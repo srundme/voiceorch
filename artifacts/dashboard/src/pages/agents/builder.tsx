@@ -34,7 +34,7 @@ import type { AgentVersion } from "@workspace/api-client-react";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { agentFormSchema, hydrateToolsForForm } from "./edit.schema";
+import { agentFormSchema, hydrateToolsForForm, CALL_ENGINE_PRESETS, type CallEnginePreset, clampBargeInEnergyThreshold, clampEndpointingMs, clampLinearDelayMs, clampInterruptWords, voiceSecondsFromInterruptWords } from "./edit.schema";
 import { buildUpdateAgentPayload, StagedPromptEditor } from "./edit";
 import type { AgentFormValues } from "./edit";
 import { Button } from "@/components/ui/button";
@@ -1610,18 +1610,9 @@ function VoiceTab({ form }: { form: any }) {
               <FormControl><Switch checked={field.value ?? true} onCheckedChange={field.onChange} /></FormControl>
             </FormItem>
           )} />
-          <FormField control={form.control} name="vadSilenceMs" render={({ field }) => (
-            <FormItem>
-              <div className="flex justify-between"><FormLabel className="text-xs">Thinking Pause Tolerance</FormLabel>
-                <span className="text-xs font-mono">{field.value ?? 350}ms</span></div>
-              <FormControl>
-                <input type="range" min={50} max={2000} step={50} value={field.value ?? 350}
-                  onChange={e => field.onChange(parseInt(e.target.value))}
-                  className="w-full h-1.5 accent-primary cursor-pointer" />
-              </FormControl>
-              <FormDescription className="text-[10px]">How long the caller can pause mid-thought before the agent responds. Increase if the agent interrupts while the caller is still thinking (e.g. "ahhh…" pauses).</FormDescription>
-            </FormItem>
-          )} />
+          <p className="text-[11px] text-muted-foreground leading-relaxed">
+            Turn-end silence is controlled on Advanced → Engine → Endpointing (not a separate VAD slider).
+          </p>
         </div>
         <div className="space-y-4">
           <SectionDivider label="Text-to-Speech Behaviour" />
@@ -2449,11 +2440,12 @@ function VoicemailTab({ form }: { form: any }) {
 
 /* ── Tab: Advanced ──────────────────────────────────────────────────────────── */
 
-type AdvSection = "timing" | "interruption" | "limits" | "compliance";
+type AdvSection = "engine" | "limits" | "compliance";
 
-function AdvSlider({ form, name, label, hint, min, max, step, fmt }: {
+function AdvSlider({ form, name, label, hint, min, max, step, fmt, onValueChange }: {
   form: any; name: string; label: string; hint?: string;
   min: number; max: number; step: number; fmt: (v: number) => string;
+  onValueChange?: (v: number) => void;
 }) {
   return (
     <FormField control={form.control} name={name} render={({ field }) => {
@@ -2473,7 +2465,11 @@ function AdvSlider({ form, name, label, hint, min, max, step, fmt }: {
               <div className="absolute left-0 h-1.5 rounded-full bg-primary/70 pointer-events-none" style={{ width: `${pct}%` }} />
               <input
                 type="range" min={min} max={max} step={step} value={val}
-                onChange={e => field.onChange(step % 1 !== 0 ? parseFloat(e.target.value) : parseInt(e.target.value))}
+                onChange={e => {
+                  const next = step % 1 !== 0 ? parseFloat(e.target.value) : parseInt(e.target.value);
+                  field.onChange(next);
+                  onValueChange?.(next);
+                }}
                 className="absolute inset-x-0 w-full opacity-0 h-5 cursor-pointer"
               />
             </div>
@@ -2512,17 +2508,39 @@ function IrdaiComplianceBanner({ enabled, agent }: { enabled: boolean; agent?: a
 }
 
 function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
-  const [section, setSection] = useState<AdvSection>("timing");
+  const [section, setSection] = useState<AdvSection>("engine");
   const [traiConfirmOpen, setTraiConfirmOpen] = useState(false);
   const [dpdpConfirmOpen, setDpdpConfirmOpen] = useState(false);
   const [irdaiConfirmOpen, setIrdaiConfirmOpen] = useState(false);
   const bargeIn = form.watch("bargeInEnabled");
+  const endpointMs = form.watch("asrEndpointingSilenceMs") ?? 300;
+  const linearMs = form.watch("linearDelayMs") ?? 400;
+  const interruptWords = form.watch("stopSpeakingNumWords") ?? 3;
+
+  const activePreset: CallEnginePreset | "custom" = (() => {
+    for (const key of Object.keys(CALL_ENGINE_PRESETS) as CallEnginePreset[]) {
+      const p = CALL_ENGINE_PRESETS[key];
+      if (
+        endpointMs === p.asrEndpointingSilenceMs
+        && linearMs === p.linearDelayMs
+        && interruptWords === p.stopSpeakingNumWords
+      ) return key;
+    }
+    return "custom";
+  })();
+
+  const applyPreset = (key: CallEnginePreset) => {
+    const p = CALL_ENGINE_PRESETS[key];
+    form.setValue("asrEndpointingSilenceMs", p.asrEndpointingSilenceMs, { shouldDirty: true });
+    form.setValue("linearDelayMs", p.linearDelayMs, { shouldDirty: true });
+    form.setValue("stopSpeakingNumWords", p.stopSpeakingNumWords, { shouldDirty: true });
+    form.setValue("stopSpeakingVoiceSecs", voiceSecondsFromInterruptWords(p.stopSpeakingNumWords), { shouldDirty: true });
+  };
 
   const nav: { id: AdvSection; icon: React.ReactNode; label: string }[] = [
-    { id: "timing",       icon: <Timer className="h-3.5 w-3.5" />,       label: "Timing"       },
-    { id: "interruption", icon: <MicOff className="h-3.5 w-3.5" />,      label: "Interruption" },
-    { id: "limits",       icon: <Gauge className="h-3.5 w-3.5" />,       label: "Limits"       },
-    { id: "compliance",   icon: <ShieldCheck className="h-3.5 w-3.5" />, label: "Compliance"   },
+    { id: "engine",     icon: <Timer className="h-3.5 w-3.5" />,       label: "Engine"     },
+    { id: "limits",     icon: <Gauge className="h-3.5 w-3.5" />,       label: "Limits"     },
+    { id: "compliance", icon: <ShieldCheck className="h-3.5 w-3.5" />, label: "Compliance" },
   ];
 
   return (
@@ -2550,151 +2568,117 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
       {/* ── Content ── */}
       <div className="px-5 py-5 space-y-4">
 
-        {/* ── TIMING ── */}
-        {section === "timing" && (
+        {/* ── ENGINE (Bolna-style) ── */}
+        {section === "engine" && (
           <>
             <div>
-              <h3 className="text-[13px] font-semibold text-foreground">Pipeline Latency</h3>
+              <h3 className="text-[13px] font-semibold text-foreground">Call Engine</h3>
               <p className="text-[11px] text-muted-foreground mt-0.5">
-                Tune each stage of the STT → LLM → TTS pipeline. Lower values cut response time; higher values add reliability.
+                The few knobs that actually drive live calls — interrupt words, when the turn ends, and how long to wait before the agent speaks.
               </p>
             </div>
+
+            <div className="flex flex-wrap gap-2">
+              {([
+                { id: "fast" as const, label: "Fast" },
+                { id: "balanced" as const, label: "Balanced" },
+                { id: "patient" as const, label: "Patient" },
+              ]).map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => applyPreset(p.id)}
+                  className={cn(
+                    "px-3 py-1.5 rounded-lg text-[11.5px] font-medium border transition-all",
+                    activePreset === p.id
+                      ? "bg-primary/15 text-primary border-primary/30"
+                      : "border-border/50 text-muted-foreground hover:text-foreground hover:bg-accent/40",
+                  )}
+                >
+                  {p.label}
+                </button>
+              ))}
+              {activePreset === "custom" && (
+                <span className="px-2 py-1.5 text-[11px] text-muted-foreground/70">Custom</span>
+              )}
+            </div>
+
             <div className="space-y-5 rounded-xl border border-border/50 bg-card/40 p-4">
-              <AdvSlider form={form} name="asrEndpointingSilenceMs"  label="STT Endpointing Silence"     hint="Silence after last spoken word before Azure sends the transcript. Lower = faster response, but risks cutting callers off mid-sentence. Fast: 100ms · Balanced: 300ms (default) · Patient: 400ms+ for slower speakers" min={50} max={2000} step={25}  fmt={v => `${v}ms`} />
-              <AdvSlider form={form} name="ttsMinSentenceChars"       label="TTS Early Dispatch Threshold" hint="Min characters before a comma-clause fires an early TTS request mid-stream. Lower = TTS fires earlier. Default: 15" min={5}   max={200}  step={5}   fmt={v => `${v}ch`} />
-              <AdvSlider form={form} name="ttsSpeed"                  label="TTS Playback Speed"           hint="Speech rate multiplier. 1.0 = natural. 1.1–1.3 sounds quicker without rushing. Only applied for Cartesia and ElevenLabs voices." min={0.7} max={1.5}  step={0.05} fmt={v => `${v.toFixed(2)}×`} />
-              <AdvSlider form={form} name="linearDelayMs"             label="Post-Transcript Buffer"       hint="Extra wait after transcript arrives before LLM starts — helps callers who pause mid-sentence. Default: 0ms" min={0}   max={2000} step={50}  fmt={v => v === 0 ? "off" : `${v}ms`} />
-              <FormField control={form.control} name="llmMaxTokens" render={({ field }) => (
-                <FormItem className="space-y-0">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <div>
-                      <FormLabel className="text-[12px] font-medium text-foreground/90">LLM Max Output Tokens</FormLabel>
-                      <p className="text-[10px] text-muted-foreground/70 mt-0.5">Cap LLM output per turn — shorter replies finish faster. Leave blank for model default</p>
-                    </div>
-                    <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20">
-                      {field.value ?? "auto"}
-                    </span>
+              <FormField control={form.control} name="bargeInEnabled" render={({ field }) => (
+                <FormItem className="flex items-center justify-between space-y-0 pb-1">
+                  <div>
+                    <FormLabel className="text-[12px] font-medium text-foreground/90">Allow barge-in</FormLabel>
+                    <p className="text-[10px] text-muted-foreground/70 mt-0.5">Caller can interrupt the agent while it speaks</p>
                   </div>
-                  <FormControl>
-                    <input
-                      type="number" min={1} max={16000} placeholder="auto"
-                      value={field.value ?? ""}
-                      onChange={e => { const v = e.target.value; field.onChange(v === "" ? null : parseInt(v, 10)); }}
-                      className="w-full h-8 rounded-lg border border-border/60 bg-card/40 px-3 text-[12px] text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary/40"
-                    />
-                  </FormControl>
+                  <FormControl><Switch checked={field.value ?? true} onCheckedChange={field.onChange} /></FormControl>
                 </FormItem>
               )} />
-              <FormField control={form.control} name="kbBakedOnly" render={({ field }) => (
-                <FormItem className="flex flex-row items-start gap-3 pt-1">
-                  <FormControl>
-                    <input type="checkbox"
-                      className="mt-0.5 h-4 w-4 rounded border-border accent-primary cursor-pointer"
-                      checked={!!field.value}
-                      onChange={e => field.onChange(e.target.checked)} />
-                  </FormControl>
-                  <div>
-                    <FormLabel className="text-[12px] font-medium text-foreground/90 cursor-pointer">Skip per-turn KB retrieval (baked only)</FormLabel>
-                    <p className="text-[10px] text-muted-foreground/70 mt-0.5">Skips the per-turn vector search before each LLM call — saves ~150–200ms. Use when your KB is small and already baked into the system prompt.</p>
-                  </div>
-                </FormItem>
-              )} />
-            </div>
 
-            <div>
-              <h3 className="text-[13px] font-semibold text-foreground">Response Timing</h3>
-              <p className="text-[11px] text-muted-foreground mt-0.5">
-                Control how long the agent waits after detecting end-of-turn before it starts speaking.
-              </p>
-            </div>
-            <div className="space-y-5 rounded-xl border border-border/50 bg-card/40 p-4">
-              <AdvSlider form={form} name="startSpeakingWaitSecs"          label="Base Wait"           hint="Extra pause before any response (0 = off)"               min={0} max={5}   step={0.1}  fmt={v => `${v.toFixed(1)}s`} />
-              <AdvSlider form={form} name="startSpeakingOnPunctuationSecs"  label="After Punctuation"   hint="Delay when utterance ends with . ? ! — default 0.1s"     min={0} max={3}   step={0.05} fmt={v => `${v.toFixed(2)}s`} />
-              <AdvSlider form={form} name="startSpeakingOnNoPunctuationSecs" label="After No Punctuation" hint="Delay when utterance has no terminal punctuation — default 1.5s (capped at 300ms)" min={0} max={3}   step={0.1}  fmt={v => `${v.toFixed(1)}s`} />
-              <AdvSlider form={form} name="startSpeakingOnNumberSecs"       label="After Number"        hint="Extra delay when utterance ends with a digit — default 0.5s (capped at 300ms)" min={0} max={3}   step={0.05} fmt={v => `${v.toFixed(2)}s`} />
-            </div>
-          </>
-        )}
+              {bargeIn && (
+                <AdvSlider
+                  form={form}
+                  name="stopSpeakingNumWords"
+                  label="Words before interrupt"
+                  hint="Agent ignores interruptions until this many words are spoken (Stop / Wait / Hold on still cut immediately). Default 3 — Bolna-style."
+                  min={1}
+                  max={6}
+                  step={1}
+                  fmt={(v) => `${v}w`}
+                  onValueChange={(v) => {
+                    form.setValue("stopSpeakingVoiceSecs", voiceSecondsFromInterruptWords(v), { shouldDirty: true });
+                  }}
+                />
+              )}
 
-        {/* ── INTERRUPTION ── */}
-        {section === "interruption" && (
-          <>
-            <div>
-              <h3 className="text-[13px] font-semibold text-foreground">Interruption Control</h3>
-              <p className="text-[11px] text-muted-foreground mt-0.5">
-                Configure how caller speech interrupts the agent mid-utterance (barge-in).
-              </p>
-            </div>
+              <AdvSlider
+                form={form}
+                name="asrEndpointingSilenceMs"
+                label="Endpointing"
+                hint="Milliseconds of silence after the caller stops before we finalize the turn. Fast 150 · Balanced 300 · Patient 500."
+                min={100}
+                max={800}
+                step={25}
+                fmt={(v) => `${v}ms`}
+              />
 
-            <FormField control={form.control} name="bargeInEnabled" render={({ field }) => (
-              <FormItem className="flex items-center justify-between rounded-xl border border-border/50 bg-card/40 px-4 py-3.5 gap-3">
-                <div className="flex items-center gap-3">
-                  <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center", field.value ? "bg-primary/15 text-primary" : "bg-muted/40 text-muted-foreground")}>
-                    <MicOff className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <FormLabel className="text-[13px] font-semibold">Allow Barge-in</FormLabel>
-                    <FormDescription className="text-[11px]">Caller can interrupt the agent while it speaks</FormDescription>
-                  </div>
-                </div>
-                <FormControl><Switch checked={field.value ?? true} onCheckedChange={field.onChange} /></FormControl>
-              </FormItem>
-            )} />
+              <AdvSlider
+                form={form}
+                name="linearDelayMs"
+                label="Linear delay"
+                hint="Extra wait after end-of-turn before the agent speaks — covers mid-sentence pauses (Bolna incremental delay)."
+                min={0}
+                max={1500}
+                step={50}
+                fmt={(v) => (v === 0 ? "off" : `${v}ms`)}
+              />
 
-            {bargeIn && (
-              <div className="space-y-5 rounded-xl border border-border/50 bg-card/40 p-4">
-                <AdvSlider form={form} name="stopSpeakingNumWords"    label="Min Words"           hint="Caller must say this many words before barge-in fires (0 = use frames)"  min={0}   max={10}   step={1}    fmt={v => v === 0 ? "off" : `${v}w`} />
-                <AdvSlider form={form} name="stopSpeakingVoiceSecs"   label="Min Voice Duration"  hint="Minimum caller voice time needed to trigger interruption"                min={0}   max={0.5}  step={0.02} fmt={v => `${v.toFixed(2)}s`} />
-                <AdvSlider form={form} name="stopSpeakingBackOffSecs" label="Back-off Silence"    hint="Silence after TTS starts before barge-in becomes active"                min={0}   max={10}   step={0.1}  fmt={v => `${v.toFixed(1)}s`} />
-                <FormField control={form.control} name="bargeInEnergyThreshold" render={({ field }) => {
-                  const val = field.value ?? 1200;
-                  const pct = ((val - 100) / (5000 - 100)) * 100;
-                  return (
-                    <FormItem className="space-y-0">
-                      <div className="flex items-center justify-between mb-1.5">
-                        <FormLabel className="text-[12px] font-medium text-foreground/90">Energy Threshold</FormLabel>
-                        <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20">{val}</span>
-                      </div>
-                      <FormControl>
-                        <div className="relative h-5 flex items-center">
-                          <div className="absolute inset-x-0 h-1.5 rounded-full bg-border/60" />
-                          <div className="absolute left-0 h-1.5 rounded-full bg-primary/70 pointer-events-none" style={{ width: `${pct}%` }} />
-                          <input type="range" min={100} max={5000} step={100} value={val}
-                            onChange={e => field.onChange(parseInt(e.target.value))}
-                            className="absolute inset-x-0 w-full opacity-0 h-5 cursor-pointer" />
-                        </div>
-                      </FormControl>
-                      <p className="text-[10px] text-muted-foreground/70 mt-1 leading-relaxed">Min RMS energy level for speech to count as a barge-in signal</p>
-                    </FormItem>
-                  );
-                }} />
-                <FormField control={form.control} name="micSensitivity" render={({ field }) => (
+              <FormField control={form.control} name="silenceTimeoutSeconds" render={({ field }) => {
+                const val = field.value ?? 30;
+                const pct = ((val - 5) / (120 - 5)) * 100;
+                return (
                   <FormItem className="space-y-0">
-                    <FormLabel className="text-[12px] font-medium text-foreground/90">Mic Sensitivity</FormLabel>
-                    <Select value={field.value ?? "normal"} onValueChange={field.onChange}>
-                      <FormControl>
-                        <SelectTrigger className="h-9 text-[12px]">
-                          <SelectValue />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="low">Low — filter noisy rooms</SelectItem>
-                        <SelectItem value="normal">Normal — default</SelectItem>
-                        <SelectItem value="high">High — catch soft replies</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <p className="text-[10px] text-muted-foreground/70 mt-1 leading-relaxed">Scales the noise gate, VAD, and barge-in thresholds together. Advanced sliders above override this when changed from default.</p>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div>
+                        <FormLabel className="text-[12px] font-medium text-foreground/90">Silence check-in</FormLabel>
+                        <p className="text-[10px] text-muted-foreground/70 mt-0.5">
+                          If the caller is silent this long, play a check-in / end the call (Bolna “user online”).
+                        </p>
+                      </div>
+                      <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20">{val}s</span>
+                    </div>
+                    <FormControl>
+                      <div className="relative h-5 flex items-center">
+                        <div className="absolute inset-x-0 h-1.5 rounded-full bg-border/60" />
+                        <div className="absolute left-0 h-1.5 rounded-full bg-primary/70 pointer-events-none" style={{ width: `${Math.min(100, Math.max(0, pct))}%` }} />
+                        <input type="range" min={5} max={120} step={5} value={val}
+                          onChange={e => field.onChange(parseInt(e.target.value))}
+                          className="absolute inset-x-0 w-full opacity-0 h-5 cursor-pointer" />
+                      </div>
+                    </FormControl>
                   </FormItem>
-                )} />
-              </div>
-            )}
-
-            {!bargeIn && (
-              <div className="rounded-xl border border-border/30 bg-muted/20 px-4 py-6 flex flex-col items-center text-center gap-2">
-                <MicOff className="h-5 w-5 text-muted-foreground/40" />
-                <p className="text-[12px] text-muted-foreground/60">Barge-in is disabled — the caller cannot interrupt the agent.</p>
-              </div>
-            )}
+                );
+              }} />
+            </div>
           </>
         )}
 
@@ -2752,39 +2736,10 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
             <div>
               <h3 className="text-[13px] font-semibold text-foreground">Call Limits</h3>
               <p className="text-[11px] text-muted-foreground mt-0.5">
-                Set hard boundaries on call duration and silence tolerance.
+                Hard cut-off for call duration. Silence check-in lives on Engine.
               </p>
             </div>
             <div className="space-y-5 rounded-xl border border-border/50 bg-card/40 p-4">
-              <FormField control={form.control} name="silenceTimeoutSeconds" render={({ field }) => {
-                const val = field.value ?? 30;
-                const pct = ((val - 5) / (300 - 5)) * 100;
-                return (
-                  <FormItem className="space-y-0">
-                    <div className="flex items-center justify-between mb-1.5">
-                      <div>
-                        <FormLabel className="text-[12px] font-medium text-foreground/90">Silence Timeout</FormLabel>
-                        <p className="text-[10px] text-muted-foreground/70 mt-0.5">Hang up if caller is silent for this duration</p>
-                      </div>
-                      <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20">{val}s</span>
-                    </div>
-                    <FormControl>
-                      <div className="relative h-5 flex items-center">
-                        <div className="absolute inset-x-0 h-1.5 rounded-full bg-border/60" />
-                        <div className="absolute left-0 h-1.5 rounded-full bg-primary/70 pointer-events-none" style={{ width: `${pct}%` }} />
-                        <input type="range" min={5} max={300} step={5} value={val}
-                          onChange={e => field.onChange(parseInt(e.target.value))}
-                          className="absolute inset-x-0 w-full opacity-0 h-5 cursor-pointer" />
-                      </div>
-                    </FormControl>
-                    <div className="flex justify-between mt-1">
-                      <span className="text-[9px] text-muted-foreground/50">5s</span>
-                      <span className="text-[9px] text-muted-foreground/50">5min</span>
-                    </div>
-                  </FormItem>
-                );
-              }} />
-              <div className="border-t border-border/30" />
               <FormField control={form.control} name="maxDuration" render={({ field }) => {
                 const val = field.value ?? 300;
                 const mins = Math.floor(val / 60);
@@ -4901,7 +4856,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       backchannelingFrequency: 0.5, webhookUrl: "",
       webhookSecret: "", noiseCancellationEnabled: true,
       ambientNoiseEnabled: false, ambientNoiseTrack: "", ambientNoiseVolume: 1.0, promptVariables: [],
-      vadSilenceMs: 350, bargeInEnabled: true, bargeInEnergyThreshold: 200,
+      vadSilenceMs: 350, bargeInEnabled: true, bargeInEnergyThreshold: 1200,
       bargeInMinFrames: 4, micSensitivity: "normal", timezone: "", machineDetectionMode: "disabled",
       voicemailAction: "hangup",
       voicemailMessage: "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.",
@@ -4910,7 +4865,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       autoSwitchToEnglish: false,
       startSpeakingWaitSecs: 0, startSpeakingOnPunctuationSecs: 0.1,
       startSpeakingOnNoPunctuationSecs: 0.1, startSpeakingOnNumberSecs: 0,
-      stopSpeakingNumWords: 1, stopSpeakingVoiceSecs: 0.2, stopSpeakingBackOffSecs: 1,
+      stopSpeakingNumWords: 3, stopSpeakingVoiceSecs: 0.45, stopSpeakingBackOffSecs: 1,
       complianceIrdai: false, complianceDpdp: false, complianceTrai: false,
       knowledgeSourceIds: [],
       contextWindowTurns: undefined,
@@ -4921,11 +4876,11 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       inboundPhoneNumberId: undefined,
       outboundPhoneNumberId: undefined,
       preferredManagedNumber: null,
-      asrEndpointingSilenceMs: 150,
+      asrEndpointingSilenceMs: 300,
       llmMaxTokens: 150,
       ttsMinSentenceChars: 25,
       ttsSpeed: 1,
-      linearDelayMs: 50,
+      linearDelayMs: 400,
       kbBakedOnly: false,
       autoRedialEnabled: true,
       autoRedialMaxAttempts: 3,
@@ -4974,7 +4929,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       promptVariables:          ((agent as any).agentConfig?.promptVariables ?? []) as AgentFormValues["promptVariables"],
       vadSilenceMs:             (agent as any).agentConfig?.vadSilenceMs ?? 350,
       bargeInEnabled:           (agent as any).agentConfig?.bargeInEnabled ?? true,
-      bargeInEnergyThreshold:   (agent as any).agentConfig?.bargeInEnergyThreshold ?? 1200,
+      bargeInEnergyThreshold:   clampBargeInEnergyThreshold((agent as any).agentConfig?.bargeInEnergyThreshold ?? 1200),
       bargeInMinFrames:         (agent as any).agentConfig?.bargeInMinFrames ?? 4,
       micSensitivity:           ((agent as any).agentConfig?.micSensitivity ?? "normal") as AgentFormValues["micSensitivity"],
       timezone:                 (agent as any).agentConfig?.timezone ?? "",
@@ -4992,8 +4947,19 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       startSpeakingOnPunctuationSecs:   (agent as any).agentConfig?.startSpeakingPlan?.onPunctuationSeconds   ?? 0.1,
       startSpeakingOnNoPunctuationSecs: (agent as any).agentConfig?.startSpeakingPlan?.onNoPunctuationSeconds ?? 1.5,
       startSpeakingOnNumberSecs:        (agent as any).agentConfig?.startSpeakingPlan?.onNumberSeconds        ?? 0.5,
-      stopSpeakingNumWords:    (agent as any).agentConfig?.stopSpeakingPlan?.numWords       ?? 0,
-      stopSpeakingVoiceSecs:   (agent as any).agentConfig?.stopSpeakingPlan?.voiceSeconds   ?? 0.2,
+      stopSpeakingNumWords: (() => {
+        const fromWords = (agent as any).agentConfig?.wordsForInterruption;
+        const fromPlan = (agent as any).agentConfig?.stopSpeakingPlan?.numWords;
+        return clampInterruptWords(fromWords ?? fromPlan ?? 3);
+      })(),
+      stopSpeakingVoiceSecs: (() => {
+        const words = clampInterruptWords(
+          (agent as any).agentConfig?.wordsForInterruption
+            ?? (agent as any).agentConfig?.stopSpeakingPlan?.numWords
+            ?? 3,
+        );
+        return voiceSecondsFromInterruptWords(words);
+      })(),
       stopSpeakingBackOffSecs: (agent as any).agentConfig?.stopSpeakingPlan?.backOffSeconds ?? 1,
       complianceIrdai: (agent as any).agentConfig?.compliance?.irdai ?? false,
       complianceDpdp:  (agent as any).agentConfig?.compliance?.dpdp  ?? false,
@@ -5008,11 +4974,11 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       inboundPhoneNumberId:            (agent as any).inboundPhoneNumberId ?? undefined,
       outboundPhoneNumberId:           (agent as any).outboundPhoneNumberId ?? undefined,
       preferredManagedNumber:          ((agent as any).agentConfig?.preferredManagedNumber as string | undefined) ?? null,
-      asrEndpointingSilenceMs:         (agent as any).agentConfig?.asrEndpointingSilenceMs ?? 300,
+      asrEndpointingSilenceMs:         clampEndpointingMs((agent as any).agentConfig?.asrEndpointingSilenceMs ?? 300),
       llmMaxTokens:                    (agent as any).agentConfig?.llmMaxTokens ?? null,
       ttsMinSentenceChars:             (agent as any).agentConfig?.ttsMinSentenceChars ?? 15,
       ttsSpeed:                        (agent as any).agentConfig?.ttsSpeed ?? 1,
-      linearDelayMs:                   (agent as any).agentConfig?.incrementalDelay ?? 0,
+      linearDelayMs:                   clampLinearDelayMs((agent as any).agentConfig?.incrementalDelay ?? 400),
       kbBakedOnly:                     ((agent as any).agentConfig?.kbBakedOnly as boolean | undefined) ?? false,
       autoRedialEnabled:      (agent as any).agentConfig?.autoRedial?.enabled ?? false,
       autoRedialMaxAttempts:  (agent as any).agentConfig?.autoRedial?.maxAttempts  ?? 3,

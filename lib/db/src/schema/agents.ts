@@ -27,6 +27,8 @@ export type AgentConfig = {
   // Tab 4 — Engine
   wordsForInterruption?: number;
   incrementalDelay?: number;
+  /** Silence ms before ASR finalizes caller turn (Bolna endpointing). */
+  asrEndpointingSilenceMs?: number;
   backchannelingStartDelay?: number;
   ambientNoiseEnabled?: boolean;
   ambientNoiseTrack?: string;

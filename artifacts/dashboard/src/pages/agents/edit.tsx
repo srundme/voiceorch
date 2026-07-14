@@ -13,7 +13,16 @@ import {
 import { cn } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
 import { useForm, useWatch, useFieldArray } from "react-hook-form";
-import { agentFormSchema, hydrateToolsForForm, type AgentFormValues } from "./edit.schema";
+import {
+  agentFormSchema,
+  hydrateToolsForForm,
+  clampBargeInEnergyThreshold,
+  clampEndpointingMs,
+  clampLinearDelayMs,
+  clampInterruptWords,
+  voiceSecondsFromInterruptWords,
+  type AgentFormValues,
+} from "./edit.schema";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -100,7 +109,10 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   if (promptVariables?.length) agentConfig["promptVariables"] = promptVariables;
   if (vadSilenceMs != null && vadSilenceMs !== 350) agentConfig["vadSilenceMs"] = vadSilenceMs;
   if (bargeInEnabled === false) agentConfig["bargeInEnabled"] = false;
-  if (bargeInEnergyThreshold != null && bargeInEnergyThreshold !== 1200) agentConfig["bargeInEnergyThreshold"] = bargeInEnergyThreshold;
+  {
+    const energy = clampBargeInEnergyThreshold(bargeInEnergyThreshold);
+    if (energy !== 1200) agentConfig["bargeInEnergyThreshold"] = energy;
+  }
   if (bargeInMinFrames != null && bargeInMinFrames !== 4) agentConfig["bargeInMinFrames"] = bargeInMinFrames;
   if (micSensitivity != null) agentConfig["micSensitivity"] = micSensitivity;
   if (timezone) agentConfig["timezone"] = timezone;
@@ -118,13 +130,19 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   if (ambientNoiseTrack) agentConfig["ambientNoiseTrack"] = ambientNoiseTrack;
   if (ambientNoiseVolume != null) agentConfig["ambientNoiseVolume"] = ambientNoiseVolume;
   if (preferredManagedNumber) agentConfig["preferredManagedNumber"] = preferredManagedNumber;
-  if (asrEndpointingSilenceMs != null && asrEndpointingSilenceMs !== 300) agentConfig["asrEndpointingSilenceMs"] = asrEndpointingSilenceMs;
+  {
+    const endpointMs = clampEndpointingMs(asrEndpointingSilenceMs);
+    if (endpointMs !== 300) agentConfig["asrEndpointingSilenceMs"] = endpointMs;
+  }
   if (sarvamSttMode) agentConfig["sarvamSttMode"] = sarvamSttMode;
   if (kbBakedOnly) agentConfig["kbBakedOnly"] = true;
   if (ttsSpeed != null && ttsSpeed !== 1) agentConfig["ttsSpeed"] = ttsSpeed;
   if (llmMaxTokens != null) agentConfig["llmMaxTokens"] = llmMaxTokens;
   if (ttsMinSentenceChars != null && ttsMinSentenceChars !== 15) agentConfig["ttsMinSentenceChars"] = ttsMinSentenceChars;
-  if (linearDelayMs != null && linearDelayMs > 0) agentConfig["incrementalDelay"] = linearDelayMs;
+  {
+    const linear = clampLinearDelayMs(linearDelayMs ?? 400);
+    if (linear > 0) agentConfig["incrementalDelay"] = linear;
+  }
   agentConfig["autoRedial"] = {
     enabled:      !!autoRedialEnabled,
     maxAttempts:  autoRedialMaxAttempts  ?? 3,
@@ -135,11 +153,17 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     onNoPunctuationSeconds: startSpeakingOnNoPunctuationSecs ?? 1.5,
     onNumberSeconds:        startSpeakingOnNumberSecs      ?? 0.5,
   };
-  agentConfig["stopSpeakingPlan"] = {
-    numWords:       stopSpeakingNumWords    ?? 0,
-    voiceSeconds:   stopSpeakingVoiceSecs   ?? 0.2,
-    backOffSeconds: stopSpeakingBackOffSecs ?? 1,
-  };
+  {
+    // Bolna parity: one "words before interrupt" drives word-count AND energy floor.
+    const numWords = clampInterruptWords(stopSpeakingNumWords);
+    const voiceSeconds = voiceSecondsFromInterruptWords(numWords);
+    agentConfig["wordsForInterruption"] = numWords;
+    agentConfig["stopSpeakingPlan"] = {
+      numWords,
+      voiceSeconds,
+      backOffSeconds: stopSpeakingBackOffSecs ?? 1,
+    };
+  }
   agentConfig["compliance"] = {
     irdai: !!complianceIrdai,
     dpdp:  !!complianceDpdp,
@@ -366,10 +390,18 @@ export default function AgentEdit() {
       stagedPromptStages: [],
       stagedPromptCoreIdentity: "",
       asrEndpointingSilenceMs: 300,
-      llmMaxTokens: undefined,
+      llmMaxTokens: null,
       ttsMinSentenceChars: 15,
-      linearDelayMs: 0,
+      ttsSpeed: 1,
+      linearDelayMs: 400,
       kbBakedOnly: false,
+      startSpeakingWaitSecs: 0,
+      startSpeakingOnPunctuationSecs: 0.1,
+      startSpeakingOnNoPunctuationSecs: 1.5,
+      startSpeakingOnNumberSecs: 0.5,
+      stopSpeakingNumWords: 3,
+      stopSpeakingVoiceSecs: 0.45,
+      stopSpeakingBackOffSecs: 1,
       autoRedialEnabled: false,
       autoRedialMaxAttempts: 3,
       schedulingCalendarId: null,
@@ -567,7 +599,7 @@ export default function AgentEdit() {
       promptVariables:          (((agent as any).agentConfig?.promptVariables ?? []) as AgentFormValues["promptVariables"]),
       vadSilenceMs:             ((agent as any).agentConfig?.vadSilenceMs as number | undefined) ?? 350,
       bargeInEnabled:           ((agent as any).agentConfig?.bargeInEnabled as boolean | undefined) ?? true,
-      bargeInEnergyThreshold:   ((agent as any).agentConfig?.bargeInEnergyThreshold as number | undefined) ?? 1200,
+      bargeInEnergyThreshold:   clampBargeInEnergyThreshold((agent as any).agentConfig?.bargeInEnergyThreshold as number | undefined),
       bargeInMinFrames:         ((agent as any).agentConfig?.bargeInMinFrames as number | undefined) ?? 4,
       micSensitivity:           (((agent as any).agentConfig?.micSensitivity as AgentFormValues["micSensitivity"] | undefined) ?? "normal"),
       timezone:                 ((agent as any).agentConfig?.timezone as string | undefined) ?? "",
@@ -587,17 +619,28 @@ export default function AgentEdit() {
       stagedPromptEnabled: (agent as any).stagedPromptEnabled ?? false,
       stagedPromptStages: (agent as any).stagedPromptStages ?? [],
       stagedPromptCoreIdentity: (agent as any).stagedPromptCoreIdentity ?? "",
-      asrEndpointingSilenceMs: ((agent as any).agentConfig?.asrEndpointingSilenceMs as number | undefined) ?? 300,
+      asrEndpointingSilenceMs: clampEndpointingMs((agent as any).agentConfig?.asrEndpointingSilenceMs as number | undefined),
       llmMaxTokens: ((agent as any).agentConfig?.llmMaxTokens as number | null | undefined) ?? null,
       ttsMinSentenceChars: ((agent as any).agentConfig?.ttsMinSentenceChars as number | undefined) ?? 15,
-      linearDelayMs: ((agent as any).agentConfig?.incrementalDelay as number | undefined) ?? 0,
+      linearDelayMs: clampLinearDelayMs((agent as any).agentConfig?.incrementalDelay as number | undefined),
       kbBakedOnly: ((agent as any).agentConfig?.kbBakedOnly as boolean | undefined) ?? false,
       startSpeakingWaitSecs:            ((agent as any).agentConfig?.startSpeakingPlan?.waitSeconds as number | undefined)            ?? 0,
       startSpeakingOnPunctuationSecs:   ((agent as any).agentConfig?.startSpeakingPlan?.onPunctuationSeconds as number | undefined)   ?? 0.1,
       startSpeakingOnNoPunctuationSecs: ((agent as any).agentConfig?.startSpeakingPlan?.onNoPunctuationSeconds as number | undefined) ?? 1.5,
       startSpeakingOnNumberSecs:        ((agent as any).agentConfig?.startSpeakingPlan?.onNumberSeconds as number | undefined)        ?? 0.5,
-      stopSpeakingNumWords:    ((agent as any).agentConfig?.stopSpeakingPlan?.numWords as number | undefined)       ?? 0,
-      stopSpeakingVoiceSecs:   ((agent as any).agentConfig?.stopSpeakingPlan?.voiceSeconds as number | undefined)   ?? 0.2,
+      stopSpeakingNumWords: (() => {
+        const fromWords = (agent as any).agentConfig?.wordsForInterruption as number | undefined;
+        const fromPlan = (agent as any).agentConfig?.stopSpeakingPlan?.numWords as number | undefined;
+        return clampInterruptWords(fromWords ?? fromPlan ?? 3);
+      })(),
+      stopSpeakingVoiceSecs: (() => {
+        const words = clampInterruptWords(
+          ((agent as any).agentConfig?.wordsForInterruption as number | undefined)
+            ?? ((agent as any).agentConfig?.stopSpeakingPlan?.numWords as number | undefined)
+            ?? 3,
+        );
+        return voiceSecondsFromInterruptWords(words);
+      })(),
       stopSpeakingBackOffSecs: ((agent as any).agentConfig?.stopSpeakingPlan?.backOffSeconds as number | undefined) ?? 1,
       complianceIrdai: ((agent as any).agentConfig?.compliance?.irdai as boolean | undefined) ?? false,
       complianceDpdp:  ((agent as any).agentConfig?.compliance?.dpdp  as boolean | undefined) ?? false,

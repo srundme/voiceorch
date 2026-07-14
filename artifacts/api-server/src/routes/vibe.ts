@@ -6,6 +6,7 @@ import {
   platformListedVoicesTable, agentDispositionsTable, phoneNumbersTable,
   agentKnowledgeSourcesTable, knowledgeSourcesTable, knowledgeEntriesTable,
 } from "@workspace/db";
+import { callEngineInsertDefaults } from "@workspace/db/call-engine-defaults";
 import { eq, and, inArray, sql } from "drizzle-orm";
 import { ingestKbTextEntries } from "../services/kb-ingest.js";
 import { logger } from "../lib/logger.js";
@@ -1405,17 +1406,12 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
         if (!row) throw new Error(`Agent ${refineAgentId} not found or not owned by user`);
         insertedAgent = row;
       } else {
-        // NEW agents get the tuned voice-latency Advanced-tab defaults (same as
-        // the POST /agents insert path). Applied only on create — refine mode
-        // must never drift an existing agent's advanced settings.
+        // NEW agents get Bolna Call Engine safe defaults (same as POST /agents).
         const tunedAdvancedDefaults: Record<string, unknown> = {
-          asrEndpointingSilenceMs: 150,
+          ...callEngineInsertDefaults(),
           ttsMinSentenceChars:     25,
-          incrementalDelay:        50,
           llmMaxTokens:            150,
-          bargeInEnergyThreshold:  200,
           startSpeakingPlan:       { waitSeconds: 0, onPunctuationSeconds: 0.1, onNoPunctuationSeconds: 0.1, onNumberSeconds: 0 },
-          stopSpeakingPlan:        { numWords: 1, voiceSeconds: 0.2, backOffSeconds: 1 },
           autoRedial:              { enabled: true, maxAttempts: 3 },
           // sarvamSttMode omitted — resolved per language at call start (en-IN → transcribe)
         };

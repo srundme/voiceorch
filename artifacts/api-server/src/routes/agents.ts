@@ -27,6 +27,7 @@ import {
 } from "../services/prompt-template.js";
 import { sanitizeToolName } from "../services/tool-executor.js";
 import { checkIrdaiCompliance } from "../services/irdai/index.js";
+import { callEngineInsertDefaults } from "@workspace/db/call-engine-defaults";
 
 const router: IRouter = Router();
 
@@ -189,21 +190,28 @@ router.post("/agents", requireAuth, async (req, res): Promise<void> => {
   if (insertData["noiseCancellationEnabled"] == null) insertData["noiseCancellationEnabled"] = true;
   const insertAgentConfig = (insertData["agentConfig"] as Record<string, unknown> | null | undefined) ?? {};
   if (insertAgentConfig["recordingEnabled"] == null) insertAgentConfig["recordingEnabled"] = true;
-  // Tuned voice-latency Advanced-tab defaults for NEW agents only (INSERT path,
-  // never PATCH). Persisted explicitly so the dashboard shows them without
-  // touching the edit-form hydrate fallbacks or runtime fallbacks, both of
-  // which must keep old-default behavior for legacy agents with unset fields.
+  // Bolna Call Engine floors for NEW agents only (INSERT path, never PATCH).
   if (insertData["maxDuration"] == null) insertData["maxDuration"] = 480;
-  if (insertAgentConfig["asrEndpointingSilenceMs"] == null) insertAgentConfig["asrEndpointingSilenceMs"] = 150;
+  const engineDefaults = callEngineInsertDefaults();
+  if (insertAgentConfig["asrEndpointingSilenceMs"] == null) {
+    insertAgentConfig["asrEndpointingSilenceMs"] = engineDefaults["asrEndpointingSilenceMs"];
+  }
   if (insertAgentConfig["ttsMinSentenceChars"] == null) insertAgentConfig["ttsMinSentenceChars"] = 25;
-  if (insertAgentConfig["incrementalDelay"] == null) insertAgentConfig["incrementalDelay"] = 50;
+  if (insertAgentConfig["incrementalDelay"] == null) {
+    insertAgentConfig["incrementalDelay"] = engineDefaults["incrementalDelay"];
+  }
   if (insertAgentConfig["llmMaxTokens"] == null) insertAgentConfig["llmMaxTokens"] = 150;
-  if (insertAgentConfig["bargeInEnergyThreshold"] == null) insertAgentConfig["bargeInEnergyThreshold"] = 200;
+  if (insertAgentConfig["bargeInEnergyThreshold"] == null) {
+    insertAgentConfig["bargeInEnergyThreshold"] = engineDefaults["bargeInEnergyThreshold"];
+  }
+  if (insertAgentConfig["wordsForInterruption"] == null) {
+    insertAgentConfig["wordsForInterruption"] = engineDefaults["wordsForInterruption"];
+  }
   if (insertAgentConfig["startSpeakingPlan"] == null) {
     insertAgentConfig["startSpeakingPlan"] = { waitSeconds: 0, onPunctuationSeconds: 0.1, onNoPunctuationSeconds: 0.1, onNumberSeconds: 0 };
   }
   if (insertAgentConfig["stopSpeakingPlan"] == null) {
-    insertAgentConfig["stopSpeakingPlan"] = { numWords: 1, voiceSeconds: 0.2, backOffSeconds: 1 };
+    insertAgentConfig["stopSpeakingPlan"] = engineDefaults["stopSpeakingPlan"];
   }
   if (insertAgentConfig["autoRedial"] == null) {
     insertAgentConfig["autoRedial"] = { enabled: true, maxAttempts: 3 };

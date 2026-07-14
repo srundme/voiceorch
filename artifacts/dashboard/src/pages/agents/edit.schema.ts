@@ -47,7 +47,7 @@ export const agentFormSchema = z.object({
   })).optional(),
   vadSilenceMs:           z.number().min(50).max(2000).optional(),
   bargeInEnabled:         z.boolean().optional(),
-  bargeInEnergyThreshold: z.number().min(100).max(5000).optional(),
+  bargeInEnergyThreshold: z.number().min(800).max(5000).optional(),
   bargeInMinFrames:       z.number().min(1).max(20).optional(),
   micSensitivity:         z.enum(["low", "normal", "high"]).optional(),
   timezone:               z.string().optional(),
@@ -90,8 +90,9 @@ export const agentFormSchema = z.object({
   startSpeakingOnPunctuationSecs: z.number().min(0).max(3).optional(),
   startSpeakingOnNoPunctuationSecs: z.number().min(0).max(3).optional(),
   startSpeakingOnNumberSecs:      z.number().min(0).max(3).optional(),
-  stopSpeakingNumWords:    z.number().min(0).max(10).optional(),
-  stopSpeakingVoiceSecs:   z.number().min(0).max(0.5).optional(),
+  /** Words before barge-in (Bolna number_of_words_for_interruption). 1–6; never 0 in Engine UI. */
+  stopSpeakingNumWords:    z.number().min(1).max(6).optional(),
+  stopSpeakingVoiceSecs:   z.number().min(0.2).max(1).optional(),
   stopSpeakingBackOffSecs: z.number().min(0).max(10).optional(),
   complianceIrdai: z.boolean().optional(),
   complianceDpdp:  z.boolean().optional(),
@@ -108,10 +109,10 @@ export const agentFormSchema = z.object({
   preferredManagedNumber: z.string().optional().nullable(),
 
   // Latency tuning
-  asrEndpointingSilenceMs: z.number().min(50).max(2000).optional(),
+  asrEndpointingSilenceMs: z.number().min(100).max(800).optional(),
   llmMaxTokens: z.number().min(1).max(16000).optional().nullable(),
   ttsMinSentenceChars: z.number().min(5).max(200).optional(),
-  linearDelayMs: z.number().min(0).max(2000).optional(),
+  linearDelayMs: z.number().min(0).max(1500).optional(),
   ttsSpeed: z.number().min(0.7).max(1.5).optional(),
   kbBakedOnly: z.boolean().optional(),
 
@@ -169,4 +170,42 @@ export function hydrateToolsForForm(tools: readonly AgentTool[]): AgentFormTool[
     }));
     return { ...toolRest, parameters: formParameters } as unknown as AgentFormTool;
   });
+}
+
+/** Bolna-style Call Engine presets (endpointing + linear delay + interrupt words). */
+export const CALL_ENGINE_PRESETS = {
+  fast:     { asrEndpointingSilenceMs: 150, linearDelayMs: 200, stopSpeakingNumWords: 2 },
+  balanced: { asrEndpointingSilenceMs: 300, linearDelayMs: 400, stopSpeakingNumWords: 3 },
+  patient:  { asrEndpointingSilenceMs: 500, linearDelayMs: 700, stopSpeakingNumWords: 4 },
+} as const;
+
+export type CallEnginePreset = keyof typeof CALL_ENGINE_PRESETS;
+
+/** Derive min voice duration so energy barge cannot undercut word-count (call 2620). */
+export function voiceSecondsFromInterruptWords(numWords: number): number {
+  const n = Math.max(1, Math.min(6, Math.round(numWords || 3)));
+  return Math.max(0.2, Number((n * 0.15).toFixed(2)));
+}
+
+/** Telephony barge energy must never use VAD-floor values like 200. */
+export function clampBargeInEnergyThreshold(value: number | null | undefined): number {
+  const v = typeof value === "number" && Number.isFinite(value) ? value : 1200;
+  return Math.max(800, Math.min(5000, Math.round(v)));
+}
+
+export function clampEndpointingMs(value: number | null | undefined): number {
+  const v = typeof value === "number" && Number.isFinite(value) ? value : 300;
+  return Math.max(100, Math.min(800, Math.round(v)));
+}
+
+export function clampLinearDelayMs(value: number | null | undefined): number {
+  const v = typeof value === "number" && Number.isFinite(value) ? value : 400;
+  return Math.max(0, Math.min(1500, Math.round(v)));
+}
+
+export function clampInterruptWords(value: number | null | undefined): number {
+  const v = typeof value === "number" && Number.isFinite(value) ? value : 3;
+  // Legacy agents stored 0 = "off" — treat as Bolna default 3.
+  if (v <= 0) return 3;
+  return Math.max(1, Math.min(6, Math.round(v)));
 }

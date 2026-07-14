@@ -162,10 +162,8 @@ describe("buildUpdateAgentPayload", () => {
     expect((payload.agentConfig as any)?.promptVariables).toBeUndefined();
   });
 
-  it("new-agent tuned Advanced defaults — validate against schema and round-trip explicitly through the payload", () => {
-    // Mirrors the builder create-path defaultValues for the Timing / Response
-    // Timing / Interruption / Limits subsections (task: tuned voice-latency
-    // profile for newly created agents).
+  it("Call Engine save path — clamps energy, derives voiceSeconds, writes wordsForInterruption", () => {
+    // Mirrors builder Engine presets + safe floors (legacy energy 200 / voice 0.06 must not ship).
     const data: AgentFormValues = {
       ...BASE,
       maxDuration: 480,
@@ -181,12 +179,11 @@ describe("buildUpdateAgentPayload", () => {
       stopSpeakingNumWords: 1,
       stopSpeakingVoiceSecs: 0.2,
       stopSpeakingBackOffSecs: 1,
-      bargeInEnergyThreshold: 200,
+      bargeInEnergyThreshold: 800,
       autoRedialEnabled: true,
       autoRedialMaxAttempts: 3,
       silenceTimeoutSeconds: 30,
     };
-    // 200 must be accepted by the form schema (min is 100)
     const schemaResult = agentFormSchema.safeParse(data);
     expect(schemaResult.success, JSON.stringify(schemaResult)).toBe(true);
 
@@ -200,7 +197,8 @@ describe("buildUpdateAgentPayload", () => {
     expect(cfg?.ttsMinSentenceChars).toBe(25);
     expect(cfg?.incrementalDelay).toBe(50);
     expect(cfg?.llmMaxTokens).toBe(150);
-    expect(cfg?.bargeInEnergyThreshold).toBe(200);
+    expect(cfg?.bargeInEnergyThreshold).toBe(800);
+    expect(cfg?.wordsForInterruption).toBe(1);
     expect(cfg?.startSpeakingPlan).toEqual({
       waitSeconds: 0,
       onPunctuationSeconds: 0.1,
@@ -209,6 +207,24 @@ describe("buildUpdateAgentPayload", () => {
     });
     expect(cfg?.stopSpeakingPlan).toEqual({ numWords: 1, voiceSeconds: 0.2, backOffSeconds: 1 });
     expect(cfg?.autoRedial).toEqual({ enabled: true, maxAttempts: 3 });
+  });
+
+  it("legacy energy below telephony floor is clamped on save", () => {
+    const payload = buildUpdateAgentPayload({
+      ...BASE,
+      bargeInEnergyThreshold: 200 as any,
+      stopSpeakingNumWords: 0 as any,
+      stopSpeakingVoiceSecs: 0.06 as any,
+    });
+    const cfg = payload.agentConfig as any;
+    expect(cfg?.bargeInEnergyThreshold).toBe(800);
+    expect(cfg?.wordsForInterruption).toBe(3);
+    expect(cfg?.stopSpeakingPlan).toEqual({ numWords: 3, voiceSeconds: 0.45, backOffSeconds: 1 });
+  });
+
+  it("rejects energy below 800 in the form schema", () => {
+    const result = agentFormSchema.safeParse({ ...BASE, bargeInEnergyThreshold: 200 });
+    expect(result.success).toBe(false);
   });
 });
 

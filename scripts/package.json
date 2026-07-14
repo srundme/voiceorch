@@ -19,6 +19,7 @@
     "seed-galaxy-kb-summary": "tsx ./src/seed-galaxy-kb-summary.ts",
     "probe-krutrim-caching": "tsx ./src/probe-krutrim-caching.ts",
     "backfill-calendar-capability": "tsx ./src/backfill-calendar-capability.ts",
+    "migrate-call-engine-config": "tsx ./src/migrate-call-engine-config.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

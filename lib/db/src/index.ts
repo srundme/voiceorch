@@ -82,3 +82,6 @@ if (POOL_WARM_MIN > 0 && POOL_WARM_PING_MS > 0) {
 export * from "./schema";
 export * from "./identity-merge";
 export * from "./caller-identity";
+// call-engine-defaults is also available as @workspace/db/call-engine-defaults
+// (import that subpath from unit tests / scripts to avoid requiring DATABASE_URL).
+export * from "./call-engine-defaults";

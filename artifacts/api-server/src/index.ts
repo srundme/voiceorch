@@ -243,6 +243,26 @@ async function migrateSaarikaToSaaras(): Promise<void> {
   }
 }
 
+/** Rewrite unsafe Call Engine JSON (energy < 800, endpoint < 100, words off, voice < 0.2). */
+async function migrateCallEngineConfigs(): Promise<void> {
+  try {
+    const { migrateCallEngineAgentConfigs } = await import("./migrations/migrateCallEngineAgentConfigs.js");
+    const summary = await migrateCallEngineAgentConfigs();
+    if (summary.updated > 0) {
+      logger.info(
+        {
+          scanned: summary.scanned,
+          updated: summary.updated,
+          agents: summary.details.map((d) => ({ id: d.id, name: d.name, reasons: d.reasons })),
+        },
+        "Migrated Call Engine agent_config floors (Bolna safe defaults)",
+      );
+    }
+  } catch (err) {
+    logger.warn({ err }, "Call Engine agent_config migration failed (non-fatal)");
+  }
+}
+
 async function seedManagedKeyFromEnv(dbKey: string, envVar: string): Promise<void> {
   const envKey = (process.env[envVar] ?? "").trim();
   if (!envKey) return;
@@ -390,6 +410,7 @@ server.listen(port, () => {
       void seedManagedKeyFromEnv("managed_krutrim_key",    "KRUTRIM_CLOUD_API_KEY");
       void seedManagedKeyFromEnv("zelto_api_key",          "ZELTO_API_KEY");
       void migrateSaarikaToSaaras();
+      void migrateCallEngineConfigs();
       startCallbackPoller();
       startSpikeChecker();
       startAlertSweep();
