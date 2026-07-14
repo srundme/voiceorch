@@ -14,6 +14,7 @@ import { CONVERSATION_DISCIPLINE_BLOCK } from "./conversationDiscipline.js";
 import { buildLeadContextBlock, resolvePromptVariables } from "./prompt-vars.js";
 import { createLLMAdapter } from "./adapters/llm/index.js";
 import { resolveMicSensitivity, getMicSensitivityThresholds } from "./mic-sensitivity.js";
+import { loadPcmLoop, TRACK_PARAMS } from "./ambient.js";
 import type { AgentConfig, AgentTool, TelephonyProvider, SessionTransport, PipelineMetrics } from "./types.js";
 import { logger } from "../lib/logger.js";
 import {
@@ -1224,6 +1225,19 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
   const sessionId = `${params.telephonyProvider}-${callRecord.id}-${Date.now()}`;
   const redisTtl = (agentConfig.maxDuration ?? 600) + 600; // maxDuration + 10 min buffer
 
+  // Warm uploaded ambient PCM into process cache before pipeline connect so the
+  // first keepalive frames can carry BG noise (call 2636: ambient silent ~6s).
+  {
+    const ambTrack = agentConfig.ambientNoiseEnabled ? agentConfig.ambientNoiseTrack : null;
+    if (ambTrack && !Object.prototype.hasOwnProperty.call(TRACK_PARAMS, ambTrack)) {
+      try {
+        await loadPcmLoop(ambTrack);
+      } catch (ambErr) {
+        logger.warn({ callId: callRecord.id, soundId: ambTrack, err: ambErr }, "Ambient preload failed — pipeline will retry");
+      }
+    }
+  }
+
   const pipeline = new OrchestrationPipeline({
     callId: callRecord.id,
     agentConfig,
@@ -1262,8 +1276,9 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     // Confirmed-machine voicemail action executed (message delivered or hangup) →
     // record a distinct "voicemail" outcome instead of "completed" in endSession.
     onVoicemailAction: () => { voicemailActionExecuted = true; },
-    // Returning caller (>=1 prior completed call) → memory-informed recognition opening
+    // Returning caller (>=1 prior completed call) → instant name opener (no greeting LLM).
     isReturningCaller: (callerProfileSnapshot?.callCount ?? 0) >= 1,
+    returningCallerName: callerProfileSnapshot?.name ?? null,
     callDirection,
     isResumeDroppedCall: resumeDroppedCall,
     // Carrier answer time — anchors the recording clock (see SessionConfig).

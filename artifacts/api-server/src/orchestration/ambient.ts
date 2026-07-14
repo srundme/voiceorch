@@ -375,6 +375,12 @@ export class FileAmbientNoiseStream {
 /** In-memory cache: id → PCM Buffer.  Keyed by ambient sound UUID. */
 const pcmCache = new Map<string, Buffer>();
 
+/** Sync peek — returns cached PCM without hitting the DB (call-start ambient). */
+export function peekCachedPcmLoop(id: string): Buffer | null {
+  const hit = pcmCache.get(id);
+  return hit ? Buffer.from(hit) : null;
+}
+
 /**
  * Load the pre-converted 8 kHz PCM loop for an uploaded ambient sound from the
  * `ambient_sounds.pcm_data` Postgres column. Results are cached in-process for

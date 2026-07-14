@@ -618,10 +618,10 @@ export interface SessionConfig {
    *  Used for telephony providers (e.g. Vobiz) that natively accept PCM, avoiding a
    *  lossy mulaw encode→decode round-trip. */
   rawPcmOutput?: boolean;
-  /** True when caller memory shows this is a returning caller (>=1 prior completed call).
-   *  When set, the opening greeting is generated from the memory-injected system prompt
-   *  (recognition-style) instead of speaking the static scripted greeting verbatim. */
+  /** True when caller memory shows this is a returning caller (>=1 prior completed call). */
   isReturningCaller?: boolean;
+  /** Returning caller's remembered name — used for an instant opener (no greeting-LLM wait). */
+  returningCallerName?: string | null;
   /** Inbound vs outbound — used for post-greeting listen timing on telephony calls. */
   callDirection?: "inbound" | "outbound";
   /** Prior call dropped within the resume window — shorter opener + listen stall. */

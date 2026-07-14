@@ -19,7 +19,7 @@ import { createTTSAdapter } from "./adapters/tts/index.js";
 import { CartesiaTTS } from "./adapters/tts/cartesia.js";
 import { encodeMulaw, upsample8to16, downsample16to8, decodeMulaw, hasSpeechEnergy, frameRms } from "./audio.js";
 import { resolveMicSensitivity, getMicSensitivityThresholds, type MicSensitivityThresholds } from "./mic-sensitivity.js";
-import { AmbientNoiseStream, FileAmbientNoiseStream, TRACK_PARAMS, loadPcmLoop, AMBIENT_LEVELS } from "./ambient.js";
+import { AmbientNoiseStream, FileAmbientNoiseStream, TRACK_PARAMS, loadPcmLoop, peekCachedPcmLoop, AMBIENT_LEVELS } from "./ambient.js";
 import { DtmfDetector } from "./dtmf.js";
 import { processAudioIn, processRawPcm8kIn, destroyAudioSession } from "./audioPool.js";
 import { RecordingBuffer } from "./recorder.js";
@@ -40,6 +40,7 @@ import {
   inactivityReprompt,
   inactivityFarewell,
   neutralGreeting,
+  buildInstantReturningGreeting,
   AFFIRMATIONS,
   STALL_BACKSTOP_MS,
   OUTBOUND_POST_GREETING_STALL_MS,
@@ -1695,18 +1696,24 @@ export class OrchestrationPipeline {
         // Built-in procedural track — synchronous
         this.ambientStream = new AmbientNoiseStream(track, ambientVolumeScale);
       } else {
-        // Uploaded sound ID — load PCM from Postgres asynchronously.
-        // ambientStream starts as null; the interval skips while loading.
-        loadPcmLoop(track)
-          .then((pcmBuffer) => {
-            if (!this.closed) {
-              this.ambientStream = new FileAmbientNoiseStream(pcmBuffer, ambientVolumeScale);
-              logger.info({ callId: config.callId, soundId: track, bytes: pcmBuffer.length }, "Ambient noise: uploaded PCM loop ready");
-            }
-          })
-          .catch((err) => {
-            logger.error({ callId: config.callId, soundId: track, err }, "Ambient noise: failed to load PCM loop — ambient disabled for this call");
-          });
+        // Uploaded sound — use in-process cache if warm; otherwise load async.
+        // Call 2636: DB load after connect made BG noise inaudible for ~6s.
+        const cached = peekCachedPcmLoop(track);
+        if (cached) {
+          this.ambientStream = new FileAmbientNoiseStream(cached, ambientVolumeScale);
+          logger.info({ callId: config.callId, soundId: track, bytes: cached.length }, "Ambient noise: cache hit at connect");
+        } else {
+          loadPcmLoop(track)
+            .then((pcmBuffer) => {
+              if (!this.closed) {
+                this.ambientStream = new FileAmbientNoiseStream(pcmBuffer, ambientVolumeScale);
+                logger.info({ callId: config.callId, soundId: track, bytes: pcmBuffer.length }, "Ambient noise: uploaded PCM loop ready");
+              }
+            })
+            .catch((err) => {
+              logger.error({ callId: config.callId, soundId: track, err }, "Ambient noise: failed to load PCM loop — ambient disabled for this call");
+            });
+        }
       }
     }
 
@@ -3274,8 +3281,41 @@ export class OrchestrationPipeline {
     return this.substituteSalutation(wrapped, this.salutationFor(detectedGender));
   }
 
+  /**
+   * Wait briefly for uploaded ambient PCM so the keepalive interval can mix
+   * noise from connect — not after greeting TTS has already started (call 2636).
+   */
+  private async ensureAmbientReady(timeoutMs: number): Promise<void> {
+    if (this.ambientStream || !this.agent.ambientNoiseEnabled || !this.agent.ambientNoiseTrack) return;
+    const track = this.agent.ambientNoiseTrack;
+    if (Object.prototype.hasOwnProperty.call(TRACK_PARAMS, track)) return;
+    const volumeScale = typeof (this.agent as { ambientNoiseVolume?: number }).ambientNoiseVolume === "number"
+      ? Math.max(0, Math.min(1, (this.agent as { ambientNoiseVolume: number }).ambientNoiseVolume))
+      : 1.0;
+    try {
+      const pcm = await Promise.race([
+        loadPcmLoop(track),
+        new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error("ambient_timeout")), timeoutMs);
+        }),
+      ]);
+      if (!this.closed && !this.ambientStream) {
+        this.ambientStream = new FileAmbientNoiseStream(pcm, volumeScale);
+        logger.info(
+          { callId: this.config.callId, soundId: track, bytes: pcm.length },
+          "Ambient noise: ready before greeting",
+        );
+      }
+    } catch {
+      // Async constructor load may still complete; do not block the opener.
+    }
+  }
+
   async greet(): Promise<void> {
     if (this.closed) return;
+    // Prefer ambient ready before first speech so BG noise isn't silent for seconds
+    // after connect (call 2636 — uploaded PCM arrived ~6s late).
+    await this.ensureAmbientReady(400);
     // ── Gemini context-cache warm (best-effort, non-blocking) ────────────────
     // Fire-and-forget: register the static system-prompt prefix as a Gemini
     // CachedContent while the greeting plays, so the caller's first real turn
@@ -3313,11 +3353,16 @@ export class OrchestrationPipeline {
         if (transferred || this.closed) return; // call was routed away — do not greet
       }
 
-      // For returning callers, prefer a memory-informed (recognition-style)
-      // opening generated from the memory-injected system prompt over the static
-      // scripted greeting — otherwise the agent would re-introduce itself cold.
+      // For returning callers, speak an instant name opener — never block on a
+      // greeting LLM round-trip (call 2636: ~3.1s silence before first TTS while
+      // Gemini generated a recognition opener). Memory context is still in the
+      // system prompt for turn 1+.
       const isReturningCaller = this.config.isReturningCaller === true;
-      let greeting = isReturningCaller ? "" : (this.agent.greetingMessage ?? "");
+      const greetLang =
+        this.currentLang || this.agent.sttConfig.language || this.agent.language || "en-IN";
+      let greeting = isReturningCaller
+        ? buildInstantReturningGreeting(this.config.returningCallerName, greetLang)
+        : (this.agent.greetingMessage ?? "");
       let greetingEmotions: string[] | undefined;
 
       // Substitute {caller_salutation} in the greeting with the neutral salutation —
@@ -3325,38 +3370,28 @@ export class OrchestrationPipeline {
       if (greeting) {
         const resolvedSal = this.salutationFor(null);
         greeting = this.substituteSalutation(greeting, resolvedSal);
-        logger.info({ callId: this.config.callId, resolvedSalutation: resolvedSal || "(empty)" }, "Pipeline: caller_salutation in greeting resolved to neutral (pre-detection)");
+        logger.info({ callId: this.config.callId, resolvedSalutation: resolvedSal || "(empty)", instantReturning: isReturningCaller }, "Pipeline: greeting prepared");
       }
 
       if (!greeting.trim()) {
-        // Fallback / returning-caller path: ask the LLM to generate an opener.
-        // The system prompt already carries the injected caller-memory block, so
-        // for returning callers this yields a recognition-style opening.
-        const greetingTrigger: import("./types.js").ConversationTurn[] = isReturningCaller
-          ? [{ role: "user", content: "[call connected — this is a returning caller you already know from the CALLER MEMORY block above; open by greeting them by name and referencing prior context, do NOT re-introduce yourself]" }]
-          : [];
+        // Cold-caller path with empty static greeting: ask the LLM for a short opener.
+        const greetingTrigger: import("./types.js").ConversationTurn[] = [];
         try {
-          // Cap the opener length — the greeting LLM path otherwise produces a long
-          // multi-sentence monologue (call 548: ~20 s greeting). Constrain to one
-          // short sentence without hard-truncating mid-word.
-          // The base system prompt still carries an unresolved {caller_salutation}
-          // placeholder (session.ts deliberately skips it). Detection has not fired
-          // at greeting time, so resolve it to the neutral salutation here — never
-          // send the raw token to the greeting LLM (it would echo it literally).
-          // COMPACT greeting prompt: only the caller-memory block + a language and a
-          // one-sentence instruction. Generating the opener against the full ~31k-token
-          // system prompt added seconds of latency (and cost) before the first word.
-          // Language falls back to the STT language, NOT agent.language (which defaults
-          // to en-US even for e.g. a Tamil agent) so the opener is in the right language.
           const greetingSystemPrompt = this.substituteSalutation(
             buildCompactGreetingPrompt(
               this.agent.systemPrompt,
-              this.currentLang || this.agent.sttConfig.language || this.agent.language || "en-IN",
+              greetLang,
               this.isResumeDroppedCall,
             ),
             this.salutationFor(null),
           );
           const _greetLlmStartAt = Date.now();
+          this.logExec("LLM", "request", {
+            provider: this.agent.llmProvider,
+            status: "info",
+            turnNumber: 0,
+            requestPayload: { purpose: "greeting", promptChars: greetingSystemPrompt.length },
+          });
           await this.llm.chat(
             greetingTrigger, greetingSystemPrompt,
             (token) => { greeting += token; },
@@ -3369,10 +3404,18 @@ export class OrchestrationPipeline {
               },
             }
           );
+          const greetingLlmMs = Date.now() - _greetLlmStartAt;
           logger.info(
-            { callId: this.config.callId, greetingLlmMs: Date.now() - _greetLlmStartAt, promptChars: greetingSystemPrompt.length },
+            { callId: this.config.callId, greetingLlmMs, promptChars: greetingSystemPrompt.length },
             "Greeting LLM completed",
           );
+          this.logExec("LLM", "response", {
+            provider: this.agent.llmProvider,
+            status: "success",
+            turnNumber: 0,
+            latencyMs: greetingLlmMs,
+            responsePayload: { purpose: "greeting", text: greeting.slice(0, 200) },
+          });
         } catch (llmErr) {
           // Recoverable: a transient greeting-LLM failure must NOT drop the call
           // before the agent speaks. Fall back to the configured static greeting
@@ -3384,6 +3427,12 @@ export class OrchestrationPipeline {
             { callId: this.config.callId, agentId: this.agent.id, provider: this.agent.llmProvider, err: llmErr },
             `${reason} — falling back to a safe spoken opener instead of dropping the call`,
           );
+          this.logExec("LLM", "response", {
+            provider: this.agent.llmProvider,
+            status: "error",
+            turnNumber: 0,
+            responsePayload: { purpose: "greeting", error: reason, fallback: fallback.slice(0, 120) },
+          });
           greeting = fallback;
         }
         // Strip <think> reasoning blocks and markup. For Cartesia, extract the
@@ -3405,6 +3454,17 @@ export class OrchestrationPipeline {
             .replace(/[^\S\r\n]{2,}/g, " ")
             .trim(),
         );
+      } else if (isReturningCaller) {
+        this.logExec("Agent", "system", {
+          status: "info",
+          turnNumber: 0,
+          metadata: {
+            event: "Instant Returning Greeting",
+            name: this.config.returningCallerName ?? null,
+            language: greetLang,
+            text: greeting.slice(0, 120),
+          },
+        });
       }
 
       if (!greeting.trim() || this.closed) return;
