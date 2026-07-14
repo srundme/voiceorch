@@ -31,7 +31,7 @@ export class InterruptionManager {
 
   constructor(opts: InterruptionManagerOptions = {}) {
     this.incrementalDelayMs = opts.incrementalDelayMs ?? 900;
-    this.wordsForInterruption = opts.wordsForInterruption ?? 2;
+    this.wordsForInterruption = opts.wordsForInterruption ?? 3;
   }
 
   getWordsForInterruption(): number {

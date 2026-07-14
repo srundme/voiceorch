@@ -77,6 +77,7 @@ export function isFalseInterruptionScrap(
   if (!t) return true;
   if (isCallerAudioDifficulty(t)) return false;
   if (isTopicClarificationAsk(t)) return false;
+  if (isAccidentalInterruptPhrase(t) || isSemanticInterrupt(t)) return false;
   if (isUltraShortNoiseFragment(t)) return true;
   const words = t.split(/\s+/).filter(Boolean);
   if (words.length === 0) return true;
@@ -406,11 +407,31 @@ const SEMANTIC_INTERRUPT_PATTERNS: RegExp[] = [
 ];
 
 /**
+ * Bolna ACCIDENTAL_INTERRUPTION_PHRASES — short phrases that MUST interrupt
+ * even under the word-count threshold (and must never be dropped as scraps).
+ */
+export const ACCIDENTAL_INTERRUPTION_PHRASES = new Set([
+  "stop", "quit", "bye", "wait", "no", "wrong", "incorrect", "hold", "pause", "break",
+  "cease", "halt", "silence", "enough", "excuse", "hold on", "hang on", "cut it",
+  "that's enough", "thats enough", "shush", "listen", "excuse me", "hold up", "not now",
+  "stop there", "stop speaking",
+  "போதும்", "நிறுத்து", "காத்து", "रुको", "बस",
+]);
+
+export function isAccidentalInterruptPhrase(text: string): boolean {
+  const t = text.trim().toLowerCase().replace(/[.!?]+$/g, "");
+  if (!t) return false;
+  const compact = t.replace(/\s+/g, " ");
+  return ACCIDENTAL_INTERRUPTION_PHRASES.has(compact);
+}
+
+/**
  * Returns true if the transcript contains a semantic interruption signal.
  * Called on both interim and final transcripts from streaming STT.
  */
 export function isSemanticInterrupt(text: string): boolean {
   const t = text.trim();
   if (!t) return false;
+  if (isAccidentalInterruptPhrase(t)) return true;
   return SEMANTIC_INTERRUPT_PATTERNS.some(re => re.test(t));
 }

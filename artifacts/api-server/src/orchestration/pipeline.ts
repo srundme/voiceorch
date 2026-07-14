@@ -47,7 +47,7 @@ import {
   isAffirmationOnlyUtterance,
   type TurnCloseReason,
 } from "./endpointing.js";
-import { checkTranscriptQuality, pickClarificationPhrase, isSemanticInterrupt, shouldHoldFragmentForCoalesce, isUltraShortNoiseFragment, isCallerAudioDifficulty, isFalseInterruptionScrap, isTopicClarificationAsk } from "./transcriptQuality.js";
+import { checkTranscriptQuality, pickClarificationPhrase, isSemanticInterrupt, isAccidentalInterruptPhrase, shouldHoldFragmentForCoalesce, isUltraShortNoiseFragment, isCallerAudioDifficulty, isFalseInterruptionScrap, isTopicClarificationAsk } from "./transcriptQuality.js";
 import { FILLER_SEQUENCE_ID, InterruptionManager } from "./interruption-manager.js";
 import { logger } from "../lib/logger.js";
 import { format, addMinutes } from "date-fns";
@@ -1456,7 +1456,7 @@ export class OrchestrationPipeline {
     }
     this.interruptionMgr = new InterruptionManager({
       incrementalDelayMs: config.agentConfig.incrementalDelay ?? 0,
-      wordsForInterruption: config.agentConfig.wordsForInterruption ?? 2,
+      wordsForInterruption: config.agentConfig.wordsForInterruption ?? 3,
     });
     // Detection only makes sense when {caller_salutation} is actually in the prompt —
     // otherwise there is nothing to fill in and we must NOT call the gender service.
@@ -1770,12 +1770,39 @@ export class OrchestrationPipeline {
               !this.bargeInRequested &&
               text.trim()
             ) {
-              if (isSemanticInterrupt(text)) {
+              // Bolna: interrupt on interim when word count exceeds threshold OR
+              // the phrase is an accidental-interrupt / semantic stop cue.
+              // Energy alone is secondary — Sarvam may not finalize during talk-over,
+              // but it DOES emit interims once the caller overpowers carrier echo.
+              if (isSemanticInterrupt(text) || isAccidentalInterruptPhrase(text)) {
                 this.triggerBargeIn("semantic_interim", text);
                 logger.info(
-                  { callId: this.config.callId, text },
+                  { callId: this.config.callId, text: text.slice(0, 80) },
                   "Semantic barge-in triggered (streaming STT interim)",
                 );
+              } else {
+                const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
+                // Bolna accumulates interim word length across partials for the turn
+                this.streamingBargeInWordCount = Math.max(
+                  this.streamingBargeInWordCount,
+                  wordCount,
+                );
+                const planNumWords = this.agent.stopSpeakingPlan?.numWords;
+                const threshold = (planNumWords && planNumWords > 0)
+                  ? planNumWords
+                  : this.interruptionMgr.getWordsForInterruption();
+                if (threshold > 0 && this.streamingBargeInWordCount > threshold) {
+                  this.triggerBargeIn("word_count_interim", text, { speculative: false });
+                  logger.info(
+                    {
+                      callId: this.config.callId,
+                      words: this.streamingBargeInWordCount,
+                      threshold,
+                      text: text.slice(0, 80),
+                    },
+                    "Barge-in detected (streaming STT interim word-count — Bolna parity)",
+                  );
+                }
               }
             }
             return;
@@ -1954,7 +1981,7 @@ export class OrchestrationPipeline {
         const threshold = (planNumWords && planNumWords > 0)
           ? planNumWords
           : this.interruptionMgr.getWordsForInterruption();
-        if (this.streamingBargeInWordCount >= threshold) {
+        if (this.streamingBargeInWordCount > threshold) {
           this.triggerBargeIn("word_count", transcript, { speculative: false });
           logger.info(
             { callId: this.config.callId, words: this.streamingBargeInWordCount, threshold },
@@ -2520,17 +2547,18 @@ export class OrchestrationPipeline {
       // a single loud frame can't fire.
       let effectiveMinFrames = this.stopSpeakingPlanConfigured
         ? Math.max(BARGE_IN_MIN_FRAMES, this.bargeInMinFrames)
-        : Math.max(this.bargeInMinFrames, (this.agent.wordsForInterruption ?? 2) * 20);
-      // All streaming STT paths (telephony carrier AND webcall) cap the frame
-      // requirement at BARGE_IN_STREAMING_MIN_FRAMES (~160 ms). Sarvam never finalizes
-      // transcripts DURING talk-over, so energy is the ONLY real-time barge-in signal
-      // and must be responsive. The adaptive bar (telephony) / AEC (webcall) is what
-      // rejects the echo — a long frame count is not the right tool for that.
-      // Batch path (respectHoldUntil) keeps its own extended frame count.
+        : Math.max(this.bargeInMinFrames, (this.agent.wordsForInterruption ?? 3) * 20);
+      // Bolna prefers transcript-gated interruption. Pure-energy barge-in without
+      // any interim STT evidence must sustain longer so brief echo / coughs do
+      // not cut the agent (then leave sticky barge + silence that looks hung).
       if (!respectHoldUntil) {
+        const hasSttEvidence = this.streamingBargeInWordCount > 0;
+        const streamingCap = hasSttEvidence
+          ? BARGE_IN_STREAMING_MIN_FRAMES
+          : Math.max(BARGE_IN_STREAMING_MIN_FRAMES * 2, 20); // ~400 ms without words
         effectiveMinFrames = Math.max(
           BARGE_IN_MIN_FRAMES,
-          Math.min(effectiveMinFrames, BARGE_IN_STREAMING_MIN_FRAMES),
+          Math.min(effectiveMinFrames, streamingCap),
         );
       }
       if (this.bargeInSpeechFrames >= effectiveMinFrames) {

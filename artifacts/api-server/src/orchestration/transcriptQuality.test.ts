@@ -8,6 +8,7 @@ import {
   isCallerAudioDifficulty,
   isFalseInterruptionScrap,
   isTopicClarificationAsk,
+  isAccidentalInterruptPhrase,
 } from "./transcriptQuality.js";
 import { isAffirmationOnlyUtterance } from "./endpointing.js";
 
@@ -123,5 +124,14 @@ describe("isAffirmationOnlyUtterance", () => {
     expect(isAffirmationOnlyUtterance(["okay", "okay"])).toBe(true);
     expect(isAffirmationOnlyUtterance(["yes", "madam"])).toBe(true);
     expect(isAffirmationOnlyUtterance(["yes", "i", "have", "two", "minutes"])).toBe(false);
+  });
+});
+
+describe("isAccidentalInterruptPhrase", () => {
+  it("matches Bolna accidental interruption phrases", () => {
+    expect(isAccidentalInterruptPhrase("wait")).toBe(true);
+    expect(isAccidentalInterruptPhrase("hold on")).toBe(true);
+    expect(isAccidentalInterruptPhrase("stop speaking")).toBe(true);
+    expect(isAccidentalInterruptPhrase("about insurance")).toBe(false);
   });
 });
