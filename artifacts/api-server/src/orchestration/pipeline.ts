@@ -48,6 +48,7 @@ import {
   type TurnCloseReason,
 } from "./endpointing.js";
 import { checkTranscriptQuality, pickClarificationPhrase, isSemanticInterrupt, isAccidentalInterruptPhrase, shouldHoldFragmentForCoalesce, isUltraShortNoiseFragment, isCallerAudioDifficulty, isFalseInterruptionScrap, isTopicClarificationAsk } from "./transcriptQuality.js";
+import { buildInterruptionHint, joinHeardSentences, resolveSpokenForHistory } from "./bargeHeard.js";
 import { FILLER_SEQUENCE_ID, InterruptionManager } from "./interruption-manager.js";
 import { logger } from "../lib/logger.js";
 import { format, addMinutes } from "date-fns";
@@ -988,18 +989,49 @@ export class OrchestrationPipeline {
     this.lastAssistantSpokenRaw = spoken;
   }
 
-  /** Called at every barge-in fire point. Captures the sentences fully played so
-   *  far this agent turn into _interruptionHint so the next processTurn() can tell
-   *  the LLM exactly what the caller heard before interrupting. Always sets a hint
-   *  (even on first-sentence cuts) so the next turn never silently restarts a pitch. */
+  /** Completed sentences only — durable history never invents mid-sentence audio. */
+  private getHeardAgentText(): string {
+    return joinHeardSentences(this._currentTurnPlayedSentences);
+  }
+
+  /** Called at every barge-in fire point. Hint matches durable heard text (no unspoken tail). */
   private captureInterruptionHint(): void {
     if (this._interruptionHint) return; // already captured (multiple simultaneous events)
-    const played = this._currentTurnPlayedSentences.join(" ").trim();
-    const mid = this._activePlaybackText?.trim() ?? "";
-    if (played && mid && !played.includes(mid)) {
-      this._interruptionHint = `${played} ${mid}`.trim();
+    const played = this.getHeardAgentText();
+    const wasMidSentence = Boolean(this._activePlaybackText?.trim());
+    this._interruptionHint = buildInterruptionHint(played, wasMidSentence);
+  }
+
+  /**
+   * After barge: keep history aligned with heard-only agent text.
+   * Tool-call assistant rows keep toolCalls and only replace spoken content.
+   */
+  private trimHistoryToHeardOnBarge(): void {
+    const heard = this.getHeardAgentText();
+    const msgs = this.conversationHistory.messages;
+    let lastUserIdx = -1;
+    let lastAsstIdx = -1;
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      if (lastUserIdx === -1 && msgs[i]!.role === "user") lastUserIdx = i;
+      if (lastAsstIdx === -1 && msgs[i]!.role === "assistant") lastAsstIdx = i;
+      if (lastUserIdx !== -1 && lastAsstIdx !== -1) break;
+    }
+    if (lastAsstIdx < 0) return;
+    // Assistant for this turn is after the latest user, OR greeting (no user yet).
+    if (lastUserIdx >= 0 && lastAsstIdx < lastUserIdx) return;
+
+    const lastAsst = msgs[lastAsstIdx]!;
+    if (lastAsst.toolCalls?.length) {
+      // Preserve tool_calls scaffold; only rewrite spoken content (may be empty).
+      this.conversationHistory.replaceLastAssistant(heard);
+      if (heard) this.lastAssistantSpokenRaw = heard;
+      return;
+    }
+    if (heard) {
+      this.conversationHistory.replaceLastAssistant(heard);
+      this.lastAssistantSpokenRaw = heard;
     } else {
-      this._interruptionHint = played || mid || "(interrupted before a full sentence finished)";
+      this.conversationHistory.popUnheardResponses(1);
     }
   }
 
@@ -1075,12 +1107,12 @@ export class OrchestrationPipeline {
   }
 
   /**
-   * Bolna __cleanup_downstream_tasks equivalent — strict teardown order:
-   * 1) invalidate sequence (stale-audio gate)
-   * 2) abort in-flight LLM
-   * 3) abort all in-flight TTS fetches
-   * 4) abort eager/speculative LLM
-   * 5) capture interruption hint + telephony clear
+   * Bolna-style natural barge teardown:
+   * 1) invalidate sequence + set barge flag (drain loops stop)
+   * 2) telephony clearAudio FIRST (sharp mute)
+   * 3) abort TTS / LLM / eager
+   * 4) heard-only hint + history trim
+   * 5) optional speculative LLM on caller partial
    */
   private triggerBargeIn(
     trigger: string,
@@ -1089,6 +1121,11 @@ export class OrchestrationPipeline {
   ): void {
     if (this.bargeInRequested) return;
     const invalidatedSeq = this.interruptionMgr.invalidateCurrentTurn();
+    this.bargeInRequested = true;
+    this._bargeInFiredCount++;
+    this._lastTurnWasBargedIn = true;
+    // Sharp mute before abort teardown — clear carrier buffer ASAP.
+    this.bargeInCallback?.();
     for (const ac of this.activeTtsAborts) {
       try { ac.abort(); } catch { /* noop */ }
     }
@@ -1099,31 +1136,12 @@ export class OrchestrationPipeline {
       this._specLlmState = null;
     }
     this.clearEagerPartialTimer();
-    this.bargeInRequested = true;
-    this._bargeInFiredCount++;
-    this._lastTurnWasBargedIn = true;
     this.captureInterruptionHint();
-    const heard = this._currentTurnPlayedSentences.join(" ").trim();
-    // Trim history when barge-in interrupts playback of an assistant turn already
-    // appended this user turn (clarification / guardrail paths).
-    if (this.isPlaying || this.isSendingTtsAudio) {
-      const msgs = this.conversationHistory.messages;
-      let lastUserIdx = -1;
-      let lastAsstIdx = -1;
-      for (let i = msgs.length - 1; i >= 0; i--) {
-        if (lastUserIdx === -1 && msgs[i]!.role === "user") lastUserIdx = i;
-        if (lastAsstIdx === -1 && msgs[i]!.role === "assistant") lastAsstIdx = i;
-        if (lastUserIdx !== -1 && lastAsstIdx !== -1) break;
-      }
-      if (lastAsstIdx > lastUserIdx) {
-        if (heard) this.conversationHistory.replaceLastAssistant(heard);
-        else this.conversationHistory.popUnheardResponses(1);
-      }
-    }
+    const heard = this.getHeardAgentText();
+    this.trimHistoryToHeardOnBarge();
     if (opts?.speculative !== false && partial?.trim()) {
       this._launchSpeculativeLlm(partial);
     }
-    this.bargeInCallback?.();
     this.logExec("Agent", "system", {
       status: "info",
       turnNumber: this._activeTurnIndex,
@@ -3382,11 +3400,14 @@ export class OrchestrationPipeline {
         this.isPlaying = false;
         this.armTailEchoGrace();
       }
-      const heardGreeting = this._currentTurnPlayedSentences.join(" ").trim() || greeting;
-      this.conversationHistory.appendAssistant(heardGreeting);
-      this.lastAssistantSpokenRaw = heardGreeting;
-      this.config.onTranscript("agent", heardGreeting);
-      this.config.onConversationUpdate?.(this.conversationHistory.messages);
+      // Heard-only: never fall back to full greeting text after a barge mid-open.
+      const heardGreeting = this.getHeardAgentText();
+      if (heardGreeting) {
+        this.conversationHistory.appendAssistant(heardGreeting);
+        this.lastAssistantSpokenRaw = heardGreeting;
+        this.config.onTranscript("agent", heardGreeting);
+        this.config.onConversationUpdate?.(this.conversationHistory.messages);
+      }
       // Drain the carrier's jitter buffer so the greeting's final word plays out
       // fully before we arm the stall backstop and enter Listening.
       await this.drainPlaybackTail();
@@ -4244,13 +4265,15 @@ export class OrchestrationPipeline {
         if (wireQueue.length > 0) {
           const chunk = wireQueue.shift()!;
           if (!this.canEmitAudio(job.sequenceId)) break;
-          this.markFirstAudioSent();
-          if (this._tTurnFirstAudioOut === null) this._tTurnFirstAudioOut = performance.now();
           // Ambient mixing only applies to mulaw output; skip when sending raw PCM
           // (raw PCM is already ambient-mixed above, at real "now", per block).
           const outChunk = (!this.config.rawPcmOutput && this.ambientStream)
             ? this.ambientStream.mixIntoMulaw(chunk)
             : chunk;
+          // Final mute gate — never send after barge invalidate (TOCTOU with flag/seq).
+          if (this.bargeInRequested || !this.interruptionMgr.isValidSequence(job.sequenceId)) break;
+          this.markFirstAudioSent();
+          if (this._tTurnFirstAudioOut === null) this._tTurnFirstAudioOut = performance.now();
           this.config.onAudioOut(outChunk);
           this.lastTtsFrameAt = Date.now(); // mark real audio out for the keepalive watchdog
           // NOTE: do NOT re-arm the echo-grace window per chunk here (see armTailEchoGrace).
@@ -4298,6 +4321,7 @@ export class OrchestrationPipeline {
         const PCM_CHUNK = CHUNK_SIZE_MULAW * 2; // 320 bytes = 20ms @ 8kHz 16-bit
         for (let i = 0; i < out8k.length; i += PCM_CHUNK) {
           if (this.closed || this.bargeInRequested || !this.canEmitAudio(job.sequenceId)) break;
+          if (!this.interruptionMgr.isValidSequence(job.sequenceId)) break;
           this.markFirstAudioSent();
           this.config.onAudioOut(out8k.slice(i, i + PCM_CHUNK));
           this.lastTtsFrameAt = Date.now(); // mark real audio out for the keepalive watchdog
@@ -4314,6 +4338,7 @@ export class OrchestrationPipeline {
         const ttsMusaw = encodeMulaw(ttsPcm8k);
         for (let i = 0; i < ttsMusaw.length; i += CHUNK_SIZE_MULAW) {
           if (this.closed || this.bargeInRequested || !this.canEmitAudio(job.sequenceId)) break;
+          if (!this.interruptionMgr.isValidSequence(job.sequenceId)) break;
           this.markFirstAudioSent();
           const chunk = ttsMusaw.slice(i, i + CHUNK_SIZE_MULAW);
           const outChunk = this.ambientStream ? this.ambientStream.mixIntoMulaw(chunk) : chunk;
@@ -5094,12 +5119,17 @@ export class OrchestrationPipeline {
     if (isGarbled) {
       const clarification = pickClarificationPhrase(sttLang, String(this.config.callId));
       logger.warn({ callId: this.config.callId, transcript, garbledReason }, "Garbled transcript — responding with clarification");
-      this.conversationHistory.appendAssistant(clarification);
-      this.config.onTranscript("agent", clarification);
-      this.config.onConversationUpdate?.(this.conversationHistory.messages);
       this.bargeInHoldUntil = Date.now() + this.bargeInEchoGraceMs;
+      this._currentTurnPlayedSentences = [];
       this.isPlaying = true;
       try { await this.playSentence(clarification); } finally { this.isPlaying = false; this.armTailEchoGrace(); }
+      const heard = this.getHeardAgentText();
+      if (heard) {
+        this.conversationHistory.appendAssistant(heard);
+        this.lastAssistantSpokenRaw = heard;
+        this.config.onTranscript("agent", heard);
+        this.config.onConversationUpdate?.(this.conversationHistory.messages);
+      }
       // Drain the carrier's jitter buffer before returning to listening so the
       // last word of the clarification isn't clipped. This short branch bypasses
       // playTask's drain, so it must replicate it (see drainPlaybackTail).
@@ -5136,12 +5166,17 @@ export class OrchestrationPipeline {
     const guardrailResponse = this.checkGuardrailRoutes(transcript);
     if (guardrailResponse !== null) {
       logger.info({ callId: this.config.callId, transcript }, "Guardrail route triggered");
-      this.conversationHistory.appendAssistant(guardrailResponse);
-      this.config.onTranscript("agent", guardrailResponse);
-      this.config.onConversationUpdate?.(this.conversationHistory.messages);
       this.bargeInHoldUntil = Date.now() + this.bargeInEchoGraceMs;
+      this._currentTurnPlayedSentences = [];
       this.isPlaying = true;
       try { await this.playSentence(guardrailResponse); } finally { this.isPlaying = false; this.armTailEchoGrace(); }
+      const heard = this.getHeardAgentText();
+      if (heard) {
+        this.conversationHistory.appendAssistant(heard);
+        this.lastAssistantSpokenRaw = heard;
+        this.config.onTranscript("agent", heard);
+        this.config.onConversationUpdate?.(this.conversationHistory.messages);
+      }
       // Drain the carrier's jitter buffer before returning to listening so the
       // last word of the canned response isn't clipped. This short branch
       // bypasses playTask's drain, so it must replicate it (see drainPlaybackTail).
@@ -6546,10 +6581,12 @@ export class OrchestrationPipeline {
     await playPromise;
 
     // Bolna parity: store only what the caller actually heard (defer until playback ends).
-    const heardOnly = this._currentTurnPlayedSentences.join(" ").trim();
-    const spokenResponse = this.bargeInRequested
-      ? heardOnly
-      : baseSpokenResponse;
+    const heardOnly = this.getHeardAgentText();
+    const spokenResponse = resolveSpokenForHistory({
+      barged: this.bargeInRequested,
+      heardOnly,
+      fullResponse: baseSpokenResponse,
+    });
     if (spokenResponse) {
       this.conversationHistory.appendAssistant(spokenResponse);
       this.trackRepeat(spokenResponse);
@@ -7359,8 +7396,12 @@ export class OrchestrationPipeline {
 
     if (cleanResponse) {
       const baseSpokenResponse = stepGuard.truncated() ? truncateToSingleStep(cleanResponse).text : cleanResponse;
-      const heardOnly = this._currentTurnPlayedSentences.join(" ").trim();
-      const spokenResponse = this.bargeInRequested ? heardOnly : baseSpokenResponse;
+      const heardOnly = this.getHeardAgentText();
+      const spokenResponse = resolveSpokenForHistory({
+        barged: this.bargeInRequested,
+        heardOnly,
+        fullResponse: baseSpokenResponse,
+      });
       if (spokenResponse) {
         this.conversationHistory.appendAssistant(spokenResponse);
         this.trackRepeat(spokenResponse);
