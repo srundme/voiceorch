@@ -5163,55 +5163,69 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
           </div>
         </Form>
 
-        {/* Studio action rail — test, inbound number, save */}
+        {/* Studio action rail — try → inbound → save → refine → publish */}
         <aside className="hidden xl:flex w-[272px] shrink-0 flex-col border-l border-border/40 bg-muted/[0.15] overflow-y-auto">
           <div className="flex flex-col gap-4 px-3.5 py-4 flex-1">
-            {/* Test actions */}
-            <div className="space-y-1">
-              <Button
-                className="w-full h-9 text-[12.5px] font-semibold gap-2 rounded-lg"
-                onClick={() => setCallDialog(true)}
-              >
-                <Phone className="h-3.5 w-3.5" />
-                Get call from agent
-              </Button>
+            {/* Try — phone + web share equal weight */}
+            <div className="space-y-2">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/55 px-0.5">
+                Try
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-10 text-[12px] font-medium gap-1.5 rounded-xl border-border/60 bg-card/40 hover:bg-card/70"
+                  onClick={() => setCallDialog(true)}
+                >
+                  <Phone className="h-3.5 w-3.5 shrink-0" />
+                  Phone
+                </Button>
+                <Button
+                  type="button"
+                  variant={showWebcall ? "default" : "outline"}
+                  className={cn(
+                    "h-10 text-[12px] font-medium gap-1.5 rounded-xl",
+                    !showWebcall && "border-border/60 bg-card/40 hover:bg-card/70",
+                  )}
+                  onClick={() => setShowWebcall(v => !v)}
+                >
+                  <Mic className="h-3.5 w-3.5 shrink-0" />
+                  {showWebcall ? "Close" : "Web"}
+                </Button>
+              </div>
+              <p className="text-[10px] text-muted-foreground/65 leading-snug px-0.5">
+                Phone dials out · Web tests in-browser
+              </p>
+            </div>
+
+            {/* Inbound assign — same APIs as Phone Numbers */}
+            <div className="space-y-2">
+              <AgentInboundPanel
+                agentId={agentId}
+                preferredManagedNumber={form.watch("preferredManagedNumber")}
+              />
               <button
                 type="button"
-                onClick={() => setShowWebcall(v => !v)}
-                className={cn(
-                  "w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-[12px] transition-colors",
-                  showWebcall
-                    ? "bg-foreground text-background font-medium"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted/40",
-                )}
+                onClick={() => navigate("/app/calls")}
+                className="text-left text-[12px] text-sky-500/90 hover:text-sky-400 transition-colors px-0.5"
               >
-                <Mic className="h-3.5 w-3.5 shrink-0" />
-                {showWebcall ? "Close browser test" : "Test via browser"}
+                See all call logs →
               </button>
             </div>
 
-            {/* Our inbound assign — not a dead link to Phone Numbers */}
-            <AgentInboundPanel
-              agentId={agentId}
-              preferredManagedNumber={form.watch("preferredManagedNumber")}
-            />
-
-            <button
-              type="button"
-              onClick={() => navigate("/app/calls")}
-              className="text-left text-[12px] text-sky-500/90 hover:text-sky-400 transition-colors px-0.5 -mt-1"
-            >
-              See all call logs →
-            </button>
-
             <div className="h-px bg-border/40" />
 
-            {/* Persist */}
-            <div className="space-y-1">
+            {/* Persist — Save primary, Refine next, Publish quiet */}
+            <div className="space-y-2">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/55 px-0.5">
+                Manage
+              </p>
               <div className="relative">
                 <Button
+                  type="button"
                   className={cn(
-                    "w-full h-9 text-[12.5px] gap-2 rounded-lg",
+                    "w-full h-10 text-[12.5px] font-semibold gap-2 rounded-xl",
                     savedFlash && "bg-green-600 hover:bg-green-700 text-white",
                   )}
                   onClick={onSave}
@@ -5224,24 +5238,23 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
                   <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-amber-400 pointer-events-none" />
                 )}
               </div>
-              <div className="flex items-center gap-1 px-0.5">
-                <button
-                  type="button"
-                  onClick={() => setPublishModalOpen(true)}
-                  className="flex-1 flex items-center justify-center gap-1.5 rounded-lg py-2 text-[11.5px] text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
-                >
-                  <Upload className="h-3 w-3" />
-                  Publish
-                </button>
-                <button
-                  type="button"
-                  onClick={() => navigate(`/app/vibe?refine=${agentId}`)}
-                  className="flex-1 flex items-center justify-center gap-1.5 rounded-lg py-2 text-[11.5px] text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
-                >
-                  <Sparkles className="h-3 w-3" />
-                  Refine
-                </button>
-              </div>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full h-9 text-[12px] font-medium gap-2 rounded-xl border-border/60"
+                onClick={() => navigate(`/app/vibe?refine=${agentId}`)}
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                Refine with AI
+              </Button>
+              <button
+                type="button"
+                onClick={() => setPublishModalOpen(true)}
+                className="w-full flex items-center justify-center gap-1.5 rounded-lg py-2 text-[11.5px] text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
+              >
+                <Upload className="h-3 w-3" />
+                Publish version
+              </button>
             </div>
 
             <div className="mt-auto space-y-2.5 pt-2">
