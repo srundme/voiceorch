@@ -49,6 +49,27 @@ export async function probeGenderService(): Promise<void> {
       "Gender service UNREACHABLE at startup — caller gender detection (Sir/Ma'am) will not work until GENDER_SERVICE_URL points at a running Voice Analysis service",
     );
   }
+
+  // Voice Memory needs ECAPA specifically — /health can be OK while /speaker/health is 503.
+  const speakerUrl = `${base}/voice-analysis/speaker/health`;
+  try {
+    const res = await fetch(speakerUrl, { method: "GET", signal: AbortSignal.timeout(8_000) });
+    let body: unknown;
+    try { body = await res.json(); } catch { body = undefined; }
+    if (res.ok) {
+      logger.info({ url: speakerUrl, body }, "Voice Memory speaker (ECAPA) ready");
+    } else {
+      logger.warn(
+        { url: speakerUrl, status: res.status, body },
+        "Voice Memory speaker (ECAPA) NOT ready — enroll/verify will fail until gender-service finishes ECAPA warmup (torch/speechbrain)",
+      );
+    }
+  } catch (err) {
+    logger.warn(
+      { url: speakerUrl, err },
+      "Voice Memory speaker health unreachable — enroll/verify will fail",
+    );
+  }
 }
 
 // ── Live diagnostics (admin) ──────────────────────────────────────────────────

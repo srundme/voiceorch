@@ -23,7 +23,10 @@ const VERIFY_MS = Number(process.env["VOICE_MEMORY_VERIFY_MS"] ?? 20_000);
 const ENROLL_BYTES = Math.round((ENROLL_MS / 1000) * SAMPLE_RATE) * SAMPLE_BYTES;
 const VERIFY_BYTES = Math.round((VERIFY_MS / 1000) * SAMPLE_RATE) * SAMPLE_BYTES;
 const MAX_BYTES = 12 * SAMPLE_RATE * SAMPLE_BYTES;
-const REQUEST_TIMEOUT_MS = 2_500;
+/** ECAPA on CPU often needs >2.5s (cold load much longer). Gender health ≠ speaker ready. */
+const REQUEST_TIMEOUT_MS = Number(process.env["VOICE_MEMORY_REQUEST_TIMEOUT_MS"] ?? 20_000);
+/** Spacing between failed enroll retries so we don't spam the gender-service. */
+const ENROLL_RETRY_BACKOFF_MS = Number(process.env["VOICE_MEMORY_ENROLL_RETRY_MS"] ?? 5_000);
 
 function buildWav(pcmData: Buffer): Buffer {
   const dataLen = pcmData.byteLength;
@@ -67,6 +70,7 @@ export class SpeakerVerifier {
   private busy = false;
   private armed = false;
   private handoffFired = false;
+  private nextEnrollAttemptAt = 0;
   private readonly callId: number;
   private readonly agentId: number;
   private readonly phoneNumber: string | null;
@@ -116,6 +120,7 @@ export class SpeakerVerifier {
     if (!this.armed || this.busy) return;
     if (!this.enrolled) {
       if (this.accumulated < ENROLL_BYTES) return;
+      if (Date.now() < this.nextEnrollAttemptAt) return;
       this.busy = true;
       void this.enroll()
         .catch((err) => this.log.warn({ callId: this.callId, err }, "Voice Memory enroll failed"))
@@ -138,6 +143,7 @@ export class SpeakerVerifier {
     this.reference = null;
     this.enrolled = false;
     this.handoffFired = false;
+    this.nextEnrollAttemptAt = 0;
     this.chunks = [];
     this.accumulated = 0;
     this.verifyChunks = [];
@@ -148,9 +154,13 @@ export class SpeakerVerifier {
   private async enroll(): Promise<void> {
     const pcm = Buffer.concat(this.chunks);
     const emb = await this.fetchEmbed(pcm);
-    if (!emb?.length) return;
+    if (!emb?.length) {
+      this.nextEnrollAttemptAt = Date.now() + ENROLL_RETRY_BACKOFF_MS;
+      return;
+    }
     this.reference = emb;
     this.enrolled = true;
+    this.nextEnrollAttemptAt = 0;
 
     let personKey = "session-only";
     let linkedFromPhone: string | null = null;
@@ -198,17 +208,46 @@ export class SpeakerVerifier {
     const blob = new Blob([ab], { type: "audio/wav" });
     const form = new FormData();
     form.append("file", blob, "enroll.wav");
+    const t0 = Date.now();
     try {
       const res = await fetch(url, {
         method: "POST",
         body: form,
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
-      if (!res.ok) return null;
+      if (!res.ok) {
+        this.log.warn(
+          { callId: this.callId, url, status: res.status, latencyMs: Date.now() - t0 },
+          "Voice Memory: embed request non-200",
+        );
+        return null;
+      }
       const body = (await res.json()) as { embedding?: number[] | null; error?: string };
-      return body.embedding ?? null;
+      if (!body.embedding?.length) {
+        this.log.warn(
+          {
+            callId: this.callId,
+            url,
+            error: body.error ?? "empty_embedding",
+            latencyMs: Date.now() - t0,
+          },
+          "Voice Memory: embed returned no embedding — check gender-service /speaker/health (ECAPA)",
+        );
+        return null;
+      }
+      return body.embedding;
     } catch (err) {
-      this.log.warn({ callId: this.callId, url, err }, "Voice Memory: embed request failed");
+      this.log.warn(
+        {
+          callId: this.callId,
+          url,
+          errName: (err as Error)?.name,
+          errMsg: (err as Error)?.message,
+          timeoutMs: REQUEST_TIMEOUT_MS,
+          latencyMs: Date.now() - t0,
+        },
+        "Voice Memory: embed request failed",
+      );
       return null;
     }
   }
@@ -225,23 +264,41 @@ export class SpeakerVerifier {
     const form = new FormData();
     form.append("file", blob, "verify.wav");
     form.append("reference_embedding", JSON.stringify(reference));
+    const t0 = Date.now();
     try {
       const res = await fetch(url, {
         method: "POST",
         body: form,
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
-      if (!res.ok) return { similarity: null, embedding: null };
+      if (!res.ok) {
+        this.log.warn(
+          { callId: this.callId, url, status: res.status, latencyMs: Date.now() - t0 },
+          "Voice Memory: verify request non-200",
+        );
+        return { similarity: null, embedding: null };
+      }
       const body = (await res.json()) as {
         similarity?: number | null;
         embedding?: number[] | null;
+        error?: string;
       };
       return {
         similarity: typeof body.similarity === "number" ? body.similarity : null,
         embedding: body.embedding ?? null,
       };
     } catch (err) {
-      this.log.warn({ callId: this.callId, url, err }, "Voice Memory: verify request failed");
+      this.log.warn(
+        {
+          callId: this.callId,
+          url,
+          errName: (err as Error)?.name,
+          errMsg: (err as Error)?.message,
+          timeoutMs: REQUEST_TIMEOUT_MS,
+          latencyMs: Date.now() - t0,
+        },
+        "Voice Memory: verify request failed",
+      );
       return { similarity: null, embedding: null };
     }
   }
