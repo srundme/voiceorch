@@ -8,6 +8,7 @@ import path from "path";
 import { existsSync } from "fs";
 import { attachSession } from "./middlewares/session.js";
 import { detectImpersonation } from "./middlewares/detectImpersonation.js";
+import { authenticateApiKey } from "./routes/user-api-keys.js";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { ipRateLimit, authRateLimit, isRateLimitExempt } from "./lib/rate-limit.js";
@@ -80,6 +81,11 @@ app.use(express.urlencoded({ extended: true }));
 // IP rate limiter can skip authenticated users and the auth rate limiter can
 // key on the user id.
 app.use(attachSession);
+
+// Developer API keys (Authorization: Bearer sk_live_…). No-op for session JWTs /
+// unauthenticated requests. Must run after attachSession so dashboard session
+// tokens remain primary when both somehow appear.
+app.use(authenticateApiKey);
 
 // Detect active admin impersonation sessions and register per-action audit hooks.
 app.use(detectImpersonation);

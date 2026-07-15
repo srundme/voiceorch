@@ -1452,7 +1452,7 @@ paths:
     post:
       operationId: addConcurrentSlot
       tags: [account]
-      summary: Purchase one additional concurrent call slot ($5 deducted from wallet)
+      summary: Purchase one additional concurrent call slot (deducted from wallet in INR)
       responses:
         "200":
           description: Updated account info with incremented concurrent limit
@@ -8363,39 +8363,60 @@ components:
     # ── Wallet ─────────────────────────────────────────────────────────────────
     WalletInfo:
       type: object
-      required: [balanceCents, balanceUsd, freeCreditsGranted, autoPayEnabled, autoPayThresholdCents, autoPayAmountCents, mandateActive]
+      required: [balanceCents, freeCreditsGranted, autoPayEnabled, autoPayThresholdCents, autoPayAmountCents, mandateActive]
       properties:
         balanceCents:
           type: integer
-          description: Current balance in cents
+          description: Current balance in INR paise (1 INR = 100 paise). Field name is historical.
+        balanceInr:
+          type: number
+          description: Current balance in INR (rupees)
         balanceUsd:
           type: number
-          description: Current balance in USD
+          description: Deprecated alias of balanceInr (INR, not USD)
+        currency:
+          type: string
+          description: Always INR
+          example: INR
+        gstRate:
+          type: number
+          description: GST rate applied on card top-ups (e.g. 0.18)
         freeCreditsGranted:
           type: boolean
         autoPayEnabled:
           type: boolean
         autoPayThresholdCents:
           type: integer
+          description: Auto-pay threshold in paise
         autoPayAmountCents:
           type: integer
+          description: Auto-pay credit amount in paise (payable includes GST)
         mandateActive:
           type: boolean
-          description: Whether a Razorpay recurring mandate token is saved for auto-pay
+          description: Whether a Razorpay recurring card mandate token is saved for auto-pay
 
     WalletTransaction:
       type: object
-      required: [id, type, amountCents, amountUsd, description, status, createdAt]
+      required: [id, type, amountCents, description, status, createdAt]
       properties:
         id:
           type: integer
         type:
           type: string
-          enum: [free_credit, topup, call_debit, auto_topup]
+          enum: [free_credit, topup, call_debit, auto_topup, debit]
         amountCents:
           type: integer
+          description: Amount in INR paise (negative for debits)
+        amountInr:
+          type: number
+          description: Amount in INR (rupees)
         amountUsd:
           type: number
+          description: Deprecated alias of amountInr (INR, not USD)
+        currency:
+          type: string
+          description: Always INR
+          example: INR
         description:
           type: string
         status:
@@ -8462,7 +8483,7 @@ components:
           type: boolean
         autoPayThresholdCents:
           type: integer
-          description: Trigger auto-pay when balance drops below this (cents)
+          description: Trigger auto-pay when balance drops below this (paise)
         autoPayAmountCents:
           type: integer
           minimum: 10000
@@ -8502,14 +8523,14 @@ components:
           format: date-time
         monthlyRateCents:
           type: integer
-          description: Monthly cost in cents (from Vobiz, 0 = no recurring fee)
+          description: Monthly cost in paise (INR; from Vobiz, 0 = no recurring fee)
         renewalRateCents:
           type: integer
-          description: Recurring monthly renewal fee in cents, charged from wallet balance on the purchase-date anniversary (30 days)
+          description: Recurring monthly renewal fee in paise (INR), charged from wallet balance on the purchase-date anniversary (30 days)
         nextRenewalAt:
           type: ["string", "null"]
           format: date-time
-          description: When the next $8 renewal charge is due (30 days after purchasedAt/lastRenewalAt). Null once released.
+          description: When the next renewal charge is due (30 days after purchasedAt/lastRenewalAt). Null once released.
         lastRenewalAt:
           type: ["string", "null"]
           format: date-time
@@ -8536,7 +8557,7 @@ components:
           enum: [local, toll_free, mobile]
         monthlyRateCents:
           type: integer
-          description: Monthly cost in cents (0 = one-time purchase only)
+          description: Monthly cost in paise (INR; 0 = one-time purchase only)
 
     PurchasePhoneNumberInput:
       type: object

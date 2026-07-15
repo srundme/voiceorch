@@ -5,52 +5,27 @@ const NAV_GROUPS = [
     title: "Getting Started",
     items: [
       { title: "Introduction", slug: "introduction" },
-      { title: "Platform Concepts", slug: "platform-concepts" },
-      { title: "Quick Start", slug: "quick-start" },
       { title: "Authentication", slug: "authentication" },
+      { title: "Quick Start", slug: "quick-start" },
     ],
   },
   {
-    title: "Building Agents",
+    title: "API Guides",
     items: [
-      { title: "Agent Overview", slug: "agents" },
-      { title: "Agent Builder", slug: "agent-builder" },
-      { title: "Prompting Guide", slug: "prompting-guide" },
-      { title: "Tools & Functions", slug: "tools" },
-      { title: "Knowledge Base", slug: "knowledge-base" },
-    ],
-  },
-  {
-    title: "Providers",
-    items: [
-      { title: "Overview", slug: "providers" },
-      { title: "ASR / Speech-to-Text", slug: "asr-providers" },
-      { title: "LLM Providers", slug: "llm-providers" },
-      { title: "TTS / Text-to-Speech", slug: "tts-providers" },
-      { title: "Telephony", slug: "telephony-providers" },
-    ],
-  },
-  {
-    title: "Campaigns",
-    items: [
-      { title: "Overview", slug: "campaigns" },
-      { title: "Managing Leads", slug: "managing-leads" },
-    ],
-  },
-  {
-    title: "Scheduling",
-    items: [
-      { title: "Overview", slug: "scheduling" },
-      { title: "Google Calendar", slug: "google-calendar" },
+      { title: "Agents", slug: "agents" },
+      { title: "Outbound Calls", slug: "outbound-calls" },
+      { title: "Webhooks", slug: "webhooks" },
+      { title: "Phone Numbers", slug: "phone-numbers" },
+      { title: "Wallet", slug: "wallet" },
     ],
   },
   {
     title: "Reference",
     items: [
-      { title: "Webhooks", slug: "webhooks" },
+      { title: "SDKs", slug: "sdks" },
+      { title: "Errors", slug: "errors" },
       { title: "API Reference", slug: "api-reference" },
-      { title: "SDKs & Claude Skill", slug: "sdks" },
-      { title: "Pricing & Usage", slug: "pricing" },
+      { title: "Pricing", slug: "pricing" },
       { title: "Changelog", slug: "changelog" },
     ],
   },
@@ -79,7 +54,7 @@ export function DocsSidebar({ activeSection }: { activeSection: string }) {
                   }`}
                 >
                   {isActive && (
-                    <span className="absolute -left-[13px] top-1/2 -translate-y-1/2 w-0.5 h-4 bg-primary rounded-full" />
+                    <span className="absolute -left-[13px] top-1/2 -translate-y-1/2 w-[2px] h-4 bg-primary rounded-full" />
                   )}
                   {item.title}
                 </Link>
