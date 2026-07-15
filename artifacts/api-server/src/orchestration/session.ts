@@ -461,6 +461,11 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     noiseCancellationEnabled: agent.noiseCancellationEnabled ?? false,
     ambientNoiseEnabled: (agentCfg["ambientNoiseEnabled"] as boolean | undefined) ?? false,
     ambientNoiseTrack: (agentCfg["ambientNoiseTrack"] as string | undefined) ?? null,
+    ambientNoiseVolume: (() => {
+      const v = agentCfg["ambientNoiseVolume"];
+      if (typeof v !== "number" || !Number.isFinite(v)) return 1.0;
+      return Math.max(0, Math.min(1, v));
+    })(),
     inactivityMessage: agent.inactivityMessage ?? null,
     guardrailRoutes: (agentCfg["guardrailRoutes"] as Array<{ name: string; scoreThreshold: number; utterances: string; response: string }> | undefined) ?? [],
     ivrEnabled: (agentCfg["ivrEnabled"] as boolean | undefined) ?? false,

@@ -303,6 +303,9 @@ export function neutralGreeting(lang?: string | null): string {
 /**
  * Instant returning-caller opener — no LLM round-trip.
  * Call 2636: Gemini recognition greeting blocked ~3.1s of silence before first TTS.
+ *
+ * Not used for resume-after-drop callbacks — those go through the greeting LLM
+ * with caller-memory / LAST EXCHANGES context (no hardcoded cut-call line).
  */
 export function buildInstantReturningGreeting(
   name?: string | null,
@@ -310,6 +313,7 @@ export function buildInstantReturningGreeting(
 ): string {
   const prefix = (lang ?? "en").split(/[-_]/)[0]?.toLowerCase() ?? "en";
   const n = (name ?? "").trim().replace(/\s+/g, " ");
+
   if (prefix === "hi") {
     return n ? `नमस्ते, ${n} जी! कैसे हैं आप?` : "नमस्ते! कैसे हैं आप?";
   }
@@ -336,6 +340,7 @@ export function buildInstantReturningGreeting(
   }
   return n ? `Hi ${n}! How are you?` : "Hi! How are you?";
 }
+
 
 export interface TurnSafetyNetOpts {
   forceFinalizeMs?: number;

@@ -584,13 +584,14 @@ export function injectEnhancedMemory(
     lines.push(
       "⚠️ IMPORTANT — RESUME, DO NOT RESTART: Your previous call with this caller ended abruptly (it dropped). " +
       "Do NOT re-introduce yourself or your company and do NOT start the conversation over. " +
+      "Do NOT open with a fresh name greeting (no வணக்கம்/hello + name / how are you). " +
       "If YOU are speaking the very first opening line of THIS call (no assistant message has been spoken yet), " +
-      "you MAY use ONE short colloquial phrase that you got cut off — then immediately continue the topic. " +
-      "If an opening greeting was ALREADY spoken (including an instant/system greeting), do NOT acknowledge any " +
-      "drop/cut/lost call at all — answer the caller's latest message only. Never invent கால் கட் / कॉल कट / " +
-      "\"call cut\" / \"call dropped\" unless the caller just said that. " +
+      "briefly acknowledge the drop in natural colloquial language, then immediately continue the topic " +
+      "from LAST EXCHANGES BEFORE THE CALL DROPPED above — mid-thread, not from the beginning. " +
+      "If an opening was ALREADY spoken on this call, do NOT acknowledge any drop/cut again — answer the " +
+      "caller's latest message only. Never invent a drop apology unless this is the opening OR the caller just said the call dropped. " +
       (hasResumeTail
-        ? "Pick the conversation back up exactly where the exchanges above left off. If they ask about a product/topic, answer that question directly."
+        ? "Pick up exactly where those exchanges left off."
         : "Continue naturally from the prior context above."),
     );
   } else if (!suppressDomain && callCount >= 1) {

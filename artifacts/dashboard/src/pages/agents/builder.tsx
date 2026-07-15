@@ -1402,6 +1402,8 @@ function VoiceTab({ form }: { form: any }) {
       });
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
+      // Mirror Voice-tab Volume so preview matches the call bed level.
+      audio.volume = Math.max(0, Math.min(1, ambientNoiseVolume));
       ambientAudioRef.current = audio;
       ambientPreviewUrlRef.current = url;
       audio.onended = () => stopAmbientPreview();
@@ -1426,6 +1428,13 @@ function VoiceTab({ form }: { form: any }) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ambientNoiseTrack, ambientNoiseEnabled]);
+
+  // Keep live preview bed level in sync with the Volume slider.
+  useEffect(() => {
+    if (ambientAudioRef.current) {
+      ambientAudioRef.current.volume = Math.max(0, Math.min(1, ambientNoiseVolume));
+    }
+  }, [ambientNoiseVolume]);
 
   const handlePreviewVoice = async () => {
     // Clicking while playing acts as a stop button.

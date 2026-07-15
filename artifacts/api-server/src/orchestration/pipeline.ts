@@ -395,7 +395,12 @@ function buildCompactGreetingPrompt(fullSystemPrompt: string, language: string, 
       `EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names ` +
       `EXACTLY as written in your instructions; never translate or transliterate them.`;
   const openingLengthRule = resumeDropped
-    ? "[OPENING LENGTH] ONE very short sentence only (under 12 words): briefly acknowledge the previous call dropped or was cut off, in natural colloquial language. No re-introduction, no company pitch, no questions — then stop and listen."
+    ? "[OPENING — RESUME AFTER DROP] The previous call with this caller dropped mid-conversation. " +
+      "Speak 1–2 short colloquial sentences only: (1) briefly acknowledge the call got cut/dropped " +
+      "(natural phrasing in the caller's language — do NOT greet by name, do NOT say வணக்கம்/hello " +
+      "as if starting fresh), (2) immediately continue from LAST EXCHANGES BEFORE THE CALL DROPPED " +
+      "in CALLER MEMORY above — pick up the same topic mid-thread. Do NOT re-introduce yourself, " +
+      "your company, or restart the sales pitch from the beginning."
     : "[OPENING LENGTH] Your opening line must be ONE short, natural sentence — a brief greeting only. Do not list services, ask multiple questions, or explain anything yet; wait for the caller to respond.";
   const parts = [
     memoryBlock,
@@ -1678,6 +1683,11 @@ export class OrchestrationPipeline {
       // and the mix levels actually applied. A future regression (wrong levels,
       // ambient silently off) is visible from this single line.
       const ambientType = Object.prototype.hasOwnProperty.call(TRACK_PARAMS, track) ? "builtin" : "uploaded";
+      const ambientVolumeScale = Math.max(0, Math.min(1,
+        typeof this.agent.ambientNoiseVolume === "number" && Number.isFinite(this.agent.ambientNoiseVolume)
+          ? this.agent.ambientNoiseVolume
+          : 1.0,
+      ));
       logger.info(
         {
           callId: config.callId,
@@ -1685,13 +1695,15 @@ export class OrchestrationPipeline {
           ambientType,
           encoding: config.rawPcmOutput ? "pcm16-8k" : "mulaw-8k",
           telephonyProvider: config.telephonyProvider,
-          levels: AMBIENT_LEVELS,
+          volumeScale: ambientVolumeScale,
+          levels: {
+            ...AMBIENT_LEVELS,
+            silenceVol: AMBIENT_LEVELS.silenceVol * ambientVolumeScale,
+            speechVol: AMBIENT_LEVELS.speechVol * ambientVolumeScale,
+          },
         },
         "Ambient noise enabled",
       );
-      const ambientVolumeScale = typeof (this.agent as any).ambientNoiseVolume === "number"
-        ? Math.max(0, Math.min(1, (this.agent as any).ambientNoiseVolume as number))
-        : 1.0;
       if (ambientType === "builtin") {
         // Built-in procedural track — synchronous
         this.ambientStream = new AmbientNoiseStream(track, ambientVolumeScale);
@@ -3291,9 +3303,11 @@ export class OrchestrationPipeline {
     if (this.ambientStream || !this.agent.ambientNoiseEnabled || !this.agent.ambientNoiseTrack) return;
     const track = this.agent.ambientNoiseTrack;
     if (Object.prototype.hasOwnProperty.call(TRACK_PARAMS, track)) return;
-    const volumeScale = typeof (this.agent as { ambientNoiseVolume?: number }).ambientNoiseVolume === "number"
-      ? Math.max(0, Math.min(1, (this.agent as { ambientNoiseVolume: number }).ambientNoiseVolume))
-      : 1.0;
+    const volumeScale = Math.max(0, Math.min(1,
+      typeof this.agent.ambientNoiseVolume === "number" && Number.isFinite(this.agent.ambientNoiseVolume)
+        ? this.agent.ambientNoiseVolume
+        : 1.0,
+    ));
     try {
       const pcm = await Promise.race([
         loadPcmLoop(track),
@@ -3355,16 +3369,19 @@ export class OrchestrationPipeline {
         if (transferred || this.closed) return; // call was routed away — do not greet
       }
 
-      // For returning callers, speak an instant name opener — never block on a
-      // greeting LLM round-trip (call 2636: ~3.1s silence before first TTS while
-      // Gemini generated a recognition opener). Memory context is still in the
-      // system prompt for turn 1+.
+      // Returning callers (normal): instant name opener — no greeting LLM
+      // (call 2636: ~3.1s silence waiting on Gemini). Resume-after-drop callbacks
+      // skip the instant opener and use the greeting LLM + CALLER MEMORY /
+      // LAST EXCHANGES so the model acknowledges the cut and continues mid-thread
+      // (call 2683) — never a hardcoded cut-call phrase.
       const isReturningCaller = this.config.isReturningCaller === true;
+      const resumeDropped = this.isResumeDroppedCall;
+      const useInstantReturning = isReturningCaller && !resumeDropped;
       const greetLang =
         this.currentLang || this.agent.sttConfig.language || this.agent.language || "en-IN";
-      let greeting = isReturningCaller
+      let greeting = useInstantReturning
         ? buildInstantReturningGreeting(this.config.returningCallerName, greetLang)
-        : (this.agent.greetingMessage ?? "");
+        : (resumeDropped ? "" : (this.agent.greetingMessage ?? ""));
       let greetingEmotions: string[] | undefined;
 
       // Substitute {caller_salutation} in the greeting with the neutral salutation —
@@ -3372,7 +3389,15 @@ export class OrchestrationPipeline {
       if (greeting) {
         const resolvedSal = this.salutationFor(null);
         greeting = this.substituteSalutation(greeting, resolvedSal);
-        logger.info({ callId: this.config.callId, resolvedSalutation: resolvedSal || "(empty)", instantReturning: isReturningCaller }, "Pipeline: greeting prepared");
+        logger.info(
+          {
+            callId: this.config.callId,
+            resolvedSalutation: resolvedSal || "(empty)",
+            instantReturning: useInstantReturning,
+            resumeDropped,
+          },
+          "Pipeline: greeting prepared",
+        );
       }
 
       if (!greeting.trim()) {
@@ -3383,7 +3408,7 @@ export class OrchestrationPipeline {
             buildCompactGreetingPrompt(
               this.agent.systemPrompt,
               greetLang,
-              this.isResumeDroppedCall,
+              resumeDropped,
             ),
             this.salutationFor(null),
           );
@@ -3456,7 +3481,18 @@ export class OrchestrationPipeline {
             .replace(/[^\S\r\n]{2,}/g, " ")
             .trim(),
         );
-      } else if (isReturningCaller) {
+        if (resumeDropped && greeting.trim()) {
+          this.logExec("Agent", "system", {
+            status: "info",
+            turnNumber: 0,
+            metadata: {
+              event: "Resume Drop Greeting",
+              language: greetLang,
+              text: greeting.slice(0, 160),
+            },
+          });
+        }
+      } else if (useInstantReturning) {
         this.logExec("Agent", "system", {
           status: "info",
           turnNumber: 0,

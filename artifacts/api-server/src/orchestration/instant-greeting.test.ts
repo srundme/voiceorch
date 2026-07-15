@@ -10,6 +10,7 @@ describe("buildInstantReturningGreeting", () => {
   it("builds Tamil opener with name", () => {
     expect(buildInstantReturningGreeting("Karthik", "ta")).toContain("Karthik");
     expect(buildInstantReturningGreeting("Karthik", "ta")).toMatch(/^வணக்கம்/);
+    expect(buildInstantReturningGreeting("Karthik", "ta")).toContain("எப்படி இருக்கீங்க");
   });
 
   it("falls back without name", () => {

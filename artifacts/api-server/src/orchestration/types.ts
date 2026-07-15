@@ -286,6 +286,8 @@ export interface AgentConfig {
   noiseCancellationEnabled: boolean;
   ambientNoiseEnabled: boolean;
   ambientNoiseTrack: string | null;
+  /** 0–1 multiplier on ambient bed (Voice tab Volume). Default 1.0 when unset. */
+  ambientNoiseVolume: number;
   inactivityMessage: string | null;
   guardrailRoutes: Array<{ name: string; scoreThreshold: number; utterances: string; response: string }>;
   ivrEnabled: boolean;
