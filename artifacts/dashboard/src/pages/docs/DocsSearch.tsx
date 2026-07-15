@@ -5,19 +5,26 @@ import { Search } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 
 const SEARCH_DATA = [
-  { title: "Introduction", section: "Getting Started", slug: "introduction", content: "SnapServe developer platform. Build apps on the voice orchestration API. Base URL https://app.snapserve.ai/api." },
-  { title: "Authentication", section: "Getting Started", slug: "authentication", content: "Use sk_live_ API keys with Authorization Bearer. Create keys in Settings. Never put keys in frontend apps." },
-  { title: "Quick Start", section: "Getting Started", slug: "quick-start", content: "List agents and POST /calls/outbound with curl Node Python SDK." },
-  { title: "Agents", section: "API Guides", slug: "agents", content: "Create list update toggle delete agents via the REST API." },
-  { title: "Outbound Calls", section: "API Guides", slug: "outbound-calls", content: "Place outbound calls, get status, end call, disposition, transfer." },
-  { title: "Webhooks", section: "API Guides", slug: "webhooks", content: "Register webhook endpoints, verify X-SnapServe-Signature HMAC, call.completed events." },
-  { title: "Phone Numbers", section: "API Guides", slug: "phone-numbers", content: "List assign release numbers. Purchase ₹800 plus GST by card. KYC for India." },
-  { title: "Wallet", section: "API Guides", slug: "wallet", content: "GET wallet balance in INR paise. ₹5 per minute. Card top-ups with GST." },
-  { title: "SDKs", section: "Reference", slug: "sdks", content: "Official Node @snapserve/sdk and Python snapserve packages." },
-  { title: "Errors", section: "Reference", slug: "errors", content: "401 402 404 429 error codes and rate limits." },
-  { title: "API Reference", section: "Reference", slug: "api-reference", content: "OpenAPI explorer for the SnapServe REST API." },
-  { title: "Pricing", section: "Reference", slug: "pricing", content: "Prepaid INR. ₹500 welcome credit. ₹5 per minute. Phone ₹800 plus GST. Card only." },
-  { title: "Changelog", section: "Reference", slug: "changelog", content: "Developer docs rebuild API key auth INR billing." },
+  { title: "Introduction", section: "Get started", slug: "introduction", content: "SnapServe AI voice agents platform documentation base URL API" },
+  { title: "What you can build", section: "Get started", slug: "what-you-can-build", content: "inbound outbound booking campaigns dialer apps API" },
+  { title: "Platform concepts", section: "Get started", slug: "platform-concepts", content: "agent call wallet phone webhooks variables tools knowledge" },
+  { title: "Quick Start", section: "Get started", slug: "quick-start", content: "sk_live list agents POST outbound curl node python" },
+  { title: "Authentication", section: "Get started", slug: "authentication", content: "API keys Bearer sk_live Authorization" },
+  { title: "Agents & builder", section: "Product", slug: "agents", content: "dashboard builder prompt voice tools publish save agent" },
+  { title: "Variables", section: "Product", slug: "variables", content: "mustache customer_name agent variables registry" },
+  { title: "Knowledge base", section: "Product", slug: "knowledge-base", content: "RAG documents attach agent upload" },
+  { title: "Calendar & booking", section: "Product", slug: "calendar", content: "Google Calendar scheduling event types availability slots" },
+  { title: "Phone numbers", section: "Product", slug: "phone-numbers", content: "KYC purchase assign INR GST" },
+  { title: "Calls & history", section: "Product", slug: "outbound-calls", content: "transcript summary disposition recording outbound" },
+  { title: "Campaigns", section: "Product", slug: "campaigns", content: "batch dial CSV leads dashboard" },
+  { title: "Webhooks", section: "Product", slug: "webhooks", content: "HMAC signature call.completed" },
+  { title: "Wallet", section: "Product", slug: "wallet", content: "balance paise INR top-up card" },
+  { title: "API Reference", section: "Reference", slug: "api-reference", content: "OpenAPI agents calls webhooks scheduling" },
+  { title: "SDKs", section: "Reference", slug: "sdks", content: "Node Python @snapserve/sdk" },
+  { title: "Errors", section: "Reference", slug: "errors", content: "401 402 429" },
+  { title: "Pricing", section: "Reference", slug: "pricing", content: "₹5 minute welcome credit phone GST" },
+  { title: "FAQ", section: "Reference", slug: "faq", content: "common questions calendar variables transcript" },
+  { title: "Changelog", section: "Reference", slug: "changelog", content: "docs rebuild API key auth" },
 ];
 
 export function DocsSearch() {
@@ -25,22 +32,26 @@ export function DocsSearch() {
   const [query, setQuery] = useState("");
   const [, setLocation] = useLocation();
 
-  const fuse = useMemo(() => new Fuse(SEARCH_DATA, {
-    keys: ["title", "content", "section"],
-    threshold: 0.3,
-    includeMatches: true,
-  }), []);
+  const fuse = useMemo(
+    () =>
+      new Fuse(SEARCH_DATA, {
+        keys: ["title", "content", "section"],
+        threshold: 0.3,
+        includeMatches: true,
+      }),
+    [],
+  );
 
   const results = useMemo(() => {
-    if (!query) return SEARCH_DATA.slice(0, 6);
-    return fuse.search(query).map(r => r.item);
+    if (!query) return SEARCH_DATA.slice(0, 8);
+    return fuse.search(query).map((r) => r.item);
   }, [query, fuse]);
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
-        setOpen((open) => !open);
+        setOpen((o) => !o);
       }
     };
     document.addEventListener("keydown", down);
@@ -80,15 +91,21 @@ export function DocsSearch() {
               {results.map((item) => (
                 <button
                   key={item.slug}
+                  className="flex flex-col items-start gap-0.5 rounded-lg px-3 py-2.5 text-left hover:bg-white/5 transition-colors"
                   onClick={() => {
                     setOpen(false);
                     setQuery("");
-                    setLocation(item.slug === "introduction" ? "/docs" : `/docs/${item.slug}`);
+                    setLocation(
+                      item.slug === "introduction"
+                        ? "/docs"
+                        : item.slug === "api-reference"
+                          ? "/docs/api-reference"
+                          : `/docs/${item.slug}`,
+                    );
                   }}
-                  className="flex flex-col items-start gap-1 rounded-md px-3 py-2.5 text-left hover:bg-white/5 transition-colors"
                 >
                   <span className="text-sm font-medium text-foreground">{item.title}</span>
-                  <span className="text-[11px] text-muted-foreground">{item.section}</span>
+                  <span className="text-xs text-muted-foreground">{item.section}</span>
                 </button>
               ))}
             </div>

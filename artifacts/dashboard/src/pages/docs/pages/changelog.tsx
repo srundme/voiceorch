@@ -6,32 +6,27 @@ export default function ChangelogPage() {
       <PageHeader
         breadcrumb="Reference"
         title="Changelog"
-        description="Notable platform and documentation changes for API consumers."
+        description="Notable documentation and API-consumer changes."
       />
 
-      <h2 id="2026-07-15">2026-07-15</h2>
+      <h2 id="2026-07-15-docs">2026-07-15 — Docs restructure</h2>
       <ul>
         <li>
-          <strong>Developer docs rebuild</strong> — <code>/docs</code> is focused on building apps
-          against the SnapServe API (auth, outbound calls, webhooks, SDKs), with Bolna-style
-          navigation, method badges, and copy-paste endpoint blocks.
+          <strong>Learning guides</strong> — what you can build, platform concepts, agents builder,
+          variables, knowledge base, calendar, campaigns, FAQ.
         </li>
         <li>
-          <strong>API key auth</strong> — <code>Authorization: Bearer sk_live_…</code> is honored on
-          the public API (in addition to dashboard session JWTs).
+          <strong>Curated API Reference</strong> — Bolna-style public surface only (agents, calls /
+          transcript+summary, variables, webhooks, phones, wallet, knowledge, scheduling). Campaigns
+          and admin APIs hidden from the sidebar.
         </li>
         <li>
-          <strong>INR billing</strong> — wallet and pricing are INR (paise). Welcome credit ₹500;
-          flat ₹5/min; phone numbers ₹800 + 18% GST; card checkout only.
+          <strong>API key auth</strong> — <code>Bearer sk_live_…</code> on the public API.
+        </li>
+        <li>
+          <strong>INR billing</strong> — ₹500 welcome, ₹5/min, phones ₹800+GST, card only.
         </li>
       </ul>
-
-      <h2 id="earlier">Earlier</h2>
-      <p>
-        Agent builder, multi-provider orchestration, campaigns, scheduling, and telephony
-        integrations shipped previously. Product UI changes are announced in-app; this page tracks
-        API consumer impact.
-      </p>
     </div>
   );
 }

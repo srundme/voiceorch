@@ -33,9 +33,9 @@ export function ApiOverview() {
       <header className="space-y-4">
         <h1 className="text-3xl font-semibold tracking-tight">{getApiTitle()}</h1>
         <p className="text-[15px] text-muted-foreground leading-relaxed">
-          The SnapServe REST API lets you manage voice agents, calls, providers, campaigns,
-          scheduling and more programmatically. {opCount} endpoints are available, grouped by
-          resource in the sidebar.
+          Public builder API for agents, variables, outbound calls (transcript &amp; summary),
+          webhooks, phone numbers, wallet, knowledge base, and scheduling.{" "}
+          {opCount} curated endpoints — dashboard-only campaign/admin APIs are omitted.
         </p>
         <div className="rounded-lg border border-white/10 bg-white/[0.03] px-4 py-3">
           <span className="text-xs uppercase tracking-wider text-muted-foreground/60">Base URL</span>
@@ -53,16 +53,16 @@ export function ApiOverview() {
 
       <Section id="authentication" title="Authentication">
         <p>
-          Authenticate end-user requests with a bearer token in the{" "}
-          <code className="text-primary">Authorization</code> header:
+          Use a developer API key from{" "}
+          <Link href="/docs/authentication">Authentication</Link> in the{" "}
+          <code className="text-sky-300">Authorization</code> header:
         </p>
-        <pre className="rounded-lg border border-white/10 bg-[#0B0D12] p-3 text-[13px] font-mono text-foreground/90 overflow-x-auto">
-          <code>Authorization: Bearer &lt;your-session-token&gt;</code>
+        <pre className="rounded-lg border border-white/10 bg-[#0c0c0f] p-3 text-[13px] font-mono text-foreground/90 overflow-x-auto">
+          <code>Authorization: Bearer sk_live_…</code>
         </pre>
         <p>
-          Internal admin endpoints use a separate{" "}
-          <code className="text-primary">X-Admin-Token</code> header instead and are not available
-          to end users.
+          Dashboard session JWTs work for the browser app only. Prefer{" "}
+          <code className="text-sky-300">sk_live_</code> keys from your backend.
         </p>
       </Section>
 

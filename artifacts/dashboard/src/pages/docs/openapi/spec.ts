@@ -7,18 +7,16 @@ import type {
   PathItemObject,
   RefObject,
 } from "./types";
+import {
+  OP_TAG_OVERRIDE,
+  PUBLIC_OPERATION_IDS,
+  PUBLIC_TAG_ORDER,
+  TAG_LABELS,
+} from "./publicOps";
 
 export const spec: OpenApiDocument = doc;
 
 export const METHODS: HttpMethod[] = ["get", "post", "put", "patch", "delete"];
-
-/**
- * Tags that are internal / platform-ops-only and must not appear in the
- * user-facing API Reference. Operations whose path starts with "/admin" are
- * already excluded at the operation level; this set covers the remaining
- * internal-only tags whose paths don't carry a visible /admin prefix.
- */
-const HIDDEN_TAGS = new Set(["command-center", "platform-analytics", "auth"]);
 
 export interface IndexedOperation {
   id: string;
@@ -69,8 +67,9 @@ function slugify(method: string, path: string): string {
 }
 
 let cachedOps: IndexedOperation[] | null = null;
+let cachedPublicOps: IndexedOperation[] | null = null;
 
-export function getOperations(): IndexedOperation[] {
+function indexAllOperations(): IndexedOperation[] {
   if (cachedOps) return cachedOps;
   const ops: IndexedOperation[] = [];
   const paths = spec.paths ?? {};
@@ -78,15 +77,15 @@ export function getOperations(): IndexedOperation[] {
     if (!pathItem) continue;
     const item = pathItem as PathItemObject;
     const sharedParams = item.parameters ?? [];
-    // Exclude admin-only endpoints — these are SnapServe-internal ops
-    // not relevant to end-user developers.
     if (path.startsWith("/admin")) continue;
     for (const method of METHODS) {
       const op = item[method];
       if (!op) continue;
-      const tag = op.tags?.[0] ?? "default";
+      const id = op.operationId ?? slugify(method, path);
+      const rawTag = op.tags?.[0] ?? "default";
+      const tag = OP_TAG_OVERRIDE[id] ?? rawTag;
       ops.push({
-        id: op.operationId ?? slugify(method, path),
+        id,
         method,
         path,
         tag,
@@ -102,14 +101,21 @@ export function getOperations(): IndexedOperation[] {
   return ops;
 }
 
+/** Public builder surface only — used by API Reference UI. */
+export function getOperations(): IndexedOperation[] {
+  if (cachedPublicOps) return cachedPublicOps;
+  cachedPublicOps = indexAllOperations().filter((op) => PUBLIC_OPERATION_IDS.has(op.id));
+  return cachedPublicOps;
+}
+
 export function getOperationById(id: string): IndexedOperation | undefined {
+  // Docs API Reference only resolves curated public ops (campaigns/admin hidden).
   return getOperations().find((o) => o.id === id);
 }
 
-/** Group operations by tag, preserving the tag order declared at the top of the spec. */
+/** Group public operations by curated tag order. */
 export function getTagGroups(): TagGroup[] {
   const ops = getOperations();
-  const declaredOrder = (spec.tags ?? []).map((t) => t.name);
   const descByTag = new Map((spec.tags ?? []).map((t) => [t.name, t.description]));
 
   const byTag = new Map<string, IndexedOperation[]>();
@@ -119,18 +125,16 @@ export function getTagGroups(): TagGroup[] {
     byTag.set(op.tag, list);
   }
 
-  const orderedTags = [
-    ...declaredOrder.filter((t) => byTag.has(t)),
-    ...[...byTag.keys()].filter((t) => !declaredOrder.includes(t)).sort(),
+  const ordered = [
+    ...PUBLIC_TAG_ORDER.filter((t) => byTag.has(t)),
+    ...[...byTag.keys()].filter((t) => !(PUBLIC_TAG_ORDER as readonly string[]).includes(t)).sort(),
   ];
 
-  return orderedTags
-    .filter((tag) => !HIDDEN_TAGS.has(tag))
-    .map((tag) => ({
-      tag,
-      description: descByTag.get(tag),
-      operations: byTag.get(tag) ?? [],
-    }));
+  return ordered.map((tag) => ({
+    tag,
+    description: descByTag.get(tag),
+    operations: byTag.get(tag) ?? [],
+  }));
 }
 
 export function getServerUrl(): string {
@@ -140,11 +144,11 @@ export function getServerUrl(): string {
 }
 
 export function getApiTitle(): string {
-  return spec.info?.title ?? "API";
+  return "SnapServe API";
 }
 
-/** Tidy a tag id (e.g. "phone-numbers") into a display label ("Phone Numbers"). */
 export function tagLabel(tag: string): string {
+  if (TAG_LABELS[tag]) return TAG_LABELS[tag];
   return tag
     .split(/[-_\s]+/)
     .map((w) => (w.length <= 3 && w === w.toLowerCase() ? w.toUpperCase() : w.charAt(0).toUpperCase() + w.slice(1)))
