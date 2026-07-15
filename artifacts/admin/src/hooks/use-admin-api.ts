@@ -22,6 +22,32 @@ export function useOverview() {
   });
 }
 
+export type CallVolumePreset = "week" | "month" | "year";
+
+export type CallVolumePoint = {
+  period: string;
+  total: number;
+  completed: number;
+  failed: number;
+};
+
+export type CallVolumeAnalytics = {
+  preset: CallVolumePreset;
+  from: string;
+  to: string;
+  bucket: "day" | "month";
+  totals: { total: number; completed: number; failed: number };
+  series: CallVolumePoint[];
+};
+
+export function useCallVolumeAnalytics(preset: CallVolumePreset = "month") {
+  return useQuery({
+    queryKey: ["admin", "analytics", "calls", preset],
+    queryFn: () => adminFetch<CallVolumeAnalytics>(`/analytics/calls?preset=${preset}`),
+    refetchInterval: 60_000,
+  });
+}
+
 // Users
 export function useUsers() {
   return useQuery({

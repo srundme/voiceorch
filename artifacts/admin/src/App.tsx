@@ -8,6 +8,7 @@ import { Layout } from "@/components/layout";
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/login";
 import Overview from "@/pages/overview";
+import CallAnalyticsPage from "@/pages/call-analytics";
 import UsersList from "@/pages/users";
 import UserDetail from "@/pages/user-detail";
 import Finance from "@/pages/finance";
@@ -74,6 +75,7 @@ function Router() {
     <Switch>
       <Route path="/login" component={Login} />
       <ProtectedRoute path="/" component={Overview} />
+      <ProtectedRoute path="/call-analytics" component={CallAnalyticsPage} />
       <ProtectedRoute path="/users" component={UsersList} />
       <ProtectedRoute path="/users/:clerkId" component={UserDetail} />
       <ProtectedRoute path="/users/:clerkId/agents/:agentId" component={AdminAgentEdit} />

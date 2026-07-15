@@ -76,6 +76,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   const navItems: NavItem[] = [
     { href: "/",               label: "Overview",         icon: Activity },
+    { href: "/call-analytics", label: "Call Analytics",   icon: PhoneCall },
     { href: "/users",          label: "Users",            icon: Users },
     { href: "/finance",        label: "Finance",          icon: Wallet },
     { href: "/audit-logs",     label: "Audit Logs",       icon: ClipboardList },

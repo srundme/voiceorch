@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { NoActiveTemplateBanner } from "@/components/no-active-template-banner";
+import { CallVolumeChart } from "@/components/call-volume-chart";
 
 function SpikeAlertsPanel() {
   const { data: alertsData, isLoading } = useSpikeAlerts();
@@ -360,6 +361,8 @@ export default function Overview() {
           </Card>
         ))}
       </div>
+
+      <CallVolumeChart compact defaultPreset="month" showViewAll />
 
       {/* Recent Calls summary */}
       <Card className="border-border shadow-none">
