@@ -1507,155 +1507,164 @@ function VoiceTab({ form }: { form: any }) {
   );
 
   return (
-    <div className="relative p-6 space-y-6">
+    <div className="relative p-6 space-y-8 max-w-3xl">
 
-      {/* ── Provider & Voice ── */}
-      <div className="space-y-3">
-        <SectionDivider label="Text-to-Speech — Provider & Voice" />
-        <div className="grid grid-cols-2 gap-3">
-          <FormField control={form.control} name="ttsProvider" render={({ field }) => (
-            <FormItem className="space-y-1">
-              <FormLabel className="text-xs text-muted-foreground">Provider</FormLabel>
-              <Select value={field.value} onValueChange={(v) => { field.onChange(v); setVoiceCustomModeV(false); form.setValue("ttsVoice", ""); form.setValue("ttsModel", ""); }}>
-                <SelectTrigger className="h-9 text-sm">
-                  <SelectValue placeholder="Select provider" />
-                </SelectTrigger>
-                <SelectContent position="popper">
-                  {TTS_PROVIDERS.map(p => (
-                    <SelectItem key={p.value} value={p.value} className="text-sm">{p.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </FormItem>
-          )} />
-
-          {ttsVoiceOptsV.length > 0 && (
-            <FormField control={form.control} name="ttsVoice" render={({ field }) => (
+      {/* ── SPEAK ── */}
+      <section className="space-y-4">
+        <div>
+          <h3 className="text-[13px] font-semibold text-foreground tracking-tight">Speak</h3>
+          <p className="text-[11px] text-muted-foreground mt-0.5">
+            How the agent sounds on the call — provider, voice, and model.
+          </p>
+        </div>
+        <div className="rounded-xl border border-border/50 bg-card/40 p-4 space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <FormField control={form.control} name="ttsProvider" render={({ field }) => (
               <FormItem className="space-y-1">
-                <FormLabel className="text-xs text-muted-foreground">Choose voice</FormLabel>
-                <Select
-                  value={
-                    dropdownValV && ttsVoiceOptsV.some((v) => v.value === dropdownValV)
-                      ? dropdownValV
-                      : undefined
-                  }
-                  onValueChange={(v) => {
-                    if (v === "__custom__") {
-                      // Show the custom input without erasing the saved voice ID.
-                      setVoiceCustomModeV(true);
-                      return;
-                    }
-                    setVoiceCustomModeV(false);
-                    field.onChange(v);
-                  }}
-                >
+                <FormLabel className="text-xs text-muted-foreground">Provider</FormLabel>
+                <Select value={field.value} onValueChange={(v) => { field.onChange(v); setVoiceCustomModeV(false); form.setValue("ttsVoice", ""); form.setValue("ttsModel", ""); }}>
                   <SelectTrigger className="h-9 text-sm">
-                    <SelectValue placeholder="Select a voice…" />
+                    <SelectValue placeholder="Select provider" />
                   </SelectTrigger>
-                  <SelectContent position="popper" className="max-h-[300px]">
-                    {ttsVoiceOptsV.filter((v) => v.value !== "").map(v => (
-                      <SelectItem key={v.value} value={v.value} className="text-sm">
-                        {v.label}
-                      </SelectItem>
+                  <SelectContent position="popper">
+                    {TTS_PROVIDERS.map(p => (
+                      <SelectItem key={p.value} value={p.value} className="text-sm">{p.label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                {previewVoiceControl}
+              </FormItem>
+            )} />
+
+            {ttsVoiceOptsV.length > 0 && (
+              <FormField control={form.control} name="ttsVoice" render={({ field }) => (
+                <FormItem className="space-y-1">
+                  <FormLabel className="text-xs text-muted-foreground">Choose voice</FormLabel>
+                  <Select
+                    value={
+                      dropdownValV && ttsVoiceOptsV.some((v) => v.value === dropdownValV)
+                        ? dropdownValV
+                        : undefined
+                    }
+                    onValueChange={(v) => {
+                      if (v === "__custom__") {
+                        setVoiceCustomModeV(true);
+                        return;
+                      }
+                      setVoiceCustomModeV(false);
+                      field.onChange(v);
+                    }}
+                  >
+                    <SelectTrigger className="h-9 text-sm">
+                      <SelectValue placeholder="Select a voice…" />
+                    </SelectTrigger>
+                    <SelectContent position="popper" className="max-h-[300px]">
+                      {ttsVoiceOptsV.filter((v) => v.value !== "").map(v => (
+                        <SelectItem key={v.value} value={v.value} className="text-sm">
+                          {v.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {previewVoiceControl}
+                </FormItem>
+              )} />
+            )}
+
+            {ttsProvider === "cartesia" && (whitelistedData?.voices ?? []).length > 0 && curatedVoiceOptsV.length === 0 && (
+              <p className="text-xs text-amber-400/80 leading-relaxed rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2.5 col-span-2">
+                No voices available for the selected language.
+              </p>
+            )}
+
+            {ttsModelOptsV.length > 0 && (
+              <FormField control={form.control} name="ttsModel" render={({ field }) => {
+                const modelVal = field.value ?? "";
+                const modelSafe = modelVal && ttsModelOptsV.some((m: any) => m.value === modelVal) ? modelVal : undefined;
+                return (
+                <FormItem className="space-y-1">
+                  <FormLabel className="text-xs text-muted-foreground">Model</FormLabel>
+                  <Select value={modelSafe} onValueChange={field.onChange}>
+                    <SelectTrigger className="h-9 text-sm">
+                      <SelectValue placeholder="Default" />
+                    </SelectTrigger>
+                    <SelectContent position="popper" className="max-h-[280px]">
+                      {ttsModelOptsV.map((m: any) => (
+                        <SelectItem key={m.value} value={m.value} className="text-sm">{m.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </FormItem>
+                );
+              }} />
+            )}
+          </div>
+
+          {showCustomV && (
+            <FormField control={form.control} name="ttsVoice" render={({ field }) => (
+              <FormItem className="space-y-1">
+                <FormLabel className="text-xs text-muted-foreground">
+                  {ttsVoiceOptsV.length > 0 ? "Custom Voice ID" : "Voice ID"}
+                </FormLabel>
+                <FormControl>
+                  <Input
+                    value={field.value === "__custom__" ? "" : (field.value ?? "")}
+                    onChange={(e) => field.onChange(e.target.value)}
+                    placeholder="Paste UUID / voice ID from your provider dashboard…"
+                    className="h-9 text-sm font-mono bg-background/50"
+                  />
+                </FormControl>
+                <FormDescription className="text-[10px]">
+                  {ttsProvider === "cartesia"
+                    ? "Find voice IDs in your Cartesia Voice Library dashboard"
+                    : ttsProvider === "elevenlabs"
+                      ? "Find voice IDs in the ElevenLabs Voice Lab"
+                      : "Provider-specific voice identifier"}
+                </FormDescription>
+                {ttsVoiceOptsV.length === 0 && previewVoiceControl}
               </FormItem>
             )} />
           )}
-
-          {ttsProvider === "cartesia" && (whitelistedData?.voices ?? []).length > 0 && curatedVoiceOptsV.length === 0 && (
-            <p className="text-xs text-amber-400/80 leading-relaxed rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2.5">
-              No voices available for the selected language.
-            </p>
-          )}
-
-          {ttsModelOptsV.length > 0 && (
-            <FormField control={form.control} name="ttsModel" render={({ field }) => {
-              const modelVal = field.value ?? "";
-              const modelSafe = modelVal && ttsModelOptsV.some((m: any) => m.value === modelVal) ? modelVal : undefined;
-              return (
-              <FormItem className="space-y-1">
-                <FormLabel className="text-xs text-muted-foreground">Model</FormLabel>
-                <Select value={modelSafe} onValueChange={field.onChange}>
-                  <SelectTrigger className="h-9 text-sm">
-                    <SelectValue placeholder="Default" />
-                  </SelectTrigger>
-                  <SelectContent position="popper" className="max-h-[280px]">
-                    {ttsModelOptsV.map((m: any) => (
-                      <SelectItem key={m.value} value={m.value} className="text-sm">{m.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </FormItem>
-              );
-            }} />
-          )}
         </div>
+      </section>
 
-        {/* Custom voice ID input — shown when free-form or "Paste custom" selected */}
-        {showCustomV && (
-          <FormField control={form.control} name="ttsVoice" render={({ field }) => (
-            <FormItem className="space-y-1">
-              <FormLabel className="text-xs text-muted-foreground">
-                {ttsVoiceOptsV.length > 0 ? "Custom Voice ID" : "Voice ID"}
-              </FormLabel>
-              <FormControl>
-                <Input
-                  value={field.value === "__custom__" ? "" : (field.value ?? "")}
-                  onChange={(e) => field.onChange(e.target.value)}
-                  placeholder="Paste UUID / voice ID from your provider dashboard…"
-                  className="h-9 text-sm font-mono bg-background/50"
-                />
-              </FormControl>
-              <FormDescription className="text-[10px]">
-                {ttsProvider === "cartesia"
-                  ? "Find voice IDs in your Cartesia Voice Library dashboard"
-                  : ttsProvider === "elevenlabs"
-                    ? "Find voice IDs in the ElevenLabs Voice Lab"
-                    : "Provider-specific voice identifier"}
-              </FormDescription>
-              {ttsVoiceOptsV.length === 0 && previewVoiceControl}
-            </FormItem>
-          )} />
-        )}
-      </div>
-
-      {/* ── Behavioral settings ── */}
-      <div className="grid grid-cols-2 gap-6">
-        <div className="space-y-4">
-          <SectionDivider label="Speech Recognition" />
+      {/* ── LISTEN ── */}
+      <section className="space-y-4">
+        <div>
+          <h3 className="text-[13px] font-semibold text-foreground tracking-tight">Listen</h3>
+          <p className="text-[11px] text-muted-foreground mt-0.5">
+            How the agent hears the caller — noise cancel, backchannels, and ambient bed.
+          </p>
+        </div>
+        <div className="rounded-xl border border-border/50 bg-card/40 p-4 space-y-3">
           <FormField control={form.control} name="noiseCancellationEnabled" render={({ field }) => (
-            <FormItem className="flex items-center justify-between rounded-lg border border-border/50 px-3 py-2">
-              <div><FormLabel className="text-sm">Noise Cancellation</FormLabel>
-                <FormDescription className="text-[10px]">Filter background noise from caller audio</FormDescription></div>
+            <FormItem className="flex items-center justify-between rounded-lg border border-border/40 px-3 py-2.5">
+              <div>
+                <FormLabel className="text-sm">Noise Cancellation</FormLabel>
+                <FormDescription className="text-[10px]">Filter background noise from caller audio</FormDescription>
+              </div>
               <FormControl><Switch checked={field.value ?? true} onCheckedChange={field.onChange} /></FormControl>
             </FormItem>
           )} />
-          <p className="text-[11px] text-muted-foreground leading-relaxed">
-            Turn-end silence is controlled on Advanced → Engine → Endpointing (not a separate VAD slider).
-          </p>
-        </div>
-        <div className="space-y-4">
-          <SectionDivider label="Text-to-Speech Behaviour" />
           <FormField control={form.control} name="backchannelingEnabled" render={({ field }) => (
-            <FormItem className="flex items-center justify-between rounded-lg border border-border/50 px-3 py-2">
-              <div><FormLabel className="text-sm">Backchanneling</FormLabel>
-                <FormDescription className="text-[10px]">Agent says "mm-hmm", "I see" while listening</FormDescription></div>
+            <FormItem className="flex items-center justify-between rounded-lg border border-border/40 px-3 py-2.5">
+              <div>
+                <FormLabel className="text-sm">Backchanneling</FormLabel>
+                <FormDescription className="text-[10px]">Agent says &quot;mm-hmm&quot;, &quot;I see&quot; while listening</FormDescription>
+              </div>
               <FormControl><Switch checked={field.value ?? false} onCheckedChange={field.onChange} /></FormControl>
             </FormItem>
           )} />
-
           <FormField control={form.control} name="ambientNoiseEnabled" render={({ field }) => (
-            <FormItem className="flex items-center justify-between rounded-lg border border-border/50 px-3 py-2">
-              <div><FormLabel className="text-sm">Background Noise</FormLabel>
-                <FormDescription className="text-[10px]">Play an ambient background track to make the call feel natural</FormDescription></div>
+            <FormItem className="flex items-center justify-between rounded-lg border border-border/40 px-3 py-2.5">
+              <div>
+                <FormLabel className="text-sm">Background Noise</FormLabel>
+                <FormDescription className="text-[10px]">Ambient bed under the agent — not the agent voice level</FormDescription>
+              </div>
               <FormControl><Switch checked={field.value ?? false} onCheckedChange={field.onChange} /></FormControl>
             </FormItem>
           )} />
           {ambientNoiseEnabled && (
-            <>
+            <div className="rounded-lg border border-dashed border-border/50 bg-muted/10 px-3 py-3 space-y-3">
               <FormField control={form.control} name="ambientNoiseTrack" render={({ field }) => (
                 <FormItem>
                   <FormLabel className="text-xs">Track</FormLabel>
@@ -1694,7 +1703,7 @@ function VoiceTab({ form }: { form: any }) {
               <FormField control={form.control} name="ambientNoiseVolume" render={({ field }) => (
                 <FormItem>
                   <div className="flex items-center justify-between">
-                    <FormLabel className="text-xs">Volume</FormLabel>
+                    <FormLabel className="text-xs">Background bed volume</FormLabel>
                     <span className="text-xs text-muted-foreground tabular-nums">{Math.round((field.value ?? 1.0) * 100)}%</span>
                   </div>
                   <FormControl>
@@ -1707,17 +1716,92 @@ function VoiceTab({ form }: { form: any }) {
                     />
                   </FormControl>
                   <FormDescription className="text-[10px]">
-                    Reduce if the background noise is too loud relative to the agent's voice
+                    Background bed only — does not change the agent&apos;s speaking volume. Lower if the bed is loud relative to the voice.
                   </FormDescription>
                 </FormItem>
               )} />
-            </>
+            </div>
           )}
         </div>
-      </div>
+      </section>
+
+      {/* ── CALL FEEL (same fields as Advanced → Engine presets) ── */}
+      <VoiceCallFeelPresets form={form} />
     </div>
   );
 }
+
+/** Voice-tab Call Engine presets — writes the same form keys as Advanced → Engine. */
+function VoiceCallFeelPresets({ form }: { form: any }) {
+  const endpointMs = form.watch("asrEndpointingSilenceMs") ?? 300;
+  const linearMs = form.watch("linearDelayMs") ?? 350;
+  const interruptWords = form.watch("stopSpeakingNumWords") ?? 3;
+
+  const activePreset: CallEnginePreset | "custom" = (() => {
+    for (const key of Object.keys(CALL_ENGINE_PRESETS) as CallEnginePreset[]) {
+      const p = CALL_ENGINE_PRESETS[key];
+      if (
+        endpointMs === p.asrEndpointingSilenceMs
+        && linearMs === p.linearDelayMs
+        && interruptWords === p.stopSpeakingNumWords
+      ) return key;
+    }
+    return "custom";
+  })();
+
+  const applyPreset = (key: CallEnginePreset) => {
+    const p = CALL_ENGINE_PRESETS[key];
+    form.setValue("asrEndpointingSilenceMs", p.asrEndpointingSilenceMs, { shouldDirty: true });
+    form.setValue("linearDelayMs", p.linearDelayMs, { shouldDirty: true });
+    form.setValue("stopSpeakingNumWords", p.stopSpeakingNumWords, { shouldDirty: true });
+    form.setValue("stopSpeakingVoiceSecs", voiceSecondsFromInterruptWords(p.stopSpeakingNumWords), { shouldDirty: true });
+  };
+
+  return (
+    <section className="space-y-3">
+      <div>
+        <h3 className="text-[13px] font-semibold text-foreground tracking-tight">Phone feel</h3>
+        <p className="text-[11px] text-muted-foreground mt-0.5">
+          How quickly the agent takes the turn — same Call Engine knobs as Advanced → Engine.
+        </p>
+      </div>
+      <div className="rounded-xl border border-border/50 bg-card/40 p-4 space-y-3">
+        <div className="flex flex-wrap gap-2">
+          {([
+            { id: "fast" as const, label: "Fast", hint: "Snappy barge / short silence" },
+            { id: "balanced" as const, label: "Balanced", hint: "Default natural pace" },
+            { id: "patient" as const, label: "Patient", hint: "Lets callers pause longer" },
+          ]).map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => applyPreset(p.id)}
+              title={p.hint}
+              className={cn(
+                "px-3 py-1.5 rounded-lg text-[11.5px] font-medium border transition-all",
+                activePreset === p.id
+                  ? "bg-primary/15 text-primary border-primary/40"
+                  : "border-border/50 text-muted-foreground hover:text-foreground hover:bg-muted/40",
+              )}
+            >
+              {p.label}
+            </button>
+          ))}
+          {activePreset === "custom" && (
+            <span className="px-2.5 py-1.5 rounded-lg text-[11px] text-muted-foreground/80 border border-dashed border-border/50">
+              Custom
+            </span>
+          )}
+        </div>
+        <p className="text-[10px] text-muted-foreground leading-relaxed">
+          Fine-tune endpointing, linear delay, and interrupt words on{" "}
+          <span className="text-foreground/80">Advanced → Engine</span>.
+        </p>
+      </div>
+    </section>
+  );
+}
+
 
 /* ── Tab: Tools ─────────────────────────────────────────────────────────────── */
 
@@ -2979,6 +3063,8 @@ function AgentListPanel({ selectedId, onSelect, rateMap }: {
   const filtered = (agents ?? []).filter(a =>
     !search || a.name.toLowerCase().includes(search.toLowerCase())
   );
+  const liveCount = (agents ?? []).filter(a => a.status === "active").length;
+  const totalCount = agents?.length ?? 0;
 
   return (
     <div className="w-[260px] shrink-0 border-r border-border/40 flex flex-col h-full bg-background/30 backdrop-blur-sm">
@@ -2987,7 +3073,12 @@ function AgentListPanel({ selectedId, onSelect, rateMap }: {
         <div className="flex items-center justify-between gap-2">
           <div className="text-left min-w-0">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/60">Agents</p>
-            <p className="text-sm font-semibold text-foreground truncate">{agents?.length ?? 0} live</p>
+            <p className="text-sm font-semibold text-foreground truncate">
+              {isLoading ? "…" : `${totalCount} agent${totalCount === 1 ? "" : "s"}`}
+              {!isLoading && totalCount > 0 && (
+                <span className="text-muted-foreground font-normal"> · {liveCount} live</span>
+              )}
+            </p>
           </div>
           <Button size="sm" className="h-8 rounded-full gap-1 px-3 text-xs shrink-0" onClick={handleCreate}>
             <Plus className="h-3.5 w-3.5" /> New
@@ -3004,15 +3095,26 @@ function AgentListPanel({ selectedId, onSelect, rateMap }: {
           <div key={i} className="px-3 py-3 rounded-xl"><Skeleton className="h-4 w-3/4 mb-1.5" /><Skeleton className="h-3 w-1/2" /></div>
         ))}
         {!isLoading && filtered.length === 0 && (
-          <div className="px-3 py-8 text-center">
-            <p className="text-xs text-muted-foreground mb-3">No agents yet</p>
-            <Button size="sm" className="h-8 rounded-full text-xs gap-1" onClick={() => navigate("/app/vibe")}>
-              <Sparkles className="h-3 w-3" /> Build with AI
-            </Button>
+          <div className="px-3 py-10 text-center space-y-2">
+            {search ? (
+              <>
+                <p className="text-xs font-medium text-foreground">No matches</p>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">Try a different name, or clear the search.</p>
+              </>
+            ) : (
+              <>
+                <p className="text-xs font-medium text-foreground">No agents yet</p>
+                <p className="text-[11px] text-muted-foreground leading-relaxed mb-2">Create one manually or build with Vibe.</p>
+                <Button size="sm" className="h-8 rounded-full text-xs gap-1" onClick={() => navigate("/app/vibe")}>
+                  <Sparkles className="h-3 w-3" /> Build with AI
+                </Button>
+              </>
+            )}
           </div>
         )}
         {filtered.map(agent => {
           const isSelected = agent.id === selectedId;
+          const isLive = agent.status === "active";
           const costCents = computeAgentRateCents(rateMap, agent as any, userProviderNames);
           return (
             <button key={agent.id} onClick={() => onSelect(agent.id)}
@@ -3025,9 +3127,13 @@ function AgentListPanel({ selectedId, onSelect, rateMap }: {
               <div className="flex items-center justify-between gap-1.5">
                 <span className="text-[13px] font-medium truncate">{agent.name}</span>
                 <span className={cn(
-                  "h-1.5 w-1.5 rounded-full shrink-0",
-                  agent.status === "active" ? "bg-emerald-400" : "bg-muted-foreground/35",
-                )} />
+                  "shrink-0 rounded-md px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide border",
+                  isLive
+                    ? "bg-emerald-500/12 text-emerald-400 border-emerald-500/25"
+                    : "bg-muted/40 text-muted-foreground border-border/50",
+                )}>
+                  {isLive ? "Live" : "Draft"}
+                </span>
               </div>
               <div className="flex items-center gap-1.5 mt-1">
                 <span className="text-[10px] text-muted-foreground/75 truncate">{agent.asrProvider} · {agent.ttsProvider}</span>
@@ -5042,9 +5148,13 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       const fieldTabMap: Record<string, TabId> = {
         webhookUrl:               "analysis",
         webhookSecret:            "analysis",
-        noiseCancellationEnabled: "advanced",
-        ambientNoiseEnabled:      "advanced",
-        ambientNoiseTrack:        "advanced",
+        noiseCancellationEnabled: "voice",
+        ambientNoiseEnabled:      "voice",
+        ambientNoiseTrack:        "voice",
+        ambientNoiseVolume:       "voice",
+        asrEndpointingSilenceMs:  "voice",
+        linearDelayMs:            "voice",
+        stopSpeakingNumWords:     "voice",
         vadSilenceMs:             "advanced",
         bargeInEnabled:           "advanced",
         bargeInEnergyThreshold:   "advanced",
@@ -5167,7 +5277,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
                   : "border-border/50 bg-muted/30 text-muted-foreground",
               )}>
                 <span className={cn("h-1.5 w-1.5 rounded-full", agent.status === "active" ? "bg-emerald-400" : "bg-muted-foreground/50")} />
-                {agent.status === "active" ? "Active" : "Inactive"}
+                {agent.status === "active" ? "Live" : "Draft"}
               </span>
               <span className="text-[11px] text-muted-foreground/50 tabular-nums shrink-0">#{String(agent.id).padStart(4, "0")}</span>
             </div>
@@ -5279,14 +5389,19 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
           </div>
         </Form>
 
-        {/* Studio action rail — try → inbound → save → refine → publish */}
+        {/* Studio action rail — Test vs Publish */}
         <aside className="hidden xl:flex w-[272px] shrink-0 flex-col border-l border-border/40 bg-muted/[0.15] overflow-y-auto">
           <div className="flex flex-col gap-4 px-3.5 py-4 flex-1">
-            {/* Try — phone + web share equal weight */}
+            {/* Test — phone + web; soft save hint when dirty */}
             <div className="space-y-2">
               <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/55 px-0.5">
-                Try
+                Test
               </p>
+              {isDirty && (
+                <p className="text-[10px] text-amber-400/90 leading-snug rounded-md border border-amber-500/20 bg-amber-500/5 px-2 py-1.5">
+                  Unsaved changes — save before testing so the call uses the latest config.
+                </p>
+              )}
               <div className="grid grid-cols-2 gap-2">
                 <Button
                   type="button"
@@ -5332,10 +5447,10 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
 
             <div className="h-px bg-border/40" />
 
-            {/* Persist — Save primary, Refine next, Publish quiet */}
+            {/* Publish — Save primary, Refine next, Publish version */}
             <div className="space-y-2">
               <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/55 px-0.5">
-                Manage
+                Publish
               </p>
               <div className="relative">
                 <Button
@@ -5348,7 +5463,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
                   disabled={updateAgent.isPending}
                 >
                   {savedFlash ? <Check className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}
-                  {updateAgent.isPending ? "Saving…" : savedFlash ? "Saved" : "Save agent"}
+                  {updateAgent.isPending ? "Saving…" : savedFlash ? "Saved" : isDirty ? "Save changes" : "Save agent"}
                 </Button>
                 {isDirty && !updateAgent.isPending && !savedFlash && (
                   <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-amber-400 pointer-events-none" />
