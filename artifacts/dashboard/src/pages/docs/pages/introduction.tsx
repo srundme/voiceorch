@@ -1,76 +1,124 @@
 import { Link } from "wouter";
+import { BookOpen, Code2, PhoneCall, Rocket, Webhook } from "lucide-react";
+import { Callout, DocCard, PageHeader } from "../DocsUi";
+import { CodeBlock } from "../CodeBlock";
+
+const COPY = `SnapServe Developer Platform
+
+Base URL: https://app.snapserve.ai/api
+Auth: Authorization: Bearer sk_live_YOUR_KEY
+
+Build dialers, automations, and inbound assistants on the SnapServe voice API.`;
 
 export default function IntroductionPage() {
   return (
     <div>
-      <h1>SnapServe Developer Platform</h1>
-      <p>
-        SnapServe is an AI voice orchestration API. Build your own product — CRM dialer,
-        support bot, appointment booker — and let SnapServe run the live phone conversation.
-        You authenticate with an API key, create or reuse agents, place outbound (or receive
-        inbound) calls, and get results over webhooks.
-      </p>
+      <PageHeader
+        breadcrumb="Overview"
+        title="SnapServe Documentation"
+        description={
+          <>
+            Build apps that <strong className="text-zinc-200">place AI voice calls</strong>, handle
+            webhooks, and manage agents — with copy-paste REST examples and official SDKs.
+          </>
+        }
+        copyText={COPY}
+      />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 my-8">
-        {[
-          { title: "Authentication", desc: "Create a sk_live_ key and call the API", href: "/docs/authentication" },
-          { title: "Quick Start", desc: "List agents and place your first outbound call", href: "/docs/quick-start" },
-          { title: "Outbound Calls", desc: "Create, poll, end, and disposition calls", href: "/docs/outbound-calls" },
-          { title: "Webhooks", desc: "Receive call.completed and more in your app", href: "/docs/webhooks" },
-          { title: "SDKs", desc: "Official Node.js and Python clients", href: "/docs/sdks" },
-          { title: "API Reference", desc: "Full OpenAPI explorer with schemas", href: "/docs/api-reference" },
-        ].map(card => (
-          <Link
-            key={card.href}
-            href={card.href}
-            className="block p-5 rounded-xl border border-border bg-white/[0.02] hover:bg-white/[0.05] hover:border-white/20 transition-all group"
-          >
-            <p className="font-semibold text-foreground group-hover:text-primary transition-colors mb-1">{card.title}</p>
-            <p className="text-sm text-muted-foreground">{card.desc}</p>
-          </Link>
-        ))}
+      <div className="not-prose grid grid-cols-1 sm:grid-cols-2 gap-3 my-8">
+        <DocCard
+          href="/docs/authentication"
+          title="Authentication"
+          description="Create a sk_live_ key and authorize every request"
+          icon={<BookOpen />}
+        />
+        <DocCard
+          href="/docs/quick-start"
+          title="Quick Start"
+          description="List agents and place your first outbound call"
+          icon={<Rocket />}
+        />
+        <DocCard
+          href="/docs/outbound-calls"
+          title="Outbound Calls"
+          description="Create, poll, end, disposition, and transfer"
+          icon={<PhoneCall />}
+        />
+        <DocCard
+          href="/docs/api-reference"
+          title="API Reference"
+          description="Full OpenAPI explorer with schemas & examples"
+          icon={<Code2 />}
+        />
       </div>
 
+      <Callout variant="warn" title="You need an account">
+        Sign up at{" "}
+        <a href="https://app.snapserve.ai" target="_blank" rel="noreferrer">
+          app.snapserve.ai
+        </a>
+        , create an agent in the dashboard, then generate an API key under{" "}
+        <a href="https://app.snapserve.ai/app/api-keys" target="_blank" rel="noreferrer">
+          API Keys
+        </a>
+        . New accounts get ₹500 welcome credit.
+      </Callout>
+
       <h2 id="base-url">Base URL</h2>
+      <p>All REST requests use:</p>
+      <CodeBlock language="text" code={`https://app.snapserve.ai/api`} />
       <p>
-        All REST requests go to:
-      </p>
-      <pre className="rounded-lg border border-border bg-[#0B0D12]/50 p-4 text-sm font-mono my-4">https://app.snapserve.ai/api</pre>
-      <p>
-        Authenticate every request with <code>Authorization: Bearer sk_live_…</code>.
-        See <Link href="/docs/authentication">Authentication</Link>.
+        Authenticate with <code>Authorization: Bearer sk_live_…</code>. See{" "}
+        <Link href="/docs/authentication">Authentication</Link>.
       </p>
 
       <h2 id="what-you-can-build">What you can build</h2>
       <ul>
         <li>
-          <strong>Your own dialer UI</strong> — store leads in your database, call{" "}
-          <code>POST /calls/outbound</code>, show live status from webhooks.
+          <strong>Your own dialer</strong> — store leads in your DB, call{" "}
+          <code>POST /calls/outbound</code>, show status from webhooks.
         </li>
         <li>
-          <strong>Backend automations</strong> — trigger a voice call when a form fills,
-          a ticket ages, or a CRM stage changes.
+          <strong>Backend automations</strong> — trigger a voice call when a form fills or a CRM
+          stage changes.
         </li>
         <li>
-          <strong>Inbound assistants</strong> — buy or bring a number, assign it to an agent,
-          handle callbacks in your app.
+          <strong>Inbound assistants</strong> — assign a number to an agent and handle results in
+          your app.
         </li>
       </ul>
 
-      <h2 id="billing-in-brief">Billing in brief</h2>
+      <h2 id="core-flow">Core flow</h2>
+      <ol>
+        <li>
+          Authenticate with <code>sk_live_</code>.
+        </li>
+        <li>
+          Pick an active <Link href="/docs/agents">agent</Link>.
+        </li>
+        <li>
+          <Link href="/docs/outbound-calls">Start an outbound call</Link>.
+        </li>
+        <li>
+          Receive <Link href="/docs/webhooks">call.completed</Link> on your HTTPS endpoint.
+        </li>
+      </ol>
+
+      <h2 id="billing">Billing in brief</h2>
       <p>
-        Accounts are prepaid in <strong>INR</strong>. New accounts get <strong>₹500</strong> welcome
-        credit. Platform fee is flat <strong>₹5 / minute</strong>. Wallet top-ups are charged by
-        card (18% GST on top). Details: <Link href="/docs/pricing">Pricing</Link> and{" "}
-        <Link href="/docs/wallet">Wallet</Link>.
+        Prepaid <strong>INR</strong>. Welcome credit <strong>₹500</strong>. Platform fee{" "}
+        <strong>₹5 / minute</strong>. Phone purchase <strong>₹800 + 18% GST</strong> (card). Details:{" "}
+        <Link href="/docs/pricing">Pricing</Link> · <Link href="/docs/wallet">Wallet</Link>.
       </p>
 
-      <h2 id="not-in-these-docs">What these docs are not</h2>
-      <p>
-        This site is for <strong>API developers</strong>. Agent prompts, voice tuning, and the
-        in-dashboard builder are product UX — configure those in the SnapServe app, then drive
-        the agent from your application via the API.
-      </p>
+      <div className="not-prose mt-10 flex flex-wrap gap-4 text-sm">
+        <Link href="/docs/webhooks" className="inline-flex items-center gap-1.5 text-sky-300 hover:text-sky-200">
+          <Webhook className="h-4 w-4" /> Webhooks guide
+        </Link>
+        <Link href="/docs/sdks" className="inline-flex items-center gap-1.5 text-sky-300 hover:text-sky-200">
+          <Code2 className="h-4 w-4" /> Node & Python SDKs
+        </Link>
+      </div>
     </div>
   );
 }

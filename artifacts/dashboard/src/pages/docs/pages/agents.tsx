@@ -1,40 +1,71 @@
-import { CodeBlock } from "../CodeBlock";
 import { Link } from "wouter";
+import { Callout, Endpoint, PageHeader, ParamsTable } from "../DocsUi";
+import { CodeBlock } from "../CodeBlock";
 
 export default function AgentsPage() {
   return (
     <div>
-      <h1>Agents API</h1>
-      <p>
-        An <strong>agent</strong> is a voice persona: system prompt, language, ASR/LLM/TTS
-        providers, and optional tools. Create agents in the dashboard for the richest editor,
-        or manage them over the API from your application.
-      </p>
-
-      <h2 id="list">List agents</h2>
-      <CodeBlock
-        language="bash"
-        code={`curl https://app.snapserve.ai/api/agents \\
-  -H "Authorization: Bearer $SNAPSERVE_API_KEY"`}
+      <PageHeader
+        breadcrumb="Agents"
+        title="Agents"
+        description="An agent is a voice persona: system prompt, language, ASR/LLM/TTS, and tools. Create richly in the dashboard, then list / update / toggle from your app."
+        copyText={`GET  https://app.snapserve.ai/api/agents
+POST https://app.snapserve.ai/api/agents
+GET  https://app.snapserve.ai/api/agents/{id}
+PATCH https://app.snapserve.ai/api/agents/{id}
+PATCH https://app.snapserve.ai/api/agents/{id}/toggle
+DELETE https://app.snapserve.ai/api/agents/{id}`}
       />
 
-      <h2 id="get">Get one agent</h2>
-      <CodeBlock
-        language="bash"
-        code={`curl https://app.snapserve.ai/api/agents/123 \\
-  -H "Authorization: Bearer $SNAPSERVE_API_KEY"`}
-      />
+      <Callout variant="info">
+        Pass <code>agentId</code> to <Link href="/docs/outbound-calls">outbound calls</Link>. The
+        agent must be <code>active</code> and your wallet must cover ₹5/min.
+      </Callout>
 
-      <h2 id="create">Create an agent</h2>
-      <p>
-        Request bodies match the OpenAPI <code>CreateAgent</code> schema. Minimal fields typically
-        include <code>name</code>, <code>systemPrompt</code>, language, and provider choices.
-        Prefer creating the first agent in the UI, then use <code>GET</code> / <code>PATCH</code>{" "}
-        from your app.
-      </p>
-      <CodeBlock
-        language="bash"
-        code={`curl -X POST https://app.snapserve.ai/api/agents \\
+      <Endpoint id="list" method="get" path="/agents" title="List agents" opId="listAgents">
+        <CodeBlock
+          language="bash"
+          code={`curl https://app.snapserve.ai/api/agents \\
+  -H "Authorization: Bearer $SNAPSERVE_API_KEY"`}
+        />
+        <CodeBlock
+          language="json"
+          code={`[
+  {
+    "id": 123,
+    "name": "Support desk",
+    "status": "active",
+    "language": "en-IN",
+    "asrProvider": "sarvam",
+    "llmProvider": "groq",
+    "ttsProvider": "cartesia"
+  }
+]`}
+        />
+      </Endpoint>
+
+      <Endpoint id="get" method="get" path="/agents/{id}" title="Get agent" opId="getAgent">
+        <CodeBlock
+          language="bash"
+          code={`curl https://app.snapserve.ai/api/agents/123 \\
+  -H "Authorization: Bearer $SNAPSERVE_API_KEY"`}
+        />
+      </Endpoint>
+
+      <Endpoint id="create" method="post" path="/agents" title="Create agent" opId="createAgent">
+        <ParamsTable
+          rows={[
+            { name: "name", type: "string", required: true, description: "Display name" },
+            { name: "systemPrompt", type: "string", required: true, description: "Instructions for the voice agent" },
+            { name: "language", type: "string", description: "BCP-47 / locale, e.g. en-IN, hi-IN" },
+            { name: "asrProvider", type: "string", description: "Speech-to-text provider key" },
+            { name: "llmProvider", type: "string", description: "LLM provider key" },
+            { name: "ttsProvider", type: "string", description: "Text-to-speech provider key" },
+          ]}
+        />
+        <CodeBlock
+          language="bash"
+          code={`curl -X POST https://app.snapserve.ai/api/agents \\
   -H "Authorization: Bearer $SNAPSERVE_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -45,38 +76,45 @@ export default function AgentsPage() {
     "llmProvider": "groq",
     "ttsProvider": "cartesia"
   }'`}
-      />
+        />
+        <p>
+          Prefer the dashboard builder for the first agent (voices, tools, phone feel), then{" "}
+          <code>GET</code> / <code>PATCH</code> from your app. Full schema in{" "}
+          <Link href="/docs/api-reference/createAgent">API Reference → createAgent</Link>.
+        </p>
+      </Endpoint>
 
-      <h2 id="update">Update / toggle</h2>
-      <CodeBlock
-        language="bash"
-        code={`# Partial update
-curl -X PATCH https://app.snapserve.ai/api/agents/123 \\
+      <Endpoint id="update" method="patch" path="/agents/{id}" title="Update agent" opId="updateAgent">
+        <CodeBlock
+          language="bash"
+          code={`curl -X PATCH https://app.snapserve.ai/api/agents/123 \\
   -H "Authorization: Bearer $SNAPSERVE_API_KEY" \\
   -H "Content-Type: application/json" \\
-  -d '{ "systemPrompt": "Updated instructions…" }'
+  -d '{ "systemPrompt": "Updated instructions…" }'`}
+        />
+      </Endpoint>
 
-# Activate or pause
-curl -X PATCH https://app.snapserve.ai/api/agents/123/toggle \\
+      <Endpoint
+        id="toggle"
+        method="patch"
+        path="/agents/{id}/toggle"
+        title="Toggle active / paused"
+        opId="toggleAgent"
+      >
+        <CodeBlock
+          language="bash"
+          code={`curl -X PATCH https://app.snapserve.ai/api/agents/123/toggle \\
   -H "Authorization: Bearer $SNAPSERVE_API_KEY"`}
-      />
+        />
+      </Endpoint>
 
-      <h2 id="delete">Delete</h2>
-      <CodeBlock
-        language="bash"
-        code={`curl -X DELETE https://app.snapserve.ai/api/agents/123 \\
+      <Endpoint id="delete" method="delete" path="/agents/{id}" title="Delete agent" opId="deleteAgent">
+        <CodeBlock
+          language="bash"
+          code={`curl -X DELETE https://app.snapserve.ai/api/agents/123 \\
   -H "Authorization: Bearer $SNAPSERVE_API_KEY"`}
-      />
-
-      <h2 id="calling">Using an agent on a call</h2>
-      <p>
-        Pass <code>agentId</code> to <Link href="/docs/outbound-calls">outbound calls</Link>.
-        The agent must be <code>active</code> and your wallet must cover the call at ₹5/min.
-      </p>
-
-      <p>
-        Full schemas: <Link href="/docs/api-reference">API Reference</Link>.
-      </p>
+        />
+      </Endpoint>
     </div>
   );
 }

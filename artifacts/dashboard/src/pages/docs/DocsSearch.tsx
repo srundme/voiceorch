@@ -50,11 +50,11 @@ export function DocsSearch() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <button className="flex items-center w-full gap-2 px-3 py-2 text-sm text-muted-foreground bg-muted/50 hover:bg-muted border border-border rounded-lg transition-colors group">
+        <button className="flex items-center w-full gap-2 px-3 py-2 text-sm text-zinc-400 bg-[#111114] hover:bg-[#16161a] border border-white/10 rounded-xl transition-colors group">
           <Search className="h-4 w-4" />
-          <span className="flex-1 text-left">Search documentation...</span>
-          <kbd className="hidden sm:inline-flex items-center gap-1 rounded border bg-background px-1.5 font-mono text-[10px] font-medium text-muted-foreground group-hover:text-foreground">
-            <span className="text-xs">⌘</span>K
+          <span className="flex-1 text-left">Search...</span>
+          <kbd className="hidden sm:inline-flex items-center gap-1 rounded-md border border-white/10 bg-black/40 px-1.5 font-mono text-[10px] font-medium text-zinc-500 group-hover:text-zinc-300">
+            ⌘K
           </kbd>
         </button>
       </DialogTrigger>

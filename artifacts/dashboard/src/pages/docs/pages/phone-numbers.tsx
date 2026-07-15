@@ -1,61 +1,78 @@
-import { CodeBlock } from "../CodeBlock";
 import { Link } from "wouter";
+import { Callout, Endpoint, PageHeader } from "../DocsUi";
+import { CodeBlock } from "../CodeBlock";
 
 export default function PhoneNumbersPage() {
   return (
     <div>
-      <h1>Phone Numbers</h1>
-      <p>
-        Phone numbers provide the caller ID for outbound calls and the DID for inbound agents.
-        Buy SnapServe-managed Indian numbers in the dashboard (card payment), then assign them
-        to agents via API.
-      </p>
-
-      <h2 id="pricing">Purchase pricing (India)</h2>
-      <ul>
-        <li>Base fee <strong>₹800</strong> + <strong>18% GST</strong> → pay <strong>₹944</strong> by card.</li>
-        <li>Renews every 30 days at ₹800 + GST from your wallet.</li>
-        <li>Indian numbers require completed <strong>KYC</strong> in the dashboard before purchase.</li>
-      </ul>
-
-      <h2 id="list">List your numbers</h2>
-      <CodeBlock
-        language="bash"
-        code={`curl https://app.snapserve.ai/api/phone-numbers \\
-  -H "Authorization: Bearer $SNAPSERVE_API_KEY"`}
+      <PageHeader
+        breadcrumb="Phone & Wallet"
+        title="Phone Numbers"
+        description="Caller ID for outbound and DID for inbound. Buy Indian numbers in the dashboard (card), then assign via API."
+        copyText={`GET   https://app.snapserve.ai/api/phone-numbers
+PATCH https://app.snapserve.ai/api/phone-numbers/{id}/assign
+DELETE https://app.snapserve.ai/api/phone-numbers/{id}`}
       />
 
-      <h2 id="assign">Assign to an agent</h2>
-      <CodeBlock
-        language="bash"
-        code={`curl -X PATCH https://app.snapserve.ai/api/phone-numbers/789/assign \\
+      <Callout variant="info" title="India pricing">
+        Base <strong>₹800</strong> + <strong>18% GST</strong> = pay <strong>₹944</strong> by card.
+        Renews every 30 days. KYC required before purchase.
+      </Callout>
+
+      <Endpoint
+        id="list"
+        method="get"
+        path="/phone-numbers"
+        title="List your numbers"
+        opId="listPhoneNumbers"
+      >
+        <CodeBlock
+          language="bash"
+          code={`curl https://app.snapserve.ai/api/phone-numbers \\
+  -H "Authorization: Bearer $SNAPSERVE_API_KEY"`}
+        />
+      </Endpoint>
+
+      <Endpoint
+        id="assign"
+        method="patch"
+        path="/phone-numbers/{id}/assign"
+        title="Assign to agent"
+        opId="assignPhoneNumber"
+      >
+        <CodeBlock
+          language="bash"
+          code={`curl -X PATCH https://app.snapserve.ai/api/phone-numbers/789/assign \\
   -H "Authorization: Bearer $SNAPSERVE_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{ "agentId": 123 }'`}
-      />
-      <p>
-        After assign, outbound calls for that agent use the number as from-number (when the
-        telephony path supports it).
-      </p>
+        />
+      </Endpoint>
 
       <h2 id="purchase">Purchase via API</h2>
       <p>
-        Inventory search and Razorpay checkout are available as{" "}
         <code>GET /phone-numbers/available</code>,{" "}
-        <code>POST /phone-numbers/purchase/initiate</code>, and{" "}
-        <code>POST /phone-numbers/purchase/confirm</code>. Most product apps still run purchase
-        in the SnapServe UI (card checkout + KYC), then automate assign / routing via API.
+        <code>POST /phone-numbers/purchase/initiate</code>,{" "}
+        <code>POST /phone-numbers/purchase/confirm</code>. Most apps still run purchase in the UI
+        (card + KYC), then automate assign via API.
       </p>
 
-      <h2 id="release">Release</h2>
-      <CodeBlock
-        language="bash"
-        code={`curl -X DELETE https://app.snapserve.ai/api/phone-numbers/789 \\
+      <Endpoint
+        id="release"
+        method="delete"
+        path="/phone-numbers/{id}"
+        title="Release number"
+        opId="releasePhoneNumber"
+      >
+        <CodeBlock
+          language="bash"
+          code={`curl -X DELETE https://app.snapserve.ai/api/phone-numbers/789 \\
   -H "Authorization: Bearer $SNAPSERVE_API_KEY"`}
-      />
+        />
+      </Endpoint>
 
       <p>
-        Call placement: <Link href="/docs/outbound-calls">Outbound Calls</Link>.
+        Next: <Link href="/docs/outbound-calls">Outbound Calls</Link>.
       </p>
     </div>
   );

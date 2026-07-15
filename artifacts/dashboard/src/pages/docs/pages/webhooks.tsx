@@ -1,81 +1,143 @@
-import { CodeBlock } from "../CodeBlock";
 import { Link } from "wouter";
+import { Callout, Endpoint, PageHeader, ParamsTable } from "../DocsUi";
+import { CodeBlock } from "../CodeBlock";
 
 export default function WebhooksPage() {
   return (
     <div>
-      <h1>Webhooks</h1>
-      <p>
-        Point SnapServe at your HTTPS endpoint to receive call lifecycle events in your own
-        application. Create endpoints via API or Settings → Webhooks in the dashboard.
-      </p>
+      <PageHeader
+        breadcrumb="Webhooks"
+        title="Webhooks"
+        description="Receive call lifecycle events on your HTTPS endpoint. Verify every payload with HMAC before trusting it."
+        copyText={`X-SnapServe-Signature: sha256=<hmac-hex>
+X-SnapServe-Timestamp: <unix-seconds>
+Signed payload: "{timestamp}.{rawBody}"`}
+      />
 
-      <h2 id="register">Register an endpoint</h2>
-      <CodeBlock
-        language="bash"
-        code={`curl -X POST https://app.snapserve.ai/api/webhook-endpoints \\
+      <Callout variant="warn" title="Verify signatures">
+        Always check <code>X-SnapServe-Signature</code> with your endpoint secret. Reject requests
+        that fail verification.
+      </Callout>
+
+      <Endpoint
+        id="register"
+        method="post"
+        path="/webhook-endpoints"
+        title="Register endpoint"
+        opId="createWebhookEndpoint"
+      >
+        <ParamsTable
+          rows={[
+            { name: "url", type: "string", required: true, description: "HTTPS URL that accepts POST" },
+            {
+              name: "events",
+              type: "string[]",
+              required: true,
+              description: 'e.g. ["call.started","call.completed","call.failed"]',
+            },
+          ]}
+        />
+        <CodeBlock
+          language="bash"
+          code={`curl -X POST https://app.snapserve.ai/api/webhook-endpoints \\
   -H "Authorization: Bearer $SNAPSERVE_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
     "url": "https://your-app.example.com/hooks/snapserve",
     "events": ["call.completed", "call.failed", "call.started"]
   }'`}
-      />
-      <p>
-        Save the signing secret returned at create time — it is not shown again. List / patch /
-        delete: <code>GET|PATCH|DELETE /webhook-endpoints</code>.
-      </p>
+        />
+        <p>
+          Save the signing <strong>secret</strong> from the create response — it is not shown again.
+        </p>
+      </Endpoint>
 
-      <h2 id="delivery">Delivery</h2>
+      <Endpoint
+        id="list"
+        method="get"
+        path="/webhook-endpoints"
+        title="List endpoints"
+        opId="listWebhookEndpoints"
+      >
+        <CodeBlock
+          language="bash"
+          code={`curl https://app.snapserve.ai/api/webhook-endpoints \\
+  -H "Authorization: Bearer $SNAPSERVE_API_KEY"`}
+        />
+      </Endpoint>
+
+      <h2 id="delivery">Delivery rules</h2>
       <ul>
         <li>HTTP <strong>POST</strong> with a JSON body.</li>
         <li>Respond <strong>200</strong> within ~10 seconds.</li>
-        <li>Failed deliveries retry with backoff (typically a few attempts), then mark failed.</li>
+        <li>Failed deliveries retry with backoff, then mark failed.</li>
       </ul>
 
       <h2 id="verify">Verify signatures</h2>
       <CodeBlock
-        language="text"
+        language="http"
         code={`X-SnapServe-Signature: sha256=<hmac-hex-digest>
 X-SnapServe-Timestamp: 1718612345`}
       />
       <p>
-        Signatures are HMAC-SHA256 of <code>{"{timestamp}.{rawBody}"}</code> using your endpoint
-        secret. Always verify before trusting the payload:
+        HMAC-SHA256 of <code>{"{timestamp}.{rawBody}"}</code> using your endpoint secret:
       </p>
       <CodeBlock
         language="javascript"
         code={`import crypto from "crypto";
 
-function verifyWebhook(rawBody, signature, timestamp, secret) {
+export function verifyWebhook(rawBody, signature, timestamp, secret) {
   const payload = \`\${timestamp}.\${rawBody}\`;
   const expected =
     "sha256=" +
     crypto.createHmac("sha256", secret).update(payload).digest("hex");
-  return crypto.timingSafeEqual(
-    Buffer.from(signature),
-    Buffer.from(expected),
+  if (signature.length !== expected.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+}
+
+// Express-style handler (use raw body buffer/string)
+app.post("/hooks/snapserve", express.raw({ type: "*/*" }), (req, res) => {
+  const rawBody = req.body.toString("utf8");
+  const ok = verifyWebhook(
+    rawBody,
+    req.get("X-SnapServe-Signature"),
+    req.get("X-SnapServe-Timestamp"),
+    process.env.SNAPSERVE_WEBHOOK_SECRET,
   );
-}`}
+  if (!ok) return res.status(401).send("invalid signature");
+  const event = JSON.parse(rawBody);
+  // handle event.event / event.data
+  res.sendStatus(200);
+});`}
+      />
+      <CodeBlock
+        language="python"
+        code={`import hmac, hashlib
+
+def verify_webhook(raw_body: bytes, signature: str, timestamp: str, secret: str) -> bool:
+    payload = f"{timestamp}.".encode() + raw_body
+    digest = hmac.new(secret.encode(), payload, hashlib.sha256).hexdigest()
+    expected = f"sha256={digest}"
+    return hmac.compare_digest(signature, expected)`}
       />
 
-      <h2 id="events">Useful events for app builders</h2>
-      <div className="my-4 overflow-x-auto">
+      <h2 id="events">Events</h2>
+      <div className="not-prose my-4 overflow-x-auto rounded-xl border border-white/10">
         <table className="w-full text-sm text-left">
-          <thead className="text-xs uppercase bg-white/5 text-muted-foreground border-b border-border">
+          <thead className="text-[11px] uppercase tracking-wider bg-white/[0.03] text-muted-foreground border-b border-white/10">
             <tr>
-              <th className="px-4 py-3 font-semibold">Event</th>
-              <th className="px-4 py-3 font-semibold">When</th>
+              <th className="px-4 py-2.5 font-semibold">Event</th>
+              <th className="px-4 py-2.5 font-semibold">When</th>
             </tr>
           </thead>
           <tbody>
             {[
               ["call.started", "Session established; agent is live"],
-              ["call.completed", "Normal hang-up; invoice duration/cost available"],
+              ["call.completed", "Normal hang-up; duration/cost available"],
               ["call.failed", "Connect failure or error exit"],
             ].map(([e, w]) => (
-              <tr key={e} className="border-b border-white/5 hover:bg-white/5">
-                <td className="px-4 py-3 font-mono text-xs">{e}</td>
+              <tr key={e} className="border-b border-white/5 last:border-0">
+                <td className="px-4 py-3 font-mono text-xs text-sky-300">{e}</td>
                 <td className="px-4 py-3 text-muted-foreground">{w}</td>
               </tr>
             ))}
@@ -104,8 +166,8 @@ function verifyWebhook(rawBody, signature, timestamp, secret) {
 
       <h2 id="local-dev">Local development</h2>
       <p>
-        Use a tunnel (ngrok, Cloudflare Tunnel) so SnapServe can reach{" "}
-        <code>https://…/hooks/snapserve</code> on your laptop.
+        Tunnel your laptop (ngrok / Cloudflare Tunnel) so SnapServe can reach{" "}
+        <code>https://…/hooks/snapserve</code>.
       </p>
     </div>
   );

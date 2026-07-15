@@ -58,8 +58,8 @@ function TagSection({
                 href={`/docs/api-reference/${op.id}`}
                 className={`group flex items-center gap-2 rounded-md px-2 py-1.5 text-[13px] transition-colors ${
                   isActive
-                    ? "bg-primary/10 text-foreground"
-                    : "text-muted-foreground hover:text-foreground hover:bg-white/5"
+                    ? "bg-sky-400/10 text-sky-200"
+                    : "text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.04]"
                 }`}
               >
                 <MethodBadge method={op.method} />

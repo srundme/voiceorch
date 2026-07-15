@@ -1,21 +1,26 @@
 import { Link } from "wouter";
+import { PageHeader } from "../DocsUi";
 
 export default function PricingPage() {
   return (
     <div>
-      <h1>Pricing</h1>
-      <p>
-        SnapServe is <strong>prepaid INR</strong>. There are no monthly subscription tiers.
-        You top up a wallet (card) and usage deducts as calls run.
-      </p>
+      <PageHeader
+        breadcrumb="Phone & Wallet"
+        title="Pricing"
+        description="Prepaid INR only — no monthly subscription tiers. Top up a wallet (card) and usage deducts as calls run."
+        copyText={`Welcome credit: ₹500
+Voice orchestration: ₹5 / minute
+Phone number: ₹800 + 18% GST = ₹944
+Min top-up credit: ₹100`}
+      />
 
       <h2 id="rates">Platform rates</h2>
-      <div className="my-4 overflow-x-auto">
+      <div className="not-prose my-4 overflow-x-auto rounded-xl border border-white/10">
         <table className="w-full text-sm text-left">
-          <thead className="text-xs uppercase bg-white/5 text-muted-foreground border-b border-border">
+          <thead className="text-[11px] uppercase tracking-wider bg-white/[0.03] text-muted-foreground border-b border-white/10">
             <tr>
-              <th className="px-4 py-3 font-semibold">Item</th>
-              <th className="px-4 py-3 font-semibold">Price</th>
+              <th className="px-4 py-2.5 font-semibold">Item</th>
+              <th className="px-4 py-2.5 font-semibold">Price</th>
             </tr>
           </thead>
           <tbody>
@@ -27,7 +32,7 @@ export default function PricingPage() {
               ["Phone number renewal (30 days)", "₹800 + GST from wallet"],
               ["Minimum top-up credit", "₹100"],
             ].map(([a, b]) => (
-              <tr key={a} className="border-b border-white/5 hover:bg-white/5">
+              <tr key={a} className="border-b border-white/5 last:border-0">
                 <td className="px-4 py-3">{a}</td>
                 <td className="px-4 py-3 text-muted-foreground">{b}</td>
               </tr>
@@ -50,8 +55,8 @@ export default function PricingPage() {
 
       <h2 id="payments">Payments</h2>
       <p>
-        Checkout is <strong>card only</strong> via Razorpay (UPI/QR are not offered). Top-up and
-        number purchase happen in the SnapServe dashboard; your app reads balance/usage over the API.
+        Checkout is <strong>card only</strong> via Razorpay. Top-up and number purchase happen in
+        the dashboard; your app reads balance/usage over the API.
       </p>
     </div>
   );

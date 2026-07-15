@@ -1,15 +1,17 @@
-import { CodeBlock } from "../CodeBlock";
 import { Link } from "wouter";
+import { PageHeader } from "../DocsUi";
+import { CodeBlock } from "../CodeBlock";
 
 export default function SdksPage() {
   return (
     <div>
-      <h1>SDKs</h1>
-      <p>
-        Official clients wrap the REST API with the same resources. Set{" "}
-        <code>apiKey</code> to your <code>sk_live_</code> key. Default base URL:{" "}
-        <code>https://app.snapserve.ai/api</code>.
-      </p>
+      <PageHeader
+        breadcrumb="Reference"
+        title="SDKs"
+        description="Official clients wrap the REST API. Set apiKey to your sk_live_ key. Default base URL: https://app.snapserve.ai/api."
+        copyText={`npm install @snapserve/sdk
+pip install snapserve`}
+      />
 
       <h2 id="node">Node.js — @snapserve/sdk</h2>
       <CodeBlock language="bash" code={`npm install @snapserve/sdk`} />
@@ -18,7 +20,7 @@ export default function SdksPage() {
         code={`import { SnapServe } from "@snapserve/sdk";
 
 const client = new SnapServe({
-  apiKey: process.env.SNAPSERVE_API_KEY!,
+  apiKey: process.env.SNAPSERVE_API_KEY,
   // baseUrl: "https://app.snapserve.ai/api", // optional
 });
 
@@ -31,7 +33,10 @@ const call = await client.calls.outbound({
 // Escape hatch for any path
 await client.request("GET", "/wallet");`}
       />
-      <p>Typed helpers typically cover: agents, calls, providers, phoneNumbers, analytics, webhookEndpoints, wallet, account, scheduling.</p>
+      <p>
+        Typed helpers typically cover: agents, calls, phoneNumbers, webhookEndpoints, wallet,
+        account, analytics.
+      </p>
 
       <h2 id="python">Python — snapserve</h2>
       <CodeBlock language="bash" code={`pip install snapserve`} />
