@@ -292,6 +292,92 @@ export function useFinanceTransactions() {
   });
 }
 
+function financeRangeParams(from?: string, to?: string) {
+  const p = new URLSearchParams();
+  if (from) p.set("from", from);
+  if (to) p.set("to", to);
+  return p.toString();
+}
+
+export function useFinanceAuditSummary(from?: string, to?: string) {
+  const q = financeRangeParams(from, to);
+  return useQuery({
+    queryKey: ["admin", "finance", "audit-summary", from, to],
+    queryFn: () => adminFetch<any>(`/finance/audit-summary?${q}`),
+  });
+}
+
+export function useFinanceLedger(opts: {
+  from?: string;
+  to?: string;
+  tab?: string;
+  limit?: number;
+  offset?: number;
+}) {
+  const p = new URLSearchParams();
+  if (opts.from) p.set("from", opts.from);
+  if (opts.to) p.set("to", opts.to);
+  if (opts.tab) p.set("tab", opts.tab);
+  if (opts.limit) p.set("limit", String(opts.limit));
+  if (opts.offset) p.set("offset", String(opts.offset));
+  return useQuery({
+    queryKey: ["admin", "finance", "ledger", opts],
+    queryFn: () => adminFetch<{ rows: any[]; total: number }>(`/finance/ledger?${p}`),
+  });
+}
+
+export function useFinanceDailyClose(from?: string, to?: string) {
+  const q = financeRangeParams(from, to);
+  return useQuery({
+    queryKey: ["admin", "finance", "daily-close", from, to],
+    queryFn: () => adminFetch<any>(`/finance/daily-close?${q}`),
+  });
+}
+
+export function useFinanceRazorpayGaps() {
+  return useQuery({
+    queryKey: ["admin", "finance", "razorpay-gaps"],
+    queryFn: () => adminFetch<any>("/finance/razorpay-gaps?hours=24"),
+  });
+}
+
+export function useFinanceEconomics(from?: string, to?: string) {
+  const q = financeRangeParams(from, to);
+  return useQuery({
+    queryKey: ["admin", "finance", "economics", from, to],
+    queryFn: () => adminFetch<any>(`/finance/economics?${q}`),
+  });
+}
+
+export function useFinanceCohorts() {
+  return useQuery({
+    queryKey: ["admin", "finance", "cohorts"],
+    queryFn: () => adminFetch<any>("/finance/cohorts"),
+  });
+}
+
+export function useFinanceInvestor() {
+  return useQuery({
+    queryKey: ["admin", "finance", "investor"],
+    queryFn: () => adminFetch<any>("/finance/investor"),
+  });
+}
+
+export async function downloadFinanceCsv(pathWithQuery: string, filename: string) {
+  const token = localStorage.getItem("adminToken") ?? "";
+  const res = await fetch(`/api/admin${pathWithQuery}`, {
+    headers: { "X-Admin-Token": token },
+  });
+  if (!res.ok) throw new Error(`Export failed: ${res.status}`);
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 // Platform
 export function usePlatformActive() {
   return useQuery({

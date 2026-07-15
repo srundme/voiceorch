@@ -25,6 +25,7 @@ import {
   Layers,
   Rocket,
   Mail,
+  ClipboardList,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -77,6 +78,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/",               label: "Overview",         icon: Activity },
     { href: "/users",          label: "Users",            icon: Users },
     { href: "/finance",        label: "Finance",          icon: Wallet },
+    { href: "/audit-logs",     label: "Audit Logs",       icon: ClipboardList },
     { href: "/usage",          label: "Usage Monitoring", icon: BarChart2 },
     { href: "/platform",       label: "Platform",         icon: Cpu },
     { href: "/health",         label: "Health",           icon: Activity },
