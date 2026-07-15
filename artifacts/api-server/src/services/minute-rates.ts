@@ -1,14 +1,11 @@
 /**
- * minute-rates.ts — flat per-minute billing rates
+ * minute-rates.ts — flat per-minute billing rates (INR / paise)
  *
- * Two tiers:
- *   managed — $0.050 / min  (5 cents)   agent runs on platform-provided keys (default for all users)
- *   byop    — $0.035 / min  (3.5 cents) agent runs on the user's own provider API keys
+ * Flat rate for all agents: ₹5.00 / min (500 paise).
+ * BYOP and managed share the same rate (plan: flat ₹5/min).
  *
- * Detection rule (applied at billing time, not stored on the agent row):
- *   If the user has their own provider keys (in the providers table) for ANY of the
- *   agent's configured ASR / LLM / TTS providers → BYOP rate.
- *   Otherwise → managed rate.
+ * Detection of byop vs managed is still used for analytics / UI labels but
+ * does not change the charge amount.
  *
  * Rates are exposed via GET /billing/rates and used in both the telephony
  * call-end path (calls.ts) and the webcall path (webcall.ts).
@@ -16,12 +13,13 @@
 
 import { db, providersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
+import { RATE_PAISE_PER_MIN } from "../lib/money-inr.js";
 
-export const MANAGED_RATE_CENTS_PER_MIN = 5;    // $0.050 / min
-export const BYOP_RATE_CENTS_PER_MIN    = 3.5;  // $0.035 / min
+export const MANAGED_RATE_CENTS_PER_MIN = RATE_PAISE_PER_MIN; // ₹5.00 / min
+export const BYOP_RATE_CENTS_PER_MIN    = RATE_PAISE_PER_MIN; // ₹5.00 / min (flat)
 
 /**
- * Returns the flat per-minute charge in cents for a given billing mode.
+ * Returns the flat per-minute charge in paise for a given billing mode.
  */
 export function getFlatRateCentsPerMin(mode: "managed" | "byop" | string | null | undefined): number {
   return mode === "byop" ? BYOP_RATE_CENTS_PER_MIN : MANAGED_RATE_CENTS_PER_MIN;
@@ -33,10 +31,6 @@ export function getFlatRateCentsPerMin(mode: "managed" | "byop" | string | null 
  * Rule: if the calling user has their own provider keys for ANY of the agent's
  * configured providers (ASR / LLM / TTS) → BYOP (user brings own keys).
  * If they have no provider keys configured → managed (SnapServe's keys are in use).
- *
- * This is evaluated at billing time so it's always accurate regardless of the
- * agentMode column value (which defaults to "managed" for new agents but may be
- * stale for older rows).
  */
 export async function resolveAgentBillingMode(
   clerkId: string | null | undefined,

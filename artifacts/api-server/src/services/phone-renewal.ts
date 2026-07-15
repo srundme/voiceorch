@@ -5,18 +5,16 @@
  * Renewal is charged FROM THE WALLET BALANCE, not via a new Razorpay
  * checkout — this matches the "monthly deduction" billing model (the $10
  * first purchase is the only step that requires an actual completed
- * payment). If the wallet balance can't cover the renewal, we attempt a
- * best-effort auto top-up via the user's saved Razorpay mandate (if any)
- * before retrying the debit once. On continued failure we leave
- * `nextRenewalAt` unchanged so the daily sweep retries the same charge the
- * next day — the number is NOT auto-released; deletion is user-initiated
- * only, at which point `status` flips to "released" and the query below
- * naturally excludes it, stopping all future renewal charges for that number.
+ * payment). Renewal is ₹800 + 18% GST from the wallet. If the balance can't
+ * cover it, we attempt auto top-up via the user's Razorpay UPI mandate before
+ * retrying once. On continued failure we leave `nextRenewalAt` unchanged so
+ * the daily sweep retries — the number is NOT auto-released.
  */
 import { and, eq, lte, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { phoneNumbersTable, usersTable, walletTransactionsTable } from "@workspace/db/schema";
 import { logger } from "../lib/logger.js";
+import { formatInr } from "../lib/money-inr.js";
 import { triggerAutoDebit } from "./wallet-auto-debit.js";
 
 let started = false;
@@ -73,7 +71,7 @@ async function renewOne(row: typeof phoneNumbersTable.$inferSelect): Promise<boo
     userId:      user.id,
     type:        "debit",
     amountCents: -renewalCents,
-    description: `Phone number ${row.number} monthly renewal ($${(renewalCents / 100).toFixed(2)})`,
+    description: `Phone number ${row.number} monthly renewal (${formatInr(renewalCents)} incl. GST)`,
     status:      "completed",
   });
 
@@ -107,10 +105,9 @@ async function sweepDuePhoneRenewals(): Promise<void> {
 }
 
 /**
- * Starts a daily sweep that charges the $8 monthly renewal fee for every
- * active phone number whose 30-day anniversary has arrived. Deleting a
- * number (status → "released") automatically excludes it from this query,
- * so no separate "stop renewal" step is needed.
+ * Starts a daily sweep that charges ₹800 + GST renewals for every active
+ * phone number whose 30-day anniversary has arrived. Deleting a number
+ * (status → "released") excludes it from this query.
  */
 export function startPhoneRenewalSweep(): void {
   if (started) return;

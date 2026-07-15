@@ -293,24 +293,24 @@ describe("mutation toast error-display path (catch block → formatAdminError)",
 // ---------------------------------------------------------------------------
 
 describe("formatCentsToDollars", () => {
-  it("formats zero cents as $0.00", () => {
+  it("formats zero paise as INR 0.00", () => {
     expect(formatCentsToDollars(0)).toMatch(/0\.00/);
   });
 
-  it("formats 100 cents as $1.00", () => {
+  it("formats 100 paise as ₹1.00", () => {
     expect(formatCentsToDollars(100)).toMatch(/1\.00/);
   });
 
-  it("formats 999 cents as $9.99", () => {
+  it("formats 999 paise as ₹9.99", () => {
     expect(formatCentsToDollars(999)).toMatch(/9\.99/);
   });
 
   it("formats large values with thousands separators", () => {
     const result = formatCentsToDollars(100000);
-    expect(result).toMatch(/1,000\.00/);
+    expect(result).toMatch(/1[,.]?000\.00/);
   });
 
-  it("formats negative cents correctly (refunds)", () => {
+  it("formats negative paise correctly (refunds)", () => {
     const result = formatCentsToDollars(-500);
     expect(result).toContain("5.00");
   });

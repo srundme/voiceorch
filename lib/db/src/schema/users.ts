@@ -10,8 +10,8 @@ export const usersTable = pgTable("users", {
   walletBalanceCents: integer("wallet_balance_cents").notNull().default(0),
   freeCreditsGranted: boolean("free_credits_granted").notNull().default(false),
   autoPayEnabled: boolean("auto_pay_enabled").notNull().default(false),
-  autoPayThresholdCents: integer("auto_pay_threshold_cents").notNull().default(100),
-  autoPayAmountCents: integer("auto_pay_amount_cents").notNull().default(1000),
+  autoPayThresholdCents: integer("auto_pay_threshold_cents").notNull().default(10000), // ₹100
+  autoPayAmountCents: integer("auto_pay_amount_cents").notNull().default(50000), // ₹500
   razorpayCustomerId: text("razorpay_customer_id"),
   razorpayTokenId: text("razorpay_token_id"),
   passwordHash: text("password_hash"),

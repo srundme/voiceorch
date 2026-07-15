@@ -177,7 +177,7 @@ function AuthShell({ children }: { children: React.ReactNode }) {
 
         <div className="max-w-md">
           <div className="inline-flex items-center gap-1.5 mb-5 px-3 py-1 rounded-full border border-purple-400/20 bg-purple-400/10 text-[0.7rem] font-medium tracking-wide text-purple-200">
-            <Sparkles size={12} /> $5 free credit · 100 minutes on us
+            <Sparkles size={12} /> ₹500 free credit · ~100 minutes on us
           </div>
           <h2 className="text-3xl font-semibold tracking-tight text-white leading-[1.15] mb-4">
             Voice agents that sound like your best rep, on call 24/7.

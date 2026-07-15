@@ -703,8 +703,7 @@ export default function CallsList() {
                           <div className="flex flex-col gap-0.5 items-end">
                             {costCents > 0 ? (
                               <span className="flex items-center gap-0.5 text-[10px] font-mono text-muted-foreground/50">
-                                <DollarSign className="h-2.5 w-2.5" />
-                                {(costCents / 100).toFixed(3)}
+                                ₹{(costCents / 100).toFixed(2)}
                               </span>
                             ) : (
                               <span className="text-muted-foreground/25 text-[10px]">—</span>

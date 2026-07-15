@@ -24,8 +24,8 @@ export function useMinuteRatesMap(): Map<string, number> {
     staleTime: 60_000,
   });
   const map = new Map<string, number>();
-  map.set("managed", 5);    // $0.05 / min default
-  map.set("byop",    3.5);  // $0.035 / min default
+  map.set("managed", 500); // ₹5.00 / min (paise)
+  map.set("byop",    500); // ₹5.00 / min (paise) — flat
   for (const r of data ?? []) {
     if (r.mode) map.set(r.mode.toLowerCase(), r.rateCentsPerMin);
   }
@@ -77,5 +77,5 @@ export function computeAgentRateCents(
     mode = agent.agentMode === "managed" ? "managed" : "byop";
   }
 
-  return rateMap.get(mode) ?? (mode === "managed" ? 5 : 3.5);
+  return rateMap.get(mode) ?? 500;
 }

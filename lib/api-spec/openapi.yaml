@@ -1580,7 +1580,7 @@ paths:
     post:
       operationId: initiatePhoneNumberPurchase
       tags: [phone-numbers]
-      summary: Start a phone-number purchase — creates a Razorpay order for the $10 first-purchase fee. The number is NOT provisioned until payment is confirmed via purchase/confirm.
+      summary: Start a phone-number purchase — creates a Razorpay INR order for ₹800 + 18% GST. The number is NOT provisioned until payment is confirmed via purchase/confirm.
       requestBody:
         required: true
         content:
@@ -8417,11 +8417,11 @@ components:
       properties:
         amountCents:
           type: integer
-          minimum: 1000
-          description: Amount in cents (minimum 1000 = $10)
+          minimum: 10000
+          description: Wallet credit in paise before GST (minimum 10000 = ₹100). Payable = credit × 1.18.
         setupMandate:
           type: boolean
-          description: When true, creates a recurring mandate order (user authorizes auto-pay once)
+          description: When true, creates a recurring UPI mandate order (user authorizes auto-pay once)
 
     TopupOrder:
       type: object
@@ -8431,16 +8431,13 @@ components:
           type: string
         amountCents:
           type: integer
-          description: Amount in USD cents (used for wallet credit)
+          description: Wallet credit in INR paise (pre-GST)
         amount:
           type: integer
-          description: >-
-            Amount in the Razorpay order's smallest currency unit — USD cents
-            for a regular top-up, INR paise for a UPI autopay-mandate order
-            (UPI has no USD rail, so mandate setup always stays INR).
+          description: Razorpay charge in INR paise (base credit + 18% GST)
         currency:
           type: string
-          description: "USD for regular top-ups; INR for UPI autopay-mandate setup"
+          description: Always INR
         keyId:
           type: string
         customerId:
@@ -8468,8 +8465,8 @@ components:
           description: Trigger auto-pay when balance drops below this (cents)
         autoPayAmountCents:
           type: integer
-          minimum: 1000
-          description: Amount to auto-charge (cents, minimum 1000 = $10)
+          minimum: 10000
+          description: Auto top-up wallet credit in paise (minimum 10000 = ₹100; payable includes 18% GST)
 
     # ── Phone Numbers ───────────────────────────────────────────────────────────
     PhoneNumber:
@@ -8569,7 +8566,7 @@ components:
           description: Razorpay order id
         amountCents:
           type: integer
-          description: First-purchase fee in cents (currently $10.00 = 1000)
+          description: Payable amount in INR paise (₹800 + 18% GST = 94400)
         amount:
           type: integer
           description: Amount in the smallest currency unit, as required by the Razorpay checkout widget

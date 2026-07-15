@@ -77,7 +77,6 @@ import {
   filterVoicesForLanguage, isVoiceCompatibleWithLanguage,
 } from "@/lib/agent-providers";
 import { useMinuteRatesMap, useUserProviderNames, computeAgentRateCents } from "@/hooks/use-minute-rates";
-import { computePipelineCost } from "@/lib/provider-pricing";
 import { DestinationOtpDialog } from "@/components/destination-otp-dialog";
 import { RecentNumbersList } from "@/components/recent-numbers-list";
 import { useRecentNumbers } from "@/hooks/use-recent-numbers";
@@ -328,31 +327,20 @@ function WebhookParamsEditor({ control, toolIndex }: { control: any; toolIndex: 
 
 type CardSection = "transcriber" | "model" | "voice";
 
-function AgentCostSummary({ form, rateMap, agent, compact = false }: { form: any; rateMap: Map<string, number>; agent: any; compact?: boolean }) {
+function AgentCostSummary({ form, rateMap, compact = false }: { form: any; rateMap: Map<string, number>; agent?: any; compact?: boolean }) {
   const userProviderNames = useUserProviderNames();
 
-  const asrProvider       = form.watch("asrProvider");
-  const llmProvider       = form.watch("llmProvider");
-  const ttsProvider       = form.watch("ttsProvider");
-  const telephonyProvider = form.watch("telephonyProvider") ?? "vobiz";
-  const llmModel          = form.watch("llmModel");
+  const asrProvider = form.watch("asrProvider");
+  const llmProvider = form.watch("llmProvider");
+  const ttsProvider = form.watch("ttsProvider");
 
   const agentProviders = [asrProvider, llmProvider, ttsProvider].filter(Boolean).map((p: string) => p.toLowerCase());
   const isByop = agentProviders.some(p => userProviderNames.has(p));
-  const platformCents = rateMap.get(isByop ? "byop" : "managed") ?? (isByop ? 3.5 : 5);
-  const platformPerMin = platformCents / 100;
-  const pipe = computePipelineCost(asrProvider ?? "sarvam", llmProvider ?? "groq", llmModel, ttsProvider ?? "cartesia", telephonyProvider ?? "vobiz");
-
-  const providerTotal = pipe.asr.costPerMin + pipe.llm.costPerMin + pipe.tts.costPerMin + pipe.telephony.costPerMin;
-  const platformSlice = isByop ? platformPerMin : Math.max(0, platformPerMin - providerTotal);
-  const totalPerMin = isByop ? platformPerMin + providerTotal : platformPerMin;
+  const platformCents = rateMap.get(isByop ? "byop" : "managed") ?? 500;
+  const totalPerMin = platformCents / 100; // paise → INR (flat ₹5/min)
 
   const segments = [
-    { key: "asr",       label: "Transcriber", provider: asrProvider,       cost: pipe.asr.costPerMin,       color: "#22c55e" },
-    { key: "llm",       label: "LLM",         provider: llmProvider,       cost: pipe.llm.costPerMin,       color: "#f97316" },
-    { key: "tts",       label: "Voice",        provider: ttsProvider,       cost: pipe.tts.costPerMin,       color: "#94a3b8" },
-    { key: "telephony", label: "Telephony",    provider: telephonyProvider, cost: pipe.telephony.costPerMin, color: "#f59e0b" },
-    { key: "platform",  label: "Platform",     provider: "SnapServe",       cost: platformSlice,            color: "#6366f1" },
+    { key: "platform", label: "Platform", provider: "SnapServe", cost: totalPerMin, color: "#6366f1" },
   ];
   const breakdown = segments.filter(s => s.cost > 0);
   const barTotal = Math.max(breakdown.reduce((s, x) => s + x.cost, 0), 0.0001);
@@ -363,7 +351,7 @@ function AgentCostSummary({ form, rateMap, agent, compact = false }: { form: any
         <TooltipTrigger asChild>
           <div className="inline-flex items-center gap-2 rounded-full border border-border/50 bg-muted/20 px-3 py-1.5 text-[12px] text-muted-foreground cursor-default">
             <span className="text-muted-foreground/70">Est. cost</span>
-            <span className="font-semibold tabular-nums text-foreground">${totalPerMin.toFixed(3)}</span>
+            <span className="font-semibold tabular-nums text-foreground">₹{totalPerMin.toFixed(2)}</span>
             <span className="text-muted-foreground/50">/min</span>
           </div>
         </TooltipTrigger>
@@ -371,7 +359,7 @@ function AgentCostSummary({ form, rateMap, agent, compact = false }: { form: any
           {breakdown.map(seg => (
             <div key={seg.key} className="flex items-center justify-between gap-3">
               <span className="font-medium">{seg.label}</span>
-              <span className="tabular-nums">${seg.cost.toFixed(4)}/min</span>
+              <span className="tabular-nums">₹{seg.cost.toFixed(2)}/min</span>
             </div>
           ))}
         </TooltipContent>
@@ -387,7 +375,7 @@ function AgentCostSummary({ form, rateMap, agent, compact = false }: { form: any
         <Tooltip>
           <TooltipTrigger asChild>
             <span className="font-semibold tabular-nums text-foreground cursor-default">
-              ~${totalPerMin.toFixed(3)}
+              ₹{totalPerMin.toFixed(2)}
             </span>
           </TooltipTrigger>
           <TooltipContent side="bottom" className="text-xs space-y-1">
@@ -399,7 +387,7 @@ function AgentCostSummary({ form, rateMap, agent, compact = false }: { form: any
                     <span className="text-muted-foreground ml-1 capitalize">({seg.provider})</span>
                   )}
                 </span>
-                <span className="tabular-nums">${seg.cost.toFixed(4)}/min</span>
+                <span className="tabular-nums">₹{seg.cost.toFixed(2)}/min</span>
               </div>
             ))}
           </TooltipContent>
@@ -413,7 +401,7 @@ function AgentCostSummary({ form, rateMap, agent, compact = false }: { form: any
             key={seg.key}
             className="h-full first:rounded-l-full last:rounded-r-full"
             style={{ width: `${(seg.cost / barTotal) * 100}%`, backgroundColor: seg.color }}
-            title={`${seg.label}: $${seg.cost.toFixed(4)}`}
+            title={`${seg.label}: ₹${seg.cost.toFixed(2)}`}
           />
         ))}
       </div>
@@ -3137,7 +3125,7 @@ function AgentListPanel({ selectedId, onSelect, rateMap }: {
               </div>
               <div className="flex items-center gap-1.5 mt-1">
                 <span className="text-[10px] text-muted-foreground/75 truncate">{agent.asrProvider} · {agent.ttsProvider}</span>
-                {costCents ? <span className="text-[10px] text-muted-foreground/55 ml-auto shrink-0">${(costCents / 100).toFixed(3)}</span> : null}
+                {costCents ? <span className="text-[10px] text-muted-foreground/55 ml-auto shrink-0">₹{(costCents / 100).toFixed(2)}</span> : null}
               </div>
             </button>
           );

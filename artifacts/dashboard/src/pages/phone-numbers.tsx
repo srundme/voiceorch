@@ -324,9 +324,11 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
   const [payingViaCheckout, setPayingViaCheckout] = useState(false);
 
   const selectedNum = available?.find(n => n.number === selected);
-  // The $10 first-purchase fee (real payment) — shown here, distinct from the
-  // $8/mo auto-renewal charged from the wallet balance every 30 days.
-  const totalCents = selectedNum ? (selectedNum.monthlyRateCents ?? 0) : 0;
+  // Flat INR pricing: ₹800 + 18% GST = ₹944 (purchase via Razorpay; renewal from wallet).
+  const PHONE_BASE_INR = 800;
+  const PHONE_GST_INR = Math.round(PHONE_BASE_INR * 0.18);
+  const PHONE_TOTAL_INR = PHONE_BASE_INR + PHONE_GST_INR;
+  const isPaidNumber = (selectedNum?.monthlyRateCents ?? 0) > 0;
 
   function handleSearch() {
     setSearched(true);
@@ -359,8 +361,20 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
           currency: order.currency,
           order_id: order.orderId,
           name:     "SnapServe",
-          description: `Phone number purchase — ${selected}`,
+          description: `Phone number — ₹${PHONE_BASE_INR} + GST ₹${PHONE_GST_INR}`,
           theme: { color: "#ededed" },
+          config: {
+            display: {
+              blocks: {
+                utib: {
+                  name: "Pay using UPI",
+                  instruments: [{ method: "upi" }],
+                },
+              },
+              sequence: ["block.utib"],
+              preferences: { show_default_blocks: true },
+            },
+          },
           modal: {
             ondismiss: () => settle(() => reject(new Error("cancelled"))),
           },
@@ -439,17 +453,27 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
               <span className="text-foreground font-medium">Aitel</span>
             </div>
             <div className="flex justify-between px-4 py-2.5">
-              <span className="text-muted-foreground">First purchase (pay now)</span>
-              <span className="font-semibold text-foreground">{totalCents > 0 ? `$${(totalCents / 100).toFixed(2)}` : "Free"}</span>
+              <span className="text-muted-foreground">Number fee</span>
+              <span className="text-foreground">₹{PHONE_BASE_INR}.00</span>
             </div>
             <div className="flex justify-between px-4 py-2.5">
-              <span className="text-muted-foreground">Renews monthly (from wallet)</span>
-              <span className="text-foreground">$8.00/mo</span>
+              <span className="text-muted-foreground">GST (18%)</span>
+              <span className="text-foreground">₹{PHONE_GST_INR}.00</span>
+            </div>
+            <div className="flex justify-between px-4 py-2.5">
+              <span className="text-muted-foreground">Pay now (UPI / QR)</span>
+              <span className="font-semibold text-foreground">₹{PHONE_TOTAL_INR}.00</span>
+            </div>
+            <div className="flex justify-between px-4 py-2.5">
+              <span className="text-muted-foreground">Renews every 30 days (wallet)</span>
+              <span className="text-foreground">₹{PHONE_BASE_INR} + GST</span>
             </div>
           </div>
           <div className="flex items-start gap-3 p-3 rounded-lg border border-zinc-500/20 bg-zinc-500/5 text-foreground text-xs">
             <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-            <span>You'll be charged ${(totalCents / 100).toFixed(2)} now via card/UPI to activate this number. It then renews automatically at $8.00/mo from your wallet balance every 30 days until you release the number.</span>
+            <span>
+              You&apos;ll pay ₹{PHONE_TOTAL_INR} now via UPI/QR (₹{PHONE_BASE_INR} + 18% GST). The number then renews at ₹{PHONE_BASE_INR} + GST from your wallet every 30 days until you release it.
+            </span>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirming(false)} disabled={payingViaCheckout}>Back</Button>
@@ -459,7 +483,7 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
               disabled={payingViaCheckout}
             >
               {payingViaCheckout ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
-              Pay ${(totalCents / 100).toFixed(2)} & Get Number
+              Pay ₹{PHONE_TOTAL_INR} & Get Number
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -473,7 +497,7 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
         <DialogHeader>
           <DialogTitle>Get a Phone Number</DialogTitle>
           <DialogDescription>
-            Browse live number inventory from Aitel. Pricing varies by country and number type — fees are deducted from your SnapServe wallet.
+            Browse live number inventory. Every number is ₹800 + 18% GST (₹944) via UPI — then renews from your wallet every 30 days.
           </DialogDescription>
         </DialogHeader>
 
@@ -549,7 +573,7 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
                       </div>
                       <div className="flex items-center gap-2 text-xs shrink-0">
                         <span className="text-foreground font-medium">
-                          {(n.monthlyRateCents ?? 0) > 0 ? `$${((n.monthlyRateCents ?? 0) / 100).toFixed(2)}/mo` : "Free"}
+                          {(n.monthlyRateCents ?? 0) > 0 ? "₹800 + GST" : "Free"}
                         </span>
                         <Badge variant="outline" className="text-[10px] capitalize">{n.numberType.replace("_", " ")}</Badge>
                       </div>
@@ -569,8 +593,8 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
             onClick={() => setConfirming(true)}
           >
             <Plus className="h-3.5 w-3.5" />
-            {selected && totalCents > 0
-              ? `Purchase — $${(totalCents / 100).toFixed(2)}/mo`
+            {selected && isPaidNumber
+              ? `Purchase — ₹${PHONE_TOTAL_INR}`
               : "Purchase Number"}
           </Button>
         </DialogFooter>

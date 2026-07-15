@@ -4,17 +4,18 @@ import { db } from "@workspace/db";
 import { usersTable, walletTransactionsTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import type { SessionPayload } from "../lib/session.js";
+import { SIGNUP_CREDIT_PAISE, formatInr } from "../lib/money-inr.js";
 
 function generateApiKey() { return `vok_${randomBytes(24).toString("hex")}`; }
 function generateOrgKey() { return `voo_${randomBytes(24).toString("hex")}`; }
 
-const FREE_CREDIT_CENTS = 500; // $5.00
+const FREE_CREDIT_CENTS = SIGNUP_CREDIT_PAISE; // Rs.500
 
 /**
  * Provision (or heal) the local user record for the authenticated Google
  * account. Identity comes from the verified session payload set by
  * `attachSession`; `users.clerk_id` stores the Google account subject id.
- * First-time users get API keys and a $5 welcome credit.
+ * First-time users get API keys and a ₹500 welcome credit.
  */
 export async function provisionUser(req: Request, _res: Response, next: NextFunction): Promise<void> {
   const session = (req as unknown as { sessionPayload?: SessionPayload }).sessionPayload;
@@ -44,7 +45,7 @@ export async function provisionUser(req: Request, _res: Response, next: NextFunc
         userId: user.id,
         type: "free_credit",
         amountCents: FREE_CREDIT_CENTS,
-        description: "Welcome credit — $5.00 free to get started",
+        description: `Welcome credit — ${formatInr(FREE_CREDIT_CENTS)} free to get started`,
         status: "completed",
       });
     } else if (user.email === null || user.name === null) {

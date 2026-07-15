@@ -25,8 +25,8 @@ const router = Router();
  */
 router.get("/billing/rates", requireAuth, async (_req, res): Promise<void> => {
   res.json([
-    { mode: "managed", rateCentsPerMin: MANAGED_RATE_CENTS_PER_MIN, label: "Managed — platform keys ($0.05/min)" },
-    { mode: "byop",    rateCentsPerMin: BYOP_RATE_CENTS_PER_MIN,    label: "BYOP — your own keys ($0.035/min)" },
+    { mode: "managed", rateCentsPerMin: MANAGED_RATE_CENTS_PER_MIN, label: "Managed — platform keys (₹5/min)", currency: "INR" },
+    { mode: "byop",    rateCentsPerMin: BYOP_RATE_CENTS_PER_MIN,    label: "BYOP — your own keys (₹5/min)", currency: "INR" },
   ]);
 });
 

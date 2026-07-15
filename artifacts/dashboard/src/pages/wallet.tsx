@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import { Wallet, Plus, RefreshCw, ArrowDownLeft, ArrowUpRight, Zap, CreditCard, ToggleLeft, ToggleRight, AlertCircle, ShieldCheck, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +14,10 @@ declare global {
   }
 }
 
+const GST_RATE = 0.18;
+const MIN_TOPUP_INR = 100;
+const TOPUP_PRESETS = [500, 1000, 2000, 5000];
+
 function loadRazorpay(): Promise<void> {
   return new Promise((resolve) => {
     if (window.Razorpay) { resolve(); return; }
@@ -24,8 +28,18 @@ function loadRazorpay(): Promise<void> {
   });
 }
 
-function centsToUsd(cents: number): string {
-  return `$${(cents / 100).toFixed(2)}`;
+function paiseToInr(paise: number): string {
+  return `₹${(paise / 100).toFixed(2)}`;
+}
+
+function formatInrRupees(rupees: number): string {
+  return `₹${rupees.toFixed(2)}`;
+}
+
+function withGstRupees(baseRupees: number): { base: number; gst: number; total: number } {
+  const base = Math.round(baseRupees * 100) / 100;
+  const gst = Math.round(base * GST_RATE * 100) / 100;
+  return { base, gst, total: Math.round((base + gst) * 100) / 100 };
 }
 
 function txTypeLabel(type: string): { label: string; color: string; icon: React.ReactNode } {
@@ -38,12 +52,10 @@ function txTypeLabel(type: string): { label: string; color: string; icon: React.
   }
 }
 
-const TOPUP_PRESETS = [10, 25, 50, 100];
-
 export default function WalletPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [topupAmount, setTopupAmount]     = useState(25);
+  const [topupAmount, setTopupAmount]     = useState(1000);
   const [customAmount, setCustomAmount]   = useState("");
   const [loading, setLoading]             = useState(false);
   const [mandateLoading, setMandateLoading] = useState(false);
@@ -54,12 +66,14 @@ export default function WalletPage() {
   const { mutateAsync: verifyPayment }              = useVerifyPayment();
   const { mutateAsync: updateAutopay }              = useUpdateAutopay();
 
-  const effectiveAmount = customAmount ? Math.max(10, Number(customAmount)) : topupAmount;
+  const effectiveAmount = customAmount ? Math.max(MIN_TOPUP_INR, Number(customAmount) || 0) : topupAmount;
+  const payableBreakdown = useMemo(() => withGstRupees(effectiveAmount), [effectiveAmount]);
 
-  // Open Razorpay checkout — handles both normal topup and mandate setup
-  const openCheckout = useCallback(async (amountCents: number, setupMandate = false) => {
+  const openCheckout = useCallback(async (amountPaise: number, setupMandate = false) => {
     await loadRazorpay();
-    const order = await createTopup({ data: { amountCents, setupMandate } });
+    const order = await createTopup({ data: { amountCents: amountPaise, setupMandate } });
+    const baseRupees = amountPaise / 100;
+    const breakdown = withGstRupees(baseRupees);
 
     return new Promise<void>((resolve, reject) => {
       let settled = false;
@@ -68,15 +82,27 @@ export default function WalletPage() {
       const opts: Record<string, unknown> = {
         key:       order.keyId,
         amount:    order.amount,
-        currency:  order.currency,
+        currency:  order.currency ?? "INR",
         order_id:  order.orderId,
         name:      "SnapServe",
         description: setupMandate
-          ? `Auto-pay mandate — ${centsToUsd(amountCents)}`
-          : `Wallet top-up — ${centsToUsd(amountCents)}`,
+          ? `Auto-pay mandate — ${formatInrRupees(breakdown.base)} + GST`
+          : `Wallet top-up — ${formatInrRupees(breakdown.base)} + GST ${formatInrRupees(breakdown.gst)}`,
         theme: { color: "#ededed" },
+        // Prefer UPI / QR; cards & netbanking remain available in the Razorpay sheet
+        config: {
+          display: {
+            blocks: {
+              utib: {
+                name: "Pay using UPI",
+                instruments: [{ method: "upi" }],
+              },
+            },
+            sequence: ["block.utib"],
+            preferences: { show_default_blocks: true },
+          },
+        },
         modal: {
-          // Called when user closes the modal without completing payment
           ondismiss: () => settle(() => reject(new Error("cancelled"))),
         },
         handler: async (response: {
@@ -92,10 +118,7 @@ export default function WalletPage() {
                 razorpaySignature: response.razorpay_signature,
               },
             });
-            // Immediately update the wallet cache with the verified balance
-            // so the UI reflects the new balance without waiting for a refetch.
             queryClient.setQueryData(getGetWalletQueryKey(), updated);
-            // Also refresh the transaction list to show the new top-up entry.
             queryClient.invalidateQueries({ queryKey: getListTransactionsQueryKey() });
             settle(() => resolve());
           } catch {
@@ -104,7 +127,6 @@ export default function WalletPage() {
         },
       };
 
-      // Pass customer_id + recurring flag when setting up a mandate
       if (setupMandate && order.customerId) {
         opts.customer_id = order.customerId;
         opts.recurring   = 1;
@@ -115,15 +137,15 @@ export default function WalletPage() {
   }, [createTopup, verifyPayment, queryClient]);
 
   const handleTopup = useCallback(async () => {
-    const amountCents = effectiveAmount * 100;
-    if (amountCents < 1000) {
-      toast({ title: "Minimum top-up is $10", variant: "destructive" });
+    const amountPaise = Math.round(effectiveAmount * 100);
+    if (amountPaise < MIN_TOPUP_INR * 100) {
+      toast({ title: `Minimum top-up is ₹${MIN_TOPUP_INR}`, variant: "destructive" });
       return;
     }
     setLoading(true);
     try {
-      await openCheckout(amountCents, false);
-      toast({ title: `Wallet topped up — ${centsToUsd(amountCents)} added!` });
+      await openCheckout(amountPaise, false);
+      toast({ title: `Wallet topped up — ${formatInrRupees(effectiveAmount)} credit added!` });
     } catch {
       toast({ title: "Payment failed or cancelled", variant: "destructive" });
     } finally {
@@ -132,11 +154,11 @@ export default function WalletPage() {
   }, [effectiveAmount, openCheckout, toast]);
 
   const handleSetupMandate = useCallback(async () => {
-    const amountCents = (wallet?.autoPayAmountCents ?? 1000);
+    const amountPaise = wallet?.autoPayAmountCents ?? 50_000;
     setMandateLoading(true);
     try {
-      await openCheckout(amountCents, true);
-      toast({ title: "Auto-pay mandate set up! Wallet will top up automatically." });
+      await openCheckout(amountPaise, true);
+      toast({ title: "Auto-pay mandate set up! Wallet will top up automatically via UPI." });
     } catch {
       toast({ title: "Mandate setup failed or cancelled", variant: "destructive" });
     } finally {
@@ -150,31 +172,31 @@ export default function WalletPage() {
     queryClient.invalidateQueries({ queryKey: getGetWalletQueryKey() });
   }, [wallet, updateAutopay, queryClient]);
 
-  const handleAutopaySettings = useCallback(async (thresholdUsd: number, amountUsd: number) => {
+  const handleAutopaySettings = useCallback(async (thresholdInr: number, amountInr: number) => {
     await updateAutopay({
       data: {
-        autoPayThresholdCents: Math.round(thresholdUsd * 100),
-        autoPayAmountCents:    Math.round(amountUsd * 100),
+        autoPayThresholdCents: Math.round(thresholdInr * 100),
+        autoPayAmountCents:    Math.round(amountInr * 100),
       },
     });
     queryClient.invalidateQueries({ queryKey: getGetWalletQueryKey() });
   }, [updateAutopay, queryClient]);
 
-  const balanceLow    = wallet && wallet.balanceCents < 100;
+  const balanceLow    = wallet && wallet.balanceCents < 10_000; // < ₹100
   const mandateActive = wallet?.mandateActive ?? false;
+  const minsRemaining = Math.floor((wallet?.balanceCents ?? 0) / 500); // ₹5/min
 
   return (
     <div className="flex flex-col h-full overflow-auto">
       <div className="border-b border-border px-6 py-4 flex items-center gap-3 shrink-0">
         <Wallet className="w-5 h-5 text-foreground" />
         <h1 className="font-semibold text-foreground text-lg">Wallet & Billing</h1>
-        <span className="text-xs text-muted-foreground ml-auto">$0.03 / minute platform fee</span>
+        <span className="text-xs text-muted-foreground ml-auto">₹5 / minute · INR · GST on top-ups</span>
       </div>
 
       <div className="flex-1 overflow-auto p-6">
         <div className="max-w-4xl mx-auto space-y-6">
 
-          {/* Balance Card */}
           <div className={`rounded-xl border p-6 ${balanceLow ? "border-border bg-zinc-500/5" : "border-border bg-card"}`}>
             <div className="flex items-start justify-between">
               <div>
@@ -183,12 +205,17 @@ export default function WalletPage() {
                   <div className="h-10 w-32 bg-muted rounded animate-pulse" />
                 ) : (
                   <p className="text-4xl font-bold text-foreground tabular-nums">
-                    {centsToUsd(wallet?.balanceCents ?? 0)}
+                    {paiseToInr(wallet?.balanceCents ?? 0)}
                   </p>
                 )}
                 <p className="text-xs text-muted-foreground mt-2">
-                  {wallet?.freeCreditsGranted && <span className="text-foreground mr-2 inline-flex items-center gap-1"><CheckCircle2 className="h-3 w-3 shrink-0 text-emerald-500" />$5 free credit applied</span>}
-                  Approx. {Math.floor((wallet?.balanceCents ?? 0) / 3)} minutes of orchestration remaining <span className="text-muted-foreground">(platform fee only — provider costs billed separately to your keys)</span>
+                  {wallet?.freeCreditsGranted && (
+                    <span className="text-foreground mr-2 inline-flex items-center gap-1">
+                      <CheckCircle2 className="h-3 w-3 shrink-0 text-emerald-500" />
+                      ₹500 free credit applied
+                    </span>
+                  )}
+                  Approx. {minsRemaining} minutes remaining at ₹5/min
                 </p>
               </div>
               {balanceLow && (
@@ -201,18 +228,18 @@ export default function WalletPage() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Top-up */}
             <div className="rounded-xl border border-border bg-card p-5 space-y-4">
               <div className="flex items-center gap-2">
                 <CreditCard className="w-4 h-4 text-muted-foreground" />
                 <h2 className="font-medium text-foreground text-sm">Add Funds</h2>
-                <span className="ml-auto text-[10px] text-muted-foreground bg-muted rounded px-1.5 py-0.5">Card · UPI · QR · NetBanking</span>
+                <span className="ml-auto text-[10px] text-muted-foreground bg-muted rounded px-1.5 py-0.5">UPI · QR · Card · NetBanking</span>
               </div>
 
               <div className="grid grid-cols-4 gap-2">
                 {TOPUP_PRESETS.map((amt) => (
                   <button
                     key={amt}
+                    type="button"
                     onClick={() => { setTopupAmount(amt); setCustomAmount(""); }}
                     className={`rounded-lg py-2 text-sm font-medium border transition-colors ${
                       !customAmount && topupAmount === amt
@@ -220,23 +247,38 @@ export default function WalletPage() {
                         : "border-border text-muted-foreground hover:border-[#ACADB1] hover:text-foreground"
                     }`}
                   >
-                    ${amt}
+                    ₹{amt}
                   </button>
                 ))}
               </div>
 
               <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">Custom amount (min $10)</Label>
+                <Label className="text-xs text-muted-foreground">Custom amount (min ₹{MIN_TOPUP_INR})</Label>
                 <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">₹</span>
                   <Input
                     type="number"
-                    min={10}
+                    min={MIN_TOPUP_INR}
                     placeholder="Enter amount"
                     value={customAmount}
                     onChange={(e) => setCustomAmount(e.target.value)}
                     className="pl-7 bg-muted border-border text-foreground"
                   />
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2.5 text-xs space-y-1">
+                <div className="flex justify-between text-muted-foreground">
+                  <span>Wallet credit</span>
+                  <span className="tabular-nums text-foreground">{formatInrRupees(payableBreakdown.base)}</span>
+                </div>
+                <div className="flex justify-between text-muted-foreground">
+                  <span>GST (18%)</span>
+                  <span className="tabular-nums text-foreground">{formatInrRupees(payableBreakdown.gst)}</span>
+                </div>
+                <div className="flex justify-between font-medium text-foreground pt-1 border-t border-border/50">
+                  <span>You pay</span>
+                  <span className="tabular-nums">{formatInrRupees(payableBreakdown.total)}</span>
                 </div>
               </div>
 
@@ -246,11 +288,10 @@ export default function WalletPage() {
                 disabled={loading}
               >
                 <Plus className="w-4 h-4 mr-2" />
-                {loading ? "Processing…" : `Add Funds — $${effectiveAmount}`}
+                {loading ? "Processing…" : `Pay ${formatInrRupees(payableBreakdown.total)} via UPI`}
               </Button>
             </div>
 
-            {/* Auto-pay */}
             <div className="rounded-xl border border-border bg-card p-5 space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -258,48 +299,49 @@ export default function WalletPage() {
                   <h2 className="font-medium text-foreground text-sm">Auto-pay</h2>
                   {mandateActive && (
                     <span className="flex items-center gap-1 text-[10px] text-foreground bg-muted border border-border rounded px-1.5 py-0.5">
-                      <ShieldCheck className="w-3 h-3" /> Mandate active
+                      <ShieldCheck className="w-3 h-3" /> UPI mandate active
                     </span>
                   )}
                 </div>
                 <button
+                  type="button"
                   onClick={handleToggleAutopay}
                   disabled={!mandateActive}
                   className={mandateActive ? "text-foreground" : "text-muted-foreground opacity-40 cursor-not-allowed"}
-                  title={mandateActive ? undefined : "Set up a mandate first"}
+                  title={mandateActive ? undefined : "Set up a UPI mandate first"}
                 >
                   {wallet?.autoPayEnabled ? <ToggleRight className="w-6 h-6" /> : <ToggleLeft className="w-6 h-6" />}
                 </button>
               </div>
 
               <p className="text-xs text-muted-foreground">
-                Automatically top up your wallet when the balance drops below the threshold.
-                {!mandateActive && " Authorize once via UPI or card to enable."}
+                Automatically top up when balance drops below the threshold. Auto top-ups also include 18% GST.
+                {!mandateActive && " Authorize once via UPI to enable."}
               </p>
 
               <div className="space-y-3">
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">Trigger when balance below</Label>
                   <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">₹</span>
                     <Input
                       type="number"
                       min={1}
-                      defaultValue={(wallet?.autoPayThresholdCents ?? 100) / 100}
-                      onBlur={(e) => handleAutopaySettings(Number(e.target.value), (wallet?.autoPayAmountCents ?? 1000) / 100)}
+                      defaultValue={(wallet?.autoPayThresholdCents ?? 10_000) / 100}
+                      onBlur={(e) => handleAutopaySettings(Number(e.target.value), (wallet?.autoPayAmountCents ?? 50_000) / 100)}
                       className="pl-7 bg-muted border-border text-foreground"
                     />
                   </div>
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Auto top-up amount (min $10)</Label>
+                  <Label className="text-xs text-muted-foreground">Auto top-up credit (min ₹{MIN_TOPUP_INR})</Label>
                   <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">₹</span>
                     <Input
                       type="number"
-                      min={10}
-                      defaultValue={(wallet?.autoPayAmountCents ?? 1000) / 100}
-                      onBlur={(e) => handleAutopaySettings((wallet?.autoPayThresholdCents ?? 100) / 100, Number(e.target.value))}
+                      min={MIN_TOPUP_INR}
+                      defaultValue={(wallet?.autoPayAmountCents ?? 50_000) / 100}
+                      onBlur={(e) => handleAutopaySettings((wallet?.autoPayThresholdCents ?? 10_000) / 100, Number(e.target.value))}
                       className="pl-7 bg-muted border-border text-foreground"
                     />
                   </div>
@@ -314,13 +356,12 @@ export default function WalletPage() {
                   disabled={mandateLoading}
                 >
                   <ShieldCheck className="w-4 h-4 mr-2" />
-                  {mandateLoading ? "Setting up…" : "Set Up Auto-pay"}
+                  {mandateLoading ? "Setting up…" : "Set Up UPI Auto-pay"}
                 </Button>
               )}
             </div>
           </div>
 
-          {/* Transaction history */}
           <div className="rounded-xl border border-border bg-card overflow-hidden">
             <div className="px-5 py-4 border-b border-border">
               <h2 className="font-medium text-foreground text-sm">Transaction History</h2>
@@ -337,11 +378,11 @@ export default function WalletPage() {
                       <div className={`${color} shrink-0`}>{icon}</div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm text-foreground truncate">{txn.description}</p>
-                        <p className="text-xs text-muted-foreground">{label} · {new Date(txn.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })}</p>
+                        <p className="text-xs text-muted-foreground">{label} · {new Date(txn.createdAt).toLocaleDateString("en-IN", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })}</p>
                       </div>
                       <div className="shrink-0 text-right">
                         <p className={`text-sm font-medium tabular-nums ${isCredit ? "text-foreground" : "text-muted-foreground"}`}>
-                          {isCredit ? "+" : ""}{centsToUsd(txn.amountCents)}
+                          {isCredit ? "+" : ""}{paiseToInr(txn.amountCents)}
                         </p>
                         <Badge variant="outline" className="text-[10px] border-border text-foreground">
                           {txn.status}

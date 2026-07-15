@@ -30,6 +30,7 @@ import { registerTransientKey } from "../services/rate-limit-cleanup.js";
 import { getLoginAuthUrl, exchangeLoginCode } from "../services/auth/google-login.js";
 import { trackEvent } from "../services/track-event.js";
 import { deriveRedirectUri, dashboardBase } from "../lib/oauth-redirect.js";
+import { SIGNUP_CREDIT_PAISE, formatInr } from "../lib/money-inr.js";
 
 const OTP_RATE_LIMIT_MAX = parseInt(process.env.OTP_RATE_LIMIT_MAX ?? "3", 10);
 const OTP_RATE_LIMIT_WINDOW_MS = parseInt(process.env.OTP_RATE_LIMIT_WINDOW_MS ?? String(15 * 60 * 1000), 10);
@@ -44,7 +45,7 @@ registerTransientKey({ prefix: OTP_RATE_LIMIT_PREFIX, windowMs: OTP_RATE_LIMIT_W
 const router: IRouter = Router();
 const scryptAsync = promisify(scrypt);
 
-const FREE_CREDIT_CENTS = 500; // $5 welcome credit
+const FREE_CREDIT_CENTS = SIGNUP_CREDIT_PAISE; // Rs.500 welcome credit
 
 async function hashPassword(password: string): Promise<string> {
   const salt = randomBytes(16).toString("hex");
@@ -167,7 +168,7 @@ router.post("/auth/register", async (req, res): Promise<void> => {
         userId: user.id,
         type: "free_credit",
         amountCents: FREE_CREDIT_CENTS,
-        description: "Welcome credit — $5.00 free to get started",
+        description: `Welcome credit — ${formatInr(FREE_CREDIT_CENTS)} free to get started`,
         status: "completed",
       });
 
@@ -689,7 +690,7 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
         userId: user.id,
         type: "free_credit",
         amountCents: FREE_CREDIT_CENTS,
-        description: "Welcome credit — $5.00 free to get started",
+        description: `Welcome credit — ${formatInr(FREE_CREDIT_CENTS)} free to get started`,
         status: "completed",
       });
 

@@ -295,7 +295,7 @@ export default function AgentsList() {
                       <div className="flex items-center gap-1.5 mb-3 px-2 py-1.5 rounded-md border border-border bg-muted/30 w-fit text-xs">
                         <DollarSign className="h-3 w-3 text-muted-foreground shrink-0" />
                         <span className="font-semibold text-foreground">
-                          {(costCents / 100).toFixed(3)}
+                          ₹{(costCents / 100).toFixed(2)}
                         </span>
                         <span className="text-muted-foreground">/ min</span>
                       </div>

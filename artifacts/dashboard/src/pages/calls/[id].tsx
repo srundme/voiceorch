@@ -1230,7 +1230,7 @@ export function CallDetailContent({
             <CardContent className="p-2.5">
               <p className="text-[9px] text-muted-foreground/50 uppercase tracking-wider">Cost</p>
               <p className="text-xs font-mono text-foreground/70">
-                {costCents > 0 ? `$${(costCents / 100).toFixed(2)}` : "—"}
+                {costCents > 0 ? `₹${(costCents / 100).toFixed(2)}` : "—"}
               </p>
             </CardContent>
           </Card>
@@ -1588,8 +1588,8 @@ export function CallDetailContent({
                 <DetailRow
                   label="Platform Fee"
                   value={costCents > 0
-                    ? `$${(costCents / 100).toFixed(2)}`
-                    : (call.status === "completed" || call.status === "failed") ? "$0.00" : "—"
+                    ? `₹${(costCents / 100).toFixed(2)}`
+                    : (call.status === "completed" || call.status === "failed") ? "₹0.00" : "—"
                   }
                   icon={<Receipt className="h-3 w-3" />}
                 />

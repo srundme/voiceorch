@@ -2,12 +2,20 @@ import { Router } from "express";
 import crypto from "crypto";
 import Razorpay from "razorpay";
 import { db } from "@workspace/db";
-import { usersTable, walletTransactionsTable, platformSettingsTable } from "@workspace/db/schema";
+import { usersTable, walletTransactionsTable } from "@workspace/db/schema";
 import { eq, desc, sql, and } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logger } from "../lib/logger.js";
 import { sendBrevoEmail } from "../services/brevo.js";
 import { walletTopUpEmail } from "../services/email-templates.js";
+import {
+  CURRENCY_INR,
+  GST_RATE,
+  MIN_TOPUP_PAISE,
+  formatInr,
+  gstPortionPaise,
+  withGstPaise,
+} from "../lib/money-inr.js";
 
 const router = Router();
 
@@ -23,29 +31,19 @@ async function getDbUser(clerkId: string) {
   return user ?? null;
 }
 
-// Only used for UPI autopay-mandate setup orders, which MUST be INR (UPI has
-// no USD rail). Regular top-ups are charged in native USD — see above.
-let _inrRateCache: { rate: number; expiresAt: number } | null = null;
-async function getUsdToInrRateForMandate(): Promise<number> {
-  if (_inrRateCache && Date.now() < _inrRateCache.expiresAt) return _inrRateCache.rate;
-  const [row] = await db
-    .select({ value: platformSettingsTable.value })
-    .from(platformSettingsTable)
-    .where(eq(platformSettingsTable.key, "usd_to_inr_rate"));
-  const rate = row ? parseFloat(row.value) || 85 : 85;
-  _inrRateCache = { rate, expiresAt: Date.now() + 5 * 60 * 1000 };
-  return rate;
-}
-
 function walletInfoPayload(user: typeof usersTable.$inferSelect) {
   return {
     balanceCents:          user.walletBalanceCents,
+    balanceInr:            user.walletBalanceCents / 100,
+    /** @deprecated use balanceInr — kept for older clients */
     balanceUsd:            user.walletBalanceCents / 100,
+    currency:              CURRENCY_INR,
     freeCreditsGranted:    user.freeCreditsGranted,
     autoPayEnabled:        user.autoPayEnabled,
     autoPayThresholdCents: user.autoPayThresholdCents,
     autoPayAmountCents:    user.autoPayAmountCents,
     mandateActive:         !!(user.razorpayCustomerId && user.razorpayTokenId),
+    gstRate:               GST_RATE,
   };
 }
 
@@ -60,7 +58,7 @@ router.get("/wallet", requireAuth, async (req, res) => {
   res.json(walletInfoPayload(user));
 });
 
-// POST /api/wallet/topup — create Razorpay order (USD; INR only for UPI mandate setup)
+// POST /api/wallet/topup — create Razorpay INR order (base credit + 18% GST payable)
 router.post("/wallet/topup", requireAuth, async (req, res) => {
   if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
     res.status(503).json({ error: "Payment gateway not configured" });
@@ -68,8 +66,9 @@ router.post("/wallet/topup", requireAuth, async (req, res) => {
   }
   const clerkId = (req as any).clerkUserId as string;
   const { amountCents, setupMandate } = req.body as { amountCents: number; setupMandate?: boolean };
-  if (!amountCents || amountCents < 1000) {
-    res.status(400).json({ error: "Minimum top-up is $10 (1000 cents)" });
+  // amountCents = wallet credit in paise (pre-GST)
+  if (!amountCents || amountCents < MIN_TOPUP_PAISE) {
+    res.status(400).json({ error: `Minimum top-up is ${formatInr(MIN_TOPUP_PAISE)}` });
     return;
   }
   const user = await getDbUser(clerkId);
@@ -78,9 +77,13 @@ router.post("/wallet/topup", requireAuth, async (req, res) => {
     return;
   }
 
+  const basePaise = Math.round(amountCents);
+  const gstPaise = gstPortionPaise(basePaise);
+  const payablePaise = withGstPaise(basePaise);
+  const currency = CURRENCY_INR;
+
   const razorpay = getRazorpay();
 
-  // Get or create Razorpay customer (needed for recurring mandate)
   let customerId = user.razorpayCustomerId ?? null;
   if (!customerId) {
     try {
@@ -100,27 +103,25 @@ router.post("/wallet/topup", requireAuth, async (req, res) => {
     }
   }
 
-  // Autopay mandates ride on UPI, which is an INR-only domestic payment rail —
-  // NPCI/UPI has no USD equivalent, so mandate-setup orders must stay in INR.
-  // A plain one-time top-up has no such constraint and is charged in real USD
-  // (this Razorpay account supports native USD orders — verified against the
-  // live API rather than assumed).
-  const currency = setupMandate ? "INR" : "USD";
-  const amount = setupMandate ? Math.round(amountCents * (await getUsdToInrRateForMandate())) : amountCents;
-
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let order: any;
   try {
     const orderPayload: Record<string, unknown> = {
-      amount,
+      amount:          payablePaise,
       currency,
       receipt:         `uid_${user.id}_${Date.now()}`,
-      notes:           { userId: String(user.id), clerkId },
+      notes:           {
+        userId: String(user.id),
+        clerkId,
+        basePaise: String(basePaise),
+        gstPaise: String(gstPaise),
+        gstRate: String(GST_RATE),
+      },
       payment_capture: 1,
     };
     if (setupMandate && customerId) {
       orderPayload.customer_id = customerId;
-      orderPayload.method      = "upi";
+      orderPayload.method = "upi";
     }
     order = await razorpay.orders.create(orderPayload as any);
   } catch (err: unknown) {
@@ -131,20 +132,25 @@ router.post("/wallet/topup", requireAuth, async (req, res) => {
 
   await db.insert(walletTransactionsTable).values({
     userId:         user.id,
-    type:           setupMandate ? "topup" : "topup",
-    amountCents,
-    description:    `Wallet top-up $${(amountCents / 100).toFixed(2)}`,
+    type:           "topup",
+    amountCents:    basePaise, // credit wallet with base only; GST is charged on payment
+    description:    `Wallet top-up ${formatInr(basePaise)} + GST ${formatInr(gstPaise)} (pay ${formatInr(payablePaise)})`,
     status:         "pending",
     razorpayOrderId: order.id,
   });
 
   res.json({
-    orderId:    order.id,
-    amountCents,
-    amount,
+    orderId:     order.id,
+    amountCents: basePaise,
+    amount:      payablePaise,
+    basePaise,
+    gstPaise,
+    payablePaise,
+    gstRate:     GST_RATE,
     currency,
-    keyId:      process.env.RAZORPAY_KEY_ID,
-    customerId: setupMandate ? customerId : null,
+    keyId:       process.env.RAZORPAY_KEY_ID,
+    customerId:  setupMandate ? customerId : null,
+    preferUpi:   true,
   });
 });
 
@@ -174,9 +180,6 @@ router.post("/wallet/verify-payment", requireAuth, async (req, res) => {
     return;
   }
 
-  // Atomically claim the transaction: the conditional WHERE status='pending' ensures
-  // only one concurrent request can win this UPDATE. Any duplicate request that
-  // arrives before or after will find 0 rows and be rejected idempotently.
   const [claimed] = await db
     .update(walletTransactionsTable)
     .set({ status: "completed", razorpayPaymentId })
@@ -190,12 +193,10 @@ router.post("/wallet/verify-payment", requireAuth, async (req, res) => {
     .returning();
 
   if (!claimed) {
-    // Either the order doesn't exist, belongs to a different user, or was already processed.
     res.status(400).json({ error: "Order not found or already processed" });
     return;
   }
 
-  // Try to fetch payment details to extract recurring token_id (outside any tx — network call)
   let tokenId: string | undefined;
   try {
     const razorpay = getRazorpay();
@@ -205,7 +206,6 @@ router.post("/wallet/verify-payment", requireAuth, async (req, res) => {
     logger.warn({ err, razorpayPaymentId }, "Could not fetch Razorpay payment details for token");
   }
 
-  // We are the sole winner of the race — credit wallet and save mandate token if present.
   if (tokenId) {
     await db.update(usersTable)
       .set({ razorpayTokenId: tokenId })
@@ -224,7 +224,6 @@ router.post("/wallet/verify-payment", requireAuth, async (req, res) => {
     "Wallet credited via verify-payment",
   );
 
-  // Top-up receipt email — fire-and-forget
   if (user.email) {
     sendBrevoEmail(
       user.email,
@@ -264,7 +263,10 @@ router.get("/wallet/transactions", requireAuth, async (req, res) => {
       id:               t.id,
       type:             t.type,
       amountCents:      t.amountCents,
+      amountInr:        t.amountCents / 100,
+      /** @deprecated use amountInr */
       amountUsd:        t.amountCents / 100,
+      currency:         CURRENCY_INR,
       description:      t.description,
       status:           t.status,
       razorpayOrderId:  t.razorpayOrderId,
@@ -288,6 +290,10 @@ router.patch("/wallet/autopay", requireAuth, async (req, res) => {
     res.status(404).json({ error: "User not found" });
     return;
   }
+  if (autoPayAmountCents !== undefined && autoPayAmountCents < MIN_TOPUP_PAISE) {
+    res.status(400).json({ error: `Auto top-up amount must be at least ${formatInr(MIN_TOPUP_PAISE)}` });
+    return;
+  }
   const [updated] = await db
     .update(usersTable)
     .set({
@@ -302,13 +308,8 @@ router.patch("/wallet/autopay", requireAuth, async (req, res) => {
 });
 
 // POST /api/wallet/webhook — Razorpay server-to-server webhook
-// Handles async payment confirmation (UPI, netbanking) that may not trigger
-// the client-side handler callback. No auth — verified by signature AND,
-// for the money-moving payment.captured event, an independent server-side
-// confirmation against the Razorpay Payments API (see below).
-// Register this URL in Razorpay Dashboard → Webhooks → payment.captured
 router.post("/wallet/webhook", async (req, res) => {
-  res.sendStatus(200); // Ack fast — Razorpay retries on non-2xx
+  res.sendStatus(200);
 
   const signature = req.headers["x-razorpay-signature"] as string | undefined;
   const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
@@ -327,15 +328,6 @@ router.post("/wallet/webhook", async (req, res) => {
       return;
     }
   }
-  // NOTE: when RAZORPAY_WEBHOOK_SECRET is not configured, the request body's
-  // event/order_id/payment_id are UNAUTHENTICATED — anyone can POST a forged
-  // payment.captured event. We never credit a wallet on the body's say-so
-  // alone: below, the payment.captured branch always independently re-fetches
-  // the payment from the Razorpay Payments API (using our server-side secret
-  // key) and only credits if Razorpay itself confirms status "captured" for
-  // the exact order_id/payment_id pair. That live lookup cannot be forged by
-  // a third party, so this is safe even with no webhook secret configured —
-  // configuring RAZORPAY_WEBHOOK_SECRET is still recommended defense-in-depth.
 
   const event = (req.body as { event?: string; payload?: Record<string, unknown> }).event;
   if (event !== "payment.captured" && event !== "payment.failed") return;
@@ -373,19 +365,11 @@ router.post("/wallet/webhook", async (req, res) => {
       return;
     }
 
-    // payment.captured
     if (!paymentId) {
       logger.warn({ event, payment }, "Razorpay webhook payment.captured: missing payment id");
       return;
     }
 
-    // SECURITY: never credit on the webhook body's say-so alone — the body is
-    // unauthenticated whenever RAZORPAY_WEBHOOK_SECRET is not configured (and
-    // is defense-in-depth even when it is). Independently re-fetch the payment
-    // from Razorpay using our own server-side secret key and require Razorpay
-    // to confirm: status is actually "captured", AND the payment's order_id
-    // matches the order_id claimed in this webhook body. A forged request
-    // cannot fabricate what the live Razorpay API returns for a real order.
     let verifiedPayment: { status?: string; order_id?: string; amount?: number } | undefined;
     try {
       const razorpay = getRazorpay();
@@ -402,9 +386,6 @@ router.post("/wallet/webhook", async (req, res) => {
       return;
     }
 
-    // Atomically claim the pending→completed transition.  If already completed
-    // (by the client-side verify-payment or a prior webhook delivery), the
-    // conditional UPDATE returns 0 rows and we skip the credit — idempotent.
     await db.transaction(async (tx) => {
       const [claimed] = await tx
         .update(walletTransactionsTable)

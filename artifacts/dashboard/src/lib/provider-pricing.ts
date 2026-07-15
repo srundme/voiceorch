@@ -85,7 +85,7 @@ const TELEPHONY_PRICING: Record<string, number> = {
   vobiz:  0.0060,
 };
 
-const PLATFORM_FEE = 0.0300; // $0.03/min
+const PLATFORM_FEE = 5.0; // ₹5.00/min flat orchestration fee
 
 export function computePipelineCost(
   asrProvider: string,

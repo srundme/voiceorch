@@ -45,10 +45,11 @@ export function formatAdminError(err: unknown): string {
   return "An unexpected error occurred.";
 }
 
+/** Format wallet/ledger minor units (paise) as INR. Name kept for call-site compat. */
 export function formatCentsToDollars(cents: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
   }).format(cents / 100);
 }
 

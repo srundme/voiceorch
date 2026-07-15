@@ -5,7 +5,8 @@
  */
 
 function fmt(cents: number): string {
-  return "$" + (cents / 100).toFixed(2);
+  // Paise → INR. ASCII "Rs." to stay safe in this template file.
+  return "Rs." + (cents / 100).toFixed(2);
 }
 
 function shell(body: string): string {
@@ -184,8 +185,8 @@ export function onboardingDay3Email(name: string): string {
 
 export function noAgentDay2Email(name: string): string {
   return shell(
-    h1("Hey " + name + " &mdash; you have $5 sitting unused") +
-    p("You signed up two days ago but haven't built your first voice agent yet. Your <strong>$5 free credit</strong> is ready and waiting &mdash; enough to run roughly 100 minutes of live AI calls.") +
+    h1("Hey " + name + " &mdash; you have Rs.500 sitting unused") +
+    p("You signed up two days ago but haven't built your first voice agent yet. Your <strong>Rs.500 free credit</strong> is ready and waiting &mdash; enough to run roughly 100 minutes of live AI calls.") +
     '<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:20px 24px;margin:20px 0">' +
     '<p style="margin:0 0 10px;font-size:14px;font-weight:600;color:#15803d">Your first agent takes about 3 minutes</p>' +
     '<p style="margin:0 0 6px;font-size:13px;color:#166534">1. Give it a name and a short system prompt (what should it say?)</p>' +
@@ -219,12 +220,12 @@ export function noAgentDay4Email(name: string, priorPlatform?: string): string {
     intro +
     '<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;padding:20px 24px;margin:20px 0">' +
     '<p style="margin:0 0 12px;font-size:14px;font-weight:600;color:#09090b">Three things that are different here</p>' +
-    '<p style="margin:0 0 10px;font-size:13px;color:#374151"><strong>1. You keep your own provider keys</strong> &mdash; no per-minute markup on LLM, TTS, or ASR. You pay providers at cost. SnapServe charges a flat orchestration fee of $0.035/min.</p>' +
+    '<p style="margin:0 0 10px;font-size:13px;color:#374151"><strong>1. You keep your own provider keys</strong> &mdash; no per-minute markup on LLM, TTS, or ASR. You pay providers at cost. SnapServe charges a flat orchestration fee of Rs.5/min.</p>' +
     '<p style="margin:0 0 10px;font-size:13px;color:#374151"><strong>2. Tamil &amp; Hindi out of the box</strong> &mdash; Sarvam ASR + LLM is built in. Agents switch languages mid-call and remember caller names across calls.</p>' +
     '<p style="margin:0;font-size:13px;color:#374151"><strong>3. Caller memory</strong> &mdash; the agent remembers every caller &mdash; their name, preferences, past conversations &mdash; automatically, no extra setup.</p>' +
     "</div>" +
     '<div style="margin:24px 0">' + btn("Build my first agent \u2192", "https://app.snapserve.ai/agents/new") + "</div>" +
-    p('<span style="font-size:13px;color:#9ca3af">Your $5 free credit is still waiting &mdash; enough to run your first real tests.</span>')
+    p('<span style="font-size:13px;color:#9ca3af">Your Rs.500 free credit is still waiting &mdash; enough to run your first real tests.</span>')
   );
 }
 
@@ -267,10 +268,10 @@ export function noAgentDay14Email(name: string): string {
 export function noAgentDay21Email(name: string): string {
   return shell(
     h1("Last call, " + name) +
-    p("You have had $5 in free credit sitting in your wallet for three weeks. We reclaim unused welcome credit for accounts that have not activated after 30 days &mdash; so this is your last chance to use it.") +
+    p("You have had Rs.500 in free credit sitting in your wallet for three weeks. We reclaim unused welcome credit for accounts that have not activated after 30 days &mdash; so this is your last chance to use it.") +
     '<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:20px 24px;margin:20px 0">' +
     '<p style="margin:0 0 8px;font-size:13px;font-weight:600;color:#c2410c">Your free credit expires in ~7 days</p>' +
-    '<p style="margin:0;font-size:13px;color:#9a3412">$5 covers roughly 100 minutes of live AI calls. That is enough to fully test a voice agent end to end. After 30 days of inactivity, the credit is removed.</p>' +
+    '<p style="margin:0;font-size:13px;color:#9a3412">Rs.500 covers roughly 100 minutes of live AI calls. That is enough to fully test a voice agent end to end. After 30 days of inactivity, the credit is removed.</p>' +
     "</div>" +
     '<div style="margin:24px 0">' + btn("Use my credit now \u2192", "https://app.snapserve.ai/agents/new") + "</div>" +
     p('<span style="font-size:13px;color:#9ca3af">If you are not ready to use SnapServe right now, no worries &mdash; you can sign up again anytime. We just do not want the credit to go to waste if you still want to try it.</span>')

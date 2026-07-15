@@ -1,14 +1,22 @@
 /**
  * wallet-auto-debit.ts — Server-initiated recurring charge via Razorpay token.
  *
- * Called by calls.ts when a user's balance drops below their auto-pay threshold
- * and they have a stored Razorpay mandate token.
+ * Called when a user's balance drops below their auto-pay threshold and they
+ * have a stored Razorpay UPI mandate token. Charges INR (base + 18% GST);
+ * credits the wallet with the base amount only.
  */
 import Razorpay from "razorpay";
 import { db } from "@workspace/db";
-import { usersTable, walletTransactionsTable, platformSettingsTable } from "@workspace/db/schema";
+import { usersTable, walletTransactionsTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
+import {
+  CURRENCY_INR,
+  GST_RATE,
+  formatInr,
+  gstPortionPaise,
+  withGstPaise,
+} from "../lib/money-inr.js";
 
 function getRazorpay() {
   return new Razorpay({
@@ -17,22 +25,6 @@ function getRazorpay() {
   });
 }
 
-let _inrRateCache: { rate: number; expiresAt: number } | null = null;
-async function getUsdToInrRate(): Promise<number> {
-  if (_inrRateCache && Date.now() < _inrRateCache.expiresAt) return _inrRateCache.rate;
-  const [row] = await db
-    .select({ value: platformSettingsTable.value })
-    .from(platformSettingsTable)
-    .where(eq(platformSettingsTable.key, "usd_to_inr_rate"));
-  const rate = row ? parseFloat(row.value) || 85 : 85;
-  _inrRateCache = { rate, expiresAt: Date.now() + 5 * 60 * 1000 };
-  return rate;
-}
-
-/**
- * Poll Razorpay for a payment's status up to maxAttempts times.
- * Returns true if the payment is captured/authorized, false otherwise.
- */
 async function pollPaymentStatus(
   razorpay: Razorpay,
   paymentId: string,
@@ -54,7 +46,7 @@ async function pollPaymentStatus(
 
 /**
  * Trigger an automatic wallet top-up using the user's stored Razorpay mandate.
- * Fire-and-forget — never throws; logs errors internally.
+ * `amountCents` is the base wallet credit in paise (pre-GST).
  */
 export async function triggerAutoDebit(
   userId: number,
@@ -69,18 +61,26 @@ export async function triggerAutoDebit(
     return;
   }
 
-  const usdToInr  = await getUsdToInrRate();
-  const amountPaise = Math.round(amountCents * usdToInr);
-  const razorpay  = getRazorpay();
+  const basePaise = Math.round(amountCents);
+  const gstPaise = gstPortionPaise(basePaise);
+  const payablePaise = withGstPaise(basePaise);
+  const razorpay = getRazorpay();
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let order: any;
   try {
     order = await razorpay.orders.create({
-      amount:          amountPaise,
-      currency:        "INR",
+      amount:          payablePaise,
+      currency:        CURRENCY_INR,
       receipt:         `autopay_${userId}_${Date.now()}`,
-      notes:           { userId: String(userId), clerkId, type: "auto_topup" },
+      notes:           {
+        userId: String(userId),
+        clerkId,
+        type: "auto_topup",
+        basePaise: String(basePaise),
+        gstPaise: String(gstPaise),
+        gstRate: String(GST_RATE),
+      },
       payment_capture: 1,
     } as any);
   } catch (err) {
@@ -94,13 +94,13 @@ export async function triggerAutoDebit(
     payment = await (razorpay.payments as any).createRecurringPayment({
       email:            user.email ?? `user_${userId}@snapserve.ai`,
       contact:          "9999999999",
-      amount:           amountPaise,
-      currency:         "INR",
+      amount:           payablePaise,
+      currency:         CURRENCY_INR,
       order_id:         order.id,
       customer_id:      user.razorpayCustomerId,
       token_id:         user.razorpayTokenId,
       recurring:        1,
-      description:      `Auto top-up $${(amountCents / 100).toFixed(2)}`,
+      description:      `Auto top-up ${formatInr(basePaise)} + GST ${formatInr(gstPaise)}`,
       notify:           { sms: false, email: true },
       reminder_enable:  false,
     });
@@ -121,21 +121,20 @@ export async function triggerAutoDebit(
     return;
   }
 
-  // Credit the wallet
   await db
     .update(usersTable)
-    .set({ walletBalanceCents: user.walletBalanceCents + amountCents })
+    .set({ walletBalanceCents: user.walletBalanceCents + basePaise })
     .where(eq(usersTable.id, userId));
 
   await db.insert(walletTransactionsTable).values({
     userId,
     type:             "auto_topup",
-    amountCents,
-    description:      `Auto top-up $${(amountCents / 100).toFixed(2)}`,
+    amountCents:      basePaise,
+    description:      `Auto top-up ${formatInr(basePaise)} + GST ${formatInr(gstPaise)} (paid ${formatInr(payablePaise)})`,
     status:           "completed",
     razorpayOrderId:  order.id,
     razorpayPaymentId: paymentId,
   });
 
-  logger.info({ userId, amountCents, paymentId }, "Auto-debit: wallet credited successfully");
+  logger.info({ userId, basePaise, payablePaise, paymentId }, "Auto-debit: wallet credited successfully");
 }

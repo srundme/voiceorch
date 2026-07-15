@@ -6,6 +6,14 @@ import { db, usersTable, walletTransactionsTable, phoneNumbersTable, phoneNumber
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logActivity } from "../lib/activity.js";
 import {
+  CURRENCY_INR,
+  GST_RATE,
+  PHONE_BASE_PAISE,
+  PHONE_TOTAL_PAISE,
+  formatInr,
+  gstPortionPaise,
+} from "../lib/money-inr.js";
+import {
   ListPhoneNumbersResponse,
   ListAvailablePhoneNumbersQueryParams,
   ListAvailablePhoneNumbersResponse,
@@ -20,17 +28,11 @@ import {
 const router: IRouter = Router();
 
 // ── Pricing ───────────────────────────────────────────────────────────────────
-// SnapServe charges a flat $10.00 (USD) first-purchase fee for any phone
-// number, regardless of the underlying carrier's local-currency cost. The
-// carrier's raw price (which VoBiz returns in INR) is never surfaced to
-// end-users — all user-facing pricing and wallet balances on SnapServe are USD.
-// This first-purchase fee requires an ACTUAL completed payment (Razorpay
-// checkout) — it is never silently deducted from the wallet balance. Once
-// purchased, the number auto-renews every 30 days at RENEWAL_RATE_CENTS,
-// deducted from the wallet balance (see services/phone-renewal.ts). Deleting
-// the number stops all future renewal charges.
-const FLAT_MONTHLY_RATE_CENTS = 1000; // $10.00 USD — first-purchase fee (real payment)
-export const RENEWAL_RATE_CENTS = 800; // $8.00 USD — recurring monthly renewal (wallet debit)
+// SnapServe charges ₹800 + 18% GST for any phone number (first purchase via
+// Razorpay INR / UPI). Carrier VoBiz INR cost is never surfaced. Renewal every
+// 30 days debits ₹800 + GST from the wallet (see services/phone-renewal.ts).
+const FLAT_MONTHLY_RATE_CENTS = PHONE_BASE_PAISE; // ₹800 base
+export const RENEWAL_RATE_CENTS = PHONE_TOTAL_PAISE; // ₹800 + 18% GST wallet debit
 export const RENEWAL_INTERVAL_DAYS = 30;
 
 function getRazorpay() {
@@ -396,7 +398,7 @@ router.get("/phone-numbers/available", requireAuth, async (req, res): Promise<vo
 });
 
 // ── POST /phone-numbers/purchase/initiate ─────────────────────────────────────
-// Creates a real Razorpay order for the $10 first-purchase fee. The number is
+// Creates a real Razorpay INR order for ₹800 + GST. The number is
 // NOT touched (not purchased from Vobiz, not inserted into phone_numbers)
 // until the payment is confirmed via /purchase/confirm below. This guarantees
 // a completed payment always precedes granting the number.
@@ -446,17 +448,26 @@ router.post("/phone-numbers/purchase/initiate", requireAuth, async (req, res): P
     return;
   }
 
-  const amountCents = FLAT_MONTHLY_RATE_CENTS;
+  const basePaise = FLAT_MONTHLY_RATE_CENTS;
+  const gstPaise = gstPortionPaise(basePaise);
+  const payablePaise = PHONE_TOTAL_PAISE;
   const razorpay = getRazorpay();
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let order: any;
   try {
     order = await razorpay.orders.create({
-      amount:          amountCents,
-      currency:        "USD",
+      amount:          payablePaise,
+      currency:        CURRENCY_INR,
       receipt:         `phone_${user.id}_${Date.now()}`,
-      notes:           { userId: String(user.id), clerkId, number },
+      notes:           {
+        userId: String(user.id),
+        clerkId,
+        number,
+        basePaise: String(basePaise),
+        gstPaise: String(gstPaise),
+        gstRate: String(GST_RATE),
+      },
       payment_capture: 1,
     } as any);
   } catch (err: unknown) {
@@ -471,20 +482,25 @@ router.post("/phone-numbers/purchase/initiate", requireAuth, async (req, res): P
     countryCode:     countryCode.toUpperCase(),
     region:          region ?? null,
     numberType:      numberType ?? "local",
-    amountCents,
+    amountCents:     payablePaise, // Razorpay charge incl. GST (for refunds)
     status:          "pending",
     razorpayOrderId: order.id,
   }).returning();
 
-  req.log.info({ userId: clerkId, number, orderId: order.id }, "Phone number purchase order initiated");
+  req.log.info({ userId: clerkId, number, orderId: order.id, payablePaise }, "Phone number purchase order initiated");
 
   res.json({
     purchaseOrderId: orderRow!.id,
     orderId:         order.id,
-    amountCents,
-    amount:          amountCents,
-    currency:        "USD",
+    amountCents:     payablePaise,
+    amount:          payablePaise,
+    basePaise,
+    gstPaise,
+    payablePaise,
+    gstRate:         GST_RATE,
+    currency:        CURRENCY_INR,
     keyId:           process.env["RAZORPAY_KEY_ID"],
+    preferUpi:       true,
   });
 });
 
@@ -599,7 +615,7 @@ router.post("/phone-numbers/purchase/confirm", requireAuth, async (req, res): Pr
     userId:            user.id,
     type:              "debit",
     amountCents:       -amountCents,
-    description:       `Phone number ${number} purchased (first purchase $${(amountCents / 100).toFixed(2)}, paid by card/UPI)`,
+    description:       `Phone number ${number} purchased (${formatInr(PHONE_BASE_PAISE)} + GST ${formatInr(gstPortionPaise(PHONE_BASE_PAISE))} = ${formatInr(amountCents)}, paid by UPI/card)`,
     status:            "completed",
     razorpayOrderId,
     razorpayPaymentId,

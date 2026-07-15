@@ -854,7 +854,7 @@ export default function UserDetail() {
           </DialogHeader>
           <div className="grid gap-3 py-3">
             <div className="grid gap-1.5">
-              <Label>Amount (USD)</Label>
+              <Label>Amount (INR)</Label>
               <Input type="number" min="0.01" step="0.01" placeholder="e.g. 10.00" value={walletAmount} onChange={(e) => setWalletAmount(e.target.value)} className="font-mono" />
             </div>
             <div className="grid gap-1.5">
