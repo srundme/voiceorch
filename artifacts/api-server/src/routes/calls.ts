@@ -1054,10 +1054,22 @@ router.patch("/calls/:id/end", requireAuth, async (req, res): Promise<void> => {
     }
   }
 
-  // Fire call.ended webhook (fire-and-forget)
+  // Fire call.completed webhook (fire-and-forget). Legacy subscribers to call.ended still match.
   if (callUserId) {
-    dispatchWebhooks(callUserId, "call.ended", {
-      callId: call.id, agentId: call.agentId, durationSeconds, costCents: debitCents,
+    const status = String(call.status ?? "completed");
+    const event = status === "failed" ? "call.failed" as const : "call.completed" as const;
+    dispatchWebhooks(callUserId, event, {
+      callId: call.id,
+      agentId: call.agentId,
+      status,
+      toNumber: call.toNumber ?? null,
+      fromNumber: call.fromNumber ?? null,
+      durationSeconds,
+      costCents: debitCents,
+      transcript: call.transcript ?? null,
+      callSummary: call.callSummary ?? null,
+      dispositionResult: call.dispositionResult ?? null,
+      recordingUrl: call.recordingUrl ?? null,
     }).catch(() => {});
   }
 

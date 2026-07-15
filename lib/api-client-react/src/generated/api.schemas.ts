@@ -2024,8 +2024,9 @@ export type WebhookEndpointEventsItem = typeof WebhookEndpointEventsItem[keyof t
 
 export const WebhookEndpointEventsItem = {
   callstarted: 'call.started',
-  callended: 'call.ended',
+  callcompleted: 'call.completed',
   callfailed: 'call.failed',
+  callended: 'call.ended',
 } as const;
 
 export interface WebhookEndpoint {
@@ -2038,6 +2039,11 @@ export interface WebhookEndpoint {
      * @nullable
      */
   secretHint?: string | null;
+  /**
+     * Full signing secret — only present on create responses
+     * @nullable
+     */
+  secret?: string | null;
   enabled: boolean;
   /** @nullable */
   description?: string | null;
@@ -2049,8 +2055,9 @@ export type WebhookEndpointInputEventsItem = typeof WebhookEndpointInputEventsIt
 
 export const WebhookEndpointInputEventsItem = {
   callstarted: 'call.started',
-  callended: 'call.ended',
+  callcompleted: 'call.completed',
   callfailed: 'call.failed',
+  callended: 'call.ended',
 } as const;
 
 export interface WebhookEndpointInput {

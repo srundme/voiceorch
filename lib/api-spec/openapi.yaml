@@ -8704,11 +8704,14 @@ components:
           type: array
           items:
             type: string
-            enum: [call.started, call.ended, call.failed]
-          description: Event types that trigger this webhook
+            enum: [call.started, call.completed, call.failed, call.ended]
+          description: Event types that trigger this webhook. Prefer call.completed (call.ended is a legacy alias).
         secretHint:
           type: ["string", "null"]
           description: Last 6 chars of the signing secret (masked)
+        secret:
+          type: ["string", "null"]
+          description: Full signing secret — only present on create responses
         enabled:
           type: boolean
         description:
@@ -8728,8 +8731,9 @@ components:
           type: array
           items:
             type: string
-            enum: [call.started, call.ended, call.failed]
+            enum: [call.started, call.completed, call.failed, call.ended]
           minItems: 1
+          description: Prefer call.completed (and optionally call.failed). call.ended is accepted as an alias of call.completed.
         secret:
           type: string
           description: HMAC signing secret (auto-generated if omitted)

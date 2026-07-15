@@ -6,18 +6,51 @@ export default function WebhooksPage() {
   return (
     <div>
       <PageHeader
-        breadcrumb="Webhooks"
+        breadcrumb="Product guides"
         title="Webhooks"
-        description="Receive call lifecycle events on your HTTPS endpoint. Verify every payload with HMAC before trusting it."
+        description="Receive call results on your HTTPS URL when a conversation finishes — transcript, summary, cost, and more."
         copyText={`X-SnapServe-Signature: sha256=<hmac-hex>
 X-SnapServe-Timestamp: <unix-seconds>
-Signed payload: "{timestamp}.{rawBody}"`}
+Signed payload: "{timestamp}.{rawBody}"
+Events: call.completed, call.failed`}
       />
 
-      <Callout variant="warn" title="Verify signatures">
-        Always check <code>X-SnapServe-Signature</code> with your endpoint secret. Reject requests
-        that fail verification.
+      <Callout variant="info" title="Not the same as Connections">
+        <strong>This page / API</strong> = SnapServe → your app (call finished).{" "}
+        <strong>Connections</strong> = forms/CRM → SnapServe (inbound leads). Dashboard:{" "}
+        <a href="https://app.snapserve.ai/app/webhooks" target="_blank" rel="noreferrer">
+          Call webhooks
+        </a>{" "}
+        vs{" "}
+        <a href="https://app.snapserve.ai/app/connections" target="_blank" rel="noreferrer">
+          Connections
+        </a>
+        .
       </Callout>
+
+      <h2 id="events">Events</h2>
+      <div className="not-prose my-4 overflow-x-auto rounded-xl border border-white/10">
+        <table className="w-full text-sm text-left">
+          <thead className="text-[11px] uppercase tracking-wider bg-white/[0.03] text-muted-foreground border-b border-white/10">
+            <tr>
+              <th className="px-4 py-2.5 font-semibold">Event</th>
+              <th className="px-4 py-2.5 font-semibold">When</th>
+            </tr>
+          </thead>
+          <tbody>
+            {[
+              ["call.completed", "Call finished (normal path). Prefer this in new subscriptions."],
+              ["call.failed", "Call ended with a failed status"],
+              ["call.ended", "Legacy alias — still matched when we send call.completed"],
+            ].map(([e, w]) => (
+              <tr key={e} className="border-b border-white/5 last:border-0">
+                <td className="px-4 py-3 font-mono text-xs text-sky-300">{e}</td>
+                <td className="px-4 py-3 text-muted-foreground">{w}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
       <Endpoint
         id="register"
@@ -28,12 +61,12 @@ Signed payload: "{timestamp}.{rawBody}"`}
       >
         <ParamsTable
           rows={[
-            { name: "url", type: "string", required: true, description: "HTTPS URL that accepts POST" },
+            { name: "url", type: "string", required: true, description: "Your HTTPS URL that accepts POST" },
             {
               name: "events",
               type: "string[]",
               required: true,
-              description: 'e.g. ["call.started","call.completed","call.failed"]',
+              description: 'e.g. ["call.completed", "call.failed"]',
             },
           ]}
         />
@@ -44,12 +77,13 @@ Signed payload: "{timestamp}.{rawBody}"`}
   -H "Content-Type: application/json" \\
   -d '{
     "url": "https://your-app.example.com/hooks/snapserve",
-    "events": ["call.completed", "call.failed", "call.started"]
+    "events": ["call.completed", "call.failed"]
   }'`}
         />
-        <p>
-          Save the signing <strong>secret</strong> from the create response — it is not shown again.
-        </p>
+        <Callout variant="warn" title="Save the secret">
+          The create response includes <code>secret</code> once. It is masked as{" "}
+          <code>secretHint</code> afterward. Copy it immediately.
+        </Callout>
       </Endpoint>
 
       <Endpoint
@@ -66,11 +100,11 @@ Signed payload: "{timestamp}.{rawBody}"`}
         />
       </Endpoint>
 
-      <h2 id="delivery">Delivery rules</h2>
+      <h2 id="delivery">Delivery</h2>
       <ul>
-        <li>HTTP <strong>POST</strong> with a JSON body.</li>
-        <li>Respond <strong>200</strong> within ~10 seconds.</li>
-        <li>Failed deliveries retry with backoff, then mark failed.</li>
+        <li>HTTP <strong>POST</strong> JSON body</li>
+        <li>Respond <strong>200</strong> within ~10 seconds</li>
+        <li>Failed deliveries are logged; keep your endpoint reliable</li>
       </ul>
 
       <h2 id="verify">Verify signatures</h2>
@@ -91,83 +125,40 @@ export function verifyWebhook(rawBody, signature, timestamp, secret) {
   const expected =
     "sha256=" +
     crypto.createHmac("sha256", secret).update(payload).digest("hex");
-  if (signature.length !== expected.length) return false;
+  if (!signature || signature.length !== expected.length) return false;
   return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
-}
-
-// Express-style handler (use raw body buffer/string)
-app.post("/hooks/snapserve", express.raw({ type: "*/*" }), (req, res) => {
-  const rawBody = req.body.toString("utf8");
-  const ok = verifyWebhook(
-    rawBody,
-    req.get("X-SnapServe-Signature"),
-    req.get("X-SnapServe-Timestamp"),
-    process.env.SNAPSERVE_WEBHOOK_SECRET,
-  );
-  if (!ok) return res.status(401).send("invalid signature");
-  const event = JSON.parse(rawBody);
-  // handle event.event / event.data
-  res.sendStatus(200);
-});`}
-      />
-      <CodeBlock
-        language="python"
-        code={`import hmac, hashlib
-
-def verify_webhook(raw_body: bytes, signature: str, timestamp: str, secret: str) -> bool:
-    payload = f"{timestamp}.".encode() + raw_body
-    digest = hmac.new(secret.encode(), payload, hashlib.sha256).hexdigest()
-    expected = f"sha256={digest}"
-    return hmac.compare_digest(signature, expected)`}
+}`}
       />
 
-      <h2 id="events">Events</h2>
-      <div className="not-prose my-4 overflow-x-auto rounded-xl border border-white/10">
-        <table className="w-full text-sm text-left">
-          <thead className="text-[11px] uppercase tracking-wider bg-white/[0.03] text-muted-foreground border-b border-white/10">
-            <tr>
-              <th className="px-4 py-2.5 font-semibold">Event</th>
-              <th className="px-4 py-2.5 font-semibold">When</th>
-            </tr>
-          </thead>
-          <tbody>
-            {[
-              ["call.started", "Session established; agent is live"],
-              ["call.completed", "Normal hang-up; duration/cost available"],
-              ["call.failed", "Connect failure or error exit"],
-            ].map(([e, w]) => (
-              <tr key={e} className="border-b border-white/5 last:border-0">
-                <td className="px-4 py-3 font-mono text-xs text-sky-300">{e}</td>
-                <td className="px-4 py-3 text-muted-foreground">{w}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <h2 id="payload">Example payload</h2>
       <CodeBlock
         language="json"
         code={`{
   "event": "call.completed",
   "timestamp": "2026-07-15T12:00:00.000Z",
   "data": {
-    "callId": 456,
-    "agentId": 123,
+    "callId": 2920,
+    "agentId": 36,
     "status": "completed",
+    "toNumber": "+916383653279",
+    "fromNumber": "+917971543255",
     "durationSeconds": 84,
     "costCents": 700,
-    "toNumber": "+919876543210"
+    "transcript": "Agent: Hello…",
+    "callSummary": "Caller asked about pricing…",
+    "dispositionResult": null,
+    "recordingUrl": null
   }
 }`}
       />
       <p>
-        <code>costCents</code> is <strong>paise</strong> (INR × 100). See{" "}
-        <Link href="/docs/wallet">Wallet</Link>.
+        <code>costCents</code> is paise. You can also load the full record with{" "}
+        <Link href="/docs/api-reference/getCall">GET /calls/{"{id}"}</Link>.
       </p>
 
       <h2 id="local-dev">Local development</h2>
       <p>
-        Tunnel your laptop (ngrok / Cloudflare Tunnel) so SnapServe can reach{" "}
-        <code>https://…/hooks/snapserve</code>.
+        Tunnel your laptop (ngrok / Cloudflare Tunnel) to an HTTPS URL SnapServe can reach.
       </p>
     </div>
   );

@@ -2144,7 +2144,7 @@ export const ListAgentTemplatesResponse = zod.array(ListAgentTemplatesResponseIt
 export const ListWebhookEndpointsResponseItem = zod.object({
   "id": zod.number(),
   "url": zod.string().url(),
-  "events": zod.array(zod.enum(['call.started', 'call.ended', 'call.failed'])).describe('Event types that trigger this webhook'),
+  "events": zod.array(zod.enum(['call.started', 'call.completed', 'call.failed', 'call.ended'])).describe('Event types that trigger this webhook. Prefer call.completed (call.ended is a legacy alias).'),
   "secretHint": zod.string().nullish().describe('Last 6 chars of the signing secret (masked)'),
   "enabled": zod.boolean(),
   "description": zod.string().nullish(),
@@ -2161,7 +2161,7 @@ export const createWebhookEndpointBodyEnabledDefault = true;
 
 export const CreateWebhookEndpointBody = zod.object({
   "url": zod.string().url(),
-  "events": zod.array(zod.enum(['call.started', 'call.ended', 'call.failed'])).min(1),
+  "events": zod.array(zod.enum(['call.started', 'call.completed', 'call.failed', 'call.ended'])).min(1),
   "secret": zod.string().optional().describe('HMAC signing secret (auto-generated if omitted)'),
   "description": zod.string().optional(),
   "enabled": zod.boolean().default(createWebhookEndpointBodyEnabledDefault)
@@ -2186,7 +2186,7 @@ export const UpdateWebhookEndpointBody = zod.object({
 export const UpdateWebhookEndpointResponse = zod.object({
   "id": zod.number(),
   "url": zod.string().url(),
-  "events": zod.array(zod.enum(['call.started', 'call.ended', 'call.failed'])).describe('Event types that trigger this webhook'),
+  "events": zod.array(zod.enum(['call.started', 'call.completed', 'call.failed', 'call.ended'])).describe('Event types that trigger this webhook. Prefer call.completed (call.ended is a legacy alias).'),
   "secretHint": zod.string().nullish().describe('Last 6 chars of the signing secret (masked)'),
   "enabled": zod.boolean(),
   "description": zod.string().nullish(),

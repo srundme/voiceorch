@@ -93,7 +93,7 @@ const NAV_SETTINGS = [
   { name: "Phone Numbers", href: "/app/phone-numbers", icon: Phone },
   { name: "Verification",  href: "/app/kyc",           icon: ShieldCheck },
   { name: "API Keys",      href: "/app/api-keys",      icon: Key },
-  { name: "Webhooks",      href: "/app/webhooks",      icon: Webhook },
+  { name: "Call webhooks", href: "/app/webhooks",      icon: Webhook },
   { name: "Wallet",        href: "/app/wallet",        icon: Wallet },
   { name: "Usage",         href: "/app/usage",         icon: TrendingUp },
 ];
@@ -114,7 +114,7 @@ const ROUTE_TITLES: [string, string][] = [
   ["/app/phone-numbers",   "Phone Numbers"],
   ["/app/kyc",             "Verification"],
   ["/app/api-keys",        "API Keys"],
-  ["/app/webhooks",        "Webhooks"],
+  ["/app/webhooks",        "Call webhooks"],
   ["/app/wallet",          "Wallet"],
   ["/app/usage",           "Usage"],
   ["/app/settings",        "Settings"],
