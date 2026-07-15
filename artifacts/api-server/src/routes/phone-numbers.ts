@@ -29,8 +29,8 @@ const router: IRouter = Router();
 
 // ── Pricing ───────────────────────────────────────────────────────────────────
 // SnapServe charges ₹800 + 18% GST for any phone number (first purchase via
-// Razorpay INR / UPI). Carrier VoBiz INR cost is never surfaced. Renewal every
-// 30 days debits ₹800 + GST from the wallet (see services/phone-renewal.ts).
+// Razorpay INR card checkout). Carrier VoBiz INR cost is never surfaced. Renewal
+// every 30 days debits ₹800 + GST from the wallet (see services/phone-renewal.ts).
 const FLAT_MONTHLY_RATE_CENTS = PHONE_BASE_PAISE; // ₹800 base
 export const RENEWAL_RATE_CENTS = PHONE_TOTAL_PAISE; // ₹800 + 18% GST wallet debit
 export const RENEWAL_INTERVAL_DAYS = 30;
@@ -500,7 +500,7 @@ router.post("/phone-numbers/purchase/initiate", requireAuth, async (req, res): P
     gstRate:         GST_RATE,
     currency:        CURRENCY_INR,
     keyId:           process.env["RAZORPAY_KEY_ID"],
-    preferUpi:       true,
+    preferCard:      true,
   });
 });
 
@@ -615,7 +615,7 @@ router.post("/phone-numbers/purchase/confirm", requireAuth, async (req, res): Pr
     userId:            user.id,
     type:              "debit",
     amountCents:       -amountCents,
-    description:       `Phone number ${number} purchased (${formatInr(PHONE_BASE_PAISE)} + GST ${formatInr(gstPortionPaise(PHONE_BASE_PAISE))} = ${formatInr(amountCents)}, paid by UPI/card)`,
+    description:       `Phone number ${number} purchased (${formatInr(PHONE_BASE_PAISE)} + GST ${formatInr(gstPortionPaise(PHONE_BASE_PAISE))} = ${formatInr(amountCents)}, paid by card)`,
     status:            "completed",
     razorpayOrderId,
     razorpayPaymentId,

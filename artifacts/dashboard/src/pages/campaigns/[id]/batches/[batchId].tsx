@@ -613,9 +613,8 @@ function LeadsTab({ campaignId, batchId, maxAttempts, agentId }: { campaignId: n
                     {/* Cost */}
                     <td className="px-3 py-2.5 hidden xl:table-cell">
                       {lead.costCents != null && lead.costCents > 0 ? (
-                        <span className="flex items-center gap-0.5 text-[10px] font-mono text-muted-foreground/50">
-                          <DollarSign className="h-2.5 w-2.5" />
-                          {(lead.costCents / 100).toFixed(3)}
+                        <span className="text-[10px] font-mono text-muted-foreground/50">
+                          ₹{(lead.costCents / 100).toFixed(2)}
                         </span>
                       ) : (
                         <span className="text-[10px] text-muted-foreground/25">—</span>

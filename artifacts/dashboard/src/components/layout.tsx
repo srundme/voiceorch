@@ -136,22 +136,22 @@ function WalletChip() {
   const rateMap = useMinuteRatesMap();
   const userProviders = useUserProviderNames();
 
-  const rateCentsPerMin = userProviders.size > 0
-    ? (rateMap.get("byop") ?? 3.5)
-    : (rateMap.get("managed") ?? 5);
+  // balanceCents is INR paise; rate is paise/min (₹5 = 500)
+  const rateCentsPerMin = rateMap.get(userProviders.size > 0 ? "byop" : "managed") ?? 500;
 
   const availMins = cents !== null ? Math.floor(cents / rateCentsPerMin) : null;
 
   const { ring, text, bar } =
     cents === null
       ? { ring: "border-border",          text: "text-muted-foreground", bar: "bg-border" }
-      : cents >= 500
+      : cents >= 50_000 // ≥ ₹500
       ? { ring: "border-emerald-500/30",  text: "text-emerald-400",      bar: "bg-emerald-500" }
-      : cents >= 100
+      : cents >= 10_000 // ≥ ₹100
       ? { ring: "border-amber-500/30",    text: "text-amber-400",        bar: "bg-amber-500" }
       : { ring: "border-red-500/30",      text: "text-red-400",          bar: "bg-red-500" };
 
-  const pct = cents === null ? 0 : Math.min(100, (cents / 1000) * 100);
+  // Progress fills toward ₹1,000 (100_000 paise)
+  const pct = cents === null ? 0 : Math.min(100, (cents / 100_000) * 100);
 
   return (
     <Link href="/app/wallet">
@@ -161,7 +161,7 @@ function WalletChip() {
           {cents !== null ? (
             <div className="flex items-baseline gap-1.5">
               <span className={`text-[11px] font-semibold tabular-nums leading-none ${text}`}>
-                ${(cents / 100).toFixed(2)}
+                ₹{(cents / 100).toFixed(2)}
               </span>
               {availMins !== null && (
                 <span className={`text-[9px] leading-none tabular-nums ${text} opacity-60`}>

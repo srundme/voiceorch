@@ -718,7 +718,7 @@ export default function LiveQueueTab({ campaignId }: { campaignId: number }) {
                       {/* Cost */}
                       <td className="px-3 py-2.5 hidden xl:table-cell">
                         <span className="font-mono text-[10px] text-muted-foreground/50">
-                          {lead.costCents != null && lead.costCents > 0 ? `$${(lead.costCents / 100).toFixed(3)}` : "—"}
+                          {lead.costCents != null && lead.costCents > 0 ? `₹${(lead.costCents / 100).toFixed(2)}` : "—"}
                         </span>
                       </td>
                       {/* Next Retry */}

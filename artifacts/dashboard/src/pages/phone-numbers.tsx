@@ -366,13 +366,13 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
           config: {
             display: {
               blocks: {
-                utib: {
-                  name: "Pay using UPI",
-                  instruments: [{ method: "upi" }],
+                card: {
+                  name: "Pay using Card",
+                  instruments: [{ method: "card" }],
                 },
               },
-              sequence: ["block.utib"],
-              preferences: { show_default_blocks: true },
+              sequence: ["block.card"],
+              preferences: { show_default_blocks: false },
             },
           },
           modal: {
@@ -461,7 +461,7 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
               <span className="text-foreground">₹{PHONE_GST_INR}.00</span>
             </div>
             <div className="flex justify-between px-4 py-2.5">
-              <span className="text-muted-foreground">Pay now (UPI / QR)</span>
+              <span className="text-muted-foreground">Pay now (card)</span>
               <span className="font-semibold text-foreground">₹{PHONE_TOTAL_INR}.00</span>
             </div>
             <div className="flex justify-between px-4 py-2.5">
@@ -472,7 +472,7 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
           <div className="flex items-start gap-3 p-3 rounded-lg border border-zinc-500/20 bg-zinc-500/5 text-foreground text-xs">
             <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
             <span>
-              You&apos;ll pay ₹{PHONE_TOTAL_INR} now via UPI/QR (₹{PHONE_BASE_INR} + 18% GST). The number then renews at ₹{PHONE_BASE_INR} + GST from your wallet every 30 days until you release it.
+              You&apos;ll pay ₹{PHONE_TOTAL_INR} now by card (₹{PHONE_BASE_INR} + 18% GST). The number then renews at ₹{PHONE_BASE_INR} + GST from your wallet every 30 days until you release it.
             </span>
           </div>
           <DialogFooter>
@@ -497,7 +497,7 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
         <DialogHeader>
           <DialogTitle>Get a Phone Number</DialogTitle>
           <DialogDescription>
-            Browse live number inventory. Every number is ₹800 + 18% GST (₹944) via UPI — then renews from your wallet every 30 days.
+            Browse live number inventory. Every number is ₹800 + 18% GST (₹944) by card — then renews from your wallet every 30 days.
           </DialogDescription>
         </DialogHeader>
 

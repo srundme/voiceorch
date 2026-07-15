@@ -143,7 +143,7 @@ export default function AgentAnalyticsPage() {
           />
           <StatCard
             label="Total spend"
-            value={`$${(stats.totalSpendCents / 100).toFixed(2)}`}
+            value={`₹${(stats.totalSpendCents / 100).toFixed(2)}`}
             sub="platform fees"
             icon={DollarSign}
             accent="zinc"

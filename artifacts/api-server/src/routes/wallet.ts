@@ -121,7 +121,7 @@ router.post("/wallet/topup", requireAuth, async (req, res) => {
     };
     if (setupMandate && customerId) {
       orderPayload.customer_id = customerId;
-      orderPayload.method = "upi";
+      orderPayload.method = "card";
     }
     order = await razorpay.orders.create(orderPayload as any);
   } catch (err: unknown) {
@@ -150,7 +150,7 @@ router.post("/wallet/topup", requireAuth, async (req, res) => {
     currency,
     keyId:       process.env.RAZORPAY_KEY_ID,
     customerId:  setupMandate ? customerId : null,
-    preferUpi:   true,
+    preferCard:  true,
   });
 });
 

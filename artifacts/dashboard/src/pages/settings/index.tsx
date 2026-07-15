@@ -433,7 +433,7 @@ function QuickOverview() {
   const activePhoneNumbers = phoneNumbers?.filter(n => !!n.agentId).length ?? 0;
   const activeApiKeys = apiKeysData?.keys.filter(k => !k.revokedAt).length ?? 0;
   const configuredWebhooks = webhooks?.filter(w => w.enabled).length ?? 0;
-  const balance = wallet ? `$${(wallet.balanceCents / 100).toFixed(2)}` : "—";
+  const balance = wallet ? `₹${(wallet.balanceCents / 100).toFixed(2)}` : "—";
 
   return (
     <div>

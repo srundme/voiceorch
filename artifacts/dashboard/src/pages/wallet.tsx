@@ -89,17 +89,17 @@ export default function WalletPage() {
           ? `Auto-pay mandate — ${formatInrRupees(breakdown.base)} + GST`
           : `Wallet top-up — ${formatInrRupees(breakdown.base)} + GST ${formatInrRupees(breakdown.gst)}`,
         theme: { color: "#ededed" },
-        // Prefer UPI / QR; cards & netbanking remain available in the Razorpay sheet
+        // Card only — no UPI / QR / netbanking
         config: {
           display: {
             blocks: {
-              utib: {
-                name: "Pay using UPI",
-                instruments: [{ method: "upi" }],
+              card: {
+                name: "Pay using Card",
+                instruments: [{ method: "card" }],
               },
             },
-            sequence: ["block.utib"],
-            preferences: { show_default_blocks: true },
+            sequence: ["block.card"],
+            preferences: { show_default_blocks: false },
           },
         },
         modal: {
@@ -158,7 +158,7 @@ export default function WalletPage() {
     setMandateLoading(true);
     try {
       await openCheckout(amountPaise, true);
-      toast({ title: "Auto-pay mandate set up! Wallet will top up automatically via UPI." });
+      toast({ title: "Auto-pay mandate set up! Wallet will top up automatically." });
     } catch {
       toast({ title: "Mandate setup failed or cancelled", variant: "destructive" });
     } finally {
@@ -232,7 +232,7 @@ export default function WalletPage() {
               <div className="flex items-center gap-2">
                 <CreditCard className="w-4 h-4 text-muted-foreground" />
                 <h2 className="font-medium text-foreground text-sm">Add Funds</h2>
-                <span className="ml-auto text-[10px] text-muted-foreground bg-muted rounded px-1.5 py-0.5">UPI · QR · Card · NetBanking</span>
+                <span className="ml-auto text-[10px] text-muted-foreground bg-muted rounded px-1.5 py-0.5">Card only</span>
               </div>
 
               <div className="grid grid-cols-4 gap-2">
@@ -288,7 +288,7 @@ export default function WalletPage() {
                 disabled={loading}
               >
                 <Plus className="w-4 h-4 mr-2" />
-                {loading ? "Processing…" : `Pay ${formatInrRupees(payableBreakdown.total)} via UPI`}
+                {loading ? "Processing…" : `Pay ${formatInrRupees(payableBreakdown.total)} by card`}
               </Button>
             </div>
 
@@ -299,7 +299,7 @@ export default function WalletPage() {
                   <h2 className="font-medium text-foreground text-sm">Auto-pay</h2>
                   {mandateActive && (
                     <span className="flex items-center gap-1 text-[10px] text-foreground bg-muted border border-border rounded px-1.5 py-0.5">
-                      <ShieldCheck className="w-3 h-3" /> UPI mandate active
+                      <ShieldCheck className="w-3 h-3" /> Mandate active
                     </span>
                   )}
                 </div>
@@ -308,7 +308,7 @@ export default function WalletPage() {
                   onClick={handleToggleAutopay}
                   disabled={!mandateActive}
                   className={mandateActive ? "text-foreground" : "text-muted-foreground opacity-40 cursor-not-allowed"}
-                  title={mandateActive ? undefined : "Set up a UPI mandate first"}
+                  title={mandateActive ? undefined : "Set up a card mandate first"}
                 >
                   {wallet?.autoPayEnabled ? <ToggleRight className="w-6 h-6" /> : <ToggleLeft className="w-6 h-6" />}
                 </button>
@@ -316,7 +316,7 @@ export default function WalletPage() {
 
               <p className="text-xs text-muted-foreground">
                 Automatically top up when balance drops below the threshold. Auto top-ups also include 18% GST.
-                {!mandateActive && " Authorize once via UPI to enable."}
+                {!mandateActive && " Authorize once with your card to enable."}
               </p>
 
               <div className="space-y-3">
@@ -356,7 +356,7 @@ export default function WalletPage() {
                   disabled={mandateLoading}
                 >
                   <ShieldCheck className="w-4 h-4 mr-2" />
-                  {mandateLoading ? "Setting up…" : "Set Up UPI Auto-pay"}
+                  {mandateLoading ? "Setting up…" : "Set Up Card Auto-pay"}
                 </Button>
               )}
             </div>

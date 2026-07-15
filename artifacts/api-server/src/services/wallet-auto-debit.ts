@@ -2,7 +2,7 @@
  * wallet-auto-debit.ts — Server-initiated recurring charge via Razorpay token.
  *
  * Called when a user's balance drops below their auto-pay threshold and they
- * have a stored Razorpay UPI mandate token. Charges INR (base + 18% GST);
+ * have a stored Razorpay card mandate token. Charges INR (base + 18% GST);
  * credits the wallet with the base amount only.
  */
 import Razorpay from "razorpay";

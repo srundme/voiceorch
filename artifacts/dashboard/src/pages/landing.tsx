@@ -453,7 +453,7 @@ export default function LandingPage() {
           <div className="reveal" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14 }}>
             {[
               { tier: "Starter", price: "₹5", unit: "/min", hi: false, features: ["Flat platform fee", "Managed providers", "10 concurrent calls", "Email support", "Caller memory included"] },
-              { tier: "Production", price: "₹5", unit: "/min", hi: true,  features: ["Same flat ₹5/min", "UPI wallet top-ups", "500 concurrent calls", "Priority support", "Smart SIP escalation"] },
+              { tier: "Production", price: "₹5", unit: "/min", hi: true,  features: ["Same flat ₹5/min", "Card wallet top-ups", "500 concurrent calls", "Priority support", "Smart SIP escalation"] },
               { tier: "Enterprise", price: "Custom", unit: "",    hi: false, features: ["Dedicated infrastructure", "Custom model fine-tuning", "Unlimited concurrency", "24/7 Slack support", "SLA guarantee"] },
             ].map(plan => (
               <div key={plan.tier} style={{ position: "relative", background: plan.hi ? "rgba(168,85,247,0.07)" : "rgba(255,255,255,0.02)", border: plan.hi ? "1px solid rgba(168,85,247,0.3)" : "1px solid rgba(255,255,255,0.07)", borderRadius: 18, padding: 28, display: "flex", flexDirection: "column", gap: 22, transition: "border-color .2s" }}
@@ -497,7 +497,7 @@ export default function LandingPage() {
               Your callers deserve an<br />agent that remembers them.
             </h2>
             <p style={{ color: "#444", fontSize: "0.95rem", marginBottom: 36, position: "relative" }}>
-              ₹500 free credit. Pay with UPI. Takes 2 minutes.
+              ₹500 free credit. Pay by card. Takes 2 minutes.
             </p>
             <Link href="/sign-up" className="btn-primary" style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "#a855f7", color: "#fff", fontSize: 15, fontWeight: 700, padding: "15px 36px", borderRadius: 10, textDecoration: "none", transition: "opacity .2s, box-shadow .2s", letterSpacing: "-0.2px", position: "relative", boxShadow: "0 0 40px rgba(168,85,247,0.3)" }}>
               Start building free →
