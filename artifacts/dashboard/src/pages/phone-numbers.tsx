@@ -478,7 +478,7 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirming(false)} disabled={payingViaCheckout}>Back</Button>
             <Button
-              className="bg-black/85 hover:bg-black/90 text-foreground"
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
               onClick={handlePurchase}
               disabled={payingViaCheckout}
             >
@@ -588,7 +588,7 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
           <Button
-            className="bg-black/85 hover:bg-black/90 text-foreground gap-1.5"
+            className="bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5"
             disabled={!selected}
             onClick={() => setConfirming(true)}
           >
@@ -723,7 +723,7 @@ function RoutingRulesDialog({ number, onClose }: { number: PhoneNumber; onClose:
         )}
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={handleSave} disabled={saving} className="bg-black/85 hover:bg-black/90 text-foreground gap-1.5">
+          <Button onClick={handleSave} disabled={saving} className="bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5">
             {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Save Rules
           </Button>
         </DialogFooter>
@@ -832,7 +832,7 @@ export default function PhoneNumbersPage() {
         {numbers && numbers.length > 0 && (
           <Button
             size="sm"
-            className="h-8 gap-1.5 bg-black/85 hover:bg-black/90 text-foreground"
+            className="h-8 gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90"
             onClick={handleGetNumber}
           >
             <Plus className="h-3.5 w-3.5" /> Get Number
@@ -868,7 +868,7 @@ export default function PhoneNumbersPage() {
           <div className="flex flex-col items-center justify-center py-24 text-muted-foreground">
             <Phone className="w-12 h-12 mb-4 opacity-30" />
             <p className="text-sm mb-3">No phone numbers yet.</p>
-            <Button size="sm" className="gap-1.5 bg-black/85 hover:bg-black/90 text-foreground" onClick={handleGetNumber}>
+            <Button size="sm" className="gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90" onClick={handleGetNumber}>
               <Plus className="h-3.5 w-3.5" /> Get Your First Number
             </Button>
           </div>

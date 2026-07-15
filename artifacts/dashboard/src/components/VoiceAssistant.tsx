@@ -91,35 +91,44 @@ function ProposalCard({
 }) {
   return (
     <div
-      className="mt-2 rounded-xl border overflow-hidden"
-      style={{ borderColor: applied ? "#166534" : "#334155", background: applied ? "#052e16" : "#0f172a" }}
+      className={cn(
+        "mt-2 rounded-xl border overflow-hidden",
+        applied
+          ? "border-emerald-500/40 bg-emerald-500/10"
+          : "border-border bg-card",
+      )}
     >
-      <div className="flex items-center gap-2 px-3 py-2 border-b" style={{ borderColor: applied ? "#166534" : "#1e293b", background: applied ? "#064e1b" : "#1e293b" }}>
-        <Wrench className="w-3.5 h-3.5 shrink-0" style={{ color: applied ? "#4ade80" : "#94a3b8" }} />
-        <span className="text-xs font-medium" style={{ color: applied ? "#4ade80" : "#e2e8f0" }}>
+      <div
+        className={cn(
+          "flex items-center gap-2 px-3 py-2 border-b",
+          applied ? "border-emerald-500/30 bg-emerald-500/15" : "border-border bg-muted/50",
+        )}
+      >
+        <Wrench className={cn("w-3.5 h-3.5 shrink-0", applied ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")} />
+        <span className={cn("text-xs font-medium", applied ? "text-emerald-700 dark:text-emerald-300" : "text-foreground")}>
           {applied ? <><CheckCircle2 className="h-3 w-3 inline mr-1" />Changes applied</> : `Update: ${proposal.agentName}`}
         </span>
       </div>
 
       <div className="px-3 py-2">
-        <p className="text-[11px] mb-2" style={{ color: "#94a3b8" }}>{proposal.summary}</p>
+        <p className="text-[11px] mb-2 text-muted-foreground">{proposal.summary}</p>
         <div className="space-y-1.5">
           {proposal.changes.map((c, i) => (
-            <div key={i} className="rounded-lg px-2.5 py-1.5" style={{ background: "#1e293b" }}>
+            <div key={i} className="rounded-lg px-2.5 py-1.5 bg-muted/60">
               <div className="flex items-center justify-between gap-2">
-                <span className="text-[11px] font-medium" style={{ color: "#e2e8f0" }}>{c.label}</span>
+                <span className="text-[11px] font-medium text-foreground">{c.label}</span>
                 {c.current_value !== undefined && (
-                  <span className="text-[10px]" style={{ color: "#64748b" }}>
+                  <span className="text-[10px] text-muted-foreground">
                     {formatValue(c.current_value)}
-                    <ChevronRight className="inline w-2.5 h-2.5 mx-0.5" style={{ color: "#475569" }} />
-                    <span style={{ color: "#818cf8" }}>{formatValue(c.proposed_value)}</span>
+                    <ChevronRight className="inline w-2.5 h-2.5 mx-0.5 text-muted-foreground/70" />
+                    <span className="text-primary">{formatValue(c.proposed_value)}</span>
                   </span>
                 )}
                 {c.current_value === undefined && (
-                  <span className="text-[10px]" style={{ color: "#818cf8" }}>{formatValue(c.proposed_value)}</span>
+                  <span className="text-[10px] text-primary">{formatValue(c.proposed_value)}</span>
                 )}
               </div>
-              <p className="text-[10px] mt-0.5" style={{ color: "#64748b" }}>{c.reason}</p>
+              <p className="text-[10px] mt-0.5 text-muted-foreground">{c.reason}</p>
             </div>
           ))}
         </div>
@@ -128,8 +137,7 @@ function ProposalCard({
           <button
             onClick={() => onApply(proposal)}
             disabled={loading}
-            className="mt-2.5 w-full rounded-lg py-1.5 text-xs font-semibold flex items-center justify-center gap-1.5 transition-opacity"
-            style={{ background: "linear-gradient(135deg,#6366f1,#818cf8)", color: "#fff", opacity: loading ? 0.6 : 1 }}
+            className="mt-2.5 w-full rounded-lg py-1.5 text-xs font-semibold flex items-center justify-center gap-1.5 transition-opacity bg-primary text-primary-foreground disabled:opacity-60"
           >
             {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
             {loading ? "Applying…" : "Apply Changes"}
@@ -472,20 +480,19 @@ export function VoiceAssistant() {
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
-          className="fixed z-50 flex h-14 w-14 items-center justify-center rounded-full shadow-lg transition-transform hover:scale-105 active:scale-95"
+          className="fixed z-50 flex h-14 w-14 items-center justify-center rounded-full shadow-lg transition-transform hover:scale-105 active:scale-95 bg-primary text-primary-foreground"
           style={{
             left: pos.x,
             top: pos.y,
-            background: "linear-gradient(135deg,#1e293b 0%,#334155 100%)",
             touchAction: "none",
             cursor: dragging ? "grabbing" : "grab",
           }}
           title="Open Orcha AI assistant · drag to move"
         >
-          <Bot className="h-6 w-6 text-white" />
+          <Bot className="h-6 w-6" />
           <span className="absolute -top-0.5 -right-0.5 flex h-3.5 w-3.5">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-60" />
-            <span className="relative inline-flex h-3.5 w-3.5 rounded-full bg-indigo-500" />
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary/60 opacity-60" />
+            <span className="relative inline-flex h-3.5 w-3.5 rounded-full bg-primary" />
           </span>
         </button>
       )}
@@ -493,18 +500,17 @@ export function VoiceAssistant() {
       {/* ── Assistant panel ───────────────────────────────────────────────────── */}
       {open && (
         <div
-          className="fixed z-50 flex flex-col rounded-2xl shadow-2xl overflow-hidden"
-          style={{ left: panelPos.left, top: panelPos.top, width: PANEL_W, height: PANEL_H, background: "#0f172a", border: "1px solid #1e293b" }}
+          className="fixed z-50 flex flex-col rounded-2xl shadow-2xl overflow-hidden bg-card border border-border text-foreground"
+          style={{ left: panelPos.left, top: panelPos.top, width: PANEL_W, height: PANEL_H }}
         >
           {/* Header */}
-          <div className="flex items-center gap-2.5 px-4 py-3 border-b shrink-0" style={{ borderColor: "#1e293b" }}>
-            <div className="flex h-8 w-8 items-center justify-center rounded-full shrink-0"
-              style={{ background: "linear-gradient(135deg,#6366f1,#818cf8)" }}>
-              <Bot className="h-4 w-4 text-white" />
+          <div className="flex items-center gap-2.5 px-4 py-3 border-b border-border shrink-0 bg-muted/40">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full shrink-0 bg-primary">
+              <Bot className="h-4 w-4 text-primary-foreground" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-white leading-none">Orcha</p>
-              <p className="text-[10px] mt-0.5" style={{ color: "#64748b" }}>
+              <p className="text-sm font-semibold text-foreground leading-none">Orcha</p>
+              <p className="text-[10px] mt-0.5 text-muted-foreground">
                 AI Platform Assistant · {pageUrl.replace("/app/", "").split("/")[0] || "home"}
               </p>
             </div>

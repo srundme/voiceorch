@@ -483,12 +483,12 @@ function getLogPreview(entry: ExecutionLogEvent): string | null {
 
 function LogDataCell({ preview }: { preview: string | null }) {
   const [expanded, setExpanded] = useState(false);
-  if (!preview) return <span className="text-white/15 text-xs">—</span>;
+  if (!preview) return <span className="text-muted-foreground/40 text-xs">—</span>;
   const isLong = preview.length > PREVIEW_MAX;
   const shown  = !isLong || expanded ? preview : preview.slice(0, PREVIEW_MAX) + "…";
   return (
     <div className="min-w-0" onClick={e => { if (isLong) { e.stopPropagation(); setExpanded(v => !v); } }}>
-      <span className="text-white/60 text-xs leading-relaxed whitespace-pre-wrap break-words">{shown}</span>
+      <span className="text-foreground/80 text-xs leading-relaxed whitespace-pre-wrap break-words">{shown}</span>
       {isLong && (
         <button className="ml-1.5 text-[10px] text-primary/60 hover:text-primary underline-offset-2 hover:underline whitespace-nowrap">
           {expanded ? <><ChevronUp className="h-3 w-3 inline" /> Show less</> : <><ChevronDown className="h-3 w-3 inline" /> Show more</>}
@@ -505,11 +505,11 @@ function JsonViewer({ data }: { data: Record<string, unknown> }) {
     <div className="relative group">
       <button
         onClick={() => { navigator.clipboard.writeText(str); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
-        className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity bg-white/10 hover:bg-white/20 rounded px-1.5 py-0.5 text-[9px] text-white/60 font-mono"
+        className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity bg-muted hover:bg-muted rounded px-1.5 py-0.5 text-[9px] text-foreground/80 font-mono"
       >
         {copied ? "copied!" : "copy"}
       </button>
-      <pre className="text-[11px] font-mono text-white/70 bg-black/30 rounded p-3 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed border border-white/5">
+      <pre className="text-[11px] font-mono text-foreground/85 bg-muted rounded p-3 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed border border-border">
         {str}
       </pre>
     </div>
@@ -558,13 +558,13 @@ function CallEndedCard({ summary }: { summary: CallEndedSummary }) {
       <div className="flex flex-wrap gap-x-5 gap-y-1.5">
         {chips.map(c => (
           <div key={c.label} className="flex flex-col">
-            <span className="text-[9px] uppercase tracking-widest text-white/25 font-semibold">{c.label}</span>
-            <span className="text-xs text-white/70 font-medium">{c.value}</span>
+            <span className="text-[9px] uppercase tracking-widest text-muted-foreground/50 font-semibold">{c.label}</span>
+            <span className="text-xs text-foreground/85 font-medium">{c.value}</span>
           </div>
         ))}
       </div>
       {(summary.errorMessage || summary.retryAttempted || summary.fallbackAttempted || summary.recoverySucceeded != null) && (
-        <div className="flex flex-wrap items-center gap-1.5 mt-2.5 pt-2.5 border-t border-white/5">
+        <div className="flex flex-wrap items-center gap-1.5 mt-2.5 pt-2.5 border-t border-border">
           {summary.errorMessage && (
             <span className="inline-flex items-center rounded bg-red-500/15 text-red-300/90 border border-red-500/25 text-[10px] font-medium px-1.5 py-0.5">
               {summary.errorCode != null ? `[${summary.errorCode}] ` : ""}{summary.errorMessage}
@@ -584,7 +584,7 @@ function CallEndedCard({ summary }: { summary: CallEndedSummary }) {
         </div>
       )}
       {hasHealth && (
-        <div className="flex flex-wrap items-center gap-1.5 mt-2.5 pt-2.5 border-t border-white/5">
+        <div className="flex flex-wrap items-center gap-1.5 mt-2.5 pt-2.5 border-t border-border">
           {errorCount > 0 && (
             <span className="inline-flex items-center rounded bg-red-500/15 text-red-300/90 border border-red-500/25 text-[10px] font-medium px-1.5 py-0.5">{errorCount} error{errorCount === 1 ? "" : "s"}</span>
           )}
@@ -600,17 +600,17 @@ function CallEndedCard({ summary }: { summary: CallEndedSummary }) {
         </div>
       )}
       {(summary.lastUserTranscript || summary.lastAgentResponse) && (
-        <div className="mt-2.5 pt-2.5 border-t border-white/5 space-y-1.5">
+        <div className="mt-2.5 pt-2.5 border-t border-border space-y-1.5">
           {summary.lastUserTranscript && (
             <div className="flex flex-col gap-0.5">
-              <span className="text-[9px] uppercase tracking-widest text-white/25 font-semibold">Last caller</span>
-              <span className="text-xs text-white/60 italic">"{summary.lastUserTranscript}"</span>
+              <span className="text-[9px] uppercase tracking-widest text-muted-foreground/50 font-semibold">Last caller</span>
+              <span className="text-xs text-foreground/80 italic">"{summary.lastUserTranscript}"</span>
             </div>
           )}
           {summary.lastAgentResponse && (
             <div className="flex flex-col gap-0.5">
-              <span className="text-[9px] uppercase tracking-widest text-white/25 font-semibold">Last agent</span>
-              <span className="text-xs text-white/60 italic">"{summary.lastAgentResponse}"</span>
+              <span className="text-[9px] uppercase tracking-widest text-muted-foreground/50 font-semibold">Last agent</span>
+              <span className="text-xs text-foreground/80 italic">"{summary.lastAgentResponse}"</span>
             </div>
           )}
         </div>
@@ -628,15 +628,15 @@ function ExecLogRow({ entry }: { entry: ExecutionLogEvent }) {
   const en = getEnrichment(entry);
   const durMs = en.durationMs ?? entry.latencyMs ?? null;
   return (
-    <div className={`border-b border-white/5 ${hasPayload ? "cursor-pointer hover:bg-white/[0.03]" : ""}`}>
+    <div className={`border-b border-border ${hasPayload ? "cursor-pointer hover:bg-muted/40" : ""}`}>
       <div
         className="grid items-start gap-2 px-3 py-2.5 text-xs select-none"
         style={{ gridTemplateColumns: LOG_GRID_COLUMNS }}
         onClick={() => { if (hasPayload) setExpanded(e => !e); }}
       >
-        <span className="font-mono text-white/35 tabular-nums pt-0.5">{ts}</span>
+        <span className="font-mono text-muted-foreground/70 tabular-nums pt-0.5">{ts}</span>
         <span className="font-mono text-cyan-300/50 tabular-nums text-center pt-0.5">
-          {en.turnNumber != null ? `#${en.turnNumber}` : <span className="text-white/15">—</span>}
+          {en.turnNumber != null ? `#${en.turnNumber}` : <span className="text-muted-foreground/40">—</span>}
         </span>
         <div className="min-w-0">
           <LogDataCell preview={getLogPreview(entry)} />
@@ -666,40 +666,40 @@ function ExecLogRow({ entry }: { entry: ExecutionLogEvent }) {
         <span className={`inline-flex items-center justify-center border rounded text-[10px] font-semibold px-1.5 py-0.5 mt-0.5 ${compCls}`}>
           {entry.component}
         </span>
-        <span className="text-white/45 truncate pt-0.5">{entry.provider ?? <span className="text-white/20">—</span>}</span>
-        <span className="font-mono text-white/35 tabular-nums text-right pt-0.5">
-          {durMs != null ? (durMs >= 1000 ? `${(durMs / 1000).toFixed(1)}s` : `${durMs}ms`) : <span className="text-white/15">—</span>}
+        <span className="text-muted-foreground truncate pt-0.5">{entry.provider ?? <span className="text-muted-foreground/50">—</span>}</span>
+        <span className="font-mono text-muted-foreground/70 tabular-nums text-right pt-0.5">
+          {durMs != null ? (durMs >= 1000 ? `${(durMs / 1000).toFixed(1)}s` : `${durMs}ms`) : <span className="text-muted-foreground/40">—</span>}
         </span>
         <span className={`inline-flex items-center justify-center text-[9px] font-bold uppercase rounded px-1 py-0.5 mt-0.5 ${
           entry.status === "error" ? "bg-red-500/20 text-red-400" :
           entry.status === "success" ? "bg-emerald-500/15 text-emerald-400" :
-          "bg-white/5 text-white/30"
+          "bg-muted text-muted-foreground/60"
         }`}>
           {entry.status === "error" ? "ERR" : entry.status === "success" ? "OK" : "—"}
         </span>
         {hasPayload ? (
           expanded
-            ? <ChevronUp className="h-3 w-3 text-white/25 mt-0.5" />
-            : <ChevronDown className="h-3 w-3 text-white/25 mt-0.5" />
+            ? <ChevronUp className="h-3 w-3 text-muted-foreground/50 mt-0.5" />
+            : <ChevronDown className="h-3 w-3 text-muted-foreground/50 mt-0.5" />
         ) : <span />}
       </div>
       {expanded && hasPayload && (
         <div className="px-3 pb-3 space-y-2">
           {entry.requestPayload && Object.keys(entry.requestPayload).length > 0 && (
             <div>
-              <p className="text-[9px] text-white/25 uppercase tracking-widest mb-1 font-semibold">Request</p>
+              <p className="text-[9px] text-muted-foreground/50 uppercase tracking-widest mb-1 font-semibold">Request</p>
               <JsonViewer data={entry.requestPayload} />
             </div>
           )}
           {entry.responsePayload && Object.keys(entry.responsePayload).length > 0 && (
             <div>
-              <p className="text-[9px] text-white/25 uppercase tracking-widest mb-1 font-semibold">Response</p>
+              <p className="text-[9px] text-muted-foreground/50 uppercase tracking-widest mb-1 font-semibold">Response</p>
               <JsonViewer data={entry.responsePayload} />
             </div>
           )}
           {entry.metadata && Object.keys(entry.metadata).length > 0 && (
             <div>
-              <p className="text-[9px] text-white/25 uppercase tracking-widest mb-1 font-semibold">Metadata</p>
+              <p className="text-[9px] text-muted-foreground/50 uppercase tracking-widest mb-1 font-semibold">Metadata</p>
               <JsonViewer data={entry.metadata} />
             </div>
           )}
@@ -1390,39 +1390,39 @@ export function CallDetailContent({
               </TabsContent>
 
               <TabsContent value="logs" className="flex-1 mt-2 min-h-0 flex flex-col">
-                <Card className="flex-1 flex flex-col overflow-hidden bg-[#0b0b0b] border-white/8 min-h-0">
+                <Card className="flex-1 flex flex-col overflow-hidden bg-card border-border min-h-0">
                   {/* Filters bar */}
                   {callLogs && callLogs.length > 0 && (
-                    <div className="flex items-center gap-2 px-3 py-2 border-b border-white/8 bg-[#0f0f0f] shrink-0 flex-wrap">
+                    <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-muted/50 shrink-0 flex-wrap">
                       <input
                         value={logSearch}
                         onChange={e => setLogSearch(e.target.value)}
                         placeholder="Search logs…"
-                        className="h-6 px-2 text-[11px] rounded bg-white/5 border border-white/10 text-white/70 placeholder:text-white/20 focus:outline-none focus:border-white/20 w-36"
+                        className="h-6 px-2 text-[11px] rounded bg-muted border border-border text-foreground/85 placeholder:text-muted-foreground focus:outline-none focus:border-ring w-36"
                       />
                       <select value={logComponent} onChange={e => setLogComponent(e.target.value)}
-                        className="h-6 px-1.5 text-[11px] rounded bg-white/5 border border-white/10 text-white/60 focus:outline-none focus:border-white/20">
+                        className="h-6 px-1.5 text-[11px] rounded bg-muted border border-border text-foreground/80 focus:outline-none focus:border-ring">
                         <option value="all">All Components</option>
                         {Array.from(new Set(callLogs.map(l => l.component))).sort().map(c => (
                           <option key={c} value={c}>{c}</option>
                         ))}
                       </select>
                       <select value={logDirection} onChange={e => setLogDirection(e.target.value)}
-                        className="h-6 px-1.5 text-[11px] rounded bg-white/5 border border-white/10 text-white/60 focus:outline-none focus:border-white/20">
+                        className="h-6 px-1.5 text-[11px] rounded bg-muted border border-border text-foreground/80 focus:outline-none focus:border-ring">
                         <option value="all">All Directions</option>
                         <option value="request">Request</option>
                         <option value="response">Response</option>
                         <option value="system">System</option>
                       </select>
                       <select value={logStatus} onChange={e => setLogStatus(e.target.value)}
-                        className="h-6 px-1.5 text-[11px] rounded bg-white/5 border border-white/10 text-white/60 focus:outline-none focus:border-white/20">
+                        className="h-6 px-1.5 text-[11px] rounded bg-muted border border-border text-foreground/80 focus:outline-none focus:border-ring">
                         <option value="all">All Status</option>
                         <option value="success">Success</option>
                         <option value="error">Error</option>
                         <option value="info">Info</option>
                       </select>
                       <div className="flex-1" />
-                      <span className="text-[10px] text-white/25 font-mono">
+                      <span className="text-[10px] text-muted-foreground/50 font-mono">
                         {callLogs.length} event{callLogs.length !== 1 ? "s" : ""}
                       </span>
                       <button
@@ -1433,7 +1433,7 @@ export function CallDetailContent({
                           a.href = url; a.download = `call-${id}-logs.json`; a.click();
                           URL.revokeObjectURL(url);
                         }}
-                        className="flex items-center gap-1 h-6 px-2 text-[10px] rounded bg-white/5 border border-white/10 text-white/50 hover:bg-white/10 hover:text-white/70 transition-colors"
+                        className="flex items-center gap-1 h-6 px-2 text-[10px] rounded bg-muted border border-border text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
                       >
                         <Download className="h-2.5 w-2.5" /> JSON
                       </button>
@@ -1442,17 +1442,17 @@ export function CallDetailContent({
 
                   <div className="flex-1 overflow-auto min-h-0">
                     {logsLoading ? (
-                      <div className="flex items-center justify-center h-full text-white/20 gap-2">
+                      <div className="flex items-center justify-center h-full text-muted-foreground/50 gap-2">
                         <ScrollText className="h-4 w-4 animate-pulse" />
                         <span className="text-xs">Loading logs…</span>
                       </div>
                     ) : !callLogs || callLogs.length === 0 ? (
                       <div className="flex flex-col items-center justify-center h-full text-center py-10">
-                        <div className="h-10 w-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center mb-3">
-                          <ScrollText className="h-5 w-5 text-white/20" />
+                        <div className="h-10 w-10 rounded-xl bg-muted border border-border flex items-center justify-center mb-3">
+                          <ScrollText className="h-5 w-5 text-muted-foreground/50" />
                         </div>
-                        <p className="text-sm text-white/30">No logs recorded</p>
-                        <p className="text-xs text-white/20 mt-1">Logs are captured for new calls going forward</p>
+                        <p className="text-sm text-muted-foreground/60">No logs recorded</p>
+                        <p className="text-xs text-muted-foreground/50 mt-1">Logs are captured for new calls going forward</p>
                       </div>
                     ) : (() => {
                       const q = logSearch.toLowerCase();
@@ -1473,7 +1473,7 @@ export function CallDetailContent({
                       if (filtered.length === 0) {
                         return (
                           <div className="flex flex-col items-center justify-center h-full text-center py-10">
-                            <p className="text-xs text-white/25">No matching events</p>
+                            <p className="text-xs text-muted-foreground/50">No matching events</p>
                           </div>
                         );
                       }
@@ -1481,7 +1481,7 @@ export function CallDetailContent({
                         <div className="min-w-[780px]">
                           {/* Table header — sticky inside the scroll container so it scrolls horizontally with the rows */}
                           <div
-                            className="grid items-center gap-2 px-3 py-1.5 border-b border-white/8 bg-[#0f0f0f] text-[9px] uppercase tracking-widest text-white/20 font-semibold sticky top-0 z-10"
+                            className="grid items-center gap-2 px-3 py-1.5 border-b border-border bg-muted/50 text-[9px] uppercase tracking-widest text-muted-foreground/50 font-semibold sticky top-0 z-10"
                             style={{ gridTemplateColumns: LOG_GRID_COLUMNS }}
                           >
                             <span>Timestamp</span>

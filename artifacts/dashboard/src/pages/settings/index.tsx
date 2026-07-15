@@ -348,7 +348,7 @@ function AccountBillingCard() {
               <div className="flex items-center gap-3 shrink-0">
                 <span className="text-2xl font-bold tabular-nums">{account?.concurrentLimit ?? "—"}</span>
                 <Button
-                  size="sm" className="h-8 text-xs gap-1.5 bg-black/85 hover:bg-black/90 text-foreground"
+                  size="sm" className="h-8 text-xs gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90"
                   disabled={addSlot.isPending}
                   onClick={() => addSlot.mutate(undefined, {
                     onSuccess: () => { queryClient.invalidateQueries({ queryKey: getGetAccountQueryKey() }); toast({ title: "Concurrent slot added", description: "Your limit has been increased by 1." }); },

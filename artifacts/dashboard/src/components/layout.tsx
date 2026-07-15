@@ -295,7 +295,7 @@ function NavItem({
         ].join(" ")}
       >
         <item.icon
-          className={`w-[14px] h-[14px] shrink-0 ${isActive ? "text-foreground/70" : "text-muted-foreground/45"}`}
+          className={`w-[14px] h-[14px] shrink-0 ${isActive ? "text-foreground/70" : "text-muted-foreground/70"}`}
         />
         {!collapsed && <span className="truncate">{item.name}</span>}
       </div>
@@ -356,7 +356,7 @@ function SidebarContent({
         {onToggleCollapse && (
           <button
             onClick={onToggleCollapse}
-            className="p-1.5 rounded-md text-muted-foreground/35 hover:text-muted-foreground hover:bg-accent/50 transition-colors shrink-0"
+            className="p-1.5 rounded-md text-muted-foreground/55 hover:text-muted-foreground hover:bg-accent/50 transition-colors shrink-0"
             title={collapsed ? "Expand" : "Collapse"}
           >
             {collapsed
@@ -372,7 +372,7 @@ function SidebarContent({
           onClick={onSearchOpen}
           className="flex items-center gap-2.5 px-2.5 py-[6.5px] rounded-lg text-[13px] text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors w-full"
         >
-          <Search className="w-[14px] h-[14px] shrink-0 text-muted-foreground/45" />
+          <Search className="w-[14px] h-[14px] shrink-0 text-muted-foreground/70" />
           {!collapsed && (
             <>
               <span className="flex-1 text-left">Search…</span>
@@ -385,7 +385,7 @@ function SidebarContent({
       {/* Primary nav */}
       <div className="flex-1 overflow-y-auto px-2 py-1 min-h-0">
         {!collapsed && (
-          <p className="px-2.5 mb-1.5 mt-1 text-[9.5px] font-semibold tracking-[0.1em] uppercase text-muted-foreground/35 select-none">
+          <p className="px-2.5 mb-1.5 mt-1 text-[9.5px] font-semibold tracking-[0.1em] uppercase text-muted-foreground/55 select-none">
             Navigation
           </p>
         )}
@@ -408,12 +408,12 @@ function SidebarContent({
               : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
           ].join(" ")}
         >
-          <SlidersHorizontal className={`w-[14px] h-[14px] shrink-0 ${isInSettings ? "text-foreground/70" : "text-muted-foreground/45"}`} />
+          <SlidersHorizontal className={`w-[14px] h-[14px] shrink-0 ${isInSettings ? "text-foreground/70" : "text-muted-foreground/70"}`} />
           {!collapsed && (
             <>
               <span className="flex-1 text-left">Settings</span>
               <ChevronDown
-                className={`w-3 h-3 text-muted-foreground/35 transition-transform duration-150 ${settingsOpen ? "rotate-180" : ""}`}
+                className={`w-3 h-3 text-muted-foreground/55 transition-transform duration-150 ${settingsOpen ? "rotate-180" : ""}`}
               />
             </>
           )}
@@ -443,7 +443,7 @@ function SidebarContent({
           onClick={onNavClick}
           className="flex items-center gap-2.5 px-2.5 py-[6.5px] rounded-lg text-[13px] text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors duration-100 w-full"
         >
-          <BookOpen className="w-[14px] h-[14px] shrink-0 text-muted-foreground/45" />
+          <BookOpen className="w-[14px] h-[14px] shrink-0 text-muted-foreground/70" />
           {!collapsed && <span>Documentation</span>}
         </Link>
       </div>
@@ -453,7 +453,7 @@ function SidebarContent({
         <div className="flex items-center gap-2 px-2.5 py-1.5">
           <div className="h-1.5 w-1.5 rounded-full bg-emerald-500/50 shrink-0" />
           {!collapsed && (
-            <span className="text-[10.5px] text-muted-foreground/35">All systems operational</span>
+            <span className="text-[10.5px] text-muted-foreground/55">All systems operational</span>
           )}
         </div>
         {!collapsed && (

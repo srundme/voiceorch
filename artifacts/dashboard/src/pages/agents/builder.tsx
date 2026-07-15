@@ -954,7 +954,7 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
                 }} />
               )}
             </div>
-            <div className="flex items-center justify-between border-t border-white/10 pt-2 mt-1">
+            <div className="flex items-center justify-between border-t border-border pt-2 mt-1">
               <div>
                 <p className="text-[10px] font-medium text-foreground/80">Multilingual</p>
                 <p className="text-[9px] text-muted-foreground">Automatically detects and switches between supported languages during the conversation.</p>
@@ -1988,12 +1988,12 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
   ] as const;
 
   const colorMap: Record<string, { border: string; bg: string; iconBg: string; iconText: string; label: string; badge: string; badgeText: string; active: string }> = {
-    emerald: { border: "border-emerald-400/40", bg: "bg-emerald-950/10", iconBg: "bg-emerald-500/15", iconText: "text-emerald-400", label: "text-emerald-300", badge: "bg-emerald-500/20", badgeText: "text-emerald-300", active: "" },
-    sky:     { border: "border-sky-400/40",     bg: "bg-sky-950/10",     iconBg: "bg-sky-500/15",     iconText: "text-sky-400",     label: "text-sky-300",     badge: "bg-sky-500/20",     badgeText: "text-sky-300",     active: "" },
-    violet:  { border: "border-violet-400/40",  bg: "bg-violet-950/10",  iconBg: "bg-violet-500/15",  iconText: "text-violet-400",  label: "text-violet-300",  badge: "bg-violet-500/20",  badgeText: "text-violet-300",  active: "" },
-    amber:   { border: "border-amber-400/40",   bg: "bg-amber-950/10",   iconBg: "bg-amber-500/15",   iconText: "text-amber-400",   label: "text-amber-300",   badge: "bg-amber-500/20",   badgeText: "text-amber-300",   active: "" },
-    red:     { border: "border-red-400/40",     bg: "bg-red-950/10",     iconBg: "bg-red-500/15",     iconText: "text-red-400",     label: "text-red-300",     badge: "bg-red-500/20",     badgeText: "text-red-300",     active: "" },
-    slate:   { border: "border-slate-400/40",   bg: "bg-slate-950/10",   iconBg: "bg-slate-500/15",   iconText: "text-slate-400",   label: "text-slate-300",   badge: "bg-slate-500/20",   badgeText: "text-slate-300",   active: "" },
+    emerald: { border: "border-emerald-500/40", bg: "bg-emerald-500/10", iconBg: "bg-emerald-500/15", iconText: "text-emerald-600 dark:text-emerald-400", label: "text-emerald-700 dark:text-emerald-300", badge: "bg-emerald-500/20", badgeText: "text-emerald-700 dark:text-emerald-300", active: "" },
+    sky:     { border: "border-sky-500/40",     bg: "bg-sky-500/10",     iconBg: "bg-sky-500/15",     iconText: "text-sky-600 dark:text-sky-400",     label: "text-sky-700 dark:text-sky-300",     badge: "bg-sky-500/20",     badgeText: "text-sky-700 dark:text-sky-300",     active: "" },
+    violet:  { border: "border-violet-500/40",  bg: "bg-violet-500/10",  iconBg: "bg-violet-500/15",  iconText: "text-violet-600 dark:text-violet-400",  label: "text-violet-700 dark:text-violet-300",  badge: "bg-violet-500/20",  badgeText: "text-violet-700 dark:text-violet-300",  active: "" },
+    amber:   { border: "border-amber-500/40",   bg: "bg-amber-500/10",   iconBg: "bg-amber-500/15",   iconText: "text-amber-600 dark:text-amber-400",   label: "text-amber-700 dark:text-amber-300",   badge: "bg-amber-500/20",   badgeText: "text-amber-700 dark:text-amber-300",   active: "" },
+    red:     { border: "border-red-500/40",     bg: "bg-red-500/10",     iconBg: "bg-red-500/15",     iconText: "text-red-600 dark:text-red-400",     label: "text-red-700 dark:text-red-300",     badge: "bg-red-500/20",     badgeText: "text-red-700 dark:text-red-300",     active: "" },
+    slate:   { border: "border-slate-500/40",   bg: "bg-slate-500/10",   iconBg: "bg-slate-500/15",   iconText: "text-slate-600 dark:text-slate-400",   label: "text-slate-700 dark:text-slate-300",   badge: "bg-slate-500/20",   badgeText: "text-slate-700 dark:text-slate-300",   active: "" },
   };
 
   return (

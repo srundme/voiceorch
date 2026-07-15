@@ -66,7 +66,7 @@ export function AgentConfigCard({
 
 /**
  * Shared inline configuration panel that opens beneath an AgentConfigCard.
- * Neutral background/border to match the card's monochrome language.
+ * Uses theme tokens so light and dark mode both render correctly.
  */
 export function AgentConfigPanel({
   icon,
@@ -82,7 +82,7 @@ export function AgentConfigPanel({
   return (
     <div
       className={cn(
-        "rounded-2xl border border-white/10 bg-[#111111] p-4 space-y-3 animate-in slide-in-from-top-1 duration-150",
+        "rounded-2xl border border-border bg-card p-4 space-y-3 animate-in slide-in-from-top-1 duration-150",
         className
       )}
     >
@@ -99,7 +99,7 @@ export function AgentConfigPanel({
  * Premium centered edit dialog shell shared by the Transcriber / Model /
  * Voice configuration modals. Matches an enterprise dashboard aesthetic
  * (Stripe/Linear/Vercel/GitHub Settings style): centered ~680px card, 16px
- * radius, dark neutral surface, subtle border, soft shadow only, fade+scale
+ * radius, theme-aware surface, subtle border, soft shadow only, fade+scale
  * entrance, header + scrollable body + sticky footer.
  *
  * Dismissal (outside click, ESC, close icon) always routes through
@@ -127,9 +127,9 @@ export function EditConfigDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onRequestClose(); }}>
-      <DialogContent className="p-0 gap-0 w-full sm:max-w-[680px] max-w-[720px] rounded-2xl border border-white/10 bg-[#111111] shadow-2xl duration-150 data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95 overflow-hidden">
-        <DialogHeader className="px-6 py-5 border-b border-white/10 space-y-1">
-          <DialogTitle className="flex items-center gap-2 text-base font-semibold">
+      <DialogContent className="p-0 gap-0 w-full sm:max-w-[680px] max-w-[720px] rounded-2xl border border-border bg-card shadow-2xl duration-150 data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95 overflow-hidden">
+        <DialogHeader className="px-6 py-5 border-b border-border space-y-1">
+          <DialogTitle className="flex items-center gap-2 text-base font-semibold text-foreground">
             {icon && <span className="text-muted-foreground/70 [&_svg]:h-4 [&_svg]:w-4">{icon}</span>}
             {title}
           </DialogTitle>
@@ -137,10 +137,10 @@ export function EditConfigDialog({
             <DialogDescription className="text-[12.5px]">{description}</DialogDescription>
           )}
         </DialogHeader>
-        <div className="px-6 py-5 max-h-[60vh] overflow-y-auto space-y-4">
+        <div className="px-6 py-5 max-h-[60vh] overflow-y-auto space-y-4 bg-card">
           {children}
         </div>
-        <DialogFooter className="px-6 py-4 border-t border-white/10 bg-[#111111]">
+        <DialogFooter className="px-6 py-4 border-t border-border bg-muted/30">
           <Button type="button" variant="outline" onClick={onRequestClose}>Cancel</Button>
           <Button type="button" onClick={onSave}>{saveLabel}</Button>
         </DialogFooter>
