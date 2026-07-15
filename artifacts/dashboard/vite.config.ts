@@ -5,12 +5,65 @@ import path from "path";
 import { readFileSync } from "fs";
 import { parse as parseYaml } from "yaml";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
+import { PUBLIC_OPERATION_IDS } from "./src/pages/docs/openapi/publicOps";
 
-// Exposes the contract-first OpenAPI spec (lib/api-spec/openapi.yaml) to the
-// dashboard as `import spec from "virtual:openapi-spec"`. Parsed at build time
-// so the browser never ships a YAML parser, and kept in sync automatically via
-// the dev watcher. Imported only inside the lazily-loaded API reference subtree
-// so it lands in its own chunk, never the main bundle.
+const HTTP_METHODS = ["get", "post", "put", "patch", "delete"] as const;
+
+/**
+ * Strip campaigns / admin / onboarding / etc. from the OpenAPI document before
+ * it is embedded in the dashboard bundle. Runtime filtering alone is not enough
+ * — the full yaml was still shipping and some builds surfaced every tag.
+ */
+function filterPublicOpenApi(doc: Record<string, unknown>): Record<string, unknown> {
+  const pathsIn = (doc.paths ?? {}) as Record<string, Record<string, unknown>>;
+  const pathsOut: Record<string, Record<string, unknown>> = {};
+
+  for (const [p, item] of Object.entries(pathsIn)) {
+    if (!item || typeof item !== "object") continue;
+    if (p.startsWith("/admin")) continue;
+    const next: Record<string, unknown> = {};
+    // Keep shared parameters / servers on the path item when any method survives.
+    for (const key of Object.keys(item)) {
+      if (!(HTTP_METHODS as readonly string[]).includes(key)) {
+        next[key] = item[key];
+      }
+    }
+    let kept = 0;
+    for (const method of HTTP_METHODS) {
+      const op = item[method] as { operationId?: string } | undefined;
+      if (!op) continue;
+      const id = op.operationId;
+      if (id && PUBLIC_OPERATION_IDS.has(id)) {
+        next[method] = op;
+        kept++;
+      }
+    }
+    if (kept > 0) {
+      // Drop non-method leftovers if they weren't needed — keep parameters only.
+      const slim: Record<string, unknown> = {};
+      if (Array.isArray(item.parameters)) slim.parameters = item.parameters;
+      for (const method of HTTP_METHODS) {
+        if (next[method]) slim[method] = next[method];
+      }
+      pathsOut[p] = slim;
+    }
+  }
+
+  const keptTags = new Set<string>();
+  for (const item of Object.values(pathsOut)) {
+    for (const method of HTTP_METHODS) {
+      const op = item[method] as { tags?: string[] } | undefined;
+      op?.tags?.forEach((t) => keptTags.add(t));
+    }
+  }
+
+  const tagsIn = Array.isArray(doc.tags) ? (doc.tags as { name: string }[]) : [];
+  const tagsOut = tagsIn.filter((t) => keptTags.has(t.name));
+
+  return { ...doc, paths: pathsOut, tags: tagsOut };
+}
+
+// Exposes a *public-docs-only* OpenAPI slice to `import spec from "virtual:openapi-spec"`.
 function openapiSpecPlugin(): Plugin {
   const VIRTUAL_ID = "virtual:openapi-spec";
   const RESOLVED_ID = "\0" + VIRTUAL_ID;
@@ -22,6 +75,10 @@ function openapiSpecPlugin(): Plugin {
     "api-spec",
     "openapi.yaml",
   );
+  const publicOpsPath = path.resolve(
+    import.meta.dirname,
+    "src/pages/docs/openapi/publicOps.ts",
+  );
 
   return {
     name: "openapi-spec",
@@ -32,14 +89,16 @@ function openapiSpecPlugin(): Plugin {
     load(id) {
       if (id !== RESOLVED_ID) return null;
       const raw = readFileSync(specPath, "utf-8");
-      const json = parseYaml(raw);
+      const json = filterPublicOpenApi(parseYaml(raw) as Record<string, unknown>);
       return `export default ${JSON.stringify(json)};`;
     },
     configureServer(server) {
       server.watcher.add(specPath);
+      server.watcher.add(publicOpsPath);
     },
     handleHotUpdate({ file, server }) {
-      if (path.resolve(file) !== specPath) return;
+      const resolved = path.resolve(file);
+      if (resolved !== specPath && resolved !== publicOpsPath) return;
       const mod = server.moduleGraph.getModuleById(RESOLVED_ID);
       if (mod) {
         server.moduleGraph.invalidateModule(mod);

@@ -33,9 +33,9 @@ export function ApiOverview() {
       <header className="space-y-4">
         <h1 className="text-3xl font-semibold tracking-tight">{getApiTitle()}</h1>
         <p className="text-[15px] text-muted-foreground leading-relaxed">
-          Public builder API for agents, variables, outbound calls (transcript &amp; summary),
-          webhooks, phone numbers, wallet, knowledge base, and scheduling.{" "}
-          {opCount} curated endpoints — dashboard-only campaign/admin APIs are omitted.
+          Public builder API only: agents, calls (transcript &amp; summary), variables, webhooks,
+          phone numbers, wallet, and knowledge base. {opCount} endpoints — campaigns, onboarding,
+          CRM, providers, and other dashboard-internal APIs are not listed here.
         </p>
         <div className="rounded-lg border border-white/10 bg-white/[0.03] px-4 py-3">
           <span className="text-xs uppercase tracking-wider text-muted-foreground/60">Base URL</span>

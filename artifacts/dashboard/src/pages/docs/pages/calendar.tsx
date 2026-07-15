@@ -45,11 +45,11 @@ export default function CalendarPage() {
         after tool changes. Confirm Scheduling → calendar shows a connected account.
       </Callout>
 
-      <h2 id="api">Via API</h2>
+      <h2 id="api">API note</h2>
       <p>
-        Calendars, event types, availability, slots, and bookings are available under{" "}
-        <Link href="/docs/api-reference">API Reference → Scheduling</Link> (
-        <code>listCalendars</code>, <code>getAvailableSlots</code>, <code>createBooking</code>, …).
+        Calendar connect and booking tools are configured in the dashboard (this page). The public
+        API Reference focuses on agents, calls, and webhooks — use the Scheduling UI for Google
+        Calendar setup rather than low-level calendar REST.
       </p>
 
       <h2 id="next">Next</h2>

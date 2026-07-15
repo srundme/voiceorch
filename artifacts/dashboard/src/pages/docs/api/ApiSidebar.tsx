@@ -130,8 +130,11 @@ export function ApiSidebar() {
 
       <div className="flex flex-col gap-1">
         <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70 mb-1">
-          Endpoints
+          Public endpoints
         </h4>
+        <p className="text-[11px] text-zinc-500 px-2 mb-2 leading-snug">
+          Builder APIs only — campaigns &amp; admin hidden.
+        </p>
         {filtered.map((g) => (
           <TagSection
             key={g.tag}
