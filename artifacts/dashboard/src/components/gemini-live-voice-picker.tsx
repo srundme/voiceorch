@@ -13,6 +13,7 @@ export function GeminiLiveVoicePicker({
 }) {
   const [voices, setVoices] = useState(GEMINI_LIVE_VOICES);
   const [previewing, setPreviewing] = useState<string | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
@@ -38,13 +39,17 @@ export function GeminiLiveVoicePicker({
     }
     audioRef.current?.pause();
     setPreviewing(voiceName);
+    setPreviewError(null);
     try {
       const res = await fetch("/api/gemini-live/voices/preview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ voiceName }),
       });
-      if (!res.ok) throw new Error("Preview failed");
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(err.error ?? `Preview failed (${res.status})`);
+      }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
@@ -54,9 +59,15 @@ export function GeminiLiveVoicePicker({
         setPreviewing(null);
         audioRef.current = null;
       };
+      audio.onerror = () => {
+        URL.revokeObjectURL(url);
+        setPreviewing(null);
+        setPreviewError("Could not play preview audio.");
+      };
       await audio.play();
-    } catch {
+    } catch (err) {
       setPreviewing(null);
+      setPreviewError(err instanceof Error ? err.message : "Preview failed");
     }
   }
 
@@ -75,7 +86,7 @@ export function GeminiLiveVoicePicker({
         </SelectContent>
       </Select>
       <div className="flex flex-wrap gap-2">
-        {voices.slice(0, 6).map((v) => (
+        {voices.map((v) => (
           <Button
             key={v.name}
             type="button"
@@ -97,9 +108,11 @@ export function GeminiLiveVoicePicker({
         {previewing ? <Square className="h-3.5 w-3.5 mr-1.5" /> : <Play className="h-3.5 w-3.5 mr-1.5" />}
         {previewing ? "Stop preview" : "Preview voice"}
       </Button>
+      {previewError && (
+        <p className="text-[11px] text-destructive">{previewError}</p>
+      )}
       <p className="text-[11px] text-muted-foreground">
-        Gemini Live uses native audio — Cartesia/Sarvam TTS is not used on this stack.
-        Outbound AMD and voicemail delivery remain on the classic stack only.
+        30 preset Gemini voices — custom voice cloning is not available on Live; use Classic stack + Cartesia/ElevenLabs for custom voices.
       </p>
     </div>
   );

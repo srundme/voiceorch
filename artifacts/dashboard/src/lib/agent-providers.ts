@@ -34,6 +34,9 @@ export const ASR_MODELS: Record<string, { value: string; label: string }[]> = {
   ],
 };
 
+/** LLM model id that routes calls through Gemini Live native audio. */
+export const GEMINI_LIVE_LLM_MODEL = "gemini-3.1-flash-live-preview" as const;
+
 export const LLM_MODELS: Record<string, { value: string; label: string }[]> = {
   openai:    [
     { value: "gpt-4.1-nano",  label: "GPT-4.1 Nano — ultra-fast, lowest cost" },
@@ -45,7 +48,17 @@ export const LLM_MODELS: Record<string, { value: string; label: string }[]> = {
     { value: "gpt-4-turbo",   label: "GPT-4 Turbo (legacy)" },
     { value: "gpt-3.5-turbo", label: "GPT-3.5 Turbo (legacy)" },
   ],
-  google:    [{ value: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite (fastest — zero-latency-overhead mode)" }, { value: "gemini-3.1-flash-lite", label: "Gemini 3.1 Flash Lite (newest, low-latency)" }, { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash (recommended)" }, { value: "gemini-3.5-flash", label: "Gemini 3.5 Flash (newest, most capable)" }, { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro (most capable)" }, { value: "gemini-2.0-flash", label: "Gemini 2.0 Flash" }, { value: "gemini-2.0-flash-lite", label: "Gemini 2.0 Flash Lite (lightweight)" }, { value: "gemini-1.5-flash", label: "Gemini 1.5 Flash (legacy)" }],
+  google:    [
+    { value: GEMINI_LIVE_LLM_MODEL, label: "Gemini 3.1 Flash Live (native realtime audio)" },
+    { value: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite (fastest — zero-latency-overhead mode)" },
+    { value: "gemini-3.1-flash-lite", label: "Gemini 3.1 Flash Lite (newest, low-latency)" },
+    { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash (recommended)" },
+    { value: "gemini-3.5-flash", label: "Gemini 3.5 Flash (newest, most capable)" },
+    { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro (most capable)" },
+    { value: "gemini-2.0-flash", label: "Gemini 2.0 Flash" },
+    { value: "gemini-2.0-flash-lite", label: "Gemini 2.0 Flash Lite (lightweight)" },
+    { value: "gemini-1.5-flash", label: "Gemini 1.5 Flash (legacy)" },
+  ],
   qwen:      [{ value: "qwen/qwen3-32b", label: "Qwen 3 32B (recommended)" }, { value: "qwen/qwen3-235b-a22b", label: "Qwen 3 235B" }],
   groq:      [{ value: "llama-3.3-70b-versatile", label: "Llama 3.3 70B (recommended)" }, { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B (fast)" }, { value: "gemma2-9b-it", label: "Gemma 2 9B" }],
   sarvam:    [{ value: "sarvam-30b", label: "Sarvam 30B (recommended)" }, { value: "sarvam-105b", label: "Sarvam 105B" }],
@@ -477,6 +490,28 @@ export function defaultLlmForLanguages(
   return hasTamil
     ? { llmProvider: DEFAULT_TAMIL_LLM_PROVIDER,    llmModel: DEFAULT_TAMIL_LLM_MODEL }
     : { llmProvider: DEFAULT_NONTAMIL_LLM_PROVIDER, llmModel: DEFAULT_NONTAMIL_LLM_MODEL };
+}
+
+export function isGeminiLiveLlmModel(model: string | undefined | null): boolean {
+  return model === GEMINI_LIVE_LLM_MODEL;
+}
+
+/** True when the agent uses Gemini Live (model selection or saved voice stack). */
+export function isGeminiLiveAgent(opts: {
+  llmModel?: string | null;
+  voiceStack?: string | null;
+}): boolean {
+  return isGeminiLiveLlmModel(opts.llmModel) || opts.voiceStack === "gemini_live";
+}
+
+export function geminiLiveModelLabel(): string {
+  return LLM_MODELS.google?.find((m) => m.value === GEMINI_LIVE_LLM_MODEL)?.label
+    ?? "Gemini 3.1 Flash Live";
+}
+
+/** Sync voiceStack when the user picks a model in the Model dialog. */
+export function voiceStackForLlmModel(model: string): "classic" | "gemini_live" {
+  return isGeminiLiveLlmModel(model) ? "gemini_live" : "classic";
 }
 
 /** Voice stack: classic STT+LLM+TTS vs Gemini native audio Live. */

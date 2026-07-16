@@ -73,11 +73,15 @@ import {
   LLM_MODELS,
   TTS_MODELS,
   TTS_VOICES,
-  VOICE_STACK_OPTIONS,
+  GEMINI_LIVE_LLM_MODEL,
   GEMINI_LIVE_THINKING_LEVELS,
+  geminiLiveModelLabel,
   getModelError,
+  isGeminiLiveAgent,
+  isGeminiLiveLlmModel,
   isTamilLanguage,
   defaultGeminiModel,
+  voiceStackForLlmModel,
 } from "@/lib/agent-providers";
 
 export type { AgentFormValues } from "./edit.schema";
@@ -179,7 +183,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
       ...(schedulingEventTypeId != null ? { defaultEventTypeId: schedulingEventTypeId } : {}),
     };
   }
-  if (voiceStack === "gemini_live") {
+  if (isGeminiLiveLlmModel(rest.llmModel) || voiceStack === "gemini_live") {
     agentConfig["voiceStack"] = "gemini_live";
     agentConfig["geminiLive"] = {
       voiceName: geminiLiveVoiceName || "Kore",
@@ -669,13 +673,20 @@ export default function AgentEdit() {
       geminiLiveVoiceName:      ((agent as any).agentConfig?.geminiLive?.voiceName as string | undefined) ?? "Kore",
       geminiLiveThinkingLevel:  ((agent as any).agentConfig?.geminiLive?.thinkingLevel as AgentFormValues["geminiLiveThinkingLevel"] | undefined) ?? "minimal",
     });
+    const cfg = (agent as any).agentConfig;
+    if (cfg?.voiceStack === "gemini_live") {
+      form.setValue("llmProvider", "google");
+      form.setValue("llmModel", GEMINI_LIVE_LLM_MODEL);
+    }
   }, [agent]);
 
   const asrProvider = useWatch({ control: form.control, name: "asrProvider" });
   const llmProvider = useWatch({ control: form.control, name: "llmProvider" });
+  const llmModel = useWatch({ control: form.control, name: "llmModel" });
   const ttsProvider = useWatch({ control: form.control, name: "ttsProvider" });
   const voiceStack = useWatch({ control: form.control, name: "voiceStack" });
   const geminiLiveVoiceName = useWatch({ control: form.control, name: "geminiLiveVoiceName" });
+  const isGeminiLive = isGeminiLiveAgent({ llmModel, voiceStack });
   // "Paste custom Voice ID" UI mode — selecting the option must NOT erase an
   // already-saved voice ID; the value only changes when the user types into
   // the custom input or picks a different curated voice.
@@ -1102,27 +1113,28 @@ export default function AgentEdit() {
                   icon={<Mic />}
                   label="Transcriber"
                   value={ASR_PROVIDERS.find(p => p.value === asrProvider)?.label ?? asrProvider}
-                  subtext={form.watch("asrModel") || "Default model"}
-                  onClick={() => openPipelineDialog("transcriber")}
+                  subtext={isGeminiLive ? "Not used with Gemini Live" : (form.watch("asrModel") || "Default model")}
+                  onClick={isGeminiLive ? undefined : () => openPipelineDialog("transcriber")}
+                  className={isGeminiLive ? "opacity-40 pointer-events-none line-through decoration-muted-foreground/40" : undefined}
                 />
                 <AgentConfigCard
                   icon={<Brain />}
                   label="Model"
-                  value={LLM_PROVIDERS.find(p => p.value === llmProvider)?.label ?? llmProvider}
-                  subtext={form.watch("llmModel") || "Default model"}
+                  value={isGeminiLive ? geminiLiveModelLabel() : (LLM_PROVIDERS.find(p => p.value === llmProvider)?.label ?? llmProvider)}
+                  subtext={isGeminiLive ? "Native realtime audio" : (llmModel || "Default model")}
                   onClick={() => openPipelineDialog("model")}
                 />
                 <AgentConfigCard
                   icon={<Volume2 />}
                   label="Voice"
                   value={
-                    voiceStack === "gemini_live"
-                      ? "Gemini Live 3.1"
+                    isGeminiLive
+                      ? (geminiLiveVoiceName || "Kore")
                       : (TTS_PROVIDERS.find(p => p.value === ttsProvider)?.label ?? ttsProvider)
                   }
                   subtext={
-                    voiceStack === "gemini_live"
-                      ? (geminiLiveVoiceName || "Kore")
+                    isGeminiLive
+                      ? "Gemini Live preset voice"
                       : (form.watch("ttsModel") || form.watch("ttsVoice") || "Default voice")
                   }
                   onClick={() => openPipelineDialog("voice")}
@@ -1202,10 +1214,19 @@ export default function AgentEdit() {
             title="Model"
             description="Choose the language model that powers the agent's responses."
           >
+            {isGeminiLive && (
+              <p className="text-[11px] text-muted-foreground rounded-md border border-border/60 bg-muted/30 px-3 py-2">
+                Gemini Live uses native speech-to-speech. Transcriber and classic TTS are skipped — pick a preset voice in the Voice section.
+              </p>
+            )}
             <FormField control={form.control} name="llmProvider" render={({ field }) => (
               <FormItem>
                 <FormLabel className="text-xs">Provider</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
+                <Select onValueChange={(v) => {
+                  field.onChange(v);
+                  form.setValue("llmModel", "");
+                  form.setValue("voiceStack", "classic");
+                }} value={field.value}>
                   <FormControl><SelectTrigger><SelectValue placeholder="Select LLM" /></SelectTrigger></FormControl>
                   <SelectContent>
                     {LLM_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
@@ -1219,7 +1240,18 @@ export default function AgentEdit() {
                 <FormLabel className="text-xs">Model</FormLabel>
                 <FormControl>
                   {LLM_MODELS[llmProvider] ? (
-                    <ModelSelect options={LLM_MODELS[llmProvider]!} value={field.value} onChange={field.onChange} placeholder="Select model" />
+                    <ModelSelect
+                      options={LLM_MODELS[llmProvider]!}
+                      value={field.value}
+                      onChange={(v) => {
+                        field.onChange(v);
+                        form.setValue("voiceStack", voiceStackForLlmModel(v));
+                        if (isGeminiLiveLlmModel(v)) {
+                          form.setValue("llmProvider", "google");
+                        }
+                      }}
+                      placeholder="Select model"
+                    />
                   ) : (
                     <Input placeholder="Enter model name" {...field} />
                   )}
@@ -1227,6 +1259,7 @@ export default function AgentEdit() {
                 <FormMessage />
               </FormItem>
             )} />
+            {!isGeminiLive && (
             <FormField control={form.control} name="temperature" render={({ field }) => (
               <FormItem>
                 <div className="flex justify-between items-center mb-2">
@@ -1240,6 +1273,7 @@ export default function AgentEdit() {
                 <FormMessage />
               </FormItem>
             )} />
+            )}
           </EditConfigDialog>
 
           {/* ── Voice dialog ── */}
@@ -1249,28 +1283,13 @@ export default function AgentEdit() {
             onSave={savePipelineDialog}
             icon={<Volume2 />}
             title="Voice"
-            description="Choose classic TTS or Gemini Live native audio for calls."
+            description={isGeminiLive ? "Choose a Gemini Live preset voice for this agent." : "Choose the TTS provider and voice for spoken responses."}
           >
-            <FormField control={form.control} name="voiceStack" render={({ field }) => (
-              <FormItem>
-                <FormLabel className="text-xs">Voice stack</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value ?? "classic"}>
-                  <FormControl><SelectTrigger><SelectValue placeholder="Select voice stack" /></SelectTrigger></FormControl>
-                  <SelectContent>
-                    {VOICE_STACK_OPTIONS.map((p) => (
-                      <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )} />
-
-            {voiceStack === "gemini_live" ? (
+            {isGeminiLive ? (
               <>
                 <FormField control={form.control} name="geminiLiveVoiceName" render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-xs">Gemini Live voice</FormLabel>
+                    <FormLabel className="text-xs">Voice</FormLabel>
                     <FormControl>
                       <GeminiLiveVoicePicker value={field.value ?? "Kore"} onChange={field.onChange} />
                     </FormControl>

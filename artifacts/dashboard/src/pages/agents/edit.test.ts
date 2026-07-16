@@ -36,9 +36,11 @@ const BASE: AgentFormValues = {
 };
 
 describe("buildUpdateAgentPayload", () => {
-  it("gemini live settings — placed in agentConfig", () => {
+  it("gemini live settings — placed in agentConfig when Live model selected", () => {
     const data: AgentFormValues = {
       ...BASE,
+      llmProvider: "google",
+      llmModel: "gemini-3.1-flash-live-preview",
       voiceStack: "gemini_live",
       geminiLiveVoiceName: "Puck",
       geminiLiveThinkingLevel: "low",

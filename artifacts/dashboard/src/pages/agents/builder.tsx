@@ -76,7 +76,8 @@ import {
   LANGUAGES, ASR_MODELS, LLM_MODELS, TTS_MODELS, TTS_VOICES, AGENT_TIMEZONES,
   isTamilLanguage, defaultGeminiModel, defaultLlmForLanguages,
   filterVoicesForLanguage, isVoiceCompatibleWithLanguage,
-  VOICE_STACK_OPTIONS, GEMINI_LIVE_THINKING_LEVELS,
+  GEMINI_LIVE_LLM_MODEL, GEMINI_LIVE_THINKING_LEVELS,
+  geminiLiveModelLabel, isGeminiLiveAgent, isGeminiLiveLlmModel, voiceStackForLlmModel,
 } from "@/lib/agent-providers";
 import { useMinuteRatesMap, useUserProviderNames, computeAgentRateCents } from "@/hooks/use-minute-rates";
 import { DestinationOtpDialog } from "@/components/destination-otp-dialog";
@@ -617,6 +618,7 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
   const telephonyProvider     = form.watch("telephonyProvider") ?? "vobiz";
   const asrModel              = form.watch("asrModel");
   const llmModel              = form.watch("llmModel");
+  const isGeminiLive          = isGeminiLiveAgent({ llmModel, voiceStack });
   const ttsVoice              = form.watch("ttsVoice");
   const ttsModel              = form.watch("ttsModel");
   const language              = form.watch("language");
@@ -789,27 +791,24 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
                 icon={<Mic />}
                 label="Transcriber"
                 value={langLabel}
-                subtext={<>{asrLabel}{asrModel ? ` · ${asrModel}` : ""}</>}
+                subtext={isGeminiLive ? "Not used with Gemini Live" : <>{asrLabel}{asrModel ? ` · ${asrModel}` : ""}</>}
                 active={openSection === "transcriber"}
-                onClick={() => openPipelineDialog("transcriber")}
+                onClick={isGeminiLive ? undefined : () => openPipelineDialog("transcriber")}
+                className={isGeminiLive ? "opacity-40 pointer-events-none line-through decoration-muted-foreground/40" : undefined}
               />
               <AgentConfigCard
                 icon={<Brain />}
                 label="Model"
-                value={llmModelLabel || llmLabel}
-                subtext={llmLabel}
+                value={isGeminiLive ? geminiLiveModelLabel() : (llmModelLabel || llmLabel)}
+                subtext={isGeminiLive ? "Native realtime audio" : llmLabel}
                 active={openSection === "model"}
                 onClick={() => openPipelineDialog("model")}
               />
               <AgentConfigCard
                 icon={<Volume2 />}
                 label="Voice"
-                value={voiceStack === "gemini_live" ? "Gemini Live 3.1" : (ttsVoiceLabel || "Select a voice")}
-                subtext={
-                  voiceStack === "gemini_live"
-                    ? (geminiLiveVoiceName || "Kore")
-                    : <>{ttsLabel}{ttsModelLabel ? ` · ${ttsModelLabel}` : ""}</>
-                }
+                value={isGeminiLive ? (geminiLiveVoiceName || "Kore") : (ttsVoiceLabel || "Select a voice")}
+                subtext={isGeminiLive ? "Gemini Live preset voice" : <>{ttsLabel}{ttsModelLabel ? ` · ${ttsModelLabel}` : ""}</>}
                 active={openSection === "voice"}
                 onClick={() => openPipelineDialog("voice")}
               />
@@ -985,11 +984,20 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
             title="Model"
             description="Choose the language model that powers the agent's responses."
           >
+            {isGeminiLive && (
+              <p className="text-[11px] text-muted-foreground rounded-md border border-border/60 bg-muted/30 px-3 py-2">
+                Gemini Live uses native speech-to-speech. Transcriber and classic TTS are skipped — pick a preset voice in the Voice section.
+              </p>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <FormField control={form.control} name="llmProvider" render={({ field }) => (
                 <FormItem className="space-y-1">
                   <FormLabel className="text-[10px] text-muted-foreground">Provider</FormLabel>
-                  <SmallSelect value={field.value} onChange={(v) => { field.onChange(v); form.setValue("llmModel", ""); }}
+                  <SmallSelect value={field.value} onChange={(v) => {
+                    field.onChange(v);
+                    form.setValue("llmModel", "");
+                    form.setValue("voiceStack", "classic");
+                  }}
                     options={LLM_PROVIDERS.map(p => ({ value: p.value, label: p.label }))} />
                 </FormItem>
               )} />
@@ -997,13 +1005,18 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
                 <FormField control={form.control} name="llmModel" render={({ field }) => (
                   <FormItem className="space-y-1">
                     <FormLabel className="text-[10px] text-muted-foreground">Model</FormLabel>
-                    <SmallSelect value={field.value ?? ""} onChange={field.onChange}
+                    <SmallSelect value={field.value ?? ""} onChange={(v) => {
+                      field.onChange(v);
+                      form.setValue("voiceStack", voiceStackForLlmModel(v));
+                      if (isGeminiLiveLlmModel(v)) form.setValue("llmProvider", "google");
+                    }}
                       options={llmOptions.map((m: any) => ({ value: m.value, label: m.label }))} placeholder="Default" />
                     <FormMessage className="text-[10px]" />
                   </FormItem>
                 )} />
               )}
             </div>
+            {!isGeminiLive && (
             <FormField control={form.control} name="temperature" render={({ field }) => (
               <FormItem className="space-y-1">
                 <div className="flex justify-between items-center">
@@ -1016,6 +1029,7 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
                 <div className="flex justify-between text-[9px] text-muted-foreground"><span>0</span><span>2</span></div>
               </FormItem>
             )} />
+            )}
           </EditConfigDialog>
 
           {/* ── Voice dialog ── */}
@@ -1025,17 +1039,9 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
             onSave={savePipelineDialog}
             icon={<Volume2 />}
             title="Voice"
-            description="Choose classic TTS or Gemini Live native audio for calls."
+            description={isGeminiLive ? "Choose a Gemini Live preset voice for this agent." : "Choose the TTS provider and voice for spoken responses."}
           >
-            <FormField control={form.control} name="voiceStack" render={({ field }) => (
-              <FormItem className="space-y-1">
-                <FormLabel className="text-[10px] text-muted-foreground">Voice stack</FormLabel>
-                <SmallSelect value={field.value ?? "classic"} onChange={field.onChange}
-                  options={VOICE_STACK_OPTIONS.map(p => ({ value: p.value, label: p.label }))} />
-              </FormItem>
-            )} />
-
-            {voiceStack === "gemini_live" ? (
+            {isGeminiLive ? (
               <div className="space-y-3">
                 <FormField control={form.control} name="geminiLiveVoiceName" render={({ field }) => (
                   <FormItem>
@@ -5144,6 +5150,10 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       geminiLiveVoiceName:      ((agent as any).agentConfig?.geminiLive?.voiceName as string | undefined) ?? "Kore",
       geminiLiveThinkingLevel:  ((agent as any).agentConfig?.geminiLive?.thinkingLevel as AgentFormValues["geminiLiveThinkingLevel"] | undefined) ?? "minimal",
     });
+    if ((agent as any).agentConfig?.voiceStack === "gemini_live") {
+      form.setValue("llmProvider", "google");
+      form.setValue("llmModel", GEMINI_LIVE_LLM_MODEL);
+    }
     if (agent.webhookUrl && !agent.webhookUrl.startsWith("https://")) {
       form.setError("webhookUrl", {
         type: "server",
