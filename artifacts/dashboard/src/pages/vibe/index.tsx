@@ -228,10 +228,10 @@ function VibeAmbientBg() {
           "blur-[40px]",
         )}
       />
-      <div className="absolute top-[-25%] left-1/2 -translate-x-1/2 h-[60vh] w-[90vw] max-w-[1000px] rounded-full bg-[#6366f1]/[0.05] dark:bg-[#6366f1]/[0.08] blur-[120px]" />
-      <div className="absolute bottom-[-15%] right-[-8%] h-[45vh] w-[55vw] max-w-[700px] rounded-full bg-[#14b8a6]/[0.04] dark:bg-[#14b8a6]/[0.06] blur-[100px]" />
-      <div className="absolute top-[20%] left-[-10%] h-[40vh] w-[45vw] max-w-[550px] rounded-full bg-[#ff9933]/[0.03] dark:bg-[#ff9933]/[0.05] blur-[90px]" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_70%_45%_at_50%_0%,rgba(99,102,241,0.06),transparent_65%)] dark:bg-[radial-gradient(ellipse_70%_45%_at_50%_0%,rgba(99,102,241,0.1),transparent_65%)]" />
+      <div className="absolute top-[-25%] left-1/2 -translate-x-1/2 h-[60vh] w-[90vw] max-w-[1000px] rounded-full bg-[#a855f7]/[0.06] dark:bg-[#a855f7]/[0.10] blur-[120px]" />
+      <div className="absolute bottom-[-15%] right-[-8%] h-[45vh] w-[55vw] max-w-[700px] rounded-full bg-[#d946ef]/[0.05] dark:bg-[#d946ef]/[0.07] blur-[100px]" />
+      <div className="absolute top-[20%] left-[-10%] h-[40vh] w-[45vw] max-w-[550px] rounded-full bg-[#c084fc]/[0.04] dark:bg-[#c084fc]/[0.06] blur-[90px]" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_70%_45%_at_50%_0%,rgba(168,85,247,0.07),transparent_65%)] dark:bg-[radial-gradient(ellipse_70%_45%_at_50%_0%,rgba(168,85,247,0.12),transparent_65%)]" />
     </div>
   );
 }
@@ -1382,16 +1382,16 @@ export default function VibePage() {
           {/* Floating top bar */}
           <header className="relative z-10 flex items-center justify-between px-5 sm:px-8 h-14 shrink-0">
             <BrandMark iconSize={22} wordmarkHeight={15} gapClass="gap-2" />
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-2">
               <ThemeToggle />
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
-                className="h-8 gap-1.5 text-muted-foreground hover:text-foreground rounded-full"
+                className="h-8 gap-1.5 rounded-full border-border/60 bg-background/40 backdrop-blur-md text-foreground/80 hover:text-foreground hover:bg-card/60"
                 onClick={() => navigate("/app/command-center")}
               >
                 <LayoutDashboard className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Dashboard</span>
+                Skip to dashboard
               </Button>
             </div>
           </header>
@@ -1405,7 +1405,7 @@ export default function VibePage() {
                 transition={{ duration: 0.5 }}
                 className="mb-8 vibe-orb relative"
               >
-                <div className="absolute inset-0 rounded-full bg-gradient-to-br from-[#6366f1]/40 via-[#14b8a6]/30 to-[#ff9933]/35 blur-2xl scale-[2] opacity-50" />
+                <div className="absolute inset-0 rounded-full bg-gradient-to-br from-[#a855f7]/45 via-[#d946ef]/35 to-[#c084fc]/40 blur-2xl scale-[2] opacity-55" />
                 <div className="relative h-16 w-16 rounded-2xl border border-white/10 bg-card/40 backdrop-blur-xl flex items-center justify-center shadow-2xl">
                   <Sparkles className="h-7 w-7 text-foreground/90" />
                 </div>
@@ -1424,13 +1424,13 @@ export default function VibePage() {
                     <span className="block text-muted-foreground/80 font-normal text-2xl sm:text-3xl mb-1">
                       Hi {welcomeName.split(" ")[0]}
                     </span>
-                    <span className="bg-gradient-to-r from-[#818cf8] via-[#2dd4bf] to-[#fbbf24] bg-clip-text text-transparent">
+                    <span className="bg-gradient-to-r from-[#a855f7] via-[#d946ef] to-[#c084fc] bg-clip-text text-transparent">
                       what are we building?
                     </span>
                   </>
                 ) : (
                   <>
-                    <span className="bg-gradient-to-r from-[#818cf8] via-[#2dd4bf] to-[#fbbf24] bg-clip-text text-transparent">
+                    <span className="bg-gradient-to-r from-[#a855f7] via-[#d946ef] to-[#c084fc] bg-clip-text text-transparent">
                       Build a voice agent
                     </span>
                     <span className="block text-muted-foreground/70 font-normal text-2xl sm:text-3xl mt-1">
@@ -1503,13 +1503,13 @@ export default function VibePage() {
                         onClick={() => send(t.message)}
                         className="group relative text-left rounded-2xl border border-border/30 bg-card/20 backdrop-blur-md p-4 overflow-hidden transition-all hover:border-border/60 hover:bg-card/40 hover:scale-[1.02] active:scale-[0.98]"
                       >
-                        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#6366f1]/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#a855f7]/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                         <p className="text-[13px] font-semibold text-foreground truncate">{t.title}</p>
                         <p className="mt-1.5 text-[11px] text-muted-foreground/70 line-clamp-2 leading-snug">{t.desc}</p>
                       </button>
                     ))}
                   </div>
-                  <div className="mt-3 flex items-center justify-center gap-3">
+                  <div className="mt-3 flex items-center justify-center">
                     <button
                       type="button"
                       onClick={() => send(VIBE_TEMPLATES[4]!.message)}
@@ -1517,14 +1517,27 @@ export default function VibePage() {
                     >
                       + Restaurant bookings
                     </button>
-                    <span className="text-border/60">·</span>
-                    <button
-                      type="button"
-                      onClick={() => navigate("/app/agents?create=1")}
-                      className="text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors"
-                    >
-                      Manual builder →
-                    </button>
+                  </div>
+
+                  {/* Clear alternative paths so new users aren't stuck on this screen */}
+                  <div className="mt-8 pt-6 border-t border-border/20 flex flex-col sm:flex-row items-center justify-center gap-3">
+                    <span className="text-[12px] text-muted-foreground/60">Prefer to do it yourself?</span>
+                    <div className="flex items-center gap-2.5">
+                      <button
+                        type="button"
+                        onClick={() => navigate("/app/agents?create=1")}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-[13px] font-medium border border-border/50 bg-background/40 text-foreground/80 hover:text-foreground hover:border-border/80 hover:bg-card/50 backdrop-blur-md transition-all"
+                      >
+                        <PlusCircle className="h-3.5 w-3.5" /> Build from scratch
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => navigate("/app/command-center")}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-[13px] font-medium border border-border/50 bg-background/40 text-foreground/80 hover:text-foreground hover:border-border/80 hover:bg-card/50 backdrop-blur-md transition-all"
+                      >
+                        <LayoutDashboard className="h-3.5 w-3.5" /> Explore dashboard
+                      </button>
+                    </div>
                   </div>
                 </motion.div>
               )}
@@ -2401,7 +2414,7 @@ function EmptyState() {
   return (
     <div className="flex flex-col items-center justify-center min-h-full py-16 text-center gap-8">
       <div className="relative">
-        <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-[#6366f1]/20 via-[#14b8a6]/15 to-transparent blur-2xl scale-150" />
+        <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-[#a855f7]/20 via-[#d946ef]/15 to-transparent blur-2xl scale-150" />
         <div className="relative h-20 w-20 rounded-3xl border border-border/30 bg-card/30 backdrop-blur-xl flex items-center justify-center p-3">
           <Sparkles className="h-8 w-8 text-muted-foreground/60" />
         </div>
