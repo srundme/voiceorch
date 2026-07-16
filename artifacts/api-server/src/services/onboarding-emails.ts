@@ -177,7 +177,7 @@ async function runZeroAgentDrip(): Promise<void> {
     if (ageMs >= 2 * DAY && ageMs < 3 * DAY) {
       await trySend(
         "d2",
-        "You still have $5 waiting in your SnapServe wallet",
+        "You still have ₹500 waiting in your SnapServe wallet",
         noAgentDay2Email(name),
       );
     } else if (ageMs >= 4 * DAY && ageMs < 5 * DAY) {
@@ -200,7 +200,7 @@ async function runZeroAgentDrip(): Promise<void> {
     } else if (ageMs >= 21 * DAY && ageMs < 22 * DAY) {
       await trySend(
         "d21",
-        "Your $5 credit \u2014 last chance",
+        "Your ₹500 credit \u2014 last chance",
         noAgentDay21Email(name),
       );
     }

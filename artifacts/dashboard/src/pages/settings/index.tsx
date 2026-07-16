@@ -342,7 +342,7 @@ function AccountBillingCard() {
                 <Users className="h-5 w-5 text-primary mt-0.5 shrink-0" />
                 <div>
                   <p className="text-sm font-medium">Concurrent Call Slots</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Max simultaneous active calls. Add more at $5.00 / slot (deducted from wallet).</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Max simultaneous active calls. Add more at ₹1,000 / slot (deducted from wallet).</p>
                 </div>
               </div>
               <div className="flex items-center gap-3 shrink-0">
@@ -355,7 +355,7 @@ function AccountBillingCard() {
                     onError: (err: unknown) => toast({ title: "Error", variant: "destructive", description: formatApiError(err) }),
                   })}
                 >
-                  <Plus className="h-3.5 w-3.5" /> Add Slot ($5)
+                  <Plus className="h-3.5 w-3.5" /> Add Slot (₹1,000)
                 </Button>
               </div>
             </div>

@@ -90,7 +90,7 @@ async function checkUsageLimits(agent: typeof agentsTable.$inferSelect): Promise
       .from(callsTable)
       .where(and(eq(callsTable.agentId, agent.id), gte(callsTable.createdAt, monthStart)));
     if ((spent ?? 0) >= agent.monthlySpendLimitCents) {
-      return `Agent has reached its monthly spend limit ($${(agent.monthlySpendLimitCents / 100).toFixed(2)}).`;
+      return `Agent has reached its monthly spend limit (₹${(agent.monthlySpendLimitCents / 100).toFixed(2)}).`;
     }
   }
   return null;
@@ -956,7 +956,7 @@ router.patch("/calls/:id/end", requireAuth, async (req, res): Promise<void> => {
   // Fetch agent early — needed for rate lookup and metrics update
   const [agentForBilling] = await db.select().from(agentsTable).where(eq(agentsTable.id, existing.agentId));
 
-  // Flat per-minute rate: managed = $0.05/min (5 ¢), BYOP = $0.035/min (3.5 ¢).
+  // Flat per-minute rate: ₹5/min for both managed and BYOP (in INR paise).
   // Mode is resolved dynamically: if the user has their own provider keys for any
   // of this agent's providers → BYOP; otherwise → managed (platform keys in use).
   // Skip billing when costCents is already set (endSession handled it for
@@ -967,7 +967,7 @@ router.patch("/calls/:id/end", requireAuth, async (req, res): Promise<void> => {
   const rateCentsPerMin = getFlatRateCentsPerMin(billingMode);
   const modeLabel = billingMode === "managed" ? "managed" : "BYOP";
   const billableMinutes = durationSeconds <= 0 ? 0 : Math.ceil(durationSeconds / 60);
-  const rateLabel = `$${(rateCentsPerMin / 100).toFixed(3)}/min (${modeLabel})`;
+  const rateLabel = `₹${(rateCentsPerMin / 100).toFixed(3)}/min (${modeLabel})`;
   const debitCents = alreadyBilled || durationSeconds <= 0
     ? 0
     : Math.round(billableMinutes * rateCentsPerMin);

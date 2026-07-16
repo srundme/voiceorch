@@ -26,7 +26,7 @@ async function verifyPassword(password: string, stored: string): Promise<boolean
 
 const router: IRouter = Router();
 
-const CONCURRENT_SLOT_CENTS = 500;
+const CONCURRENT_SLOT_CENTS = 100_000; // ₹1,000 per concurrent slot (INR paise)
 
 function generateApiKey() { return `vok_${randomBytes(24).toString("hex")}`; }
 function generateOrgKey() { return `voo_${randomBytes(24).toString("hex")}`; }
@@ -66,7 +66,7 @@ router.post("/account/add-concurrent", requireAuth, async (req, res): Promise<vo
   if (!user) { res.status(404).json({ error: "User not found" }); return; }
 
   if (user.walletBalanceCents < CONCURRENT_SLOT_CENTS) {
-    res.status(402).json({ error: "Insufficient balance. Top up your wallet to add a concurrent slot ($5.00 each)." });
+    res.status(402).json({ error: "Insufficient balance. Top up your wallet to add a concurrent slot (₹1,000 each)." });
     return;
   }
 

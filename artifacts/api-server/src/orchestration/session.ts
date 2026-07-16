@@ -2389,7 +2389,7 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
             const rateCentsPerMin = getFlatRateCentsPerMin(billingMode);
             const billableMinutes = Math.ceil(durationSeconds / 60);
             const modeLabel       = billingMode === "managed" ? "managed" : "BYOP";
-            const rateLabel       = `$${(rateCentsPerMin / 100).toFixed(3)}/min (${modeLabel})`;
+            const rateLabel       = `₹${(rateCentsPerMin / 100).toFixed(3)}/min (${modeLabel})`;
             const debitCents      = Math.round(billableMinutes * rateCentsPerMin);
             if (debitCents > 0) {
               await db.update(callsTable).set({ costCents: debitCents }).where(eq(callsTable.id, session.callId));

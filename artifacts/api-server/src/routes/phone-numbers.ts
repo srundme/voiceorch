@@ -626,7 +626,7 @@ router.post("/phone-numbers/purchase/confirm", requireAuth, async (req, res): Pr
     eventType:    "phone_number.purchased",
     resourceType: "phone_number",
     resourceId:   String(row!.id),
-    description:  `Phone number ${number} purchased ($${(amountCents / 100).toFixed(2)}, paid via Razorpay)`,
+    description:  `Phone number ${number} purchased (₹${(amountCents / 100).toFixed(2)}, paid via Razorpay)`,
   });
 
   req.log.info({ number, userId: clerkId, vobizId: vobizNumber.id, nextRenewalAt }, "Phone number purchased and provisioned after confirmed payment");

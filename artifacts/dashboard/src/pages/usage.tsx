@@ -3,13 +3,13 @@ import { BarChart3, TrendingUp, PhoneCall, Clock, Calculator, Mic, MessageSquare
 import { useGetMyUsage } from "@workspace/api-client-react";
 import { format, parseISO } from "date-fns";
 
-function microsToUsd(micros: number): string {
-  return `$${(micros / 1_000_000).toFixed(4)}`;
+function microsToInr(micros: number): string {
+  return `₹${(micros / 1_000_000).toFixed(4)}`;
 }
-function microsToUsdShort(micros: number): string {
-  const usd = micros / 1_000_000;
-  if (usd >= 1) return `$${usd.toFixed(2)}`;
-  return `$${usd.toFixed(4)}`;
+function microsToInrShort(micros: number): string {
+  const inr = micros / 1_000_000;
+  if (inr >= 1) return `₹${inr.toFixed(2)}`;
+  return `₹${inr.toFixed(4)}`;
 }
 function formatMinutes(totalMinutes: number): string {
   if (totalMinutes >= 100) return `${Math.round(totalMinutes)}`;
@@ -102,7 +102,7 @@ function LineItem({
         ) : costMicros == null ? (
           <span className="text-muted-foreground/40 font-normal italic">Pending</span>
         ) : (
-          microsToUsd(costMicros)
+          microsToInr(costMicros)
         )}
       </span>
     </div>
@@ -142,7 +142,7 @@ function CallChargeRowItem({ c }: { c: any }) {
         </td>
         <td className="py-2.5 pr-4 text-right">
           <span className="text-xs font-semibold text-foreground tabular-nums">
-            {microsToUsd(grandTotalMicros)}
+            {microsToInr(grandTotalMicros)}
           </span>
         </td>
       </tr>
@@ -204,7 +204,7 @@ function CallChargeRowItem({ c }: { c: any }) {
               </div>
               <div className="flex items-center justify-between gap-3 pt-3">
                 <p className="text-xs font-bold uppercase tracking-wider text-foreground">Grand Total</p>
-                <span className="text-sm font-bold text-foreground tabular-nums">{microsToUsd(grandTotalMicros)}</span>
+                <span className="text-sm font-bold text-foreground tabular-nums">{microsToInr(grandTotalMicros)}</span>
               </div>
             </div>
           </td>
@@ -240,7 +240,7 @@ export default function UsagePage() {
             <SummaryCard
               icon={TrendingUp}
               label="Total Spend"
-              value={microsToUsdShort(data.totalSpendMicros ?? data.totalUsedMicros)}
+              value={microsToInrShort(data.totalSpendMicros ?? data.totalUsedMicros)}
               sub="This month"
             />
             <SummaryCard
@@ -258,7 +258,7 @@ export default function UsagePage() {
             <SummaryCard
               icon={Calculator}
               label="Avg Cost / Call"
-              value={microsToUsdShort(data.avgCostPerCallMicros ?? 0)}
+              value={microsToInrShort(data.avgCostPerCallMicros ?? 0)}
               sub="This month"
             />
           </div>

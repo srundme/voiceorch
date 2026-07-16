@@ -68,8 +68,8 @@ export const LLM_MODELS: Record<string, { value: string; label: string }[]> = {
     { value: "MiniMaxAI/MiniMax-M3",   label: "MiniMax M3 — multilingual, strong Tamil/Indic" },
   ],
   openrouter: [
-    { value: "qwen/qwen3.6-35b-a3b",   label: "Qwen3.6 35B-A3B — ~203ms, ~$0.0023/min (recommended, fastest)" },
-    { value: "qwen/qwen3.5-397b-a17b", label: "Qwen3.5 397B-A17B — ~535ms, ~$0.0083/min, best for agentic use" },
+    { value: "qwen/qwen3.6-35b-a3b",   label: "Qwen3.6 35B-A3B — ~203ms, low cost (recommended, fastest)" },
+    { value: "qwen/qwen3.5-397b-a17b", label: "Qwen3.5 397B-A17B — ~535ms, best for agentic use" },
   ],
   krutrim: [
     { value: "gpt-oss-20b",        label: "GPT-OSS 20B — Krutrim proprietary, fast, tool-capable (recommended)" },
