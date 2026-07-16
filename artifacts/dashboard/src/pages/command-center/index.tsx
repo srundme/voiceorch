@@ -5,9 +5,11 @@ import {
   AlertTriangle, Server, Key, Bot,
   Cpu, Radio, AudioWaveform, Phone,
   ArrowUpRight, ArrowDownLeft,
-  Rocket, Inbox, LayoutGrid,
+  Rocket, Inbox, LayoutGrid, Menu,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
 import {
   useGetDashboardStats,
   useListCalls,
@@ -115,8 +117,8 @@ function LiveIndicator({ isFetching }: { isFetching: boolean }) {
         <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
       </span>
       <span className="font-mono">Live</span>
-      <span className="text-muted-foreground/25">·</span>
-      <span className="font-mono">Refreshing every 10s</span>
+      <span className="text-muted-foreground/25 hidden sm:inline">·</span>
+      <span className="font-mono hidden sm:inline">Refreshing every 10s</span>
     </div>
   );
 }
@@ -301,6 +303,7 @@ function SidebarCardHeading({ icon: Icon, title }: { icon: React.ElementType; ti
 
 export default function CommandCenterPage() {
   const [, navigate] = useLocation();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const stats = useGetDashboardStats({ query: { queryKey: getGetDashboardStatsQueryKey(), refetchInterval: 15_000, staleTime: 12_000 } });
   const callsQ = useListCalls(undefined, { query: { queryKey: getListCallsQueryKey(), refetchInterval: 10_000, staleTime: 8_000 } });
   const providers = useListProviders({ query: { queryKey: getListProvidersQueryKey(), refetchInterval: 30_000, staleTime: 25_000 } });
@@ -349,18 +352,73 @@ export default function CommandCenterPage() {
   const avgTts = avg(c => c.ttsFirstChunkMs);
 
   return (
-    <div className="flex flex-col gap-6 px-6 py-4 min-h-full">
+    <div className="flex flex-col gap-6 px-4 sm:px-6 py-4 min-h-full">
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Terminal className="w-4 h-4 text-muted-foreground/50" />
-          <div>
+      <div className="flex items-start sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-2 min-w-0">
+          <Terminal className="w-4 h-4 text-muted-foreground/50 shrink-0" />
+          <div className="min-w-0">
             <h1 className="text-[15px] font-semibold text-foreground leading-tight">Command Center</h1>
-            <p className="text-[11px] text-muted-foreground/40 leading-tight mt-1">Monitor your agents, calls, and pipeline health in real time.</p>
+            <p className="text-[11px] text-muted-foreground/40 leading-tight mt-1 hidden sm:block">Monitor your agents, calls, and pipeline health in real time.</p>
           </div>
         </div>
-        <LiveIndicator isFetching={isFetching} />
+        <div className="flex items-center gap-2 shrink-0">
+          <LiveIndicator isFetching={isFetching} />
+          <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
+            <SheetTrigger asChild>
+              <Button variant="outline" size="sm" className="lg:hidden h-10 min-h-10 gap-1.5 text-xs">
+                <Menu className="h-4 w-4" />
+                Ops
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="right" className="p-0 w-[min(100vw,300px)] overflow-y-auto">
+              <SheetTitle className="sr-only">Ops sidebar</SheetTitle>
+              <div className="p-4 flex flex-col gap-6">
+                <div className="rounded-xl border border-border/60 bg-card overflow-hidden">
+                  <SidebarCardHeading icon={Rocket} title="Next Steps" />
+                  <div className="p-3 flex flex-col gap-2">
+                    {[
+                      { label: "Create Agent",      desc: "Build and configure a new voice agent",    icon: Bot,      href: "/app/agents?create=1",  done: hasAgent },
+                      { label: "Connect Provider",  desc: "Add your ASR, LLM, or TTS keys",           icon: Key,      href: "/app/providers",         done: hasProvider },
+                      { label: "Buy Phone Number",  desc: "Get a number to receive or place calls",    icon: Phone,    href: "/app/phone-numbers",     done: hasPhoneNumber },
+                      { label: "Create Campaign",   desc: "Launch an outbound call campaign",          icon: Activity, href: "/app/campaigns",         done: hasCampaign },
+                    ].map(({ label, desc, icon: Icon, href, done }) => (
+                      <button
+                        key={href}
+                        onClick={() => { setSidebarOpen(false); navigate(href); }}
+                        className={cn(
+                          "flex items-start gap-3 px-3 py-2.5 rounded-lg text-left w-full border transition-all min-h-[44px]",
+                          done
+                            ? "border-emerald-500/20 bg-emerald-500/5"
+                            : "border-border/40 bg-card",
+                        )}
+                      >
+                        <div className={cn("mt-0.5 rounded-md p-1.5 shrink-0", done ? "bg-emerald-500/10" : "bg-muted/60")}>
+                          {done ? <CheckCircle2 className="w-3 h-3 text-emerald-400" /> : <Icon className="w-3 h-3 text-muted-foreground/60" />}
+                        </div>
+                        <div className="flex flex-col gap-0.5 min-w-0">
+                          <span className="text-[12px] font-medium text-foreground/80">{label}</span>
+                          <span className="text-[10px] text-muted-foreground/45 leading-snug">{desc}</span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="rounded-xl border border-border/60 bg-card overflow-hidden">
+                  <SidebarCardHeading icon={Bot} title="Agents" />
+                  <div className="px-3 py-2">
+                    {allAgents.length === 0 ? (
+                      <p className="text-[12px] text-muted-foreground/40 py-4 text-center">No agents yet.</p>
+                    ) : (
+                      allAgents.slice(0, 8).map(a => <AgentRow key={a.id} agent={a} />)
+                    )}
+                  </div>
+                </div>
+              </div>
+            </SheetContent>
+          </Sheet>
+        </div>
       </div>
 
       {/* ── KPI Row ─────────────────────────────────────────────────────────── */}
@@ -374,8 +432,8 @@ export default function CommandCenterPage() {
 
       {/* ── Latency strip ───────────────────────────────────────────────────── */}
       {(avgStt != null || avgLlm != null || avgTts != null) && (
-        <div className="flex items-center gap-4 px-4 py-2 rounded-xl border border-border/60 bg-muted/20 text-[11px]">
-          <span className="text-muted-foreground/40 font-semibold uppercase tracking-wide text-[10px]">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2 rounded-xl border border-border/60 bg-muted/20 text-[11px]">
+          <span className="text-muted-foreground/40 font-semibold uppercase tracking-wide text-[10px] w-full sm:w-auto">
             Voice Pipeline Health
           </span>
           <div className="flex items-center gap-1.5">
@@ -400,7 +458,7 @@ export default function CommandCenterPage() {
       )}
 
       {/* ── Two-column body ──────────────────────────────────────────────────── */}
-      <div className="flex gap-6 min-h-0">
+      <div className="flex flex-col lg:flex-row gap-6 min-h-0">
 
         {/* ── Left column: Calls + Activity ─────────────────────────────────── */}
         <div className="flex flex-col gap-6 flex-1 min-w-0">
@@ -415,7 +473,7 @@ export default function CommandCenterPage() {
               />
               <button
                 onClick={() => navigate("/app/calls")}
-                className="flex items-center gap-1 text-[11px] text-muted-foreground/40 hover:text-muted-foreground/70 transition-colors duration-[180ms]"
+                className="flex items-center gap-1 text-[11px] text-muted-foreground/40 hover:text-muted-foreground/70 transition-colors duration-[180ms] min-h-[44px] sm:min-h-0"
               >
                 <span>View All</span>
                 <ArrowUpRight className="w-3 h-3" />
@@ -423,10 +481,64 @@ export default function CommandCenterPage() {
             </div>
 
             <div className="rounded-xl border border-border/60 bg-card overflow-hidden">
+              {/* Mobile cards */}
+              <div className="sm:hidden divide-y divide-border/40 max-h-[440px] overflow-y-auto">
+                {callsQ.isLoading ? (
+                  Array.from({ length: 5 }).map((_, i) => (
+                    <div key={i} className="px-4 py-3 space-y-2">
+                      <div className="h-3 rounded animate-pulse bg-muted w-2/3" />
+                      <div className="h-3 rounded animate-pulse bg-muted w-1/2" />
+                    </div>
+                  ))
+                ) : recentCalls.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-14 gap-3 text-center px-4">
+                    <Phone className="w-7 h-7 text-muted-foreground/20" />
+                    <p className="text-[12px] font-medium text-foreground/40">No calls yet. Create an agent and make your first call.</p>
+                    <button
+                      onClick={() => navigate("/app/agents?create=1")}
+                      className="mt-1 text-[11px] font-medium text-muted-foreground/60 hover:text-foreground transition-all border border-border/50 rounded-lg px-3 py-2.5 min-h-[44px] hover:bg-accent/40"
+                    >
+                      Create Agent
+                    </button>
+                  </div>
+                ) : (
+                  recentCalls.map(call => {
+                    const dir = (call as any).direction as string | undefined;
+                    const phone = fmtPhone(call.fromNumber, call.toNumber, dir);
+                    return (
+                      <button
+                        key={call.id}
+                        type="button"
+                        className="w-full text-left px-4 py-3.5 hover:bg-accent/25 transition-colors min-h-[44px]"
+                        onClick={() => navigate(`/app/calls/${call.id}`)}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-[13px] font-medium text-foreground truncate">{call.agentName ?? "—"}</p>
+                          <span className={cn("text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0", statusColors(call.status))}>
+                            {statusLabel(call.status)}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 mt-1.5 text-[11px] text-muted-foreground/60">
+                          <span className="font-mono truncate">{phone}</span>
+                          <span>·</span>
+                          <span>{fmtDuration(call.durationSeconds)}</span>
+                          <span className="ml-auto shrink-0">{relativeTime(call.createdAt)}</span>
+                        </div>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Desktop table */}
+              <div className="hidden sm:block">
               {/* table header */}
-              <div className="grid grid-cols-[1fr_120px_76px_64px_84px_72px] border-b border-border/60 bg-muted/30 px-4 py-3">
+              <div className="grid grid-cols-[1fr_minmax(0,120px)_76px_64px_84px_72px] md:grid-cols-[1fr_120px_76px_64px_84px_72px] border-b border-border/60 bg-muted/30 px-4 py-3 overflow-x-auto">
                 {["Agent", "Phone", "Direction", "Duration", "Status", "Time"].map(h => (
-                  <span key={h} className="text-[10px] font-semibold tracking-[0.07em] uppercase text-muted-foreground/35 truncate">
+                  <span key={h} className={cn(
+                    "text-[10px] font-semibold tracking-[0.07em] uppercase text-muted-foreground/35 truncate",
+                    (h === "Direction" || h === "Duration") && "hidden md:inline",
+                  )}>
                     {h}
                   </span>
                 ))}
@@ -436,7 +548,7 @@ export default function CommandCenterPage() {
               <div className="divide-y divide-border/40 max-h-[440px] overflow-y-auto">
                 {callsQ.isLoading ? (
                   Array.from({ length: 8 }).map((_, i) => (
-                    <div key={i} className="grid grid-cols-[1fr_120px_76px_64px_84px_72px] px-4 py-3 gap-0">
+                    <div key={i} className="grid grid-cols-[1fr_minmax(0,120px)_76px_64px_84px_72px] md:grid-cols-[1fr_120px_76px_64px_84px_72px] px-4 py-3 gap-0">
                       {Array.from({ length: 6 }).map((_, j) => (
                         <div key={j} className="h-3 rounded animate-pulse bg-muted w-4/5 self-center" />
                       ))}
@@ -462,7 +574,7 @@ export default function CommandCenterPage() {
                     return (
                       <div
                         key={call.id}
-                        className="grid grid-cols-[1fr_120px_76px_64px_84px_72px] px-4 py-3 hover:bg-accent/25 hover:-translate-y-px transition-all duration-[180ms] ease-out cursor-pointer"
+                        className="grid grid-cols-[1fr_minmax(0,120px)_76px_64px_84px_72px] md:grid-cols-[1fr_120px_76px_64px_84px_72px] px-4 py-3 hover:bg-accent/25 hover:-translate-y-px transition-all duration-[180ms] ease-out cursor-pointer"
                         onClick={() => navigate(`/app/calls/${call.id}`)}
                       >
                         {/* Agent */}
@@ -470,7 +582,7 @@ export default function CommandCenterPage() {
                         {/* Phone */}
                         <p className="text-[10px] font-mono text-muted-foreground/50 truncate pr-2 self-center">{phone}</p>
                         {/* Direction */}
-                        <div className="self-center pr-1">
+                        <div className="self-center pr-1 hidden md:block">
                           {dir ? (
                             <span className={cn(
                               "inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full font-medium",
@@ -486,7 +598,7 @@ export default function CommandCenterPage() {
                           ) : <span className="text-[10px] text-muted-foreground/30">—</span>}
                         </div>
                         {/* Duration */}
-                        <p className="text-[10px] font-mono text-muted-foreground/50 self-center">{fmtDuration(call.durationSeconds)}</p>
+                        <p className="text-[10px] font-mono text-muted-foreground/50 self-center hidden md:block">{fmtDuration(call.durationSeconds)}</p>
                         {/* Status */}
                         <div className="self-center">
                           <span className={cn("text-[10px] px-1.5 py-0.5 rounded font-medium", statusColors(call.status))}>
@@ -501,6 +613,7 @@ export default function CommandCenterPage() {
                     );
                   })
                 )}
+              </div>
               </div>
             </div>
           </div>
@@ -585,7 +698,7 @@ export default function CommandCenterPage() {
         </div>
 
         {/* ── Right sidebar ─────────────────────────────────────────────────── */}
-        <div className="w-[280px] shrink-0 flex flex-col gap-6">
+        <div className="hidden lg:flex w-[280px] shrink-0 flex-col gap-6">
 
           {/* Next Steps */}
           <div className="rounded-xl border border-border/60 bg-card overflow-hidden">
@@ -708,7 +821,7 @@ export default function CommandCenterPage() {
 
       {/* ── Getting Started strip ────────────────────────────────────────────── */}
       {showGettingStarted && (
-        <div className="rounded-xl border border-border/60 bg-card px-4 py-4 flex items-center gap-4">
+        <div className="rounded-xl border border-border/60 bg-card px-4 py-4 flex flex-col sm:flex-row sm:items-center gap-4">
           <div className="flex items-center gap-2 shrink-0">
             <Rocket className="w-4 h-4 text-muted-foreground/40" />
             <div>
@@ -716,23 +829,23 @@ export default function CommandCenterPage() {
               <p className="text-[10px] text-muted-foreground/35 leading-tight mt-1">Set up your first voice agent</p>
             </div>
           </div>
-          <div className="h-px flex-1 bg-border/40" />
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="hidden sm:block h-px flex-1 bg-border/40" />
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 shrink-0 w-full sm:w-auto">
             <button
               onClick={() => navigate("/app/agents?create=1")}
-              className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground/60 hover:text-foreground transition-colors border border-border/50 rounded-lg px-3 py-1.5 hover:bg-accent/40"
+              className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground/60 hover:text-foreground transition-colors border border-border/50 rounded-lg px-3 py-2.5 min-h-[44px] sm:min-h-0 sm:py-1.5 hover:bg-accent/40"
             >
               <span className="text-muted-foreground/35">1.</span> Create an agent
             </button>
             <button
               onClick={() => navigate("/app/providers")}
-              className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground/60 hover:text-foreground transition-colors border border-border/50 rounded-lg px-3 py-1.5 hover:bg-accent/40"
+              className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground/60 hover:text-foreground transition-colors border border-border/50 rounded-lg px-3 py-2.5 min-h-[44px] sm:min-h-0 sm:py-1.5 hover:bg-accent/40"
             >
               <span className="text-muted-foreground/35">2.</span> Add a provider
             </button>
             <button
               onClick={() => navigate("/app/test-simulator")}
-              className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground/60 hover:text-foreground transition-colors border border-border/50 rounded-lg px-3 py-1.5 hover:bg-accent/40"
+              className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground/60 hover:text-foreground transition-colors border border-border/50 rounded-lg px-3 py-2.5 min-h-[44px] sm:min-h-0 sm:py-1.5 hover:bg-accent/40"
             >
               <span className="text-muted-foreground/35">3.</span> Make a test call
             </button>

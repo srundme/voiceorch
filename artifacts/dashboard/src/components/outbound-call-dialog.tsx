@@ -81,7 +81,7 @@ export function OutboundCallDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="w-[calc(100vw-1.5rem)] max-w-md rounded-2xl sm:rounded-lg bottom-4 top-auto translate-y-0 data-[state=open]:slide-in-from-bottom-4 sm:bottom-auto sm:top-[50%] sm:translate-y-[-50%] sm:data-[state=open]:slide-in-from-top-[48%]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <PhoneOutgoing className="h-5 w-5 text-primary" />
@@ -104,6 +104,8 @@ export function OutboundCallDialog({
                 onKeyDown={(e) => {
                   if (e.key === "Enter") handleMakeCall();
                 }}
+                className="h-12 text-base"
+                inputMode="tel"
               />
               <p className="text-xs text-muted-foreground">
                 Include country code, e.g.{" "}
@@ -140,14 +142,14 @@ export function OutboundCallDialog({
               )}
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" className="h-11 min-h-11" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
             <Button
               onClick={() => handleMakeCall()}
               disabled={!toNumber.trim() || outboundCall.isPending}
-              className="gap-2"
+              className="gap-2 h-11 min-h-11"
             >
               {outboundCall.isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin" />

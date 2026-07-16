@@ -657,7 +657,7 @@ export default function SettingsPage() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="space-y-6 p-6 md:p-8 pt-6 max-w-6xl mx-auto">
+      <div className="space-y-6 p-4 sm:p-6 md:p-8 pt-6 max-w-6xl mx-auto">
         {view === "general" ? (
           <GeneralSettingsView onBack={() => setView("overview")} />
         ) : (

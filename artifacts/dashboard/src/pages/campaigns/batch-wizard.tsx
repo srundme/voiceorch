@@ -445,7 +445,7 @@ function Step2({
 
       <div className="space-y-3">
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Create New Source</p>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {(["csv", "webhook", "meta_form"] as const).map(type => {
             const isSelected = state.sourceMode === "new" && state.newSourceType === type;
             const labels: Record<string, { name: string; desc: string; when: string }> = {
@@ -483,7 +483,7 @@ function Step2({
         {/* CRM tiles — connection-aware */}
         <div className="space-y-2 mt-1">
           <p className="text-[11px] text-muted-foreground uppercase font-semibold tracking-wider">CRM Import</p>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {CRM_TILES.map(crm => {
               const conn = "disabled" in crm ? undefined : crmConnections.find(c => c.provider === crm.id);
               const isConnected = !!conn;
@@ -775,7 +775,7 @@ function MetaFormStep({ toast }: { toast: ReturnType<typeof useToast>["toast"] }
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label className="text-xs">Page Name <span className="text-muted-foreground/60">(optional)</span></Label>
               <Input value={pageName} onChange={e => setPageName(e.target.value)} placeholder="My Business Page" className="h-9 text-sm" />
@@ -895,7 +895,7 @@ function Step3({
   const crmSection = (
     <div className="space-y-2 pt-2 border-t border-border">
       <p className="text-[11px] text-muted-foreground uppercase font-semibold tracking-wider pt-2">Or import from CRM</p>
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {CRM_TILES_DEF.map(crm => {
           const conn = "disabled" in crm && crm.disabled ? undefined : crmConnections.find(c => c.provider === crm.id);
           const isConnected = !!conn;
@@ -961,7 +961,7 @@ function Step3({
           </p>
         </div>
         <div className="space-y-2">
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {CRM_TILES_DEF.map(crm => {
               const conn = "disabled" in crm && crm.disabled ? undefined : crmConnections.find(c => c.provider === crm.id);
               const isConnected = !!conn;
@@ -1624,7 +1624,7 @@ function Step5({
 
       {result ? (
         <>
-          <div className="grid grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <StatCard label="Total"       value={result.totalRows}    color="default" />
             <StatCard label="Valid"        value={result.validRows}    color="green" />
             <StatCard label="Invalid"      value={result.invalidRows}  color="red" />
@@ -1838,7 +1838,7 @@ function Step7({
 
       <div className="bg-muted/30 border border-border rounded-xl p-4 space-y-4">
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Retry Settings</p>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <Label className="text-xs">Max Attempts</Label>
             <Input
@@ -1870,7 +1870,7 @@ function Step7({
             onChange={tz => setState({ timezone: tz })}
           />
         </div>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <Label className="text-xs">Start Hour (24h)</Label>
             <Input
@@ -2272,7 +2272,7 @@ function StepSidebar({
   onStepClick: (n: number) => void;
 }) {
   return (
-    <aside className="w-56 flex-shrink-0 border-r border-border bg-background/60 flex flex-col">
+    <aside className="hidden lg:flex w-56 flex-shrink-0 border-r border-border bg-background/60 flex-col">
       <div className="px-4 py-5 border-b border-border">
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Batch Wizard</p>
         <div className="mt-3">
@@ -2438,25 +2438,25 @@ export default function BatchWizardPage() {
 
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="flex-shrink-0 px-8 py-4 border-b border-border flex items-center gap-3 bg-background/80">
+        <div className="flex-shrink-0 px-4 sm:px-8 py-4 border-b border-border flex items-center gap-3 bg-background/80">
           <button
             type="button"
             onClick={() => setLocation(`/app/campaigns/${campaignId}`)}
-            className="text-muted-foreground hover:text-foreground transition-colors"
+            className="text-muted-foreground hover:text-foreground transition-colors min-h-10 min-w-10 flex items-center justify-center"
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
-          <div>
+          <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold">New Batch</p>
-            <p className="text-xs text-muted-foreground">Campaign #{campaignId}</p>
+            <p className="text-xs text-muted-foreground">Campaign #{campaignId} · Step {currentStep} of 7</p>
           </div>
           {state.batchName && (
-            <span className="ml-2 text-xs text-primary font-medium">— {state.batchName}</span>
+            <span className="hidden sm:inline ml-2 text-xs text-primary font-medium truncate">— {state.batchName}</span>
           )}
         </div>
 
         {/* Step content */}
-        <div className="flex-1 overflow-y-auto px-8 py-6">
+        <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-6 pb-24 lg:pb-6">
           {currentStep === 1 && <Step1 state={state} setState={setState} campaignId={campaignId} />}
           {currentStep === 2 && (
             <Step3
@@ -2482,8 +2482,8 @@ export default function BatchWizardPage() {
 
         {/* Bottom nav (hidden on Step 7 which has its own launch button) */}
         {currentStep < 7 && (
-          <div className="flex-shrink-0 px-8 py-4 border-t border-border flex items-center justify-between bg-background/60">
-            <Button variant="ghost" size="sm" onClick={goBack} disabled={currentStep === 1}>
+          <div className="flex-shrink-0 px-4 sm:px-8 py-3 sm:py-4 border-t border-border flex items-center justify-between bg-background/95 backdrop-blur-sm pb-safe sticky bottom-0 z-10">
+            <Button variant="ghost" size="sm" className="min-h-10 h-11" onClick={goBack} disabled={currentStep === 1}>
               <ArrowLeft className="w-3.5 h-3.5 mr-1.5" />Back
             </Button>
 
@@ -2504,7 +2504,7 @@ export default function BatchWizardPage() {
               ))}
             </div>
 
-            <Button size="sm" onClick={goNext} disabled={!canAdvance()}>
+            <Button size="sm" className="min-h-10 h-11" onClick={goNext} disabled={!canAdvance()}>
               Next<ChevronRight className="w-3.5 h-3.5 ml-1.5" />
             </Button>
           </div>

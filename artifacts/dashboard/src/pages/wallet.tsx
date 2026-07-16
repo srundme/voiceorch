@@ -188,17 +188,19 @@ export default function WalletPage() {
 
   return (
     <div className="flex flex-col h-full overflow-auto">
-      <div className="border-b border-border px-6 py-4 flex items-center gap-3 shrink-0">
+      <div className="border-b border-border px-4 sm:px-6 py-4 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 shrink-0">
+        <div className="flex items-center gap-3">
         <Wallet className="w-5 h-5 text-foreground" />
         <h1 className="font-semibold text-foreground text-lg">Wallet & Billing</h1>
-        <span className="text-xs text-muted-foreground ml-auto">₹5 / minute · INR · GST on top-ups</span>
+        </div>
+        <span className="text-xs text-muted-foreground sm:ml-auto">₹5 / minute · INR · GST on top-ups</span>
       </div>
 
-      <div className="flex-1 overflow-auto p-6">
+      <div className="flex-1 overflow-auto p-4 sm:p-6">
         <div className="max-w-4xl mx-auto space-y-6">
 
           <div className={`rounded-xl border p-6 ${balanceLow ? "border-border bg-zinc-500/5" : "border-border bg-card"}`}>
-            <div className="flex items-start justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
               <div>
                 <p className="text-xs text-muted-foreground uppercase tracking-widest mb-1">Available Balance</p>
                 {walletLoading ? (
@@ -235,7 +237,7 @@ export default function WalletPage() {
                 <span className="ml-auto text-[10px] text-muted-foreground bg-muted rounded px-1.5 py-0.5">Card only</span>
               </div>
 
-              <div className="grid grid-cols-4 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {TOPUP_PRESETS.map((amt) => (
                   <button
                     key={amt}
@@ -283,7 +285,7 @@ export default function WalletPage() {
               </div>
 
               <Button
-                className="w-full bg-primary hover:opacity-90 text-primary-foreground font-semibold"
+                className="w-full min-h-11 h-11 bg-primary hover:opacity-90 text-primary-foreground font-semibold"
                 onClick={handleTopup}
                 disabled={loading}
               >

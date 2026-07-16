@@ -21,6 +21,8 @@ import { BrandMark } from "@/components/logo";
 import { DottedSurface } from "@/components/ui/dotted-surface";
 import { useQueryClient } from "@tanstack/react-query";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { AGENT_TIMEZONES } from "@/lib/agent-providers";
 import { getListAgentsQueryKey } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
@@ -289,6 +291,10 @@ export default function VibePage() {
   const [activeSessionId, setActiveSessionId] = useState<number | null>(null);
   const [sessions, setSessions]               = useState<SessionSummary[]>([]);
   const [sidebarOpen, setSidebarOpen]         = useState(true);
+  const isMobile = useIsMobile();
+  useEffect(() => {
+    if (isMobile) setSidebarOpen(false);
+  }, [isMobile]);
   const [viewMode, setViewMode]               = useState<"editing" | "history">("editing");
   // Dedupe for notice cards — once per language decision / notice signature.
   const noticeSigsRef = useRef<Set<string>>(new Set());
@@ -1370,7 +1376,7 @@ export default function VibePage() {
 
       {/* ══ Landing view — before first message ════════════════════════════ */}
       {!chatStarted && (
-        <div className="relative flex flex-col h-full overflow-hidden bg-background">
+        <div className="relative flex flex-col h-full min-h-0 overflow-hidden bg-background">
           <VibeAmbientBg />
 
           {/* Floating top bar */}
@@ -1538,11 +1544,22 @@ export default function VibePage() {
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8 rounded-full text-muted-foreground hover:text-foreground shrink-0"
+                className="h-10 w-10 rounded-full text-muted-foreground hover:text-foreground shrink-0"
                 onClick={() => navigate("/app/command-center")}
               >
                 <LayoutDashboard className="h-4 w-4" />
               </Button>
+              {refineId != null && sessions.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="md:hidden h-10 w-10 rounded-full text-muted-foreground hover:text-foreground shrink-0"
+                  onClick={() => setSidebarOpen(true)}
+                  aria-label="Open history"
+                >
+                  <History className="h-4 w-4" />
+                </Button>
+              )}
               <div className="flex items-center gap-2 min-w-0">
                 <div className={cn(
                   "h-7 w-7 rounded-lg border flex items-center justify-center overflow-hidden p-1 shrink-0 transition-all",
@@ -1591,7 +1608,10 @@ export default function VibePage() {
                 sessions={sessions}
                 activeSessionId={activeSessionId}
                 viewMode={viewMode}
-                onSelectSession={loadHistorySession}
+                onSelectSession={(id) => {
+                  loadHistorySession(id);
+                  if (isMobile) setSidebarOpen(false);
+                }}
                 onNewChat={startNewChat}
                 open={sidebarOpen}
                 onToggle={() => setSidebarOpen(o => !o)}
@@ -1637,7 +1657,7 @@ export default function VibePage() {
               </div>
 
               {/* Bottom input — same premium card as landing */}
-              <div className="shrink-0 px-4 sm:px-6 pb-5 pt-2 bg-gradient-to-t from-background via-background/95 to-transparent">
+              <div className="shrink-0 px-4 sm:px-6 pb-5 pt-2 pb-safe bg-gradient-to-t from-background via-background/95 to-transparent">
                 <div className="max-w-2xl mx-auto">
                   {viewMode === "history" ? (
                     <div className="flex items-center justify-between rounded-2xl border border-border/40 bg-card/40 backdrop-blur-xl px-4 py-3 gap-3">
@@ -1645,7 +1665,7 @@ export default function VibePage() {
                         <History className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                         <p className="text-xs text-muted-foreground truncate">Historical conversation · read only</p>
                       </div>
-                      <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs rounded-full shrink-0"
+                      <Button size="sm" variant="outline" className="h-10 min-h-10 gap-1.5 text-xs rounded-full shrink-0"
                         onClick={startNewChat}>
                         <PlusCircle className="h-3 w-3" /> New Chat
                       </Button>
@@ -2839,6 +2859,55 @@ function VibeSidebar({
   open: boolean;
   onToggle: () => void;
 }) {
+  const isMobile = useIsMobile();
+
+  const sessionList = (
+    <div className="flex-1 overflow-y-auto py-1.5">
+      {sessions.map(session => {
+        const isActive = session.id === activeSessionId;
+        const isViewing = isActive && viewMode === "history";
+        return (
+          <button
+            key={session.id}
+            onClick={() => onSelectSession(session.id)}
+            className={cn(
+              "w-full text-left px-3 py-3 md:py-2.5 hover:bg-muted/50 transition-colors border-l-2 min-h-[44px]",
+              isViewing
+                ? "bg-primary/8 border-primary"
+                : isActive && viewMode === "editing"
+                  ? "border-primary/40 bg-primary/5"
+                  : "border-transparent",
+            )}
+          >
+            <p className="text-xs font-medium truncate text-foreground leading-snug">{session.title}</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">{getRelativeTime(session.updatedAt)}</p>
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  if (isMobile) {
+    return (
+      <Sheet open={open} onOpenChange={(o) => { if (o !== open) onToggle(); }}>
+        <SheetContent side="left" className="p-0 w-[min(100vw,280px)] flex flex-col">
+          <SheetTitle className="sr-only">Chat history</SheetTitle>
+          <div className="flex items-center justify-between px-3 h-14 border-b border-border/60 shrink-0">
+            <p className="text-xs font-semibold text-foreground">History</p>
+            <button
+              onClick={onNewChat}
+              title="New Chat"
+              className="h-10 w-10 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all"
+            >
+              <PlusCircle className="h-4 w-4" />
+            </button>
+          </div>
+          {sessionList}
+        </SheetContent>
+      </Sheet>
+    );
+  }
+
   if (!open) {
     return (
       <div className="flex flex-col items-center border-r border-border/60 bg-background pt-3 gap-2 w-10 shrink-0">
@@ -2875,30 +2944,7 @@ function VibeSidebar({
           </button>
         </div>
       </div>
-      {/* Session list */}
-      <div className="flex-1 overflow-y-auto py-1.5">
-        {sessions.map(session => {
-          const isActive = session.id === activeSessionId;
-          const isViewing = isActive && viewMode === "history";
-          return (
-            <button
-              key={session.id}
-              onClick={() => onSelectSession(session.id)}
-              className={cn(
-                "w-full text-left px-3 py-2.5 hover:bg-muted/50 transition-colors border-l-2",
-                isViewing
-                  ? "bg-primary/8 border-primary"
-                  : isActive && viewMode === "editing"
-                    ? "border-primary/40 bg-primary/5"
-                    : "border-transparent",
-              )}
-            >
-              <p className="text-xs font-medium truncate text-foreground leading-snug">{session.title}</p>
-              <p className="text-[10px] text-muted-foreground mt-0.5">{getRelativeTime(session.updatedAt)}</p>
-            </button>
-          );
-        })}
-      </div>
+      {sessionList}
     </div>
   );
 }

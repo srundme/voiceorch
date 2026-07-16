@@ -200,18 +200,69 @@ export default function SchedulingPage() {
           </div>
         </AppPageHeader>
 
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6">
         <Card className="border-border/50">
           <CardContent className="p-0">
+            {/* Mobile booking cards */}
+            <div className="sm:hidden divide-y divide-border/60">
+              {isLoading && Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="p-4 space-y-2">
+                  <Skeleton className="h-4 w-2/3" />
+                  <Skeleton className="h-3 w-1/2" />
+                </div>
+              ))}
+              {!isLoading && (!bookings || bookings.length === 0) && (
+                <EmptyState
+                  variant="inline"
+                  icon={<Calendar />}
+                  title="No bookings yet"
+                  description={
+                    statusFilter !== "all" || sourceFilter !== "all" || syncFilter !== "all" || calendarFilter !== "all"
+                      ? "No bookings match these filters. Try clearing them."
+                      : "When agents book appointments mid-call, they'll show up here."
+                  }
+                  action={{
+                    label: "Open calendars",
+                    onClick: () => navigate(`${BASE}/app/scheduling/calendars`),
+                    icon: <Calendar className="h-3.5 w-3.5" />,
+                  }}
+                />
+              )}
+              {!isLoading && bookings?.map(b => (
+                <button
+                  key={b.id}
+                  type="button"
+                  onClick={() => navigate(`${BASE}/app/scheduling/bookings/${b.id}`)}
+                  className="w-full text-left p-4 hover:bg-muted/40 transition-colors active:bg-muted/60"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-medium text-sm truncate">{b.attendeeName}</p>
+                      <p className="text-xs text-muted-foreground truncate">{b.attendeeEmail}</p>
+                    </div>
+                    {statusBadge(b.status)}
+                  </div>
+                  <p className="text-xs text-foreground/80 mt-2">
+                    {format(parseISO(b.slotStart), "MMM d, yyyy · h:mm a")} – {format(parseISO(b.slotEnd), "h:mm a")}
+                  </p>
+                  <div className="mt-2 flex items-center gap-2 flex-wrap">
+                    {sourceBadge(b.bookedVia)}
+                    <CalSyncBadge status={b.calendarSyncStatus} error={b.calendarSyncError} />
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            <div className="hidden sm:block overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Attendee</TableHead>
                   <TableHead>Slot</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Via</TableHead>
-                  <TableHead>Cal Sync</TableHead>
-                  <TableHead>Booked</TableHead>
+                  <TableHead className="hidden md:table-cell">Via</TableHead>
+                  <TableHead className="hidden lg:table-cell">Cal Sync</TableHead>
+                  <TableHead className="hidden sm:table-cell">Booked</TableHead>
                   <TableHead className="w-8"></TableHead>
                 </TableRow>
               </TableHeader>
@@ -296,11 +347,11 @@ export default function SchedulingPage() {
                           )}
                         </div>
                       </TableCell>
-                      <TableCell>{sourceBadge(b.bookedVia)}</TableCell>
-                      <TableCell onClick={e => e.stopPropagation()}>
+                      <TableCell className="hidden md:table-cell">{sourceBadge(b.bookedVia)}</TableCell>
+                      <TableCell className="hidden lg:table-cell" onClick={e => e.stopPropagation()}>
                         <CalSyncBadge status={b.calendarSyncStatus} error={b.calendarSyncError} />
                       </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
+                      <TableCell className="hidden sm:table-cell text-xs text-muted-foreground">
                         {format(parseISO(b.createdAt), "MMM d")}
                       </TableCell>
                       <TableCell>
@@ -311,6 +362,7 @@ export default function SchedulingPage() {
                 })()}
               </TableBody>
             </Table>
+            </div>
           </CardContent>
         </Card>
       </div>

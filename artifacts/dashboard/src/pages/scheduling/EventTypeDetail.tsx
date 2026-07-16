@@ -250,7 +250,7 @@ export default function EventTypeDetailPage({ id: idProp, embedded = false, onSa
   if (isLoading || !form) {
     return (
       <div className="flex flex-col h-full">
-        <div className="border-b px-6 py-3 flex items-center gap-4">
+        <div className="border-b px-4 sm:px-6 py-3 flex flex-wrap items-center gap-3 sm:gap-4">
           <Skeleton className="h-8 w-8 rounded" />
           <Skeleton className="h-5 w-48" />
         </div>
@@ -322,9 +322,9 @@ export default function EventTypeDetailPage({ id: idProp, embedded = false, onSa
         </Button>
       </div>
 
-      <div className="flex flex-1 overflow-hidden">
-        {/* Left sidebar */}
-        <nav className="w-56 shrink-0 border-r bg-muted/20 overflow-y-auto py-3 px-2 space-y-0.5">
+      <div className="flex flex-1 overflow-hidden flex-col md:flex-row">
+        {/* Left sidebar — desktop */}
+        <nav className="hidden md:block w-56 shrink-0 border-r bg-muted/20 overflow-y-auto py-3 px-2 space-y-0.5">
           {NAV.map(({ id: navId, label, sub, icon: Icon }) => (
             <button
               key={navId}
@@ -362,8 +362,29 @@ export default function EventTypeDetailPage({ id: idProp, embedded = false, onSa
           </div>
         </nav>
 
+        <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+        {/* Mobile section picker */}
+        <div className="md:hidden shrink-0 border-b border-border/60 px-4 py-2 overflow-x-auto">
+          <div className="flex gap-1.5 min-w-max">
+            {NAV.map(({ id: navId, label }) => (
+              <button
+                key={navId}
+                type="button"
+                onClick={() => setSection(navId)}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
+                  section === navId
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-muted-foreground"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* Main content */}
-        <main className="flex-1 overflow-y-auto p-6 md:p-8 max-w-2xl">
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 max-w-2xl pb-24 md:pb-8">
           {section === "basics" && (
             <div className="space-y-6">
               <div>
@@ -506,7 +527,7 @@ export default function EventTypeDetailPage({ id: idProp, embedded = false, onSa
 
               <div className="space-y-3">
                 <Label>Buffer time</Label>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
                     <p className="text-xs text-muted-foreground">Before event</p>
                     <div className="flex items-center gap-2">
@@ -747,6 +768,20 @@ export default function EventTypeDetailPage({ id: idProp, embedded = false, onSa
             </div>
           )}
         </main>
+
+        {/* Mobile sticky save */}
+        {dirty && (
+          <div className="md:hidden sticky bottom-0 z-10 border-t border-border bg-background/95 backdrop-blur-sm px-4 py-3 pb-safe">
+            <Button
+              className="w-full min-h-11 h-11"
+              onClick={save}
+              disabled={saving}
+            >
+              {saving ? "Saving…" : "Save changes"}
+            </Button>
+          </div>
+        )}
+        </div>
       </div>
 
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>

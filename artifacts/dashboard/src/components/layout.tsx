@@ -15,6 +15,7 @@ import { useGetWallet } from "@workspace/api-client-react";
 import { useMinuteRatesMap, useUserProviderNames } from "@/hooks/use-minute-rates";
 import { SnapServeIcon } from "@/components/logo";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { cn } from "@/lib/utils";
 
 /* ─── Error boundary ─────────────────────────────────────────────────────── */
 interface ErrorBoundaryState { hasError: boolean; error: unknown }
@@ -471,6 +472,42 @@ function SidebarContent({
   );
 }
 
+/* ─── Mobile bottom nav ──────────────────────────────────────────────────── */
+const MOBILE_BOTTOM_NAV = [
+  { name: "Home",    href: "/app/command-center", icon: Monitor },
+  { name: "Vibe",    href: "/app/vibe",           icon: Sparkles },
+  { name: "Agents",  href: "/app/agents",         icon: Users },
+  { name: "Calls",   href: "/app/calls",          icon: Phone },
+  { name: "Wallet",  href: "/app/wallet",         icon: Wallet },
+] as const;
+
+function MobileBottomNav() {
+  const [location] = useLocation();
+  return (
+    <nav
+      className="md:hidden fixed bottom-0 left-0 right-0 z-30 border-t border-border bg-sidebar/95 backdrop-blur-md pb-safe"
+      aria-label="Primary"
+    >
+      <div className="grid grid-cols-5 h-14">
+        {MOBILE_BOTTOM_NAV.map((item) => {
+          const active =
+            item.href === "/app/agents"
+              ? location.startsWith("/app/agents")
+              : location.startsWith(item.href);
+          return (
+            <Link key={item.href} href={item.href} className="flex flex-col items-center justify-center gap-0.5 min-h-[44px]">
+              <item.icon className={cn("h-5 w-5", active ? "text-foreground" : "text-muted-foreground/70")} />
+              <span className={cn("text-[10px] font-medium leading-none", active ? "text-foreground" : "text-muted-foreground/70")}>
+                {item.name}
+              </span>
+            </Link>
+          );
+        })}
+      </div>
+    </nav>
+  );
+}
+
 /* ─── Layout ─────────────────────────────────────────────────────────────── */
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location]  = useLocation();
@@ -492,7 +529,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const sidebarW = collapsed ? "w-[52px]" : "w-[220px]";
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-background">
+    <div className="flex h-dvh h-screen w-full overflow-hidden bg-background">
       {/* Desktop sidebar */}
       <aside
         className={`hidden md:flex flex-col shrink-0 transition-all duration-200 ease-in-out overflow-hidden ${sidebarW}`}
@@ -506,27 +543,31 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
       {/* Mobile header + drawer */}
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-        <div className="md:hidden flex items-center h-[50px] px-4 shrink-0 fixed top-0 left-0 right-0 z-30 bg-sidebar border-b border-sidebar-border">
+        <div className="md:hidden flex items-center h-[50px] px-3 shrink-0 fixed top-0 left-0 right-0 z-30 bg-sidebar/95 backdrop-blur-md border-b border-sidebar-border" style={{ paddingTop: "env(safe-area-inset-top, 0px)", height: "calc(50px + env(safe-area-inset-top, 0px))" }}>
           <SheetTrigger asChild>
-            <button className="p-2 rounded-lg text-muted-foreground hover:bg-accent transition-colors">
-              <Menu className="h-4 w-4" />
+            <button
+              type="button"
+              className="touch-target flex items-center justify-center rounded-lg text-muted-foreground hover:bg-accent transition-colors"
+              aria-label="Open menu"
+            >
+              <Menu className="h-5 w-5" />
             </button>
           </SheetTrigger>
-          <Link href="/app" className="ml-2 flex items-center gap-1.5">
+          <Link href="/app" className="ml-1 flex items-center gap-1.5 min-w-0">
             <SnapServeIcon size={20} className="text-foreground shrink-0" />
-            <span className="leading-none text-[13px] text-foreground" style={{ fontFamily: "system-ui, sans-serif", letterSpacing: "-0.02em" }}>
+            <span className="leading-none text-[13px] text-foreground truncate" style={{ fontFamily: "system-ui, sans-serif", letterSpacing: "-0.02em" }}>
               <span style={{ fontWeight: 700 }}>Snap</span>
               <span style={{ fontWeight: 400, opacity: 0.55 }}>Serve</span>
             </span>
           </Link>
-          <div className="ml-auto flex items-center gap-1">
+          <div className="ml-auto flex items-center gap-0.5">
             <WalletChip />
             <ThemeToggle />
             <TopbarUser />
           </div>
         </div>
 
-        <SheetContent side="left" className="p-0 w-[220px]">
+        <SheetContent side="left" className="p-0 w-[min(100vw,280px)]">
           <SidebarContent
             collapsed={false}
             onNavClick={() => setMobileOpen(false)}
@@ -536,19 +577,21 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </Sheet>
 
       {/* Main */}
-      <main className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden bg-background pt-[50px] md:pt-0">
+      <main className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden bg-background pt-[calc(50px+env(safe-area-inset-top,0px))] md:pt-0 pb-[calc(3.5rem+env(safe-area-inset-bottom,0px))] md:pb-0">
         {/* Topbar — desktop only */}
         <div className="hidden md:block">
           <Topbar location={location} />
         </div>
 
         {/* Scrollable content */}
-        <div className="flex-1 overflow-y-auto min-h-0">
+        <div className="flex-1 overflow-y-auto min-h-0 overscroll-y-contain">
           <ErrorBoundary location={location}>
             {children}
           </ErrorBoundary>
         </div>
       </main>
+
+      <MobileBottomNav />
 
       <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
     </div>

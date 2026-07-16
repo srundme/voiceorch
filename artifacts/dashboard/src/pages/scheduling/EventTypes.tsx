@@ -344,7 +344,7 @@ export default function EventTypesPage({
     <div className="flex flex-col h-full overflow-hidden">
       <SchedulingTabNav />
       {/* Header */}
-      <div className="border-b px-6 py-4 shrink-0">
+      <div className="border-b px-4 sm:px-6 py-4 shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-muted">
@@ -366,7 +366,7 @@ export default function EventTypesPage({
       {/* Body */}
       <div className="flex-1 overflow-y-auto">
         {isLoading ? (
-          <div className="p-6 space-y-3">
+          <div className="p-4 sm:p-6 space-y-3">
             {[1, 2, 3].map(i => (
               <div key={i} className="h-14 rounded-lg bg-muted animate-pulse" />
             ))}

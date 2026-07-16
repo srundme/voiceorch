@@ -221,6 +221,66 @@ function MiniStat({ label, value, icon }: { label: string; value: string; icon: 
   return <MetricCard label={label} value={value} icon={icon} />;
 }
 
+/* ── Mobile Call Card ────────────────────────────────────────────────────── */
+function CallMobileCard({
+  call,
+  onOpen,
+}: {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  call: any;
+  onOpen: () => void;
+}) {
+  const costCents = (call as { costCents?: number }).costCents ?? 0;
+  const isWeb = (call.fromNumber ?? "").startsWith("webcall") || (call.toNumber ?? "").startsWith("webcall");
+  const isCampaign = !isWeb && (call as { campaignId?: number }).campaignId != null;
+  const direction: "inbound" | "outbound" = isWeb ? "outbound" : (call.direction ?? "inbound");
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="w-full text-left px-4 py-3.5 border-b border-border/60 last:border-0 hover:bg-elevated/70 transition-colors active:bg-elevated/90"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs font-medium text-foreground/90 truncate">{call.agentName}</span>
+            <StatusBadge status={call.status} />
+          </div>
+          <p className="text-[10px] text-muted-foreground/50 font-mono mt-1">
+            {format(parseISO(call.createdAt), "MMM d · HH:mm")} · {getExecutionId(call)}
+          </p>
+        </div>
+        <Eye className="h-4 w-4 text-muted-foreground/40 shrink-0 mt-0.5" />
+      </div>
+      <div className="mt-2.5 grid grid-cols-2 gap-x-3 gap-y-1.5 text-[11px]">
+        <div className="min-w-0">
+          <span className="text-[9px] uppercase tracking-wide text-muted-foreground/45">From</span>
+          <p className="font-mono text-foreground/75 truncate">{call.fromNumber ?? "—"}</p>
+        </div>
+        <div className="min-w-0">
+          <span className="text-[9px] uppercase tracking-wide text-muted-foreground/45">To</span>
+          <p className="font-mono text-foreground/75 truncate">{call.toNumber ?? "—"}</p>
+        </div>
+      </div>
+      <div className="mt-2.5 flex items-center justify-between gap-2 flex-wrap">
+        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium bg-elevated text-foreground/70 border border-border">
+          {direction === "outbound" ? (
+            <ArrowUpRight className="h-3 w-3 text-foreground/50 shrink-0" />
+          ) : (
+            <ArrowDownLeft className="h-3 w-3 text-foreground/50 shrink-0" />
+          )}
+          {isWeb ? "Web Call" : isCampaign ? "Campaign" : "Live Call"}
+        </span>
+        <div className="flex items-center gap-3 text-[11px] text-muted-foreground/60 tabular-nums">
+          <span>{formatDuration(call.durationSeconds)}</span>
+          {costCents > 0 && <span>₹{(costCents / 100).toFixed(2)}</span>}
+        </div>
+      </div>
+    </button>
+  );
+}
+
 
 /* ── Page ────────────────────────────────────────────────────────────────── */
 export default function CallsList() {
@@ -493,9 +553,9 @@ export default function CallsList() {
               )}
             </div>
 
-            <div className="shrink-0">
+            <div className="shrink-0 w-full sm:w-auto">
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-[150px] h-9 text-xs">
+                <SelectTrigger className="w-full sm:w-[150px] h-9 text-xs">
                   <SelectValue placeholder="All statuses" />
                 </SelectTrigger>
                 <SelectContent>
@@ -516,9 +576,9 @@ export default function CallsList() {
               </Select>
             </div>
 
-            <div className="shrink-0">
+            <div className="shrink-0 w-full sm:w-auto">
               <Select value={agentFilter} onValueChange={setAgentFilter}>
-                <SelectTrigger className="w-[170px] h-9 text-xs">
+                <SelectTrigger className="w-full sm:w-[170px] h-9 text-xs">
                   <SelectValue placeholder="All agents" />
                 </SelectTrigger>
                 <SelectContent>
@@ -567,9 +627,9 @@ export default function CallsList() {
               </Popover>
             </div>
 
-            <div className="shrink-0">
+            <div className="shrink-0 w-full sm:w-auto">
               <Select value={sortBy} onValueChange={setSortBy}>
-                <SelectTrigger className="w-[180px] h-9 text-xs">
+                <SelectTrigger className="w-full sm:w-[180px] h-9 text-xs">
                   <SelectValue placeholder="Sort" />
                 </SelectTrigger>
                 <SelectContent>
@@ -606,17 +666,50 @@ export default function CallsList() {
         </AppPageHeader>
 
         {/* Table */}
-        <div ref={callsScrollRef} className="flex-1 overflow-auto px-6 py-5">
+        <div ref={callsScrollRef} className="flex-1 overflow-auto px-4 sm:px-6 py-5">
           <div className="rounded-2xl border border-border bg-elevated/40 shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
+            {/* Mobile card list */}
+            <div className="sm:hidden">
+              {callsLoading ? (
+                Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="px-4 py-3.5 border-b border-border/60 space-y-2">
+                    <Skeleton className="h-4 w-3/4" />
+                    <Skeleton className="h-3 w-1/2" />
+                    <Skeleton className="h-3 w-full" />
+                  </div>
+                ))
+              ) : pagedCalls.length > 0 ? (
+                pagedCalls.map((call) => (
+                  <CallMobileCard key={call.id} call={call} onOpen={() => setSelectedCallId(call.id)} />
+                ))
+              ) : (
+                <EmptyState
+                  variant="inline"
+                  icon={<Phone />}
+                  title="No calls found"
+                  description={
+                    hasActiveFilters
+                      ? "Try adjusting your filters"
+                      : "Calls will appear once your agents start making them"
+                  }
+                  action={
+                    hasActiveFilters
+                      ? { label: "Clear filters", onClick: clearFilters, icon: <RefreshCw className="h-3 w-3" /> }
+                      : undefined
+                  }
+                />
+              )}
+            </div>
+
+            <div className="hidden sm:block overflow-x-auto">
             <Table>
               <TableHeader className="sticky top-0 z-10 bg-elevated/95 backdrop-blur supports-[backdrop-filter]:bg-elevated/80">
                 <TableRow className="hover:bg-transparent border-b border-border">
                   <TableHead className="w-[104px] py-3 px-4 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground/70">Date & Time</TableHead>
                   <TableHead className="w-[68px] py-3 px-4 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground/70">Call ID</TableHead>
                   <TableHead className="w-[160px] py-3 px-4 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground/70">Agent</TableHead>
-                  <TableHead className="py-3 px-4 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground/70">From</TableHead>
-                  <TableHead className="py-3 px-4 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground/70">To</TableHead>
+                  <TableHead className="hidden md:table-cell py-3 px-4 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground/70">From</TableHead>
+                  <TableHead className="hidden md:table-cell py-3 px-4 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground/70">To</TableHead>
                   <TableHead className="w-[118px] py-3 px-4 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground/70 text-center">Call Type</TableHead>
                   <TableHead className="w-[112px] py-3 px-4 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground/70 text-center">Status</TableHead>
                   <TableHead className="w-[72px] py-3 px-4 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground/70 text-center">Duration</TableHead>
@@ -667,10 +760,10 @@ export default function CallsList() {
                             </span>
                           </div>
                         </TableCell>
-                        <TableCell className="px-4 py-0 align-middle max-w-0">
+                        <TableCell className="hidden md:table-cell px-4 py-0 align-middle max-w-0">
                           <PhoneCell number={call.fromNumber} />
                         </TableCell>
-                        <TableCell className="px-4 py-0 align-middle max-w-0">
+                        <TableCell className="hidden md:table-cell px-4 py-0 align-middle max-w-0">
                           <PhoneCell number={call.toNumber} />
                         </TableCell>
                         <TableCell className="px-4 py-0 align-middle text-center">

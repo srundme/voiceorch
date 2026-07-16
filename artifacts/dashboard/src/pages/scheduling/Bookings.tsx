@@ -141,7 +141,7 @@ export default function BookingDetailPage() {
   const isEditable = booking.status === "pending" || booking.status === "confirmed";
 
   return (
-    <div className="flex flex-col gap-6 p-6">
+    <div className="flex flex-col gap-6 p-4 sm:p-6">
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="sm" onClick={() => navigate(`${BASE}/app/scheduling`)}>
           <ChevronLeft className="h-4 w-4 mr-1" />Back

@@ -68,8 +68,10 @@ import {
   AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogFooter,
   AlertDialogTitle, AlertDialogDescription, AlertDialogAction, AlertDialogCancel,
 } from "@/components/ui/alert-dialog";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Progress } from "@/components/ui/progress";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError, mapApiErrors, isDestinationUnverifiedError } from "@/lib/format-api-error";
 import {
@@ -3234,10 +3236,11 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
 
 /* ── Agent list panel ───────────────────────────────────────────────────────── */
 
-function AgentListPanel({ selectedId, onSelect, rateMap }: {
+function AgentListPanel({ selectedId, onSelect, rateMap, className }: {
   selectedId: number | null;
   onSelect: (id: number) => void;
   rateMap: Map<string, number>;
+  className?: string;
 }) {
   const [search, setSearch] = useState("");
   const [, navigate] = useLocation();
@@ -3254,7 +3257,7 @@ function AgentListPanel({ selectedId, onSelect, rateMap }: {
   const totalCount = agents?.length ?? 0;
 
   return (
-    <div className="w-[260px] shrink-0 border-r border-border/40 flex flex-col h-full bg-background/30 backdrop-blur-sm">
+    <div className={cn("w-[260px] shrink-0 border-r border-border/40 flex flex-col h-full bg-background/30 backdrop-blur-sm", className)}>
       <CreateAgentDialog open={showCreate} onClose={() => setShowCreate(false)} />
       <div className="p-4 border-b border-border/40 space-y-3">
         <div className="flex items-center justify-between gap-2">
@@ -3267,7 +3270,7 @@ function AgentListPanel({ selectedId, onSelect, rateMap }: {
               )}
             </p>
           </div>
-          <Button size="sm" className="h-8 rounded-full gap-1 px-3 text-xs shrink-0" onClick={handleCreate}>
+          <Button size="sm" className="h-10 min-h-10 md:h-8 rounded-full gap-1 px-3 text-xs shrink-0" onClick={handleCreate}>
             <Plus className="h-3.5 w-3.5" /> New
           </Button>
         </div>
@@ -5114,7 +5117,7 @@ function VersionsTab({ agentId }: { agentId: number }) {
 
 /* ── Agent editor panel ─────────────────────────────────────────────────────── */
 
-function AgentEditorPanel({ agentId }: { agentId: number }) {
+function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAgents?: () => void }) {
   const [activeTab, setActiveTab] = useState<TabId>("overview");
   const tabContentRef = useRef<HTMLDivElement>(null);
   const scrollPositions = useRef<Partial<Record<TabId, number>>>({});
@@ -5462,6 +5465,18 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
         <div className="flex items-start justify-between gap-4">
           <div className="flex flex-col min-w-0 gap-1.5 flex-1">
             <div className="flex items-center gap-2 min-w-0">
+              {onOpenAgents && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="md:hidden h-10 min-h-10 shrink-0 gap-1.5 rounded-lg text-xs px-3"
+                  onClick={onOpenAgents}
+                >
+                  <List className="h-3.5 w-3.5" />
+                  Agents
+                </Button>
+              )}
               <h1
                 className="text-xl sm:text-2xl font-semibold leading-tight tracking-tight truncate max-w-[420px]"
                 title={agent.name}
@@ -5491,15 +5506,15 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
             <AgentCostSummary form={form} rateMap={rateMap} agent={agent} />
           </div>
 
-          {/* Mobile / compact actions when rail is hidden */}
-          <div className="flex xl:hidden items-center gap-1.5 shrink-0">
-            <Button size="sm" variant="outline" className="h-8 text-xs gap-1 rounded-lg" onClick={() => setCallDialog(true)}>
+          {/* Compact header actions when rail is hidden — desktop tablet only; phone uses sticky bar */}
+          <div className="hidden sm:flex xl:hidden items-center gap-1.5 shrink-0">
+            <Button size="sm" variant="outline" className="h-10 min-h-10 text-xs gap-1 rounded-lg" onClick={() => setCallDialog(true)}>
               <Phone className="h-3.5 w-3.5" /> Call
             </Button>
             <div className="relative">
               <Button
                 size="sm"
-                className={cn("h-8 text-xs gap-1 rounded-lg px-3", savedFlash && "bg-green-600 hover:bg-green-700 text-white")}
+                className={cn("h-10 min-h-10 text-xs gap-1 rounded-lg px-3", savedFlash && "bg-green-600 hover:bg-green-700 text-white")}
                 onClick={onSave}
                 disabled={updateAgent.isPending}
               >
@@ -5512,7 +5527,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
             </div>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button size="icon" variant="ghost" className="h-8 w-8 rounded-lg"><MoreHorizontal className="h-4 w-4" /></Button>
+                <Button size="icon" variant="ghost" className="h-10 w-10 rounded-lg"><MoreHorizontal className="h-4 w-4" /></Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem onClick={() => setShowWebcall(v => !v)}>
@@ -5559,7 +5574,13 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       </Dialog>
 
       {showWebcall && (
-        <div className="fixed bottom-4 right-4 z-50 w-[420px] h-[560px] flex flex-col shadow-2xl rounded-2xl overflow-hidden">
+        <div
+          className={cn(
+            "fixed z-50 flex flex-col shadow-2xl overflow-hidden bg-background",
+            "inset-0 rounded-none",
+            "md:inset-auto md:bottom-4 md:right-4 md:w-[420px] md:h-[560px] md:rounded-2xl",
+          )}
+        >
           <WebcallPanel agentId={agent.id} agentName={agent.name ?? "Agent"} compact onClose={() => setShowWebcall(false)} />
         </div>
       )}
@@ -5592,6 +5613,42 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
                 {activeTab === "advanced"  && <AdvancedTab form={form} agent={agent} />}
                 {activeTab === "versions"  && <VersionsTab agentId={agent.id} />}
               </form>
+            </div>
+
+            {/* Sticky Phone / Web / Save — below xl (rail hidden) */}
+            <div className="xl:hidden shrink-0 border-t border-border/40 bg-background/95 backdrop-blur-md px-3 py-2.5 pb-safe">
+              <div className="grid grid-cols-3 gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-11 min-h-11 text-xs font-medium gap-1.5 rounded-xl"
+                  onClick={() => setCallDialog(true)}
+                >
+                  <Phone className="h-4 w-4 shrink-0" />
+                  Phone
+                </Button>
+                <Button
+                  type="button"
+                  variant={showWebcall ? "default" : "outline"}
+                  className="h-11 min-h-11 text-xs font-medium gap-1.5 rounded-xl"
+                  onClick={() => setShowWebcall(v => !v)}
+                >
+                  <Mic className="h-4 w-4 shrink-0" />
+                  {showWebcall ? "Close" : "Web"}
+                </Button>
+                <Button
+                  type="button"
+                  className={cn("h-11 min-h-11 text-xs font-medium gap-1.5 rounded-xl relative", savedFlash && "bg-green-600 hover:bg-green-700")}
+                  onClick={onSave}
+                  disabled={updateAgent.isPending}
+                >
+                  {savedFlash ? <Check className="h-4 w-4" /> : <Save className="h-4 w-4" />}
+                  {updateAgent.isPending ? "…" : savedFlash ? "Saved" : "Save"}
+                  {isDirty && !updateAgent.isPending && !savedFlash && (
+                    <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-amber-400" />
+                  )}
+                </Button>
+              </div>
             </div>
           </div>
         </Form>
@@ -5727,7 +5784,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
 
       {/* Outbound call dialog */}
       <Dialog open={callDialog} onOpenChange={setCallDialog}>
-        <DialogContent>
+        <DialogContent className="w-[calc(100vw-1.5rem)] max-w-md rounded-2xl sm:rounded-lg bottom-4 top-auto translate-y-0 data-[state=open]:slide-in-from-bottom-4 sm:bottom-auto sm:top-[50%] sm:translate-y-[-50%] sm:data-[state=open]:slide-in-from-top-[48%]">
           <DialogHeader>
             <DialogTitle>Make Outbound Call</DialogTitle>
             <DialogDescription>
@@ -5745,11 +5802,11 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
           </DialogHeader>
           <form onSubmit={handleOutbound} className="space-y-4">
             <Input value={callNumber} onChange={e => setCallNumber(e.target.value)}
-              placeholder="+12125551234" className="h-10" autoFocus />
+              placeholder="+12125551234" className="h-12 text-base" autoFocus inputMode="tel" />
             <RecentNumbersList numbers={recentNumbers} onSelect={setCallNumber} onRemove={removeNumber} />
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setCallDialog(false)}>Cancel</Button>
-              <Button type="submit" disabled={initiateOutbound.isPending}>
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button type="button" variant="outline" className="h-11 min-h-11" onClick={() => setCallDialog(false)}>Cancel</Button>
+              <Button type="submit" className="h-11 min-h-11" disabled={initiateOutbound.isPending}>
                 <Phone className="h-4 w-4 mr-1.5" />
                 {initiateOutbound.isPending ? "Calling…" : "Call"}
               </Button>
@@ -5903,11 +5960,11 @@ function StudioEmptyCanvas({ onCreate }: { onCreate: () => void }) {
             Pick one from the list, or create a new agent with AI or manual setup.
           </p>
         </div>
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-2 pt-1">
-          <Button className="h-9 rounded-xl gap-1.5 text-xs" onClick={() => navigate("/app/vibe")}>
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-2 pt-1 w-full max-w-sm mx-auto">
+          <Button className="h-11 min-h-11 rounded-xl gap-1.5 text-xs w-full sm:w-auto" onClick={() => navigate("/app/vibe")}>
             <Sparkles className="h-3.5 w-3.5" /> Build with AI
           </Button>
-          <Button variant="outline" className="h-9 rounded-xl gap-1.5 text-xs" onClick={onCreate}>
+          <Button variant="outline" className="h-11 min-h-11 rounded-xl gap-1.5 text-xs w-full sm:w-auto" onClick={onCreate}>
             <Plus className="h-3.5 w-3.5" /> Manual setup
           </Button>
         </div>
@@ -5924,12 +5981,15 @@ export default function AgentBuilder() {
   const params = useParams<{ id?: string }>();
   const [, navigate] = useLocation();
   const rateMap = useMinuteRatesMap();
+  const isMobile = useIsMobile();
   const { data: agents, isLoading: agentsLoading } = useListAgents({ query: { queryKey: getListAgentsQueryKey() } });
 
   const selectedId = params.id ? parseInt(params.id, 10) : null;
+  const [agentsSheetOpen, setAgentsSheetOpen] = useState(false);
 
   const handleSelect = (id: number) => {
     try { localStorage.setItem(LAST_AGENT_ID_KEY, String(id)); } catch { /* ignore */ }
+    setAgentsSheetOpen(false);
     navigate(`/app/agents/${id}`);
   };
 
@@ -5975,12 +6035,36 @@ export default function AgentBuilder() {
     } catch { /* ignore */ }
   }, []);
 
+  // On mobile with no selection yet, open agents sheet so list is reachable
+  useEffect(() => {
+    if (isMobile && selectedId == null && !agentsLoading) {
+      const list = Array.isArray(agents) ? agents : [];
+      if (list.length === 0) setAgentsSheetOpen(true);
+    }
+  }, [isMobile, selectedId, agentsLoading, agents]);
+
   return (
     <div className="flex h-full overflow-hidden">
       <CreateAgentDialog open={showCreate} onClose={() => setShowCreate(false)} />
-      <AgentListPanel selectedId={selectedId} onSelect={handleSelect} rateMap={rateMap} />
+      <AgentListPanel
+        selectedId={selectedId}
+        onSelect={handleSelect}
+        rateMap={rateMap}
+        className="hidden md:flex"
+      />
+      <Sheet open={agentsSheetOpen} onOpenChange={setAgentsSheetOpen}>
+        <SheetContent side="left" className="p-0 w-[min(100vw,280px)] md:hidden [&>button]:hidden">
+          <SheetTitle className="sr-only">Agents</SheetTitle>
+          <AgentListPanel
+            selectedId={selectedId}
+            onSelect={handleSelect}
+            rateMap={rateMap}
+            className="w-full border-0"
+          />
+        </SheetContent>
+      </Sheet>
       {selectedId != null ? (
-        <AgentEditorPanel agentId={selectedId} />
+        <AgentEditorPanel agentId={selectedId} onOpenAgents={() => setAgentsSheetOpen(true)} />
       ) : (
         <StudioEmptyCanvas onCreate={handleCreate} />
       )}

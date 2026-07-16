@@ -815,7 +815,7 @@ export default function CalendarsPage({ embedded = false, onCalendarSaved }: { e
   return (
     <div className={embedded ? "flex flex-col gap-6 max-w-3xl" : "flex flex-col h-full overflow-hidden"}>
       {!embedded && <SchedulingTabNav />}
-      <div className={embedded ? "contents" : "flex flex-col gap-6 p-6 max-w-3xl flex-1 overflow-y-auto"}>
+      <div className={embedded ? "contents" : "flex flex-col gap-6 p-4 sm:p-6 max-w-3xl flex-1 overflow-y-auto"}>
       {/* Back + header — hidden when embedded inside Settings tabs */}
       {!embedded && (
         <div>

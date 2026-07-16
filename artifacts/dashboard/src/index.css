@@ -598,3 +598,28 @@
   background: rgba(255, 255, 255, 0.045);
   border-color: rgba(255, 255, 255, 0.1);
 }
+
+/* ── Mobile / safe-area helpers ───────────────────────────────────────────── */
+.pb-safe {
+  padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+}
+.pt-safe {
+  padding-top: calc(0.25rem + env(safe-area-inset-top, 0px));
+}
+.min-h-dvh {
+  min-height: 100dvh;
+}
+.h-dvh {
+  height: 100dvh;
+}
+@supports (height: 100dvh) {
+  .h-screen-mobile {
+    height: 100dvh;
+  }
+}
+@media (max-width: 767px) {
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}

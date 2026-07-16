@@ -26,6 +26,8 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useQueryClient } from "@tanstack/react-query";
+import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { AppPageHeader } from "@/components/app-page-header";
 import { EmptyState } from "@/components/empty-state";
 import {
@@ -675,12 +677,13 @@ function CallerListRow({
 
 /* ─── Caller list column ─────────────────────────────────────────────────── */
 function CallerListColumn({
-  callers, isLoading, selectedPhone, onSelect,
+  callers, isLoading, selectedPhone, onSelect, onBack,
 }: {
   callers: CallerContact[];
   isLoading: boolean;
   selectedPhone: string | null;
   onSelect: (phone: string) => void;
+  onBack?: () => void;
 }) {
   const [search, setSearch] = useState("");
   const listScrollRef = useScrollRestoration<HTMLDivElement>("memory-callers", !isLoading);
@@ -696,6 +699,17 @@ function CallerListColumn({
 
   return (
     <div className="flex flex-col h-full min-h-0">
+      {onBack && (
+        <div className="px-3 pt-2 shrink-0 lg:hidden">
+          <button
+            type="button"
+            onClick={onBack}
+            className="text-[12px] font-medium text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+          >
+            ← Back to agents
+          </button>
+        </div>
+      )}
       <div className="px-3 pt-3 pb-2.5 shrink-0">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/40" />
@@ -828,7 +842,7 @@ function CallerDetailView({
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* caller header — the primary focus of the page */}
-      <div className="px-6 pt-3 pb-4 shrink-0">
+      <div className="px-4 sm:px-6 pt-3 pb-4 shrink-0">
         <DetailNav className="mb-2.5" backTo="/app/memory" backLabel="Back" onBack={onBack} preferOnBack />
         <div className="flex items-start gap-4">
           <CallerAvatar contact={contact} size="lg" />
@@ -918,7 +932,7 @@ function CallerDetailView({
 
       {/* per-caller tabs */}
       <Tabs value={tab} onValueChange={setTab} className="flex-1 min-h-0 flex flex-col">
-        <TabsList className="shrink-0 h-auto w-full justify-start gap-1 rounded-none border-b border-border/50 bg-transparent px-6 pt-0 pb-0">
+        <TabsList className="shrink-0 h-auto w-full justify-start gap-1 rounded-none border-b border-border/50 bg-transparent px-4 sm:px-6 pt-0 pb-0 overflow-x-auto">
           {[
             { value: "overview", label: "Overview" },
             { value: "facts",    label: `Facts (${facts.length})` },
@@ -936,7 +950,7 @@ function CallerDetailView({
           ))}
         </TabsList>
 
-        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5">
+        <div className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 py-5">
           {isLoading ? (
             <div className="space-y-3">
               {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-16 w-full rounded-xl" />)}
@@ -1112,6 +1126,10 @@ export default function MemoryPage() {
   // When the user explicitly backs out of a caller, suppress the auto-select
   // until they pick another caller so the empty detail state can show.
   const autoSelectSuppressed = useRef(false);
+  const isMobile = useIsMobile();
+  const [mobilePanel, setMobilePanel] = useState<"agents" | "callers" | "detail">(
+    deepLink.caller ? "detail" : deepLink.agentId ? "callers" : "agents",
+  );
 
   const [, navigate] = useLocation();
   const { toast } = useToast();
@@ -1119,6 +1137,7 @@ export default function MemoryPage() {
   const selectCaller = (phone: string) => {
     autoSelectSuppressed.current = false;
     setSelectedPhone(phone);
+    if (isMobile) setMobilePanel("detail");
   };
 
   const { data: summaryData, isLoading, isError, error } =
@@ -1170,8 +1189,9 @@ export default function MemoryPage() {
     if (callersLoading) return;
     if (autoSelectSuppressed.current) return;
     if (selectedContact) return;
+    if (isMobile) return;
     if (callers.length > 0) setSelectedPhone(callers[0]!.phoneNumber);
-  }, [callersLoading, selectedContact, callers]);
+  }, [callersLoading, selectedContact, callers, isMobile]);
 
   // Mirror the agent + caller selection into the URL so returning restores it.
   useEffect(() => {
@@ -1217,7 +1237,10 @@ export default function MemoryPage() {
             {/* Body: agents · callers · caller detail */}
             <div className="flex-1 min-h-0 flex overflow-hidden">
               {/* Agents rail */}
-              <div className="w-[180px] xl:w-[210px] shrink-0 border-r border-border/40 flex flex-col min-h-0">
+              <div className={cn(
+                "w-full lg:w-[180px] xl:w-[210px] shrink-0 border-r border-border/40 flex flex-col min-h-0",
+                isMobile && mobilePanel !== "agents" && "hidden",
+              )}>
                 <div className="px-3 pt-3 pb-2.5 shrink-0">
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/40" />
@@ -1242,7 +1265,7 @@ export default function MemoryPage() {
                         key={agent.agentId}
                         agent={agent}
                         selected={selected?.agentId === agent.agentId}
-                        onClick={() => { autoSelectSuppressed.current = false; setSelectedId(agent.agentId); setSelectedPhone(null); }}
+                        onClick={() => { autoSelectSuppressed.current = false; setSelectedId(agent.agentId); setSelectedPhone(null); if (isMobile) setMobilePanel("callers"); }}
                         onNote={() => setNoteAgentId(agent.agentId)}
                       />
                     ))
@@ -1251,13 +1274,17 @@ export default function MemoryPage() {
               </div>
 
               {/* Callers list */}
-              <div className="w-[270px] xl:w-[310px] shrink-0 border-r border-border/40 flex flex-col min-h-0">
+              <div className={cn(
+                "w-full lg:w-[270px] xl:w-[310px] shrink-0 border-r border-border/40 flex flex-col min-h-0",
+                isMobile && mobilePanel !== "callers" && "hidden",
+              )}>
                 {selected ? (
                   <CallerListColumn
                     callers={callers}
                     isLoading={callersLoading}
                     selectedPhone={selectedPhone}
                     onSelect={selectCaller}
+                    onBack={isMobile ? () => { autoSelectSuppressed.current = true; setSelectedPhone(null); setMobilePanel("agents"); } : undefined}
                   />
                 ) : (
                   <div className="flex items-center justify-center h-full text-[12.5px] text-muted-foreground px-4 text-center">
@@ -1267,13 +1294,13 @@ export default function MemoryPage() {
               </div>
 
               {/* Caller detail (dominant) */}
-              <div className="flex-1 min-w-0 overflow-hidden">
+              <div className={cn("flex-1 min-w-0 overflow-hidden", isMobile && mobilePanel !== "detail" && "hidden")}>
                 {selected && selectedContact ? (
                   <CallerDetailView
                     key={`${selected.agentId}:${selectedContact.phoneNumber}`}
                     agentId={selected.agentId}
                     contact={selectedContact}
-                    onBack={() => { autoSelectSuppressed.current = true; setSelectedPhone(null); }}
+                    onBack={() => { autoSelectSuppressed.current = true; setSelectedPhone(null); if (isMobile) setMobilePanel("callers"); }}
                   />
                 ) : callersLoading ? (
                   <div className="p-6 space-y-4">

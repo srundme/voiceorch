@@ -309,7 +309,7 @@ export function WebcallPanel({ agentId, agentName, compact, onClose }: { agentId
 
   return (
     <div className={compact ? "h-full flex flex-col" : "p-5 max-w-3xl"}>
-      <div className={`bg-card border border-border rounded-2xl overflow-hidden flex flex-col${compact ? " flex-1" : ""}`} style={compact ? undefined : { height: "calc(100vh - 9rem)" }}>
+      <div className={`bg-card border border-border rounded-2xl overflow-hidden flex flex-col${compact ? " flex-1" : ""}`} style={compact ? undefined : { height: "calc(100dvh - 9rem)" }}>
         {/* Header */}
         <div className="flex items-center gap-3 px-4 h-12 shrink-0 border-b border-border">
           <span className={

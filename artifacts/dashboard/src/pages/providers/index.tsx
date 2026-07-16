@@ -264,7 +264,7 @@ export default function ProvidersList() {
     <div className="max-w-[1400px] mx-auto px-10 py-10 space-y-6">
 
       {/* Header */}
-      <div className="flex items-center justify-between gap-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-4 sm:px-0">
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/50 mb-1.5">Build</p>
           <h1 className="text-[18px] font-semibold tracking-tight text-foreground leading-none">Providers</h1>

@@ -726,7 +726,8 @@ function WebhookRow({
   return (
     <>
       <div className={cn("border-b border-border/50 last:border-b-0", hasNewEvent && "bg-foreground/[0.03]")}>
-        <div className="flex items-center gap-3 px-4 py-2.5">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 px-4 py-3 sm:py-2.5">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
           <div className="h-7 w-7 rounded-md bg-muted flex items-center justify-center shrink-0 text-[10px] font-bold text-muted-foreground select-none">
             {initials}
           </div>
@@ -736,6 +737,14 @@ function WebhookRow({
               {connection.name}
             </span>
             <StatusBadge status={connection.status as ConnectionStatus} pulse={hasNewEvent} />
+          </div>
+          </div>
+
+          <div className="sm:hidden flex items-center gap-1 min-w-0">
+            <code className="text-[10px] text-muted-foreground font-mono truncate flex-1">
+              {connection.webhookUrl}
+            </code>
+            <CopyButton text={connection.webhookUrl} />
           </div>
 
           <div className="hidden sm:flex items-center gap-1 min-w-0 flex-1 max-w-[220px]">
@@ -755,12 +764,12 @@ function WebhookRow({
             )}
           </div>
 
-          <div className="flex items-center gap-0.5 shrink-0">
+          <div className="flex items-center gap-0.5 shrink-0 w-full sm:w-auto justify-end">
             <Button
               size="sm"
               variant="ghost"
               onClick={() => setListenOpen(true)}
-              className="h-6 px-2 text-[11px] text-muted-foreground hover:text-foreground gap-1"
+              className="h-8 min-h-10 px-2 text-[11px] text-muted-foreground hover:text-foreground gap-1"
               title="Listen for incoming payloads"
             >
               <Radio className="w-3 h-3" />
@@ -2121,8 +2130,8 @@ function CrmConnectorSection() {
               <div
                 className={`bg-card border border-border rounded-xl p-4${provider.comingSoon ? " opacity-50 pointer-events-none" : ""}`}
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-start gap-3 min-w-0">
+                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                  <div className="flex items-start gap-3 min-w-0 flex-1">
                     <div className="mt-0.5 shrink-0">
                       {provider.logo}
                     </div>
@@ -2174,7 +2183,7 @@ function CrmConnectorSection() {
                     </div>
                   </div>
 
-                  <div className="flex flex-col items-end gap-1.5 shrink-0">
+                  <div className="flex flex-col items-stretch sm:items-end gap-2 shrink-0 w-full sm:w-auto">
                     {!provider.comingSoon && activeConns.map(conn => (
                       <div key={conn.id} className="flex items-center gap-1.5">
                         <Button
@@ -2197,7 +2206,7 @@ function CrmConnectorSection() {
                         size="sm"
                         variant={isConnected ? "ghost" : "default"}
                         onClick={() => handleConnect(provider.id)}
-                        className="h-7 px-3 text-xs"
+                        className="h-10 min-h-10 px-3 text-xs w-full sm:w-auto"
                       >
                         <Link2 className="w-3 h-3 mr-1.5" />
                         {isConnected ? "Connect another" : "Connect"}
@@ -2306,7 +2315,7 @@ export default function ConnectionsPage() {
       />
 
       <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-4xl px-6 py-6 space-y-8">
+        <div className="mx-auto w-full max-w-4xl px-4 sm:px-6 py-6 space-y-8">
 
           {/* 1. CRM Connectors — primary integrations */}
           <CrmConnectorSection />

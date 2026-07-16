@@ -87,7 +87,7 @@ export function DestinationOtpDialog({ open, phoneNumber, onClose, onVerified }:
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); }}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="w-[calc(100vw-1.5rem)] max-w-md rounded-2xl sm:rounded-lg bottom-4 top-auto translate-y-0 data-[state=open]:slide-in-from-bottom-4 sm:bottom-auto sm:top-[50%] sm:translate-y-[-50%] sm:data-[state=open]:slide-in-from-top-[48%]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ShieldCheck className="h-5 w-5 text-primary" />
@@ -111,8 +111,8 @@ export function DestinationOtpDialog({ open, phoneNumber, onClose, onVerified }:
                 We'll send a one-time code via SMS to confirm you have access to this number.
               </p>
               <div className="flex gap-2">
-                <Button variant="outline" className="flex-1" onClick={handleClose}>Cancel</Button>
-                <Button className="flex-1" onClick={handleSend} disabled={sending}>
+                <Button variant="outline" className="flex-1 h-11 min-h-11" onClick={handleClose}>Cancel</Button>
+                <Button className="flex-1 h-11 min-h-11" onClick={handleSend} disabled={sending}>
                   {sending
                     ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Sending…</>
                     : "Send OTP"}
@@ -129,9 +129,10 @@ export function DestinationOtpDialog({ open, phoneNumber, onClose, onVerified }:
                   onChange={e => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
                   onKeyDown={e => e.key === "Enter" && otp.length === 6 && handleVerify()}
                   placeholder="123456"
-                  className="font-mono text-center text-lg tracking-widest"
+                  className="font-mono text-center text-lg tracking-widest h-12"
                   maxLength={6}
                   autoFocus
+                  inputMode="numeric"
                 />
               </div>
               <p className="text-xs text-muted-foreground">
@@ -144,9 +145,9 @@ export function DestinationOtpDialog({ open, phoneNumber, onClose, onVerified }:
                 </button>
               </p>
               <div className="flex gap-2">
-                <Button variant="outline" className="flex-1" onClick={handleClose}>Cancel</Button>
+                <Button variant="outline" className="flex-1 h-11 min-h-11" onClick={handleClose}>Cancel</Button>
                 <Button
-                  className="flex-1"
+                  className="flex-1 h-11 min-h-11"
                   onClick={handleVerify}
                   disabled={verifying || otp.length !== 6}
                 >

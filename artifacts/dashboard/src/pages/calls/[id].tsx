@@ -1106,10 +1106,10 @@ export function CallDetailContent({
 
   return (
     <TooltipProvider>
-      <div className="flex-1 space-y-5 p-6 h-full flex flex-col overflow-hidden">
+      <div className="flex-1 space-y-5 p-4 sm:p-6 h-full flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between gap-4 shrink-0">
-          <div className="flex items-center gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 min-w-0">
             {!drawerMode ? (
               <DetailNav backTo="/app/calls" backLabel="Back to Calls" />
             ) : (
@@ -1165,7 +1165,7 @@ export function CallDetailContent({
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap shrink-0">
             {call.recordingUrl ? (
               <button
                 type="button"
@@ -1246,7 +1246,7 @@ export function CallDetailContent({
           {/* Left Column */}
           <div className="col-span-1 lg:col-span-2 flex flex-col h-full min-h-0">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
-              <TabsList className="h-8 w-fit shrink-0">
+              <TabsList className="h-8 w-full sm:w-fit shrink-0 overflow-x-auto justify-start">
                 <TabsTrigger value="transcript" className="text-xs h-6 gap-1">
                   <FileText className="h-3 w-3" /> Transcript
                 </TabsTrigger>

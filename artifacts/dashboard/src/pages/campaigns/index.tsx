@@ -168,6 +168,83 @@ const SOURCE_ICON: Record<string, React.ReactNode> = {
 
 // ── Campaign Row ───────────────────────────────────────────────────────────
 
+function CampaignMobileCard({
+  campaign,
+  onEdit,
+  onDelete,
+}: {
+  campaign: DashboardCampaign;
+  onEdit: (c: Campaign) => void;
+  onDelete: (c: Campaign) => void;
+}) {
+  const [, navigate] = useLocation();
+  const totalCallable = campaign.totalLeads;
+  const completed = campaign.completedLeads;
+  const pct = totalCallable > 0 ? Math.round((completed / totalCallable) * 100) : 0;
+
+  return (
+    <div
+      className="md:hidden px-4 py-3.5 border-b border-border/40 last:border-0 hover:bg-muted/20 transition-colors cursor-pointer"
+      onClick={() => navigate(`${BASE}/app/campaigns/${campaign.id}`)}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="shrink-0">{SOURCE_ICON[(campaign as unknown as Record<string, string>)["leadSource"] ?? "csv"] ?? <Megaphone className="h-3.5 w-3.5 text-muted-foreground/40" />}</span>
+            <span className="text-sm font-medium text-foreground truncate">{campaign.name}</span>
+          </div>
+          <p className="text-[10px] text-muted-foreground/40 mt-0.5">
+            {formatDistanceToNow(new Date(campaign.createdAt), { addSuffix: true })}
+            {campaign.agentName ? ` · ${campaign.agentName}` : ""}
+          </p>
+        </div>
+        <CampaignStatusBadge status={campaign.status} />
+      </div>
+      <div className="mt-2.5 flex items-center gap-3 text-xs tabular-nums">
+        {campaign.callingLeads > 0 && (
+          <span className="text-emerald-500 font-semibold">{campaign.callingLeads} live</span>
+        )}
+        {campaign.queuedLeads > 0 && (
+          <span className="text-amber-500 font-semibold">{campaign.queuedLeads} queued</span>
+        )}
+        <span className="text-muted-foreground/50 ml-auto">{completed}/{totalCallable} · {pct}%</span>
+      </div>
+      <div className="mt-2 h-1 bg-muted rounded-full overflow-hidden">
+        <div className="h-full bg-foreground/25 rounded-full transition-all" style={{ width: `${pct}%` }} />
+      </div>
+      <div className="mt-2.5 flex items-center gap-1.5 justify-end" onClick={e => e.stopPropagation()}>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-8 min-h-10 text-xs gap-1 flex-1 sm:flex-none"
+          onClick={e => { e.stopPropagation(); navigate(`${BASE}/app/campaigns/${campaign.id}`); }}
+        >
+          Open <ChevronRight className="h-3 w-3" />
+        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              className="h-8 w-8 min-h-10 flex items-center justify-center rounded-lg hover:bg-muted transition-colors"
+              onClick={e => e.stopPropagation()}
+            >
+              <MoreHorizontal className="h-3.5 w-3.5 text-muted-foreground/50" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-[130px]">
+            <DropdownMenuItem className="text-xs" onClick={e => { e.stopPropagation(); onEdit(campaign as unknown as Campaign); }}>
+              <Pencil className="h-3.5 w-3.5 text-muted-foreground/60" /> Edit
+            </DropdownMenuItem>
+            <DropdownMenuItem className="text-xs text-red-500 focus:text-red-500 focus:bg-red-500/5"
+              onClick={e => { e.stopPropagation(); onDelete(campaign as unknown as Campaign); }}>
+              <Trash2 className="h-3.5 w-3.5" /> Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    </div>
+  );
+}
+
 function CampaignRow({
   campaign,
   onEdit,
@@ -192,7 +269,7 @@ function CampaignRow({
 
   return (
     <div
-      className="group grid items-center gap-3 px-4 py-3.5 hover:bg-muted/20 transition-colors cursor-pointer border-b border-border/40 last:border-0"
+      className="group hidden md:grid items-center gap-3 px-4 py-3.5 hover:bg-muted/20 transition-colors cursor-pointer border-b border-border/40 last:border-0"
       style={{ gridTemplateColumns: "2fr 1fr 1fr 80px 70px 100px 56px 80px 100px" }}
       onClick={() => navigate(`${BASE}/app/campaigns/${campaign.id}`)}
     >
@@ -776,7 +853,7 @@ function CampaignWizard({
                   <span>1 (serial)</span><span>{maxConcurrency} (your limit)</span>
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {["Call Delay", "Max Attempts", "Business Hours"].map(lbl => (
                   <div key={lbl} className="bg-muted/30 rounded-lg p-3 text-center border border-border">
                     <p className="text-[9px] text-muted-foreground/40 uppercase tracking-widest mb-1">{lbl}</p>
@@ -886,8 +963,8 @@ function CampaignWizard({
           )}
         </div>
 
-        <div className="px-6 py-4 border-t border-border shrink-0 flex items-center justify-between">
-          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={stepIdx === 0 ? close : back}>
+        <div className="px-4 sm:px-6 py-4 border-t border-border shrink-0 flex items-center justify-between pb-safe bg-background/95 backdrop-blur-sm sticky bottom-0 z-10">
+          <Button variant="outline" size="sm" className="h-9 min-h-10 text-xs" onClick={stepIdx === 0 ? close : back}>
             {stepIdx === 0 ? "Cancel" : "← Back"}
           </Button>
           <div className="flex items-center gap-1">
@@ -898,11 +975,11 @@ function CampaignWizard({
             ))}
           </div>
           {isLast ? (
-            <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => void handleCreate()} disabled={create.isPending || !consentComplete()}>
+            <Button size="sm" className="h-9 min-h-10 text-xs gap-1.5" onClick={() => void handleCreate()} disabled={create.isPending || !consentComplete()}>
               {create.isPending ? "Creating…" : "Create Campaign"}
             </Button>
           ) : (
-            <Button size="sm" className="h-8 text-xs" onClick={next} disabled={!canNext()}>Next →</Button>
+            <Button size="sm" className="h-9 min-h-10 text-xs" onClick={next} disabled={!canNext()}>Next →</Button>
           )}
         </div>
       </DialogContent>
@@ -1066,7 +1143,7 @@ function CampaignFormDialog({
 function TableHeader() {
   return (
     <div
-      className="grid items-center gap-3 px-4 py-2.5 border-b border-border/60 bg-muted/30"
+      className="hidden md:grid items-center gap-3 px-4 py-2.5 border-b border-border/60 bg-muted/30"
       style={{ gridTemplateColumns: "2fr 1fr 1fr 80px 70px 100px 56px 80px 100px" }}
     >
       {[
@@ -1232,7 +1309,7 @@ export default function CampaignsPage() {
       </AppPageHeader>
 
       {/* ── Content ── */}
-      <div ref={listScrollRef} className="flex-1 overflow-auto px-6 py-5">
+      <div ref={listScrollRef} className="flex-1 overflow-auto px-4 sm:px-6 py-5">
         <div className="bg-card border border-border rounded-2xl overflow-hidden">
 
           {/* Filter bar */}
@@ -1389,6 +1466,14 @@ export default function CampaignsPage() {
               {filtered.map(c => (
                 <CampaignRow
                   key={c.id}
+                  campaign={c}
+                  onEdit={row => setEditing(row)}
+                  onDelete={row => { setDeleteNameInput(""); setDeleting(row); }}
+                />
+              ))}
+              {filtered.map(c => (
+                <CampaignMobileCard
+                  key={`m-${c.id}`}
                   campaign={c}
                   onEdit={row => setEditing(row)}
                   onDelete={row => { setDeleteNameInput(""); setDeleting(row); }}

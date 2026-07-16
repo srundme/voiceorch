@@ -241,15 +241,15 @@ export default function VoicesPage() {
 
   return (
     <div className="flex-1 min-h-0 flex flex-col overflow-y-auto">
-      <div className="max-w-6xl mx-auto w-full p-6 space-y-6">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
+      <div className="max-w-6xl mx-auto w-full p-4 sm:p-6 space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Voices</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Voices</h1>
             <p className="text-muted-foreground mt-1 text-sm">
               Whitelisted Cartesia voices and your instant clones.
             </p>
           </div>
-          <Button onClick={() => setCloneOpen(true)} className="gap-1.5">
+          <Button onClick={() => setCloneOpen(true)} className="gap-1.5 w-full sm:w-auto min-h-10 h-11">
             <Sparkles className="h-4 w-4" />
             Clone my voice
           </Button>
