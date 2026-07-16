@@ -17,6 +17,7 @@ export * from "./campaign-crm";
 export * from "./campaign-ops";
 export * from "./scheduling";
 export * from "./platform-listed-voices";
+export * from "./user-cloned-voices";
 export * from "./usage-spike-dismissals";
 export * from "./usage-spike-notifications";
 export * from "./kyc";
