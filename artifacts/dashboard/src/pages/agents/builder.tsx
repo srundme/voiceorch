@@ -78,6 +78,7 @@ import {
   filterVoicesForLanguage, isVoiceCompatibleWithLanguage,
   GEMINI_LIVE_LLM_MODEL, GEMINI_LIVE_THINKING_LEVELS,
   geminiLiveModelLabel, isGeminiLiveAgent, isGeminiLiveLlmModel, voiceStackForLlmModel,
+  languagesForAgent, isGeminiLiveLanguage,
 } from "@/lib/agent-providers";
 import { useMinuteRatesMap, useUserProviderNames, computeAgentRateCents } from "@/hooks/use-minute-rates";
 import { DestinationOtpDialog } from "@/components/destination-otp-dialog";
@@ -788,13 +789,12 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/55">Pipeline</p>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
               <AgentConfigCard
-                icon={<Mic />}
-                label="Transcriber"
+                icon={isGeminiLive ? <Globe /> : <Mic />}
+                label={isGeminiLive ? "Language" : "Transcriber"}
                 value={langLabel}
-                subtext={isGeminiLive ? "Not used with Gemini Live" : <>{asrLabel}{asrModel ? ` · ${asrModel}` : ""}</>}
+                subtext={isGeminiLive ? "Gemini Live conversation language" : <>{asrLabel}{asrModel ? ` · ${asrModel}` : ""}</>}
                 active={openSection === "transcriber"}
-                onClick={isGeminiLive ? undefined : () => openPipelineDialog("transcriber")}
-                className={isGeminiLive ? "opacity-40 pointer-events-none line-through decoration-muted-foreground/40" : undefined}
+                onClick={() => openPipelineDialog("transcriber")}
               />
               <AgentConfigCard
                 icon={<Brain />}
@@ -901,28 +901,49 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
             />
           )}
 
-          {/* ── Transcriber dialog ── */}
+          {/* ── Transcriber / Language dialog ── */}
           <EditConfigDialog
             open={openSection === "transcriber"}
             onRequestClose={requestClosePipelineDialog}
             onSave={savePipelineDialog}
-            icon={<Mic />}
-            title="Transcriber"
-            description="Choose the speech-to-text provider, model, and language used to transcribe caller audio."
+            icon={isGeminiLive ? <Globe /> : <Mic />}
+            title={isGeminiLive ? "Language" : "Transcriber"}
+            description={
+              isGeminiLive
+                ? "Choose the conversation language for Gemini Live. Native audio has no separate STT — language is enforced via system instructions."
+                : "Choose the speech-to-text provider, model, and language used to transcribe caller audio."
+            }
           >
-            <div className="grid grid-cols-2 gap-3">
-              <FormField control={form.control} name="language" render={({ field }) => (
+            {isGeminiLive && (
+              <p className="text-[11px] text-muted-foreground rounded-md border border-border/60 bg-muted/30 px-3 py-2">
+                Gemini Live supports ~97 languages. Pick the primary language callers should hear and speak.
+              </p>
+            )}
+            <div className={isGeminiLive ? "space-y-3" : "grid grid-cols-2 gap-3"}>
+              <FormField control={form.control} name="language" render={({ field }) => {
+                const langOpts = languagesForAgent(isGeminiLive);
+                const current = field.value ?? "";
+                // Keep current selection visible even if it isn't in the Live catalog.
+                const options = (!isGeminiLive || !current || isGeminiLiveLanguage(current) || langOpts.some(l => l.value === current))
+                  ? langOpts
+                  : [{ value: current, label: LANGUAGES.find(l => l.value === current)?.label ?? current }, ...langOpts];
+                return (
                 <FormItem className="space-y-1">
                   <FormLabel className="text-[10px] text-muted-foreground">Language</FormLabel>
                   <SmallSelect value={field.value} onChange={(v) => {
                     field.onChange(v);
-                    const { llmProvider, llmModel } = defaultLlmForLanguages(v);
-                    form.setValue("llmProvider", llmProvider);
-                    form.setValue("llmModel", llmModel);
+                    // Never auto-swap the LLM while on Gemini Live — that would kick the user off realtime.
+                    if (!isGeminiLive) {
+                      const { llmProvider, llmModel } = defaultLlmForLanguages(v);
+                      form.setValue("llmProvider", llmProvider);
+                      form.setValue("llmModel", llmModel);
+                    }
                   }}
-                    options={LANGUAGES.map(l => ({ value: l.value, label: l.label }))} placeholder="Select language" />
+                    options={options.map(l => ({ value: l.value, label: l.label }))} placeholder="Select language" />
                 </FormItem>
-              )} />
+                );
+              }} />
+              {!isGeminiLive && (
               <FormField control={form.control} name="asrProvider" render={({ field }) => (
                 <FormItem className="space-y-1">
                   <FormLabel className="text-[10px] text-muted-foreground">Provider</FormLabel>
@@ -930,7 +951,8 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
                     options={ASR_PROVIDERS.map(p => ({ value: p.value, label: p.label }))} />
                 </FormItem>
               )} />
-              {asrModelOpts.length > 0 && (
+              )}
+              {!isGeminiLive && asrModelOpts.length > 0 && (
                 <FormField control={form.control} name="asrModel" render={({ field }) => (
                   <FormItem className="space-y-1">
                     <FormLabel className="text-[10px] text-muted-foreground">Model</FormLabel>
@@ -940,7 +962,7 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
                   </FormItem>
                 )} />
               )}
-              {asrProvider === "sarvam" && (
+              {!isGeminiLive && asrProvider === "sarvam" && (
                 <FormField control={form.control} name="sarvamSttMode" render={({ field }) => {
                   const lang = form.watch("language") ?? "";
                   const autoDefault = lang.toLowerCase().startsWith("en") ? "transcribe" : "codemix";
@@ -964,7 +986,11 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
             <div className="flex items-center justify-between border-t border-border pt-2 mt-1">
               <div>
                 <p className="text-[10px] font-medium text-foreground/80">Multilingual</p>
-                <p className="text-[9px] text-muted-foreground">Automatically detects and switches between supported languages during the conversation.</p>
+                <p className="text-[9px] text-muted-foreground">
+                  {isGeminiLive
+                    ? "Allow Gemini Live to follow the caller when they switch languages mid-call."
+                    : "Automatically detects and switches between supported languages during the conversation."}
+                </p>
               </div>
               <FormField control={form.control} name="languageAutoDetect" render={({ field }) => (
                 <Switch
@@ -986,7 +1012,7 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
           >
             {isGeminiLive && (
               <p className="text-[11px] text-muted-foreground rounded-md border border-border/60 bg-muted/30 px-3 py-2">
-                Gemini Live uses native speech-to-speech. Transcriber and classic TTS are skipped — pick a preset voice in the Voice section.
+                Gemini Live uses native speech-to-speech. Classic STT/TTS are skipped — set language in the Language card and pick a preset voice in Voice.
               </p>
             )}
             <div className="grid grid-cols-2 gap-3">

@@ -527,6 +527,40 @@ export const GEMINI_LIVE_THINKING_LEVELS = [
   { value: "high", label: "High" },
 ] as const;
 
+/**
+ * Base language codes supported by Gemini Live native audio
+ * (Gemini API Live capabilities guide — ~97 languages).
+ * Native audio does not take speechConfig.languageCode; language is enforced
+ * via system instructions using the agent's `language` / `asrLanguage` field.
+ */
+export const GEMINI_LIVE_BASE_LANGUAGES = new Set([
+  "af", "ak", "sq", "am", "ar", "hy", "as", "az", "eu", "be", "bn", "bs", "bg",
+  "my", "ca", "ceb", "zh", "hr", "cs", "da", "nl", "en", "et", "fo", "fil", "fi",
+  "fr", "gl", "ka", "de", "el", "gu", "ha", "iw", "he", "hi", "hu", "is", "id",
+  "ga", "it", "ja", "kn", "kk", "km", "rw", "ko", "ku", "ky", "lo", "lv", "lt",
+  "mk", "ms", "ml", "mt", "mi", "mr", "mn", "ne", "no", "or", "om", "ps", "fa",
+  "pl", "pt", "pa", "qu", "ro", "rm", "ru", "sr", "sd", "si", "sk", "sl", "so",
+  "st", "es", "sw", "sv", "tg", "ta", "te", "th", "tn", "tr", "tk", "uk", "ur",
+  "uz", "vi", "cy", "fy", "wo", "yo", "zu",
+]);
+
+/** True when a BCP-47 tag is supported by Gemini Live (base language match). */
+export function isGeminiLiveLanguage(code: string | null | undefined): boolean {
+  if (!code) return false;
+  return GEMINI_LIVE_BASE_LANGUAGES.has(baseLanguage(code));
+}
+
+/**
+ * SnapServe language options that Gemini Live can speak.
+ * Prefer regional tags already in LANGUAGES (e.g. hi-IN, ta-IN, en-IN).
+ */
+export const GEMINI_LIVE_LANGUAGES = LANGUAGES.filter((l) => isGeminiLiveLanguage(l.value));
+
+/** Language picker options for classic vs Gemini Live agents. */
+export function languagesForAgent(isGeminiLive: boolean): typeof LANGUAGES {
+  return isGeminiLive ? GEMINI_LIVE_LANGUAGES : LANGUAGES;
+}
+
 /** Static fallback; runtime UI may fetch GET /api/gemini-live/voices. */
 export const GEMINI_LIVE_VOICES = [
   { name: "Zephyr", style: "Bright" }, { name: "Puck", style: "Upbeat" }, { name: "Charon", style: "Informative" },

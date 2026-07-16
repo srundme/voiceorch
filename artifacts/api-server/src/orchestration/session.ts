@@ -279,14 +279,20 @@ export async function createSession(params: {
   // Build effective system prompt with date/time context + strict language enforcement
   const LANG_NAMES: Record<string, string> = {
     "en-US": "English", "en-GB": "English", "en-IN": "English", "en": "English",
-    "hi": "Hindi", "ta": "Tamil", "ta-IN": "Tamil",
+    "hi": "Hindi", "hi-IN": "Hindi", "ta": "Tamil", "ta-IN": "Tamil",
     "te": "Telugu", "te-IN": "Telugu", "kn": "Kannada", "kn-IN": "Kannada",
     "mr": "Marathi", "mr-IN": "Marathi", "gu": "Gujarati", "gu-IN": "Gujarati",
-    "bn": "Bengali", "bn-IN": "Bengali", "ml": "Malayalam", "ml-IN": "Malayalam",
+    "bn": "Bengali", "bn-IN": "Bengali", "bn-BD": "Bengali", "ml": "Malayalam", "ml-IN": "Malayalam",
+    "pa": "Punjabi", "pa-IN": "Punjabi", "ur": "Urdu", "ur-IN": "Urdu",
     "si": "Sinhala", "si-LK": "Sinhala",
-    "es": "Spanish", "es-MX": "Spanish (Mexico)", "fr": "French", "de": "German",
-    "it": "Italian", "pt-BR": "Portuguese (Brazil)", "ja": "Japanese",
-    "ko": "Korean", "zh": "Mandarin Chinese", "ar": "Arabic",
+    "es": "Spanish", "es-MX": "Spanish (Mexico)", "es-US": "Spanish", "fr": "French", "fr-FR": "French", "de": "German", "de-DE": "German",
+    "it": "Italian", "it-IT": "Italian", "pt-BR": "Portuguese (Brazil)", "ja": "Japanese", "ja-JP": "Japanese",
+    "ko": "Korean", "ko-KR": "Korean", "zh": "Mandarin Chinese", "ar": "Arabic",
+    "id": "Indonesian", "id-ID": "Indonesian", "th": "Thai", "th-TH": "Thai",
+    "vi": "Vietnamese", "vi-VN": "Vietnamese", "tr": "Turkish", "tr-TR": "Turkish",
+    "ru": "Russian", "ru-RU": "Russian", "nl": "Dutch", "nl-NL": "Dutch",
+    "pl": "Polish", "pl-PL": "Polish", "uk": "Ukrainian", "uk-UA": "Ukrainian",
+    "ro": "Romanian", "ro-RO": "Romanian",
   };
   // Script directive for non-Latin languages — tells weaker models to write in
   // native Unicode script, not romanized form (Tanglish, Hinglish-script, etc.).

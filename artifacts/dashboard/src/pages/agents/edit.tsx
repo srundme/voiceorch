@@ -60,7 +60,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { AgentConfigCard, EditConfigDialog } from "@/components/agent-config-card";
 import { GeminiLiveVoicePicker } from "@/components/gemini-live-voice-picker";
-import { Mic, Brain, Volume2 } from "lucide-react";
+import { Mic, Brain, Volume2, Globe } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError, mapApiErrors } from "@/lib/format-api-error";
 import {
@@ -82,6 +82,8 @@ import {
   isTamilLanguage,
   defaultGeminiModel,
   voiceStackForLlmModel,
+  languagesForAgent,
+  isGeminiLiveLanguage,
 } from "@/lib/agent-providers";
 
 export type { AgentFormValues } from "./edit.schema";
@@ -702,7 +704,7 @@ export default function AgentEdit() {
   // discarding, and Cancel can restore the pre-edit values.
   type PipelineSection = "transcriber" | "model" | "voice";
   const SECTION_FIELDS: Record<PipelineSection, (keyof AgentFormValues)[]> = {
-    transcriber: ["asrProvider", "asrModel", "languageAutoDetect"],
+    transcriber: ["language", "asrProvider", "asrModel", "languageAutoDetect"],
     model: ["llmProvider", "llmModel", "temperature"],
     voice: ["voiceStack", "ttsProvider", "ttsModel", "ttsVoice", "geminiLiveVoiceName", "geminiLiveThinkingLevel"],
   };
@@ -960,25 +962,37 @@ export default function AgentEdit() {
 
                   <div className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
-                      <FormField control={form.control} name="language" render={({ field }) => (
+                      <FormField control={form.control} name="language" render={({ field }) => {
+                        const langOpts = languagesForAgent(isGeminiLive);
+                        const current = field.value ?? "";
+                        const options = (!isGeminiLive || !current || isGeminiLiveLanguage(current) || langOpts.some(l => l.value === current))
+                          ? langOpts
+                          : [{ value: current, label: LANGUAGES.find(l => l.value === current)?.label ?? current }, ...langOpts];
+                        return (
                         <FormItem>
                           <FormLabel>Language</FormLabel>
                           <Select onValueChange={(v) => {
                             field.onChange(v);
-                            if (isTamilLanguage(v)) {
+                            // Don't kick the user off Gemini Live when changing language.
+                            if (!isGeminiLive && isTamilLanguage(v)) {
                               form.setValue("llmProvider", "google");
                               form.setValue("llmModel", defaultGeminiModel());
                             }
                           }} value={field.value ?? ""}>
                             <FormControl><SelectTrigger><SelectValue placeholder="Select language" /></SelectTrigger></FormControl>
                             <SelectContent>
-                              {LANGUAGES.map(l => <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>)}
+                              {options.map(l => <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>)}
                             </SelectContent>
                           </Select>
-                          <FormDescription>Passed to ASR + TTS.</FormDescription>
+                          <FormDescription>
+                            {isGeminiLive
+                              ? "Gemini Live speaks and listens in this language."
+                              : "Passed to ASR + TTS."}
+                          </FormDescription>
                           <FormMessage />
                         </FormItem>
-                      )} />
+                        );
+                      }} />
 
                       <FormField control={form.control} name="silenceTimeoutSeconds" render={({ field }) => (
                         <FormItem>
@@ -1110,12 +1124,19 @@ export default function AgentEdit() {
             <div className="md:col-span-2 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <AgentConfigCard
-                  icon={<Mic />}
-                  label="Transcriber"
-                  value={ASR_PROVIDERS.find(p => p.value === asrProvider)?.label ?? asrProvider}
-                  subtext={isGeminiLive ? "Not used with Gemini Live" : (form.watch("asrModel") || "Default model")}
-                  onClick={isGeminiLive ? undefined : () => openPipelineDialog("transcriber")}
-                  className={isGeminiLive ? "opacity-40 pointer-events-none line-through decoration-muted-foreground/40" : undefined}
+                  icon={isGeminiLive ? <Globe /> : <Mic />}
+                  label={isGeminiLive ? "Language" : "Transcriber"}
+                  value={
+                    isGeminiLive
+                      ? (LANGUAGES.find(l => l.value === form.watch("language"))?.label ?? form.watch("language") ?? "Select language")
+                      : (ASR_PROVIDERS.find(p => p.value === asrProvider)?.label ?? asrProvider)
+                  }
+                  subtext={
+                    isGeminiLive
+                      ? "Gemini Live conversation language"
+                      : (form.watch("asrModel") || "Default model")
+                  }
+                  onClick={() => openPipelineDialog("transcriber")}
                 />
                 <AgentConfigCard
                   icon={<Brain />}
@@ -1157,15 +1178,47 @@ export default function AgentEdit() {
             </div>
           </div>
 
-          {/* ── Transcriber dialog ── */}
+          {/* ── Transcriber / Language dialog ── */}
           <EditConfigDialog
             open={openSection === "transcriber"}
             onRequestClose={requestClosePipelineDialog}
             onSave={savePipelineDialog}
-            icon={<Mic />}
-            title="Transcriber"
-            description="Choose the speech-to-text provider and model used to transcribe caller audio."
+            icon={isGeminiLive ? <Globe /> : <Mic />}
+            title={isGeminiLive ? "Language" : "Transcriber"}
+            description={
+              isGeminiLive
+                ? "Choose the conversation language for Gemini Live. Native audio has no separate STT — language is enforced via system instructions."
+                : "Choose the speech-to-text provider and model used to transcribe caller audio."
+            }
           >
+            {isGeminiLive ? (
+              <>
+                <p className="text-[11px] text-muted-foreground rounded-md border border-border/60 bg-muted/30 px-3 py-2 mb-2">
+                  Gemini Live supports ~97 languages. Pick the primary language callers should hear and speak.
+                </p>
+                <FormField control={form.control} name="language" render={({ field }) => {
+                  const langOpts = languagesForAgent(true);
+                  const current = field.value ?? "";
+                  const options = (!current || isGeminiLiveLanguage(current) || langOpts.some(l => l.value === current))
+                    ? langOpts
+                    : [{ value: current, label: LANGUAGES.find(l => l.value === current)?.label ?? current }, ...langOpts];
+                  return (
+                  <FormItem>
+                    <FormLabel className="text-xs">Language</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value ?? ""}>
+                      <FormControl><SelectTrigger><SelectValue placeholder="Select language" /></SelectTrigger></FormControl>
+                      <SelectContent>
+                        {options.map(l => <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>Gemini Live speaks and listens in this language.</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                  );
+                }} />
+              </>
+            ) : (
+              <>
             <FormField control={form.control} name="asrProvider" render={({ field }) => (
               <FormItem>
                 <FormLabel className="text-xs">Provider</FormLabel>
@@ -1191,10 +1244,16 @@ export default function AgentEdit() {
                 <FormMessage />
               </FormItem>
             )} />
+              </>
+            )}
             <div className="flex items-center justify-between border-t pt-4 mt-2">
               <div>
                 <p className="text-xs font-medium">Multilingual</p>
-                <p className="text-[11px] text-muted-foreground">Automatically detects and switches between supported languages during the conversation.</p>
+                <p className="text-[11px] text-muted-foreground">
+                  {isGeminiLive
+                    ? "Allow Gemini Live to follow the caller when they switch languages mid-call."
+                    : "Automatically detects and switches between supported languages during the conversation."}
+                </p>
               </div>
               <FormField control={form.control} name="languageAutoDetect" render={({ field }) => (
                 <Switch
@@ -1216,7 +1275,7 @@ export default function AgentEdit() {
           >
             {isGeminiLive && (
               <p className="text-[11px] text-muted-foreground rounded-md border border-border/60 bg-muted/30 px-3 py-2">
-                Gemini Live uses native speech-to-speech. Transcriber and classic TTS are skipped — pick a preset voice in the Voice section.
+                Gemini Live uses native speech-to-speech. Classic STT/TTS are skipped — set language in the Language card and pick a preset voice in Voice.
               </p>
             )}
             <FormField control={form.control} name="llmProvider" render={({ field }) => (
