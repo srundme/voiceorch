@@ -446,10 +446,20 @@ function AgentInboundPanel({
     query: { queryKey: getListPhoneNumbersQueryKey(), staleTime: 60_000 },
   });
   const { data: agents } = useListAgents({ query: { queryKey: getListAgentsQueryKey() } });
+  const { data: managedData } = useQuery({
+    queryKey: ["phone-numbers", "managed"],
+    queryFn: () => customFetch<{ numbers: string[] }>(`${DASH_API}/phone-numbers/managed`),
+    staleTime: 5 * 60 * 1000,
+  });
   const assign = useAssignPhoneNumber();
   const phoneNumbers = Array.isArray(phoneNumbersRaw) ? phoneNumbersRaw : [];
   const assigned = phoneNumbers.find(p => p.agentId === agentId);
-  const preferredManaged = preferredManagedNumber ?? null;
+  const managedNumbers = managedData?.numbers ?? [];
+  const testingFromNumber =
+    preferredManagedNumber
+    ?? (assigned?.number ?? null)
+    ?? managedNumbers[0]
+    ?? null;
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string>("none");
@@ -499,61 +509,84 @@ function AgentInboundPanel({
     }
   };
 
-  const outboundLabel = assigned?.number
-    ?? (preferredManaged ? `${preferredManaged} · Platform` : null);
-
   return (
-    <div className={cn("rounded-xl border border-border/50 bg-card/40 p-3 space-y-2.5", className)}>
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <PhoneForwarded className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Inbound</span>
+    <div className={cn("space-y-2", className)}>
+      {/* Outbound testing — free platform managed number */}
+      <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/5 p-3 space-y-1.5">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <Phone className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-600/90 dark:text-emerald-400/90">
+              Outbound testing
+            </span>
+          </div>
+          <span className="text-[9px] font-medium uppercase tracking-wide text-emerald-600/80 dark:text-emerald-400/70 shrink-0">
+            Free
+          </span>
         </div>
-        <button
-          type="button"
-          onClick={() => navigate("/app/phone-numbers")}
-          className="text-[10px] font-medium text-muted-foreground hover:text-foreground transition-colors"
-        >
-          Numbers →
-        </button>
+        {testingFromNumber ? (
+          <>
+            <p className="text-[13px] font-semibold tabular-nums text-foreground tracking-tight">
+              {testingFromNumber}
+            </p>
+            <p className="text-[10px] text-muted-foreground leading-relaxed">
+              Platform managed number — used as caller ID when you click <span className="text-foreground/80">Phone</span>. Outbound only; inbound does not ring this agent.
+            </p>
+          </>
+        ) : (
+          <p className="text-[11px] text-muted-foreground leading-relaxed">
+            No managed testing number is configured yet. Contact support, or assign your own number below for outbound caller ID.
+          </p>
+        )}
       </div>
 
-      {isLoading ? (
-        <Skeleton className="h-9 w-full rounded-lg" />
-      ) : (
-        <button
-          type="button"
-          onClick={openDialog}
-          className="w-full flex items-center justify-between gap-2 rounded-lg border border-border/50 bg-background/50 px-2.5 py-2 text-left hover:border-border hover:bg-background/70 transition-colors"
-        >
-          <div className="min-w-0">
-            <p className={cn("text-[12px] font-medium truncate tabular-nums", assigned ? "text-foreground" : "text-muted-foreground")}>
-              {assigned?.number ?? "No number assigned"}
-            </p>
-            <p className="text-[10px] text-muted-foreground/70 truncate mt-0.5">
-              {assigned
-                ? "Inbound + outbound caller ID"
-                : phoneNumbers.length === 0
-                  ? "Buy or bring a number first"
-                  : "Click to assign a number"}
-            </p>
+      {/* Inbound — requires user's assigned number */}
+      <div className="rounded-xl border border-border/50 bg-card/40 p-3 space-y-2.5">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <PhoneForwarded className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Inbound</span>
           </div>
-          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-        </button>
-      )}
+          <button
+            type="button"
+            onClick={() => navigate("/app/phone-numbers")}
+            className="text-[10px] font-medium text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Numbers →
+          </button>
+        </div>
 
-      {!assigned && outboundLabel && (
-        <p className="text-[10px] text-muted-foreground/70 px-0.5">
-          Outbound fallback: <span className="tabular-nums text-muted-foreground">{outboundLabel}</span>
-        </p>
-      )}
+        {isLoading ? (
+          <Skeleton className="h-9 w-full rounded-lg" />
+        ) : (
+          <button
+            type="button"
+            onClick={openDialog}
+            className="w-full flex items-center justify-between gap-2 rounded-lg border border-border/50 bg-background/50 px-2.5 py-2 text-left hover:border-border hover:bg-background/70 transition-colors"
+          >
+            <div className="min-w-0">
+              <p className={cn("text-[12px] font-medium truncate tabular-nums", assigned ? "text-foreground" : "text-muted-foreground")}>
+                {assigned?.number ?? "No number assigned"}
+              </p>
+              <p className="text-[10px] text-muted-foreground/70 truncate mt-0.5">
+                {assigned
+                  ? "Receives inbound calls to this agent"
+                  : phoneNumbers.length === 0
+                    ? "Optional — buy a number for inbound only"
+                    : "Click to assign for inbound calls"}
+              </p>
+            </div>
+            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          </button>
+        )}
+      </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Set inbound number</DialogTitle>
             <DialogDescription>
-              Route inbound calls to this agent. Outbound caller ID follows the same number — same assign path as Phone Numbers.
+              Route inbound calls to this agent. Outbound test calls already use the free platform number above — you do not need to buy a number to dial out.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-1">
@@ -5122,7 +5155,6 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
     query: { queryKey: getGetAgentQueryKey(agentId) },
   });
 
-
   const updateAgent = useUpdateAgent();
   const deleteAgent = useDeleteAgent();
   const initiateOutbound = useInitiateOutboundCall();
@@ -5174,6 +5206,17 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       geminiLiveThinkingLevel: "minimal",
     },
   });
+
+  const preferredManagedWatch = form.watch("preferredManagedNumber");
+  const { data: managedPhoneData } = useQuery({
+    queryKey: ["phone-numbers", "managed"],
+    queryFn: () => customFetch<{ numbers: string[] }>(`${DASH_API}/phone-numbers/managed`),
+    staleTime: 5 * 60 * 1000,
+  });
+  const outboundTestingFrom =
+    (typeof preferredManagedWatch === "string" && preferredManagedWatch.trim())
+      ? preferredManagedWatch.trim()
+      : (managedPhoneData?.numbers?.[0] ?? null);
 
   useEffect(() => {
     if (!agent) return;
@@ -5590,7 +5633,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
                 </Button>
               </div>
               <p className="text-[10px] text-muted-foreground/65 leading-snug px-0.5">
-                Phone dials out · Web tests in-browser
+                Phone = free outbound test (platform number) · Web = in-browser
               </p>
             </div>
 
@@ -5687,7 +5730,18 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Make Outbound Call</DialogTitle>
-            <DialogDescription>Agent <strong>{agent.name}</strong> will call this number.</DialogDescription>
+            <DialogDescription>
+              Agent <strong>{agent.name}</strong> will call this number
+              {outboundTestingFrom ? (
+                <>
+                  {" "}using free platform caller ID{" "}
+                  <span className="font-medium tabular-nums text-foreground">{outboundTestingFrom}</span>
+                  {" "}(outbound only).
+                </>
+              ) : (
+                "."
+              )}
+            </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleOutbound} className="space-y-4">
             <Input value={callNumber} onChange={e => setCallNumber(e.target.value)}
