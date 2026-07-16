@@ -7,7 +7,7 @@ import {
   Settings, Key, Webhook, Wallet, TrendingUp, ShieldCheck,
   Mic2, Menu, ChevronDown, ChevronLeft, ChevronRight,
   LogOut, Bell, Search, SlidersHorizontal, BookOpen, PhoneMissed, PlugZap, Sun, Moon, Sparkles,
-  ListTodo,
+  ListTodo, ArrowRightLeft, Instagram,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useAuth } from "@/lib/auth";
@@ -82,11 +82,13 @@ const NAV_PRIMARY = [
   { name: "Agents",          href: "/app/agents",          icon: Users },
   { name: "Agent Knowledge", href: "/app/knowledge-bases", icon: BookOpen },
   { name: "Campaigns",       href: "/app/campaigns",       icon: Zap },
+  { name: "Meta Leads",      href: "/app/meta-leads",      icon: Instagram },
   { name: "Connections",     href: "/app/connections",     icon: PlugZap },
   { name: "Scheduling",      href: "/app/scheduling",      icon: CalendarDays },
   { name: "Memory / CRM",    href: "/app/memory",          icon: Brain },
   { name: "Call Logs",       href: "/app/calls",           icon: Phone },
   { name: "Callbacks",       href: "/app/callbacks",       icon: PhoneMissed },
+  { name: "Transfers",       href: "/app/transfers",       icon: ArrowRightLeft },
 ];
 
 const NAV_SETTINGS = [

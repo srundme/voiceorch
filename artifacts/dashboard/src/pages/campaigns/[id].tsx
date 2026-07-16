@@ -43,8 +43,27 @@ import { CallDetailDrawer } from "@/components/call-detail-drawer";
 import { TablePagination } from "@/components/table-pagination";
 import { format, formatDistanceToNow } from "date-fns";
 import { BATCH_STATUS_MAP, CAMPAIGN_STATUS_MAP } from "@/lib/campaign-status";
+import LiveQueueTab from "./live-queue";
+import IncomingCallsTab from "./incoming";
+import CallbacksTab from "./callbacks";
+import TransfersTab from "./transfers";
+import BookingsTab from "./bookings";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+// ── Tabs ───────────────────────────────────────────────────────────────────────
+
+type CampaignTab = "overview" | "live-queue" | "incoming" | "callbacks" | "transfers" | "bookings" | "config";
+
+const CAMPAIGN_TABS: { id: CampaignTab; label: string; icon: React.ReactNode }[] = [
+  { id: "overview",   label: "Overview",      icon: null },
+  { id: "live-queue", label: "Live Queue",    icon: <Radio className="h-3 w-3" /> },
+  { id: "incoming",   label: "Incoming",      icon: <PhoneIncoming className="h-3 w-3" /> },
+  { id: "callbacks",  label: "Callbacks",     icon: <PhoneCall className="h-3 w-3" /> },
+  { id: "transfers",  label: "Transfers",     icon: <ArrowRightLeft className="h-3 w-3" /> },
+  { id: "bookings",   label: "Bookings",      icon: <Calendar className="h-3 w-3" /> },
+  { id: "config",     label: "Configuration", icon: <Settings className="h-3 w-3" /> },
+];
 
 // ── Business hours helpers ────────────────────────────────────────────────────
 
@@ -1302,7 +1321,7 @@ export default function CampaignDetailPage() {
   const [hoursEnd,   setHoursEnd]   = useState<string>("");
   const [hoursTz,    setHoursTz]    = useState<string>("Asia/Kolkata");
   const [hoursEnabled, setHoursEnabled] = useState<boolean>(true);
-  const [activeTab, setActiveTab] = useState<"overview" | "config">("overview");
+  const [activeTab, setActiveTab] = useState<CampaignTab>("overview");
 
   useEffect(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1563,21 +1582,21 @@ export default function CampaignDetailPage() {
         </div>
 
         {/* Tab bar */}
-        <div className="flex items-center px-4 border-b border-border/60">
-          {(["overview", "config"] as const).map(tab => (
+        <div className="flex items-center px-4 border-b border-border/60 overflow-x-auto scrollbar-hide">
+          {CAMPAIGN_TABS.map(tab => (
             <button
-              key={tab}
+              key={tab.id}
               type="button"
-              onClick={() => setActiveTab(tab)}
+              onClick={() => setActiveTab(tab.id)}
               className={cn(
-                "flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium border-b-2 -mb-px transition-colors",
-                activeTab === tab
+                "flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium border-b-2 -mb-px transition-colors whitespace-nowrap shrink-0",
+                activeTab === tab.id
                   ? "border-primary text-foreground"
                   : "border-transparent text-muted-foreground hover:text-foreground"
               )}
             >
-              {tab === "config" && <Settings className="h-3 w-3" />}
-              {tab === "overview" ? "Overview" : "Configuration"}
+              {tab.icon}
+              {tab.label}
             </button>
           ))}
         </div>
@@ -1783,6 +1802,13 @@ export default function CampaignDetailPage() {
           )}
 
           </>)}
+
+          {/* ── Live Queue / Incoming / Callbacks / Transfers / Bookings ── */}
+          {activeTab === "live-queue" && <LiveQueueTab campaignId={campaignId} />}
+          {activeTab === "incoming"   && <IncomingCallsTab campaignId={campaignId} />}
+          {activeTab === "callbacks"  && <CallbacksTab campaignId={campaignId} />}
+          {activeTab === "transfers"  && <TransfersTab campaignId={campaignId} />}
+          {activeTab === "bookings"   && <BookingsTab campaignId={campaignId} />}
 
           {/* ── OVERVIEW continued: stats + batches ──────────────────────── */}
           {activeTab === "overview" && (<>

@@ -1,9 +1,7 @@
 import { ChevronLeft, User as UserIcon } from "lucide-react";
 import { Link } from "wouter";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 
 function initialsFor(name: string | null, email: string | null): string {
@@ -19,17 +17,9 @@ function initialsFor(name: string | null, email: string | null): string {
 
 export default function ProfilePage() {
   const { user } = useAuth();
-  const { toast } = useToast();
 
   const name = user?.name ?? null;
   const email = user?.email ?? null;
-
-  function handleSave() {
-    toast({
-      title: "No changes to save",
-      description: "Your name and email are managed by your sign-in provider (Google or email account) and can't be edited here.",
-    });
-  }
 
   return (
     <div className="px-8 py-2 max-w-[1000px] mx-auto space-y-8">
@@ -86,12 +76,6 @@ export default function ProfilePage() {
                 className="flex h-9 w-full rounded-md border border-border/60 bg-muted/20 px-3 py-1 text-sm text-muted-foreground shadow-sm disabled:cursor-not-allowed disabled:opacity-70"
               />
             </div>
-          </div>
-
-          <div className="pt-2">
-            <Button onClick={handleSave} className="w-full sm:w-auto">
-              Save Changes
-            </Button>
           </div>
         </CardContent>
       </Card>

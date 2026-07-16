@@ -617,7 +617,7 @@ function CalendarCard({
                         <AlertTriangle className="h-3 w-3 shrink-0 mt-0.5" />
                         <span>
                           <strong>{effective.email}</strong> needs reconnect — events won’t sync. Re-authorize in{" "}
-                          <Link href={`${BASE}/app/settings/conferencing`} className="underline underline-offset-2">Conferencing</Link>.
+                          <Link href={`${BASE}/app/scheduling/conferencing`} className="underline underline-offset-2">Conferencing</Link>.
                         </span>
                       </p>
                     );

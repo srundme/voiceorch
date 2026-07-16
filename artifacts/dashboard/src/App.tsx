@@ -15,14 +15,11 @@ import { recordInAppNavigation } from "@/lib/nav-history";
 import { SnapServeLoader } from "@/components/logo";
 import { VoiceAssistant } from "@/components/VoiceAssistant";
 import AgentBuilder from "@/pages/agents/builder";
-import Dashboard from "@/pages/dashboard";
-import AgentDetail from "@/pages/agents/[id]";
 
 import CallsList from "@/pages/calls/index";
 import CallDetail from "@/pages/calls/[id]";
 import ProvidersList from "@/pages/providers/index";
 import Settings from "@/pages/settings/index";
-import ConferencingPage from "@/pages/settings/Conferencing";
 import ProfilePage from "@/pages/settings/Profile";
 import KnowledgeBasePage from "@/pages/knowledge-base";
 import WalletPage from "@/pages/wallet";
