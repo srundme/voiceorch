@@ -49,7 +49,7 @@ import {
   isAffirmationOnlyUtterance,
   type TurnCloseReason,
 } from "./endpointing.js";
-import { checkTranscriptQuality, pickClarificationPhrase, isSemanticInterrupt, isAccidentalInterruptPhrase, shouldHoldFragmentForCoalesce, isUltraShortNoiseFragment, isCallerAudioDifficulty, isFalseInterruptionScrap, isTopicClarificationAsk } from "./transcriptQuality.js";
+import { checkTranscriptQuality, pickClarificationPhrase, isSemanticInterrupt, isAccidentalInterruptPhrase, shouldHoldFragmentForCoalesce, isUltraShortNoiseFragment, isCallerAudioDifficulty, isFalseInterruptionScrap, isTopicClarificationAsk, isBackchannelOnlyUtterance } from "./transcriptQuality.js";
 import { buildInterruptionHint, joinHeardSentences, resolveSpokenForHistory, estimateHeardPrefix, composeHeardWithMid } from "./bargeHeard.js";
 import { getCachedFillerPcm, setCachedFillerPcm } from "./fillerPcmCache.js";
 import { FILLER_SEQUENCE_ID, InterruptionManager } from "./interruption-manager.js";
@@ -119,7 +119,7 @@ const FILLER_THRESHOLD_MS     = 350;    // play a filler phrase if LLM has not r
                                         // token within this window (and backchannel didn't fire)
 const DEAD_AIR_FILLER_CANCEL_MS = 500; // skip dead-air filler playback if LLM first token
                                         // arrives within this window after filler was enqueued
-const FRAGMENT_COALESCE_MS    = 2000;   // hold short English fragments for a follow-up STT final
+const FRAGMENT_COALESCE_MS    = 2000;   // hold short English fragments / Indic acks for a follow-up STT final
 const LLM_TTFT_FALLBACK_MS    = Number(process.env.LLM_TTFT_FALLBACK_MS ?? 1200); // abort slow primary LLM
 const LLM_SLOW_TTFT_MS        = Number(process.env.LLM_SLOW_TTFT_MS ?? 1200);     // warn in execution logs
 const TTS_STREAM_TIMEOUT_MS   = 8000;   // abort TTS streaming fetch if no data within 8 s —
@@ -1909,6 +1909,9 @@ export class OrchestrationPipeline implements VoiceSession {
                   { callId: this.config.callId, text: text.slice(0, 80) },
                   "Semantic barge-in triggered (streaming STT interim)",
                 );
+              } else if (isBackchannelOnlyUtterance(text)) {
+                // Pure acks during agent speech are not interruptions — caller is
+                // often about to continue (call 2967: "சரி" then the real question).
               } else {
                 const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
                 // Bolna accumulates interim word length across partials for the turn
@@ -2098,6 +2101,12 @@ export class OrchestrationPipeline implements VoiceSession {
       if (isSemanticInterrupt(transcript)) {
         this.triggerBargeIn("semantic", transcript);
         logger.info({ callId: this.config.callId, transcript }, "Semantic barge-in triggered (streaming STT)");
+      } else if (isBackchannelOnlyUtterance(transcript)) {
+        // Pure ack finals must not cut TTS — often a lead-in to more speech.
+        logger.info(
+          { callId: this.config.callId, transcript: transcript.slice(0, 80) },
+          "Streaming STT: barge-in suppressed for backchannel-only transcript",
+        );
       } else if (
         Date.now() < this.bargeInSentenceStartAt + this.bargeInEchoGraceMs ||
         Date.now() < this.greetingEchoHoldUntil
@@ -2302,10 +2311,25 @@ export class OrchestrationPipeline implements VoiceSession {
         this.logDiscardedTranscript(transcript, "fragment_coalesce_hold");
         this.safetyNet.onFinal();
         this.clearEagerPartialTimer();
+        // Drop any speculative LLM started on the filler-only partial — the
+        // coalesced follow-up (or flush) will launch a fresh turn.
+        if (this._specLlmState && !this.isProcessing) {
+          this._specLlmState.aborted = true;
+          this._specLlmState = null;
+        }
         this.interruptionMgr.onUserSpeechEnd();
         if (!this.closed) this.safetyNet.beginListening();
         return;
       }
+    } else if (this._fragmentCoalesce) {
+      // Complete follow-up arrived while a fragment was held — merge, don't drop.
+      clearTimeout(this._fragmentCoalesce.timer);
+      transcript = `${this._fragmentCoalesce.text} ${transcript}`.trim();
+      this._fragmentCoalesce = null;
+      logger.info(
+        { callId: this.config.callId, merged: transcript.slice(0, 120) },
+        "STT fragment coalesced with complete follow-up final",
+      );
     } else {
       this.clearFragmentCoalesce();
     }
@@ -5638,8 +5662,17 @@ export class OrchestrationPipeline implements VoiceSession {
     // playTask starts TTS-ing the filler phrase while KB lookup and LLM warm up.
     // This fills the dead silence between the user finishing speaking and the
     // first agent word.
+    // Skip when the caller only said a pure ack ("சரி", "okay") — playing
+    // another filler before the real answer makes short turns feel like the
+    // agent only said "okay" (call 2967).
     let backchanneledThisTurn = false;
-    if (this.agent.backchannelingEnabled && !this.closed && !this.bargeInRequested) {
+    const skipFillerForBackchannelAck = isBackchannelOnlyUtterance(transcript);
+    if (
+      this.agent.backchannelingEnabled
+      && !this.closed
+      && !this.bargeInRequested
+      && !skipFillerForBackchannelAck
+    ) {
       // Prefer conversation language; bootstrap from agent target / STT config so
       // auto-detect agents still backchannel on turn 1 instead of staying silent.
       const fillerLang = this.currentLang
@@ -6107,7 +6140,12 @@ export class OrchestrationPipeline implements VoiceSession {
     // backchannel didn't already cover the silence, enqueue a filler phrase so
     // the caller hears something rather than dead air.
     let fillerTimer: ReturnType<typeof setTimeout> | null = null;
-    if (!backchanneledThisTurn && !this.closed && !this.bargeInRequested) {
+    if (
+      !backchanneledThisTurn
+      && !skipFillerForBackchannelAck
+      && !this.closed
+      && !this.bargeInRequested
+    ) {
       fillerTimer = setTimeout(() => {
         if (!llmFirstTokenAt && !this.bargeInRequested && !this.closed) {
           // Strict, language-based fillers only — no hardcoded English fallback.

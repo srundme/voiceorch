@@ -39,6 +39,40 @@ const VALID_COMPLETE_SHORT_UTTERANCE_RE =
 const REDUPLICATED_ACK_RE =
   /^(ok(ay)?|yes|yeah|ஆமா|சரி|ठीक)([\s,.!]+(ok(ay)?|yes|yeah|ஆமா|சரி|ठीक)){0,2}[\s,.!]*$/i;
 
+/** Indic one-word acks / negations — backchannel, not a standalone question. */
+const INDIC_SINGLE_ACK_RE =
+  /^(சரி|சரிங்க|ஆமா|ஆம்|இல்ல|இல்லை|हां|हाँ|ठीक|जी|haan|han|theek|accha|hmm|hm|mm)[\s,.!]*$/iu;
+
+/** Indic/Hinglish ack + vocative chains ("ஆமா சார் ஆமா.", "okay sir"). */
+const INDIC_ACK_VOCATIVE_RE =
+  /^(ஆமா|ஆம்|சரி|haan|ok(?:ay)?)([\s,.!]+(சார்|sir|जी|ji|madam|மா.?ம்|ஆமா|ஆம்|சரி|हां|हाँ|haan|ok(?:ay)?)){0,4}[\s,.!]*$/iu;
+
+/** English ack/backchannel only — excludes greetings/farewells (those are real turns). */
+const ENGLISH_BACKCHANNEL_ONLY_RE =
+  /^(yes|yeah|yep|yup|no|nope|ok|okay|sure|right|fine|hmm|hm|mm)([,.]|\s+(madam|ma'?am|sir|there))?\.?$/i;
+
+/**
+ * Pure backchannel / filler ack — not a substantive caller turn on its own.
+ * Used to coalesce Tamil/Hindi "சரி"/"ஆமா" with a follow-up question, skip
+ * eager speculative LLM, and suppress agent filler TTS on ack-only turns.
+ */
+export function isBackchannelOnlyUtterance(text: string): boolean {
+  const t = text.trim();
+  if (!t) return true;
+  if (isSemanticInterrupt(t) || isTopicClarificationAsk(t) || isCallerAudioDifficulty(t)) {
+    return false;
+  }
+  if (/[?？]/.test(t)) return false;
+  if (/(முடியுமா|கேளுங்க|சொல்லுங்க|விளக்க|explain|tell me|என்ன|எப்படி|எங்க|ஏன்|time|கேட்க)/iu.test(t)) {
+    return false;
+  }
+  if (ENGLISH_BACKCHANNEL_ONLY_RE.test(t)) return true;
+  if (REDUPLICATED_ACK_RE.test(t)) return true;
+  if (INDIC_SINGLE_ACK_RE.test(t)) return true;
+  if (INDIC_ACK_VOCATIVE_RE.test(t)) return true;
+  return false;
+}
+
 /** Caller asks to clarify / re-explain the last topic (often mid-sentence STT). */
 export function isTopicClarificationAsk(text: string): boolean {
   const t = text.trim();
@@ -211,6 +245,8 @@ export function shouldHoldFragmentForCoalesce(
   if (!t) return false;
   const wordCount = t.split(/\s+/).filter(Boolean).length;
   if (wordCount > 8) return false;
+
+  if (isBackchannelOnlyUtterance(t)) return true;
 
   if (isEnglishExpectedLang(opts?.expectedLang) || isLikelyIncompleteEnglishFragment(t)) {
     return isLikelyIncompleteEnglishFragment(t);

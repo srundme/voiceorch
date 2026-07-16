@@ -9,6 +9,7 @@ import {
   isFalseInterruptionScrap,
   isTopicClarificationAsk,
   isAccidentalInterruptPhrase,
+  isBackchannelOnlyUtterance,
 } from "./transcriptQuality.js";
 import { isAffirmationOnlyUtterance } from "./endpointing.js";
 
@@ -53,6 +54,18 @@ describe("checkTranscriptQuality", () => {
     expect(shouldHoldFragmentForCoalesce("I want to know how", { expectedLang: "en-IN" })).toBe(true);
     expect(isLikelyIncompleteEnglishFragment("I want to know how")).toBe(true);
     expect(shouldHoldFragmentForCoalesce("I can benefit in health insurance.", { expectedLang: "en-IN" })).toBe(false);
+  });
+
+  it("coalesces pure Tamil/English backchannel acks (call 2967)", () => {
+    expect(isBackchannelOnlyUtterance("சரி")).toBe(true);
+    expect(isBackchannelOnlyUtterance("ஆமா")).toBe(true);
+    expect(isBackchannelOnlyUtterance("okay")).toBe(true);
+    expect(isBackchannelOnlyUtterance("okay sir")).toBe(true);
+    expect(shouldHoldFragmentForCoalesce("சரி", { expectedLang: "ta-IN" })).toBe(true);
+    expect(shouldHoldFragmentForCoalesce("ஆமா", { expectedLang: "ta-IN" })).toBe(true);
+    expect(isBackchannelOnlyUtterance("இப்ப என்ன time சார்?")).toBe(false);
+    expect(shouldHoldFragmentForCoalesce("இப்ப என்ன time சார்?", { expectedLang: "ta-IN" })).toBe(false);
+    expect(isBackchannelOnlyUtterance("hello")).toBe(false);
   });
 });
 

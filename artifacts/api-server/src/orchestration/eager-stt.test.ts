@@ -6,20 +6,20 @@ describe("isEagerCommitReady", () => {
     expect(isEagerCommitReady("I want to know.")).toBe(true);
   });
 
-  it("accepts short affirmations", () => {
-    expect(isEagerCommitReady("okay")).toBe(true);
-    expect(isEagerCommitReady("சரி")).toBe(true);
-    expect(isEagerCommitReady("ஆமா")).toBe(true);
-    expect(isEagerCommitReady("சரிங்க")).toBe(true);
-    expect(isEagerCommitReady("okay sir")).toBe(true);
+  it("rejects pure backchannel acks (wait for coalesce / final question)", () => {
+    expect(isEagerCommitReady("okay")).toBe(false);
+    expect(isEagerCommitReady("சரி")).toBe(false);
+    expect(isEagerCommitReady("ஆமா")).toBe(false);
+    expect(isEagerCommitReady("சரிங்க")).toBe(false);
+    expect(isEagerCommitReady("okay sir")).toBe(false);
+    expect(isEagerCommitReady("ஆமா", { speechEnd: true })).toBe(false);
   });
 
   it("rejects very short dangling partial without speechEnd", () => {
     expect(isEagerCommitReady("I want")).toBe(false);
   });
 
-  it("accepts two-word Indic/Hinglish of length >= 8 without speechEnd", () => {
-    expect(isEagerCommitReady("Okay sir")).toBe(true);
+  it("accepts two-word Indic content of length >= 8 without speechEnd", () => {
     expect(isEagerCommitReady("எங்க சார்")).toBe(true);
   });
 
@@ -27,10 +27,9 @@ describe("isEagerCommitReady", () => {
     expect(isEagerCommitReady("I want to know how")).toBe(true);
   });
 
-  it("relaxes for speechEnd (Sarvam VAD committed)", () => {
+  it("relaxes for speechEnd (Sarvam VAD committed) on content — not acks", () => {
     expect(isEagerCommitReady("I want to know how", { speechEnd: true })).toBe(true);
     expect(isEagerCommitReady("premium budget", { speechEnd: true })).toBe(true);
-    expect(isEagerCommitReady("ஆமா", { speechEnd: true })).toBe(true);
   });
 });
 
