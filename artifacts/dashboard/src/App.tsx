@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { Switch, Route, Router as WouterRouter, useLocation, Redirect } from "wouter";
+import { Switch, Route, Router as WouterRouter, useLocation, Redirect, Link } from "wouter";
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
-import { PhoneCall, Sparkles, AudioLines, ShieldCheck } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import { AuthProvider, useAuth, SignedIn, SignedOut, consumeSignOutReason } from "@/lib/auth";
+import { DotGridBackground } from "@/components/ui/dot-grid-background";
 import { setAuthTokenGetter, setDefaultTimeoutMs, setUnauthorizedHandler, useGetOnboardingStatus, useListAgents } from "@workspace/api-client-react";
 import { Toaster } from "@/components/ui/toaster";
 import { Button } from "@/components/ui/button";
@@ -125,90 +126,10 @@ function QueryClientCacheInvalidator() {
   return null;
 }
 
-const authFeatures = [
-  { icon: PhoneCall, text: "Launch voice agents on your own ASR, LLM & TTS keys — or go fully managed" },
-  { icon: AudioLines, text: "Real-time transcripts, call analytics & campaign performance" },
-  { icon: ShieldCheck, text: "Enterprise-grade orchestration with your data, your rules" },
-];
-
-function VoiceBars() {
-  const heights = [14, 26, 18, 34, 22, 30, 16, 28, 20, 12, 24, 32, 18, 26, 14, 20];
-  return (
-    <div className="flex items-end gap-[3px] h-9">
-      {heights.map((h, i) => (
-        <div
-          key={i}
-          className="voice-bar w-[3px] rounded-full bg-gradient-to-t from-purple-500/70 to-fuchsia-300/90"
-          style={{ height: h, animationDelay: `${i * 90}ms` }}
-        />
-      ))}
-    </div>
-  );
-}
-
-function AuthShell({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="relative min-h-screen w-full bg-black flex overflow-hidden">
-      <div className="pointer-events-none absolute -top-40 -left-32 w-[520px] h-[520px] rounded-full bg-purple-600/20 blur-[120px]" />
-      <div className="pointer-events-none absolute bottom-[-180px] right-[-140px] w-[480px] h-[480px] rounded-full bg-fuchsia-500/10 blur-[130px]" />
-      <div
-        className="pointer-events-none absolute inset-0 opacity-[0.04]"
-        style={{
-          backgroundImage:
-            "linear-gradient(rgba(255,255,255,0.6) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.6) 1px, transparent 1px)",
-          backgroundSize: "48px 48px",
-        }}
-      />
-
-      {/* Left visual panel — desktop only */}
-      <div className="hidden lg:flex lg:w-[44%] xl:w-[40%] relative z-10 flex-col justify-between p-14 border-r border-white/[0.06] bg-gradient-to-b from-white/[0.03] to-transparent animate-in fade-in slide-in-from-left-4 duration-700">
-        <div className="flex items-center gap-2">
-          <div className="flex flex-col gap-[5px] w-7">
-            <div className="h-2 w-full rounded-full bg-white" />
-            <div className="h-2 w-[78%] rounded-full bg-white/60" />
-            <div className="h-2 w-[58%] rounded-full bg-white/35" />
-          </div>
-          <span className="text-sm font-semibold tracking-tight text-white">
-            Snap<span className="font-normal text-white/55">Serve</span>
-          </span>
-        </div>
-
-        <div className="max-w-md">
-          <div className="inline-flex items-center gap-1.5 mb-5 px-3 py-1 rounded-full border border-purple-400/20 bg-purple-400/10 text-[0.7rem] font-medium tracking-wide text-purple-200">
-            <Sparkles size={12} /> ₹500 free credit · ~100 minutes on us
-          </div>
-          <h2 className="text-3xl font-semibold tracking-tight text-white leading-[1.15] mb-4">
-            Voice agents that sound like your best rep, on call 24/7.
-          </h2>
-          <p className="text-sm text-white/45 leading-relaxed mb-8">
-            Orchestrate ASR, LLM and TTS providers behind one reliable pipeline — bring your own keys or let SnapServe run it for you.
-          </p>
-          <div className="flex flex-col gap-4 mb-9">
-            {authFeatures.map(({ icon: Icon, text }) => (
-              <div key={text} className="flex items-start gap-3">
-                <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/[0.06] border border-white/[0.08] text-purple-300">
-                  <Icon size={14} />
-                </div>
-                <span className="text-[0.83rem] text-white/60 leading-snug">{text}</span>
-              </div>
-            ))}
-          </div>
-          <VoiceBars />
-        </div>
-
-        <p className="text-[0.72rem] text-white/25">© {new Date().getFullYear()} SnapServe. All rights reserved.</p>
-      </div>
-
-      {/* Right — auth card */}
-      <div className="flex-1 flex items-center justify-center p-6 relative z-10">
-        {children}
-      </div>
-    </div>
-  );
-}
-
 function SignInPage() {
+  const [location, navigate] = useLocation();
   const [error, setError] = useState<string | null>(null);
+  const isSignup = location.startsWith("/sign-up");
 
   // If a previous tab/session was force-signed-out (e.g. the server started
   // rejecting requests because the account was suspended/deleted), surface a
@@ -220,100 +141,90 @@ function SignInPage() {
     }
   }, []);
 
-  const cardStyle: React.CSSProperties = {
-    width: 440,
-    maxWidth: "calc(100vw - 32px)",
-    background: "linear-gradient(180deg, rgba(20,16,32,0.92), rgba(8,6,16,0.94))",
-    borderRadius: 24,
-    padding: "40px 36px 36px",
-    boxShadow: "0 0 0 1px rgba(168,85,247,0.16), 0 0 60px rgba(168,85,247,0.08), 0 32px 80px rgba(0,0,0,0.7)",
-    backdropFilter: "blur(16px)",
-    position: "relative" as const,
-    zIndex: 1,
-  };
-  const cardClassName = "animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-500";
-
-  const logoIcon = (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: 28, gap: 16 }}>
-      {/* Three-bar mark — left-aligned, proportions matching the SnapServe brand */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 7, width: 52 }}>
-        <div style={{ width: "100%", height: 11, borderRadius: 6, background: "white", opacity: 1 }} />
-        <div style={{ width: "78%",  height: 11, borderRadius: 6, background: "white", opacity: 0.6 }} />
-        <div style={{ width: "58%",  height: 11, borderRadius: 6, background: "white", opacity: 0.35 }} />
-      </div>
-      {/* Wordmark */}
-      <div style={{ display: "flex", alignItems: "baseline", gap: 0, letterSpacing: "-0.02em" }}>
-        <span style={{ fontWeight: 700, fontSize: "1.15rem", color: "#fff" }}>Snap</span>
-        <span style={{ fontWeight: 400, fontSize: "1.15rem", color: "rgba(255,255,255,0.55)" }}>Serve</span>
-      </div>
-    </div>
-  );
-
-  const errorBanner = error && (
-    <div style={{ marginBottom: 16, padding: "10px 14px", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 10, fontSize: "0.8rem", color: "#fca5a5" }}>
-      {error}
-    </div>
-  );
-
-  const googleBtn = (
-    <a
-      href="/api/auth/google/connect"
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 10,
-        width: "100%",
-        background: "rgba(255,255,255,0.06)",
-        border: "1px solid rgba(255,255,255,0.1)",
-        borderRadius: 12,
-        padding: "13px 0",
-        color: "#fff",
-        fontSize: "0.9rem",
-        fontWeight: 600,
-        textDecoration: "none",
-        cursor: "pointer",
-        transition: "background .15s, border-color .15s",
-        letterSpacing: "-0.1px",
-      }}
-      onMouseEnter={e => {
-        (e.currentTarget as HTMLAnchorElement).style.background = "rgba(255,255,255,0.1)";
-        (e.currentTarget as HTMLAnchorElement).style.borderColor = "rgba(255,255,255,0.18)";
-      }}
-      onMouseLeave={e => {
-        (e.currentTarget as HTMLAnchorElement).style.background = "rgba(255,255,255,0.06)";
-        (e.currentTarget as HTMLAnchorElement).style.borderColor = "rgba(255,255,255,0.1)";
-      }}
-    >
-      <svg width="18" height="18" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
-        <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
-        <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
-        <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
-        <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.35-8.16 2.35-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
-        <path fill="none" d="M0 0h48v48H0z"/>
-      </svg>
-      Continue with Google
-    </a>
-  );
-
   return (
-    <AuthShell>
-      <div style={cardStyle} className={cardClassName}>
-        {logoIcon}
+    <div className="relative min-h-[100dvh] w-full flex items-center justify-center overflow-hidden bg-black text-white">
+      {/* Animated dot-grid background */}
+      <DotGridBackground
+        className="absolute inset-0 z-0 pointer-events-none"
+        style={{ width: "100%", height: "100%" }}
+      />
 
-        <div style={{ textAlign: "center", marginBottom: 28 }}>
-          <h1 style={{ fontWeight: 700, fontSize: "1.25rem", color: "#fff", letterSpacing: "-0.3px", marginBottom: 8 }}>
-            Welcome to SnapServe
-          </h1>
-          <p style={{ fontSize: "0.875rem", color: "#5a5c6e", lineHeight: 1.5 }}>
-            Sign in to manage your voice agents.
-          </p>
+      {/* Vignette */}
+      <div
+        className="absolute inset-0 z-[1] pointer-events-none"
+        style={{
+          background:
+            "radial-gradient(circle at center, rgba(0,0,0,0.72) 0%, rgba(0,0,0,0) 55%, rgba(0,0,0,0.88) 100%)",
+        }}
+      />
+
+      {/* Auth card */}
+      <div className="relative z-[2] w-full max-w-[400px] mx-4 flex flex-col items-center text-center rounded-2xl border border-white/[0.08] bg-[#0f0f12]/90 backdrop-blur-xl p-8 shadow-[0_24px_80px_rgba(0,0,0,0.8)] animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-500">
+        {/* SnapServe logo — three-bar mark + wordmark */}
+        <div className="flex flex-col items-center gap-4 mb-6">
+          <div className="flex flex-col gap-[6px] w-[46px]">
+            <div className="h-[10px] w-full rounded-full bg-white" />
+            <div className="h-[10px] w-[78%] rounded-full bg-white/60" />
+            <div className="h-[10px] w-[58%] rounded-full bg-white/35" />
+          </div>
+          <div className="flex items-baseline tracking-tight">
+            <span className="text-lg font-bold text-white">Snap</span>
+            <span className="text-lg font-normal text-white/55">Serve</span>
+          </div>
         </div>
 
-        {errorBanner}
-        {googleBtn}
+        <h1 className="text-xl font-semibold tracking-tight mb-1.5">
+          {isSignup ? "Create your account" : "Sign in to SnapServe"}
+        </h1>
+        <p className="text-sm text-white/45 mb-5 leading-relaxed">
+          {isSignup ? "Get started with your voice agents." : "Sign in to manage your voice agents."}
+        </p>
+
+        <div className="inline-flex items-center gap-1.5 mb-6 px-3 py-1 rounded-full border border-purple-400/20 bg-purple-400/10 text-[0.7rem] font-medium tracking-wide text-purple-200">
+          <Sparkles size={12} /> ₹500 free credit · ~100 minutes on us
+        </div>
+
+        {error && (
+          <div className="w-full mb-4 px-3.5 py-2.5 rounded-lg border border-red-500/20 bg-red-500/[0.08] text-xs text-red-300 text-left">
+            {error}
+          </div>
+        )}
+
+        {/* Google is the only supported provider */}
+        <a
+          href="/api/auth/google/connect"
+          className="w-full flex items-center justify-center gap-2.5 rounded-lg bg-white text-black font-semibold text-sm py-3 transition-colors hover:bg-white/90"
+        >
+          <svg width="18" height="18" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+            <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+            <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+            <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+            <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.35-8.16 2.35-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+            <path fill="none" d="M0 0h48v48H0z"/>
+          </svg>
+          {isSignup ? "Sign up with Google" : "Continue with Google"}
+        </a>
+
+        {/* Sign in / sign up toggle */}
+        <div className="mt-6 text-sm text-white/50">
+          {isSignup ? "Already have an account? " : "Don't have an account? "}
+          <button
+            type="button"
+            onClick={() => navigate(isSignup ? "/sign-in" : "/sign-up")}
+            className="text-white font-medium hover:underline underline-offset-2"
+          >
+            {isSignup ? "Sign in" : "Sign up"}
+          </button>
+        </div>
+
+        {/* Footer */}
+        <p className="mt-4 text-[0.72rem] text-white/35 leading-relaxed">
+          By continuing, you agree to our{" "}
+          <Link href="/terms" className="text-white/55 hover:text-white/80">Terms of Service</Link> and{" "}
+          <Link href="/privacy" className="text-white/55 hover:text-white/80">Privacy Policy</Link>.
+        </p>
       </div>
-    </AuthShell>
+    </div>
   );
 }
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Mic, MicOff, PhoneOff, Phone, Loader2, AlertCircle, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SiriWave } from "@/components/ui/siri-wave";
 
 /**
  * Webcall 2.0 — browser "Live Test" transport for an agent.
@@ -339,8 +340,13 @@ export function WebcallPanel({ agentId, agentName, compact, onClose }: { agentId
         {/* Transcript */}
         <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-2.5">
           {lines.length === 0 && (
-            <div className="h-full flex flex-col items-center justify-center text-center gap-2 text-muted-foreground/50">
-              <Phone className="h-7 w-7 opacity-40" />
+            <div className="h-full flex flex-col items-center justify-center text-center gap-3 text-muted-foreground/50">
+              <SiriWave
+                variant={active ? "wave" : "fluid-dots"}
+                size={compact ? 190 : 240}
+                renderScale={0.6}
+                className="rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.45)]"
+              />
               <p className="text-[12px]">
                 {active ? "Listening… say hello to your agent." : "Press Start call to begin a live voice test."}
               </p>
