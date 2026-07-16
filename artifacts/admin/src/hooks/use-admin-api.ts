@@ -13,11 +13,14 @@ export function useBookInterns() {
   });
 }
 
+// Real vs. test/internal user segmentation
+export type UserSegment = "real" | "test" | "all";
+
 // Overview
-export function useOverview() {
+export function useOverview(segment: UserSegment = "real") {
   return useQuery({
-    queryKey: ["admin", "overview"],
-    queryFn: () => adminFetch<any>("/overview"),
+    queryKey: ["admin", "overview", segment],
+    queryFn: () => adminFetch<any>(`/overview?segment=${segment}`),
     refetchInterval: 30000,
   });
 }
@@ -40,10 +43,10 @@ export type CallVolumeAnalytics = {
   series: CallVolumePoint[];
 };
 
-export function useCallVolumeAnalytics(preset: CallVolumePreset = "month") {
+export function useCallVolumeAnalytics(preset: CallVolumePreset = "month", segment: UserSegment = "real") {
   return useQuery({
-    queryKey: ["admin", "analytics", "calls", preset],
-    queryFn: () => adminFetch<CallVolumeAnalytics>(`/analytics/calls?preset=${preset}`),
+    queryKey: ["admin", "analytics", "calls", preset, segment],
+    queryFn: () => adminFetch<CallVolumeAnalytics>(`/analytics/calls?preset=${preset}&segment=${segment}`),
     refetchInterval: 60_000,
   });
 }
@@ -90,6 +93,24 @@ export function useSetConcurrentLimit(clerkId: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin", "users", clerkId] });
       queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
+    },
+  });
+}
+
+// Mark / unmark a user as a test/internal account (excluded from real analytics).
+export function useSetUserTestFlag(clerkId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { isTest: boolean }) =>
+      adminFetch<{ isTest: boolean }>(`/users/${clerkId}/test-flag`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "users", clerkId] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "overview"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "analytics", "calls"] });
     },
   });
 }

@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { useOverview, useSpikeAlerts, useDismissSpikeAlert, usePromptTemplates, useVobizWalletStatus } from "@/hooks/use-admin-api";
+import { useOverview, useSpikeAlerts, useDismissSpikeAlert, usePromptTemplates, useVobizWalletStatus, type UserSegment } from "@/hooks/use-admin-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Users, PhoneCall, Activity, DollarSign, Clock, AlertCircle, Bell, X, Mail, Wallet, RefreshCw, TrendingDown, ChevronDown, ChevronUp, CheckCircle2 } from "lucide-react";
+import { Users, PhoneCall, Activity, DollarSign, Clock, AlertCircle, Bell, X, Mail, Wallet, RefreshCw, TrendingDown, ChevronDown, ChevronUp, CheckCircle2, Timer } from "lucide-react";
 import { formatCentsToDollars } from "@/lib/api";
 import { formatApiError } from "@/lib/format-api-error";
 import { useToast } from "@/hooks/use-toast";
@@ -248,8 +248,15 @@ function VobizWalletCard() {
   );
 }
 
+const SEGMENTS: { id: UserSegment; label: string }[] = [
+  { id: "real", label: "Real" },
+  { id: "test", label: "Test" },
+  { id: "all", label: "All" },
+];
+
 export default function Overview() {
-  const { data: overview, isLoading, isError, error } = useOverview();
+  const [segment, setSegment] = useState<UserSegment>("real");
+  const { data: overview, isLoading, isError, error } = useOverview(segment);
   const { data: templates } = usePromptTemplates();
   const hasActiveTemplate = templates === undefined || templates.some((t) => t.isActive);
 
@@ -279,6 +286,12 @@ export default function Overview() {
       value: overview?.totalCalls?.toLocaleString() || "0",
       icon: PhoneCall,
       description: "All time",
+    },
+    {
+      title: "Total Minutes",
+      value: overview?.totalMinutes?.toLocaleString() || "0",
+      icon: Timer,
+      description: "Consumed by users",
     },
     {
       title: "Active Calls",
@@ -332,15 +345,34 @@ export default function Overview() {
       </div>
 
       {/* Page header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <h1 className="text-3xl font-bold tracking-tight">Platform Overview</h1>
-        <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-          <span className="relative flex h-1.5 w-1.5">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-60" />
-            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-primary" />
-          </span>
-          <RefreshCw className="h-3 w-3" />
-          <span>Live</span>
+        <div className="flex items-center gap-3">
+          {/* Real / Test / All segment toggle */}
+          <div className="inline-flex items-center rounded-md border border-border bg-card p-0.5">
+            {SEGMENTS.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => setSegment(s.id)}
+                className={`px-2.5 h-6 text-[11px] font-medium rounded-[5px] transition-colors ${
+                  segment === s.id
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+            <span className="relative flex h-1.5 w-1.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-60" />
+              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-primary" />
+            </span>
+            <RefreshCw className="h-3 w-3" />
+            <span>Live</span>
+          </div>
         </div>
       </div>
 
@@ -362,7 +394,7 @@ export default function Overview() {
         ))}
       </div>
 
-      <CallVolumeChart compact defaultPreset="month" showViewAll />
+      <CallVolumeChart compact defaultPreset="month" showViewAll segment={segment} />
 
       {/* Recent Calls summary */}
       <Card className="border-border shadow-none">

@@ -2,7 +2,7 @@ import { Router } from "express";
 import { db, usersTable, walletTransactionsTable, callsTable, agentsTable, scheduledCallbacksTable, bookingsTable, eventTypesTable, schedulingCalendarsTable, platformSettingsTable, usageSpikeDismissalsTable, usageSpikeNotificationsTable, alertNotificationLogTable, providerMinuteRatesTable, bookInternsTable, bookProgressTable, bookExamAttemptsTable } from "@workspace/db";
 import { invalidateMinuteRatesCache } from "../services/minute-rates.js";
 import { sendTestEmail } from "../services/scheduling/notifications.js";
-import { eq, sql, count, sum, desc, lt, gt, and, inArray, ilike, like } from "drizzle-orm";
+import { eq, sql, count, sum, desc, lt, gt, and, inArray, ilike, like, type SQL, type AnyColumn } from "drizzle-orm";
 import { TRACK_PARAMS } from "../orchestration/ambient.js";
 import { requireAdmin } from "../middlewares/requireAdmin.js";
 import { getAllSessions } from "../orchestration/session.js";
@@ -18,37 +18,84 @@ const router = Router();
 
 router.use("/admin", requireAdmin);
 
+// ─── User segmentation (real vs. test/internal) ───────────────────────────────
+// "real"  → excludes test/internal accounts (default for all analytics)
+// "test"  → only test/internal accounts
+// "all"   → no filter
+type UserSegment = "real" | "test" | "all";
+
+function parseSegment(raw: unknown): UserSegment {
+  return raw === "test" ? "test" : raw === "all" ? "all" : "real";
+}
+
+/** Restrict a clerkId (text) column to users in the given segment. */
+function segByClerkId(col: AnyColumn, seg: UserSegment): SQL | undefined {
+  if (seg === "all") return undefined;
+  return sql`${col} in (select clerk_id from users where is_test = ${seg === "test"})`;
+}
+
+/** Restrict a users.id (integer) column to users in the given segment. */
+function segByUserId(col: AnyColumn, seg: UserSegment): SQL | undefined {
+  if (seg === "all") return undefined;
+  return sql`${col} in (select id from users where is_test = ${seg === "test"})`;
+}
+
 // ─── Overview ────────────────────────────────────────────────────────────────
 
 router.get("/admin/overview", async (req, res): Promise<void> => {
   try {
-    const [[{ totalUsers }], [{ totalCalls }], [{ totalRevenueCents }], [{ pendingCallbacks }], [{ recentCalls }]] =
+    const segment = parseSegment(req.query.segment);
+    const usersSeg = segment === "all" ? undefined : eq(usersTable.isTest, segment === "test");
+    const callsSeg = segByClerkId(callsTable.userId, segment);
+
+    const [
+      [{ totalUsers }],
+      [{ totalCalls }],
+      [{ totalRevenueCents }],
+      [{ pendingCallbacks }],
+      [{ recentCalls }],
+      [{ totalDurationSeconds }],
+      [{ successfulCalls }],
+    ] =
       await Promise.all([
-        db.select({ totalUsers: count() }).from(usersTable),
-        db.select({ totalCalls: count() }).from(callsTable),
+        db.select({ totalUsers: count() }).from(usersTable).where(usersSeg),
+        db.select({ totalCalls: count() }).from(callsTable).where(callsSeg),
         db
           .select({ totalRevenueCents: sql<number>`coalesce(sum(amount_cents), 0)` })
           .from(walletTransactionsTable)
-          .where(eq(walletTransactionsTable.type, "topup")),
+          .where(and(eq(walletTransactionsTable.type, "topup"), segByUserId(walletTransactionsTable.userId, segment))),
         db
           .select({ pendingCallbacks: count() })
           .from(scheduledCallbacksTable)
-          .where(eq(scheduledCallbacksTable.status, "pending")),
+          .where(and(eq(scheduledCallbacksTable.status, "pending"), segByClerkId(scheduledCallbacksTable.userId, segment))),
         db
           .select({ recentCalls: count() })
           .from(callsTable)
-          .where(gt(callsTable.createdAt, sql`now() - interval '24 hours'`)),
+          .where(and(gt(callsTable.createdAt, sql`now() - interval '24 hours'`), callsSeg)),
+        db
+          .select({ totalDurationSeconds: sql<number>`coalesce(sum(duration_seconds), 0)` })
+          .from(callsTable)
+          .where(callsSeg),
+        db
+          .select({ successfulCalls: count() })
+          .from(callsTable)
+          .where(and(eq(callsTable.status, "completed"), callsSeg)),
       ]);
 
     const activeCalls = getAllSessions().length;
+    const totalMinutes = Math.round(Number(totalDurationSeconds) / 60);
 
     res.json({
+      segment,
       totalUsers,
       totalCalls,
+      successfulCalls,
       activeCalls,
       totalRevenueCents,
       pendingCallbacks,
       recentCalls,
+      totalDurationSeconds: Number(totalDurationSeconds),
+      totalMinutes,
     });
   } catch (err) {
     req.log.error({ err }, "admin/overview failed");
@@ -121,6 +168,7 @@ router.get("/admin/users", async (req, res): Promise<void> => {
       freeCreditsGranted: u.freeCreditsGranted,
       onboardingCompleted: u.onboardingCompleted,
       onboardingData: u.onboardingData,
+      isTest: u.isTest,
       callCount: callCountMap.get(u.clerkId) ?? 0,
       agentCount: agentCountMap.get(u.clerkId) ?? 0,
       totalDurationSeconds: durationMap.get(u.clerkId) ?? 0,
@@ -228,6 +276,34 @@ router.patch("/admin/users/:clerkId/concurrent-limit", async (req, res): Promise
     res.json({ concurrentLimit: updated?.concurrentLimit });
   } catch (err) {
     req.log.error({ err }, "admin/users/:clerkId/concurrent-limit failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// Mark / unmark a user as a test/internal account (excluded from real analytics).
+router.patch("/admin/users/:clerkId/test-flag", async (req, res): Promise<void> => {
+  try {
+    const { clerkId } = req.params;
+    const { isTest } = req.body as { isTest: boolean };
+
+    if (typeof isTest !== "boolean") {
+      res.status(400).json({ error: "isTest must be a boolean" });
+      return;
+    }
+
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, clerkId!));
+    if (!user) { res.status(404).json({ error: "User not found" }); return; }
+
+    const [updated] = await db
+      .update(usersTable)
+      .set({ isTest })
+      .where(eq(usersTable.clerkId, clerkId!))
+      .returning({ isTest: usersTable.isTest });
+
+    logger.info({ clerkId, isTest }, "Admin set user test flag");
+    res.json({ isTest: updated?.isTest });
+  } catch (err) {
+    req.log.error({ err }, "admin/users/:clerkId/test-flag failed");
     res.status(500).json({ error: "Internal server error" });
   }
 });

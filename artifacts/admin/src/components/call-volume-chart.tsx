@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import {
   useCallVolumeAnalytics,
   type CallVolumePreset,
+  type UserSegment,
 } from "@/hooks/use-admin-api";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -33,13 +34,15 @@ export function CallVolumeChart({
   compact = false,
   defaultPreset = "month",
   showViewAll = false,
+  segment = "real",
 }: {
   compact?: boolean;
   defaultPreset?: CallVolumePreset;
   showViewAll?: boolean;
+  segment?: UserSegment;
 }) {
   const [preset, setPreset] = useState<CallVolumePreset>(defaultPreset);
-  const { data, isLoading, isError } = useCallVolumeAnalytics(preset);
+  const { data, isLoading, isError } = useCallVolumeAnalytics(preset, segment);
 
   const chartData = (data?.series ?? []).map((p) => ({
     ...p,

@@ -22,6 +22,10 @@ export const usersTable = pgTable("users", {
   onboardingData: jsonb("onboarding_data"),
   preferences: jsonb("preferences").$type<{ theme?: "light" | "dark" | "system" }>(),
   status: text("status").notNull().default("active"),
+  // Internal / QA accounts we create for testing. Excluded from real-user
+  // analytics by default. Set manually from the admin Users page (or auto-set
+  // on signup when INTERNAL_EMAIL_PATTERNS matches).
+  isTest: boolean("is_test").notNull().default(false),
   suspendedAt: timestamp("suspended_at", { withTimezone: true }),
   suspendedReason: text("suspended_reason"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

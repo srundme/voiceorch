@@ -69,10 +69,17 @@ function enumerateBuckets(from: Date, to: Date, bucket: "day" | "month"): string
   return periods;
 }
 
-// GET /api/admin/analytics/calls?preset=week|month|year
+// GET /api/admin/analytics/calls?preset=week|month|year&segment=real|test|all
 router.get("/admin/analytics/calls", async (req, res): Promise<void> => {
   try {
     const { preset, from, to, bucket } = resolvePreset(req.query.preset);
+
+    // Real vs. test/internal user segmentation (default: real users only).
+    const segment = req.query.segment === "test" ? "test" : req.query.segment === "all" ? "all" : "real";
+    const segFilter =
+      segment === "all"
+        ? sql``
+        : sql` and user_id in (select clerk_id from users where is_test = ${segment === "test"})`;
 
     const result =
       bucket === "month"
@@ -83,7 +90,7 @@ router.get("/admin/analytics/calls", async (req, res): Promise<void> => {
               count(*) filter (where status = 'completed')::int as completed,
               count(*) filter (where status = 'failed')::int as failed
             from calls
-            where created_at >= ${from} and created_at <= ${to}
+            where created_at >= ${from} and created_at <= ${to}${segFilter}
             group by 1
             order by 1
           `)
@@ -94,7 +101,7 @@ router.get("/admin/analytics/calls", async (req, res): Promise<void> => {
               count(*) filter (where status = 'completed')::int as completed,
               count(*) filter (where status = 'failed')::int as failed
             from calls
-            where created_at >= ${from} and created_at <= ${to}
+            where created_at >= ${from} and created_at <= ${to}${segFilter}
             group by 1
             order by 1
           `);
