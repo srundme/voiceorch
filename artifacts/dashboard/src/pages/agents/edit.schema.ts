@@ -116,6 +116,10 @@ export const agentFormSchema = z.object({
   ttsSpeed: z.number().min(0.7).max(1.5).optional(),
   kbBakedOnly: z.boolean().optional(),
 
+  voiceStack: z.enum(["classic", "gemini_live"]).optional(),
+  geminiLiveVoiceName: z.string().optional(),
+  geminiLiveThinkingLevel: z.enum(["minimal", "low", "medium", "high"]).optional(),
+
   // Auto-redial on drop
   autoRedialEnabled:      z.boolean().optional(),
   autoRedialMaxAttempts:  z.number().min(1).max(10).optional(),

@@ -17,6 +17,7 @@ import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { WebcallPanel } from "@/components/webcall-panel";
 import { AgentConfigCard, EditConfigDialog } from "@/components/agent-config-card";
+import { GeminiLiveVoicePicker } from "@/components/gemini-live-voice-picker";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
@@ -75,6 +76,7 @@ import {
   LANGUAGES, ASR_MODELS, LLM_MODELS, TTS_MODELS, TTS_VOICES, AGENT_TIMEZONES,
   isTamilLanguage, defaultGeminiModel, defaultLlmForLanguages,
   filterVoicesForLanguage, isVoiceCompatibleWithLanguage,
+  VOICE_STACK_OPTIONS, GEMINI_LIVE_THINKING_LEVELS,
 } from "@/lib/agent-providers";
 import { useMinuteRatesMap, useUserProviderNames, computeAgentRateCents } from "@/hooks/use-minute-rates";
 import { DestinationOtpDialog } from "@/components/destination-otp-dialog";
@@ -420,7 +422,7 @@ function AgentCostSummary({ form, rateMap, compact = false }: { form: any; rateM
 const SECTION_FIELDS: Record<CardSection, string[]> = {
   transcriber: ["language", "asrProvider", "asrModel", "sarvamSttMode", "languageAutoDetect"],
   model: ["llmProvider", "llmModel", "temperature"],
-  voice: ["ttsProvider", "ttsModel", "ttsVoice"],
+  voice: ["voiceStack", "ttsProvider", "ttsModel", "ttsVoice", "geminiLiveVoiceName", "geminiLiveThinkingLevel"],
 };
 
 /* ── Inbound number card (same assign API as Phone Numbers) ─────────────────── */
@@ -610,6 +612,8 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
   const asrProvider           = form.watch("asrProvider");
   const llmProvider           = form.watch("llmProvider");
   const ttsProvider           = form.watch("ttsProvider");
+  const voiceStack            = form.watch("voiceStack");
+  const geminiLiveVoiceName   = form.watch("geminiLiveVoiceName");
   const telephonyProvider     = form.watch("telephonyProvider") ?? "vobiz";
   const asrModel              = form.watch("asrModel");
   const llmModel              = form.watch("llmModel");
@@ -800,8 +804,12 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
               <AgentConfigCard
                 icon={<Volume2 />}
                 label="Voice"
-                value={ttsVoiceLabel || "Select a voice"}
-                subtext={<>{ttsLabel}{ttsModelLabel ? ` · ${ttsModelLabel}` : ""}</>}
+                value={voiceStack === "gemini_live" ? "Gemini Live 3.1" : (ttsVoiceLabel || "Select a voice")}
+                subtext={
+                  voiceStack === "gemini_live"
+                    ? (geminiLiveVoiceName || "Kore")
+                    : <>{ttsLabel}{ttsModelLabel ? ` · ${ttsModelLabel}` : ""}</>
+                }
                 active={openSection === "voice"}
                 onClick={() => openPipelineDialog("voice")}
               />
@@ -1017,8 +1025,34 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
             onSave={savePipelineDialog}
             icon={<Volume2 />}
             title="Voice"
-            description="Choose the text-to-speech provider and voice used to speak to callers."
+            description="Choose classic TTS or Gemini Live native audio for calls."
           >
+            <FormField control={form.control} name="voiceStack" render={({ field }) => (
+              <FormItem className="space-y-1">
+                <FormLabel className="text-[10px] text-muted-foreground">Voice stack</FormLabel>
+                <SmallSelect value={field.value ?? "classic"} onChange={field.onChange}
+                  options={VOICE_STACK_OPTIONS.map(p => ({ value: p.value, label: p.label }))} />
+              </FormItem>
+            )} />
+
+            {voiceStack === "gemini_live" ? (
+              <div className="space-y-3">
+                <FormField control={form.control} name="geminiLiveVoiceName" render={({ field }) => (
+                  <FormItem>
+                    <FormControl>
+                      <GeminiLiveVoicePicker value={field.value ?? "Kore"} onChange={field.onChange} />
+                    </FormControl>
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="geminiLiveThinkingLevel" render={({ field }) => (
+                  <FormItem className="space-y-1">
+                    <FormLabel className="text-[10px] text-muted-foreground">Thinking level</FormLabel>
+                    <SmallSelect value={field.value ?? "minimal"} onChange={field.onChange}
+                      options={GEMINI_LIVE_THINKING_LEVELS.map(p => ({ value: p.value, label: p.label }))} />
+                  </FormItem>
+                )} />
+              </div>
+            ) : (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <FormField control={form.control} name="ttsProvider" render={({ field }) => (
@@ -1091,6 +1125,7 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
                 </div>
               )}
             </div>
+            )}
           </EditConfigDialog>
 
           {/* ── Unsaved changes confirmation ── */}
@@ -5003,6 +5038,9 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       autoRedialMaxAttempts: 3,
       schedulingCalendarId: null,
       schedulingEventTypeId: null,
+      voiceStack: "classic",
+      geminiLiveVoiceName: "Kore",
+      geminiLiveThinkingLevel: "minimal",
     },
   });
 
@@ -5102,6 +5140,9 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       sarvamSttMode:          ((agent as any).agentConfig?.sarvamSttMode as AgentFormValues["sarvamSttMode"]) ?? undefined,
       schedulingCalendarId:   ((agent as any).agentConfig?.calendarCapability?.defaultCalendarId as number | null | undefined) ?? null,
       schedulingEventTypeId:  ((agent as any).agentConfig?.calendarCapability?.defaultEventTypeId as number | null | undefined) ?? null,
+      voiceStack:               (((agent as any).agentConfig?.voiceStack as string | undefined) === "gemini_live" ? "gemini_live" : "classic") as AgentFormValues["voiceStack"],
+      geminiLiveVoiceName:      ((agent as any).agentConfig?.geminiLive?.voiceName as string | undefined) ?? "Kore",
+      geminiLiveThinkingLevel:  ((agent as any).agentConfig?.geminiLive?.thinkingLevel as AgentFormValues["geminiLiveThinkingLevel"] | undefined) ?? "minimal",
     });
     if (agent.webhookUrl && !agent.webhookUrl.startsWith("https://")) {
       form.setError("webhookUrl", {

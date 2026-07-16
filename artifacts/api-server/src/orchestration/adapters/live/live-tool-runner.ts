@@ -1,0 +1,152 @@
+import type { AgentConfig, AgentTool, SessionConfig } from "../../types.js";
+import { resolveGoodbyeMessage } from "../../types.js";
+import {
+  matchToolByName,
+  executeNativeBooking,
+  executeNativeCheckAvailability,
+  executeNativeListBookings,
+  executeNativeReschedule,
+  executeNativeCancel,
+  executeWebhookTool,
+} from "../../../services/tool-executor.js";
+import { scheduleCallbackRequested } from "../../../services/autoRedial.js";
+import { logger } from "../../../lib/logger.js";
+
+export interface LiveToolRunnerDeps {
+  config: SessionConfig;
+  agent: AgentConfig;
+  onAgentText: (text: string) => void;
+  speakText: (text: string) => Promise<void>;
+  endCall: () => void;
+}
+
+/**
+ * Execute a single Live API function call synchronously and return the JSON
+ * result payload for sendToolResponse.
+ */
+export async function runLiveToolCall(
+  deps: LiveToolRunnerDeps,
+  toolName: string,
+  args: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const { config, agent, onAgentText, speakText, endCall } = deps;
+
+  if (toolName === "end_call") {
+    const endCallTool = agent.tools.find((t) => t.type === "end_call");
+    const goodbye = resolveGoodbyeMessage(
+      endCallTool?.type === "end_call" ? endCallTool.goodbyeMessage : undefined,
+      agent.endCallPhrases,
+    );
+    onAgentText(goodbye);
+    await speakText(goodbye);
+    endCall();
+    return { output: "call_ended" };
+  }
+
+  if (toolName === "schedule_callback") {
+    const toNumber = config.callerPhone ?? "";
+    const scheduledAtRaw = args["scheduled_at"] as string | undefined;
+    const notes = args["notes"] as string | undefined;
+    const scheduledAt = scheduledAtRaw ? new Date(scheduledAtRaw) : new Date(Date.now() + 60 * 60 * 1000);
+    if (toNumber) {
+      await scheduleCallbackRequested({
+        agentId: agent.id,
+        toNumber,
+        scheduledAt,
+        callId: config.callId,
+        notes,
+      });
+      return {
+        output:
+          `Callback recorded for ${scheduledAt.toISOString()}. Confirm the time to the caller, then close with a proper goodbye.`,
+      };
+    }
+    return { output: "Callback noted." };
+  }
+
+  const tool = matchToolByName(agent.tools, toolName);
+  if (!tool) {
+    logger.warn({ callId: config.callId, toolName }, "Live: unknown tool call");
+    return { error: `Unknown tool: ${toolName}` };
+  }
+
+  try {
+    const result = await executeLiveAgentTool(deps, tool, args);
+    if (result === undefined) return { output: "ok" };
+    return { output: result };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error({ callId: config.callId, toolName, err }, "Live tool execution failed");
+    return { error: message };
+  }
+}
+
+async function executeLiveAgentTool(
+  deps: LiveToolRunnerDeps,
+  tool: AgentTool,
+  args: Record<string, unknown>,
+): Promise<string | undefined> {
+  const { config, agent, onAgentText, speakText, endCall } = deps;
+  const callId = config.callId;
+  const agentId = agent.id;
+
+  switch (tool.type) {
+    case "call_transfer": {
+      const ok = (await config.onCallTransfer?.(tool.transferTo)) ?? true;
+      if (!ok) return "transfer_failed: unable to connect to a human agent at this time";
+      endCall();
+      return undefined;
+    }
+    case "transfer_cold": {
+      if (!tool.targetNumber?.trim()) return "transfer_unavailable: no transfer number configured";
+      if (tool.holdMessage?.trim()) {
+        onAgentText(tool.holdMessage);
+        await speakText(tool.holdMessage);
+      }
+      const ok = (await config.onCallTransfer?.(tool.targetNumber)) ?? true;
+      if (!ok) return "transfer_failed: unable to connect to a human agent at this time";
+      endCall();
+      return undefined;
+    }
+    case "transfer_warm": {
+      if (!tool.targetNumber?.trim()) return "transfer_unavailable: no transfer number configured";
+      if (tool.holdMessage?.trim()) {
+        onAgentText(tool.holdMessage);
+        await speakText(tool.holdMessage);
+      }
+      const ok = (await config.onCallTransfer?.(tool.targetNumber)) ?? true;
+      if (!ok) return "transfer_failed: unable to connect to a human agent at this time";
+      endCall();
+      return undefined;
+    }
+    case "transfer_agent": {
+      const targetId = args["targetAgentId"] ?? tool.targetAgentId;
+      const ok = (await config.onCallTransfer?.(`agent:${targetId}`)) ?? false;
+      if (!ok) return "transfer_failed: agent-to-agent transfer is not supported";
+      endCall();
+      return undefined;
+    }
+    case "webhook":
+      await executeWebhookTool(callId, tool, args);
+      return undefined;
+    case "end_call": {
+      const goodbye = resolveGoodbyeMessage(tool.goodbyeMessage, agent.endCallPhrases);
+      onAgentText(goodbye);
+      await speakText(goodbye);
+      endCall();
+      return undefined;
+    }
+    case "native_booking":
+      return executeNativeBooking(callId, agentId, tool, args);
+    case "native_check_availability":
+      return executeNativeCheckAvailability(callId, agentId, tool, args);
+    case "native_list_bookings":
+      return executeNativeListBookings(callId, agentId, tool, args);
+    case "native_reschedule":
+      return executeNativeReschedule(callId, agentId, tool, args);
+    case "native_cancel":
+      return executeNativeCancel(callId, agentId, tool, args);
+    default:
+      return `Tool type ${tool.type} is not supported on the Live stack yet.`;
+  }
+}

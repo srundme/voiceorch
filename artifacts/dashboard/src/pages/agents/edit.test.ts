@@ -36,6 +36,22 @@ const BASE: AgentFormValues = {
 };
 
 describe("buildUpdateAgentPayload", () => {
+  it("gemini live settings — placed in agentConfig", () => {
+    const data: AgentFormValues = {
+      ...BASE,
+      voiceStack: "gemini_live",
+      geminiLiveVoiceName: "Puck",
+      geminiLiveThinkingLevel: "low",
+    };
+    const payload = buildUpdateAgentPayload(data);
+    const cfg = payload.agentConfig as Record<string, unknown>;
+    expect(cfg["voiceStack"]).toBe("gemini_live");
+    expect(cfg["geminiLive"]).toEqual({
+      voiceName: "Puck",
+      thinkingLevel: "low",
+    });
+  });
+
   it("minimal update — parses against UpdateAgentBody", () => {
     const payload = buildUpdateAgentPayload(BASE);
     const result = UpdateAgentBody.safeParse(payload);

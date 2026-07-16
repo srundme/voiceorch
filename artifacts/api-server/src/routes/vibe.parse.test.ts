@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { parseVibeGeminiJson } from "./vibe-gemini-parse.js";
+import {
+  parseVibeGeminiJson,
+  parseVoicePick,
+  looksLikePhoneAssign,
+  looksLikePhoneSkip,
+  replyAsksCallFlow,
+} from "./vibe-gemini-parse.js";
 
 describe("parseVibeGeminiJson", () => {
   it("parses bare JSON", () => {
@@ -28,5 +34,34 @@ describe("parseVibeGeminiJson", () => {
   it("returns null for invalid payloads", () => {
     expect(parseVibeGeminiJson("not json at all")).toBeNull();
     expect(parseVibeGeminiJson('{"phase":"core","ready":false,"config":{}}')).toBeNull();
+  });
+});
+
+describe("parseVoicePick", () => {
+  it("parses Select messages with voiceId", () => {
+    expect(parseVoicePick("I'll go with Varun (voiceId: abc-123)")).toEqual({
+      voiceName: "Varun",
+      voiceId: "abc-123",
+    });
+  });
+
+  it("parses Select messages without voiceId", () => {
+    expect(parseVoicePick("I'll go with Gayathri")).toEqual({ voiceName: "Gayathri" });
+  });
+
+  it("ignores unrelated messages", () => {
+    expect(parseVoicePick("Walk me through the call")).toBeNull();
+  });
+});
+
+describe("phone + call-flow helpers", () => {
+  it("detects assign / skip", () => {
+    expect(looksLikePhoneAssign("Assign +9198 (number id 12) as the inbound number")).toBe(true);
+    expect(looksLikePhoneSkip("Skip the phone number for now")).toBe(true);
+  });
+
+  it("detects call-flow questions", () => {
+    expect(replyAsksCallFlow("Great. Walk me through how Maya should handle the call.")).toBe(true);
+    expect(replyAsksCallFlow("Okay, Varun will use this voice.")).toBe(false);
   });
 });

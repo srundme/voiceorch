@@ -30,6 +30,7 @@ import ambientSoundsRouter, { ambientSoundsUserRouter } from "./ambient-sounds.j
 import wizardRouter from "./wizard.js";
 import vibeRouter from "./vibe.js";
 import vibeSessionsRouter from "./vibe-sessions.js";
+import agentTasksRouter from "./agent-tasks.js";
 import campaignsRouter from "./campaigns.js";
 import campaignDashboardRouter from "./campaign-dashboard.js";
 import campaignBatchesRouter from "./campaign-batches.js";
@@ -61,6 +62,7 @@ import callTransfersRouter from "./call-transfers.js";
 import billingRouter from "./billing.js";
 import utilsRouter from "./utils.js";
 import voicesRouter from "./voices.js";
+import geminiLiveRouter from "./gemini-live.js";
 import testToolRouter from "./test-tool.js";
 import authRouter from "./auth.js";
 import dispositionRouter from "./disposition.js";
@@ -103,6 +105,7 @@ router.use(authRouter);
 
 // Public utility routes — no auth required
 router.use(voicesRouter);
+router.use(geminiLiveRouter);
 router.use(utilsRouter);
 
 // Public book progress routes — anonymous per-device, no session required
@@ -129,6 +132,7 @@ router.use(onboardingRouter);
 router.use(wizardRouter);
 router.use(vibeRouter);
 router.use(vibeSessionsRouter);
+router.use(agentTasksRouter);
 router.use(campaignDashboardRouter);
 router.use(campaignsRouter);
 router.use(campaignBatchesRouter);

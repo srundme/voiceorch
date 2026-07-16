@@ -47,3 +47,28 @@ export function extractGeminiResponseText(parts: Array<{ text?: string; thought?
   if (visible.trim()) return visible;
   return withText.map(p => p.text!).join("");
 }
+
+/** Detect in-chat voice card picks from the dashboard Select message. */
+export function parseVoicePick(text: string): { voiceId?: string; voiceName?: string } | null {
+  const withId = text.match(/i'?ll go with\s+(.+?)\s*\(\s*voiceId\s*:\s*([^)]+?)\s*\)/i);
+  if (withId) {
+    return { voiceName: withId[1]!.trim(), voiceId: withId[2]!.trim() };
+  }
+  if (/i'?ll go with\s+/i.test(text)) {
+    const m = text.match(/i'?ll go with\s+([^(.\n]+)/i);
+    return m?.[1] ? { voiceName: m[1].trim() } : { voiceName: undefined };
+  }
+  return null;
+}
+
+export function looksLikePhoneAssign(text: string): boolean {
+  return /^\s*assign\s+/i.test(text) || /\(\s*number id\s+\d+\s*\)/i.test(text);
+}
+
+export function looksLikePhoneSkip(text: string): boolean {
+  return /skip the phone number/i.test(text);
+}
+
+export function replyAsksCallFlow(reply: string): boolean {
+  return /walk me through|how should .+ handle|call (flow|script)|opening|main pitch/i.test(reply);
+}

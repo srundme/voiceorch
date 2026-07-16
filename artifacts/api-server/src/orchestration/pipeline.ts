@@ -26,6 +26,7 @@ import { RecordingBuffer } from "./recorder.js";
 import type { AudioProcessResult } from "./audioPool.js";
 import type { AgentConfig, AgentTool, ConversationTurn, LLMAdapter, LLMUsage, SessionConfig, StreamSTT, STTConfig, ToolDefinition } from "./types.js";
 import { resolveGoodbyeMessage } from "./types.js";
+import type { VoiceSession } from "./voice-session.js";
 import { retrieveKbContext, retrieveKbContextMultiEx, resolveKbTurnBudgetMs, type KbRetrievalResult } from "./kb-retrieval.js";
 import { KRUTRIM_AUTO_SUMMARY_TITLE } from "../services/kb-source-summary.js";
 import { getBackchannelFillers, pickBackchannelFiller } from "./backchannel.js";
@@ -560,7 +561,7 @@ type TtsSentenceJob = {
   ready: Promise<void>;
 };
 
-export class OrchestrationPipeline {
+export class OrchestrationPipeline implements VoiceSession {
   private config: SessionConfig;
   private readonly callDirection: "inbound" | "outbound";
   private readonly isResumeDroppedCall: boolean;

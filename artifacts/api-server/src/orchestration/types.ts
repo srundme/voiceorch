@@ -399,6 +399,15 @@ export interface AgentConfig {
    * and the baked injection already covers it (source ID count is low, doc is < 4000 chars).
    */
   kbBakedOnly: boolean;
+
+  /** Classic STT→LLM→TTS (default) or Gemini native audio-to-audio Live stack. */
+  voiceStack: "classic" | "gemini_live";
+  /** Resolved Live settings when voiceStack === "gemini_live". */
+  geminiLive: {
+    model: string;
+    voiceName: string;
+    thinkingLevel: "minimal" | "low" | "medium" | "high";
+  } | null;
 }
 
 export interface ProviderKey {

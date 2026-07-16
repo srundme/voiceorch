@@ -79,6 +79,43 @@ export function downsample16to8(buf16k: Buffer): Buffer {
   return out;
 }
 
+/**
+ * Downsample 24 kHz PCM16 LE → 8 kHz using a simple 3:1 box filter.
+ * Gemini Live outputs 24 kHz; telephony + webcall wire formats use 8 kHz.
+ */
+export function downsample24to8(buf24k: Buffer): Buffer {
+  const inSamples = Math.floor(buf24k.length / 2);
+  const groups = Math.floor(inSamples / 3);
+  const out = Buffer.allocUnsafe(groups * 2);
+  for (let i = 0; i < groups; i++) {
+    const base = i * 3;
+    const a = buf24k.readInt16LE(base * 2);
+    const b = base + 1 < inSamples ? buf24k.readInt16LE((base + 1) * 2) : a;
+    const c = base + 2 < inSamples ? buf24k.readInt16LE((base + 2) * 2) : b;
+    out.writeInt16LE(Math.round((a + b + c) / 3), i * 2);
+  }
+  return out;
+}
+
+/**
+ * Downsample 24 kHz PCM16 LE → 16 kHz (2:3 ratio) via linear interpolation.
+ * Used when a consumer needs 16 kHz output from Live audio.
+ */
+export function downsample24to16(buf24k: Buffer): Buffer {
+  const inSamples = Math.floor(buf24k.length / 2);
+  const outSamples = Math.floor((inSamples * 2) / 3);
+  const out = Buffer.allocUnsafe(outSamples * 2);
+  for (let i = 0; i < outSamples; i++) {
+    const srcPos = (i * 3) / 2;
+    const idx = Math.floor(srcPos);
+    const frac = srcPos - idx;
+    const s0 = buf24k.readInt16LE(idx * 2);
+    const s1 = idx + 1 < inSamples ? buf24k.readInt16LE((idx + 1) * 2) : s0;
+    out.writeInt16LE(Math.round(s0 + (s1 - s0) * frac), i * 2);
+  }
+  return out;
+}
+
 // ── Noise Cancellation ───────────────────────────────────────────────────────
 //
 // Two-stage pipeline applied to 8 kHz LINEAR16 PCM before it reaches any STT:

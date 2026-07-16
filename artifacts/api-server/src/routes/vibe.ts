@@ -11,11 +11,10 @@ import { eq, and, inArray, sql } from "drizzle-orm";
 import { ingestKbTextEntries } from "../services/kb-ingest.js";
 import { logger } from "../lib/logger.js";
 import { logActivity } from "../lib/activity.js";
-import { generateLayeredAgentPrompt } from "../services/prompt-template.js";
-import { getActiveLayer } from "../services/system-prompt-template.js";
 import { resolveAmdConfig } from "../orchestration/telephony/dial.js";
 import { trackEvent } from "../services/track-event.js";
-import { parseVibeGeminiJson, extractGeminiResponseText } from "./vibe-gemini-parse.js";
+import { parseVibeGeminiJson, extractGeminiResponseText, parseVoicePick, looksLikePhoneAssign, looksLikePhoneSkip, replyAsksCallFlow } from "./vibe-gemini-parse.js";
+import { buildPatternSystemPrompt } from "./vibe-system-prompt-pattern.js";
 
 const router = Router();
 
@@ -195,9 +194,9 @@ PHASE "voice_selection"
 Voice cards are now shown directly in this chat — the user can preview and select one.
 - Say: "I've pulled up the available voices — you can hit ▶ to preview each one and click Select when you find the right fit."
 - The list is sorted so voices matching the agent's language(s) appear first; the rest are below.
-- When the user picks (by name or gender), set voiceId and voiceName exactly from the available options list.
+- When the user picks (by name, "I'll go with …", or a voiceId): set voiceId and voiceName exactly from the available options list, and set gender from that voice.
 - If the user asks where the voices are, wants to see them again, or changes the agent's language(s): STAY in phase="voice_selection" — the voice cards are re-displayed in the chat automatically on every turn of this phase. NEVER apologize or claim the UI failed to display.
-→ Transition: once voice chosen, set phase="call_flow"
+→ Transition (CRITICAL): the moment a voice is confirmed, set phase="call_flow" immediately. Your reply MUST (1) briefly confirm the voice and (2) ask the call-flow opening question in the SAME message. NEVER stay on phase="voice_selection" after a confirmed pick with only a confirmation — that strands the user.
 
 PHASE "call_flow"
 Deeply understand the full call script — don't rush this phase. Collect across 2–3 turns:
@@ -275,7 +274,7 @@ PHASE "phone_number" (ONLY when direction is "inbound" or "both" — for pure "o
 - When the user picks one (by clicking Assign or naming it): set phoneNumberId to that number's EXACT id from the list. NEVER invent an id.
 - If the user skips: set phoneNumberSkipped=true. The agent is still created — a number can be connected later.
 - If the list says NONE: tell them they don't have any numbers yet — they can purchase one from the Phone Numbers page and connect it to this agent later using "Refine with AI". Set phoneNumberSkipped=true and move on. Do NOT block creation.
-→ Transition: set phase="build" once phoneNumberId is set OR phoneNumberSkipped=true
+→ Transition (CRITICAL): once phoneNumberId is set OR phoneNumberSkipped=true, set phase="build" and ready=true in the SAME turn. Do not linger on phone_number with only a confirmation.
 
 PHASE "build"
 - Say: "Perfect — I have everything I need! Building [name] now..."
@@ -351,19 +350,36 @@ class VibeGeminiError extends Error {
 const VIBE_RECOVERY_NOTE =
   "IMPORTANT: Your previous response was cut off or was not valid JSON. Respond again to the conversation above with ONLY the complete, compact, valid JSON object matching the required schema — no markdown fences, no commentary, and keep the \"reply\" text brief.";
 
-/** Flash-Lite fully disables thinking (thinkingBudget:0); 2.5 Flash may still emit thought-only parts. */
+/** Flash-Lite defaults to no thinking; budget 0 avoids empty thought-only candidates. */
 const VIBE_GEMINI_MODEL = "gemini-2.5-flash-lite";
 
-const VIBE_RESPONSE_SCHEMA = {
-  type: "object",
-  properties: {
-    reply:  { type: "string" },
-    phase:  { type: "string" },
-    ready:  { type: "boolean" },
-    config: { type: "object", nullable: true },
-  },
-  required: ["reply", "phase", "ready", "config"],
-} as const;
+function lastUserContent(msgs: VibeChatMessage[]): string {
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    if (msgs[i]!.role === "user") return msgs[i]!.content;
+  }
+  return "";
+}
+
+/**
+ * Build the Gemini request body.
+ *
+ * IMPORTANT: do NOT send `responseSchema` here. Vibe's `config` is a large open-ended
+ * object; Gemini's OpenAPI-subset `responseSchema` rejects free-form `{ type: "object" }`
+ * (and required+nullable config) with HTTP 400 — which fails every chat turn.
+ * We rely on `responseMimeType: application/json` + parseVibeGeminiJson recovery instead.
+ */
+function buildGeminiRequestBody(contents: Array<{ role: string; parts: Array<{ text: string }> }>): string {
+  return JSON.stringify({
+    system_instruction: { parts: [{ text: VIBE_SYSTEM_PROMPT }] },
+    contents,
+    generationConfig: {
+      responseMimeType: "application/json",
+      temperature: 0.4,
+      maxOutputTokens: 16384,
+      thinkingConfig: { thinkingBudget: 0 },
+    },
+  });
+}
 
 async function callGemini(key: string, messages: VibeChatMessage[]): Promise<GeminiVibeResponse> {
   const baseContents = messages.map(m => ({
@@ -382,17 +398,7 @@ async function callGemini(key: string, messages: VibeChatMessage[]): Promise<Gem
       ? [...baseContents, { role: "user", parts: [{ text: VIBE_RECOVERY_NOTE }] }]
       : baseContents;
 
-    const body = JSON.stringify({
-      system_instruction: { parts: [{ text: VIBE_SYSTEM_PROMPT }] },
-      contents,
-      generationConfig: {
-        responseMimeType: "application/json",
-        responseSchema: VIBE_RESPONSE_SCHEMA,
-        temperature: 0.4,
-        maxOutputTokens: 16384,
-        thinkingConfig: { thinkingBudget: 0 },
-      },
-    });
+    const body = buildGeminiRequestBody(contents);
 
     try {
       const resp = await Promise.race([
@@ -748,6 +754,8 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
         ``,
         `CRITICAL — systemPrompt editing rules:`,
         `- The "systemPrompt" field above is the EXACT, COMPLETE current system prompt. Treat it as a literal string, not a description or summary.`,
+        `- Prompts use a fixed section pattern (IDENTITY, LANGUAGE STYLE, TONE, GENDER, CALL FLOW, INTERRUPTIONS, KB, OBJECTIONS, ERRORS, CARTESIA SONIC 3, HUMAN SPEECH RULES, CALL GOAL, COMPLETION, RESPONSE HANDLING). Preserve section headers and order.`,
+        `- Never invent alternate Cartesia tag syntax. Emotion / [laughter] / <break> / <spell> rules stay as written unless the user explicitly changes them.`,
         `- When the user requests a text change (e.g. change "28" to "30", or update a specific phrase), find the exact substring in the system prompt and replace ONLY that. Copy the rest of the system prompt character-for-character.`,
         `- Do NOT rewrite, paraphrase, simplify, reformat, restructure, or shorten any part of the system prompt. The output "systemPrompt" must differ from the input "systemPrompt" only at the exact requested change site(s).`,
         `- Return the full edited system prompt in config.systemPrompt — never truncate it.`,
@@ -765,20 +773,108 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
       ];
     }
 
+    // When the user just clicked a voice card, force the model into call_flow so it
+    // cannot strand them with only "okay, we'll use that voice."
+    const voicePickHint = !isRefine ? parseVoicePick(lastUserContent(messages)) : null;
+    if (voicePickHint) {
+      const idPart = voicePickHint.voiceId
+        ? ` voiceId=${voicePickHint.voiceId}, voiceName=${voicePickHint.voiceName ?? ""}`
+        : voicePickHint.voiceName
+          ? ` voiceName=${voicePickHint.voiceName}`
+          : "";
+      contextualMessages = [
+        ...contextualMessages,
+        {
+          role: "user" as const,
+          content: [
+            `[SYSTEM TURN RULE — VOICE JUST SELECTED]`,
+            `The user clicked Select on a voice card.${idPart}`,
+            `In your JSON: set voiceId/voiceName/gender from the [VOICE OPTIONS] list, set phase="call_flow" (never voice_selection), ready=false.`,
+            `Your reply must briefly confirm the voice AND ask the call-flow opening question in the same message.`,
+          ].join("\n"),
+        },
+      ];
+    }
+
+    const phonePickHint = !isRefine && (looksLikePhoneAssign(lastUserContent(messages)) || looksLikePhoneSkip(lastUserContent(messages)));
+    if (phonePickHint) {
+      contextualMessages = [
+        ...contextualMessages,
+        {
+          role: "user" as const,
+          content: [
+            `[SYSTEM TURN RULE — PHONE NUMBER DECISION]`,
+            `The user just assigned or skipped an inbound number.`,
+            `Set phoneNumberId from the number id they provided (or phoneNumberSkipped=true), set phase="build", ready=true, and say you are building the agent now.`,
+          ].join("\n"),
+        },
+      ];
+    }
+
     let parsed: GeminiVibeResponse;
     try {
       parsed = await callGemini(geminiKey, contextualMessages);
     } catch (err) {
       const kind = err instanceof VibeGeminiError ? err.kind : "unavailable";
-      logger.warn({ err, kind }, "vibe-chat: Gemini call failed");
+      const detail = err instanceof Error ? err.message : String(err);
+      logger.warn({ err, kind, detail: detail.slice(0, 400) }, "vibe-chat: Gemini call failed");
+      const isClientReject = /Gemini 40[013]/.test(detail);
       emit({
         type: "error",
         message: kind === "malformed"
           ? "the AI returned a malformed response. This is usually a one-off — please try again."
-          : "the AI is taking longer than usual or is temporarily unavailable. Please try again in a moment.",
+          : isClientReject
+            ? "the AI request was rejected. Please try again in a moment — if it keeps failing, contact support."
+            : "the AI is taking longer than usual or is temporarily unavailable. Please try again in a moment.",
       });
       res.end();
       return;
+    }
+
+    // ── Deterministic phase guards (LLM often confirms without advancing) ──
+    const lastUser = lastUserContent(messages);
+    const voicePick = parseVoicePick(lastUser);
+    if (voicePick) {
+      if (parsed.config) {
+        const cfgMut = parsed.config;
+        const match = availableVoices.find(v =>
+          (voicePick.voiceId && v.voiceId === voicePick.voiceId)
+          || (voicePick.voiceName && v.voiceName.toLowerCase() === voicePick.voiceName!.toLowerCase()),
+        );
+        if (match) {
+          cfgMut.voiceId = match.voiceId;
+          cfgMut.voiceName = match.voiceName;
+          if (match.gender === "male" || match.gender === "female") cfgMut.gender = match.gender;
+        } else {
+          if (voicePick.voiceId) cfgMut.voiceId = voicePick.voiceId;
+          if (voicePick.voiceName) cfgMut.voiceName = voicePick.voiceName;
+        }
+      }
+      if (parsed.phase === "voice_selection" || parsed.phase === "core") {
+        parsed.phase = "call_flow";
+      }
+      if (!replyAsksCallFlow(parsed.reply)) {
+        const name = parsed.config?.agentName || "the agent";
+        parsed.reply = `${parsed.reply.trim()} Walk me through how ${name} should handle the call — the opening, the main pitch or purpose, key questions, how to handle objections, and how to close. Even a rough sketch is fine.`;
+      }
+    }
+
+    if (!isRefine && looksLikePhoneSkip(lastUser) && parsed.config) {
+      parsed.config.phoneNumberSkipped = true;
+    }
+    if (!isRefine && looksLikePhoneAssign(lastUser) && parsed.config) {
+      const idMatch = lastUser.match(/number id\s+(\d+)/i);
+      if (idMatch) parsed.config.phoneNumberId = Number(idMatch[1]);
+    }
+    if (!isRefine && parsed.config && (looksLikePhoneAssign(lastUser) || looksLikePhoneSkip(lastUser))) {
+      const c = parsed.config;
+      if (c.phoneNumberId != null || c.phoneNumberSkipped) {
+        parsed.phase = "build";
+        parsed.ready = true;
+        if (!/building|build(ing)?\s+/i.test(parsed.reply)) {
+          parsed.reply = `${parsed.reply.trim()} Perfect — I have everything I need! Building ${c.agentName || "your agent"} now...`;
+        }
+      }
     }
 
     const reply = (parsed.reply ?? "Tell me about the agent you want to build!").trim();
@@ -787,7 +883,7 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
       await sleep(10);
     }
 
-    const cfg   = parsed.config;
+    const cfg = parsed.config;
     // Normalize: if Gemini set schedulingTools but omitted the boolean flag (LLM output
     // variation), treat scheduling as enabled — the tools array is the stronger signal.
     if (cfg && Array.isArray(cfg.schedulingTools) && cfg.schedulingTools.length > 0 && !cfg.schedulingEnabled) {
@@ -799,7 +895,8 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
     // so the picker can be re-shown ("where are the voices?") and re-ordered when
     // the user changes the agent's language(s) mid-selection.
     let emittedVoiceOptions = false;
-    if (phase === "voice_selection") {
+    // Never re-show voice cards on the turn the user just picked one.
+    if (phase === "voice_selection" && !voicePick) {
       // Agent language(s) for ordering — only when the user actually chose one
       const agentLangs: string[] = parsed.config?.languageChosen
         ? [...new Set([parsed.config.language, ...(parsed.config.multilingualLanguages ?? [])].filter(Boolean))]
@@ -847,7 +944,7 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
     // has selected), and NEVER alongside a fresh voice_options in the same response.
     // Prevents refine-mode "cards appear then instantly vanish": the pre-existing
     // config carries a voiceId, which must not count as a new pick.
-    const voicePickedThisTurn = !!cfg.voiceId && cfg.voiceId !== selectedVoiceId;
+    const voicePickedThisTurn = !!cfg.voiceId && (cfg.voiceId !== selectedVoiceId || !!voicePick);
     if (voicePickedThisTurn && !emittedVoiceOptions) {
       emit({ type: "voice_selected", voiceId: cfg.voiceId, voiceName: cfg.voiceName });
     }
@@ -1123,78 +1220,41 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
       } else if (existingAgentRow?.systemPrompt) {
         systemPrompt = String(existingAgentRow.systemPrompt);
       }
-      // Skip the entire regeneration block below.
-    } else try {
-      // Use the platform's layered prompt generator — same engine as the
-      // dashboard "Generate System Prompt" button: Foundation + Domain + inputs.
-      const [foundationLayer, clientDetailsLayer] = await Promise.all([
-        getActiveLayer({ type: "foundation" }).catch(() => null),
-        getActiveLayer({ type: "client_details" }).catch(() => null),
-      ]);
-
-      const transferNote = cfg.callTransferEnabled
-        ? `Call transfer enabled — transfer to "${cfg.transferName || "human agent"}" at ${cfg.transferPhoneNumber} when needed.`
-        : "";
-      const complianceNote = Object.entries(cfg.compliance ?? {})
-        .filter(([, v]) => v).map(([k]) => k.toUpperCase()).join(", ");
-
-      const formInputs: Record<string, unknown> = {
-        agentName:           cfg.agentName,
-        companyName:         cfg.companyName,
-        useCase:             cfg.description,
-        agentDirection:      cfg.direction === "outbound" ? "Outbound" : cfg.direction === "both" ? "Inbound and Outbound" : "Inbound",
-        language:            langDisplay,
-        selectedLanguages:   (cfg.multilingualLanguages ?? []).filter((l: string) => l !== langDisplay),
-        callFlowDescription: cfg.callFlowNotes ?? cfg.description,
-        mandatoryQuestions:  cfg.mandatoryQuestions ?? "",
-        agentRules:          cfg.agentRules ?? "",
-        callbackGreeting:    cfg.callbackGreeting ?? "",
-        dispositionLogic:    cfg.dispositionLogic ?? "",
-        keyKnowledge:        "",  // KB indexed as sources — never baked into system prompt
-        transferInfo:        transferNote,
-        complianceFlags:     complianceNote,
-        genderDetection:     cfg.genderDetectionEnabled ? "Use {caller_salutation} (Sir/Ma'am) once the caller's gender is detected." : "",
-        dispositions:        (cfg.dispositions ?? [])
-          .map((d) => `${d.category}: ${(d.outcomes ?? []).join("/")}`)
-          .join(", "),
-      };
-
-      if (foundationLayer) {
-        // Full layered generation (Foundation locked + optional client details)
-        systemPrompt = await generateLayeredAgentPrompt({
-          foundationText:    foundationLayer.extractedText,
-          domainText:        "",          // vibe doesn't pick a domain — use custom/other path
-          domainName:        "Custom / Other",
-          clientDetailsText: clientDetailsLayer?.extractedText ?? "",
-          formInputs,
+      // Skip regeneration — refine keeps surgical edits.
+    } else {
+      // Proven section pattern (IDENTITY → LANGUAGE → TONE → FLOW → Cartesia → …).
+      // Dynamic slots from Vibe config; speech/Cartesia rules are stable — not free-form LLM invention.
+      try {
+        systemPrompt = buildPatternSystemPrompt({
+          agentName:              cfg.agentName,
+          companyName:            cfg.companyName,
+          description:            cfg.description,
+          language:               cfg.language,
+          langDisplay,
+          languageMode:           cfg.languageMode === "multi" ? "multi" : "single",
+          multilingualLanguages:  cfg.multilingualLanguages ?? [],
+          direction:              cfg.direction || "inbound",
+          callFlowNotes:          cfg.callFlowNotes ?? "",
+          mandatoryQuestions:     cfg.mandatoryQuestions ?? "",
+          agentRules:             cfg.agentRules ?? "",
+          callbackGreeting:       cfg.callbackGreeting ?? "",
+          dispositionLogic:       cfg.dispositionLogic ?? "",
+          greetingMessage:        cfg.greetingMessage,
+          genderDetectionEnabled: !!cfg.genderDetectionEnabled,
+          maleSalutation:         cfg.maleSalutation || "Sir",
+          femaleSalutation:       cfg.femaleSalutation || "Ma'am",
+          callTransferEnabled:    !!cfg.callTransferEnabled,
+          transferPhoneNumber:    cfg.transferPhoneNumber || "",
+          transferName:           cfg.transferName || "",
+          voicemailEnabled:       !!cfg.voicemailEnabled,
+          voicemailMessage:       cfg.voicemailMessage || "",
+          schedulingEnabled:      !!cfg.schedulingEnabled,
+          compliance:             cfg.compliance ?? {},
+          dispositions:           cfg.dispositions ?? [],
         });
-      } else {
-        // No Foundation template — fall back to a standalone Gemini generation
-        // using the user's inputs directly (better than the old sysInstr/sysUser approach)
-        const sysInstr = buildPromptInstruction(cfg, langDisplay);
-        const sysUser  = buildPromptUserContent(cfg, langDisplay);
-        const pr = await Promise.race([
-          fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                system_instruction: { parts: [{ text: sysInstr }] },
-                contents: [{ role: "user", parts: [{ text: sysUser }] }],
-                generationConfig: { temperature: 0.7, maxOutputTokens: 2048 },
-              }),
-            },
-          ),
-          new Promise<never>((_, rej) => setTimeout(() => rej(new Error("prompt_gen_timeout")), 25000)),
-        ]);
-        const pj = await (pr as Response).json() as any;
-        const parts = pj?.candidates?.[0]?.content?.parts ?? [];
-        const gen = (parts.find((p: any) => !p.thought && p.text) ?? parts[parts.length - 1])?.text?.trim();
-        if (gen) systemPrompt = stripPromptMarkdown(gen);
+      } catch (err) {
+        logger.warn({ err }, "vibe-chat: pattern prompt build failed, using fallback");
       }
-    } catch (err) {
-      logger.warn({ err }, "vibe-chat: prompt gen failed, using fallback");
     }
 
     const preview = systemPrompt.slice(0, 300);
@@ -1622,89 +1682,5 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
     } catch { /* already closed */ }
   }
 });
-
-/** Strip markdown formatting from a generated system prompt so it reads as clean spoken prose. */
-function stripPromptMarkdown(text: string): string {
-  return text
-    .replace(/\*\*([^*\n]+)\*\*/g, "$1")          // bold → plain
-    .replace(/\*([^*\n]+)\*/g, "$1")               // italic → plain
-    .replace(/_([^_\n]+)_/g, "$1")                 // _italic_ → plain
-    .replace(/`([^`\n]+)`/g, "$1")                 // inline code → plain
-    .replace(/^#{1,6}\s+/gm, "")                   // ## headers → plain line
-    .replace(/^[-*•]\s+/gm, "")                    // bullet markers → none
-    .replace(/^\d+\.\s+/gm, "")                    // numbered list → none
-    .replace(/^Section \d+[^:\n]*:?\s*$/gm, "")    // "Section 1 — ..." headings → removed
-    .replace(/^>\s*/gm, "")                        // blockquotes
-    .replace(/\n{3,}/g, "\n\n")                    // excessive blank lines → max 2
-    .trim();
-}
-
-function buildPromptInstruction(cfg: VibeConfig, langDisplay: string): string {
-  return `You are a senior voice AI prompt engineer. Write a complete, production-ready system prompt for a voice agent.
-
-CRITICAL REQUIREMENTS:
-1. COLLOQUIAL SPOKEN LANGUAGE ONLY. Write exactly the way a confident, warm human rep talks on the phone — short sentences, everyday contractions, natural rhythm. NOT formal/literary. For Indian languages: use everyday spoken dialect (e.g. Tamil: "கொஞ்சம் சொல்லுங்க" not formal "கூறுங்கள்").
-2. VOICE-FIRST. No bullet points, no markdown, no headers in the output — only flowing spoken prose that maps directly to how the agent should speak.
-3. TOKEN-EFFICIENT. Do NOT repeat yourself. Do NOT list knowledge-base facts or company descriptions — those come from a separate indexed KB. Only include what the agent needs to know to BEHAVE correctly.
-4. Aim for 450–600 words. Every sentence must earn its place.
-
-STRUCTURE (write flowing prose — absolutely NO section headers, bullet points, bold, or markdown in your output):
-
-PARAGRAPH 1 — Identity and opening.
-State who the agent is and what company. Then write the exact words the agent says IMMEDIATELY after the caller responds to "Hello!". ${cfg.direction === "outbound" ? 'This is an OUTBOUND agent — it calls people. After "Hello!" the agent introduces its name and company, states the reason for calling in ONE sentence, then asks a short yes/no permission question like "Kya aap abhi ek minute mein baat kar sakte hain?" (adapt to language). Do NOT write "For outbound:" or any label — just write the actual words the agent speaks.' : 'This is an INBOUND agent — people call it. After "Hello!" the agent introduces itself warmly and asks how it can help.'}
-
-PARAGRAPH 2 — Call flow.
-Turn the call flow notes into a step-by-step conversational script written as flowing prose. Each step: what the agent says, then how it reacts to different caller responses. Include all objection-handling lines.
-
-${cfg.mandatoryQuestions ? `PARAGRAPH 3 — Mandatory questions.
-Write: "You must ask the following questions on every call, in this exact order, no matter what — do not skip them even if the caller seems ready to close: ${cfg.mandatoryQuestions}"` : ""}
-
-${cfg.agentRules ? `PARAGRAPH 4 — Rules.
-Translate these rules into firm first-person directives (e.g. "I will always…", "I will never…"): ${cfg.agentRules}` : ""}
-
-PARAGRAPH 5 — Returning callers.
-Write this verbatim (adapt language as needed): "The platform provides {prior_facts} — everything this caller has told me in previous calls. If {prior_facts} contains information, I recognise this is a returning caller. I do NOT start the conversation from scratch. Instead I acknowledge what I know — 'Last time we spoke, you mentioned…' — and pick up from there. If {prior_facts} is empty, I treat the caller as new."${cfg.callbackGreeting ? ` Then add: "${cfg.callbackGreeting}"` : ""}
-
-PARAGRAPH 6 — Call outcomes.
-Write this as a strict directive: "After every call I tag the outcome. Here is how I decide: ${cfg.dispositionLogic || "tag based on caller intent and engagement level"}."
-
-PARAGRAPH 7 — Voice delivery.
-Write this verbatim: "My voice is Cartesia Sonic. I use Cartesia delivery tags sparingly — plain speech is always the default. When I do use them: I place <emotion value='enthusiastic'/> before genuinely good news, <emotion value='sympathetic'/> before empathetic lines, <emotion value='calm'/> to reset after an emotional moment, <emotion value='curious'/> when asking for information. I insert [laughter] only at natural moments where a warm, brief laugh genuinely fits — never forced. I use <spell>CODE</spell> to read out confirmation codes or reference IDs character by character. I use <break time='500ms'/> before an important point when the caller needs a beat to absorb it. I never chain multiple break tags, never place tags mid-word or mid-number, and never invent tag formats other than these four."
-${cfg.callTransferEnabled ? `
-PARAGRAPH 8 — Transfer.
-When the caller explicitly asks for a human, or I cannot resolve the issue after two genuine attempts, I use the transfer tool to connect them to ${cfg.transferName || "a human agent"} at ${cfg.transferPhoneNumber}. I say: "Let me connect you to someone who can help — just a moment." I do NOT transfer for minor objections.` : ""}
-${cfg.compliance?.irdai ? "\nCompliance: I never make exaggerated claims about returns or coverage. I always say 'subject to terms and conditions'. If a caller asks for a guaranteed return I clarify that is not possible." : ""}
-${cfg.compliance?.dpdp ? "\nCompliance: At the very start of every call I say: 'This call may be recorded for quality purposes. By continuing, you consent to data processing under the DPDP Act.'" : ""}
-${cfg.compliance?.trai ? "\nCompliance: I state the purpose of my call clearly within the first 30 seconds. If the caller says they are on DND I apologise and end the call immediately." : ""}
-
-IMPORTANT OUTPUT RULES:
-- Output ONLY the system prompt text. Zero commentary, zero markdown, zero code fences, zero section labels.
-- Every paragraph is plain prose — no bold, no bullets, no numbered lists, no asterisks.
-- The agent speaks in ${langDisplay} — every example phrase and spoken line must be in ${langDisplay} (colloquial/spoken register, never formal/literary).`;
-}
-
-function buildPromptUserContent(cfg: VibeConfig, langDisplay: string): string {
-  const lines = [
-    `Agent Name: ${cfg.agentName}`,
-    `Company: ${cfg.companyName}`,
-    `Direction: ${cfg.direction === "outbound" ? "Outbound (agent calls leads)" : cfg.direction === "both" ? "Both inbound and outbound" : "Inbound (customers call in)"}`,
-    `Language: ${langDisplay}`,
-    `Purpose: ${cfg.description}`,
-  ];
-  if (cfg.callFlowNotes)      lines.push(`\nCALL FLOW NOTES:\n${cfg.callFlowNotes}`);
-  if (cfg.mandatoryQuestions) lines.push(`\nMANDATORY QUESTIONS (must ask every call in order):\n${cfg.mandatoryQuestions}`);
-  if (cfg.agentRules)         lines.push(`\nAGENT RULES (strict DOs and DON'Ts):\n${cfg.agentRules}`);
-  if (cfg.callbackGreeting)   lines.push(`\nCALLBACK / RETURNING CALLER OPENING:\n${cfg.callbackGreeting}`);
-  if (cfg.dispositionLogic)   lines.push(`\nDISPOSITION LOGIC (how to tag outcomes):\n${cfg.dispositionLogic}`);
-  if (cfg.dispositions?.length) {
-    lines.push(`\nOUTCOME CATEGORIES:\n${cfg.dispositions.map(d => `${d.category}: ${(d.outcomes ?? []).join(" / ")}`).join("\n")}`);
-  }
-  if (cfg.callTransferEnabled) lines.push(`\nTransfer to: "${cfg.transferName || "Human Agent"}" at ${cfg.transferPhoneNumber}`);
-  if (cfg.genderDetectionEnabled) lines.push(`Gender detection enabled — use {caller_salutation} (${cfg.maleSalutation}/${cfg.femaleSalutation}) after detection`);
-  if (cfg.schedulingEnabled)  lines.push("Scheduling: agent can book, reschedule, and cancel appointments");
-  if (cfg.voicemailEnabled && cfg.voicemailMessage) lines.push(`Voicemail message: "${cfg.voicemailMessage}"`);
-  // knowledgeBaseNotes is indexed as a separate KB source — intentionally excluded from system prompt
-  return lines.join("\n");
-}
 
 export default router;

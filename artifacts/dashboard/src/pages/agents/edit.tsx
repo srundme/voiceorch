@@ -59,6 +59,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { AgentConfigCard, EditConfigDialog } from "@/components/agent-config-card";
+import { GeminiLiveVoicePicker } from "@/components/gemini-live-voice-picker";
 import { Mic, Brain, Volume2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError, mapApiErrors } from "@/lib/format-api-error";
@@ -72,6 +73,8 @@ import {
   LLM_MODELS,
   TTS_MODELS,
   TTS_VOICES,
+  VOICE_STACK_OPTIONS,
+  GEMINI_LIVE_THINKING_LEVELS,
   getModelError,
   isTamilLanguage,
   defaultGeminiModel,
@@ -94,6 +97,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     asrEndpointingSilenceMs, llmMaxTokens, ttsMinSentenceChars, linearDelayMs, ttsSpeed,
     autoRedialEnabled, autoRedialMaxAttempts,
     sarvamSttMode, kbBakedOnly, schedulingCalendarId, schedulingEventTypeId,
+    voiceStack, geminiLiveVoiceName, geminiLiveThinkingLevel,
     // Inbound/outbound phone number assignment is read-only in the agent form —
     // it's managed exclusively from the Phone Numbers page now. Never forward
     // these to the server: they're populated from the agent's own (potentially
@@ -174,6 +178,15 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
       defaultCalendarId: schedulingCalendarId,
       ...(schedulingEventTypeId != null ? { defaultEventTypeId: schedulingEventTypeId } : {}),
     };
+  }
+  if (voiceStack === "gemini_live") {
+    agentConfig["voiceStack"] = "gemini_live";
+    agentConfig["geminiLive"] = {
+      voiceName: geminiLiveVoiceName || "Kore",
+      thinkingLevel: geminiLiveThinkingLevel ?? "minimal",
+    };
+  } else if (voiceStack === "classic") {
+    agentConfig["voiceStack"] = "classic";
   }
 
   const NATIVE_BOOKING_TYPES = new Set(["native_booking", "native_check_availability", "native_list_bookings", "native_reschedule", "native_cancel"]);
@@ -406,6 +419,9 @@ export default function AgentEdit() {
       autoRedialMaxAttempts: 3,
       schedulingCalendarId: null,
       schedulingEventTypeId: null,
+      voiceStack: "classic",
+      geminiLiveVoiceName: "Kore",
+      geminiLiveThinkingLevel: "minimal",
     },
   });
 
@@ -649,12 +665,17 @@ export default function AgentEdit() {
       autoRedialMaxAttempts:  ((agent as any).agentConfig?.autoRedial?.maxAttempts as number | undefined) ?? 3,
       schedulingCalendarId:   ((agent as any).agentConfig?.calendarCapability?.defaultCalendarId as number | null | undefined) ?? null,
       schedulingEventTypeId:  ((agent as any).agentConfig?.calendarCapability?.defaultEventTypeId as number | null | undefined) ?? null,
+      voiceStack:               (((agent as any).agentConfig?.voiceStack as string | undefined) === "gemini_live" ? "gemini_live" : "classic") as AgentFormValues["voiceStack"],
+      geminiLiveVoiceName:      ((agent as any).agentConfig?.geminiLive?.voiceName as string | undefined) ?? "Kore",
+      geminiLiveThinkingLevel:  ((agent as any).agentConfig?.geminiLive?.thinkingLevel as AgentFormValues["geminiLiveThinkingLevel"] | undefined) ?? "minimal",
     });
   }, [agent]);
 
   const asrProvider = useWatch({ control: form.control, name: "asrProvider" });
   const llmProvider = useWatch({ control: form.control, name: "llmProvider" });
   const ttsProvider = useWatch({ control: form.control, name: "ttsProvider" });
+  const voiceStack = useWatch({ control: form.control, name: "voiceStack" });
+  const geminiLiveVoiceName = useWatch({ control: form.control, name: "geminiLiveVoiceName" });
   // "Paste custom Voice ID" UI mode — selecting the option must NOT erase an
   // already-saved voice ID; the value only changes when the user types into
   // the custom input or picks a different curated voice.
@@ -672,7 +693,7 @@ export default function AgentEdit() {
   const SECTION_FIELDS: Record<PipelineSection, (keyof AgentFormValues)[]> = {
     transcriber: ["asrProvider", "asrModel", "languageAutoDetect"],
     model: ["llmProvider", "llmModel", "temperature"],
-    voice: ["ttsProvider", "ttsModel", "ttsVoice"],
+    voice: ["voiceStack", "ttsProvider", "ttsModel", "ttsVoice", "geminiLiveVoiceName", "geminiLiveThinkingLevel"],
   };
   const [openSection, setOpenSection] = useState<PipelineSection | null>(null);
   const [confirmDiscardSection, setConfirmDiscardSection] = useState<PipelineSection | null>(null);
@@ -1094,8 +1115,16 @@ export default function AgentEdit() {
                 <AgentConfigCard
                   icon={<Volume2 />}
                   label="Voice"
-                  value={TTS_PROVIDERS.find(p => p.value === ttsProvider)?.label ?? ttsProvider}
-                  subtext={form.watch("ttsModel") || form.watch("ttsVoice") || "Default voice"}
+                  value={
+                    voiceStack === "gemini_live"
+                      ? "Gemini Live 3.1"
+                      : (TTS_PROVIDERS.find(p => p.value === ttsProvider)?.label ?? ttsProvider)
+                  }
+                  subtext={
+                    voiceStack === "gemini_live"
+                      ? (geminiLiveVoiceName || "Kore")
+                      : (form.watch("ttsModel") || form.watch("ttsVoice") || "Default voice")
+                  }
                   onClick={() => openPipelineDialog("voice")}
                 />
               </div>
@@ -1220,8 +1249,51 @@ export default function AgentEdit() {
             onSave={savePipelineDialog}
             icon={<Volume2 />}
             title="Voice"
-            description="Choose the text-to-speech provider and voice used to speak to callers."
+            description="Choose classic TTS or Gemini Live native audio for calls."
           >
+            <FormField control={form.control} name="voiceStack" render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-xs">Voice stack</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value ?? "classic"}>
+                  <FormControl><SelectTrigger><SelectValue placeholder="Select voice stack" /></SelectTrigger></FormControl>
+                  <SelectContent>
+                    {VOICE_STACK_OPTIONS.map((p) => (
+                      <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )} />
+
+            {voiceStack === "gemini_live" ? (
+              <>
+                <FormField control={form.control} name="geminiLiveVoiceName" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs">Gemini Live voice</FormLabel>
+                    <FormControl>
+                      <GeminiLiveVoicePicker value={field.value ?? "Kore"} onChange={field.onChange} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="geminiLiveThinkingLevel" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs">Thinking level</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value ?? "minimal"}>
+                      <FormControl><SelectTrigger><SelectValue placeholder="Select thinking level" /></SelectTrigger></FormControl>
+                      <SelectContent>
+                        {GEMINI_LIVE_THINKING_LEVELS.map((p) => (
+                          <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+              </>
+            ) : (
+              <>
             <FormField control={form.control} name="ttsProvider" render={({ field }) => (
               <FormItem>
                 <FormLabel className="text-xs">Provider</FormLabel>
@@ -1291,6 +1363,8 @@ export default function AgentEdit() {
                 </FormItem>
               );
             }} />
+              </>
+            )}
           </EditConfigDialog>
 
           {/* ── Unsaved changes confirmation ── */}

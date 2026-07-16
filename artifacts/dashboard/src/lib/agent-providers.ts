@@ -478,3 +478,30 @@ export function defaultLlmForLanguages(
     ? { llmProvider: DEFAULT_TAMIL_LLM_PROVIDER,    llmModel: DEFAULT_TAMIL_LLM_MODEL }
     : { llmProvider: DEFAULT_NONTAMIL_LLM_PROVIDER, llmModel: DEFAULT_NONTAMIL_LLM_MODEL };
 }
+
+/** Voice stack: classic STT+LLM+TTS vs Gemini native audio Live. */
+export const VOICE_STACK_OPTIONS = [
+  { value: "classic", label: "Classic (STT + LLM + TTS)" },
+  { value: "gemini_live", label: "Gemini Live 3.1" },
+] as const;
+
+export const GEMINI_LIVE_THINKING_LEVELS = [
+  { value: "minimal", label: "Minimal — lowest latency (recommended)" },
+  { value: "low", label: "Low" },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High" },
+] as const;
+
+/** Static fallback; runtime UI may fetch GET /api/gemini-live/voices. */
+export const GEMINI_LIVE_VOICES = [
+  { name: "Zephyr", style: "Bright" }, { name: "Puck", style: "Upbeat" }, { name: "Charon", style: "Informative" },
+  { name: "Kore", style: "Firm" }, { name: "Fenrir", style: "Excitable" }, { name: "Leda", style: "Youthful" },
+  { name: "Orus", style: "Firm" }, { name: "Aoede", style: "Breezy" }, { name: "Callirrhoe", style: "Easy-going" },
+  { name: "Autonoe", style: "Bright" }, { name: "Enceladus", style: "Breathy" }, { name: "Iapetus", style: "Clear" },
+  { name: "Umbriel", style: "Easy-going" }, { name: "Algieba", style: "Smooth" }, { name: "Despina", style: "Smooth" },
+  { name: "Erinome", style: "Clear" }, { name: "Algenib", style: "Gravelly" }, { name: "Rasalgethi", style: "Informative" },
+  { name: "Laomedeia", style: "Upbeat" }, { name: "Achernar", style: "Soft" }, { name: "Alnilam", style: "Firm" },
+  { name: "Schedar", style: "Even" }, { name: "Gacrux", style: "Mature" }, { name: "Pulcherrima", style: "Forward" },
+  { name: "Achird", style: "Friendly" }, { name: "Zubenelgenubi", style: "Casual" }, { name: "Vindemiatrix", style: "Gentle" },
+  { name: "Sadachbia", style: "Lively" }, { name: "Sadaltager", style: "Knowledgeable" }, { name: "Sulafat", style: "Warm" },
+] as const;

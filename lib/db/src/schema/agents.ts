@@ -154,6 +154,14 @@ export type AgentConfig = {
       cancel: boolean;
     };
   };
+  /** Classic STT→LLM→TTS (default) or Gemini native audio-to-audio Live stack. */
+  voiceStack?: "classic" | "gemini_live";
+  /** Settings for voiceStack === "gemini_live" — voice is NOT stored in ttsVoice. */
+  geminiLive?: {
+    model?: string;
+    voiceName?: string;
+    thinkingLevel?: "minimal" | "low" | "medium" | "high";
+  };
 };
 
 export const agentsTable = pgTable("agents", {

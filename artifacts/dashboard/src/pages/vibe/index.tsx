@@ -1054,8 +1054,11 @@ export default function VibePage() {
 
     } catch (err: unknown) {
       if ((err as Error).name === "AbortError") return;
+      const msg = err instanceof Error && err.message.startsWith("HTTP")
+        ? `Something went wrong (${err.message}). Please try again.`
+        : "Something went wrong. Please try again.";
       setMessages(prev => prev.map(m =>
-        !m.done && m.role === "ai" ? { ...m, content: "Something went wrong. Please try again.", done: true } : m
+        !m.done && m.role === "ai" ? { ...m, content: msg, done: true } : m
       ));
       setPhase("idle");
     }
@@ -1611,9 +1614,10 @@ export default function VibePage() {
                       onPreview={vid => previewVoice(vid, setPlayingVoice)}
                       onSelect={v => {
                         collapseVoicePickers();
-                        selectedVoiceIdRef.current = v.voiceId;
                         setSelectedVoice(v.voiceName);
-                        send(`I'll go with ${v.voiceName}`);
+                        // Do NOT update selectedVoiceIdRef before the request — the server
+                        // compares it to detect a new pick. Confirm via voice_selected SSE.
+                        send(`I'll go with ${v.voiceName} (voiceId: ${v.voiceId})`);
                       }}
                       selectedNumber={selectedNumber}
                       onAssignNumber={n => {

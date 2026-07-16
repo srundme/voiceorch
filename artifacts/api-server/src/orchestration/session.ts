@@ -8,6 +8,14 @@ import { KRUTRIM_AUTO_SUMMARY_TITLE } from "../services/kb-source-summary.js";
 import { decryptKey } from "../lib/crypto.js";
 import { eq, and, sql, inArray } from "drizzle-orm";
 import { OrchestrationPipeline } from "./pipeline.js";
+import type { VoiceSession } from "./voice-session.js";
+import { GeminiLivePipeline } from "./adapters/live/gemini-live-pipeline.js";
+import {
+  DEFAULT_GEMINI_LIVE_MODEL,
+  resolveGeminiLiveThinkingLevel,
+  resolveGeminiLiveVoice,
+  resolveVoiceStack,
+} from "./adapters/live/gemini-live-voices.js";
 import { resolveSarvamSttMode } from "./adapters/stt/sarvam-mode.js";
 import { withDbRetry } from "./db-retry.js";
 import { CONVERSATION_DISCIPLINE_BLOCK } from "./conversationDiscipline.js";
@@ -91,7 +99,7 @@ interface MetricsAcc {
 interface ActiveSession {
   callId: number;
   agentId: number;
-  pipeline: OrchestrationPipeline;
+  pipeline: VoiceSession;
   /** Provider-side call id (VoBiz answer-webhook CallUUID / Twilio CallSid / …)
    *  when known at session creation. Lets async provider callbacks (e.g. the
    *  VoBiz machine_detection_url AMD verdict) find the LIVE session directly. */
@@ -558,6 +566,21 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
         )
       : ((agentCfg["sarvamSttMode"] as string | undefined) ?? null),
     kbBakedOnly: (agentCfg["kbBakedOnly"] as boolean | undefined) ?? false,
+    voiceStack: resolveVoiceStack(agentCfg["voiceStack"] as string | undefined),
+    geminiLive: resolveVoiceStack(agentCfg["voiceStack"] as string | undefined) === "gemini_live"
+      ? {
+          model: (typeof (agentCfg["geminiLive"] as Record<string, unknown> | undefined)?.["model"] === "string"
+            && ((agentCfg["geminiLive"] as Record<string, unknown>)["model"] as string).trim())
+            ? ((agentCfg["geminiLive"] as Record<string, unknown>)["model"] as string)
+            : DEFAULT_GEMINI_LIVE_MODEL,
+          voiceName: resolveGeminiLiveVoice(
+            (agentCfg["geminiLive"] as Record<string, unknown> | undefined)?.["voiceName"] as string | undefined,
+          ),
+          thinkingLevel: resolveGeminiLiveThinkingLevel(
+            (agentCfg["geminiLive"] as Record<string, unknown> | undefined)?.["thinkingLevel"] as string | undefined,
+          ),
+        }
+      : null,
   };
   // Propagate endpointing silence into STTConfig so Azure adapter picks it up
   agentConfig.sttConfig.endpointingSilenceMs = agentConfig.asrEndpointingSilenceMs;
@@ -941,6 +964,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     agent.asrProvider?.toLowerCase(),
     agent.llmProvider?.toLowerCase(),
     agent.ttsProvider?.toLowerCase(),
+    ...(agentConfig.voiceStack === "gemini_live" ? ["google"] : []),
   ].filter((p): p is string => !!p);
 
   const isManaged = agent.agentMode === "managed";
@@ -1083,6 +1107,21 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     return inserted;
   })();
 
+  // ── Inject Agent Task brief into system prompt (from dial-time metadata) ────
+  try {
+    const meta = callRecord.metadata ? JSON.parse(callRecord.metadata) as Record<string, unknown> : {};
+    const taskBrief = typeof meta["taskBrief"] === "string" ? meta["taskBrief"].trim() : "";
+    if (taskBrief) {
+      agentConfig.systemPrompt += `\n\n${taskBrief}`;
+      logger.info(
+        { agentId: params.agentId, callId: callRecord.id, agentTaskId: meta["agentTaskId"] ?? null },
+        "Agent task brief injected into system prompt",
+      );
+    }
+  } catch (taskBriefErr) {
+    logger.warn({ err: taskBriefErr, callId: callRecord.id }, "Failed to inject agent task brief");
+  }
+
   // ── Write back triggeredCallId on the scheduled callback row ─────────────────
   if (params.scheduledCallbackId) {
     void db.update(scheduledCallbacksTable)
@@ -1182,31 +1221,43 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
   }
 
   // ── Setup: provider-init / voice / prompt events (mirror the web-call path) ──
-  logExec(EXEC_COMPONENTS.STT, "system", {
-    status: "info",
-    metadata: {
-      event: "Provider Initialized", provider: agent.asrProvider,
-      // Use the effective language from agentConfig — may differ from agent.asrLanguage
-      // when caller memory language_pref overrode it at session start.
-      language: agentConfig.language ?? agent.asrLanguage ?? agent.language ?? null,
-      ...(agentConfig.language &&
-          agentConfig.language !== (agent.asrLanguage ?? agent.language)
-        ? { languageOverriddenFromMemory: true, originalLanguage: agent.asrLanguage ?? agent.language ?? null }
-        : {}),
-    },
-  });
-  logExec(EXEC_COMPONENTS.LLM, "system", {
-    status: "info",
-    metadata: { event: "Provider Initialized", provider: agent.llmProvider, model: agent.llmModel ?? null },
-  });
-  logExec(EXEC_COMPONENTS.TTS, "system", {
-    status: "info",
-    metadata: { event: "Provider Initialized", provider: agent.ttsProvider },
-  });
-  logExec(EXEC_COMPONENTS.TTS, "system", {
-    status: "info",
-    metadata: { event: "Voice Loaded", provider: agent.ttsProvider, voice: agent.ttsVoice ?? null },
-  });
+  if (agentConfig.voiceStack === "gemini_live") {
+    logExec(EXEC_COMPONENTS.Agent, "system", {
+      status: "info",
+      metadata: {
+        event: "Provider Initialized",
+        provider: "gemini_live",
+        model: agentConfig.geminiLive?.model ?? DEFAULT_GEMINI_LIVE_MODEL,
+        voice: agentConfig.geminiLive?.voiceName ?? null,
+      },
+    });
+  } else {
+    logExec(EXEC_COMPONENTS.STT, "system", {
+      status: "info",
+      metadata: {
+        event: "Provider Initialized", provider: agent.asrProvider,
+        // Use the effective language from agentConfig — may differ from agent.asrLanguage
+        // when caller memory language_pref overrode it at session start.
+        language: agentConfig.language ?? agent.asrLanguage ?? agent.language ?? null,
+        ...(agentConfig.language &&
+            agentConfig.language !== (agent.asrLanguage ?? agent.language)
+          ? { languageOverriddenFromMemory: true, originalLanguage: agent.asrLanguage ?? agent.language ?? null }
+          : {}),
+      },
+    });
+    logExec(EXEC_COMPONENTS.LLM, "system", {
+      status: "info",
+      metadata: { event: "Provider Initialized", provider: agent.llmProvider, model: agent.llmModel ?? null },
+    });
+    logExec(EXEC_COMPONENTS.TTS, "system", {
+      status: "info",
+      metadata: { event: "Provider Initialized", provider: agent.ttsProvider },
+    });
+    logExec(EXEC_COMPONENTS.TTS, "system", {
+      status: "info",
+      metadata: { event: "Voice Loaded", provider: agent.ttsProvider, voice: agent.ttsVoice ?? null },
+    });
+  }
   logExec(EXEC_COMPONENTS.Agent, "system", {
     status: "info",
     metadata: {
@@ -1242,7 +1293,231 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     }
   }
 
-  const pipeline = new OrchestrationPipeline({
+  const onCallTransferHandler = async (to: string, operatorSummary?: string): Promise<boolean> => {
+    const isWarm = !!operatorSummary;
+    logger.info({ callId: callRecord.id, transferTo: to, warm: isWarm }, "Call transfer initiated");
+
+    // AI-to-AI transfer: agent: prefix means transfer to another agent
+    if (to.startsWith("agent:")) {
+      const targetAgentId = parseInt(to.slice(6), 10);
+      // Agent-to-agent (AI→AI) handoff is NOT implemented. This previously returned
+      // true and ended the call, so the caller was dropped into dead air whenever the
+      // LLM (or an IVR option) picked an agent transfer. Report failure instead so the
+      // pipeline keeps the current agent talking to the caller.
+      logger.warn({ callId: callRecord.id, targetAgentId }, "Agent-to-agent transfer requested but not implemented — refusing (call continues with current agent)");
+      logExec(EXEC_COMPONENTS.Tool, "system", {
+        status: "error",
+        metadata: {
+          event:   "Transfer Failed",
+          reason:  "agent_transfer_not_implemented",
+          target:  to,
+          message: "Agent-to-agent transfer is not supported",
+        },
+      });
+      return false;
+    }
+
+    // Execute the actual provider-level call redirect
+    try {
+      if (!params.externalCallId) {
+        logger.warn({ callId: callRecord.id }, "Transfer: no externalCallId — cannot redirect call");
+        logExec(EXEC_COMPONENTS.Tool, "system", {
+          status: "error",
+          metadata: {
+            event:   "Transfer Failed",
+            reason:  "no_call_uuid",
+            message: "Transfer unavailable: provider call UUID not yet assigned (call not fully connected)",
+          },
+        });
+        return false;
+      }
+      const baseUrl = (
+        process.env["WEBHOOK_BASE_URL"] ??
+        getSelfBaseUrl()
+      ).replace(/\/$/, "");
+
+      // ── For warm_summary mode: persist summary + get transferId/token for whisper URL ──
+      let transferId: number | undefined;
+      let briefingToken: string | undefined;
+      if (isWarm && agent.userId) {
+        try {
+          // Generate an unguessable per-transfer token used to authenticate the
+          // warm-briefing-xml request (prevents sequential-ID enumeration).
+          briefingToken = randomBytes(32).toString("hex");
+          const [row] = await db.insert(callTransfersTable).values({
+            callId:       callRecord.id,
+            userId:       agent.userId,
+            transferTo:   to,
+            summary:      operatorSummary,
+            status:       "initiated",
+            briefingToken,
+          }).returning({ id: callTransfersTable.id });
+          transferId = row?.id;
+          logger.info({ callId: callRecord.id, transferId }, "Warm transfer: DB record created");
+        } catch (err) {
+          logger.error({ callId: callRecord.id, err }, "Warm transfer: failed to persist summary — falling back to cold");
+        }
+      }
+
+      const {
+        transferTwilioCall, buildTwilioWarmTransferTwiML,
+        transferPlivoCall,  buildPlivoWarmTransferXml,
+        transferVobizCall,  buildVobizWarmTransferXml,
+      } = await import("./telephony/transfer.js");
+      const tprov = params.telephonyProvider;
+
+      logExec(EXEC_COMPONENTS.Tool, "system", {
+        status: "info",
+        metadata: {
+          event:    "Transfer Started",
+          provider: tprov ?? "unknown",
+          target:   to,
+          mode:     isWarm ? "warm" : "cold",
+          callUuid: params.externalCallId,
+        },
+      });
+
+      // Set the transfer flag BEFORE calling the provider API. Providers (esp.
+      // VoBiz) send the media-stream "stop" / close the WS *during* the transfer
+      // API call, which fires onCallEnd → ws.close(). If wasTransferred were still
+      // false at that moment, we'd send a close frame that VoBiz treats as a
+      // hang-up, aborting the in-flight transfer. Reset to false in the catch
+      // block below if the transfer API call fails.
+      wasTransferred = true;
+      transferredTo = to;
+      void patchSessionMeta(sessionId, { wasTransferred: true, transferredTo: to }, redisTtl);
+
+      if (tprov === "twilio") {
+        const authToken = providerKeys.get("twilio") ?? "";
+        const extra = providerKeys.get("twilio:extraConfig");
+        const cfg = extra ? (JSON.parse(extra) as Record<string, string>) : {};
+        const accountSid = cfg["accountSid"] ?? "";
+        let xmlUrl: string;
+        if (isWarm && transferId && briefingToken) {
+          xmlUrl = `${baseUrl}/api/webhooks/twilio/warm-transfer-xml?target=${encodeURIComponent(to)}&transferId=${transferId}&token=${encodeURIComponent(briefingToken)}`;
+        } else {
+          xmlUrl = `${baseUrl}/api/webhooks/twilio/transfer-xml?target=${encodeURIComponent(to)}`;
+        }
+        await transferTwilioCall({ accountSid, authToken, callSid: params.externalCallId, xmlUrl });
+      } else if (tprov === "plivo") {
+        const authToken = providerKeys.get("plivo") ?? "";
+        const extra = providerKeys.get("plivo:extraConfig");
+        const cfg = extra ? (JSON.parse(extra) as Record<string, string>) : {};
+        const authId = cfg["authId"] ?? "";
+        let xmlUrl: string;
+        if (isWarm && transferId && briefingToken) {
+          xmlUrl = `${baseUrl}/api/webhooks/plivo/warm-transfer-xml?target=${encodeURIComponent(to)}&transferId=${transferId}&token=${encodeURIComponent(briefingToken)}`;
+        } else {
+          xmlUrl = `${baseUrl}/api/webhooks/plivo/transfer-xml?target=${encodeURIComponent(to)}`;
+        }
+        await transferPlivoCall({ authId, authToken, callUuid: params.externalCallId, xmlUrl });
+      } else if (tprov === "vobiz") {
+        const authToken = providerKeys.get("vobiz") ?? "";
+        const extra = providerKeys.get("vobiz:extraConfig");
+        const cfg = extra ? (JSON.parse(extra) as Record<string, string>) : {};
+        const authId = cfg["authId"] ?? "";
+        // VoBiz needs a callerId on the <Dial> to the human agent — it must be a
+        // VoBiz-provisioned number on the account (our platform number), NOT the
+        // customer. Outbound: fromNumber is the platform number; inbound:
+        // toNumber is the platform number.
+        const callerId = params.callDirection === "outbound" ? params.fromNumber : params.toNumber;
+        const callerIdQs = callerId ? `&callerId=${encodeURIComponent(callerId)}` : "";
+        let xmlUrl: string;
+        if (isWarm && transferId && briefingToken) {
+          xmlUrl = `${baseUrl}/api/webhooks/vobiz/warm-transfer-xml?target=${encodeURIComponent(to)}&transferId=${transferId}&token=${encodeURIComponent(briefingToken)}${callerIdQs}`;
+        } else {
+          xmlUrl = `${baseUrl}/api/webhooks/vobiz/transfer-xml?target=${encodeURIComponent(to)}${callerIdQs}`;
+        }
+        await transferVobizCall({ authId, authToken, callUuid: params.externalCallId, xmlUrl, callDirection: params.callDirection });
+      } else {
+        // Unknown / unsupported telephony provider. We optimistically set
+        // wasTransferred=true before the provider branch (to win the WS-close race),
+        // so undo it here and report failure instead of silently ending the call in
+        // dead air.
+        wasTransferred = false;
+        transferredTo = null;
+        void patchSessionMeta(sessionId, { wasTransferred: false, transferredTo: null }, redisTtl);
+        logger.warn({ callId: callRecord.id, provider: tprov ?? "unknown" }, "Transfer: unsupported telephony provider — cannot redirect (call continues)");
+        logExec(EXEC_COMPONENTS.Tool, "system", {
+          status: "error",
+          metadata: {
+            event:    "Transfer Failed",
+            reason:   "unsupported_provider",
+            provider: tprov ?? "unknown",
+            target:   to,
+          },
+        });
+        return false;
+      }
+      // suppress unused-import warnings for builders not used via direct call
+      void buildTwilioWarmTransferTwiML; void buildPlivoWarmTransferXml; void buildVobizWarmTransferXml;
+
+      // wasTransferred / transferredTo were already set BEFORE the provider call
+      // (see comment above) to win the WS-close race. Nothing to set here.
+      logExec(EXEC_COMPONENTS.Tool, "system", {
+        status: "success",
+        metadata: {
+          event:    "Transfer Completed",
+          provider: tprov ?? "unknown",
+          target:   to,
+          mode:     isWarm ? "warm" : "cold",
+          callUuid: params.externalCallId,
+        },
+      });
+      return true;
+    } catch (err) {
+      // Transfer failed — undo the optimistic flag set before the provider call
+      // so normal call-end (ws.close) proceeds and the call isn't left hanging
+      // with a dead AI stream.
+      wasTransferred = false;
+      transferredTo = null;
+      void patchSessionMeta(sessionId, { wasTransferred: false, transferredTo: null }, redisTtl);
+      const errMsg = err instanceof Error ? err.message : String(err);
+      logger.error({ callId: callRecord.id, err }, "Provider call transfer API failed");
+      logExec(EXEC_COMPONENTS.Tool, "system", {
+        status: "error",
+        metadata: {
+          event:    "Transfer Failed",
+          reason:   "provider_api_error",
+          provider: params.telephonyProvider ?? "unknown",
+          callUuid: params.externalCallId ?? null,
+          message:  errMsg,
+        },
+      });
+      return false;
+    }
+  };
+
+  const pipeline: VoiceSession = agentConfig.voiceStack === "gemini_live"
+    ? new GeminiLivePipeline({
+        callId: callRecord.id,
+        agentConfig,
+        providerKeys,
+        telephonyProvider: params.telephonyProvider,
+        callerPhone,
+        campaignLeadId: params.campaignLeadId ?? null,
+        onAudioOut: params.onAudioOut,
+        rawPcmOutput: params.rawPcmOutput ?? (params.telephonyProvider === "vobiz"),
+        onTranscript: (speaker, text) => {
+          logger.debug({ callId: callRecord.id, speaker, text: text.slice(0, 80) }, "Transcript");
+          params.onTranscript?.(speaker, text);
+        },
+        onCallEnd: () => {
+          naturalEndTriggered = true;
+          params.onCallEnd();
+        },
+        onCallTransfer: onCallTransferHandler,
+        onBargeIn: params.onBargeIn,
+        onConversationUpdate: (history) => {
+          void saveConversation(callRecord.id, history, redisTtl);
+        },
+        onFatalError: (reason) => {
+          void failSession(sessionId, reason);
+        },
+        callDirection,
+        answeredAt: params.answeredAt,
+      })
+    : new OrchestrationPipeline({
     callId: callRecord.id,
     agentConfig,
     providerKeys,
@@ -1323,200 +1598,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
       naturalEndTriggered = true;
       params.onCallEnd();
     },
-    onCallTransfer: async (to, operatorSummary?) => {
-      const isWarm = !!operatorSummary;
-      logger.info({ callId: callRecord.id, transferTo: to, warm: isWarm }, "Call transfer initiated");
-
-      // AI-to-AI transfer: agent: prefix means transfer to another agent
-      if (to.startsWith("agent:")) {
-        const targetAgentId = parseInt(to.slice(6), 10);
-        // Agent-to-agent (AI→AI) handoff is NOT implemented. This previously returned
-        // true and ended the call, so the caller was dropped into dead air whenever the
-        // LLM (or an IVR option) picked an agent transfer. Report failure instead so the
-        // pipeline keeps the current agent talking to the caller.
-        logger.warn({ callId: callRecord.id, targetAgentId }, "Agent-to-agent transfer requested but not implemented — refusing (call continues with current agent)");
-        logExec(EXEC_COMPONENTS.Tool, "system", {
-          status: "error",
-          metadata: {
-            event:   "Transfer Failed",
-            reason:  "agent_transfer_not_implemented",
-            target:  to,
-            message: "Agent-to-agent transfer is not supported",
-          },
-        });
-        return false;
-      }
-
-      // Execute the actual provider-level call redirect
-      try {
-        if (!params.externalCallId) {
-          logger.warn({ callId: callRecord.id }, "Transfer: no externalCallId — cannot redirect call");
-          logExec(EXEC_COMPONENTS.Tool, "system", {
-            status: "error",
-            metadata: {
-              event:   "Transfer Failed",
-              reason:  "no_call_uuid",
-              message: "Transfer unavailable: provider call UUID not yet assigned (call not fully connected)",
-            },
-          });
-          return false;
-        }
-        const baseUrl = (
-          process.env["WEBHOOK_BASE_URL"] ??
-          getSelfBaseUrl()
-        ).replace(/\/$/, "");
-
-        // ── For warm_summary mode: persist summary + get transferId/token for whisper URL ──
-        let transferId: number | undefined;
-        let briefingToken: string | undefined;
-        if (isWarm && agent.userId) {
-          try {
-            // Generate an unguessable per-transfer token used to authenticate the
-            // warm-briefing-xml request (prevents sequential-ID enumeration).
-            briefingToken = randomBytes(32).toString("hex");
-            const [row] = await db.insert(callTransfersTable).values({
-              callId:       callRecord.id,
-              userId:       agent.userId,
-              transferTo:   to,
-              summary:      operatorSummary,
-              status:       "initiated",
-              briefingToken,
-            }).returning({ id: callTransfersTable.id });
-            transferId = row?.id;
-            logger.info({ callId: callRecord.id, transferId }, "Warm transfer: DB record created");
-          } catch (err) {
-            logger.error({ callId: callRecord.id, err }, "Warm transfer: failed to persist summary — falling back to cold");
-          }
-        }
-
-        const {
-          transferTwilioCall, buildTwilioWarmTransferTwiML,
-          transferPlivoCall,  buildPlivoWarmTransferXml,
-          transferVobizCall,  buildVobizWarmTransferXml,
-        } = await import("./telephony/transfer.js");
-        const tprov = params.telephonyProvider;
-
-        logExec(EXEC_COMPONENTS.Tool, "system", {
-          status: "info",
-          metadata: {
-            event:    "Transfer Started",
-            provider: tprov ?? "unknown",
-            target:   to,
-            mode:     isWarm ? "warm" : "cold",
-            callUuid: params.externalCallId,
-          },
-        });
-
-        // Set the transfer flag BEFORE calling the provider API. Providers (esp.
-        // VoBiz) send the media-stream "stop" / close the WS *during* the transfer
-        // API call, which fires onCallEnd → ws.close(). If wasTransferred were still
-        // false at that moment, we'd send a close frame that VoBiz treats as a
-        // hang-up, aborting the in-flight transfer. Reset to false in the catch
-        // block below if the transfer API call fails.
-        wasTransferred = true;
-        transferredTo = to;
-        void patchSessionMeta(sessionId, { wasTransferred: true, transferredTo: to }, redisTtl);
-
-        if (tprov === "twilio") {
-          const authToken = providerKeys.get("twilio") ?? "";
-          const extra = providerKeys.get("twilio:extraConfig");
-          const cfg = extra ? (JSON.parse(extra) as Record<string, string>) : {};
-          const accountSid = cfg["accountSid"] ?? "";
-          let xmlUrl: string;
-          if (isWarm && transferId && briefingToken) {
-            xmlUrl = `${baseUrl}/api/webhooks/twilio/warm-transfer-xml?target=${encodeURIComponent(to)}&transferId=${transferId}&token=${encodeURIComponent(briefingToken)}`;
-          } else {
-            xmlUrl = `${baseUrl}/api/webhooks/twilio/transfer-xml?target=${encodeURIComponent(to)}`;
-          }
-          await transferTwilioCall({ accountSid, authToken, callSid: params.externalCallId, xmlUrl });
-        } else if (tprov === "plivo") {
-          const authToken = providerKeys.get("plivo") ?? "";
-          const extra = providerKeys.get("plivo:extraConfig");
-          const cfg = extra ? (JSON.parse(extra) as Record<string, string>) : {};
-          const authId = cfg["authId"] ?? "";
-          let xmlUrl: string;
-          if (isWarm && transferId && briefingToken) {
-            xmlUrl = `${baseUrl}/api/webhooks/plivo/warm-transfer-xml?target=${encodeURIComponent(to)}&transferId=${transferId}&token=${encodeURIComponent(briefingToken)}`;
-          } else {
-            xmlUrl = `${baseUrl}/api/webhooks/plivo/transfer-xml?target=${encodeURIComponent(to)}`;
-          }
-          await transferPlivoCall({ authId, authToken, callUuid: params.externalCallId, xmlUrl });
-        } else if (tprov === "vobiz") {
-          const authToken = providerKeys.get("vobiz") ?? "";
-          const extra = providerKeys.get("vobiz:extraConfig");
-          const cfg = extra ? (JSON.parse(extra) as Record<string, string>) : {};
-          const authId = cfg["authId"] ?? "";
-          // VoBiz needs a callerId on the <Dial> to the human agent — it must be a
-          // VoBiz-provisioned number on the account (our platform number), NOT the
-          // customer. Outbound: fromNumber is the platform number; inbound:
-          // toNumber is the platform number.
-          const callerId = params.callDirection === "outbound" ? params.fromNumber : params.toNumber;
-          const callerIdQs = callerId ? `&callerId=${encodeURIComponent(callerId)}` : "";
-          let xmlUrl: string;
-          if (isWarm && transferId && briefingToken) {
-            xmlUrl = `${baseUrl}/api/webhooks/vobiz/warm-transfer-xml?target=${encodeURIComponent(to)}&transferId=${transferId}&token=${encodeURIComponent(briefingToken)}${callerIdQs}`;
-          } else {
-            xmlUrl = `${baseUrl}/api/webhooks/vobiz/transfer-xml?target=${encodeURIComponent(to)}${callerIdQs}`;
-          }
-          await transferVobizCall({ authId, authToken, callUuid: params.externalCallId, xmlUrl, callDirection: params.callDirection });
-        } else {
-          // Unknown / unsupported telephony provider. We optimistically set
-          // wasTransferred=true before the provider branch (to win the WS-close race),
-          // so undo it here and report failure instead of silently ending the call in
-          // dead air.
-          wasTransferred = false;
-          transferredTo = null;
-          void patchSessionMeta(sessionId, { wasTransferred: false, transferredTo: null }, redisTtl);
-          logger.warn({ callId: callRecord.id, provider: tprov ?? "unknown" }, "Transfer: unsupported telephony provider — cannot redirect (call continues)");
-          logExec(EXEC_COMPONENTS.Tool, "system", {
-            status: "error",
-            metadata: {
-              event:    "Transfer Failed",
-              reason:   "unsupported_provider",
-              provider: tprov ?? "unknown",
-              target:   to,
-            },
-          });
-          return false;
-        }
-        // suppress unused-import warnings for builders not used via direct call
-        void buildTwilioWarmTransferTwiML; void buildPlivoWarmTransferXml; void buildVobizWarmTransferXml;
-
-        // wasTransferred / transferredTo were already set BEFORE the provider call
-        // (see comment above) to win the WS-close race. Nothing to set here.
-        logExec(EXEC_COMPONENTS.Tool, "system", {
-          status: "success",
-          metadata: {
-            event:    "Transfer Completed",
-            provider: tprov ?? "unknown",
-            target:   to,
-            mode:     isWarm ? "warm" : "cold",
-            callUuid: params.externalCallId,
-          },
-        });
-        return true;
-      } catch (err) {
-        // Transfer failed — undo the optimistic flag set before the provider call
-        // so normal call-end (ws.close) proceeds and the call isn't left hanging
-        // with a dead AI stream.
-        wasTransferred = false;
-        transferredTo = null;
-        void patchSessionMeta(sessionId, { wasTransferred: false, transferredTo: null }, redisTtl);
-        const errMsg = err instanceof Error ? err.message : String(err);
-        logger.error({ callId: callRecord.id, err }, "Provider call transfer API failed");
-        logExec(EXEC_COMPONENTS.Tool, "system", {
-          status: "error",
-          metadata: {
-            event:    "Transfer Failed",
-            reason:   "provider_api_error",
-            provider: params.telephonyProvider ?? "unknown",
-            callUuid: params.externalCallId ?? null,
-            message:  errMsg,
-          },
-        });
-        return false;
-      }
-    },
+    onCallTransfer: onCallTransferHandler,
     onBargeIn: params.onBargeIn,
     onMetrics: (m: PipelineMetrics) => {
       metricsAcc.sttTotal += m.sttLatencyMs;
@@ -1611,21 +1693,34 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
   logger.info({ sessionId, callId: callRecord.id, agent: agent.name }, "Session created");
 
   if (params.amdMachineHint || params.amdArmed) {
-    // Acoustic AMD confirmation — armed by an (unreliable) synchronous machine
-    // hint OR unconditionally for AMD-enabled VoBiz outbound calls (amdArmed;
-    // the async machine_detection_url callback corroborates mid-window). Open
-    // the normal stream but confirm the machine verdict acoustically BEFORE
-    // greeting — only a confirmed machine enacts the voicemail action; anything
-    // ambiguous falls through to a normal greeting so a live human is never harmed.
-    pipeline.confirmAmdMachineThenBranch().catch((err) => {
-      logger.error({ sessionId, err }, "AMD acoustic confirmation failed");
-    });
+    if (agentConfig.voiceStack === "gemini_live") {
+      // v1: acoustic AMD / voicemail delivery stays on the classic stack only.
+      pipeline.greet().catch((err) => {
+        logger.error({ sessionId, err }, "Gemini Live greeting failed");
+      });
+    } else {
+      // Acoustic AMD confirmation — armed by an (unreliable) synchronous machine
+      // hint OR unconditionally for AMD-enabled VoBiz outbound calls (amdArmed;
+      // the async machine_detection_url callback corroborates mid-window). Open
+      // the normal stream but confirm the machine verdict acoustically BEFORE
+      // greeting — only a confirmed machine enacts the voicemail action; anything
+      // ambiguous falls through to a normal greeting so a live human is never harmed.
+      pipeline.confirmAmdMachineThenBranch().catch((err) => {
+        logger.error({ sessionId, err }, "AMD acoustic confirmation failed");
+      });
+    }
   } else if (params.voicemailDelivery) {
-    // Voicemail-delivery mode: do NOT greet/run the conversation. Listen for the
-    // machine greeting to end, then speak the full message once and hang up.
-    pipeline.deliverVoicemail().catch((err) => {
-      logger.error({ sessionId, err }, "Voicemail delivery failed");
-    });
+    if (agentConfig.voiceStack === "gemini_live") {
+      pipeline.greet().catch((err) => {
+        logger.error({ sessionId, err }, "Gemini Live greeting failed");
+      });
+    } else {
+      // Voicemail-delivery mode: do NOT greet/run the conversation. Listen for the
+      // machine greeting to end, then speak the full message once and hang up.
+      pipeline.deliverVoicemail().catch((err) => {
+        logger.error({ sessionId, err }, "Voicemail delivery failed");
+      });
+    }
   } else {
     pipeline.greet().catch((err) => {
       logger.error({ sessionId, err }, "Greeting failed");
@@ -2534,6 +2629,25 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
               avgTtsLatencyMs:    avgTtsMs,
             }).catch((err) => logger.warn({ sessionId, err }, "Zelto push failed (session)"));
           }).catch(() => {});
+
+          // ── Agent Task completion hook ──────────────────────────────────────
+          try {
+            const md = call.metadata ? JSON.parse(call.metadata) as Record<string, unknown> : {};
+            const agentTaskId = typeof md["agentTaskId"] === "number" ? md["agentTaskId"] : Number(md["agentTaskId"]);
+            if (Number.isFinite(agentTaskId) && agentTaskId > 0) {
+              const { onAgentTaskCallEnded } = await import("../services/task-orchestrator.js");
+              await onAgentTaskCallEnded({
+                callId: session.callId,
+                agentTaskId,
+                summary: callSummary || null,
+                disposition: dispositionResult,
+                amdResult: call.amdResult ?? null,
+                successEvaluation: call.successEvaluation ?? null,
+              });
+            }
+          } catch (taskEndErr) {
+            logger.warn({ sessionId, err: taskEndErr }, "Agent task call-end hook failed");
+          }
         })();
 
         // ── Post-call taxonomy disposition classification (fire-and-forget) ──────
