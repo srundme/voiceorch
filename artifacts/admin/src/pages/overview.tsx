@@ -145,7 +145,7 @@ function VobizWalletCard() {
   const vobizInr   = data?.vobizBalanceInr ?? null;
   const requiredInr = data?.requiredMinInr ?? 0;
   const shortfallInr = data?.shortfallInr ?? 0;
-  const totalUserUsd = data?.totalUserWalletUsd ?? 0;
+  const totalUserInr = data?.totalUserWalletInr ?? 0;
   const thresholdPct = data?.thresholdPct ?? 20;
 
   const pct = vobizInr !== null && requiredInr > 0
@@ -204,7 +204,7 @@ function VobizWalletCard() {
               </div>
               <div className="text-right text-xs text-muted-foreground shrink-0">
                 <div>User wallets</div>
-                <div className="font-mono font-semibold text-foreground">${totalUserUsd.toFixed(2)}</div>
+                <div className="font-mono font-semibold text-foreground">₹{totalUserInr.toLocaleString("en-IN", { maximumFractionDigits: 0 })}</div>
               </div>
             </div>
 

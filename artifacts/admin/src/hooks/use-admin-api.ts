@@ -925,6 +925,50 @@ export function useGrowthEventStats() {
   });
 }
 
+// ─── Signups / Lifecycle Report ───────────────────────────────────────────────
+
+export type LifecycleState = "active" | "inactive" | "never_activated" | "suspended" | "closed";
+
+export interface SignupReportRow {
+  clerk_id: string;
+  email: string | null;
+  name: string | null;
+  is_test: boolean;
+  status: string;
+  suspended_at: string | null;
+  suspended_reason: string | null;
+  onboarding_completed: boolean;
+  role: string | null;
+  referral_source: string | null;
+  auth_method: "password" | "google";
+  signed_up_at: string;
+  login_count: number;
+  first_login_at: string | null;
+  last_login_at: string | null;
+  first_vibe_at: string | null;
+  agent_count: number;
+  first_agent_at: string | null;
+  call_count: number;
+  first_call_at: string | null;
+  last_call_at: string | null;
+  total_duration_seconds: number;
+  last_seen_at: string;
+  lifecycle: LifecycleState;
+}
+
+export interface SignupReport {
+  summary: Record<string, number>;
+  rows: SignupReportRow[];
+}
+
+export function useSignupReport(segment: UserSegment = "all") {
+  return useQuery({
+    queryKey: ["admin", "reports", "signups", segment],
+    queryFn: () => adminFetch<SignupReport>(`/reports/signups?segment=${segment}`),
+    refetchInterval: 60_000,
+  });
+}
+
 // ── Ambient Sounds ────────────────────────────────────────────────────────────
 
 export interface AmbientSound {
@@ -1024,12 +1068,11 @@ export function useSendTestEmail() {
 }
 
 export interface VobizWalletStatus {
-  totalUserWalletUsd:  number;
+  totalUserWalletInr:  number;
   vobizBalanceInr:     number | null;
   requiredMinInr:      number;
   shortfallInr:        number;
   thresholdPct:        number;
-  usdToInr:            number;
   status:              "ok" | "warning" | "critical" | "unknown";
 }
 

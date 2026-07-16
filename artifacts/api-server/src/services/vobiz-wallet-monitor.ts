@@ -7,7 +7,10 @@
  *
  * Business rule (from master-costing.md):
  *   VoBiz telephony = 10.8% of user spend → keep 20% buffer
- *   ∴ recommended = totalUserWalletUSD × (thresholdPct / 100) × usdToInrRate
+ *   ∴ recommended = totalUserWalletINR × (thresholdPct / 100)
+ *
+ * NOTE: user wallet balances (wallet_balance_cents) are stored in INR paise,
+ * so the total is already in rupees — no currency conversion is applied.
  *
  * Two severity tiers:
  *   warning  — VoBiz balance < recommended minimum
@@ -15,7 +18,6 @@
  *
  * Config keys (platform_settings table, editable from Admin):
  *   vobiz_wallet_threshold_pct  — % of user wallets to keep in VoBiz (default 20)
- *   vobiz_usd_to_inr_rate       — USD→INR exchange rate used for conversion (default 96)
  *
  * Alert cooldown uses a separate in-process timestamp to avoid spamming:
  * one alert every 60 minutes maximum regardless of severity, except when
@@ -31,38 +33,31 @@ const CHECK_INTERVAL_MS = 15 * 60 * 1000; // every 15 minutes
 const ALERT_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour between alerts (same severity)
 
 const THRESHOLD_PCT_KEY   = "vobiz_wallet_threshold_pct";
-const USD_TO_INR_KEY      = "vobiz_usd_to_inr_rate";
 
 let _lastAlertAt   = 0;
 let _lastSeverity  = "";
 
-async function getConfig(): Promise<{ thresholdPct: number; usdToInr: number }> {
-  const [pctRow, rateRow] = await Promise.all([
-    db
-      .select({ value: platformSettingsTable.value })
-      .from(platformSettingsTable)
-      .where(eq(platformSettingsTable.key, THRESHOLD_PCT_KEY))
-      .then(([r]) => r),
-    db
-      .select({ value: platformSettingsTable.value })
-      .from(platformSettingsTable)
-      .where(eq(platformSettingsTable.key, USD_TO_INR_KEY))
-      .then(([r]) => r),
-  ]);
+async function getConfig(): Promise<{ thresholdPct: number }> {
+  const pctRow = await db
+    .select({ value: platformSettingsTable.value })
+    .from(platformSettingsTable)
+    .where(eq(platformSettingsTable.key, THRESHOLD_PCT_KEY))
+    .then(([r]) => r);
 
   const thresholdPct = pctRow?.value ? Number(pctRow.value) : 20;
-  const usdToInr     = rateRow?.value ? Number(rateRow.value) : 96;
 
   return {
     thresholdPct: Number.isFinite(thresholdPct) && thresholdPct > 0 ? thresholdPct : 20,
-    usdToInr:     Number.isFinite(usdToInr)     && usdToInr > 0     ? usdToInr     : 96,
   };
 }
 
 async function fetchTotalUserWalletCents(): Promise<number> {
+  // Only real users count toward the required buffer — test/internal
+  // accounts (is_test) never generate real telephony spend.
   const [row] = await db
     .select({ total: sql<string>`coalesce(sum(wallet_balance_cents), 0)` })
-    .from(usersTable);
+    .from(usersTable)
+    .where(eq(usersTable.isTest, false));
   return Number(row?.total ?? 0);
 }
 
@@ -100,16 +95,15 @@ async function checkVobizWallet(): Promise<void> {
       return;
     }
 
-    const totalUserUsd   = totalUserCents / 100;
-    const requiredInr    = totalUserUsd * (config.thresholdPct / 100) * config.usdToInr;
+    const totalUserInr   = totalUserCents / 100;
+    const requiredInr    = totalUserInr * (config.thresholdPct / 100);
     const criticalInr    = requiredInr * 0.5;
     const vobizBalance   = vobiz.availableBalance;
 
     logger.info(
       {
-        totalUserUsd:    totalUserUsd.toFixed(2),
+        totalUserInr:    totalUserInr.toFixed(2),
         thresholdPct:    config.thresholdPct,
-        usdToInr:        config.usdToInr,
         requiredInr:     requiredInr.toFixed(2),
         vobizBalanceInr: vobizBalance.toFixed(2),
       },
@@ -137,7 +131,7 @@ async function checkVobizWallet(): Promise<void> {
       : `VoBiz master wallet low — top up recommended`;
 
     const message =
-      `Total user wallets: $${totalUserUsd.toFixed(2)} USD\n` +
+      `Total user wallets: ₹${totalUserInr.toFixed(2)} INR\n` +
       `Recommended VoBiz balance (${config.thresholdPct}% of user wallets): ₹${requiredInr.toFixed(0)} INR\n` +
       `Current VoBiz available balance:   ₹${vobizBalance.toFixed(0)} INR\n` +
       `Shortfall: ₹${shortfall.toFixed(0)} INR\n\n` +
@@ -179,12 +173,11 @@ export function startVobizWalletMonitor(): void {
  * Does NOT fire alerts — pure read.
  */
 export async function getVobizWalletStatus(): Promise<{
-  totalUserWalletUsd:  number;
+  totalUserWalletInr:  number;
   vobizBalanceInr:     number | null;
   requiredMinInr:      number;
   shortfallInr:        number;
   thresholdPct:        number;
-  usdToInr:            number;
   status:              "ok" | "warning" | "critical" | "unknown";
 }> {
   const [config, totalUserCents, vobiz] = await Promise.all([
@@ -193,17 +186,16 @@ export async function getVobizWalletStatus(): Promise<{
     fetchVobizBalance(),
   ]);
 
-  const totalUserUsd = totalUserCents / 100;
-  const requiredInr  = totalUserUsd * (config.thresholdPct / 100) * config.usdToInr;
+  const totalUserInr = totalUserCents / 100;
+  const requiredInr  = totalUserInr * (config.thresholdPct / 100);
 
   if (vobiz === null) {
     return {
-      totalUserWalletUsd: totalUserUsd,
+      totalUserWalletInr: totalUserInr,
       vobizBalanceInr:    null,
       requiredMinInr:     requiredInr,
       shortfallInr:       0,
       thresholdPct:       config.thresholdPct,
-      usdToInr:           config.usdToInr,
       status:             "unknown",
     };
   }
@@ -214,12 +206,11 @@ export async function getVobizWalletStatus(): Promise<{
   else if (vobiz.availableBalance < requiredInr)  status = "warning";
 
   return {
-    totalUserWalletUsd:  totalUserUsd,
+    totalUserWalletInr:  totalUserInr,
     vobizBalanceInr:     vobiz.availableBalance,
     requiredMinInr:      requiredInr,
     shortfallInr:        shortfall,
     thresholdPct:        config.thresholdPct,
-    usdToInr:            config.usdToInr,
     status,
   };
 }

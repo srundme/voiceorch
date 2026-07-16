@@ -21,6 +21,13 @@ const SEGMENTS: { id: UserSegment; label: string }[] = [
   { id: "all", label: "All" },
 ];
 
+type UserCategory = "all" | "professional" | "student";
+const CATEGORIES: { id: UserCategory; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "professional", label: "Professional" },
+  { id: "student", label: "Student" },
+];
+
 function TestFlagToggle({ clerkId, isTest }: { clerkId: string; isTest: boolean }) {
   const mutation = useSetUserTestFlag(clerkId);
   return (
@@ -45,20 +52,22 @@ export default function UsersList() {
   const { data: users, isLoading, isError, error } = useUsers();
   const [search, setSearch] = useState("");
   const [segment, setSegment] = useState<UserSegment>("all");
+  const [category, setCategory] = useState<UserCategory>("all");
 
   const filteredUsers = users?.filter(
     (u) =>
       (u.email?.toLowerCase().includes(search.toLowerCase()) ||
         u.name?.toLowerCase().includes(search.toLowerCase()) ||
         u.clerkId?.toLowerCase().includes(search.toLowerCase())) &&
-      (segment === "all" ? true : segment === "test" ? !!u.isTest : !u.isTest)
+      (segment === "all" ? true : segment === "test" ? !!u.isTest : !u.isTest) &&
+      (category === "all" ? true : u.onboardingData?.role === category)
   );
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <h1 className="text-3xl font-bold tracking-tight">Users</h1>
-        <div className="flex items-center gap-3 w-full sm:w-auto">
+        <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
           <div className="inline-flex items-center rounded-md border border-border bg-card p-0.5 shrink-0">
             {SEGMENTS.map((s) => (
               <button
@@ -72,6 +81,22 @@ export default function UsersList() {
                 }`}
               >
                 {s.label}
+              </button>
+            ))}
+          </div>
+          <div className="inline-flex items-center rounded-md border border-border bg-card p-0.5 shrink-0">
+            {CATEGORIES.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => setCategory(c.id)}
+                className={`px-2.5 h-8 text-[11px] font-medium rounded-[5px] transition-colors ${
+                  category === c.id
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {c.label}
               </button>
             ))}
           </div>

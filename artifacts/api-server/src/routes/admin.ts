@@ -828,6 +828,106 @@ router.get("/admin/growth/event-stats", async (_req, res): Promise<void> => {
   }
 });
 
+// ─── Signups / Lifecycle Report ──────────────────────────────────────────────
+// Per-user lifecycle timeline: when they signed up, acquisition channel + auth
+// method, login history, activation, last-seen, and whether they ghosted
+// (never activated / went inactive) or closed (suspended / deleted).
+router.get("/admin/reports/signups", async (req, res): Promise<void> => {
+  try {
+    const segment = parseSegment(req.query.segment);
+    // Validated segment → safe to build the WHERE clause; still parameterised.
+    const where =
+      segment === "all" ? "" : "WHERE u.is_test = $1";
+    const params = segment === "all" ? [] : [segment === "test"];
+
+    const result = await pool.query(`
+      WITH ev AS (
+        SELECT user_id,
+          COUNT(*) FILTER (WHERE event_name = 'login')            AS login_count,
+          MIN(created_at) FILTER (WHERE event_name = 'login')     AS first_login_at,
+          MAX(created_at) FILTER (WHERE event_name = 'login')     AS last_login_at,
+          MIN(created_at) FILTER (WHERE event_name = 'vibe_started') AS first_vibe_at
+        FROM analytics_events
+        GROUP BY user_id
+      ),
+      ag AS (
+        SELECT user_id, COUNT(*) AS agent_count,
+          MIN(created_at) AS first_agent_at, MAX(created_at) AS last_agent_at
+        FROM agents GROUP BY user_id
+      ),
+      ca AS (
+        SELECT user_id, COUNT(*) AS call_count,
+          MIN(created_at) AS first_call_at, MAX(created_at) AS last_call_at,
+          COALESCE(SUM(duration_seconds), 0) AS total_duration_seconds
+        FROM calls GROUP BY user_id
+      )
+      SELECT
+        u.clerk_id,
+        u.email,
+        u.name,
+        u.is_test,
+        u.status,
+        u.suspended_at,
+        u.suspended_reason,
+        u.onboarding_completed,
+        u.onboarding_data->>'role'           AS role,
+        u.onboarding_data->>'referralSource' AS referral_source,
+        CASE WHEN u.password_hash IS NOT NULL THEN 'password' ELSE 'google' END AS auth_method,
+        u.created_at                          AS signed_up_at,
+        COALESCE(ev.login_count, 0)           AS login_count,
+        ev.first_login_at,
+        ev.last_login_at,
+        ev.first_vibe_at,
+        COALESCE(ag.agent_count, 0)           AS agent_count,
+        ag.first_agent_at,
+        COALESCE(ca.call_count, 0)            AS call_count,
+        ca.first_call_at,
+        ca.last_call_at,
+        COALESCE(ca.total_duration_seconds, 0) AS total_duration_seconds,
+        GREATEST(
+          u.created_at,
+          COALESCE(ev.last_login_at, u.created_at),
+          COALESCE(ca.last_call_at,  u.created_at),
+          COALESCE(ag.last_agent_at, u.created_at)
+        ) AS last_seen_at,
+        CASE
+          WHEN u.status = 'deleted'   THEN 'closed'
+          WHEN u.status = 'suspended' THEN 'suspended'
+          WHEN NOT u.onboarding_completed AND COALESCE(ag.agent_count,0) = 0 AND COALESCE(ca.call_count,0) = 0
+            THEN 'never_activated'
+          WHEN GREATEST(
+                 u.created_at,
+                 COALESCE(ev.last_login_at, u.created_at),
+                 COALESCE(ca.last_call_at,  u.created_at),
+                 COALESCE(ag.last_agent_at, u.created_at)
+               ) < NOW() - INTERVAL '7 days'
+            THEN 'inactive'
+          ELSE 'active'
+        END AS lifecycle
+      FROM users u
+      LEFT JOIN ev ON ev.user_id = u.clerk_id
+      LEFT JOIN ag ON ag.user_id = u.clerk_id
+      LEFT JOIN ca ON ca.user_id = u.clerk_id
+      ${where}
+      ORDER BY u.created_at DESC
+      LIMIT 1000
+    `, params);
+
+    // Lifecycle rollup so the UI can show summary counts without re-querying.
+    const summary = { total: 0, active: 0, inactive: 0, never_activated: 0, suspended: 0, closed: 0 } as Record<string, number>;
+    for (const row of result.rows) {
+      summary.total += 1;
+      const key = String(row.lifecycle);
+      if (key in summary) summary[key] += 1;
+    }
+
+    res.json({ summary, rows: result.rows });
+  } catch (err) {
+    logger.error({ err }, "reports/signups failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 // ─── Alert Notification Settings ─────────────────────────────────────────────
 
 const ALERT_NOTIFICATION_EMAIL_KEY = "alert_notification_email";
