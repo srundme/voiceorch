@@ -433,9 +433,10 @@ RESPONSE FORMAT — ONLY valid JSON, no prose outside it:
 }`;
 
 /** Classified vibe-chat Gemini failure so the SSE error emit can tell users whether retrying helps. */
+type VibeGeminiErrorKind = "malformed" | "unavailable" | "rate_limited";
 class VibeGeminiError extends Error {
-  kind: "malformed" | "unavailable";
-  constructor(message: string, kind: "malformed" | "unavailable") {
+  kind: VibeGeminiErrorKind;
+  constructor(message: string, kind: VibeGeminiErrorKind) {
     super(message);
     this.name = "VibeGeminiError";
     this.kind = kind;
@@ -484,7 +485,7 @@ async function callGemini(key: string, messages: VibeChatMessage[]): Promise<Gem
     parts: [{ text: m.content }],
   }));
 
-  const MAX_ATTEMPTS = 3;
+  const MAX_ATTEMPTS = 4;
   let lastErr: Error | undefined;
   // Flipped after a truncated/unparseable response so the retry is a targeted
   // recovery request instead of an identical (and identically doomed) repeat.
@@ -508,16 +509,29 @@ async function callGemini(key: string, messages: VibeChatMessage[]): Promise<Gem
 
       if (!resp.ok) {
         const txt = await resp.text();
+        const isRateLimit = resp.status === 429;
         logger.warn(
-          { evt: "vibe_gemini_attempt_failed", attempt, httpStatus: resp.status, snippet: txt.slice(0, 500) },
+          { evt: "vibe_gemini_attempt_failed", attempt, httpStatus: resp.status, rateLimited: isRateLimit, snippet: txt.slice(0, 500) },
           "vibe-chat: Gemini HTTP error",
         );
-        const err = new VibeGeminiError(`Gemini ${resp.status}: ${txt.slice(0, 300)}`, "unavailable");
-        // Retry on rate-limit or server error; fail fast on 400/401/403
-        if (resp.status === 429 || resp.status >= 500) {
+        // 429 (shared-key rate limit under load) is the common "AI busy" case —
+        // classify it distinctly so the client can show a friendly retry message.
+        const err = new VibeGeminiError(
+          `Gemini ${resp.status}: ${txt.slice(0, 300)}`,
+          isRateLimit ? "rate_limited" : "unavailable",
+        );
+        // Retry on rate-limit or server error; fail fast on 400/401/403.
+        if (isRateLimit || resp.status >= 500) {
           lastErr = err;
           if (attempt < MAX_ATTEMPTS) {
-            await sleep(attempt * 2000); // 2s, 4s — Gemini often recovers after a brief cooldown
+            // Honour Retry-After when present (seconds), else exponential backoff.
+            // Capped so the SSE stream never appears hung — the client retries too.
+            const retryAfterSec = Number(resp.headers.get("retry-after"));
+            const base = Number.isFinite(retryAfterSec) && retryAfterSec > 0
+              ? Math.min(retryAfterSec * 1000, 6000)
+              : Math.min(1000 * 2 ** (attempt - 1), 6000); // 1s, 2s, 4s, 6s
+            const jitter = Math.floor(Math.random() * 500);
+            await sleep(base + jitter);
             continue;
           }
         }
@@ -916,13 +930,17 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
       const detail = err instanceof Error ? err.message : String(err);
       logger.warn({ err, kind, detail: detail.slice(0, 400) }, "vibe-chat: Gemini call failed");
       const isClientReject = /Gemini 40[013]/.test(detail);
+      // rate_limited + unavailable (timeout/5xx/network) are transient "AI busy"
+      // states worth an automatic client retry; malformed/client-reject are not.
+      const busy = kind === "rate_limited" || (kind === "unavailable" && !isClientReject);
       emit({
         type: "error",
-        message: kind === "malformed"
-          ? "the AI returned a malformed response. This is usually a one-off — please try again."
-          : isClientReject
-            ? "the AI request was rejected. Please try again in a moment — if it keeps failing, contact support."
-            : "the AI is taking longer than usual or is temporarily unavailable. Please try again in a moment.",
+        retryable: busy,
+        message: busy
+          ? "Our AI is busy right now — a lot of people are building at the same time. Please wait a few seconds and send your message again."
+          : kind === "malformed"
+            ? "the AI returned a malformed response. This is usually a one-off — please try again."
+            : "the AI request was rejected. Please try again in a moment — if it keeps failing, contact support.",
       });
       res.end();
       return;

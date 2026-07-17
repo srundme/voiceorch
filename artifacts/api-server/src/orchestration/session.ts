@@ -37,6 +37,7 @@ import { computeOperationalOutcome, setOperationalOutcome } from "../services/op
 import { appendTraiDisclosure, scanForOptOut } from "../services/trai/index.js";
 import { appendDpdpDisclosure, scanAndRedactPII } from "../services/dpdp/index.js";
 import { appendIrdaiAiDisclosure } from "../services/irdai/index.js";
+import { appendGuardrails, redactTranscriptPII } from "../services/guardrails.js";
 import { scheduleNetworkDropCallback } from "../services/autoRedial.js";
 import { refillCampaignForLead } from "../services/batchScheduler.js";
 import { resolveRetryConfig } from "../services/retryEngine.js";
@@ -454,6 +455,12 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     const irdaiInsurer = (agentCfg["irdaiInsurerName"] as string | undefined) ?? agent.name ?? null;
     effectiveSystemPrompt = appendIrdaiAiDisclosure(effectiveSystemPrompt, irdaiInsurer);
   }
+
+  // Security & identity guardrails (prompt-injection resistance, no leaking of
+  // internal instructions/tools, consistent "are you AI?" handling). Appended
+  // after compliance disclosures so its identity rule defers to any mandatory
+  // AI disclosure (IRDAI/RBI) added above.
+  effectiveSystemPrompt = appendGuardrails(effectiveSystemPrompt, agent.name);
 
   // 80 was too tight for Tamil/Hinglish — call 2643 hit the cap mid-sentence
   // twice (outputTokens≈91 on "…அதுக்கு ஒரு fifteen" / "…இப்போ demo-க்கு").
@@ -1999,7 +2006,10 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
   // which (after ingress validation) can be up to a few seconds in the future
   // for a very short call, so guard the subtraction against a negative result.
   const durationSeconds = Math.max(0, Math.floor((endedAt.getTime() - session.startedAt.getTime()) / 1000));
-  const transcript = session.pipeline.getTranscript();
+  // Redact high-risk secrets (card numbers, PAN, Aadhaar, CVV/OTP/PIN) before
+  // the transcript is persisted or sent to webhooks/summaries. Phone/email are
+  // intentionally preserved — they are legitimate lead-capture data.
+  const transcript = redactTranscriptPII(session.pipeline.getTranscript());
 
   const { metricsAcc } = session;
   const avgSttMs = metricsAcc.count > 0 ? Math.round(metricsAcc.sttTotal / metricsAcc.count) : null;

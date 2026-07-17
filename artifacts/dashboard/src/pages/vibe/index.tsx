@@ -806,6 +806,18 @@ export default function VibePage() {
     }
 
     try {
+      let aiReply   = "";
+      let streamHadError = false;
+      // Auto-retry transient "AI busy" (shared-key rate-limit / timeout) errors so
+      // they surface as a brief "retrying…" pause instead of a dead error bubble.
+      const MAX_BUSY_RETRIES = 3;
+      let busyAttempt = 0;
+
+      retryLoop: while (true) {
+      aiReply = "";
+      streamHadError = false;
+      let wantRetry = false;
+
       const resp = await fetch("/api/agents/vibe-chat", {
         method:  "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token ?? ""}` },
@@ -826,8 +838,6 @@ export default function VibePage() {
       const reader  = resp.body.getReader();
       const decoder = new TextDecoder();
       let buf       = "";
-      let aiReply   = "";
-      let streamHadError = false;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -1048,16 +1058,38 @@ export default function VibePage() {
               }
               break;
 
-            case "error":
+            case "error": {
               streamHadError = true;
-              setMessages(prev => prev.map(m =>
-                !m.done && m.role === "ai" ? { ...m, content: `Sorry, something went wrong — ${evt.message as string}`, done: true } : m
-              ));
-              setPhase("idle");
+              const retryable = evt.retryable === true;
+              if (retryable && busyAttempt < MAX_BUSY_RETRIES) {
+                // Keep the bubble open and let the retryLoop re-issue the turn.
+                wantRetry = true;
+                const shown = busyAttempt + 1;
+                setMessages(prev => prev.map(m =>
+                  !m.done && m.role === "ai"
+                    ? { ...m, content: `Our AI is busy right now — lots of people are building at once. Retrying… (${shown}/${MAX_BUSY_RETRIES})`, done: false }
+                    : m
+                ));
+              } else {
+                setMessages(prev => prev.map(m =>
+                  !m.done && m.role === "ai" ? { ...m, content: `${evt.message as string}`, done: true } : m
+                ));
+                setPhase("idle");
+              }
               break;
+            }
           }
         }
       }
+
+      if (wantRetry) {
+        busyAttempt++;
+        // Exponential backoff with jitter, in step with the server-side retries.
+        await new Promise(r => setTimeout(r, 1200 * busyAttempt + Math.random() * 600));
+        continue retryLoop;
+      }
+      break retryLoop;
+      } // end retryLoop
 
       setMessages(prev => prev.map(m => !m.done && m.role === "ai" ? { ...m, done: true } : m));
       if (!streamHadError && aiReply.trim()) {
