@@ -19,6 +19,7 @@ import { OutboundCallDialog } from "@/components/outbound-call-dialog";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { BrandMark } from "@/components/logo";
 import { DottedSurface } from "@/components/ui/dotted-surface";
+import { SilkAurora } from "@/components/ui/silk-aurora";
 import { useQueryClient } from "@tanstack/react-query";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
@@ -219,19 +220,37 @@ async function previewVoice(voiceId: string, setPlaying: (id: string | null) => 
 function VibeAmbientBg() {
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden">
-      <DottedSurface className="opacity-70 dark:opacity-90" />
-      <div
-        aria-hidden
-        className={cn(
-          "pointer-events-none absolute -top-10 left-1/2 size-full -translate-x-1/2 rounded-full",
-          "bg-[radial-gradient(ellipse_at_center,hsl(var(--foreground)/0.08),transparent_55%)]",
-          "blur-[40px]",
-        )}
-      />
-      <div className="absolute top-[-25%] left-1/2 -translate-x-1/2 h-[60vh] w-[90vw] max-w-[1000px] rounded-full bg-[#a855f7]/[0.06] dark:bg-[#a855f7]/[0.10] blur-[120px]" />
-      <div className="absolute bottom-[-15%] right-[-8%] h-[45vh] w-[55vw] max-w-[700px] rounded-full bg-[#d946ef]/[0.05] dark:bg-[#d946ef]/[0.07] blur-[100px]" />
-      <div className="absolute top-[20%] left-[-10%] h-[40vh] w-[45vw] max-w-[550px] rounded-full bg-[#c084fc]/[0.04] dark:bg-[#c084fc]/[0.06] blur-[90px]" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_70%_45%_at_50%_0%,rgba(168,85,247,0.07),transparent_65%)] dark:bg-[radial-gradient(ellipse_70%_45%_at_50%_0%,rgba(168,85,247,0.12),transparent_65%)]" />
+      {/* Dark mode: animated silk aurora (satin-dark WebGL background) */}
+      <div className="absolute inset-0 hidden dark:block">
+        <SilkAurora
+          interactive={false}
+          speed={0.8}
+          intensity={0.9}
+          grain={0.5}
+          vignette={1}
+          baseColor="#060609"
+          midColor="#12131b"
+          sheenColor="#d8dcec"
+          accentColor="#7c6cf0"
+          className="absolute inset-0 h-full min-h-0 w-full items-stretch bg-[#060609]"
+        />
+      </div>
+
+      {/* Light mode: soft neutral silk wash */}
+      <div className="absolute inset-0 block dark:hidden">
+        <DottedSurface className="opacity-60" />
+        <div
+          aria-hidden
+          className={cn(
+            "absolute -top-10 left-1/2 size-full -translate-x-1/2 rounded-full",
+            "bg-[radial-gradient(ellipse_at_center,hsl(var(--foreground)/0.06),transparent_55%)]",
+            "blur-[40px]",
+          )}
+        />
+        <div className="absolute top-[-25%] left-1/2 -translate-x-1/2 h-[60vh] w-[90vw] max-w-[1000px] rounded-full bg-[#7c6cf0]/[0.05] blur-[120px]" />
+        <div className="absolute bottom-[-15%] right-[-8%] h-[45vh] w-[55vw] max-w-[700px] rounded-full bg-[#a9b4e0]/[0.05] blur-[100px]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_70%_45%_at_50%_0%,rgba(124,108,240,0.06),transparent_65%)]" />
+      </div>
     </div>
   );
 }
@@ -1405,7 +1424,7 @@ export default function VibePage() {
                 transition={{ duration: 0.5 }}
                 className="mb-8 vibe-orb relative"
               >
-                <div className="absolute inset-0 rounded-full bg-gradient-to-br from-[#a855f7]/45 via-[#d946ef]/35 to-[#c084fc]/40 blur-2xl scale-[2] opacity-55" />
+                <div className="absolute inset-0 rounded-full bg-gradient-to-br from-[#7c6cf0]/40 via-[#a9b4e0]/25 to-[#d8dcec]/30 blur-2xl scale-[2] opacity-55" />
                 <div className="relative h-16 w-16 rounded-2xl border border-white/10 bg-card/40 backdrop-blur-xl flex items-center justify-center shadow-2xl">
                   <Sparkles className="h-7 w-7 text-foreground/90" />
                 </div>
@@ -1424,13 +1443,13 @@ export default function VibePage() {
                     <span className="block text-muted-foreground/80 font-normal text-2xl sm:text-3xl mb-1">
                       Hi {welcomeName.split(" ")[0]}
                     </span>
-                    <span className="bg-gradient-to-r from-[#a855f7] via-[#d946ef] to-[#c084fc] bg-clip-text text-transparent">
+                    <span className="bg-gradient-to-r from-[#7c6cf0] via-[#a9b4e0] to-[#d8dcec] bg-clip-text text-transparent">
                       what are we building?
                     </span>
                   </>
                 ) : (
                   <>
-                    <span className="bg-gradient-to-r from-[#a855f7] via-[#d946ef] to-[#c084fc] bg-clip-text text-transparent">
+                    <span className="bg-gradient-to-r from-[#7c6cf0] via-[#a9b4e0] to-[#d8dcec] bg-clip-text text-transparent">
                       Build a voice agent
                     </span>
                     <span className="block text-muted-foreground/70 font-normal text-2xl sm:text-3xl mt-1">
@@ -1503,7 +1522,7 @@ export default function VibePage() {
                         onClick={() => send(t.message)}
                         className="group relative text-left rounded-2xl border border-border/30 bg-card/20 backdrop-blur-md p-4 overflow-hidden transition-all hover:border-border/60 hover:bg-card/40 hover:scale-[1.02] active:scale-[0.98]"
                       >
-                        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#a855f7]/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#7c6cf0]/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                         <p className="text-[13px] font-semibold text-foreground truncate">{t.title}</p>
                         <p className="mt-1.5 text-[11px] text-muted-foreground/70 line-clamp-2 leading-snug">{t.desc}</p>
                       </button>
@@ -2414,7 +2433,7 @@ function EmptyState() {
   return (
     <div className="flex flex-col items-center justify-center min-h-full py-16 text-center gap-8">
       <div className="relative">
-        <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-[#a855f7]/20 via-[#d946ef]/15 to-transparent blur-2xl scale-150" />
+        <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-[#7c6cf0]/20 via-[#a9b4e0]/12 to-transparent blur-2xl scale-150" />
         <div className="relative h-20 w-20 rounded-3xl border border-border/30 bg-card/30 backdrop-blur-xl flex items-center justify-center p-3">
           <Sparkles className="h-8 w-8 text-muted-foreground/60" />
         </div>
