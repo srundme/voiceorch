@@ -224,16 +224,20 @@ function VibeAmbientBg() {
       <div className="absolute inset-0 hidden dark:block">
         <SilkAurora
           interactive={false}
-          speed={0.8}
-          intensity={0.9}
-          grain={0.5}
+          speed={0.6}
+          intensity={0.6}
+          grain={0.35}
           vignette={1}
           baseColor="#060609"
-          midColor="#12131b"
-          sheenColor="#d8dcec"
-          accentColor="#7c6cf0"
+          midColor="#0f1017"
+          sheenColor="#9aa1bd"
+          accentColor="#6f63d6"
           className="absolute inset-0 h-full min-h-0 w-full items-stretch bg-[#060609]"
         />
+        {/* Readability scrim: mute the aurora's bright ribbons so light UI text
+            keeps contrast, with an extra darken behind the centered hero. */}
+        <div className="absolute inset-0 bg-[#06060b]/45" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_65%_55%_at_50%_45%,rgba(6,6,11,0.55),transparent_72%)]" />
       </div>
 
       {/* Light mode: soft neutral silk wash */}
@@ -1452,7 +1456,7 @@ export default function VibePage() {
                     <span className="bg-gradient-to-r from-[#7c6cf0] via-[#a9b4e0] to-[#d8dcec] bg-clip-text text-transparent">
                       Build a voice agent
                     </span>
-                    <span className="block text-muted-foreground/70 font-normal text-2xl sm:text-3xl mt-1">
+                    <span className="block text-muted-foreground/70 dark:text-white/70 font-normal text-2xl sm:text-3xl mt-1">
                       in plain English
                     </span>
                   </>
@@ -1464,7 +1468,7 @@ export default function VibePage() {
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.45, delay: 0.16 }}
-                  className="mt-4 text-[15px] sm:text-base text-muted-foreground/80 leading-relaxed max-w-lg"
+                  className="mt-4 text-[15px] sm:text-base text-muted-foreground/80 dark:text-white/75 leading-relaxed max-w-lg"
                 >
                   Tell me the use case — I&apos;ll wire up speech, language, tools, and your system prompt.
                 </motion.p>
@@ -1511,7 +1515,7 @@ export default function VibePage() {
                   transition={{ duration: 0.45, delay: 0.42 }}
                   className="mt-12 w-full"
                 >
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground/40 mb-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground/40 dark:text-white/45 mb-4">
                     Start from a template
                   </p>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 max-w-3xl mx-auto">
@@ -1520,11 +1524,11 @@ export default function VibePage() {
                         key={t.title}
                         type="button"
                         onClick={() => send(t.message)}
-                        className="group relative text-left rounded-2xl border border-border/30 bg-card/20 backdrop-blur-md p-4 overflow-hidden transition-all hover:border-border/60 hover:bg-card/40 hover:scale-[1.02] active:scale-[0.98]"
+                        className="group relative text-left rounded-2xl border border-border/30 dark:border-white/10 bg-card/20 dark:bg-white/[0.06] backdrop-blur-xl p-4 overflow-hidden transition-all hover:border-border/60 hover:bg-card/40 dark:hover:bg-white/[0.1] hover:scale-[1.02] active:scale-[0.98]"
                       >
                         <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#7c6cf0]/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                         <p className="text-[13px] font-semibold text-foreground truncate">{t.title}</p>
-                        <p className="mt-1.5 text-[11px] text-muted-foreground/70 line-clamp-2 leading-snug">{t.desc}</p>
+                        <p className="mt-1.5 text-[11px] text-muted-foreground/70 dark:text-white/60 line-clamp-2 leading-snug">{t.desc}</p>
                       </button>
                     ))}
                   </div>
