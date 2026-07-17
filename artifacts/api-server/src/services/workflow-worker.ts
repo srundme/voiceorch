@@ -47,13 +47,13 @@ async function pollSheetTriggers(): Promise<void> {
   for (const wf of workflows as Workflow[]) {
     const t = wf.trigger;
     if (!t || t.type !== "sheet_row") continue;
-    if (!t.connectionId || !t.spreadsheetId || !t.sheetName) continue;
+    if (!t.spreadsheetId || !t.sheetName) continue;
 
     const state = (wf.triggerState ?? {}) as { lastRow?: number };
     const hasCursor = typeof state.lastRow === "number";
 
     const { rows, lastRow } = await readNewRows(
-      t.connectionId, t.spreadsheetId, t.sheetName,
+      t.connectionId ?? null, t.spreadsheetId, t.sheetName,
       hasCursor ? state.lastRow! : 1,
     );
 

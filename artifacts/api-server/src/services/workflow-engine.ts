@@ -350,9 +350,12 @@ function evalCondition(step: WorkflowStep, context: Ctx): boolean {
 // ── sheet write ─────────────────────────────────────────────────────────────────
 
 async function doSheetWrite(step: WorkflowStep, context: Ctx, isUpdate: boolean): Promise<void> {
-  if (!step.connectionId || !step.spreadsheetId || !step.sheetName) {
-    throw new Error("sheet step missing connectionId/spreadsheetId/sheetName");
+  if (!step.spreadsheetId || !step.sheetName) {
+    throw new Error("sheet step missing spreadsheetId/sheetName");
   }
+  // connectionId is optional: when absent, the connector uses the shared-sheet
+  // service account.
+  const connectionId = step.connectionId ?? null;
   const columnMap = step.columnMap ?? {};
   const rowByHeader: Record<string, string> = {};
   for (const [header, template] of Object.entries(columnMap)) {
@@ -361,10 +364,10 @@ async function doSheetWrite(step: WorkflowStep, context: Ctx, isUpdate: boolean)
   if (isUpdate) {
     const matchColumn = step.matchColumn ?? "";
     const matchValue = toStr(getPath(context, step.matchField ?? step.phoneField ?? "phone") || context["phone"]);
-    const ok = await updateRow(step.connectionId, step.spreadsheetId, step.sheetName, matchColumn, matchValue, rowByHeader);
+    const ok = await updateRow(connectionId, step.spreadsheetId, step.sheetName, matchColumn, matchValue, rowByHeader);
     if (!ok) throw new Error("sheet_update failed");
   } else {
-    const ok = await appendRow(step.connectionId, step.spreadsheetId, step.sheetName, rowByHeader);
+    const ok = await appendRow(connectionId, step.spreadsheetId, step.sheetName, rowByHeader);
     if (!ok) throw new Error("sheet_append failed");
   }
 }

@@ -16,7 +16,7 @@ import {
 } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logger } from "../lib/logger.js";
-import { listSheetsConnectionsForUser, readNewRows } from "../services/google-sheets.js";
+import { readNewRows, getServiceAccountEmail } from "../services/google-sheets.js";
 import { startWorkflowRun } from "../services/workflow-engine.js";
 
 const router: IRouter = Router();
@@ -127,9 +127,9 @@ async function setStatus(clerkId: string, id: number, status: "active" | "paused
   // Seed the sheet-row cursor at activation so pre-existing rows never dial.
   if (status === "active" && existing.trigger?.type === "sheet_row") {
     const t = existing.trigger;
-    if (t.connectionId && t.spreadsheetId && t.sheetName) {
+    if (t.spreadsheetId && t.sheetName) {
       try {
-        const { lastRow } = await readNewRows(t.connectionId, t.spreadsheetId, t.sheetName, 1);
+        const { lastRow } = await readNewRows(t.connectionId ?? null, t.spreadsheetId, t.sheetName, 1);
         patch["triggerState"] = { ...(existing.triggerState ?? {}), lastRow };
       } catch { /* worker will seed on first tick */ }
     }
@@ -211,16 +211,14 @@ function sleep(ms: number) { return new Promise<void>(r => setTimeout(r, ms)); }
 
 function buildSystemPrompt(ctx: {
   agents: Array<{ id: number; name: string }>;
-  sheetsConnected: boolean;
-  sheetsConnectionId: string | null;
-  sheetsEmail: string | null;
+  serviceAccountEmail: string | null;
 }): string {
   const agentList = ctx.agents.length
     ? ctx.agents.map(a => `- "${a.name}" (agentId: ${a.id})`).join("\n")
     : "(none yet — tell the user to create an agent first)";
-  const sheets = ctx.sheetsConnected
-    ? `A Google Sheets account is connected (email: ${ctx.sheetsEmail}, connectionId: "${ctx.sheetsConnectionId}"). Use this connectionId for any sheet steps.`
-    : `No Google Sheets account is connected yet. If the workflow needs a sheet, still add the step but tell the user they must click "Connect Google Sheets" and pick the spreadsheet + tab in the side panel afterward.`;
+  const sheets = ctx.serviceAccountEmail
+    ? `To use a Google Sheet, the user pastes their Sheet's URL in the side panel and shares that sheet (Editor access) with ${ctx.serviceAccountEmail}. Add sheet steps normally — do NOT set connectionId or spreadsheetId; the user picks the sheet + tab in the side panel.`
+    : `Google Sheets isn't set up on this server yet. You can still add sheet steps, but tell the user to paste their Sheet URL in the side panel once it's available.`;
 
   return `You are SnapServe's Workflow Builder. You help NON-TECHNICAL users create phone-call automations by chatting in plain language. Be warm, concise, and never show JSON or technical jargon in your "reply" text.
 
@@ -234,7 +232,7 @@ TRIGGERS (pick one):
 
 STEP TYPES:
 - "make_call": the AI agent phones the lead. REQUIRES agentId (choose from the user's agents below by matching the name they mention; if unclear, ask which agent). Optional phoneField (context key holding the phone, default "phone").
-- "sheet_append": add a new row to a Google Sheet with call results. Fields: connectionId, and columnMap (map of sheet column header -> template using {{tokens}}). Leave spreadsheetId/sheetName empty — the user picks those in the side panel.
+- "sheet_append": add a new row to a Google Sheet with call results. Field: columnMap (map of sheet column header -> template using {{tokens}}). Leave connectionId/spreadsheetId/sheetName empty — the user picks the sheet + tab in the side panel.
 - "sheet_update": update an existing row (matchColumn + matchField). Same fields as append plus matchColumn (e.g. "Phone") and matchField (context key, usually "phone").
 - "condition": continue only if a value matches. Fields: field (context path), op ("eq"|"neq"|"contains"|"exists"|"gt"|"lt"), value.
 - "delay": wait. Field: delaySeconds.
@@ -265,8 +263,8 @@ When ready, "workflow" MUST look like:
 {
   "name": "short name",
   "description": "one line",
-  "trigger": { "type": "form_lead" | "instagram_lead" | "sheet_row" | "manual", "connectionId"?: "...", "phoneColumn"?: "...", "fieldMap"?: { "SourceField": "contextKey" } },
-  "steps": [ { "id": "s1", "type": "make_call", "agentId": 123 }, { "id": "s2", "type": "sheet_append", "connectionId": "...", "columnMap": { "Name": "{{name}}", "Phone": "{{phone}}", "Outcome": "{{call.status}}", "Summary": "{{call.summary}}" } } ]
+  "trigger": { "type": "form_lead" | "instagram_lead" | "sheet_row" | "manual", "phoneColumn"?: "...", "fieldMap"?: { "SourceField": "contextKey" } },
+  "steps": [ { "id": "s1", "type": "make_call", "agentId": 123 }, { "id": "s2", "type": "sheet_append", "columnMap": { "Name": "{{name}}", "Phone": "{{phone}}", "Outcome": "{{call.status}}", "Summary": "{{call.summary}}" } } ]
 }`;
 }
 
@@ -355,17 +353,12 @@ router.post("/workflows/chat", requireAuth, async (req, res): Promise<void> => {
     const key = await getGeminiKey();
     if (!key) { emit({ type: "error", message: "No AI key configured — contact the platform admin." }); res.end(); return; }
 
-    const [agents, sheetsConns] = await Promise.all([
-      db.select({ id: agentsTable.id, name: agentsTable.name }).from(agentsTable).where(eq(agentsTable.userId, clerkId)),
-      listSheetsConnectionsForUser(clerkId),
-    ]);
-    const sheetsConn = sheetsConns[0] ?? null;
+    const agents = await db.select({ id: agentsTable.id, name: agentsTable.name })
+      .from(agentsTable).where(eq(agentsTable.userId, clerkId));
 
     const systemPrompt = buildSystemPrompt({
       agents,
-      sheetsConnected: !!sheetsConn,
-      sheetsConnectionId: sheetsConn?.id ?? null,
-      sheetsEmail: sheetsConn?.email ?? null,
+      serviceAccountEmail: getServiceAccountEmail(),
     });
 
     const result = await callGemini(key, messages, systemPrompt);

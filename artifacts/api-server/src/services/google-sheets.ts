@@ -27,6 +27,59 @@ const SHEETS_SCOPES = [
 
 const SPREADSHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets";
 
+// ── Service-account mode (simplest UX: user shares the sheet with our SA) ─────
+//
+// If GOOGLE_SERVICE_ACCOUNT_JSON is set (the full service-account key JSON),
+// the workflow maker reads/writes any sheet the user has shared with the
+// service account's email — no per-user OAuth, no redirect URIs, no consent.
+
+let cachedSaAuth: InstanceType<typeof google.auth.GoogleAuth> | null = null;
+
+function serviceAccountCreds(): { client_email: string; private_key: string } | null {
+  const raw = process.env["GOOGLE_SERVICE_ACCOUNT_JSON"];
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as { client_email?: string; private_key?: string };
+    if (!parsed.client_email || !parsed.private_key) return null;
+    // Railway/env stores newlines as literal "\n" — normalize them back.
+    return { client_email: parsed.client_email, private_key: parsed.private_key.replace(/\\n/g, "\n") };
+  } catch {
+    logger.warn("google-sheets: GOOGLE_SERVICE_ACCOUNT_JSON is not valid JSON");
+    return null;
+  }
+}
+
+export function isServiceAccountConfigured(): boolean {
+  return serviceAccountCreds() !== null;
+}
+
+export function getServiceAccountEmail(): string | null {
+  return serviceAccountCreds()?.client_email ?? null;
+}
+
+function getServiceAccountAuth(): InstanceType<typeof google.auth.GoogleAuth> | null {
+  const creds = serviceAccountCreds();
+  if (!creds) return null;
+  if (!cachedSaAuth) {
+    cachedSaAuth = new google.auth.GoogleAuth({
+      credentials: { client_email: creds.client_email, private_key: creds.private_key },
+      scopes: ["https://www.googleapis.com/auth/spreadsheets"],
+    });
+  }
+  return cachedSaAuth;
+}
+
+/** Extract the spreadsheet ID from a full Google Sheets URL (or a raw ID). */
+export function extractSpreadsheetId(input: string): string | null {
+  const s = (input ?? "").trim();
+  if (!s) return null;
+  const m = s.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+  if (m) return m[1]!;
+  // Bare ID (no slashes / not a URL).
+  if (/^[a-zA-Z0-9-_]{20,}$/.test(s)) return s;
+  return null;
+}
+
 export function sheetsCallbackUrl(): string {
   if (process.env["GOOGLE_SHEETS_REDIRECT_URI"]) {
     return process.env["GOOGLE_SHEETS_REDIRECT_URI"];
@@ -177,12 +230,52 @@ async function getValidSheetsAccessToken(connectionId: string): Promise<string |
   return accessToken;
 }
 
-async function sheetsClient(connectionId: string) {
+async function sheetsClient(connectionId?: string | null) {
+  // No connectionId → service-account mode (user shared the sheet with our SA).
+  if (!connectionId) {
+    const auth = getServiceAccountAuth();
+    if (!auth) return null;
+    return google.sheets({ version: "v4", auth: auth as never });
+  }
   const token = await getValidSheetsAccessToken(connectionId);
   if (!token) return null;
   const client = makePlatformOAuth2Client();
   client.setCredentials({ access_token: token });
   return google.sheets({ version: "v4", auth: client });
+}
+
+/**
+ * Verify we can access a spreadsheet (service-account mode) and return its tabs.
+ * Throws a friendly error when the sheet hasn't been shared with our SA.
+ */
+export async function getSpreadsheetMeta(
+  spreadsheetId: string,
+): Promise<{ title: string; tabs: string[] }> {
+  const sheets = await sheetsClient(null);
+  if (!sheets) {
+    throw new Error("Google Sheets service account is not configured on the server.");
+  }
+  try {
+    const res = await sheets.spreadsheets.get({
+      spreadsheetId,
+      fields: "properties.title,sheets.properties.title",
+    });
+    return {
+      title: res.data.properties?.title ?? "(Untitled)",
+      tabs: (res.data.sheets ?? []).map(s => s.properties?.title ?? "").filter(Boolean),
+    };
+  } catch (err: unknown) {
+    const status = (err as { code?: number; response?: { status?: number } })?.code
+      ?? (err as { response?: { status?: number } })?.response?.status;
+    if (status === 403 || status === 404) {
+      const email = getServiceAccountEmail() ?? "the service account";
+      throw new Error(
+        `Can't access this sheet. Share it with ${email} (give Editor access), then try again.`,
+      );
+    }
+    logger.warn({ err, spreadsheetId }, "google-sheets: getSpreadsheetMeta failed");
+    throw new Error("Couldn't open this Google Sheet. Check the URL and try again.");
+  }
 }
 
 async function driveClient(connectionId: string) {
@@ -210,7 +303,7 @@ export async function listSpreadsheets(connectionId: string): Promise<Array<{ id
   }
 }
 
-export async function listSheets(connectionId: string, spreadsheetId: string): Promise<string[]> {
+export async function listSheets(connectionId: string | null, spreadsheetId: string): Promise<string[]> {
   const sheets = await sheetsClient(connectionId);
   if (!sheets) return [];
   try {
@@ -227,7 +320,7 @@ function a1(sheetName: string, range: string): string {
   return `'${sheetName.replace(/'/g, "''")}'!${range}`;
 }
 
-export async function getHeaderRow(connectionId: string, spreadsheetId: string, sheetName: string): Promise<string[]> {
+export async function getHeaderRow(connectionId: string | null, spreadsheetId: string, sheetName: string): Promise<string[]> {
   const sheets = await sheetsClient(connectionId);
   if (!sheets) return [];
   try {
@@ -250,7 +343,7 @@ export interface SheetRow {
  * plus the highest row number seen so the caller can advance its checkpoint.
  */
 export async function readNewRows(
-  connectionId: string,
+  connectionId: string | null,
   spreadsheetId: string,
   sheetName: string,
   sinceRow: number,
@@ -287,7 +380,7 @@ export async function readNewRows(
 
 /** Append a row. Column order follows the sheet's header row; unknown keys are ignored. */
 export async function appendRow(
-  connectionId: string,
+  connectionId: string | null,
   spreadsheetId: string,
   sheetName: string,
   rowByHeader: Record<string, string>,
@@ -337,7 +430,7 @@ export async function appendRow(
  * Falls back to appending when no matching row is found.
  */
 export async function updateRow(
-  connectionId: string,
+  connectionId: string | null,
   spreadsheetId: string,
   sheetName: string,
   matchColumn: string,

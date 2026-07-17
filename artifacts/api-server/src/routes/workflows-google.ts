@@ -9,6 +9,10 @@ import {
   listSpreadsheets,
   listSheets,
   getHeaderRow,
+  isServiceAccountConfigured,
+  getServiceAccountEmail,
+  extractSpreadsheetId,
+  getSpreadsheetMeta,
 } from "../services/google-sheets.js";
 import { verifyOAuthState } from "../services/scheduling/google-calendar.js";
 import { logger } from "../lib/logger.js";
@@ -46,6 +50,33 @@ function deriveRedirectUri(req: Request): string {
   }
   return `${getSelfBaseUrl()}/api/workflows/google/callback`;
 }
+
+// ── Service-account mode: share-a-sheet, no OAuth ───────────────────────────
+//
+// The simplest path for non-technical users: they paste a Google Sheet URL and
+// share it with our service-account email. No "Connect Google" flow required.
+
+router.get("/workflows/sheets/service-account", requireAuth, async (_req, res): Promise<void> => {
+  res.json({
+    enabled: isServiceAccountConfigured(),
+    email: getServiceAccountEmail(),
+  });
+});
+
+router.post("/workflows/sheets/verify", requireAuth, async (req, res): Promise<void> => {
+  const url = String((req.body as { url?: string } | undefined)?.url ?? "");
+  const spreadsheetId = extractSpreadsheetId(url);
+  if (!spreadsheetId) {
+    res.status(400).json({ error: "That doesn't look like a Google Sheet URL." });
+    return;
+  }
+  try {
+    const meta = await getSpreadsheetMeta(spreadsheetId);
+    res.json({ spreadsheetId, title: meta.title, tabs: meta.tabs });
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : "Couldn't open that sheet." });
+  }
+});
 
 // ── List connected Google (Sheets) accounts ─────────────────────────────────
 router.get("/workflows/google/connections", requireAuth, async (req, res): Promise<void> => {
