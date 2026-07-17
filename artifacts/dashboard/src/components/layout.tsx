@@ -77,9 +77,9 @@ const LS_SETTINGS     = "snapserve:settings-open";
 
 const NAV_PRIMARY = [
   { name: "Command Center",  href: "/app/command-center",  icon: Monitor },
+  { name: "Agents",          href: "/app/agents",          icon: Users },
   { name: "Vibe Build",      href: "/app/vibe",            icon: Sparkles },
   { name: "Agent Tasks",     href: "/app/tasks",           icon: ListTodo },
-  { name: "Agents",          href: "/app/agents",          icon: Users },
   { name: "Agent Knowledge", href: "/app/knowledge-bases", icon: BookOpen },
   { name: "Campaigns",       href: "/app/campaigns",       icon: Zap },
   { name: "Meta Leads",      href: "/app/meta-leads",      icon: Instagram },
