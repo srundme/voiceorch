@@ -6,6 +6,7 @@ import { usersTable, walletTransactionsTable, invoicesTable } from "@workspace/d
 import { eq, desc, sql, and } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logger } from "../lib/logger.js";
+import { getAppOrigins } from "../lib/app-domain.js";
 import { issueInvoice, renderInvoiceHtml, renderInvoicePdf } from "../services/invoice.js";
 import {
   CURRENCY_INR,
@@ -237,6 +238,136 @@ router.post("/wallet/verify-payment", requireAuth, async (req, res) => {
   });
 
   res.json(walletInfoPayload(updated));
+});
+
+/**
+ * Credit a wallet top-up from a verified order, identifying the user via the
+ * pending transaction row (no session needed). Atomic + idempotent: only the
+ * first caller to flip `pending → completed` credits the balance, so the
+ * redirect callback, the handler verify path and the webhook can all race
+ * safely. Issues the GST invoice (idempotent per payment id).
+ */
+async function creditTopupByOrder(orderId: string, paymentId: string): Promise<void> {
+  const [txn] = await db
+    .select()
+    .from(walletTransactionsTable)
+    .where(eq(walletTransactionsTable.razorpayOrderId, orderId));
+  if (!txn) {
+    logger.warn({ orderId }, "payment-callback: order not found in DB — cannot credit");
+    return;
+  }
+
+  let credited = false;
+  await db.transaction(async (tx) => {
+    const [claimed] = await tx
+      .update(walletTransactionsTable)
+      .set({ status: "completed", razorpayPaymentId: paymentId })
+      .where(and(
+        eq(walletTransactionsTable.id, txn.id),
+        eq(walletTransactionsTable.status, "pending"),
+      ))
+      .returning({ id: walletTransactionsTable.id });
+    if (!claimed) return;
+    await tx
+      .update(usersTable)
+      .set({ walletBalanceCents: sql`${usersTable.walletBalanceCents} + ${txn.amountCents}` })
+      .where(eq(usersTable.id, txn.userId));
+    credited = true;
+  });
+
+  if (!credited) {
+    logger.info({ orderId, paymentId }, "payment-callback: order already processed — skipping (idempotent)");
+    return;
+  }
+
+  logger.info(
+    { orderId, paymentId, userId: txn.userId, amountCents: txn.amountCents },
+    "Wallet credited via payment-callback (redirect flow)",
+  );
+
+  const [invUser] = await db.select().from(usersTable).where(eq(usersTable.id, txn.userId));
+  if (invUser) {
+    void issueInvoice({
+      user: { id: invUser.id, name: invUser.name, email: invUser.email },
+      type: "wallet_topup",
+      description: "Wallet top-up — prepaid calling credit",
+      hsnSac: "998413",
+      amountCents: txn.amountCents,
+      gstInclusive: false,
+      razorpayOrderId: orderId,
+      razorpayPaymentId: paymentId,
+    });
+  }
+}
+
+/**
+ * Validate the `return` URL supplied by the client against trusted origins to
+ * prevent an open redirect, and append the top-up status. Falls back to the
+ * request's own origin + /wallet.
+ */
+function resolveReturnUrl(raw: string | null, req: { protocol: string; get(name: string): string | undefined }, status: "success" | "failed"): string {
+  const requestOrigin = `${req.protocol}://${req.get("host") ?? ""}`;
+  const allowed = new Set<string>([...getAppOrigins(), "https://app.snapserve.ai", requestOrigin]);
+  const isDev = process.env["NODE_ENV"] !== "production";
+
+  let base = `${requestOrigin}/wallet`;
+  if (raw) {
+    try {
+      const u = new URL(raw);
+      if (isDev || allowed.has(u.origin)) {
+        u.search = "";
+        u.hash = "";
+        base = u.toString();
+      }
+    } catch {
+      // ignore malformed return URL, use fallback
+    }
+  }
+  const sep = base.includes("?") ? "&" : "?";
+  return `${base}${sep}topup=${status}`;
+}
+
+// POST /api/wallet/payment-callback — Razorpay redirect-mode return target.
+// Razorpay does a top-level form POST here after net banking / UPI / card
+// redirects (redirect mode avoids the about:blank popup that breaks net
+// banking). We verify the signature, credit idempotently, then 302 back to the
+// dashboard wallet page. Public (no session): the user is identified via the
+// signed order, not a bearer token.
+router.post("/wallet/payment-callback", async (req, res) => {
+  const returnRaw = typeof req.query.return === "string" ? req.query.return : null;
+  const body = (req.body ?? {}) as Record<string, string>;
+  const razorpayOrderId = body.razorpay_order_id;
+  const razorpayPaymentId = body.razorpay_payment_id;
+  const razorpaySignature = body.razorpay_signature;
+
+  const fail = (reason: string, extra?: Record<string, unknown>) => {
+    logger.warn({ reason, razorpayOrderId, razorpayPaymentId, ...extra }, "payment-callback: not credited");
+    res.redirect(302, resolveReturnUrl(returnRaw, req, "failed"));
+  };
+
+  if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
+    // User cancelled or payment failed — Razorpay posts error[...] fields here.
+    fail("missing success fields", { error: body["error[description]"] });
+    return;
+  }
+
+  const secret = process.env.RAZORPAY_KEY_SECRET;
+  if (!secret) { fail("gateway not configured"); return; }
+
+  const expectedSig = crypto
+    .createHmac("sha256", secret)
+    .update(`${razorpayOrderId}|${razorpayPaymentId}`)
+    .digest("hex");
+  if (expectedSig !== razorpaySignature) { fail("invalid signature"); return; }
+
+  try {
+    await creditTopupByOrder(razorpayOrderId, razorpayPaymentId);
+  } catch (err) {
+    // Payment is signature-verified; the webhook will reconcile crediting if
+    // this failed. Still send the user to the success page.
+    logger.error({ err, razorpayOrderId, razorpayPaymentId }, "payment-callback: crediting error (webhook will reconcile)");
+  }
+  res.redirect(302, resolveReturnUrl(returnRaw, req, "success"));
 });
 
 // GET /api/wallet/transactions

@@ -100,6 +100,28 @@ export default function WalletPage() {
 
   useEffect(() => { void loadInvoices(); }, [loadInvoices]);
 
+  // Handle the redirect-mode return from Razorpay (?topup=success|failed). One-
+  // time top-ups navigate away to the bank and come back here via the server
+  // callback, so success is reported on return rather than via the JS handler.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const topup = params.get("topup");
+    if (!topup) return;
+    if (topup === "success") {
+      toast({ title: "Payment successful — wallet updated!" });
+      queryClient.invalidateQueries({ queryKey: getGetWalletQueryKey() });
+      queryClient.invalidateQueries({ queryKey: getListTransactionsQueryKey() });
+      setTimeout(() => { void loadInvoices(); }, 2500);
+    } else if (topup === "failed") {
+      toast({ title: "Payment failed or cancelled", variant: "destructive" });
+    }
+    params.delete("topup");
+    const clean = window.location.pathname + (params.toString() ? `?${params.toString()}` : "");
+    window.history.replaceState({}, "", clean);
+    // Run once on mount for the return redirect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const downloadInvoice = useCallback(async (inv: InvoiceRow) => {
     setDownloadingId(inv.id);
     try {
@@ -175,6 +197,7 @@ export default function WalletPage() {
       if (setupMandate && order.customerId) {
         // Recurring auto-pay mandates must be backed by a card (net banking
         // cannot authorize a recurring card mandate), so restrict to card only.
+        // Mandates use the popup/handler flow (redirect mode is card-only here).
         opts.customer_id = order.customerId;
         opts.recurring   = 1;
         opts.config = {
@@ -186,11 +209,17 @@ export default function WalletPage() {
             preferences: { show_default_blocks: false },
           },
         };
+      } else {
+        // One-time top-ups: use redirect mode. Net banking (and some UPI) open a
+        // bank page that browsers refuse to render inside Razorpay's popup/iframe
+        // (the popup stays at about:blank). Redirect mode makes the whole flow a
+        // top-level navigation and returns to our server callback, which credits
+        // the wallet and 302s back here with ?topup=success|failed. The default
+        // menu (Card, UPI, Net Banking, Wallets) is used — no custom config.
+        const returnUrl = `${window.location.origin}${window.location.pathname}`;
+        opts.redirect = true;
+        opts.callback_url = `${window.location.origin}/api/wallet/payment-callback?return=${encodeURIComponent(returnUrl)}`;
       }
-      // One-time top-ups: no custom `config` — let Razorpay render its default
-      // checkout (Card, Net Banking, UPI, Wallets). A custom net-banking block
-      // with show_default_blocks:false renders a blank bank-selection/redirect
-      // page, so the default menu is both more reliable and better UX.
 
       new window.Razorpay(opts).open();
     });
