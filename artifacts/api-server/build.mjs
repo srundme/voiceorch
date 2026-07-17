@@ -32,6 +32,10 @@ async function buildAll() {
     // - use path traversal to read files (e.g. @google-cloud/secret-manager loads sibling .proto files)
     external: [
       "*.node",
+      // pdfkit loads its standard-font .afm metric files from disk at runtime
+      // (e.g. data/Helvetica.afm). Bundling it breaks those paths (ENOENT), so
+      // it must run from node_modules like the other unbundleable packages.
+      "pdfkit",
       "ffmpeg-static",
       "sharp",
       "better-sqlite3",

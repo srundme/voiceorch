@@ -147,38 +147,6 @@ export default function WalletPage() {
           ? `Auto-pay mandate — ${formatInrRupees(breakdown.base)} + GST`
           : `Wallet top-up — ${formatInrRupees(breakdown.base)} + GST ${formatInrRupees(breakdown.gst)}`,
         theme: { color: "#ededed" },
-        // Recurring auto-pay mandates must be backed by a card (net banking
-        // cannot authorize a recurring card mandate). One-time top-ups allow
-        // both card and net banking.
-        config: setupMandate
-          ? {
-              display: {
-                blocks: {
-                  card: {
-                    name: "Pay using Card",
-                    instruments: [{ method: "card" }],
-                  },
-                },
-                sequence: ["block.card"],
-                preferences: { show_default_blocks: false },
-              },
-            }
-          : {
-              display: {
-                blocks: {
-                  card: {
-                    name: "Pay using Card",
-                    instruments: [{ method: "card" }],
-                  },
-                  netbanking: {
-                    name: "Pay using Net Banking",
-                    instruments: [{ method: "netbanking" }],
-                  },
-                },
-                sequence: ["block.card", "block.netbanking"],
-                preferences: { show_default_blocks: false },
-              },
-            },
         modal: {
           ondismiss: () => settle(() => reject(new Error("cancelled"))),
         },
@@ -205,9 +173,24 @@ export default function WalletPage() {
       };
 
       if (setupMandate && order.customerId) {
+        // Recurring auto-pay mandates must be backed by a card (net banking
+        // cannot authorize a recurring card mandate), so restrict to card only.
         opts.customer_id = order.customerId;
         opts.recurring   = 1;
+        opts.config = {
+          display: {
+            blocks: {
+              card: { name: "Pay using Card", instruments: [{ method: "card" }] },
+            },
+            sequence: ["block.card"],
+            preferences: { show_default_blocks: false },
+          },
+        };
       }
+      // One-time top-ups: no custom `config` — let Razorpay render its default
+      // checkout (Card, Net Banking, UPI, Wallets). A custom net-banking block
+      // with show_default_blocks:false renders a blank bank-selection/redirect
+      // page, so the default menu is both more reliable and better UX.
 
       new window.Razorpay(opts).open();
     });
@@ -314,7 +297,7 @@ export default function WalletPage() {
               <div className="flex items-center gap-2">
                 <CreditCard className="w-4 h-4 text-muted-foreground" />
                 <h2 className="font-medium text-foreground text-sm">Add Funds</h2>
-                <span className="ml-auto text-[10px] text-muted-foreground bg-muted rounded px-1.5 py-0.5">Card & Net Banking</span>
+                <span className="ml-auto text-[10px] text-muted-foreground bg-muted rounded px-1.5 py-0.5">Card, UPI & Net Banking</span>
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
