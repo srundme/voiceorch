@@ -3,8 +3,7 @@ import { useOverview, useSpikeAlerts, useDismissSpikeAlert, usePromptTemplates, 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Users, PhoneCall, Activity, DollarSign, Clock, AlertCircle, Bell, X, Mail, Wallet, RefreshCw, TrendingDown, ChevronDown, ChevronUp, CheckCircle2, Timer } from "lucide-react";
-import { formatCentsToDollars } from "@/lib/api";
+import { Users, PhoneCall, Activity, Clock, AlertCircle, Bell, X, Mail, Wallet, RefreshCw, TrendingDown, ChevronDown, ChevronUp, CheckCircle2, Timer } from "lucide-react";
 import { formatApiError } from "@/lib/format-api-error";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
@@ -274,12 +273,6 @@ export default function Overview() {
       value: overview?.totalUsers?.toLocaleString() || "0",
       icon: Users,
       description: "Registered accounts",
-    },
-    {
-      title: "Total Revenue",
-      value: formatCentsToDollars(overview?.totalRevenueCents || 0),
-      icon: DollarSign,
-      description: "Lifetime",
     },
     {
       title: "Total Calls",
