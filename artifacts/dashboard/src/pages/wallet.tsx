@@ -89,19 +89,38 @@ export default function WalletPage() {
           ? `Auto-pay mandate — ${formatInrRupees(breakdown.base)} + GST`
           : `Wallet top-up — ${formatInrRupees(breakdown.base)} + GST ${formatInrRupees(breakdown.gst)}`,
         theme: { color: "#ededed" },
-        // Card only — no UPI / QR / netbanking
-        config: {
-          display: {
-            blocks: {
-              card: {
-                name: "Pay using Card",
-                instruments: [{ method: "card" }],
+        // Recurring auto-pay mandates must be backed by a card (net banking
+        // cannot authorize a recurring card mandate). One-time top-ups allow
+        // both card and net banking.
+        config: setupMandate
+          ? {
+              display: {
+                blocks: {
+                  card: {
+                    name: "Pay using Card",
+                    instruments: [{ method: "card" }],
+                  },
+                },
+                sequence: ["block.card"],
+                preferences: { show_default_blocks: false },
+              },
+            }
+          : {
+              display: {
+                blocks: {
+                  card: {
+                    name: "Pay using Card",
+                    instruments: [{ method: "card" }],
+                  },
+                  netbanking: {
+                    name: "Pay using Net Banking",
+                    instruments: [{ method: "netbanking" }],
+                  },
+                },
+                sequence: ["block.card", "block.netbanking"],
+                preferences: { show_default_blocks: false },
               },
             },
-            sequence: ["block.card"],
-            preferences: { show_default_blocks: false },
-          },
-        },
         modal: {
           ondismiss: () => settle(() => reject(new Error("cancelled"))),
         },
@@ -234,7 +253,7 @@ export default function WalletPage() {
               <div className="flex items-center gap-2">
                 <CreditCard className="w-4 h-4 text-muted-foreground" />
                 <h2 className="font-medium text-foreground text-sm">Add Funds</h2>
-                <span className="ml-auto text-[10px] text-muted-foreground bg-muted rounded px-1.5 py-0.5">Card only</span>
+                <span className="ml-auto text-[10px] text-muted-foreground bg-muted rounded px-1.5 py-0.5">Card & Net Banking</span>
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -290,7 +309,7 @@ export default function WalletPage() {
                 disabled={loading}
               >
                 <Plus className="w-4 h-4 mr-2" />
-                {loading ? "Processing…" : `Pay ${formatInrRupees(payableBreakdown.total)} by card`}
+                {loading ? "Processing…" : `Pay ${formatInrRupees(payableBreakdown.total)}`}
               </Button>
             </div>
 
