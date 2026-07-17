@@ -589,25 +589,45 @@ export default function UserDetail() {
                   <TableHead>Date</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead>Description</TableHead>
+                  <TableHead>Status</TableHead>
                   <TableHead className="text-right">Amount</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {transactions.isLoading ? (
-                  <TableRow><TableCell colSpan={4} className="text-center h-20 animate-pulse text-muted-foreground">Loading…</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={5} className="text-center h-20 animate-pulse text-muted-foreground">Loading…</TableCell></TableRow>
                 ) : (transactions.data?.data ?? []).length === 0 ? (
-                  <TableRow><TableCell colSpan={4} className="text-center h-20 text-muted-foreground">No transactions</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={5} className="text-center h-20 text-muted-foreground">No transactions</TableCell></TableRow>
                 ) : (
-                  (transactions.data?.data ?? []).map((tx: any) => (
-                    <TableRow key={tx.id}>
-                      <TableCell className="text-xs font-mono text-muted-foreground">{format(new Date(tx.createdAt), "MMM d HH:mm")}</TableCell>
-                      <TableCell className="text-xs capitalize">{tx.type}</TableCell>
-                      <TableCell className="text-xs truncate max-w-[200px]" title={tx.description}>{tx.description}</TableCell>
-                      <TableCell className={`text-right text-xs font-mono tabular-nums ${tx.amountCents > 0 ? "text-emerald-500" : "text-destructive"}`}>
-                        {tx.amountCents > 0 ? "+" : ""}{formatCentsToDollars(tx.amountCents)}
-                      </TableCell>
-                    </TableRow>
-                  ))
+                  (transactions.data?.data ?? []).map((tx: any) => {
+                    // Only completed transactions actually moved money / balance.
+                    // Pending (order created, payment never finished) and failed
+                    // top-ups must NOT look like real credits.
+                    const isCompleted = tx.status === "completed";
+                    const amountClass = !isCompleted
+                      ? "text-muted-foreground/60 line-through"
+                      : tx.amountCents > 0
+                        ? "text-emerald-500"
+                        : "text-destructive";
+                    return (
+                      <TableRow key={tx.id} className={isCompleted ? "" : "opacity-70"}>
+                        <TableCell className="text-xs font-mono text-muted-foreground">{format(new Date(tx.createdAt), "MMM d HH:mm")}</TableCell>
+                        <TableCell className="text-xs capitalize">{tx.type}</TableCell>
+                        <TableCell className="text-xs truncate max-w-[200px]" title={tx.description}>{tx.description}</TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={isCompleted ? "default" : tx.status === "failed" ? "destructive" : "secondary"}
+                            className="capitalize text-[10px]"
+                          >
+                            {tx.status === "pending" ? "not paid" : (tx.status || "unknown")}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className={`text-right text-xs font-mono tabular-nums ${amountClass}`}>
+                          {tx.amountCents > 0 ? "+" : ""}{formatCentsToDollars(tx.amountCents)}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
                 )}
               </TableBody>
             </Table>
