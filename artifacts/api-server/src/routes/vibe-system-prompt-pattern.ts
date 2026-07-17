@@ -193,9 +193,12 @@ function callFlowBlock(input: VibePatternPromptInput): string {
     if (input.dispositionLogic?.trim()) {
       parts.push(`After every call, tag the outcome using this logic: ${input.dispositionLogic.trim()}`);
     }
-    if (input.dispositions?.length) {
+    const validDispositions = (input.dispositions ?? []).filter(
+      d => d && typeof d.category === "string" && d.category.trim() && (d.outcomes ?? []).length,
+    );
+    if (validDispositions.length) {
       parts.push(`Outcome categories:`);
-      for (const d of input.dispositions) {
+      for (const d of validDispositions) {
         parts.push(`- ${d.category}: ${(d.outcomes ?? []).join(" / ")}`);
       }
     }

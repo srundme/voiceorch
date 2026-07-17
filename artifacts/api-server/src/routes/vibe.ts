@@ -121,6 +121,62 @@ interface VibeDisposition {
   outcomes: string[];
 }
 
+/**
+ * Coerce whatever shape Gemini emits for dispositions into valid
+ * { category, outcomes[] } entries. The model frequently returns the wrong
+ * shape — e.g. [{name, description}] or a flat list of outcome labels — which
+ * previously produced "undefined:" lines in the system prompt and an empty
+ * Call Disposition config. Anything unusable is dropped; bare outcome labels
+ * (no category) are folded into a single "Call Outcome" category.
+ */
+function normalizeDispositions(raw: unknown): VibeDisposition[] {
+  if (!Array.isArray(raw)) return [];
+  const out: VibeDisposition[] = [];
+  const looseOutcomes: string[] = [];
+
+  const toStringArray = (v: unknown): string[] => {
+    if (typeof v === "string") return v.trim() ? [v.trim()] : [];
+    if (Array.isArray(v)) {
+      return v
+        .map(x => (typeof x === "string" ? x : (x && typeof x === "object" && "label" in (x as any)) ? String((x as any).label ?? "") : ""))
+        .map(s => s.trim())
+        .filter(Boolean);
+    }
+    return [];
+  };
+
+  for (const item of raw) {
+    if (typeof item === "string") {
+      if (item.trim()) looseOutcomes.push(item.trim());
+      continue;
+    }
+    if (!item || typeof item !== "object") continue;
+    const o = item as Record<string, unknown>;
+    const categoryRaw = o["category"] ?? o["name"] ?? o["label"] ?? o["title"] ?? o["type"];
+    const category = typeof categoryRaw === "string" ? categoryRaw.trim() : "";
+    const outcomes = toStringArray(o["outcomes"] ?? o["values"] ?? o["options"] ?? o["choices"]);
+    if (category && outcomes.length) {
+      out.push({ category, outcomes });
+    } else if (category && !outcomes.length) {
+      // A named entry with no values is really a single outcome label.
+      looseOutcomes.push(category);
+    } else if (!category && outcomes.length) {
+      looseOutcomes.push(...outcomes);
+    }
+  }
+
+  if (looseOutcomes.length) {
+    const existing = out.find(d => /lead|outcome|status|result/i.test(d.category));
+    if (existing) {
+      existing.outcomes = [...new Set([...existing.outcomes, ...looseOutcomes])];
+    } else {
+      out.push({ category: "Call Outcome", outcomes: [...new Set(looseOutcomes)] });
+    }
+  }
+
+  return out.filter(d => d.category && d.outcomes.length);
+}
+
 interface VibeConfig {
   agentName:    string;
   companyName:  string;
@@ -182,9 +238,11 @@ Collect these 5 things (can gather multiple per turn if the user volunteers them
 1. Agent name (a real human name callers will hear — suggest one if they don't give one)
 2. Company/brand name
 3. Language(s) the agent speaks — codes: ta-IN=Tamil, hi-IN=Hindi, te-IN=Telugu, kn-IN=Kannada, ml-IN=Malayalam, en-IN=English India, en-US=English US.
+   ENGLISH DEFAULT: SnapServe is India-first. Whenever English is involved, ALWAYS use en-IN (English India) — NEVER en-US — unless the user explicitly asks for US/American English. This applies to the primary language, added languages, and the multilingual base language.
    This answer is OPTIONAL: if the user is unsure or wants to skip, keep the default language and set languageChosen=false (all voices will be shown later).
    If they name exactly ONE language: set language=<its code> and languageChosen=true.
    If they name TWO OR MORE languages in one answer: NEVER assume which is primary. Do NOT set language or languageChosen yet — keep languageChosen=false and treat item 3 as NOT collected. Ask a follow-up listing the languages they mentioned, e.g. "Which of these — Tamil, Hindi, or English — should be [name]'s primary language?" Only after they explicitly answer: set language=<the confirmed primary's code>, languageChosen=true, put ALL mentioned languages (including the primary) in multilingualLanguages, and set languageMode="multi".
+   MULTILINGUAL BELONGS HERE, at the start — decide it together with the primary language, NOT in a later phase. Right after the primary language is confirmed (single-language case), ask ONCE in the same or next turn: "Should [name] also speak any other languages, or just [primary]?" — If the user names more: add the primary + all named languages to multilingualLanguages and set languageMode="multi". If they say just the one / no: keep languageMode="single". If they already named multiple languages up front, this is already handled — do NOT re-ask.
    The user can change or add languages at ANY time, including during voice selection — just update language/multilingualLanguages/languageChosen and the voice list refreshes automatically. If they name several languages at once during such a change, the same rule applies: ask which should be primary before changing language.
 4. Call direction: "inbound" (customers call in), "outbound" (agent calls out), or "both" (handles both). If the user says "both", "either", or that it handles both scenarios — set direction="both".
 5. Purpose/description (what it does and who it talks to)
@@ -196,31 +254,59 @@ Voice cards are now shown directly in this chat — the user can preview and sel
 - The list is sorted so voices matching the agent's language(s) appear first; the rest are below.
 - When the user picks (by name, "I'll go with …", or a voiceId): set voiceId and voiceName exactly from the available options list, and set gender from that voice.
 - If the user asks where the voices are, wants to see them again, or changes the agent's language(s): STAY in phase="voice_selection" — the voice cards are re-displayed in the chat automatically on every turn of this phase. NEVER apologize or claim the UI failed to display.
-→ Transition (CRITICAL): the moment a voice is confirmed, set phase="call_flow" immediately. Your reply MUST (1) briefly confirm the voice and (2) ask the call-flow opening question in the SAME message. NEVER stay on phase="voice_selection" after a confirmed pick with only a confirmation — that strands the user.
+→ Transition (CRITICAL): the moment a voice is confirmed, set phase="call_flow" immediately. Your reply MUST (1) briefly confirm the voice and (2) in the SAME message, present the PROPOSED call-flow draft described in phase="call_flow" (Turn 1) — do NOT ask the user to write the flow from scratch. NEVER stay on phase="voice_selection" after a confirmed pick with only a confirmation — that strands the user.
 
 PHASE "call_flow"
-Deeply understand the full call script — don't rush this phase. Collect across 2–3 turns:
-Turn 1: Ask: "Walk me through how [name] should handle the call — the opening, the main pitch or purpose, key questions, how to handle objections, and how to close. Even a rough sketch is fine."
-Turn 2 (once you have the general flow): Ask BOTH of these in the same message:
-  (a) "What are the questions [name] MUST ask on every call? List them in the order they should be asked. For example: 'Do you have an existing policy?', 'What's your budget?', 'Are you the decision maker?'"
-  (b) "Any strict rules — things [name] should always do or never do? E.g. 'Never quote a price without checking', 'Always get consent before recording', 'Don't call after 7pm'"
-Turn 3 (if direction is outbound or both): Ask: "If [name] calls back someone it already spoke to before, how should it open differently? For example: pick up from where they left off, re-introduce briefly, or start fresh."
-- Capture the opening + flow in callFlowNotes.
-- Capture the must-ask questions (numbered list) in mandatoryQuestions. If none given, leave empty.
-- Capture the rules (dos and don'ts) in agentRules. If none given, leave empty.
-- Capture the callback opening in callbackGreeting. If not applicable or not given, leave empty.
-→ Transition: set phase="knowledge_base" only after you have callFlowNotes AND mandatoryQuestions (even if empty after asking).
+This is the highest-impact phase. Most users do NOT know how to design a good call flow, so NEVER ask them to write one from a blank page. Instead, PROPOSE a complete, ready-to-use draft tailored to their exact business, then let them accept it as-is, tweak any part, or replace it with their own.
+
+FORMATTING (CRITICAL): NEVER present the flow as one long paragraph. Always lay it out as clean, scannable, multi-line text with a numbered/labelled structure, line breaks between steps, and short indented bullets under each step. Use real newlines (\\n). Example shape:
+
+Opening
+- ...
+Discovery
+- ...
+- ...
+Main pitch
+- ...
+Objections
+- "price too high" → ...
+- "need to think" → ...
+Close
+- ...
+
+Write callFlowNotes in this SAME clean multi-line, labelled format — not a paragraph.
+
+Turn 1 — Propose the flow (do NOT just ask):
+- Using everything you already know (purpose/description, company, direction, language, who the agent talks to, and any specifics they gave like prices, dates, timings, product names), WRITE a concrete best-practice call flow for [name] in the labelled multi-line format above:
+  Opening — how [name] greets and (outbound) states the reason for calling or (inbound) offers help.
+  Discovery — 2–4 short questions to understand the caller's need and fit.
+  Main pitch / purpose — the core value delivered one idea at a time, REUSING the exact facts the user gave (e.g. course fee, batch start date, class timings).
+  Objections — the 2–3 objections most likely for THIS specific business, each with a natural one-line response.
+  Close — the concrete next step (enrol / book / callback) and a warm sign-off.
+- Make it specific to their domain — never generic filler. Reuse their real details verbatim.
+- Put this full draft into callFlowNotes immediately (do not leave it empty), in the clean multi-line format.
+- End your reply with a short line offering edits AND a translation: "Use it as-is, change any step, or give me your own. Want me to show this in [agent's language, e.g. Tamil/Hindi] so it's easier to read? Just say the word." — ONLY offer translation when the agent's language is NOT English; if it is English, drop that sentence.
+
+TRANSLATION:
+- If the user asks to see the flow in Tamil/Hindi/another language, RE-DISPLAY the same flow translated into that language in your reply, keeping the exact clean multi-line labelled layout. This is for the user's reading only — keep callFlowNotes itself in English (the agent still gets English instructions and speaks in its configured language) UNLESS the user explicitly says to store it in that language.
+
+Turn 2 — Confirm/refine, then propose must-ask questions + rules (still don't ask blind):
+- If the user edits anything, apply it to callFlowNotes and briefly re-confirm.
+- In the SAME message, PROPOSE sensible defaults derived from the purpose, each as a clean numbered/bulleted list (not a paragraph):
+  (a) Must-ask questions: suggest 2–4 questions [name] should ask on every call, as a numbered list, and put them in mandatoryQuestions. Say: "I'd also have [name] always ask these — add or remove any?"
+  (b) Rules: suggest 2–3 obvious dos/don'ts for this business (e.g. "Always confirm the batch start date", "Never promise a discount without approval") and put them in agentRules. Ask: "And a couple of ground rules — anything to change?"
+- The user can accept, edit, or add their own to all of the above.
+
+Turn 3 — Repeat callers (ALWAYS ask, every direction — MEMORY IS A KEY SNAPSERVE STRENGTH):
+- Memory is one of SnapServe's biggest advantages: [name] remembers people it has already spoken to across calls. Make this its own clear, prominent question — never skip it and never bury it.
+- Ask: "One of [name]'s best features is memory — it remembers callers it has spoken to before. When [name] reaches someone it already knows, how should it open? I'd recommend picking up warmly from where they left off (referencing what was discussed) instead of re-introducing from scratch — but you can choose a quick re-intro or a fresh start."
+- Propose "pick up from where they left off" as the default and put that draft opening in callbackGreeting.
+- callFlowNotes, mandatoryQuestions, agentRules, and callbackGreeting MUST end up populated with your proposed drafts (refined by the user), not empty — unless the user explicitly says they want one left blank.
+→ Transition: set phase="knowledge_base" only after the user has accepted or edited the proposed flow (callFlowNotes populated), you have presented the must-ask questions + rules, AND you have asked the repeat-caller/memory question.
 
 PHASE "knowledge_base"
 - Ask: "Does [name] need a knowledge base? You can upload documents in the platform after creation. For now — what should [name] know about [company]'s products, services, pricing, or FAQs? I'll bake this into the system prompt."
 - If they say nothing/skip, note that and move on. Capture any details in knowledgeBaseNotes.
-→ Transition: set phase="multilingual"
-
-PHASE "multilingual"
-- If languageMode is ALREADY "multi" (languages + primary were confirmed earlier): do NOT re-ask or change the primary. Briefly confirm, e.g. "You've already set [name] up with [languages] ([primary] as primary) — want to add any more?" Only add languages if they name new ones.
-- Otherwise ask: "Should [name] handle multiple languages, or just [primary language]?"
-- If yes: ask which to add (Tamil/Hindi/Telugu/Kannada/Malayalam/English India/English US)
-- Set languageMode="multi" if more than 1; hasTamil=true if Tamil is primary or included. NEVER change the previously confirmed primary language here unless the user explicitly asks to.
 → Transition: set phase="features_gender"
 
 PHASE "features_gender"
@@ -235,7 +321,7 @@ PHASE "features_transfer"
 
 PHASE "features_voicemail"
 - Ask: "For outbound calls — should [name] leave a voicemail if unanswered?"
-- If yes: ask what the voicemail message should say
+- If yes: do NOT ask the user to write it. PROPOSE a short, natural voicemail message yourself, tailored to [company] and the purpose, in the agent's language, and put it in voicemailMessage. Present it and say: "Here's a voicemail I'd leave: \"[message]\" — keep it, or tell me what to change." If the user edits, update voicemailMessage.
 → Transition: set phase="features_scheduling"
 
 PHASE "features_scheduling"
@@ -264,8 +350,16 @@ PHASE "dispositions"
 - First ask: "How would you define a HOT or Interested Lead for [name]? What does a caller say or do on a call that tells you they're genuinely interested? And what signals mean they're Not Interested?" (1–2 sentences is fine)
 - Capture their answer in dispositionLogic.
 - Then, based on dispositionLogic + purpose + direction, AUTO-GENERATE 3–5 specific outcome categories with clear outcomes. Make them precise — not generic. For example, instead of "Interested", say "Hot Lead — wants quote" and "Warm Lead — needs follow-up". Use the user's own language from their dispositionLogic answer.
-- Present them conversationally: "Here's how I've defined call outcomes for [name] based on what you told me: [brief list]. Does this look right?"
-- Adjust if the user asks. Update dispositionLogic if they refine their definition.
+- Present them as a CLEAN NUMBERED LIST, one outcome per line, no markdown/asterisks — format each line exactly as "1. Name — short description". Put a short intro line above and "Does this look right?" below. Example layout:
+  Here's how I'd define [name]'s call outcomes:
+  1. Hot Lead — Ready to enrol: asks about admission, fees, start date.
+  2. Warm Lead — Needs more info: detailed questions but not ready yet.
+  3. Not Interested — Clear rejection: says it's not a fit / looking elsewhere.
+  Does this look right?
+- CRITICAL — you MUST also write these into config.dispositions in this EXACT shape (never leave it empty, never use other keys):
+  "dispositions": [{ "category": "Lead Status", "outcomes": ["Hot Lead - ready to enrol", "Warm Lead - needs info", "Not Interested", "Follow-up required"] }]
+  Normally ONE category (e.g. "Lead Status" or "Call Outcome") whose "outcomes" array holds the 3–5 labels you presented. Add a second category only if it's clearly needed. Both "category" (a non-empty string) and "outcomes" (a non-empty array of strings) are REQUIRED on every entry. Do NOT emit entries like {name, description} or bare strings.
+- Adjust if the user asks. Update dispositionLogic AND config.dispositions if they refine.
 → Transition: if direction is "inbound" or "both", set phase="phone_number". If direction is "outbound", set phase="build".
 
 PHASE "phone_number" (ONLY when direction is "inbound" or "both" — for pure "outbound" agents skip this phase entirely and go straight to build)
@@ -281,6 +375,7 @@ PHASE "build"
 - Set ready=true with the complete config
 
 RULES:
+- FORMATTING: replies are shown as PLAIN TEXT — markdown is NOT rendered. NEVER use *, **, __, #, ##, or backticks; they appear literally as ugly characters. For emphasis use plain words. For any list (call flow, must-ask questions, rules, outcomes) use real line breaks with "1." / "2." or a leading "- ", never one dense paragraph.
 - Conversational and warm — like a helpful colleague, not a form
 - NEVER ask about STT/LLM/TTS — handled automatically
 - Always return the COMPLETE config with ALL previously collected fields in every response
@@ -857,7 +952,9 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
       }
       if (!replyAsksCallFlow(parsed.reply)) {
         const name = parsed.config?.agentName || "the agent";
-        parsed.reply = `${parsed.reply.trim()} Walk me through how ${name} should handle the call — the opening, the main pitch or purpose, key questions, how to handle objections, and how to close. Even a rough sketch is fine.`;
+        // Proposal-first fallback: don't make the user design the script blind.
+        // Offer a clean, scannable recommended structure they can accept/tweak/replace.
+        parsed.reply = `${parsed.reply.trim()}\n\nHere's a suggested call flow for ${name}:\n\nOpening\n- Greet warmly and introduce ${name}, then say why you're reaching out.\nDiscovery\n- Ask 2–3 quick questions to understand what the caller needs.\nMain pitch\n- Share the key points one at a time, not all at once.\nObjections\n- Answer the common concerns simply and reassure.\nClose\n- Confirm the next step and end on a warm note.\n\nUse it as-is, change any step, or give me your own.`;
       }
     }
 
@@ -889,6 +986,12 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
     // variation), treat scheduling as enabled — the tools array is the stronger signal.
     if (cfg && Array.isArray(cfg.schedulingTools) && cfg.schedulingTools.length > 0 && !cfg.schedulingEnabled) {
       cfg.schedulingEnabled = true;
+    }
+    // Repair disposition shape before any consumer (disposition cards, system
+    // prompt, DB taxonomy) reads it — prevents "undefined:" lines and empty
+    // Call Disposition config when the model returns the wrong structure.
+    if (cfg) {
+      cfg.dispositions = normalizeDispositions(cfg.dispositions);
     }
     const phase = (parsed.phase ?? "core").trim();
 

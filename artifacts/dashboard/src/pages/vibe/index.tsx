@@ -1757,7 +1757,16 @@ export default function VibePage() {
                     variant={showTestCall ? "default" : "outline"}
                     className="h-7 gap-1.5 text-xs rounded-lg bg-white/5 border-white/15 backdrop-blur-sm"
                     disabled={isThinking && !showTestCall}
-                    onClick={() => setShowTestCall(v => !v)}
+                    onClick={() => {
+                      if (showTestCall) {
+                        setShowTestCall(false);
+                        // Closing the live test on a freshly built agent should land
+                        // on the launch step, not loop back to the hype screen.
+                        if (refineId == null) setPostBuildStep("rating");
+                      } else {
+                        setShowTestCall(true);
+                      }
+                    }}
                   >
                     <Phone className="h-3 w-3" />
                     {showTestCall ? "Close Test" : "Test Web Call"}
