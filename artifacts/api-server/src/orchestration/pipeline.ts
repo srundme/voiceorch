@@ -3407,6 +3407,30 @@ export class OrchestrationPipeline implements VoiceSession {
       let greeting = useInstantReturning
         ? buildInstantReturningGreeting(this.config.returningCallerName, greetLang)
         : (resumeDropped ? "" : (this.agent.greetingMessage ?? ""));
+
+      // Language-aware greeting: a non-English agent whose static welcome message
+      // is still plain English (e.g. the builder default "Hello! How can I help
+      // you today?") would otherwise open the call in English and anchor the
+      // entire conversation to English — the model sees its own English opener in
+      // history and keeps replying in English despite the language rule. When the
+      // target language is non-English (an Indic language) and the saved greeting
+      // contains NO Indic-script characters, drop it so the empty-greeting path
+      // below asks the LLM for a natural, localized opener instead. Greetings the
+      // operator actually wrote in the target script (\u0900-\u0DFF) — and all
+      // English agents — are left untouched.
+      if (
+        !useInstantReturning &&
+        greeting.trim() &&
+        !greetLang.toLowerCase().startsWith("en") &&
+        !/[\u0900-\u0DFF]/.test(greeting)
+      ) {
+        logger.info(
+          { callId: this.config.callId, greetLang },
+          "Pipeline: static greeting is not in the agent's language — generating a localized opener instead",
+        );
+        greeting = "";
+      }
+
       let greetingEmotions: string[] | undefined;
 
       // Substitute {caller_salutation} in the greeting with the neutral salutation —

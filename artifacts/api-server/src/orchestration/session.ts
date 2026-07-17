@@ -354,7 +354,14 @@ export async function createSession(params: {
     // agent's generic language field for enforcement. This prevents the
     // "en-US" default in agent.language from overriding an explicitly-
     // configured Tamil/Hindi ASR language with an "English only" rule.
-    const agentLang = agent.asrLanguage ?? agent.language;
+    //
+    // Use `||` (not `??`): the builder saves asrLanguage as "" (empty string,
+    // NOT null) for agents configured only via the Language card, so `??` would
+    // resolve to "" and silently skip the entire language rule — leaving a
+    // Tamil/Hindi agent with no "respond in X" instruction and defaulting to
+    // English. `||` correctly falls through the empty string to agent.language,
+    // matching the sttConfig/AgentConfig.language resolution below (lines ~473/493).
+    const agentLang = agent.asrLanguage || agent.language;
     if (agentLang) {
       const langName = LANG_NAMES[agentLang] ?? agentLang;
       const scriptNote = LANG_SCRIPT_DIRECTIVE[agentLang] ?? "";
