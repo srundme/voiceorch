@@ -152,8 +152,11 @@ export default function WalletPage() {
   const openCheckout = useCallback(async (amountPaise: number, setupMandate = false) => {
     await loadRazorpay();
     const order = await createTopup({ data: { amountCents: amountPaise, setupMandate } });
-    const baseRupees = amountPaise / 100;
-    const breakdown = withGstRupees(baseRupees);
+    // Derive the label strictly from the order the server actually created
+    // (amountPaise == base credit sent, order.amount == payable incl. GST) so the
+    // Razorpay description can never drift from the real charge.
+    const baseLabelPaise = amountPaise;
+    const gstLabelPaise = Math.max(0, (order.amount ?? amountPaise) - amountPaise);
 
     return new Promise<void>((resolve, reject) => {
       let settled = false;
@@ -166,8 +169,8 @@ export default function WalletPage() {
         order_id:  order.orderId,
         name:      "SnapServe",
         description: setupMandate
-          ? `Auto-pay mandate — ${formatInrRupees(breakdown.base)} + GST`
-          : `Wallet top-up — ${formatInrRupees(breakdown.base)} + GST ${formatInrRupees(breakdown.gst)}`,
+          ? `Auto-pay mandate — ${paiseToInr(baseLabelPaise)} + GST`
+          : `Wallet top-up — ${paiseToInr(baseLabelPaise)} + GST ${paiseToInr(gstLabelPaise)}`,
         theme: { color: "#ededed" },
         modal: {
           ondismiss: () => settle(() => reject(new Error("cancelled"))),
