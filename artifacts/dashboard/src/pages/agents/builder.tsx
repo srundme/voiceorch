@@ -5856,7 +5856,11 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
           name,
           asrProvider: "sarvam",
           asrModel: "saaras:v3",
-          asrLanguage: "en-IN",
+          // asrLanguage is an ASR-only override — leave it blank so the main
+          // `language` field (the Transcriber "Language" dropdown) stays the
+          // single source of truth. Seeding it to "en-IN" here previously stuck
+          // agents in English even after the user switched the dropdown to Tamil.
+          asrLanguage: "",
           language: "en-IN",
           llmProvider: "groq",
           llmModel: "llama-3.3-70b-versatile",

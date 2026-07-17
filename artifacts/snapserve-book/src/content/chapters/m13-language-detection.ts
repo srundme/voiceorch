@@ -129,7 +129,7 @@ ws.send(JSON.stringify({
           ],
           correctIndex: 2,
           explanation:
-            "`asrLanguage ?? language` is correct. `asrLanguage` reflects the actual language the STT is set up for. Using only `language` when `asrLanguage = 'ta-IN'` injects 'English only' — a language rule that contradicts the STT config and makes the LLM respond in English to a Tamil caller.",
+            "Use `ta-IN`. `session.ts` resolves the effective language from BOTH fields with a 'non-English wins' rule: English is the default in both the edit form (`en-US`) and the 'from scratch' flow (`en-IN`), so a non-English value in EITHER `language` or `asrLanguage` is the user's intentional pick and wins. That fixes both mirror-image cases — `asrLanguage:'ta-IN'` + `language:'en-US'`, and the reverse `language:'ta-IN'` + stale `asrLanguage:'en-IN'` — which otherwise made the LLM reply in English to a Tamil caller.",
         },
         {
           prompt: "What happens if you omit `mode: 'Continuous'` in the `speech.context` for a multi-language session?",

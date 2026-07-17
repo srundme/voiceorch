@@ -349,19 +349,33 @@ export async function createSession(params: {
   const isMultilingual =
     (Array.isArray(agentCfg["secondaryLanguages"]) && (agentCfg["secondaryLanguages"] as string[]).length > 0) ||
     agentCfg["languageAutoDetect"] === true;
+
+  // Resolve the agent's effective conversation language from its two fields.
+  //   • `language`     — the main Transcriber "Language" dropdown (primary control)
+  //   • `asrLanguage`  — an optional ASR-only override ("leave blank to use Language")
+  // A NON-English value in either field is an explicit, intentional choice, since
+  // English is the default in BOTH the edit form (en-US) and the "from scratch"
+  // flow (en-IN). So a non-English value wins over an English value in the other
+  // field. This fixes two mirror-image bugs that both surfaced as "agent replies
+  // in English despite a Tamil selection":
+  //   • scratch flow:  language="ta-IN", asrLanguage="en-IN"  → ta-IN
+  //   • legacy config: language="en-US", asrLanguage="ta-IN"  → ta-IN
+  // When both are English, both non-English, or only one is set, the main
+  // `language` field wins (falling back to asrLanguage only if language is empty).
+  const effectiveAgentLang: string | null = (() => {
+    const L = (agent.language ?? "").trim();
+    const A = (agent.asrLanguage ?? "").trim();
+    const isEn = (x: string) => x.toLowerCase().startsWith("en");
+    if (L && A) {
+      if (isEn(L) && !isEn(A)) return A;
+      if (!isEn(L) && isEn(A)) return L;
+      return L;
+    }
+    return L || A || null;
+  })();
+
   {
-    // Prefer asrLanguage (the language the caller actually speaks) over the
-    // agent's generic language field for enforcement. This prevents the
-    // "en-US" default in agent.language from overriding an explicitly-
-    // configured Tamil/Hindi ASR language with an "English only" rule.
-    //
-    // Use `||` (not `??`): the builder saves asrLanguage as "" (empty string,
-    // NOT null) for agents configured only via the Language card, so `??` would
-    // resolve to "" and silently skip the entire language rule — leaving a
-    // Tamil/Hindi agent with no "respond in X" instruction and defaulting to
-    // English. `||` correctly falls through the empty string to agent.language,
-    // matching the sttConfig/AgentConfig.language resolution below (lines ~473/493).
-    const agentLang = agent.asrLanguage || agent.language;
+    const agentLang = effectiveAgentLang;
     if (agentLang) {
       const langName = LANG_NAMES[agentLang] ?? agentLang;
       const scriptNote = LANG_SCRIPT_DIRECTIVE[agentLang] ?? "";
@@ -474,10 +488,10 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     firstSpeaker: agent.firstSpeaker === "user" ? "user" : "assistant",
     endCallPhrases,
     silenceTimeoutSeconds: agent.silenceTimeoutSeconds ?? null,
-    // Mirror the STT language resolution (asrLanguage first) so AgentConfig.language —
-    // which drives the pipeline's [LANGUAGE — ABSOLUTE RULE] block — agrees with STT,
-    // the [STRICT LANGUAGE RULE], and TTS instead of contradicting them (call 548).
-    language: agent.asrLanguage || agent.language || null,
+    // AgentConfig.language is the agent's SPOKEN language — it drives the
+    // pipeline's [LANGUAGE — ABSOLUTE RULE] block and the TTS voice language.
+    // Use the unified resolver so the language rule, TTS, and STT all agree.
+    language: effectiveAgentLang,
     languageAutoDetect: isMultilingual,
     autoSwitchToEnglish: agentCfg["autoSwitchToEnglish"] === true,
     backchannelingEnabled: agent.backchannelingEnabled ?? false,
@@ -497,7 +511,10 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     ivrGreeting: (agentCfg["ivrGreeting"] as string | undefined) ?? null,
     ivrOptions: (agentCfg["ivrOptions"] as Array<{ digit: string; label: string; targetAgentId?: number }> | undefined) ?? [],
     sttConfig: {
-      language: agent.asrLanguage || agent.language || null,
+      // STT recognizes the same language the agent speaks. Using the unified
+      // resolver (instead of raw asrLanguage-first) means a stale/mismatched
+      // asrLanguage:"en-IN" no longer forces English recognition of a Tamil call.
+      language: effectiveAgentLang,
       backgroundDenoising: agent.asrBackgroundDenoising ?? false,
       confidenceThreshold: agent.asrConfidenceThreshold ?? 0.40,
       endOfTurnConfidence: agent.asrEndOfTurnConfidence ?? 0.70,
