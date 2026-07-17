@@ -59,7 +59,6 @@ import TransfersPage from "@/pages/transfers";
 import VoicesPage from "@/pages/voices";
 import TestSimulatorPage from "@/pages/test-simulator";
 import VibePage from "@/pages/vibe";
-import TasksPage from "@/pages/tasks";
 import CommandCenterPage from "@/pages/command-center/index";
 import MemoryPage from "@/pages/memory/index";
 import DocsPage from "@/pages/docs/index";
@@ -321,7 +320,6 @@ function ProtectedApp() {
           {/* Full-screen pages — no sidebar layout */}
           <Route path="/app/onboarding" component={OnboardingPage} />
           <Route path="/app/vibe" component={VibePage} />
-          <Route path="/app/tasks" component={TasksPage} />
           {/* All other /app/* routes go through the onboarding gate + Layout */}
           <Route path="/app/*?" component={AppRoutes} />
         </Switch>

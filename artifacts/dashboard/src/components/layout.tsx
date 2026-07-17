@@ -7,7 +7,7 @@ import {
   Settings, Key, Webhook, Wallet, TrendingUp, ShieldCheck,
   Mic2, Menu, ChevronDown, ChevronLeft, ChevronRight,
   LogOut, Bell, Search, SlidersHorizontal, BookOpen, PhoneMissed, PlugZap, Sun, Moon, Sparkles,
-  ListTodo, ArrowRightLeft, Instagram,
+  ArrowRightLeft, Instagram,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useAuth } from "@/lib/auth";
@@ -79,7 +79,6 @@ const NAV_PRIMARY = [
   { name: "Command Center",  href: "/app/command-center",  icon: Monitor },
   { name: "Agents",          href: "/app/agents",          icon: Users },
   { name: "Vibe Build",      href: "/app/vibe",            icon: Sparkles },
-  { name: "Agent Tasks",     href: "/app/tasks",           icon: ListTodo },
   { name: "Agent Knowledge", href: "/app/knowledge-bases", icon: BookOpen },
   { name: "Campaigns",       href: "/app/campaigns",       icon: Zap },
   { name: "Meta Leads",      href: "/app/meta-leads",      icon: Instagram },
@@ -106,7 +105,6 @@ const NAV_SETTINGS = [
 const ROUTE_TITLES: [string, string][] = [
   ["/app/command-center",  "Command Center"],
   ["/app/vibe",            "Vibe Build"],
-  ["/app/tasks",           "Agent Tasks"],
   ["/app/agents",          "Agents"],
   ["/app/knowledge-bases", "Agent Knowledge"],
   ["/app/campaigns",       "Campaigns"],
