@@ -375,7 +375,9 @@ function buildGeminiRequestBody(contents: Array<{ role: string; parts: Array<{ t
     generationConfig: {
       responseMimeType: "application/json",
       temperature: 0.4,
-      maxOutputTokens: 16384,
+      // Reply text + config JSON comfortably fit in 8k; the 16k cap only widened
+      // the truncation-retry window without helping normal turns.
+      maxOutputTokens: 8192,
       thinkingConfig: { thinkingBudget: 0 },
     },
   });
@@ -878,10 +880,9 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
     }
 
     const reply = (parsed.reply ?? "Tell me about the agent you want to build!").trim();
-    for (const ch of reply) {
-      emit({ type: "text", delta: ch });
-      await sleep(10);
-    }
+    // Emit the reply in one frame — Gemini has already produced the full text, so
+    // fake per-character pacing only added latency. The client animates locally.
+    emit({ type: "text", delta: reply });
 
     const cfg = parsed.config;
     // Normalize: if Gemini set schedulingTools but omitted the boolean flag (LLM output
@@ -1113,7 +1114,6 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
         },
       ];
       for (const f of features) {
-        await sleep(120);
         emit({ type: "feature", ...f });
       }
 
@@ -1131,7 +1131,6 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
         };
         const selectedTypes = resolveSchedulingTools(cfg);
         const selectedSet = new Set(selectedTypes);
-        await sleep(80);
         emit({
           type:     "tools",
           category: "scheduling",
@@ -1160,7 +1159,6 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
     }
     if (dirTakesInbound && phase === "phone_number" && userNumbers.length > 0
         && !pickedNumberRow && !cfg.phoneNumberSkipped) {
-      await sleep(150);
       emit({
         type: "phone_number_options",
         numbers: userNumbers.map(n => ({ id: n.id, number: n.number, region: n.region ?? "", assignedAgentId: n.agentId })),
@@ -1172,10 +1170,8 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
 
     // Disposition cards
     if (cfg.dispositions?.length) {
-      await sleep(200);
       emit({ type: "section", id: "dispositions", title: "Call Outcomes" });
       for (const d of cfg.dispositions) {
-        await sleep(80);
         emit({ type: "disposition_card", category: d.category, outcomes: d.outcomes });
       }
     }
@@ -1192,16 +1188,12 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
     // silently saving nothing. The next turn (with the number) will build normally.
     if (cfg.callTransferEnabled && !String(cfg.transferPhoneNumber ?? "").trim()) {
       const ask = "\n\nOne thing before I save — call transfer is enabled, but I don't have a phone number to transfer calls to yet. What number should I use? (Include the country code, e.g. +91XXXXXXXXXX.)";
-      for (const ch of ask) {
-        emit({ type: "text", delta: ch });
-        await sleep(10);
-      }
+      emit({ type: "text", delta: ask });
       res.end();
       return;
     }
 
     // ── Build phase ──────────────────────────────────────────────────────────
-    await sleep(400);
     emit({ type: "status", message: "Generating system prompt…" });
 
     const resolvedVoiceId   = cfg.voiceId   || (cfg.gender === "female" ? DEFAULT_FEMALE_VOICE_ID   : DEFAULT_MALE_VOICE_ID);
@@ -1258,13 +1250,9 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
     }
 
     const preview = systemPrompt.slice(0, 300);
-    for (const ch of preview) {
-      emit({ type: "prompt_stream", delta: ch });
-      await sleep(5);
-    }
+    emit({ type: "prompt_stream", delta: preview });
     if (systemPrompt.length > 300) emit({ type: "prompt_stream", delta: "…" });
 
-    await sleep(500);
     emit({ type: "status", message: "Creating your agent…" });
 
     // Build agentConfig object

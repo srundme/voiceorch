@@ -513,7 +513,10 @@ function AgentInboundPanel({
 
   return (
     <div className={cn("space-y-2", className)}>
-      {/* Outbound testing — free platform managed number */}
+      {/* Outbound testing — free platform managed number.
+          Hidden once the agent has its own assigned number, since outbound
+          caller ID then follows that number and this card is redundant. */}
+      {!assigned && (
       <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/5 p-3 space-y-1.5">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 min-w-0">
@@ -541,6 +544,7 @@ function AgentInboundPanel({
           </p>
         )}
       </div>
+      )}
 
       {/* Inbound — requires user's assigned number */}
       <div className="rounded-xl border border-border/50 bg-card/40 p-3 space-y-2.5">
