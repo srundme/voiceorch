@@ -339,6 +339,19 @@ export function useFinanceTransactions() {
   });
 }
 
+export function useRecentRecharges(opts?: { limit?: number; status?: string }) {
+  const limit = opts?.limit ?? 200;
+  const status = opts?.status ?? "completed";
+  return useQuery({
+    queryKey: ["admin", "finance", "recharges", limit, status],
+    queryFn: () =>
+      adminFetch<{ rows: any[]; total: number; totalAmountCents: number }>(
+        `/finance/recharges?limit=${limit}&status=${encodeURIComponent(status)}`,
+      ),
+    refetchInterval: 30000,
+  });
+}
+
 function financeRangeParams(from?: string, to?: string) {
   const p = new URLSearchParams();
   if (from) p.set("from", from);

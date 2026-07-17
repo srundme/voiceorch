@@ -387,6 +387,63 @@ router.get("/admin/finance/transactions", async (req, res): Promise<void> => {
   }
 });
 
+// Recent wallet recharges (top-ups only) joined with the paying user. Powers the
+// admin "Recharges" page so the owner can see who paid and when at a glance.
+router.get("/admin/finance/recharges", async (req, res): Promise<void> => {
+  try {
+    const limit = Math.min(Number(req.query["limit"] ?? 100), 500);
+    const offset = Number(req.query["offset"] ?? 0);
+    // Default to only successful recharges; pass ?status=all to include pending/failed.
+    const statusFilter = String(req.query["status"] ?? "completed");
+
+    const conds = [inArray(walletTransactionsTable.type, ["topup", "auto_topup"])];
+    if (statusFilter !== "all") {
+      conds.push(eq(walletTransactionsTable.status, statusFilter));
+    }
+
+    const [rows, [totals]] = await Promise.all([
+      db
+        .select({
+          id: walletTransactionsTable.id,
+          userId: walletTransactionsTable.userId,
+          type: walletTransactionsTable.type,
+          amountCents: walletTransactionsTable.amountCents,
+          description: walletTransactionsTable.description,
+          status: walletTransactionsTable.status,
+          razorpayOrderId: walletTransactionsTable.razorpayOrderId,
+          razorpayPaymentId: walletTransactionsTable.razorpayPaymentId,
+          createdAt: walletTransactionsTable.createdAt,
+          userEmail: usersTable.email,
+          userName: usersTable.name,
+          userClerkId: usersTable.clerkId,
+          userIsTest: usersTable.isTest,
+        })
+        .from(walletTransactionsTable)
+        .leftJoin(usersTable, eq(walletTransactionsTable.userId, usersTable.id))
+        .where(and(...conds))
+        .orderBy(desc(walletTransactionsTable.createdAt))
+        .limit(limit)
+        .offset(offset),
+      db
+        .select({
+          total: count(),
+          amountCents: sum(walletTransactionsTable.amountCents),
+        })
+        .from(walletTransactionsTable)
+        .where(and(...conds)),
+    ]);
+
+    res.json({
+      rows,
+      total: Number(totals?.total ?? 0),
+      totalAmountCents: Number(totals?.amountCents ?? 0),
+    });
+  } catch (err) {
+    req.log.error({ err }, "admin/finance/recharges failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 // ─── Platform / Engineering ───────────────────────────────────────────────────
 
 router.get("/admin/platform/active", async (_req, res): Promise<void> => {

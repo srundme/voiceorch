@@ -12,6 +12,7 @@ import CallAnalyticsPage from "@/pages/call-analytics";
 import UsersList from "@/pages/users";
 import UserDetail from "@/pages/user-detail";
 import Finance from "@/pages/finance";
+import Recharges from "@/pages/recharges";
 import Platform from "@/pages/platform";
 import Growth from "@/pages/growth";
 import BoardPulse from "@/pages/board/pulse";
@@ -88,6 +89,7 @@ function Router() {
       <ProtectedRoute path="/users/:clerkId" component={UserDetail} />
       <ProtectedRoute path="/users/:clerkId/agents/:agentId" component={AdminAgentEdit} />
       <ProtectedRoute path="/finance" component={Finance} />
+      <ProtectedRoute path="/recharges" component={Recharges} />
       <ProtectedRoute path="/platform" component={Platform} />
       <ProtectedRoute path="/growth" component={Growth} />
       <ProtectedRoute path="/board/pulse" component={BoardPulse} />

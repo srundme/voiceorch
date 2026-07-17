@@ -33,6 +33,7 @@ import {
   Sparkles,
   Calculator,
   Presentation,
+  IndianRupee,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -91,6 +92,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/call-analytics", label: "Call Analytics",   icon: PhoneCall },
     { href: "/users",          label: "Users",            icon: Users },
     { href: "/finance",        label: "Finance",          icon: Wallet },
+    { href: "/recharges",      label: "Recharges",        icon: IndianRupee },
     { href: "/audit-logs",     label: "Audit Logs",       icon: ClipboardList },
     { href: "/usage",          label: "Usage Monitoring", icon: BarChart2 },
     { href: "/platform",       label: "Platform",         icon: Cpu },
