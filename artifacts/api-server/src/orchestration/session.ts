@@ -62,6 +62,21 @@ import {
 
 
 /**
+ * Fallback silence/inactivity timeout (seconds) applied when an agent has no
+ * `silenceTimeoutSeconds` configured. Without this, dead-air calls (voicemail,
+ * an idle open webcall tab, or a phone call whose hangup event never arrives)
+ * never self-terminate and linger until the 30-minute stuck-call sweep force-
+ * closes them — producing fake long-duration calls. The silence watchdog first
+ * re-prompts ("are you still there?") and only hangs up after a second window,
+ * so the effective time before hangup is roughly double this value.
+ *
+ * An agent may still explicitly disable the timeout by setting it to 0.
+ * Override the default via SILENCE_TIMEOUT_DEFAULT_SECONDS.
+ */
+const DEFAULT_SILENCE_TIMEOUT_SECONDS =
+  parseInt(process.env["SILENCE_TIMEOUT_DEFAULT_SECONDS"] ?? "", 10) || 15;
+
+/**
  * Returns true when the last ~300 characters of the transcript contain a
  * farewell phrase, indicating the caller ended the call intentionally.
  * Used to suppress false-positive network-drop callbacks.
@@ -487,7 +502,10 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     greetingMessage: agent.greetingMessage ?? null,
     firstSpeaker: agent.firstSpeaker === "user" ? "user" : "assistant",
     endCallPhrases,
-    silenceTimeoutSeconds: agent.silenceTimeoutSeconds ?? null,
+    // Fall back to a default so idle/dead-air calls self-terminate instead of
+    // lingering until the stuck-call sweep. `?? ` keeps an explicit 0 (disabled)
+    // and any explicit value the agent configured.
+    silenceTimeoutSeconds: agent.silenceTimeoutSeconds ?? DEFAULT_SILENCE_TIMEOUT_SECONDS,
     // AgentConfig.language is the agent's SPOKEN language — it drives the
     // pipeline's [LANGUAGE — ABSOLUTE RULE] block and the TTS voice language.
     // Use the unified resolver so the language rule, TTS, and STT all agree.

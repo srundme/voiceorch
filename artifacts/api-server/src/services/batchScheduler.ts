@@ -561,29 +561,28 @@ async function sweepStuckInProgressCalls(): Promise<void> {
 
     if (stuck.length === 0) return;
 
-    // We never learned the real connected duration for a stuck call, so cap it
-    // at the stuck-call timeout rather than (now − createdAt) — otherwise a call
-    // that sat stuck for hours/days becomes a multi-thousand-minute "completed"
-    // call and grossly inflates aggregate minutes.
-    const maxStuckDurationSeconds = Math.floor(STUCK_CALL_TIMEOUT_MS / 1000);
+    // A stuck call never received a proper hangup/teardown, so we never learned
+    // its real connected duration. Marking it "completed" with a fabricated
+    // (timeout-length) duration inflated aggregate minutes and produced fake
+    // "30m 0s" calls in the UI. Instead mark it "failed" with duration 0 and a
+    // reason, so it is excluded from completed-call minute analytics and is
+    // clearly identifiable as an aborted/orphaned call rather than a real one.
     for (const call of stuck) {
       try {
-        const durationSeconds = Math.min(
-          Math.floor((Date.now() - call.createdAt.getTime()) / 1000),
-          maxStuckDurationSeconds,
-        );
         await db
           .update(callsTable)
           .set({
-            status: "completed",
+            status: "failed",
             endedAt: new Date(),
-            durationSeconds,
+            durationSeconds: 0,
+            errorMessage:
+              "Auto-closed: call stuck in progress beyond timeout (no hangup or teardown received)",
           })
           .where(and(
             eq(callsTable.id, call.id),
             inArray(callsTable.status, ["ringing", "in_progress"]),
           ));
-        logger.warn({ callId: call.id, durationSeconds }, "Stuck in-progress call auto-closed by sweep");
+        logger.warn({ callId: call.id }, "Stuck in-progress call auto-closed by sweep (marked failed)");
       } catch (callErr) {
         logger.error({ err: callErr, callId: call.id }, "sweepStuckInProgressCalls: error processing call");
       }
