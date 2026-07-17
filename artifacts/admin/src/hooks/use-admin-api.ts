@@ -410,6 +410,78 @@ export function useFinanceInvestor() {
   });
 }
 
+// ─── Board (Founder / Investor deck) ──────────────────────────────────────────
+
+export interface BoardSettings {
+  cashOnHandPaise: number;
+  monthlyBurnPaise: number;
+  cacPaise: number;
+  telephonyCostPaisePerMin: number;
+  flagshipClerkId: string | null;
+  flagshipGoal: number;
+}
+
+export function useBoardSettings() {
+  return useQuery({
+    queryKey: ["admin", "board", "settings"],
+    queryFn: () => adminFetch<BoardSettings>("/board/settings"),
+  });
+}
+
+export function useUpdateBoardSettings() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Partial<BoardSettings>) =>
+      adminFetch<BoardSettings>("/board/settings", {
+        method: "PUT",
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "board"] });
+    },
+  });
+}
+
+export function useBoardPulse() {
+  return useQuery({
+    queryKey: ["admin", "board", "pulse"],
+    queryFn: () => adminFetch<any>("/board/pulse"),
+    refetchInterval: 60_000,
+  });
+}
+
+export function useBoardGrowth() {
+  return useQuery({
+    queryKey: ["admin", "board", "growth"],
+    queryFn: () => adminFetch<any>("/board/growth"),
+    refetchInterval: 300_000,
+  });
+}
+
+export function useBoardRetention() {
+  return useQuery({
+    queryKey: ["admin", "board", "retention"],
+    queryFn: () => adminFetch<any>("/board/retention"),
+    refetchInterval: 300_000,
+  });
+}
+
+export function useBoardMoat() {
+  return useQuery({
+    queryKey: ["admin", "board", "moat"],
+    queryFn: () => adminFetch<any>("/board/moat"),
+    refetchInterval: 300_000,
+  });
+}
+
+export function useBoardUnitEconomics() {
+  return useQuery({
+    queryKey: ["admin", "board", "unit-economics"],
+    queryFn: () => adminFetch<any>("/board/unit-economics"),
+    refetchInterval: 300_000,
+  });
+}
+
 export async function downloadFinanceCsv(pathWithQuery: string, filename: string) {
   const token = localStorage.getItem("adminToken") ?? "";
   const res = await fetch(`/api/admin${pathWithQuery}`, {

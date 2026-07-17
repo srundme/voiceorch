@@ -25,6 +25,7 @@ import adminDeploymentsRouter from "./admin-deployments.js";
 import adminGenderServiceRouter from "./admin-gender-service.js";
 import adminEmailsRouter from "./admin-emails.js";
 import adminFinanceAnalyticsRouter from "./admin-finance-analytics.js";
+import adminBoardAnalyticsRouter from "./admin-board-analytics.js";
 import adminCallAnalyticsRouter from "./admin-call-analytics.js";
 import ambientSoundsRouter, { ambientSoundsUserRouter } from "./ambient-sounds.js";
 import wizardRouter from "./wizard.js";
@@ -91,6 +92,7 @@ router.use(adminDeploymentsRouter);
 router.use(adminGenderServiceRouter);
 router.use(adminEmailsRouter);
 router.use(adminFinanceAnalyticsRouter);
+router.use(adminBoardAnalyticsRouter);
 router.use(adminCallAnalyticsRouter);
 
 // Public campaign lead webhook — must be before provisionUser (no Clerk session needed)

@@ -42,6 +42,11 @@ export const callsTable = pgTable("calls", {
   // Conversation continuity
   /** True when the call ended naturally (goodbye / transfer). False/null = dropped. */
   conversationCompleted: boolean("conversation_completed"),
+  // Board / Product-Moat analytics (forward-only instrumentation)
+  /** Primary spoken language detected during the call (e.g. "en", "hi", "ta", "hinglish"). */
+  primaryLanguage: text("primary_language"),
+  /** True when cross-call memory injected prior facts for a recognized returning caller. */
+  memoryRecognized: boolean("memory_recognized"),
   /** LLM-generated context snapshot for the next auto-callback to resume from. */
   resumeContext: jsonb("resume_context").$type<{
     summary: string;

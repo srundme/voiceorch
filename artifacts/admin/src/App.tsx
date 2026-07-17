@@ -14,6 +14,11 @@ import UserDetail from "@/pages/user-detail";
 import Finance from "@/pages/finance";
 import Platform from "@/pages/platform";
 import Growth from "@/pages/growth";
+import BoardPulse from "@/pages/board/pulse";
+import BoardGrowth from "@/pages/board/growth";
+import BoardRetention from "@/pages/board/retention";
+import BoardMoat from "@/pages/board/moat";
+import BoardUnitEconomics from "@/pages/board/unit-economics";
 import SignupsReport from "@/pages/reports/signups";
 import ManagedKeys from "@/pages/managed-keys";
 import ManagedNumbers from "@/pages/managed-numbers";
@@ -83,6 +88,11 @@ function Router() {
       <ProtectedRoute path="/finance" component={Finance} />
       <ProtectedRoute path="/platform" component={Platform} />
       <ProtectedRoute path="/growth" component={Growth} />
+      <ProtectedRoute path="/board/pulse" component={BoardPulse} />
+      <ProtectedRoute path="/board/growth" component={BoardGrowth} />
+      <ProtectedRoute path="/board/retention" component={BoardRetention} />
+      <ProtectedRoute path="/board/moat" component={BoardMoat} />
+      <ProtectedRoute path="/board/unit-economics" component={BoardUnitEconomics} />
       <ProtectedRoute path="/reports/signups" component={SignupsReport} />
       <ProtectedRoute path="/managed-keys" component={ManagedKeys} />
       <ProtectedRoute path="/managed-numbers" component={ManagedNumbers} />

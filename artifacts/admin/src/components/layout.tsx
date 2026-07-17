@@ -27,6 +27,11 @@ import {
   Mail,
   ClipboardList,
   UserPlus,
+  Gauge,
+  LineChart,
+  HeartPulse,
+  Sparkles,
+  Calculator,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -76,6 +81,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
   };
 
   const navItems: NavItem[] = [
+    { href: "/board/pulse",           label: "Company Pulse",      icon: Gauge, section: "Board" },
+    { href: "/board/growth",          label: "Growth Metrics",     icon: LineChart },
+    { href: "/board/retention",       label: "Retention & Health", icon: HeartPulse },
+    { href: "/board/moat",            label: "Product Moat",       icon: Sparkles },
+    { href: "/board/unit-economics",  label: "Unit Economics",     icon: Calculator },
     { href: "/",               label: "Overview",         icon: Activity },
     { href: "/call-analytics", label: "Call Analytics",   icon: PhoneCall },
     { href: "/users",          label: "Users",            icon: Users },

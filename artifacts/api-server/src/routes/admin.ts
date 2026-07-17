@@ -73,7 +73,13 @@ router.get("/admin/overview", async (req, res): Promise<void> => {
           .from(callsTable)
           .where(and(gt(callsTable.createdAt, sql`now() - interval '24 hours'`), callsSeg)),
         db
-          .select({ totalDurationSeconds: sql<number>`coalesce(sum(duration_seconds), 0)` })
+          // Clamp each call to a sane ceiling (2h) before summing so a stray
+          // stuck/lingering call with an inflated duration_seconds can't distort
+          // the aggregate. coalesce(..,0) first so NULL durations count as 0
+          // (least(NULL, x) would otherwise return x).
+          .select({
+            totalDurationSeconds: sql<number>`coalesce(sum(least(coalesce(duration_seconds, 0), 7200)), 0)`,
+          })
           .from(callsTable)
           .where(callsSeg),
         db

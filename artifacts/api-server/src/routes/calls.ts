@@ -948,7 +948,14 @@ router.patch("/calls/:id/end", requireAuth, async (req, res): Promise<void> => {
   }
 
   const endedAt = new Date();
-  const durationSeconds = Math.floor((endedAt.getTime() - existing.createdAt.getTime()) / 1000);
+  // Runaway guard: a web call is timed from record creation, so a browser tab
+  // left open (never firing this end call promptly) would otherwise report — and
+  // bill — many hours. Cap at 4h; a single real conversation never runs that long.
+  const MAX_CALL_DURATION_SECONDS = 4 * 60 * 60;
+  const durationSeconds = Math.min(
+    Math.floor((endedAt.getTime() - existing.createdAt.getTime()) / 1000),
+    MAX_CALL_DURATION_SECONDS,
+  );
 
   // Parse optional latency payload
   const latency = parseLatencyBody(req.body);

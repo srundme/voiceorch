@@ -141,6 +141,10 @@ interface ActiveSession {
   /** Agent persona fingerprint at call start — written to caller memory at
    *  call-end so future calls can detect a persona swap (whiplash guard). */
   personaHash: string;
+  /** Effective STT/agent language resolved at session start (BCP-47 or the agent
+   *  language). Fallback source for the calls.primary_language analytics column
+   *  when the pipeline didn't detect a caller language mid-call. */
+  configuredLanguage: string | null;
 }
 
 const sessions = new Map<string, ActiveSession>();
@@ -1649,6 +1653,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     get callerNameLatchedThisCall() { return callerNameLatchedThisCall; },
     get callerNameLatchTier() { return callerNameLatchTier; },
     personaHash,
+    configuredLanguage: agentConfig.language ?? null,
     callerPhone,
     agentUserId:          agent.userId ?? null,
     agentLlmProvider:     agent.llmProvider,
@@ -1952,6 +1957,13 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
     const hasClosingSignal = metricsAcc.count > 0 && closingPhrases.some(p => lastChunk.includes(p));
     const conversationCompleted = session.naturalEndTriggered || session.wasTransferred || bookingCompletedThisCall || hasClosingSignal;
 
+    // Board / Product-Moat analytics (forward-only). primaryLanguage = the caller
+    // language the pipeline settled on, else the agent's configured language.
+    // memoryRecognized = a returning caller (>=1 prior call) whose cross-call
+    // memory was loaded at session start.
+    const primaryLanguage = session.pipeline.getPreferredCallerLang() || session.configuredLanguage || null;
+    const memoryRecognized = (session.callerProfileSnapshot?.callCount ?? 0) >= 1;
+
     await db.update(callsTable).set({
       status: callStatus,
       endedAt,
@@ -1961,6 +1973,8 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
       llmLatencyMs: avgLlmMs,
       ttsFirstChunkMs: avgTtsMs,
       conversationCompleted,
+      primaryLanguage,
+      memoryRecognized,
       ...(tokensSavedValue > 0 ? { tokensSaved: tokensSavedValue } : {}),
       ...(recordingUrl ? { recordingUrl } : {}),
       ...(recordingError ? { recordingError } : {}),

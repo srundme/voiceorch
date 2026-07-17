@@ -561,9 +561,17 @@ async function sweepStuckInProgressCalls(): Promise<void> {
 
     if (stuck.length === 0) return;
 
+    // We never learned the real connected duration for a stuck call, so cap it
+    // at the stuck-call timeout rather than (now − createdAt) — otherwise a call
+    // that sat stuck for hours/days becomes a multi-thousand-minute "completed"
+    // call and grossly inflates aggregate minutes.
+    const maxStuckDurationSeconds = Math.floor(STUCK_CALL_TIMEOUT_MS / 1000);
     for (const call of stuck) {
       try {
-        const durationSeconds = Math.floor((Date.now() - call.createdAt.getTime()) / 1000);
+        const durationSeconds = Math.min(
+          Math.floor((Date.now() - call.createdAt.getTime()) / 1000),
+          maxStuckDurationSeconds,
+        );
         await db
           .update(callsTable)
           .set({
