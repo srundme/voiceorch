@@ -30,14 +30,22 @@ export async function sendBrevoSms(to: string, content: string): Promise<void> {
   logger.info({ to }, "Brevo SMS sent");
 }
 
+export interface BrevoAttachment {
+  /** Base64-encoded file content. */
+  content: string;
+  /** File name shown in the email (e.g. "invoice.pdf"). */
+  name: string;
+}
+
 /**
- * Sends a transactional email via Brevo.
+ * Sends a transactional email via Brevo, optionally with file attachments.
  * Requires BREVO_API_KEY environment variable.
  */
 export async function sendBrevoEmail(
   to: string,
   subject: string,
   htmlBody: string,
+  attachments?: BrevoAttachment[],
 ): Promise<void> {
   const apiKey = process.env["BREVO_API_KEY"];
   if (!apiKey) throw new Error("BREVO_API_KEY is not configured. Add it to the environment secrets.");
@@ -53,6 +61,9 @@ export async function sendBrevoEmail(
       to:      [{ email: to }],
       subject,
       htmlContent: htmlBody,
+      ...(attachments && attachments.length > 0
+        ? { attachment: attachments.map((a) => ({ content: a.content, name: a.name })) }
+        : {}),
     }),
   });
 

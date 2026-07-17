@@ -1,5 +1,5 @@
-import React, { useState, useCallback, useMemo } from "react";
-import { Wallet, Plus, RefreshCw, ArrowDownLeft, ArrowUpRight, Zap, CreditCard, ToggleLeft, ToggleRight, AlertCircle, ShieldCheck, CheckCircle2 } from "lucide-react";
+import React, { useState, useCallback, useMemo, useEffect } from "react";
+import { Wallet, Plus, RefreshCw, ArrowDownLeft, ArrowUpRight, Zap, CreditCard, ToggleLeft, ToggleRight, AlertCircle, ShieldCheck, CheckCircle2, FileText, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,6 +17,20 @@ declare global {
 const GST_RATE = 0.18;
 const MIN_TOPUP_INR = 100;
 const TOPUP_PRESETS = [500, 1000, 2000, 5000];
+
+interface InvoiceRow {
+  id: number;
+  invoiceNumber: string;
+  type: string;
+  description: string;
+  totalCents: number;
+  status: string;
+  createdAt: string;
+}
+
+function sessionToken(): string | null {
+  try { return localStorage.getItem("voiceorch:session"); } catch { return null; }
+}
 
 function loadRazorpay(): Promise<void> {
   return new Promise((resolve) => {
@@ -65,6 +79,50 @@ export default function WalletPage() {
   const { mutateAsync: createTopup }                = useCreateTopup();
   const { mutateAsync: verifyPayment }              = useVerifyPayment();
   const { mutateAsync: updateAutopay }              = useUpdateAutopay();
+
+  const [invoices, setInvoices]           = useState<InvoiceRow[]>([]);
+  const [invoicesLoading, setInvoicesLoading] = useState(true);
+  const [downloadingId, setDownloadingId] = useState<number | null>(null);
+
+  const loadInvoices = useCallback(async () => {
+    try {
+      const token = sessionToken();
+      const r = await fetch("/api/wallet/invoices?limit=100", {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (r.ok) setInvoices((await r.json()) as InvoiceRow[]);
+    } catch {
+      /* non-fatal */
+    } finally {
+      setInvoicesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void loadInvoices(); }, [loadInvoices]);
+
+  const downloadInvoice = useCallback(async (inv: InvoiceRow) => {
+    setDownloadingId(inv.id);
+    try {
+      const token = sessionToken();
+      const r = await fetch(`/api/wallet/invoices/${inv.id}/pdf`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!r.ok) throw new Error("failed");
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${inv.invoiceNumber.replace(/\//g, "-")}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast({ title: "Could not download invoice", variant: "destructive" });
+    } finally {
+      setDownloadingId(null);
+    }
+  }, [toast]);
 
   const effectiveAmount = customAmount ? Math.max(MIN_TOPUP_INR, Number(customAmount) || 0) : topupAmount;
   const payableBreakdown = useMemo(() => withGstRupees(effectiveAmount), [effectiveAmount]);
@@ -165,6 +223,9 @@ export default function WalletPage() {
     try {
       await openCheckout(amountPaise, false);
       toast({ title: `Wallet topped up — ${formatInrRupees(effectiveAmount)} credit added!` });
+      // Invoice is generated server-side just after payment verification; give it
+      // a moment then refresh the list.
+      setTimeout(() => { void loadInvoices(); }, 2500);
     } catch {
       toast({ title: "Payment failed or cancelled", variant: "destructive" });
     } finally {
@@ -381,6 +442,43 @@ export default function WalletPage() {
                 </Button>
               )}
             </div>
+          </div>
+
+          <div className="rounded-xl border border-border bg-card overflow-hidden">
+            <div className="px-5 py-4 border-b border-border flex items-center gap-2">
+              <FileText className="w-4 h-4 text-muted-foreground" />
+              <h2 className="font-medium text-foreground text-sm">Invoices &amp; Receipts</h2>
+              <span className="ml-auto text-[10px] text-muted-foreground">GST tax invoices · PDF</span>
+            </div>
+            {invoicesLoading ? (
+              <div className="text-center py-10 text-muted-foreground text-sm">Loading invoices…</div>
+            ) : invoices.length === 0 ? (
+              <div className="text-center py-10 text-muted-foreground text-sm">No invoices yet. Invoices are generated automatically on every purchase.</div>
+            ) : (
+              <div className="divide-y divide-black/[0.06]">
+                {invoices.map((inv) => (
+                  <div key={inv.id} className="flex items-center px-5 py-3.5 gap-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-foreground truncate">{inv.invoiceNumber}</p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {inv.description} · {new Date(inv.createdAt).toLocaleDateString("en-IN", { month: "short", day: "numeric", year: "numeric" })}
+                      </p>
+                    </div>
+                    <p className="text-sm font-medium tabular-nums text-foreground shrink-0">{paiseToInr(inv.totalCents)}</p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="shrink-0"
+                      onClick={() => downloadInvoice(inv)}
+                      disabled={downloadingId === inv.id}
+                    >
+                      <Download className="w-3.5 h-3.5 mr-1.5" />
+                      {downloadingId === inv.id ? "…" : "PDF"}
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="rounded-xl border border-border bg-card overflow-hidden">

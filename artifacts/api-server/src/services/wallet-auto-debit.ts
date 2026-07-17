@@ -10,6 +10,7 @@ import { db } from "@workspace/db";
 import { usersTable, walletTransactionsTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
+import { issueInvoice } from "./invoice.js";
 import {
   CURRENCY_INR,
   GST_RATE,
@@ -133,6 +134,18 @@ export async function triggerAutoDebit(
     description:      `Auto top-up ${formatInr(basePaise)} + GST ${formatInr(gstPaise)} (paid ${formatInr(payablePaise)})`,
     status:           "completed",
     razorpayOrderId:  order.id,
+    razorpayPaymentId: paymentId,
+  });
+
+  // GST tax invoice cum receipt (base credit + 18% GST) with PDF attached.
+  void issueInvoice({
+    user: { id: user.id, name: user.name, email: user.email },
+    type: "wallet_topup",
+    description: "Wallet auto top-up — prepaid calling credit",
+    hsnSac: "998413",
+    amountCents: basePaise,
+    gstInclusive: false,
+    razorpayOrderId: order.id,
     razorpayPaymentId: paymentId,
   });
 

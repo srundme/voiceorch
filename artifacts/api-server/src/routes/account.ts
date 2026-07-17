@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { db, usersTable, walletTransactionsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logActivity } from "../lib/activity.js";
+import { issueInvoice } from "../services/invoice.js";
 import { GetPreferencesResponse, UpdatePreferencesBody } from "@workspace/api-zod";
 
 const scryptAsync = promisify(scrypt);
@@ -91,6 +92,17 @@ router.post("/account/add-concurrent", requireAuth, async (req, res): Promise<vo
     userId: clerkId,
     eventType: "account.concurrent_slot_added",
     description: `Concurrent limit increased to ${updated.concurrentLimit}`,
+    metadata: { newLimit: updated.concurrentLimit },
+  });
+
+  // GST tax invoice. Paid from the wallet, so the ₹1,000 is GST-inclusive.
+  void issueInvoice({
+    user: { id: user.id, name: user.name, email: user.email },
+    type: "concurrent_slot",
+    description: `Concurrent call slot (limit now ${updated.concurrentLimit})`,
+    hsnSac: "998413",
+    amountCents: CONCURRENT_SLOT_CENTS,
+    gstInclusive: true,
     metadata: { newLimit: updated.concurrentLimit },
   });
 

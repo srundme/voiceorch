@@ -2,12 +2,11 @@ import { Router } from "express";
 import crypto from "crypto";
 import Razorpay from "razorpay";
 import { db } from "@workspace/db";
-import { usersTable, walletTransactionsTable } from "@workspace/db/schema";
+import { usersTable, walletTransactionsTable, invoicesTable } from "@workspace/db/schema";
 import { eq, desc, sql, and } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logger } from "../lib/logger.js";
-import { sendBrevoEmail } from "../services/brevo.js";
-import { walletTopUpEmail } from "../services/email-templates.js";
+import { issueInvoice, renderInvoiceHtml, renderInvoicePdf } from "../services/invoice.js";
 import {
   CURRENCY_INR,
   GST_RATE,
@@ -224,18 +223,18 @@ router.post("/wallet/verify-payment", requireAuth, async (req, res) => {
     "Wallet credited via verify-payment",
   );
 
-  if (user.email) {
-    sendBrevoEmail(
-      user.email,
-      "Payment received — SnapServe wallet topped up",
-      walletTopUpEmail(
-        user.name ?? user.email.split("@")[0]!,
-        claimed.amountCents,
-        updated?.walletBalanceCents ?? 0,
-        razorpayPaymentId,
-      ),
-    ).catch(err => logger.warn({ err, userId: user.id }, "Top-up receipt email failed"));
-  }
+  // GST tax invoice cum receipt (base credit + 18% GST) with PDF attached.
+  // This single document replaces the old separate receipt email. Idempotent.
+  void issueInvoice({
+    user: { id: user.id, name: user.name, email: user.email },
+    type: "wallet_topup",
+    description: "Wallet top-up — prepaid calling credit",
+    hsnSac: "998413",
+    amountCents: claimed.amountCents,
+    gstInclusive: false,
+    razorpayOrderId,
+    razorpayPaymentId,
+  });
 
   res.json(walletInfoPayload(updated));
 });
@@ -409,8 +408,99 @@ router.post("/wallet/webhook", async (req, res) => {
       logger.info({ orderId, paymentId, userId: txn.userId, amountCents: txn.amountCents },
         "Wallet credited via Razorpay webhook payment.captured");
     });
+
+    // GST tax invoice (idempotent per payment id — no-op if verify path issued it).
+    const [invUser] = await db.select().from(usersTable).where(eq(usersTable.id, txn.userId));
+    if (invUser) {
+      void issueInvoice({
+        user: { id: invUser.id, name: invUser.name, email: invUser.email },
+        type: "wallet_topup",
+        description: "Wallet top-up — prepaid calling credit",
+        hsnSac: "998413",
+        amountCents: txn.amountCents,
+        gstInclusive: false,
+        razorpayOrderId: orderId,
+        razorpayPaymentId: paymentId,
+      });
+    }
   } catch (err) {
     logger.error({ err, orderId, paymentId, event }, "Razorpay webhook: error processing event");
+  }
+});
+
+// GET /api/wallet/invoices — list the authenticated user's tax invoices
+router.get("/wallet/invoices", requireAuth, async (req, res) => {
+  const clerkId = (req as any).clerkUserId as string;
+  const limit  = Math.min(Number(req.query.limit  ?? 50), 200);
+  const offset = Number(req.query.offset ?? 0);
+  const user = await getDbUser(clerkId);
+  if (!user) { res.status(404).json({ error: "User not found" }); return; }
+
+  const rows = await db
+    .select()
+    .from(invoicesTable)
+    .where(eq(invoicesTable.userId, user.id))
+    .orderBy(desc(invoicesTable.createdAt))
+    .limit(limit)
+    .offset(offset);
+
+  res.json(
+    rows.map((r) => ({
+      id:            r.id,
+      invoiceNumber: r.invoiceNumber,
+      type:          r.type,
+      description:   r.description,
+      baseCents:     r.baseCents,
+      gstCents:      r.gstCents,
+      totalCents:    r.totalCents,
+      totalInr:      r.totalCents / 100,
+      currency:      r.currency,
+      status:        r.status,
+      createdAt:     r.createdAt,
+    })),
+  );
+});
+
+// GET /api/wallet/invoices/:id — rendered HTML invoice (printable / save as PDF)
+router.get("/wallet/invoices/:id", requireAuth, async (req, res) => {
+  const clerkId = (req as any).clerkUserId as string;
+  const id = parseInt(req.params.id!, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const user = await getDbUser(clerkId);
+  if (!user) { res.status(404).json({ error: "User not found" }); return; }
+
+  const [invoice] = await db
+    .select()
+    .from(invoicesTable)
+    .where(and(eq(invoicesTable.id, id), eq(invoicesTable.userId, user.id)));
+
+  if (!invoice) { res.status(404).json({ error: "Invoice not found" }); return; }
+  res.set("Content-Type", "text/html").send(renderInvoiceHtml(invoice));
+});
+
+// GET /api/wallet/invoices/:id/pdf — downloadable PDF invoice
+router.get("/wallet/invoices/:id/pdf", requireAuth, async (req, res) => {
+  const clerkId = (req as any).clerkUserId as string;
+  const id = parseInt(req.params.id!, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const user = await getDbUser(clerkId);
+  if (!user) { res.status(404).json({ error: "User not found" }); return; }
+
+  const [invoice] = await db
+    .select()
+    .from(invoicesTable)
+    .where(and(eq(invoicesTable.id, id), eq(invoicesTable.userId, user.id)));
+
+  if (!invoice) { res.status(404).json({ error: "Invoice not found" }); return; }
+
+  try {
+    const pdf = await renderInvoicePdf(invoice);
+    res.set("Content-Type", "application/pdf");
+    res.set("Content-Disposition", `attachment; filename="${invoice.invoiceNumber.replace(/\//g, "-")}.pdf"`);
+    res.send(pdf);
+  } catch (err) {
+    logger.error({ err, invoiceId: id }, "Failed to render invoice PDF");
+    res.status(500).json({ error: "Failed to generate PDF" });
   }
 });
 

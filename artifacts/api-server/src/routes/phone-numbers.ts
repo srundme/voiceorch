@@ -5,6 +5,7 @@ import { eq, and, sql } from "drizzle-orm";
 import { db, usersTable, walletTransactionsTable, phoneNumbersTable, phoneNumberOrdersTable, agentsTable, vobizAccountsTable, platformSettingsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logActivity } from "../lib/activity.js";
+import { issueInvoice } from "../services/invoice.js";
 import {
   CURRENCY_INR,
   GST_RATE,
@@ -627,6 +628,19 @@ router.post("/phone-numbers/purchase/confirm", requireAuth, async (req, res): Pr
     resourceType: "phone_number",
     resourceId:   String(row!.id),
     description:  `Phone number ${number} purchased (₹${(amountCents / 100).toFixed(2)}, paid via Razorpay)`,
+  });
+
+  // GST tax invoice: base ₹800 + 18% GST, paid by card (total = amountCents).
+  void issueInvoice({
+    user: { id: user.id, name: user.name, email: user.email },
+    type: "phone_number",
+    description: `Phone number ${number} — provisioning & 1 month rental`,
+    hsnSac: "998411",
+    amountCents: PHONE_BASE_PAISE,
+    gstInclusive: false,
+    razorpayOrderId,
+    razorpayPaymentId,
+    metadata: { number, phoneNumberId: row!.id },
   });
 
   req.log.info({ number, userId: clerkId, vobizId: vobizNumber.id, nextRenewalAt }, "Phone number purchased and provisioned after confirmed payment");
