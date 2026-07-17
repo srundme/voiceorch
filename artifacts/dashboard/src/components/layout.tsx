@@ -7,7 +7,7 @@ import {
   Settings, Key, Webhook, Wallet, TrendingUp, ShieldCheck,
   Mic2, Menu, ChevronDown, ChevronLeft, ChevronRight,
   LogOut, Bell, Search, SlidersHorizontal, BookOpen, PhoneMissed, PlugZap, Sun, Moon, Sparkles,
-  ListTodo, ArrowRightLeft, Instagram,
+  ListTodo, ArrowRightLeft, Instagram, Workflow,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useAuth } from "@/lib/auth";
@@ -82,6 +82,7 @@ const NAV_PRIMARY = [
   { name: "Agent Tasks",     href: "/app/tasks",           icon: ListTodo },
   { name: "Agent Knowledge", href: "/app/knowledge-bases", icon: BookOpen },
   { name: "Campaigns",       href: "/app/campaigns",       icon: Zap },
+  { name: "Workflows",       href: "/app/workflows",       icon: Workflow },
   { name: "Meta Leads",      href: "/app/meta-leads",      icon: Instagram },
   { name: "Connections",     href: "/app/connections",     icon: PlugZap },
   { name: "Scheduling",      href: "/app/scheduling",      icon: CalendarDays },
@@ -110,6 +111,7 @@ const ROUTE_TITLES: [string, string][] = [
   ["/app/agents",          "Agents"],
   ["/app/knowledge-bases", "Agent Knowledge"],
   ["/app/campaigns",       "Campaigns"],
+  ["/app/workflows",       "Workflows"],
   ["/app/connections",     "Connections"],
   ["/app/scheduling",      "Scheduling"],
   ["/app/memory",          "Memory / CRM"],

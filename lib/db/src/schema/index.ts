@@ -59,3 +59,5 @@ export * from "./deployment-events";
 export * from "./platform-emails";
 export * from "./workshop-events";
 export * from "./invoices";
+export * from "./workflows";
+export * from "./google-sheets-connections";

@@ -7,7 +7,7 @@ import {
 } from "@workspace/api-zod";
 import { db, campaignsTable, campaignLeadsTable, callsTable, agentsTable, providersTable, platformSettingsTable, campaignConsentBasisTable, phoneNumbersTable, type CampaignFieldMappings } from "@workspace/db";
 import { encryptKey, decryptKey } from "../lib/crypto.js";
-import { eq, and, count, desc, inArray, isNull } from "drizzle-orm";
+import { eq, and, count, desc, inArray, isNull, ne } from "drizzle-orm";
 import { scheduleCampaignCall } from "../orchestration/campaignCaller.js";
 import { evaluateIrdaiGate, IRDAI_BLOCKED_MESSAGE, IRDAI_BLOCKED_CODE, type IrdaiGateResult } from "../services/irdai/gate.js";
 
@@ -150,7 +150,8 @@ router.get("/campaigns", async (req, res): Promise<void> => {
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
 
   const rows = await db.select().from(campaignsTable)
-    .where(eq(campaignsTable.userId, userId))
+    // Hide internal per-agent campaigns created by the workflow engine.
+    .where(and(eq(campaignsTable.userId, userId), ne(campaignsTable.leadSource, "workflow")))
     .orderBy(desc(campaignsTable.createdAt));
 
   res.json(rows.map(toCampaign));

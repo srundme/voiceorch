@@ -74,6 +74,9 @@ import crmRouter from "./crm.js";
 import bookRouter from "./book.js";
 import workshopRouter from "./workshop.js";
 import adminEventFeedbackRouter from "./admin-event-feedback.js";
+import workflowsRouter from "./workflows.js";
+import workflowsGoogleRouter from "./workflows-google.js";
+import workflowsPublicRouter from "./workflows-public.js";
 import { provisionUser } from "../middlewares/userProvisioning.js";
 
 const router: IRouter = Router();
@@ -118,6 +121,9 @@ router.use(bookRouter);
 
 // Public workshop feedback form — anonymous students, no session required
 router.use(workshopRouter);
+
+// Public workflow trigger intake (website / Instagram form leads) — no session
+router.use(workflowsPublicRouter);
 
 router.use(storageRouter);
 router.use(provisionUser);
@@ -173,5 +179,7 @@ router.use(agentVersionsRouter);
 router.use(callbacksRouter);
 router.use(connectionsRouter);
 router.use(crmRouter);
+router.use(workflowsRouter);
+router.use(workflowsGoogleRouter);
 
 export default router;

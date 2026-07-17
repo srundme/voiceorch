@@ -62,6 +62,8 @@ import VibePage from "@/pages/vibe";
 import TasksPage from "@/pages/tasks";
 import CommandCenterPage from "@/pages/command-center/index";
 import MemoryPage from "@/pages/memory/index";
+import WorkflowsPage from "@/pages/workflows/index";
+import WorkflowDetailPage from "@/pages/workflows/[id]";
 import DocsPage from "@/pages/docs/index";
 
 import ImpersonatePage from "@/pages/impersonate";
@@ -288,6 +290,8 @@ function AppRoutes() {
         <Route path="/app/campaigns/:id/batches/:batchId" component={BatchDetailPage} />
         <Route path="/app/campaigns/:id" component={CampaignDetailPage} />
         <Route path="/app/campaigns" component={CampaignsPage} />
+        <Route path="/app/workflows/:id" component={WorkflowDetailPage} />
+        <Route path="/app/workflows" component={WorkflowsPage} />
         <Route path="/app/scheduling/bookings/:id" component={SchedulingBookingDetailPage} />
         <Route path="/app/scheduling/calendars" component={() => <SchedulingCalendarsPage />} />
         <Route path="/app/scheduling/event-types/:id" component={SchedulingEventTypeDetailPage} />
