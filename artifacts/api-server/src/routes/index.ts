@@ -72,6 +72,8 @@ import callbacksRouter from "./callbacks.js";
 import connectionsRouter from "./connections.js";
 import crmRouter from "./crm.js";
 import bookRouter from "./book.js";
+import workshopRouter from "./workshop.js";
+import adminEventFeedbackRouter from "./admin-event-feedback.js";
 import { provisionUser } from "../middlewares/userProvisioning.js";
 
 const router: IRouter = Router();
@@ -94,6 +96,7 @@ router.use(adminEmailsRouter);
 router.use(adminFinanceAnalyticsRouter);
 router.use(adminBoardAnalyticsRouter);
 router.use(adminCallAnalyticsRouter);
+router.use(adminEventFeedbackRouter);
 
 // Public campaign lead webhook — must be before provisionUser (no Clerk session needed)
 router.use(campaignWebhookRouter);
@@ -112,6 +115,9 @@ router.use(utilsRouter);
 
 // Public book progress routes — anonymous per-device, no session required
 router.use(bookRouter);
+
+// Public workshop feedback form — anonymous students, no session required
+router.use(workshopRouter);
 
 router.use(storageRouter);
 router.use(provisionUser);

@@ -1204,3 +1204,89 @@ export function useSendManualEmail() {
     },
   });
 }
+
+// ─── Workshop events + feedback analytics ─────────────────────────────────────
+
+export interface WorkshopSession {
+  id: string;
+  name: string;
+}
+
+export interface WorkshopEvent {
+  id: number;
+  slug: string;
+  title: string;
+  college: string | null;
+  eventDate: string | null;
+  mode: "online" | "offline";
+  sessions: WorkshopSession[];
+  status: "open" | "closed";
+  registrationsCount: number;
+  attendeesCount: number;
+  createdAt: string;
+  updatedAt: string;
+  responseCount: number;
+}
+
+export interface WorkshopEventInput {
+  title: string;
+  slug?: string;
+  college?: string | null;
+  eventDate?: string | null;
+  mode?: "online" | "offline";
+  sessions?: WorkshopSession[];
+  status?: "open" | "closed";
+  registrationsCount?: number;
+  attendeesCount?: number;
+}
+
+export function useWorkshopEvents() {
+  return useQuery({
+    queryKey: ["admin", "events"],
+    queryFn: () => adminFetch<WorkshopEvent[]>("/events"),
+    refetchInterval: 60_000,
+  });
+}
+
+export function useCreateWorkshopEvent() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: WorkshopEventInput) =>
+      adminFetch<WorkshopEvent>("/events", { method: "POST", body: JSON.stringify(data) }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["admin", "events"] }),
+  });
+}
+
+export function useUpdateWorkshopEvent() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Partial<WorkshopEventInput> }) =>
+      adminFetch<WorkshopEvent>(`/events/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["admin", "events"] }),
+  });
+}
+
+export function useDeleteWorkshopEvent() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => adminFetch<void>(`/events/${id}`, { method: "DELETE" }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["admin", "events"] }),
+  });
+}
+
+export function useWorkshopAnalytics(id: number | null) {
+  return useQuery({
+    queryKey: ["admin", "events", id, "analytics"],
+    queryFn: () => adminFetch<any>(`/events/${id}/analytics`),
+    enabled: id !== null,
+    refetchInterval: 60_000,
+  });
+}
+
+export function useWorkshopResponses(id: number | null) {
+  return useQuery({
+    queryKey: ["admin", "events", id, "responses"],
+    queryFn: () => adminFetch<any[]>(`/events/${id}/responses`),
+    enabled: id !== null,
+  });
+}

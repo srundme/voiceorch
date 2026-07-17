@@ -47,6 +47,8 @@ import PricingPage from "@/pages/usage/pricing";
 import AllocationsPage from "@/pages/usage/allocations";
 import AlertsPage from "@/pages/usage/alerts";
 
+import EventsPage from "@/pages/events";
+import EventDetailPage from "@/pages/events/[id]";
 import BookInternsPage from "@/pages/book-interns";
 import FamilyCompaniesPage from "@/pages/family/companies";
 import FamilyCompanyDetailPage from "@/pages/family/company-detail";
@@ -122,6 +124,10 @@ function Router() {
       <ProtectedRoute path="/audit-logs" component={AuditLogsPage} />
       <ProtectedRoute path="/deployments" component={DeploymentsPage} />
       <ProtectedRoute path="/emails" component={EmailsPage} />
+
+      {/* Workshops */}
+      <ProtectedRoute path="/events/:id" component={EventDetailPage} />
+      <ProtectedRoute path="/events" component={EventsPage} />
 
       {/* Engineering Programme */}
       <ProtectedRoute path="/book-interns" component={BookInternsPage} />

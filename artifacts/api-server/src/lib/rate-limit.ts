@@ -78,6 +78,41 @@ export const schedulingBookingRateLimit = rateLimit({
   },
 });
 
+// Public workshop feedback form (unauthenticated, internet-facing). Same
+// pattern as the scheduling limiters: narrow per-page / per-submitter limits in
+// front of the global 100/min IP limit.
+export const workshopMetaRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60, // 60 meta lookups/min per (IP, slug) — generous for form loads/retries
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    const slug = (req.params["slug"] as string | undefined) ?? "unknown";
+    return `${ipKeyGenerator(req.ip ?? req.socket?.remoteAddress ?? "unknown")}:${slug}`;
+  },
+  message: { error: "Too many requests for this workshop form. Please slow down." },
+  handler: (req, res, _next, options) => {
+    logger.warn({ ip: req.ip, slug: req.params["slug"] }, "Rate limit exceeded (workshop meta)");
+    res.status(429).json(options.message);
+  },
+});
+
+export const workshopSubmitRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: 5, // 5 submissions/min per (IP, email) — blocks spam without blocking retries
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    const email = String((req.body as Record<string, unknown> | undefined)?.["email"] ?? "unknown").toLowerCase();
+    return `${ipKeyGenerator(req.ip ?? req.socket?.remoteAddress ?? "unknown")}:${email}`;
+  },
+  message: { error: "Too many submissions. Please try again in a minute." },
+  handler: (req, res, _next, options) => {
+    logger.warn({ ip: req.ip }, "Rate limit exceeded (workshop submit)");
+    res.status(429).json(options.message);
+  },
+});
+
 export const exemptPaths = [
   "/api/healthz",
   "/api/campaign-webhook",

@@ -57,3 +57,4 @@ export * from "./agent-tasks";
 export * from "./analytics-events";
 export * from "./deployment-events";
 export * from "./platform-emails";
+export * from "./workshop-events";
