@@ -10,6 +10,7 @@ import {
   executeWebhookTool,
 } from "../../../services/tool-executor.js";
 import { scheduleCallbackRequested } from "../../../services/autoRedial.js";
+import { resolveCallbackTime } from "../../../lib/tz-datetime.js";
 import { logger } from "../../../lib/logger.js";
 
 export interface LiveToolRunnerDeps {
@@ -47,7 +48,8 @@ export async function runLiveToolCall(
     const toNumber = config.callerPhone ?? "";
     const scheduledAtRaw = args["scheduled_at"] as string | undefined;
     const notes = args["notes"] as string | undefined;
-    const scheduledAt = scheduledAtRaw ? new Date(scheduledAtRaw) : new Date(Date.now() + 60 * 60 * 1000);
+    const cbTz = agent.timezone?.trim() || "Asia/Kolkata";
+    const { scheduledAt, wasDefaulted, wasClamped } = resolveCallbackTime(scheduledAtRaw, cbTz);
     if (toNumber) {
       await scheduleCallbackRequested({
         agentId: agent.id,
@@ -56,9 +58,17 @@ export async function runLiveToolCall(
         callId: config.callId,
         notes,
       });
+      const cbLocal = scheduledAt.toLocaleString("en-IN", {
+        weekday: "long", day: "numeric", month: "long",
+        hour: "numeric", minute: "2-digit", hour12: true, timeZone: cbTz,
+      });
+      logger.info(
+        { callId: config.callId, agentId: agent.id, toNumber, scheduledAtRaw, scheduledAt, tz: cbTz, wasDefaulted, wasClamped },
+        "Live: schedule_callback invoked by LLM",
+      );
       return {
         output:
-          `Callback recorded for ${scheduledAt.toISOString()}. Confirm the time to the caller, then close with a proper goodbye.`,
+          `Callback recorded for ${cbLocal} (${cbTz}). Confirm THIS exact time to the caller, then close with a proper goodbye.`,
       };
     }
     return { output: "Callback noted." };

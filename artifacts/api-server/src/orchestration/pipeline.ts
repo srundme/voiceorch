@@ -58,6 +58,7 @@ import { format, addMinutes } from "date-fns";
 import { toZonedTime, formatInTimeZone } from "date-fns-tz";
 import { db, bookingsTable, eventTypesTable, schedulingCalendarsTable, agentsTable, platformSettingsTable } from "@workspace/db";
 import { scheduleCallbackRequested } from "../services/autoRedial.js";
+import { resolveCallbackTime } from "../lib/tz-datetime.js";
 import { eq, and, or, sql } from "drizzle-orm";
 import { getAvailableSlots } from "../services/scheduling/slot-engine.js";
 import type { TimeSlot } from "../services/scheduling/slot-engine.js";
@@ -99,7 +100,7 @@ const SCHEDULE_CALLBACK_TOOL_DEF: ToolDefinition = {
     properties: {
       scheduled_at: {
         type: "string",
-        description: "ISO 8601 datetime to call back (e.g. '2026-06-23T15:00:00'). Omit if no specific time was mentioned — defaults to 1 hour from now.",
+        description: "Local wall-clock datetime to call back, in the BUSINESS timezone shown in your [CURRENT DATE & TIME] context. Resolve any relative phrasing ('tomorrow', 'this evening', 'in two hours', 'next Monday 10am') against that current date/time and output an absolute ISO 8601 value WITHOUT a timezone suffix (e.g. '2026-06-23T15:00:00'). Omit only if no time was mentioned — defaults to 1 hour from now.",
       },
       notes: {
         type: "string",
@@ -4684,8 +4685,12 @@ export class OrchestrationPipeline implements VoiceSession {
         const callId = this.config.callId;
         const scheduledAtRaw = args["scheduled_at"] as string | undefined;
         const notes = args["notes"] as string | undefined;
-        const scheduledAt = scheduledAtRaw ? new Date(scheduledAtRaw) : new Date(Date.now() + 60 * 60 * 1000);
-        logger.info({ callId, agentId, toNumber, scheduledAt, notes }, "Built-in schedule_callback invoked by LLM");
+        const cbTz = this.agent.timezone?.trim() || "Asia/Kolkata";
+        const { scheduledAt, wasDefaulted, wasClamped } = resolveCallbackTime(scheduledAtRaw, cbTz);
+        logger.info(
+          { callId, agentId, toNumber, scheduledAtRaw, scheduledAt, tz: cbTz, wasDefaulted, wasClamped, notes },
+          "Built-in schedule_callback invoked by LLM",
+        );
         if (toNumber) {
           await scheduleCallbackRequested({
             agentId,
@@ -4694,7 +4699,11 @@ export class OrchestrationPipeline implements VoiceSession {
             callId,
             notes,
           });
-          return `Callback recorded for ${scheduledAt.toISOString()}. Now speak naturally to the caller: confirm the time back to them (e.g. "Great, I've noted that — we'll call you at [time]"), thank them, then close the conversation. Do NOT call end_call automatically — only end the call after you have spoken a proper goodbye.`;
+          const cbLocal = scheduledAt.toLocaleString("en-IN", {
+            weekday: "long", day: "numeric", month: "long",
+            hour: "numeric", minute: "2-digit", hour12: true, timeZone: cbTz,
+          });
+          return `Callback recorded for ${cbLocal} (${cbTz}). Now speak naturally to the caller: confirm THIS exact time back to them (e.g. "Great, I've noted that — we'll call you ${cbLocal}"), thank them, then close the conversation. Do NOT call end_call automatically — only end the call after you have spoken a proper goodbye.`;
         }
         return "Callback noted — I'll arrange for someone to call you back.";
       }

@@ -508,6 +508,22 @@ export function injectEnhancedMemory(
   if (resumeDrop) headerParts.push("⚠️ LAST CALL DROPPED");
   lines.push(headerParts.join("  |  "));
 
+  // ── Historical-date guard ─────────────────────────────────────────────────
+  // Summaries/facts below were written on PAST calls. A booking made "tomorrow"
+  // last week is not "tomorrow" today. Even though the live prompt carries the
+  // real current date, the model will happily parrot a stale relative word it
+  // sees in memory — so tell it explicitly to recompute before speaking.
+  if (!suppressDomain) {
+    lines.push("");
+    lines.push(
+      "[DATE NOTE] Everything in this caller memory is from PAST calls. Do NOT repeat relative " +
+        'time words ("today", "tomorrow", "yesterday", "next week") as written here — they were ' +
+        "true when recorded, not necessarily now. Always recompute dates against the current " +
+        "date/time given elsewhere in your instructions before saying them aloud (e.g. a meeting " +
+        'stored as "tomorrow" may actually be today).',
+    );
+  }
+
   // ── Previous call summary (single line — most recent call only) ───────────
   const latestSummary = suppressDomain
     ? null

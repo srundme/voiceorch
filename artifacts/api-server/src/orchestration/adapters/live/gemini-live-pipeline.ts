@@ -29,7 +29,21 @@ const SCHEDULE_CALLBACK_TOOL = {
   name: "schedule_callback",
   description:
     "Schedule a callback when the caller explicitly asks to be called back later.",
-  parameters: { type: "object" as const, properties: {}, required: [] as string[] },
+  parameters: {
+    type: "object" as const,
+    properties: {
+      scheduled_at: {
+        type: "string" as const,
+        description:
+          "Local wall-clock datetime to call back, in the business timezone shown in your current date/time context. Resolve relative phrasing ('tomorrow', 'this evening', 'in two hours') against the current date/time and output an absolute ISO 8601 value WITHOUT a timezone suffix (e.g. '2026-06-23T15:00:00'). Omit if no time was mentioned — defaults to 1 hour from now.",
+      },
+      notes: {
+        type: "string" as const,
+        description: "Brief note capturing why the callback was requested, in the caller's words.",
+      },
+    },
+    required: [] as string[],
+  },
 };
 
 export class GeminiLivePipeline implements VoiceSession {

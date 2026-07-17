@@ -1,12 +1,12 @@
 import { createHmac, createHash, randomBytes } from "crypto";
 import { getSelfBaseUrl } from "../lib/app-domain.js";
-import { db, agentsTable, callsTable, providersTable, platformSettingsTable, campaignLeadsTable, knowledgeEntriesTable, callTransfersTable, usersTable, walletTransactionsTable, bookingsTable, scheduledCallbacksTable, campaignsTable, executionLogsTable } from "@workspace/db";
+import { db, agentsTable, callsTable, providersTable, platformSettingsTable, campaignLeadsTable, knowledgeEntriesTable, callTransfersTable, usersTable, walletTransactionsTable, bookingsTable, eventTypesTable, scheduledCallbacksTable, campaignsTable, executionLogsTable } from "@workspace/db";
 import { createExecutionLogger, writeCallEndedLog, writeCallStartedLog, logRecordingEvent, EXEC_COMPONENTS } from "../services/execution-log.js";
 import { getFlatRateCentsPerMin, resolveAgentBillingMode } from "../services/minute-rates.js";
 import { getAttachedSourceIds, buildKnowledgeBaseBlockEx } from "./kb-retrieval.js";
 import { KRUTRIM_AUTO_SUMMARY_TITLE } from "../services/kb-source-summary.js";
 import { decryptKey } from "../lib/crypto.js";
-import { eq, and, sql, inArray } from "drizzle-orm";
+import { eq, and, sql, inArray, or, gt, ne } from "drizzle-orm";
 import { OrchestrationPipeline } from "./pipeline.js";
 import type { VoiceSession } from "./voice-session.js";
 import { GeminiLivePipeline } from "./adapters/live/gemini-live-pipeline.js";
@@ -811,6 +811,91 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
       logger.info(
         { agentId: params.agentId, callerPhone, callCount: callerProfileSnapshot?.callCount ?? 0, factCount: callerCtxResult.facts.length, archiveCount: callerCtxResult.recentCalls.length },
         "Caller memory injected into system prompt"
+      );
+    }
+  }
+
+  // ── Inject DB-backed upcoming bookings (authoritative, freshly computed) ──────
+  // Caller-memory summaries store relative day-words ("tomorrow") that go stale on
+  // a follow-up call. To keep the agent temporally accurate we look up this
+  // caller's confirmed upcoming meetings straight from the calendar and inject the
+  // ABSOLUTE date/time plus the day-word recomputed against *today*. This block is
+  // appended AFTER caller memory so the LLM treats it as the final authority.
+  if (!isWebcall && callerPhone) {
+    try {
+      const callerRawNumber = callDirection === "outbound" ? params.toNumber : params.fromNumber;
+      if (callerRawNumber && agent.id) {
+        const now = new Date();
+        const upcoming = await db
+          .select({
+            slotStart: bookingsTable.slotStart,
+            slotEnd: bookingsTable.slotEnd,
+            status: bookingsTable.status,
+            meetLink: bookingsTable.meetLink,
+            eventName: eventTypesTable.name,
+          })
+          .from(bookingsTable)
+          .innerJoin(callsTable, eq(bookingsTable.callId, callsTable.id))
+          .leftJoin(eventTypesTable, eq(bookingsTable.eventTypeId, eventTypesTable.id))
+          .where(
+            and(
+              eq(callsTable.agentId, agent.id),
+              or(
+                eq(callsTable.fromNumber, callerRawNumber),
+                eq(callsTable.toNumber, callerRawNumber),
+              ),
+              gt(bookingsTable.slotStart, now),
+              ne(bookingsTable.status, "cancelled"),
+            ),
+          )
+          .orderBy(bookingsTable.slotStart)
+          .limit(3);
+
+        if (upcoming.length > 0) {
+          const tz = (agentCfg["timezone"] as string | undefined) || "Asia/Kolkata";
+          // Calendar-day delta between two instants in the agent's timezone.
+          const ymdInTz = (d: Date): string => d.toLocaleDateString("en-CA", { timeZone: tz }); // YYYY-MM-DD
+          const dayDelta = (from: string, to: string): number => {
+            const a = Date.UTC(+from.slice(0, 4), +from.slice(5, 7) - 1, +from.slice(8, 10));
+            const b = Date.UTC(+to.slice(0, 4), +to.slice(5, 7) - 1, +to.slice(8, 10));
+            return Math.round((b - a) / 86_400_000);
+          };
+          const todayYmd = ymdInTz(now);
+          const relWord = (delta: number): string =>
+            delta === 0 ? "today" : delta === 1 ? "tomorrow" : delta < 0 ? `${Math.abs(delta)} day(s) ago` : `in ${delta} days`;
+
+          const todayReadable = now.toLocaleDateString("en-IN", {
+            weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: tz,
+          });
+          const lines = upcoming.map((b) => {
+            const abs = b.slotStart.toLocaleString("en-IN", {
+              weekday: "long", day: "numeric", month: "long", year: "numeric",
+              hour: "numeric", minute: "2-digit", hour12: true, timeZone: tz,
+            });
+            const delta = dayDelta(todayYmd, ymdInTz(b.slotStart));
+            const title = b.eventName ? `"${b.eventName}"` : "the meeting";
+            return `- ${title} on ${abs} (that is ${relWord(delta)}).`;
+          });
+
+          agentConfig.systemPrompt +=
+            `\n\n[UPCOMING BOOKINGS — LIVE FROM CALENDAR, AUTHORITATIVE]\n` +
+            `Today is ${todayReadable}. This caller has the following confirmed upcoming meeting(s). ` +
+            `Use these EXACT dates and times — they OVERRIDE any relative day-words ("tomorrow", "next week") ` +
+            `that may appear in the caller memory above, which could be stale.\n` +
+            lines.join("\n") +
+            `\nWhen you refer to a meeting, say the relative day-word that is correct for TODAY ` +
+            `(e.g. only say "tomorrow" if it is genuinely the next day; say "today" if it is today).`;
+
+          logger.info(
+            { agentId: params.agentId, callerPhone, bookingCount: upcoming.length },
+            "Upcoming bookings injected into system prompt",
+          );
+        }
+      }
+    } catch (bookingErr) {
+      logger.warn(
+        { agentId: params.agentId, callerPhone, bookingErr },
+        "Failed to load upcoming bookings — continuing without booking context",
       );
     }
   }
@@ -2260,9 +2345,17 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
               : "";
 
             const ctxLlm = createLLMAdapter(ctxLlmProvider, ctxLlmKey, ctxLlmModel);
+            // Freeze relative dates: this snapshot is reused on a later callback, so
+            // "tomorrow" must be captured as an absolute date or the callback agent
+            // will restate the wrong day.
+            const rcToday = new Date().toLocaleString("en-IN", {
+              weekday: "long", year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Kolkata",
+            });
             const ctxUserContent =
-              `The following is a transcript of a voice call. ` +
-              `Extract a complete context snapshot so the agent can continue naturally if it needs to call back.\n\n` +
+              `The following is a transcript of a voice call that took place on ${rcToday}. ` +
+              `Extract a complete context snapshot so the agent can continue naturally if it needs to call back. ` +
+              `When the transcript mentions relative dates or times ("tomorrow", "next Monday", "in two days"), ` +
+              `convert them to absolute calendar dates in the summary and extractedFacts so they stay accurate on a later call.\n\n` +
               `Transcript:\n${transcript.slice(-4000)}${toolLogBlock}\n\n` +
               `Respond ONLY with a JSON object (no markdown, no explanation) with these exact keys:\n` +
               `{"summary":"<2-3 sentence summary of the whole call>",` +
@@ -2523,9 +2616,23 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
                 if (sumLlmKey) {
                   const llm = createLLMAdapter(sumLlmProvider, sumLlmKey, sumLlmModel);
                   const customPrompt = (agCfgForWebhook["summarizationPrompt"] as string | undefined) ?? "";
-                  const userContent = customPrompt
-                    ? `${customPrompt}\n\nTranscript:\n${transcript.slice(0, 6000)}`
-                    : `Summarize this call transcript as a single natural paragraph of 4 to 6 sentences. Briefly cover why the customer called, what was discussed, any important information collected, the outcome, and any follow-up or next steps (only if applicable). Write plain prose — do not use bullet points, numbered lists, or headings.\n\nTranscript:\n${transcript.slice(0, 6000)}`;
+                  // Freeze relative dates to absolute ones. This summary is replayed
+                  // as cross-call memory on future calls; a bare "tomorrow" written
+                  // today would still read as "tomorrow" next week and make the
+                  // follow-up agent misstate the meeting date.
+                  const sumTz = (agCfgForWebhook["timezone"] as string | undefined) || "Asia/Kolkata";
+                  const sumToday = new Date().toLocaleString("en-IN", {
+                    weekday: "long", year: "numeric", month: "long", day: "numeric", timeZone: sumTz,
+                  });
+                  const dateRule =
+                    `This call took place on ${sumToday}. When the transcript mentions relative dates or ` +
+                    `times ("tomorrow", "next Monday", "in two days", "this evening"), convert them to ` +
+                    `absolute calendar dates in your summary (e.g. "on Saturday, 19 July 2026") so it stays ` +
+                    `accurate when read on a later call. Never keep bare relative day-words.`;
+                  const baseInstruction = customPrompt
+                    ? customPrompt
+                    : `Summarize this call transcript as a single natural paragraph of 4 to 6 sentences. Briefly cover why the customer called, what was discussed, any important information collected, the outcome, and any follow-up or next steps (only if applicable). Write plain prose — do not use bullet points, numbered lists, or headings.`;
+                  const userContent = `${baseInstruction}\n\n${dateRule}\n\nTranscript:\n${transcript.slice(0, 6000)}`;
                   let summary = "";
                   await llm.chat(
                     [{ role: "user", content: userContent }],
