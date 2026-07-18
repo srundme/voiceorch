@@ -11,7 +11,7 @@ import {
   Building2, CheckCircle2, Loader2, ChevronLeft, ChevronRight, Zap, UserCheck,
   PhoneForwarded, Voicemail, Calendar, ShieldCheck,
   Play, Volume2, FileText, BookOpen, ArrowUpRight, Paperclip,
-  PlusCircle, History, PhoneIncoming, Info, PhoneOutgoing, Star, Rocket, X, LayoutDashboard,
+  PlusCircle, History, PhoneIncoming, Info, PhoneOutgoing, Star, Rocket, X,
   PanelRightOpen, PanelRightClose, ArrowLeft,
 } from "lucide-react";
 import { WebcallPanel } from "@/components/webcall-panel";
@@ -1467,39 +1467,22 @@ export default function VibePage() {
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKey}
-              placeholder={phase === "done" ? "Your agent is ready!" : "Describe the voice agent you want to build…"}
+              placeholder={phase === "done" ? "Your agent is ready!" : "e.g. An agent that answers calls for my clinic and books appointments…"}
               disabled={phase === "done" || phase === "building"}
               rows={3}
               className="resize-none border-0 bg-transparent text-[15px] leading-relaxed rounded-[26px] rounded-b-none px-5 pt-5 pb-2 min-h-[88px] placeholder:text-muted-foreground/45 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none"
             />
             <div className="flex items-center justify-between gap-3 px-3 pb-3">
-              <div className="flex items-center gap-0.5">
-                <button
-                  onClick={() => { setUrlInputOpen(v => !v); setUrlInputValue(""); }}
-                  disabled={phase === "done" || phase === "building" || isThinking}
-                  title="Add website URL for knowledge base"
-                  className={cn(
-                    "flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all disabled:opacity-30",
-                    urlInputOpen && "text-foreground bg-muted/50",
-                  )}
-                >
-                  <Globe className="h-4 w-4" />
-                </button>
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={phase === "done" || phase === "building" || isThinking}
-                  title="Upload document for knowledge base"
-                  className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all disabled:opacity-30"
-                >
-                  <Paperclip className="h-4 w-4" />
-                </button>
-              </div>
+              <p className="text-[11px] text-muted-foreground/60 pl-2">
+                Tip: write like you&apos;re texting a friend
+              </p>
               <Button
                 size="icon"
                 onClick={() => send()}
                 disabled={!canSend}
+                aria-label="Start building"
                 className={cn(
-                  "h-9 w-9 rounded-full transition-all duration-200 shrink-0",
+                  "h-10 w-10 rounded-full transition-all duration-200 shrink-0",
                   canSend
                     ? "bg-primary hover:bg-primary/90 text-primary-foreground shadow-md hover:scale-105"
                     : "bg-muted/60 text-muted-foreground",
@@ -1567,12 +1550,11 @@ export default function VibePage() {
   return (
     <div className="fixed inset-0 bg-background overflow-hidden">
 
-      {/* ══ Landing view — before first message ════════════════════════════ */}
+      {/* ══ Landing view — one clear path for non-techies ══════════════════ */}
       {!chatStarted && (
         <div className="relative flex flex-col h-full min-h-0 overflow-hidden bg-background">
           <VibeAmbientBg />
 
-          {/* Floating top bar */}
           <header className="relative z-10 flex items-center justify-between px-5 sm:px-8 h-14 shrink-0">
             <div className="flex items-center gap-2 min-w-0">
               <Button
@@ -1596,167 +1578,117 @@ export default function VibePage() {
                 >
                   <History className="h-3.5 w-3.5" />
                   <span className="hidden sm:inline">My drafts</span>
-                  <span className="text-[10px] text-muted-foreground tabular-nums">({sessions.length})</span>
                 </Button>
               )}
               <ThemeToggle />
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 gap-1.5 rounded-full border-border/60 bg-background/40 backdrop-blur-md text-foreground/80 hover:text-foreground hover:bg-card/60"
-                onClick={() => navigate("/app/command-center")}
-              >
-                <LayoutDashboard className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Dashboard</span>
-              </Button>
             </div>
           </header>
 
-          {/* Centered hero */}
-          <div className="relative z-10 flex-1 flex flex-col items-center justify-center px-5 sm:px-8 pb-8 overflow-y-auto">
-            <div className="w-full max-w-3xl mx-auto flex flex-col items-center text-center">
+          <div className="relative z-10 flex-1 flex flex-col items-center justify-center px-5 sm:px-8 pb-10 overflow-y-auto">
+            <div className="w-full max-w-xl mx-auto flex flex-col items-center text-center">
+              {/* Resume first — returning users shouldn't hunt for drafts */}
+              {sessions[0] && (
+                <motion.button
+                  type="button"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  onClick={() => void loadHistorySession(sessions[0]!.id)}
+                  className="mb-8 w-full text-left rounded-2xl border border-emerald-500/25 bg-emerald-500/8 px-4 py-3.5 hover:bg-emerald-500/12 transition-colors"
+                >
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-500/90">
+                    Continue where you left off
+                  </p>
+                  <div className="mt-1.5 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-foreground truncate">{sessions[0].title}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        Saved {getRelativeTime(sessions[0].updatedAt)}
+                        {sessions.length > 1 ? ` · ${sessions.length} drafts total` : ""}
+                      </p>
+                    </div>
+                    <span className="shrink-0 text-xs font-medium text-emerald-500">Open →</span>
+                  </div>
+                </motion.button>
+              )}
+
               <motion.div
-                initial={{ opacity: 0, scale: 0.85 }}
+                initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.5 }}
-                className="mb-8 vibe-orb relative"
+                transition={{ duration: 0.45 }}
+                className="mb-6"
               >
-                <div className="absolute inset-0 rounded-full bg-gradient-to-br from-[#7c6cf0]/40 via-[#a9b4e0]/25 to-[#d8dcec]/30 blur-2xl scale-[2] opacity-55" />
-                <div className="relative h-16 w-16 rounded-2xl border border-white/10 bg-card/40 backdrop-blur-xl flex items-center justify-center shadow-2xl">
-                  <Sparkles className="h-7 w-7 text-foreground/90" />
+                <div className="h-14 w-14 rounded-2xl border border-border/40 bg-card/50 backdrop-blur-xl flex items-center justify-center mx-auto">
+                  <Sparkles className="h-6 w-6 text-foreground/80" />
                 </div>
               </motion.div>
 
               <motion.h1
-                initial={{ opacity: 0, y: 16 }}
+                initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: 0.08 }}
-                className="font-display text-4xl sm:text-5xl md:text-[3.25rem] font-semibold tracking-tight leading-[1.08] text-foreground"
+                transition={{ duration: 0.45, delay: 0.05 }}
+                className="font-display text-3xl sm:text-4xl md:text-[2.75rem] font-semibold tracking-tight leading-[1.15] text-foreground"
               >
-                {isThinking ? (
-                  <span className="text-muted-foreground">Configuring your agent…</span>
-                ) : welcomeName ? (
+                {welcomeName ? (
                   <>
-                    <span className="block text-muted-foreground/80 font-normal text-2xl sm:text-3xl mb-1">
+                    <span className="block text-muted-foreground font-normal text-xl sm:text-2xl mb-1">
                       Hi {welcomeName.split(" ")[0]}
                     </span>
-                    <span className="bg-gradient-to-r from-[#7c6cf0] via-[#a9b4e0] to-[#d8dcec] bg-clip-text text-transparent">
-                      what are we building?
-                    </span>
+                    Create your calling agent
                   </>
                 ) : (
-                  <>
-                    <span className="bg-gradient-to-r from-[#7c6cf0] via-[#a9b4e0] to-[#d8dcec] bg-clip-text text-transparent">
-                      Build a voice agent
-                    </span>
-                    <span className="block text-muted-foreground/70 dark:text-white/70 font-normal text-2xl sm:text-3xl mt-1">
-                      in plain English
-                    </span>
-                  </>
+                  <>Create your calling agent</>
                 )}
               </motion.h1>
 
-              {!isThinking && (
-                <motion.p
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.45, delay: 0.16 }}
-                  className="mt-4 text-[15px] sm:text-base text-muted-foreground/80 dark:text-white/75 leading-relaxed max-w-lg"
-                >
-                  Tell me the use case — I&apos;ll wire up speech, language, tools, and your system prompt.
-                </motion.p>
-              )}
+              <motion.p
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: 0.1 }}
+                className="mt-3 text-[15px] text-muted-foreground leading-relaxed max-w-md"
+              >
+                Just describe what you need in plain words. We&apos;ll set up the voice, language, and script for you.
+              </motion.p>
 
               <motion.div
-                initial={{ opacity: 0, y: 20 }}
+                initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: 0.22 }}
-                className="mt-10 w-full max-w-2xl"
+                transition={{ duration: 0.45, delay: 0.15 }}
+                className="mt-8 w-full"
               >
                 {inputBlock(true)}
               </motion.div>
 
-              {!isThinking && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ duration: 0.45, delay: 0.32 }}
-                  className="mt-6 w-full max-w-2xl"
-                >
-                  <div className="flex flex-wrap justify-center gap-2">
-                    {QUICK_SUGGESTIONS.slice(0, 5).map((s, i) => (
-                      <motion.button
-                        key={s.label}
-                        initial={{ opacity: 0, y: 8 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.35 + i * 0.04 }}
-                        type="button"
-                        onClick={() => send(s.message)}
-                        className="px-4 py-2 rounded-full text-[13px] font-medium border border-border/40 bg-background/40 text-muted-foreground hover:text-foreground hover:border-border/70 hover:bg-card/50 backdrop-blur-md transition-all hover:scale-[1.03] active:scale-[0.97]"
-                      >
-                        {s.label}
-                      </motion.button>
-                    ))}
-                  </div>
-                </motion.div>
-              )}
-
-              {!isThinking && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ duration: 0.45, delay: 0.42 }}
-                  className="mt-12 w-full"
-                >
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground/40 dark:text-white/45 mb-4">
-                    Start from a template
-                  </p>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 max-w-3xl mx-auto">
-                    {VIBE_TEMPLATES.slice(0, 4).map(t => (
-                      <button
-                        key={t.title}
-                        type="button"
-                        onClick={() => send(t.message)}
-                        className="group relative text-left rounded-2xl border border-border/30 dark:border-white/10 bg-card/20 dark:bg-white/[0.06] backdrop-blur-xl p-4 overflow-hidden transition-all hover:border-border/60 hover:bg-card/40 dark:hover:bg-white/[0.1] hover:scale-[1.02] active:scale-[0.98]"
-                      >
-                        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#7c6cf0]/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                        <p className="text-[13px] font-semibold text-foreground truncate">{t.title}</p>
-                        <p className="mt-1.5 text-[11px] text-muted-foreground/70 dark:text-white/60 line-clamp-2 leading-snug">{t.desc}</p>
-                      </button>
-                    ))}
-                  </div>
-                  <div className="mt-3 flex items-center justify-center">
-                    <button
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.4, delay: 0.25 }}
+                className="mt-8 w-full"
+              >
+                <p className="text-[11px] text-muted-foreground/70 mb-3">
+                  Or tap an example to start
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-left">
+                  {[
+                    { title: "Answer customer calls", desc: "Support & FAQs", msg: QUICK_SUGGESTIONS[0]!.message },
+                    { title: "Book appointments", desc: "Clinic or salon", msg: QUICK_SUGGESTIONS[2]!.message },
+                    { title: "Follow up sales leads", desc: "Calls people who enquired", msg: QUICK_SUGGESTIONS[1]!.message },
+                    { title: "Take restaurant bookings", desc: "Tables & timings", msg: QUICK_SUGGESTIONS[4]!.message },
+                  ].map((ex, i) => (
+                    <motion.button
+                      key={ex.title}
                       type="button"
-                      onClick={() => send(VIBE_TEMPLATES[4]!.message)}
-                      className="text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.28 + i * 0.04 }}
+                      onClick={() => send(ex.msg)}
+                      className="rounded-2xl border border-border/40 bg-card/30 backdrop-blur-md px-4 py-3.5 hover:border-border/70 hover:bg-card/50 transition-all text-left active:scale-[0.99]"
                     >
-                      + Restaurant bookings
-                    </button>
-                  </div>
-
-                  {/* Clear alternative paths so new users aren't stuck on this screen */}
-                  <div className="mt-8 pt-6 border-t border-border/20 flex flex-col sm:flex-row items-center justify-center gap-3">
-                    <span className="text-[12px] text-muted-foreground/60">Prefer to do it yourself?</span>
-                    <div className="flex items-center gap-2.5">
-                      <button
-                        type="button"
-                        onClick={() => navigate("/app/agents?create=1")}
-                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-[13px] font-medium border border-border/50 bg-background/40 text-foreground/80 hover:text-foreground hover:border-border/80 hover:bg-card/50 backdrop-blur-md transition-all"
-                      >
-                        <PlusCircle className="h-3.5 w-3.5" /> Build from scratch
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => navigate("/app/command-center")}
-                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-[13px] font-medium border border-border/50 bg-background/40 text-foreground/80 hover:text-foreground hover:border-border/80 hover:bg-card/50 backdrop-blur-md transition-all"
-                      >
-                        <LayoutDashboard className="h-3.5 w-3.5" /> Explore dashboard
-                      </button>
-                    </div>
-                  </div>
-                </motion.div>
-              )}
+                      <p className="text-[13px] font-semibold text-foreground">{ex.title}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">{ex.desc}</p>
+                    </motion.button>
+                  ))}
+                </div>
+              </motion.div>
             </div>
           </div>
         </div>
