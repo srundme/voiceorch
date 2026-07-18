@@ -12,7 +12,7 @@ import {
   PhoneForwarded, Voicemail, Calendar, ShieldCheck,
   Play, Volume2, FileText, BookOpen, ArrowUpRight, Paperclip,
   PlusCircle, History, PhoneIncoming, Info, PhoneOutgoing, Star, Rocket, X, LayoutDashboard,
-  PanelRightOpen, PanelRightClose,
+  PanelRightOpen, PanelRightClose, ArrowLeft, Bookmark,
 } from "lucide-react";
 import { WebcallPanel } from "@/components/webcall-panel";
 import { OutboundCallDialog } from "@/components/outbound-call-dialog";
@@ -319,6 +319,8 @@ export default function VibePage() {
     if (isMobile) setSidebarOpen(false);
   }, [isMobile]);
   const [viewMode, setViewMode]               = useState<"editing" | "history">("editing");
+  // Open chat shell early so users can browse drafts before sending a message.
+  const [showChatShell, setShowChatShell]     = useState(false);
   // Dedupe for notice cards — once per language decision / notice signature.
   const noticeSigsRef = useRef<Set<string>>(new Set());
   const [selectedNumber, setSelectedNumber] = useState<string>("");
@@ -466,6 +468,20 @@ export default function VibePage() {
       }).catch(() => {}))
     );
   }, [createdId]);
+
+  // ── Load draft sessions for new builds (refine loads its own filtered list)
+  useEffect(() => {
+    if (refineId) return;
+    const token = getToken();
+    fetch("/api/vibe/sessions", {
+      headers: { Authorization: `Bearer ${token ?? ""}` },
+    })
+      .then(r => r.ok ? r.json() : [])
+      .then((list: SessionSummary[]) => {
+        if (Array.isArray(list) && list.length > 0) setSessions(list);
+      })
+      .catch(() => {});
+  }, [refineId]);
 
   // ── Refine mode: load existing agent on mount ────────────────────────────
   useEffect(() => {
@@ -1237,7 +1253,7 @@ export default function VibePage() {
       setMessages(chatMsgs.length > 0 ? chatMsgs : [{
         id: "empty",
         role: "ai",
-        content: "This session has no messages yet.",
+        content: "This draft has no messages yet — pick up where you left off.",
         done: true,
       }]);
       historyRef.current = msgs.map(m => ({
@@ -1246,23 +1262,105 @@ export default function VibePage() {
       }));
       activeSessionIdRef.current = id;
       setActiveSessionId(id);
-      setViewMode("history");
+      // Resume as editable draft — not read-only history.
+      setViewMode("editing");
+      setPhase("idle");
+      if (isMobile) setSidebarOpen(false);
+      toast({ title: "Draft resumed", description: "Continue the conversation from where you left off." });
     } catch { /* silently fail */ }
-  }, []);
+  }, [isMobile, setPhase, toast]);
 
   const startNewChat = useCallback(() => {
     activeSessionIdRef.current = null;
     setActiveSessionId(null);
     setViewMode("editing");
-    const agentName = (refineBaseRef.current?.agentName as string) ?? "your agent";
-    setMessages([{
-      id: uid(),
-      role: "ai",
-      done: true,
-      content: `I've loaded **${agentName}** — you can see the current setup on the right. What would you like to change?`,
-    }]);
+    setPhase("idle");
+    setFields([]);
+    setSelectedVoice("");
+    setCallFlowNotes("");
+    setKbNotes("");
+    setFeatures([]);
+    setDispositions([]);
+    setPromptPreview("");
+    if (refineId != null) {
+      const agentName = (refineBaseRef.current?.agentName as string) ?? "your agent";
+      setMessages([{
+        id: uid(),
+        role: "ai",
+        done: true,
+        content: `I've loaded **${agentName}** — you can see the current setup on the right. What would you like to change?`,
+      }]);
+    } else {
+      setMessages([{
+        id: uid(),
+        role: "ai",
+        done: true,
+        content: "Hey! I'll help you build your voice agent in a few minutes. Tell me — what do you want this agent to do, and who will it be talking to?",
+      }]);
+    }
     historyRef.current = [];
-  }, []);
+    if (isMobile) setSidebarOpen(false);
+  }, [refineId, isMobile, setPhase]);
+
+  const saveDraft = useCallback(async () => {
+    if (phaseRef.current === "building" || phaseRef.current === "done") {
+      toast({ title: "Nothing to save", description: "This build is already finished." });
+      return;
+    }
+    const token = getToken();
+    // Ensure a session exists even if the user hasn't completed a turn yet.
+    if (activeSessionIdRef.current === null && historyRef.current.length > 0) {
+      try {
+        const title = historyRef.current.find(m => m.role === "user")?.content.slice(0, 70)
+          || "Untitled draft";
+        const sResp = await fetch("/api/vibe/sessions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token ?? ""}` },
+          body: JSON.stringify({ agentId: refineId ?? null, title }),
+        });
+        if (sResp.ok) {
+          const sData = await sResp.json() as { id: number; title: string; agentId: number | null; createdAt: string };
+          activeSessionIdRef.current = sData.id;
+          setActiveSessionId(sData.id);
+          setSessions(prev => [{
+            id: sData.id, title: sData.title, agentId: sData.agentId,
+            createdAt: sData.createdAt, updatedAt: sData.createdAt, messageCount: historyRef.current.length,
+          }, ...prev.filter(s => s.id !== sData.id)]);
+          await fetch(`/api/vibe/sessions/${sData.id}/messages`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token ?? ""}` },
+            body: JSON.stringify({ messages: historyRef.current }),
+          }).catch(() => {});
+        }
+      } catch { /* fall through to toast */ }
+    } else if (activeSessionIdRef.current !== null) {
+      // Touch updatedAt so the draft rises in the list
+      fetch(`/api/vibe/sessions/${activeSessionIdRef.current}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token ?? ""}` },
+        body: JSON.stringify({}),
+      }).catch(() => {});
+      setSessions(prev => prev.map(s =>
+        s.id === activeSessionIdRef.current
+          ? { ...s, updatedAt: new Date().toISOString(), messageCount: Math.max(s.messageCount, historyRef.current.length) }
+          : s,
+      ));
+    }
+
+    if (activeSessionIdRef.current == null && historyRef.current.length === 0) {
+      toast({
+        title: "Start chatting first",
+        description: "Send a message — your draft saves automatically after each reply.",
+      });
+      return;
+    }
+
+    toast({
+      title: "Draft saved",
+      description: "You can leave anytime and resume from Drafts.",
+    });
+    setSidebarOpen(true);
+  }, [refineId, toast]);
 
   const canSend = input.trim().length > 0
     && phase !== "building" && phase !== "thinking" && phase !== "streaming" && phase !== "done"
@@ -1279,8 +1377,8 @@ export default function VibePage() {
     if (previewWorthy) setPreviewOpen(true);
   }, [previewWorthy]);
 
-  // Landing = no user message yet and not refine mode
-  const chatStarted = messages.length > 1 || !!refineId || refineLoading;
+  // Landing = no user message yet and not refine mode (unless opening drafts)
+  const chatStarted = messages.length > 1 || !!refineId || refineLoading || showChatShell;
 
   const isThinking = phase === "thinking" || phase === "streaming" || phase === "building";
 
@@ -1436,8 +1534,31 @@ export default function VibePage() {
 
           {/* Floating top bar */}
           <header className="relative z-10 flex items-center justify-between px-5 sm:px-8 h-14 shrink-0">
-            <BrandMark iconSize={22} wordmarkHeight={15} gapClass="gap-2" />
+            <div className="flex items-center gap-2 min-w-0">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-9 gap-1.5 rounded-full text-muted-foreground hover:text-foreground shrink-0 px-2.5"
+                onClick={() => navigate("/app/agents")}
+              >
+                <ArrowLeft className="h-4 w-4" />
+                <span className="text-sm font-medium">Back</span>
+              </Button>
+              <BrandMark iconSize={22} wordmarkHeight={15} gapClass="gap-2" />
+            </div>
             <div className="flex items-center gap-2">
+              {sessions.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 gap-1.5 rounded-full border-border/60 bg-background/40 backdrop-blur-md"
+                  onClick={() => { setShowChatShell(true); setSidebarOpen(true); }}
+                >
+                  <History className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Drafts</span>
+                  <span className="text-[10px] text-muted-foreground tabular-nums">({sessions.length})</span>
+                </Button>
+              )}
               <ThemeToggle />
               <Button
                 variant="outline"
@@ -1446,7 +1567,7 @@ export default function VibePage() {
                 onClick={() => navigate("/app/command-center")}
               >
                 <LayoutDashboard className="h-3.5 w-3.5" />
-                Skip to dashboard
+                <span className="hidden sm:inline">Dashboard</span>
               </Button>
             </div>
           </header>
@@ -1608,27 +1729,28 @@ export default function VibePage() {
 
           {/* Floating header */}
           <header className="relative z-10 flex items-center justify-between px-4 sm:px-6 h-14 shrink-0 border-b border-border/20 bg-background/60 backdrop-blur-xl">
-            <div className="flex items-center gap-2 min-w-0">
+            <div className="flex items-center gap-1.5 min-w-0">
               <Button
                 variant="ghost"
-                size="icon"
-                className="h-10 w-10 rounded-full text-muted-foreground hover:text-foreground shrink-0"
-                onClick={() => navigate("/app/command-center")}
+                size="sm"
+                className="h-9 gap-1.5 rounded-full text-muted-foreground hover:text-foreground shrink-0 px-2.5"
+                onClick={() => navigate("/app/agents")}
               >
-                <LayoutDashboard className="h-4 w-4" />
+                <ArrowLeft className="h-4 w-4" />
+                <span className="text-sm font-medium hidden xs:inline sm:inline">Back</span>
               </Button>
-              {refineId != null && sessions.length > 0 && (
+              {sessions.length > 0 && (
                 <Button
                   variant="ghost"
                   size="icon"
                   className="md:hidden h-10 w-10 rounded-full text-muted-foreground hover:text-foreground shrink-0"
                   onClick={() => setSidebarOpen(true)}
-                  aria-label="Open history"
+                  aria-label="Open drafts"
                 >
                   <History className="h-4 w-4" />
                 </Button>
               )}
-              <div className="flex items-center gap-2 min-w-0">
+              <div className="flex items-center gap-2 min-w-0 pl-1">
                 <div className={cn(
                   "h-7 w-7 rounded-lg border flex items-center justify-center overflow-hidden p-1 shrink-0 transition-all",
                   isThinking ? "border-primary/40 bg-primary/10" : "border-border/40 bg-card/40",
@@ -1638,22 +1760,35 @@ export default function VibePage() {
                 <div className="min-w-0 hidden sm:block">
                   <p className="font-semibold text-sm leading-none truncate">Vibe Build</p>
                   <p className="text-[10px] text-muted-foreground mt-0.5 truncate">
-                    {refineId ? "Refining agent" : "AI agent builder"}
+                    {refineId ? "Refining agent" : activeSessionId ? "Draft in progress" : "AI agent builder"}
                   </p>
                 </div>
               </div>
             </div>
 
             <div className="flex items-center gap-1.5">
-              {(refineLoading || isThinking) && (
-                <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground mr-1">
-                  {refineLoading
-                    ? <><Loader2 className="h-3 w-3 animate-spin" /> Loading…</>
-                    : <><span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
-                      {phase === "thinking"
-                        ? (slowThink ? "Still thinking — Gemini can take a bit…" : "Thinking…")
-                        : phase === "streaming" ? "Responding…" : statusMsg || "Configuring…"}</>}
-                </div>
+              {phase !== "done" && phase !== "building" && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 gap-1.5 rounded-full text-xs border-border/50 bg-background/40"
+                  onClick={() => void saveDraft()}
+                  disabled={isThinking}
+                >
+                  <Bookmark className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Save draft</span>
+                </Button>
+              )}
+              {sessions.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 gap-1.5 rounded-full text-muted-foreground hover:text-foreground hidden md:inline-flex"
+                  onClick={() => setSidebarOpen(v => !v)}
+                >
+                  <History className="h-3.5 w-3.5" />
+                  <span className="text-xs">Drafts</span>
+                </Button>
               )}
               {previewWorthy && (
                 <Button
@@ -1671,14 +1806,13 @@ export default function VibePage() {
           </header>
 
           <div className="relative z-10 flex flex-1 min-h-0">
-            {refineId != null && sessions.length > 0 && (
+            {sessions.length > 0 && (
               <VibeSidebar
                 sessions={sessions}
                 activeSessionId={activeSessionId}
                 viewMode={viewMode}
                 onSelectSession={(id) => {
-                  loadHistorySession(id);
-                  if (isMobile) setSidebarOpen(false);
+                  void loadHistorySession(id);
                 }}
                 onNewChat={startNewChat}
                 open={sidebarOpen}
@@ -1697,6 +1831,7 @@ export default function VibePage() {
                     <MessageBubble
                       key={msg.id}
                       msg={msg}
+                      thinkingLabel={slowThink ? "Still thinking — this can take a moment…" : "Thinking…"}
                       selectedVoice={selectedVoice}
                       playingVoice={playingVoice}
                       onPreview={vid => previewVoice(vid, setPlayingVoice)}
@@ -1719,7 +1854,10 @@ export default function VibePage() {
                       }}
                     />
                   ))}
-                  {phase === "thinking" && <ThinkingLogo />}
+                  {/* In-chat status — building only (thinking uses the empty AI bubble dots) */}
+                  {phase === "building" && (
+                    <ThinkingLogo label={statusMsg || "Configuring your agent…"} />
+                  )}
                   <div ref={chatEndRef} className="h-4" />
                 </div>
               </div>
@@ -1731,12 +1869,18 @@ export default function VibePage() {
                     <div className="flex items-center justify-between rounded-2xl border border-border/40 bg-card/40 backdrop-blur-xl px-4 py-3 gap-3">
                       <div className="flex items-center gap-2 min-w-0">
                         <History className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                        <p className="text-xs text-muted-foreground truncate">Historical conversation · read only</p>
+                        <p className="text-xs text-muted-foreground truncate">Saved draft</p>
                       </div>
-                      <Button size="sm" variant="outline" className="h-10 min-h-10 gap-1.5 text-xs rounded-full shrink-0"
-                        onClick={startNewChat}>
-                        <PlusCircle className="h-3 w-3" /> New Chat
-                      </Button>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Button size="sm" className="h-10 min-h-10 gap-1.5 text-xs rounded-full"
+                          onClick={() => setViewMode("editing")}>
+                          Resume chat
+                        </Button>
+                        <Button size="sm" variant="outline" className="h-10 min-h-10 gap-1.5 text-xs rounded-full"
+                          onClick={startNewChat}>
+                          <PlusCircle className="h-3 w-3" /> New
+                        </Button>
+                      </div>
                     </div>
                   ) : (
                     inputBlock(true)
@@ -2085,8 +2229,9 @@ export default function VibePage() {
 /*  Chat components                                                            */
 /* ═══════════════════════════════════════════════════════════════════════════ */
 
-function MessageBubble({ msg, selectedVoice, playingVoice, onPreview, onSelect, selectedNumber, onAssignNumber, onSkipNumber }: {
+function MessageBubble({ msg, thinkingLabel = "Thinking…", selectedVoice, playingVoice, onPreview, onSelect, selectedNumber, onAssignNumber, onSkipNumber }: {
   msg: ChatMsg;
+  thinkingLabel?: string;
   selectedVoice: string;
   playingVoice: string | null;
   onPreview: (id: string) => void;
@@ -2114,12 +2259,27 @@ function MessageBubble({ msg, selectedVoice, playingVoice, onPreview, onSelect, 
           <img src="/snapserve-icon.png" alt="" className="h-full w-full object-contain" />
         </div>
         <div className="flex-1 min-w-0 pt-0.5">
-          <p className="text-[15px] leading-[1.65] text-foreground/95 whitespace-pre-wrap">
-            {msg.content}
-            {!msg.done && msg.content.length > 0 && (
-              <span className="inline-block w-0.5 h-[1.1em] bg-foreground/50 ml-0.5 align-middle animate-pulse rounded-sm" />
-            )}
-          </p>
+          {!msg.content && !msg.done ? (
+            <div className="rounded-3xl rounded-tl-md border border-border/40 bg-card/40 px-4 py-3 inline-flex items-center gap-2.5">
+              <div className="flex gap-1 items-center">
+                {[0, 150, 300].map(d => (
+                  <span
+                    key={d}
+                    className="h-2 w-2 rounded-full bg-foreground/40 animate-bounce"
+                    style={{ animationDelay: `${d}ms` }}
+                  />
+                ))}
+              </div>
+              <span className="text-[13px] text-muted-foreground">{thinkingLabel}</span>
+            </div>
+          ) : (
+            <p className="text-[15px] leading-[1.65] text-foreground/95 whitespace-pre-wrap">
+              {msg.content}
+              {!msg.done && msg.content.length > 0 && (
+                <span className="inline-block w-0.5 h-[1.1em] bg-foreground/50 ml-0.5 align-middle animate-pulse rounded-sm" />
+              )}
+            </p>
+          )}
         </div>
       </div>
 
@@ -2341,20 +2501,25 @@ function VoicePill({ voice, isSelected, isPlaying, onPreview, onSelect }: {
   );
 }
 
-function ThinkingLogo() {
+function ThinkingLogo({ label = "Thinking…" }: { label?: string }) {
   return (
-    <div className="flex gap-3 items-center">
+    <div className="flex gap-3 items-start animate-in fade-in duration-200" aria-live="polite" aria-label={label}>
       <div className="h-8 w-8 rounded-xl bg-card/60 border border-border/30 flex items-center justify-center overflow-hidden p-1.5 shrink-0">
         <img src="/snapserve-icon.png" alt="" className="h-full w-full object-contain opacity-80" />
       </div>
-      <div className="flex gap-1 items-center py-2">
-        {[0, 150, 300].map(d => (
-          <span
-            key={d}
-            className="h-2 w-2 rounded-full bg-foreground/30 animate-bounce"
-            style={{ animationDelay: `${d}ms` }}
-          />
-        ))}
+      <div className="rounded-3xl rounded-tl-md border border-border/40 bg-card/40 px-4 py-3 min-w-[140px]">
+        <div className="flex items-center gap-2.5">
+          <div className="flex gap-1 items-center">
+            {[0, 150, 300].map(d => (
+              <span
+                key={d}
+                className="h-2 w-2 rounded-full bg-foreground/40 animate-bounce"
+                style={{ animationDelay: `${d}ms` }}
+              />
+            ))}
+          </div>
+          <p className="text-[13px] text-muted-foreground">{label}</p>
+        </div>
       </div>
     </div>
   );
@@ -2908,7 +3073,7 @@ function DoneCard({ name, id, navigate, isUpdate, onTestWebCall }: {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════ */
-/*  VibeSidebar — chat history sidebar (refine mode only)                     */
+/*  VibeSidebar — saved drafts / chat history                                  */
 /* ═══════════════════════════════════════════════════════════════════════════ */
 
 function getRelativeTime(dateStr: string): string {
@@ -2970,10 +3135,10 @@ function VibeSidebar({
         <SheetContent side="left" className="p-0 w-[min(100vw,280px)] flex flex-col">
           <SheetTitle className="sr-only">Chat history</SheetTitle>
           <div className="flex items-center justify-between px-3 h-14 border-b border-border/60 shrink-0">
-            <p className="text-xs font-semibold text-foreground">History</p>
+            <p className="text-xs font-semibold text-foreground">Drafts</p>
             <button
               onClick={onNewChat}
-              title="New Chat"
+              title="New chat"
               className="h-10 w-10 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all"
             >
               <PlusCircle className="h-4 w-4" />
@@ -3003,11 +3168,11 @@ function VibeSidebar({
     <div className="flex flex-col w-[210px] shrink-0 border-r border-border/60 bg-background">
       {/* Header */}
       <div className="flex items-center justify-between px-3 h-14 border-b border-border/60 shrink-0">
-        <p className="text-xs font-semibold text-foreground">History</p>
+        <p className="text-xs font-semibold text-foreground">Drafts</p>
         <div className="flex items-center gap-0.5">
           <button
             onClick={onNewChat}
-            title="New Chat"
+            title="New chat"
             className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all"
           >
             <PlusCircle className="h-3.5 w-3.5" />
