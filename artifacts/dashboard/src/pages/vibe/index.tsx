@@ -12,7 +12,7 @@ import {
   PhoneForwarded, Voicemail, Calendar, ShieldCheck,
   Play, Volume2, FileText, BookOpen, ArrowUpRight, Paperclip,
   PlusCircle, History, PhoneIncoming, Info, PhoneOutgoing, Star, Rocket, X, LayoutDashboard,
-  PanelRightOpen, PanelRightClose, ArrowLeft, Bookmark,
+  PanelRightOpen, PanelRightClose, ArrowLeft,
 } from "lucide-react";
 import { WebcallPanel } from "@/components/webcall-panel";
 import { OutboundCallDialog } from "@/components/outbound-call-dialog";
@@ -118,6 +118,72 @@ const GREETING: ChatMsg = {
   id: "g", role: "ai", done: true,
   content: "Hey! I'll help you build your voice agent in a few minutes.\n\nTell me — what do you want this agent to do, and who will it be talking to?",
 };
+
+/** Tech keys that non-coders don't need on the main preview. */
+const ADVANCED_FIELD_KEYS = new Set(["llm", "stt", "tts"]);
+
+/** Plain-English labels / values for the preview (server may still send old jargon). */
+function humanizeField(field: AgentField): AgentField {
+  const map: Record<string, { label: string; value?: string }> = {
+    name: { label: "Agent name" },
+    company: { label: "Company" },
+    language: { label: "Language" },
+    direction: {
+      label: "Call type",
+      value: /both|inbound\s*&\s*outbound/i.test(field.value)
+        ? "Incoming & outgoing"
+        : /outbound/i.test(field.value)
+          ? "Outgoing calls"
+          : /inbound/i.test(field.value)
+            ? "Incoming calls"
+            : field.value,
+    },
+    voice: { label: "Voice" },
+    llm: { label: "Smart replies", value: "Set up automatically" },
+    stt: { label: "Understands speech", value: "Set up automatically" },
+    tts: { label: "Natural voice", value: "Set up automatically" },
+    inbound_number: {
+      label: "Phone number",
+      value: !field.value || field.value === "Not assigned" ? "Not assigned yet" : field.value,
+    },
+    greeting: { label: "Greeting" },
+  };
+  const h = map[field.key];
+  if (!h) return field;
+  return { ...field, label: h.label, value: h.value ?? field.value };
+}
+
+type VibeProgressStep = { id: string; label: string; done: boolean };
+
+function buildVibeProgress(opts: {
+  fields: AgentField[];
+  callFlowNotes: string;
+  dispositions: DispositionCard[];
+  phase: Phase;
+  refineId: number | null;
+}): { steps: VibeProgressStep[]; currentLabel: string; doneCount: number } {
+  const has = (key: string) => {
+    const v = opts.fields.find(f => f.key === key)?.value?.trim();
+    return !!v && v !== "—";
+  };
+  const steps: VibeProgressStep[] = [
+    { id: "name", label: "Name", done: has("name") },
+    { id: "company", label: "Company", done: has("company") },
+    { id: "language", label: "Language", done: has("language") },
+    { id: "direction", label: "Call type", done: has("direction") },
+    { id: "voice", label: "Voice", done: has("voice") || !!opts.refineId },
+    { id: "flow", label: "Script", done: opts.callFlowNotes.trim().length > 0 },
+    { id: "finish", label: "Finish", done: opts.phase === "done" || opts.dispositions.length > 0 },
+  ];
+  const doneCount = steps.filter(s => s.done).length;
+  const next = steps.find(s => !s.done);
+  const currentLabel = opts.phase === "done"
+    ? "Ready!"
+    : next
+      ? `Next: ${next.label}`
+      : "Almost done";
+  return { steps, currentLabel, doneCount };
+}
 
 /* ── landing template recommendations ──────────────────────────────────────── */
 interface VibeTemplate {
@@ -321,6 +387,10 @@ export default function VibePage() {
   const [viewMode, setViewMode]               = useState<"editing" | "history">("editing");
   // Open chat shell early so users can browse drafts before sending a message.
   const [showChatShell, setShowChatShell]     = useState(false);
+  const [draftSavedFlash, setDraftSavedFlash] = useState(false);
+  const [showAdvancedPreview, setShowAdvancedPreview] = useState(false);
+  const [draftTitle, setDraftTitle] = useState("");
+  const draftTitleRef = useRef<string>("");
   // Dedupe for notice cards — once per language decision / notice signature.
   const noticeSigsRef = useRef<Set<string>>(new Set());
   const [selectedNumber, setSelectedNumber] = useState<string>("");
@@ -513,21 +583,21 @@ export default function VibePage() {
 
         // Pre-populate right panel fields (including company + greeting)
         const panelFields: AgentField[] = [
-          { key: "name",      label: "Agent Name",     value: (agent.name as string) || "—",              icon: "bot"      },
+          { key: "name",      label: "Agent name",     value: (agent.name as string) || "—",              icon: "bot"      },
           { key: "company",   label: "Company",        value: (cfg.companyName as string) || "—",          icon: "building" },
           { key: "language",  label: "Language",       value: lang,                                        icon: "globe"    },
-          { key: "direction", label: "Call Direction",
-            value: cfg.direction === "both" ? "Inbound & Outbound"
-              : cfg.direction === "outbound" ? "Outbound" : "Inbound",                                     icon: "phone"    },
+          { key: "direction", label: "Call type",
+            value: cfg.direction === "both" ? "Incoming & outgoing"
+              : cfg.direction === "outbound" ? "Outgoing calls" : "Incoming calls",                                     icon: "phone"    },
           { key: "voice",     label: "Voice",
             value: (agent.ttsVoice as string)
               ? ((agent.ttsVoiceName as string) || `…${(agent.ttsVoice as string).slice(-8)}`)
               : "—",                                                                                         icon: "mic"      },
-          { key: "llm",       label: "AI Brain",       value: (agent.llmModel as string) || "Managed",     icon: "cpu"      },
-          { key: "stt",       label: "Speech-to-Text",
-            value: `Sarvam Saaras v3 · ${cfg.sarvamSttMode === "verbatim" ? "Verbatim" : cfg.sarvamSttMode === "transcribe" ? "Transcribe" : "Codemix"}`,
+          { key: "llm",       label: "Smart replies",       value: "Set up automatically",     icon: "cpu"      },
+          { key: "stt",       label: "Understands speech",
+            value: "Set up automatically",
                                                                                                               icon: "ear"      },
-          { key: "tts",       label: "Voice Engine",   value: "Cartesia Sonic 3.5",                        icon: "speaker"  },
+          { key: "tts",       label: "Natural voice",   value: "Set up automatically",                        icon: "speaker"  },
         ];
         if (agent.greetingMessage) {
           panelFields.splice(2, 0, {
@@ -539,8 +609,8 @@ export default function VibePage() {
         const assignedRow = numberRows.find(n => n.agentId === refineId);
         if (cfg.direction === "inbound" || cfg.direction === "both" || assignedRow) {
           panelFields.push({
-            key: "inbound_number", label: "Inbound Number",
-            value: (assignedRow?.number as string) || "Not assigned", icon: "phone-incoming",
+            key: "inbound_number", label: "Phone number",
+            value: (assignedRow?.number as string) || "Not assigned yet", icon: "phone-incoming",
           });
         }
         if (assignedRow?.number) setSelectedNumber(assignedRow.number as string);
@@ -909,11 +979,15 @@ export default function VibePage() {
               break;
 
             case "field":
-              setPhase("building");
               setFields(prev => {
                 const next = [...prev];
                 const idx  = next.findIndex(f => f.key === evt.key);
-                const f: AgentField = { key: evt.key as string, label: evt.label as string, value: evt.value as string, icon: evt.icon as string };
+                const f: AgentField = humanizeField({
+                  key: evt.key as string,
+                  label: evt.label as string,
+                  value: evt.value as string,
+                  icon: evt.icon as string,
+                });
                 if (idx >= 0) next[idx] = f; else next.push(f);
                 return next;
               });
@@ -954,7 +1028,6 @@ export default function VibePage() {
               break;
 
             case "feature":
-              setPhase("building");
               setFeatures(prev => {
                 const next = [...prev];
                 const idx  = next.findIndex(f => f.key === evt.key);
@@ -1127,6 +1200,8 @@ export default function VibePage() {
         setSessions(prev => prev.map(s =>
           s.id === sid ? { ...s, messageCount: s.messageCount + 2, updatedAt: new Date().toISOString() } : s,
         ));
+        setDraftSavedFlash(true);
+        window.setTimeout(() => setDraftSavedFlash(false), 2000);
       }
 
     } catch (err: unknown) {
@@ -1302,66 +1377,6 @@ export default function VibePage() {
     if (isMobile) setSidebarOpen(false);
   }, [refineId, isMobile, setPhase]);
 
-  const saveDraft = useCallback(async () => {
-    if (phaseRef.current === "building" || phaseRef.current === "done") {
-      toast({ title: "Nothing to save", description: "This build is already finished." });
-      return;
-    }
-    const token = getToken();
-    // Ensure a session exists even if the user hasn't completed a turn yet.
-    if (activeSessionIdRef.current === null && historyRef.current.length > 0) {
-      try {
-        const title = historyRef.current.find(m => m.role === "user")?.content.slice(0, 70)
-          || "Untitled draft";
-        const sResp = await fetch("/api/vibe/sessions", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token ?? ""}` },
-          body: JSON.stringify({ agentId: refineId ?? null, title }),
-        });
-        if (sResp.ok) {
-          const sData = await sResp.json() as { id: number; title: string; agentId: number | null; createdAt: string };
-          activeSessionIdRef.current = sData.id;
-          setActiveSessionId(sData.id);
-          setSessions(prev => [{
-            id: sData.id, title: sData.title, agentId: sData.agentId,
-            createdAt: sData.createdAt, updatedAt: sData.createdAt, messageCount: historyRef.current.length,
-          }, ...prev.filter(s => s.id !== sData.id)]);
-          await fetch(`/api/vibe/sessions/${sData.id}/messages`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token ?? ""}` },
-            body: JSON.stringify({ messages: historyRef.current }),
-          }).catch(() => {});
-        }
-      } catch { /* fall through to toast */ }
-    } else if (activeSessionIdRef.current !== null) {
-      // Touch updatedAt so the draft rises in the list
-      fetch(`/api/vibe/sessions/${activeSessionIdRef.current}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token ?? ""}` },
-        body: JSON.stringify({}),
-      }).catch(() => {});
-      setSessions(prev => prev.map(s =>
-        s.id === activeSessionIdRef.current
-          ? { ...s, updatedAt: new Date().toISOString(), messageCount: Math.max(s.messageCount, historyRef.current.length) }
-          : s,
-      ));
-    }
-
-    if (activeSessionIdRef.current == null && historyRef.current.length === 0) {
-      toast({
-        title: "Start chatting first",
-        description: "Send a message — your draft saves automatically after each reply.",
-      });
-      return;
-    }
-
-    toast({
-      title: "Draft saved",
-      description: "You can leave anytime and resume from Drafts.",
-    });
-    setSidebarOpen(true);
-  }, [refineId, toast]);
-
   const canSend = input.trim().length > 0
     && phase !== "building" && phase !== "thinking" && phase !== "streaming" && phase !== "done"
     && viewMode === "editing";
@@ -1381,6 +1396,31 @@ export default function VibePage() {
   const chatStarted = messages.length > 1 || !!refineId || refineLoading || showChatShell;
 
   const isThinking = phase === "thinking" || phase === "streaming" || phase === "building";
+
+  const vibeProgress = useMemo(
+    () => buildVibeProgress({ fields, callFlowNotes, dispositions, phase, refineId }),
+    [fields, callFlowNotes, dispositions, phase, refineId],
+  );
+
+  // Auto-name drafts once we know the agent / company — "Sruthi · SRM"
+  useEffect(() => {
+    const name = fields.find(f => f.key === "name")?.value?.trim();
+    const company = fields.find(f => f.key === "company")?.value?.trim();
+    if (!name || name === "—") return;
+    const title = company && company !== "—" ? `${name} · ${company}` : name;
+    if (title === draftTitleRef.current) return;
+    draftTitleRef.current = title;
+    setDraftTitle(title);
+    const sid = activeSessionIdRef.current;
+    if (sid == null) return;
+    const token = getToken();
+    fetch(`/api/vibe/sessions/${sid}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token ?? ""}` },
+      body: JSON.stringify({ title }),
+    }).catch(() => {});
+    setSessions(prev => prev.map(s => s.id === sid ? { ...s, title } : s));
+  }, [fields]);
 
   useEffect(() => {
     if (phase !== "thinking") {
@@ -1555,7 +1595,7 @@ export default function VibePage() {
                   onClick={() => { setShowChatShell(true); setSidebarOpen(true); }}
                 >
                   <History className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline">Drafts</span>
+                  <span className="hidden sm:inline">My drafts</span>
                   <span className="text-[10px] text-muted-foreground tabular-nums">({sessions.length})</span>
                 </Button>
               )}
@@ -1727,9 +1767,9 @@ export default function VibePage() {
         <div className="relative flex flex-col h-full overflow-hidden animate-in fade-in duration-300">
           <VibeAmbientBg />
 
-          {/* Floating header */}
+          {/* Floating header — keep chrome minimal for non-techies */}
           <header className="relative z-10 flex items-center justify-between px-4 sm:px-6 h-14 shrink-0 border-b border-border/20 bg-background/60 backdrop-blur-xl">
-            <div className="flex items-center gap-1.5 min-w-0">
+            <div className="flex items-center gap-1.5 min-w-0 flex-1">
               <Button
                 variant="ghost"
                 size="sm"
@@ -1737,59 +1777,49 @@ export default function VibePage() {
                 onClick={() => navigate("/app/agents")}
               >
                 <ArrowLeft className="h-4 w-4" />
-                <span className="text-sm font-medium hidden xs:inline sm:inline">Back</span>
+                <span className="text-sm font-medium">Back</span>
               </Button>
-              {sessions.length > 0 && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="md:hidden h-10 w-10 rounded-full text-muted-foreground hover:text-foreground shrink-0"
-                  onClick={() => setSidebarOpen(true)}
-                  aria-label="Open drafts"
-                >
-                  <History className="h-4 w-4" />
-                </Button>
-              )}
-              <div className="flex items-center gap-2 min-w-0 pl-1">
-                <div className={cn(
-                  "h-7 w-7 rounded-lg border flex items-center justify-center overflow-hidden p-1 shrink-0 transition-all",
-                  isThinking ? "border-primary/40 bg-primary/10" : "border-border/40 bg-card/40",
-                )}>
-                  <img src="/snapserve-icon.png" alt="" className="h-full w-full object-contain" />
-                </div>
-                <div className="min-w-0 hidden sm:block">
-                  <p className="font-semibold text-sm leading-none truncate">Vibe Build</p>
-                  <p className="text-[10px] text-muted-foreground mt-0.5 truncate">
-                    {refineId ? "Refining agent" : activeSessionId ? "Draft in progress" : "AI agent builder"}
+              <div className="min-w-0 pl-1 flex-1 max-w-md">
+                <div className="flex items-center gap-2 min-w-0">
+                  <p className="font-semibold text-sm leading-none truncate">
+                    {draftTitle || (refineId ? "Improve your agent" : "Build your agent")}
                   </p>
+                  {draftSavedFlash && (
+                    <span className="text-[10px] font-medium text-emerald-500 shrink-0 animate-in fade-in">
+                      Saved
+                    </span>
+                  )}
                 </div>
+                {phase !== "done" && (
+                  <div className="mt-1.5 flex items-center gap-2 min-w-0">
+                    <div className="flex-1 h-1 rounded-full bg-muted/60 overflow-hidden max-w-[160px]">
+                      <div
+                        className="h-full rounded-full bg-emerald-500 transition-all duration-500"
+                        style={{ width: `${Math.round((vibeProgress.doneCount / vibeProgress.steps.length) * 100)}%` }}
+                      />
+                    </div>
+                    <p className="text-[10px] text-muted-foreground truncate">
+                      {vibeProgress.doneCount}/{vibeProgress.steps.length} · {vibeProgress.currentLabel}
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
 
-            <div className="flex items-center gap-1.5">
-              {phase !== "done" && phase !== "building" && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 gap-1.5 rounded-full text-xs border-border/50 bg-background/40"
-                  onClick={() => void saveDraft()}
-                  disabled={isThinking}
-                >
-                  <Bookmark className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline">Save draft</span>
-                </Button>
-              )}
-              {sessions.length > 0 && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 gap-1.5 rounded-full text-muted-foreground hover:text-foreground hidden md:inline-flex"
-                  onClick={() => setSidebarOpen(v => !v)}
-                >
-                  <History className="h-3.5 w-3.5" />
-                  <span className="text-xs">Drafts</span>
-                </Button>
-              )}
+            <div className="flex items-center gap-1.5 shrink-0">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 gap-1.5 rounded-full text-muted-foreground hover:text-foreground"
+                onClick={() => setSidebarOpen(v => !v)}
+                aria-label="Open saved drafts"
+              >
+                <History className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline text-xs">My drafts</span>
+                {sessions.length > 0 && (
+                  <span className="text-[10px] tabular-nums text-muted-foreground">({sessions.length})</span>
+                )}
+              </Button>
               {previewWorthy && (
                 <Button
                   variant="ghost"
@@ -1798,7 +1828,7 @@ export default function VibePage() {
                   onClick={() => setPreviewOpen(v => !v)}
                 >
                   {previewOpen ? <PanelRightClose className="h-3.5 w-3.5" /> : <PanelRightOpen className="h-3.5 w-3.5" />}
-                  <span className="hidden sm:inline text-xs">{previewOpen ? "Hide" : "Preview"}</span>
+                  <span className="hidden sm:inline text-xs">{previewOpen ? "Hide" : "Your agent"}</span>
                 </Button>
               )}
               <ThemeToggle />
@@ -1806,7 +1836,7 @@ export default function VibePage() {
           </header>
 
           <div className="relative z-10 flex flex-1 min-h-0">
-            {sessions.length > 0 && (
+            {(sidebarOpen || sessions.length > 0) && (
               <VibeSidebar
                 sessions={sessions}
                 activeSessionId={activeSessionId}
@@ -1883,7 +1913,22 @@ export default function VibePage() {
                       </div>
                     </div>
                   ) : (
-                    inputBlock(true)
+                    <div className="space-y-2">
+                      {inputBlock(true)}
+                      {isThinking ? (
+                        <p className="text-center text-[12px] text-muted-foreground animate-in fade-in">
+                          {phase === "building"
+                            ? "Creating your agent — almost there…"
+                            : slowThink
+                              ? "Still working — thanks for waiting…"
+                              : "Please wait — I'm preparing the next step…"}
+                        </p>
+                      ) : phase !== "done" ? (
+                        <p className="text-center text-[11px] text-muted-foreground/70">
+                          Progress saves automatically · leave anytime and open My drafts
+                        </p>
+                      ) : null}
+                    </div>
                   )}
                 </div>
               </div>
@@ -1904,16 +1949,16 @@ export default function VibePage() {
                   <Zap className="h-3.5 w-3.5 text-foreground/80" />
                 </div>
                 <div>
-                  <p className="font-semibold text-sm leading-none">Agent Preview</p>
+                  <p className="font-semibold text-sm leading-none">Your agent</p>
                   <p className="text-[10px] text-muted-foreground/70 mt-0.5">
                     {showTestCall                    ? "Live test in progress" :
-                     postBuildStep === "hype"        ? "Your agent is ready!" :
-                     postBuildStep === "rating"      ? "Launch your agent" :
-                     !hasRightContent               ? "Waiting for your description…" :
-                     phase === "building"            ? (statusMsg || "Configuring…") :
-                     phase === "done"               ? "Ready to deploy" :
-                     (refineId && phase === "idle")  ? "Agent loaded — tell me what to change" :
-                                                      "Building up as we chat"}
+                     postBuildStep === "hype"        ? "Ready to try!" :
+                     postBuildStep === "rating"      ? "Launch when you're happy" :
+                     !hasRightContent               ? "Answers appear here as you chat" :
+                     phase === "building"            ? (statusMsg || "Putting it together…") :
+                     phase === "done"               ? "Ready" :
+                     (refineId && phase === "idle")  ? "Tell me what to change" :
+                                                      vibeProgress.currentLabel}
                   </p>
                 </div>
               </div>
@@ -2028,12 +2073,32 @@ export default function VibePage() {
               ) : (
             <div className="max-w-2xl space-y-8">
 
-              {/* Agent Config */}
+              {/* Agent Config — primary facts first; tech details tucked away */}
               {fields.length > 0 && (
-                <Section title="Configuration">
+                <Section title="What you've set">
                   <div className="grid grid-cols-2 gap-2">
-                    {fields.map(f => <FieldCard key={f.key} field={f} />)}
+                    {fields.filter(f => !ADVANCED_FIELD_KEYS.has(f.key)).map(f => (
+                      <FieldCard key={f.key} field={humanizeField(f)} />
+                    ))}
                   </div>
+                  {fields.some(f => ADVANCED_FIELD_KEYS.has(f.key)) && (
+                    <div className="pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowAdvancedPreview(v => !v)}
+                        className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        {showAdvancedPreview ? "Hide technical details" : "Show technical details"}
+                      </button>
+                      {showAdvancedPreview && (
+                        <div className="grid grid-cols-2 gap-2 mt-2">
+                          {fields.filter(f => ADVANCED_FIELD_KEYS.has(f.key)).map(f => (
+                            <FieldCard key={f.key} field={humanizeField(f)} />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </Section>
               )}
 
@@ -2044,7 +2109,7 @@ export default function VibePage() {
                     <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />
                     <div>
                       <p className="text-xs font-semibold text-primary">{selectedVoice}</p>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">Voice selected · Cartesia Sonic 3.5</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">Selected · sounds natural on calls</p>
                     </div>
                   </div>
                 </Section>
@@ -2052,7 +2117,7 @@ export default function VibePage() {
 
               {/* Call Flow */}
               {callFlowNotes && (
-                <Section title="Call Flow">
+                <Section title="Call script">
                   <NoteCard icon={<FileText className="h-3.5 w-3.5" />} text={callFlowNotes} />
                 </Section>
               )}
@@ -2634,11 +2699,11 @@ function DispositionRow({ d, i }: { d: DispositionCard; i: number }) {
 
 function EmptyState() {
   const items = [
-    "Voice & language",
-    "Call flow & script",
-    "Knowledge base",
-    "Tools & scheduling",
-    "System prompt",
+    "Name & company",
+    "Language & voice",
+    "What the agent says",
+    "Extra tools (optional)",
+    "Ready to call",
   ];
   return (
     <div className="flex flex-col items-center justify-center min-h-full py-16 text-center gap-8">
@@ -2649,16 +2714,19 @@ function EmptyState() {
         </div>
       </div>
       <div className="max-w-xs">
-        <p className="font-display font-semibold text-lg">Live preview</p>
-        <p className="text-sm text-muted-foreground/70 mt-2 leading-relaxed">
-          Your agent config will appear here as we chat.
+        <p className="font-display font-semibold text-lg">Your agent appears here</p>
+        <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
+          Just answer in the chat — no technical setup needed. We'll fill this side as you go.
         </p>
       </div>
-      <div className="flex flex-wrap justify-center gap-2 max-w-sm">
-        {items.map(t => (
-          <span key={t} className="px-3 py-1.5 rounded-full text-[11px] text-muted-foreground/60 border border-border/30 bg-card/20">
-            {t}
-          </span>
+      <div className="w-full max-w-xs space-y-2 text-left">
+        {items.map((item, i) => (
+          <div key={item} className="flex items-center gap-2.5 text-xs text-muted-foreground">
+            <span className="h-5 w-5 rounded-full border border-border/50 flex items-center justify-center text-[10px] tabular-nums shrink-0">
+              {i + 1}
+            </span>
+            {item}
+          </div>
         ))}
       </div>
     </div>
@@ -3105,27 +3173,35 @@ function VibeSidebar({
 
   const sessionList = (
     <div className="flex-1 overflow-y-auto py-1.5">
-      {sessions.map(session => {
-        const isActive = session.id === activeSessionId;
-        const isViewing = isActive && viewMode === "history";
-        return (
-          <button
-            key={session.id}
-            onClick={() => onSelectSession(session.id)}
-            className={cn(
-              "w-full text-left px-3 py-3 md:py-2.5 hover:bg-muted/50 transition-colors border-l-2 min-h-[44px]",
-              isViewing
-                ? "bg-primary/8 border-primary"
-                : isActive && viewMode === "editing"
-                  ? "border-primary/40 bg-primary/5"
-                  : "border-transparent",
-            )}
-          >
-            <p className="text-xs font-medium truncate text-foreground leading-snug">{session.title}</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">{getRelativeTime(session.updatedAt)}</p>
-          </button>
-        );
-      })}
+      {sessions.length === 0 ? (
+        <div className="px-3 py-6 text-center">
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            No saved drafts yet. Start chatting — we'll save automatically.
+          </p>
+        </div>
+      ) : (
+        sessions.map(session => {
+          const isActive = session.id === activeSessionId;
+          const isViewing = isActive && viewMode === "history";
+          return (
+            <button
+              key={session.id}
+              onClick={() => onSelectSession(session.id)}
+              className={cn(
+                "w-full text-left px-3 py-3 md:py-2.5 hover:bg-muted/50 transition-colors border-l-2 min-h-[44px]",
+                isViewing
+                  ? "bg-primary/8 border-primary"
+                  : isActive && viewMode === "editing"
+                    ? "border-primary/40 bg-primary/5"
+                    : "border-transparent",
+              )}
+            >
+              <p className="text-xs font-medium truncate text-foreground leading-snug">{session.title}</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">{getRelativeTime(session.updatedAt)}</p>
+            </button>
+          );
+        })
+      )}
     </div>
   );
 

@@ -1106,17 +1106,17 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
       return (c.schedulingTools?.length) ? c.schedulingTools : ALL;
     }
 
-    // Core field events
+    // Core field events — labels are plain-English for non-technical builders.
     const coreFields = [
-      { key: "name",      label: "Agent Name",     value: cfg.agentName,                                                         icon: "bot"      },
+      { key: "name",      label: "Agent name",     value: cfg.agentName,                                                         icon: "bot"      },
       { key: "company",   label: "Company",        value: cfg.companyName || "—",                                                icon: "building" },
       { key: "language",  label: "Language",       value: langDisplay,                                                           icon: "globe"    },
-      { key: "direction", label: "Call Direction",
-        value: cfg.direction === "both" ? "Inbound & Outbound" : cfg.direction === "outbound" ? "Outbound" : "Inbound",
+      { key: "direction", label: "Call type",
+        value: cfg.direction === "both" ? "Incoming & outgoing" : cfg.direction === "outbound" ? "Outgoing calls" : "Incoming calls",
         icon: "phone" },
-      { key: "llm",       label: "AI Brain",       value: isTamil ? "Gemini 2.5 Flash" : "Groq Llama 3.3 70B",                  icon: "cpu"      },
-      { key: "stt",       label: "Speech-to-Text", value: "Sarvam Saaras v3",                                                    icon: "ear"      },
-      { key: "tts",       label: "Voice Engine",   value: "Cartesia Sonic 3.5",                                                  icon: "speaker"  },
+      { key: "llm",       label: "Smart replies",  value: "Set up automatically",                                                icon: "cpu"      },
+      { key: "stt",       label: "Understands speech", value: "Set up automatically",                                           icon: "ear"      },
+      { key: "tts",       label: "Natural voice",  value: "Set up automatically",                                                icon: "speaker"  },
     ];
     if (cfg.voiceId) {
       coreFields.splice(3, 0, { key: "voice", label: "Voice", value: `${cfg.voiceName} — ${cfg.gender === "female" ? "Female" : "Male"}`, icon: "mic" });
@@ -1124,7 +1124,7 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
     {
       const displayNumber = pickedNumberRow?.number || refineAssignedNumber?.number || "";
       if (dirTakesInbound && (displayNumber || cfg.phoneNumberSkipped || phase === "phone_number" || phase === "build" || parsed.ready)) {
-        coreFields.push({ key: "inbound_number", label: "Inbound Number", value: displayNumber || "Not assigned", icon: "phone-incoming" });
+        coreFields.push({ key: "inbound_number", label: "Phone number", value: displayNumber || "Not assigned yet", icon: "phone-incoming" });
       }
     }
     for (const field of coreFields) {
