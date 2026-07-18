@@ -2557,6 +2557,18 @@ export class OrchestrationPipeline implements VoiceSession {
   }
 
   /**
+   * Last meaningful media time for billing: max of real caller activity, real
+   * TTS frame out, and recording track writes. Ignores VoBiz keepalive zeros
+   * (those never touch lastTtsFrameAt / the recording buffer).
+   */
+  getLastMediaAtMs(): number | null {
+    const fromRec = this.recording.getLastWriteAtMs();
+    const candidates = [this.lastCallerActivityAt, this.lastTtsFrameAt, fromRec ?? 0].filter((t) => t > 0);
+    if (candidates.length === 0) return null;
+    return Math.max(...candidates);
+  }
+
+  /**
    * Marks the first outbound audio chunk of a turn. On the very first outbound
    * chunk of the whole call it also logs the carrier answer → first-audio gap
    * (the dead-air latency the caller hears before the greeting), once per call,

@@ -38,6 +38,7 @@ import { appendTraiDisclosure, scanForOptOut } from "../services/trai/index.js";
 import { appendDpdpDisclosure, scanAndRedactPII } from "../services/dpdp/index.js";
 import { appendIrdaiAiDisclosure } from "../services/irdai/index.js";
 import { appendGuardrails, redactTranscriptPII } from "../services/guardrails.js";
+import { resolveBillableDurationSeconds } from "./billable-duration.js";
 import { scheduleNetworkDropCallback } from "../services/autoRedial.js";
 import { refillCampaignForLead } from "../services/batchScheduler.js";
 import { resolveRetryConfig } from "../services/retryEngine.js";
@@ -2005,7 +2006,31 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
   // Clamp to non-negative: startedAt is anchored to the carrier answer time,
   // which (after ingress validation) can be up to a few seconds in the future
   // for a very short call, so guard the subtraction against a negative result.
-  const durationSeconds = Math.max(0, Math.floor((endedAt.getTime() - session.startedAt.getTime()) / 1000));
+  const wallClockSeconds = Math.max(0, Math.floor((endedAt.getTime() - session.startedAt.getTime()) / 1000));
+  // Bill conversation time, not idle keepalive until maxDuration. Recording /
+  // last media omit VoBiz silence frames, so a 2-minute talk that lingered to
+  // the 8-minute max must charge ~2 minutes (ceil), not ₹40 for 8.
+  const recording = session.pipeline.getRecording();
+  const durationSeconds = resolveBillableDurationSeconds({
+    wallClockSeconds,
+    startedAtMs: session.startedAt.getTime(),
+    lastMediaAtMs: session.pipeline.getLastMediaAtMs(),
+    recordingSeconds: recording.getCapturedDurationSeconds() || null,
+  });
+  if (wallClockSeconds - durationSeconds >= 30) {
+    logger.warn(
+      {
+        sessionId,
+        callId: session.callId,
+        wallClockSeconds,
+        billableSeconds: durationSeconds,
+        endReason: reason ?? session.pipeline.endReasonHint ?? null,
+        recordingSeconds: recording.getCapturedDurationSeconds(),
+        lastMediaAtMs: session.pipeline.getLastMediaAtMs(),
+      },
+      "Billable duration shorter than wall-clock — idle tail not charged",
+    );
+  }
   // Redact high-risk secrets (card numbers, PAN, Aadhaar, CVV/OTP/PIN) before
   // the transcript is persisted or sent to webhooks/summaries. Phone/email are
   // intentionally preserved — they are legitimate lead-capture data.

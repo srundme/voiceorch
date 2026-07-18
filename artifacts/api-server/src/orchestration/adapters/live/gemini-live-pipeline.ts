@@ -170,6 +170,10 @@ export class GeminiLivePipeline implements VoiceSession {
     return this.recording;
   }
 
+  getLastMediaAtMs(): number | null {
+    return this.recording.getLastWriteAtMs();
+  }
+
   close(): void {
     if (this.closed) return;
     this.closed = true;

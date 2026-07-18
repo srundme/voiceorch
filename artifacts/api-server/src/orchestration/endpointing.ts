@@ -679,6 +679,8 @@ export class SilenceWatchdog {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private lastSpeechAt = 0;
   private repromptCount = 0;
+  /** Consecutive busy near-misses with no recent caller speech — stuck agent flags. */
+  private consecutiveBusyNearMisses = 0;
   private readonly maxReprompts: number;
   private readonly now: () => number;
 
@@ -690,6 +692,7 @@ export class SilenceWatchdog {
   /** Full re-arm: usable transcript arrived / turn boundary. Clears check-in count. */
   reset(): void {
     this.repromptCount = 0;
+    this.consecutiveBusyNearMisses = 0;
     this.arm(this.opts.timeoutMs);
   }
 
@@ -701,6 +704,7 @@ export class SilenceWatchdog {
   onSpeechEnergy(): void {
     this.lastSpeechAt = this.now();
     this.repromptCount = 0;
+    this.consecutiveBusyNearMisses = 0;
   }
 
   clear(): void {
@@ -719,15 +723,33 @@ export class SilenceWatchdog {
     this.timer = null;
     const { timeoutMs } = this.opts;
     // Agent is mid-speech / mid-turn — not caller abandonment. Re-arm in full.
+    // Escape hatch: if isBusy stays true for many windows with no caller speech
+    // (stuck isPlaying/isProcessing), force hangup instead of riding to maxDuration
+    // and over-billing idle keepalive time.
     if (this.opts.isBusy?.()) {
+      const sinceSpeech = this.lastSpeechAt > 0 ? this.now() - this.lastSpeechAt : null;
+      const stuckBusy =
+        this.consecutiveBusyNearMisses >= 6 &&
+        (sinceSpeech == null || sinceSpeech >= timeoutMs * 2);
+      if (stuckBusy) {
+        this.opts.onNearMiss?.({
+          cause: "busy",
+          msSinceLastSpeech: sinceSpeech,
+          rearmedForMs: 0,
+        });
+        this.opts.onGiveUp();
+        return;
+      }
+      this.consecutiveBusyNearMisses++;
       this.opts.onNearMiss?.({
         cause: "busy",
-        msSinceLastSpeech: null,
+        msSinceLastSpeech: sinceSpeech,
         rearmedForMs: timeoutMs,
       });
       this.arm(timeoutMs);
       return;
     }
+    this.consecutiveBusyNearMisses = 0;
     // Caller was audibly speaking within the window (streaming STT may have
     // gone quiet without partials) — re-arm for the remaining share.
     const sinceSpeech = this.now() - this.lastSpeechAt;

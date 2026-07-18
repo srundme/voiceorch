@@ -130,6 +130,28 @@ export class RecordingBuffer {
     }
   }
 
+  /**
+   * Length of the captured audio timeline in seconds (longer of caller/agent
+   * tracks). Keepalive silence is never written here, so this tracks talk time
+   * even when the telephony session stays open much longer.
+   */
+  getCapturedDurationSeconds(): number {
+    const maxBytes = Math.max(this.caller.bytes, this.agent.bytes);
+    if (maxBytes <= 0) return 0;
+    return maxBytes / (this.sampleRate * BYTES_PER_SAMPLE);
+  }
+
+  /**
+   * Wall-clock epoch ms of the most recent caller or agent PCM write, or null
+   * when nothing was captured yet.
+   */
+  getLastWriteAtMs(): number | null {
+    const a = this.caller.lastWriteMs;
+    const b = this.agent.lastWriteMs;
+    if (a == null && b == null) return null;
+    return Math.max(a ?? 0, b ?? 0);
+  }
+
   /** Byte offset on the shared timeline corresponding to `now`. */
   private timelineBytes(now: number): number {
     if (this.startMs === null) this.startMs = now;
