@@ -286,40 +286,38 @@ async function previewVoice(voiceId: string, setPlaying: (id: string | null) => 
 function VibeAmbientBg() {
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden">
-      {/* Dark mode: animated silk aurora (satin-dark WebGL background) */}
+      {/* Dark mode: SnapServe brand — pure black / zinc silk (no purple) */}
       <div className="absolute inset-0 hidden dark:block">
         <SilkAurora
           interactive={false}
-          speed={0.6}
-          intensity={0.6}
-          grain={0.35}
-          vignette={1}
-          baseColor="#060609"
-          midColor="#0f1017"
-          sheenColor="#9aa1bd"
-          accentColor="#6f63d6"
-          className="absolute inset-0 h-full min-h-0 w-full items-stretch bg-[#060609]"
+          speed={0.45}
+          intensity={0.45}
+          grain={0.28}
+          vignette={1.15}
+          baseColor="#0a0a0a"
+          midColor="#141414"
+          sheenColor="#a1a1aa"
+          accentColor="#e4e4e7"
+          className="absolute inset-0 h-full min-h-0 w-full items-stretch bg-[#0a0a0a]"
         />
-        {/* Readability scrim: mute the aurora's bright ribbons so light UI text
-            keeps contrast, with an extra darken behind the centered hero. */}
-        <div className="absolute inset-0 bg-[#06060b]/45" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_65%_55%_at_50%_45%,rgba(6,6,11,0.55),transparent_72%)]" />
+        {/* Keep text readable — soft zinc scrim, brand-neutral */}
+        <div className="absolute inset-0 bg-[#0a0a0a]/50" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_65%_55%_at_50%_42%,rgba(10,10,10,0.5),transparent_72%)]" />
       </div>
 
-      {/* Light mode: soft neutral silk wash */}
-      <div className="absolute inset-0 block dark:hidden">
-        <DottedSurface className="opacity-60" />
+      {/* Light mode: soft zinc wash matching app chrome */}
+      <div className="absolute inset-0 block dark:hidden bg-[hsl(220_20%_96%)]">
+        <DottedSurface className="opacity-50" />
         <div
           aria-hidden
           className={cn(
             "absolute -top-10 left-1/2 size-full -translate-x-1/2 rounded-full",
-            "bg-[radial-gradient(ellipse_at_center,hsl(var(--foreground)/0.06),transparent_55%)]",
+            "bg-[radial-gradient(ellipse_at_center,hsl(var(--foreground)/0.05),transparent_55%)]",
             "blur-[40px]",
           )}
         />
-        <div className="absolute top-[-25%] left-1/2 -translate-x-1/2 h-[60vh] w-[90vw] max-w-[1000px] rounded-full bg-[#7c6cf0]/[0.05] blur-[120px]" />
-        <div className="absolute bottom-[-15%] right-[-8%] h-[45vh] w-[55vw] max-w-[700px] rounded-full bg-[#a9b4e0]/[0.05] blur-[100px]" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_70%_45%_at_50%_0%,rgba(124,108,240,0.06),transparent_65%)]" />
+        <div className="absolute top-[-20%] left-1/2 -translate-x-1/2 h-[55vh] w-[85vw] max-w-[900px] rounded-full bg-zinc-400/[0.06] blur-[110px]" />
+        <div className="absolute bottom-[-10%] right-[-6%] h-[40vh] w-[50vw] max-w-[600px] rounded-full bg-zinc-500/[0.05] blur-[90px]" />
       </div>
     </div>
   );
@@ -1593,9 +1591,9 @@ export default function VibePage() {
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   onClick={() => void loadHistorySession(sessions[0]!.id)}
-                  className="mb-8 w-full text-left rounded-2xl border border-emerald-500/25 bg-emerald-500/8 px-4 py-3.5 hover:bg-emerald-500/12 transition-colors"
+                  className="mb-8 w-full text-left rounded-2xl border border-border/60 bg-card/50 backdrop-blur-md px-4 py-3.5 hover:bg-card/80 hover:border-border transition-colors"
                 >
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-500/90">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                     Continue where you left off
                   </p>
                   <div className="mt-1.5 flex items-center justify-between gap-3">
@@ -1606,7 +1604,7 @@ export default function VibePage() {
                         {sessions.length > 1 ? ` · ${sessions.length} drafts total` : ""}
                       </p>
                     </div>
-                    <span className="shrink-0 text-xs font-medium text-emerald-500">Open →</span>
+                    <span className="shrink-0 text-xs font-medium text-foreground">Open →</span>
                   </div>
                 </motion.button>
               )}
@@ -1717,7 +1715,7 @@ export default function VibePage() {
                     {draftTitle || (refineId ? "Improve your agent" : "Build your agent")}
                   </p>
                   {draftSavedFlash && (
-                    <span className="text-[10px] font-medium text-emerald-500 shrink-0 animate-in fade-in">
+                    <span className="text-[10px] font-medium text-foreground/70 shrink-0 animate-in fade-in">
                       Saved
                     </span>
                   )}
@@ -1726,7 +1724,7 @@ export default function VibePage() {
                   <div className="mt-1.5 flex items-center gap-2 min-w-0">
                     <div className="flex-1 h-1 rounded-full bg-muted/60 overflow-hidden max-w-[160px]">
                       <div
-                        className="h-full rounded-full bg-emerald-500 transition-all duration-500"
+                        className="h-full rounded-full bg-foreground/80 transition-all duration-500"
                         style={{ width: `${Math.round((vibeProgress.doneCount / vibeProgress.steps.length) * 100)}%` }}
                       />
                     </div>
@@ -2640,7 +2638,7 @@ function EmptyState() {
   return (
     <div className="flex flex-col items-center justify-center min-h-full py-16 text-center gap-8">
       <div className="relative">
-        <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-[#7c6cf0]/20 via-[#a9b4e0]/12 to-transparent blur-2xl scale-150" />
+        <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-zinc-400/15 via-zinc-500/8 to-transparent blur-2xl scale-150" />
         <div className="relative h-20 w-20 rounded-3xl border border-border/30 bg-card/30 backdrop-blur-xl flex items-center justify-center p-3">
           <Sparkles className="h-8 w-8 text-muted-foreground/60" />
         </div>
