@@ -62,7 +62,8 @@ import TransfersPage from "@/pages/transfers";
 import VoicesPage from "@/pages/voices";
 import TestSimulatorPage from "@/pages/test-simulator";
 import VibePage from "@/pages/vibe";
-import CommandCenterPage from "@/pages/command-center/index";
+import HomePage from "@/pages/home/index";
+import CommandCenterRedirect from "@/pages/command-center/index";
 import MemoryPage from "@/pages/memory/index";
 import DocsPage from "@/pages/docs/index";
 
@@ -243,7 +244,7 @@ function AppRoot() {
   if (isLoading) return <SnapServeLoader />;
   const list = Array.isArray(agents) ? agents : (agents as any)?.agents ?? [];
   if (!list.length) return <Redirect to="/app/vibe" />;
-  return <Redirect to="/app/command-center" />;
+  return <Redirect to="/app/home" />;
 }
 
 function AppRoutes() {
@@ -268,7 +269,8 @@ function AppRoutes() {
       <VoiceAssistant />
       <Switch>
         <Route path="/app" component={AppRoot} />
-        <Route path="/app/command-center" component={CommandCenterPage} />
+        <Route path="/app/home" component={HomePage} />
+        <Route path="/app/command-center" component={CommandCenterRedirect} />
         <Route path="/app/analytics" component={AnalyticsPage} />
         <Route path="/app/agents" component={AgentBuilder} />
 

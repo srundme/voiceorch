@@ -3,7 +3,7 @@ import { Link, useLocation } from "wouter";
 import { useTheme } from "@/components/theme-provider";
 import { GlobalSearch, useGlobalSearchTrigger } from "@/components/GlobalSearch";
 import {
-  Monitor, Users, Zap, CalendarDays, Brain, Phone,
+  Home, Users, Zap, CalendarDays, Brain, Phone,
   Settings, Key, Webhook, Wallet, TrendingUp, ShieldCheck,
   Mic2, Menu, ChevronDown, ChevronLeft, ChevronRight,
   LogOut, Bell, Search, SlidersHorizontal, BookOpen, PhoneMissed, PlugZap, Sun, Moon, Sparkles,
@@ -76,7 +76,7 @@ const LS_COLLAPSED    = "snapserve:sidebar-collapsed";
 const LS_SETTINGS     = "snapserve:settings-open";
 
 const NAV_PRIMARY = [
-  { name: "Command Center",  href: "/app/command-center",  icon: Monitor },
+  { name: "Home",            href: "/app/home",            icon: Home },
   { name: "Agents",          href: "/app/agents",          icon: Users },
   { name: "Vibe Build",      href: "/app/vibe",            icon: Sparkles },
   { name: "Agent Knowledge", href: "/app/knowledge-bases", icon: BookOpen },
@@ -104,7 +104,8 @@ const NAV_SETTINGS = [
 ];
 
 const ROUTE_TITLES: [string, string][] = [
-  ["/app/command-center",  "Command Center"],
+  ["/app/home",            "Home"],
+  ["/app/command-center",  "Home"],
   ["/app/vibe",            "Vibe Build"],
   ["/app/agents",          "Agents"],
   ["/app/knowledge-bases", "Agent Knowledge"],
@@ -476,7 +477,7 @@ function SidebarContent({
 
 /* ─── Mobile bottom nav ──────────────────────────────────────────────────── */
 const MOBILE_BOTTOM_NAV = [
-  { name: "Home",    href: "/app/command-center", icon: Monitor },
+  { name: "Home",    href: "/app/home", icon: Home },
   { name: "Vibe",    href: "/app/vibe",           icon: Sparkles },
   { name: "Agents",  href: "/app/agents",         icon: Users },
   { name: "Calls",   href: "/app/calls",          icon: Phone },

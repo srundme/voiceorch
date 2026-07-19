@@ -401,7 +401,7 @@ export default function OnboardingPage() {
   // rather than jumping straight into the questionnaire.
   useEffect(() => {
     if (!statusLoading && status?.completed) {
-      setLocation("/app/command-center");
+      setLocation("/app/home");
     } else if (!statusLoading && status?.completed === false) {
       setStep(1);
     }

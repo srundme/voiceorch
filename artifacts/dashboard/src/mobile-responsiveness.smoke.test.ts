@@ -51,11 +51,12 @@ describe("mobile responsiveness smoke", () => {
     expect(vibe).toMatch(/pb-safe/);
   });
 
-  it("command center stacks and collapses the ops rail", () => {
-    const cc = src("src/pages/command-center/index.tsx");
-    expect(cc).toMatch(/flex-col lg:flex-row/);
-    expect(cc).toMatch(/hidden lg:flex w-\[280px\]/);
-    expect(cc).toMatch(/sm:hidden divide-y/);
+  it("home page stacks KPIs and action grids for mobile", () => {
+    const home = src("src/pages/home/index.tsx");
+    expect(home).toMatch(/grid-cols-2 sm:grid-cols-4/);
+    expect(home).toMatch(/grid lg:grid-cols-2/);
+    expect(home).toMatch(/Needs attention/);
+    expect(home).toMatch(/Quick actions/);
   });
 
   it("outbound / OTP dialogs use large touch CTAs", () => {
