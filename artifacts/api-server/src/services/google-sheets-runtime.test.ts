@@ -83,7 +83,9 @@ describe("defaultColumnMapForUseCase", () => {
 });
 
 describe("sheetRange", () => {
-  it("quotes tab names with spaces", () => {
+  it("always quotes tab names", () => {
     expect(sheetRange("Call Log", "A1")).toBe("'Call Log'!A1");
+    expect(sheetRange("Call Log", "A1:ZZ1")).toBe("'Call Log'!A1:ZZ1");
+    expect(sheetRange("Leads", "A1")).toBe("'Leads'!A1");
   });
 });

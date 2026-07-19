@@ -161,11 +161,10 @@ export function resolveMatchColumnIndex(headers: string[], matchColumn: string):
   return headers.findIndex((h) => PHONE_HEADER_RE.test(h));
 }
 
+/** Always quote sheet titles for Sheets API A1 ranges (spaces, unicode, etc.). */
 export function escapeSheetName(name: string): string {
-  if (/['\s!]/.test(name)) {
-    return `'${name.replace(/'/g, "''")}'`;
-  }
-  return name;
+  const cleaned = String(name ?? "").trim() || "Sheet1";
+  return `'${cleaned.replace(/'/g, "''")}'`;
 }
 
 export function sheetRange(sheetName: string, a1: string): string {

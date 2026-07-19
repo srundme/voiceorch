@@ -299,7 +299,7 @@ export async function ensureHeaders(
   if (headers.length === 0) return { headers: [], wrote: false };
   const auth = await getAuthedClient(connectionId, userId);
   const sheets = google.sheets({ version: "v4", auth });
-  const range = sheetRange(sheetName, "1:1");
+  const range = sheetRange(sheetName, "A1:ZZ1");
   const existing = await sheets.spreadsheets.values.get({
     spreadsheetId,
     range,
@@ -668,7 +668,7 @@ export async function createSpreadsheet(
   if (template.headers.length > 0) {
     await sheets.spreadsheets.values.update({
       spreadsheetId,
-      range: `${sheetName}!A1`,
+      range: sheetRange(sheetName, "A1"),
       valueInputOption: "RAW",
       requestBody: { values: [template.headers] },
     });
