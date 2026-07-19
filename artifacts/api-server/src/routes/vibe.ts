@@ -1484,17 +1484,11 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
       agentConfig.compliance = comp;
     }
 
-    // Greeting — always a simple opener; the system prompt handles the full intro.
-    // Only honour a user-typed quoted line from their call-flow notes.
-    function buildGreeting(_name: string, _company: string, lang: string, callFlowNotes: string | undefined): string {
-      if (callFlowNotes) {
-        // Only match double-quotes (straight " or curly "" ) — never apostrophes/single-quotes,
-        // which are common mid-word (e.g. "customer's") and cause partial-phrase extraction.
-        const q = callFlowNotes.match(/[""][^""]{8,80}[""]/);
-        if (q) return q[0].slice(1, -1);
-      }
-      // Simple locale greeting — no name/company at all.
-      // The system prompt teaches the agent to introduce itself after the caller responds.
+    // Greeting — ALWAYS a short hello only. Never pull discovery questions /
+    // appointment lines from call-flow notes into the welcome field (that made
+    // callers hear "could I get your full name…" as the opener). The system
+    // prompt owns the real intro after the caller responds.
+    function buildGreeting(lang: string): string {
       switch (lang) {
         case "ta-IN": return "வணக்கம்!";
         case "hi-IN": return "नमस्ते!";
@@ -1508,11 +1502,17 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
         default:      return "Hello!";
       }
     }
-    // In refine modee mode, preserve the agent's existing greeting unless the user explicitly
-    // changed it (Gemini carries it forward in cfg.greetingMessage from the refine context).
-    const greetingMessage = (isRefine && cfg.greetingMessage)
-      ? cfg.greetingMessage
-      : buildGreeting(cfg.agentName, cfg.companyName, langCode, cfg.callFlowNotes);
+    function isSimpleGreeting(s: string): boolean {
+      const t = s.trim();
+      // Short hello-style only — reject questions / multi-sentence openers.
+      return t.length > 0 && t.length <= 24 && !/[?]/.test(t) && t.split(/\s+/).length <= 4;
+    }
+    // Create: always Hello. Refine: keep only if already a short hello; otherwise
+    // reset (fixes agents that inherited a call-flow quote as the welcome).
+    const simpleHello = buildGreeting(langCode);
+    const greetingMessage = (isRefine && cfg.greetingMessage && isSimpleGreeting(cfg.greetingMessage))
+      ? cfg.greetingMessage.trim()
+      : simpleHello;
 
     // Build tools array — matches the JSON shape the builder reads from agent.tools
     const tools: Record<string, unknown>[] = [];
