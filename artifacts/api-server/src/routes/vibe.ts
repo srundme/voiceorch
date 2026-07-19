@@ -1377,12 +1377,16 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
     emit({ type: "status", message: "Creating your agent…" });
 
     // Build agentConfig object
+    const agentTimezone = (cfg.timezone?.trim() || "Asia/Kolkata");
     const agentConfig: Record<string, unknown> = {
       recordingEnabled:     true,
       summarizationEnabled: true,
       languageAutoDetect:   cfg.languageMode === "multi",
       isMultilingual:       cfg.languageMode === "multi",
       direction:            cfg.direction || "inbound",
+      // India-first default — always persist so the Prompt tab never shows "Not set"
+      // and datetime injection / calendars share the same zone.
+      timezone:             agentTimezone,
     };
     if (cfg.direction === "outbound") {
       agentConfig.autoRedial = { enabled: true, maxAttempts: 3 };
@@ -1497,7 +1501,6 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
       }
     }
     // Scheduling tools: added for the exact subset the user confirmed
-    const agentTimezone = cfg.timezone || "Asia/Kolkata";
     const nameMap: Record<string, string> = {
       native_booking:              "book_appointment",
       native_check_availability:   "check_availability",
