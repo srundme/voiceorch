@@ -1698,8 +1698,8 @@ export default function VibePage() {
           <VibeAmbientBg />
 
           {/* Floating header — keep chrome minimal for non-techies */}
-          <header className="relative z-10 flex items-center justify-between px-4 sm:px-6 h-14 shrink-0 border-b border-border/20 bg-background/60 backdrop-blur-xl">
-            <div className="flex items-center gap-1.5 min-w-0 flex-1">
+          <header className="relative z-10 flex items-center justify-between px-4 sm:px-6 min-h-16 py-2.5 shrink-0 border-b border-border/20 bg-background/60 backdrop-blur-xl">
+            <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
               <Button
                 variant="ghost"
                 size="sm"
@@ -1709,7 +1709,8 @@ export default function VibePage() {
                 <ArrowLeft className="h-4 w-4" />
                 <span className="text-sm font-medium">Back</span>
               </Button>
-              <div className="min-w-0 pl-1 flex-1 max-w-md">
+              <div className="hidden sm:block h-8 w-px shrink-0 bg-border/60" aria-hidden />
+              <div className="min-w-0 flex-1 max-w-lg">
                 <div className="flex items-center gap-2 min-w-0">
                   <p className="font-semibold text-sm leading-none truncate">
                     {draftTitle || (refineId ? "Improve your agent" : "Build your agent")}
@@ -1721,8 +1722,8 @@ export default function VibePage() {
                   )}
                 </div>
                 {phase !== "done" && (
-                  <div className="mt-1.5 flex items-center gap-2 min-w-0">
-                    <div className="flex-1 h-1 rounded-full bg-muted/60 overflow-hidden max-w-[160px]">
+                  <div className="mt-2 flex items-center gap-2.5 min-w-0">
+                    <div className="flex-1 h-1 rounded-full bg-muted/60 overflow-hidden max-w-[180px]">
                       <div
                         className="h-full rounded-full bg-foreground/80 transition-all duration-500"
                         style={{ width: `${Math.round((vibeProgress.doneCount / vibeProgress.steps.length) * 100)}%` }}

@@ -1182,6 +1182,29 @@ export function usePlatformEmails(params: { page?: number; userId?: string; sear
   });
 }
 
+export interface EmailReportResponse {
+  days: number;
+  since: string;
+  totals: { total: number; sent: number; failed: number };
+  byType: Array<{ emailType: string; total: number; sent: number; failed: number }>;
+  byDay: Array<{ day: string; total: number; sent: number; failed: number }>;
+  recentFailures: Array<{
+    id: number;
+    toEmail: string;
+    subject: string;
+    emailType: string;
+    errorMessage: string | null;
+    sentAt: string;
+  }>;
+}
+
+export function useEmailReport(days: number = 30) {
+  return useQuery({
+    queryKey: ["admin", "emails", "report", days],
+    queryFn: () => adminFetch<EmailReportResponse>(`/emails/report?days=${days}`),
+  });
+}
+
 export function usePlatformEmailDetail(id: number | null) {
   return useQuery({
     queryKey: ["admin", "emails", id],

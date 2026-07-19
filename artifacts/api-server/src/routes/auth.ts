@@ -183,12 +183,16 @@ router.post("/auth/register", async (req, res): Promise<void> => {
         normalizedEmail,
         "Welcome back to SnapServe!",
         welcomeBackEmail(user.name ?? normalizedEmail.split("@")[0]!),
+        undefined,
+        { emailType: "welcome_back", toUserId: sub, toName: user.name },
       ).catch(err => logger.warn({ err, email: normalizedEmail }, "Welcome-back email send failed"));
     } else {
       sendBrevoEmail(
         normalizedEmail,
         "Welcome to SnapServe! 🎉",
         welcomeEmail(user.name ?? normalizedEmail.split("@")[0]!, FREE_CREDIT_CENTS),
+        undefined,
+        { emailType: "welcome", toUserId: sub, toName: user.name },
       ).catch(err => logger.warn({ err, email: normalizedEmail }, "Welcome email send failed"));
     }
 
@@ -334,6 +338,8 @@ router.post("/auth/password-reset/request", async (req, res): Promise<void> => {
         normalizedEmail,
         "Your SnapServe password reset code",
         passwordResetOtpEmail(otp),
+        undefined,
+        { emailType: "password_reset", toUserId: user.clerkId ?? String(user.id), toName: user.name },
       );
     } catch (emailErr) {
       logger.warn({ emailErr, email: normalizedEmail }, "OTP email send failed");
@@ -535,6 +541,8 @@ router.post("/auth/password-reset/verify", async (req, res): Promise<void> => {
       normalizedEmail,
       "Your SnapServe password was changed",
       passwordChangedEmail(user.name ?? normalizedEmail.split("@")[0]!),
+      undefined,
+      { emailType: "password_changed", toUserId: user.clerkId ?? String(user.id), toName: user.name },
     ).catch(err => logger.warn({ err, email: normalizedEmail }, "Password-changed email send failed"));
 
     res.json({ token });
@@ -703,6 +711,8 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
           normalizedEmail,
           "Welcome to SnapServe! 🎉",
           welcomeEmail(user.name ?? normalizedEmail.split("@")[0]!, FREE_CREDIT_CENTS),
+          undefined,
+          { emailType: "welcome", toUserId: googleSub, toName: user.name },
         ).catch(err => logger.warn({ err, email: normalizedEmail }, "Google signup welcome email failed"));
       }
     } else if (user.status === "deleted") {
@@ -730,6 +740,8 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
           normalizedEmail,
           "Welcome back to SnapServe!",
           welcomeBackEmail(user.name ?? normalizedEmail.split("@")[0]!),
+          undefined,
+          { emailType: "welcome_back", toUserId: googleSub, toName: user.name },
         ).catch(err => logger.warn({ err, email: normalizedEmail }, "Google reactivation welcome-back email failed"));
       }
     } else if (user.status !== "active") {

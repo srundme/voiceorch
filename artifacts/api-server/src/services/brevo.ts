@@ -1,3 +1,4 @@
+import { db, platformEmailsTable } from "@workspace/db";
 import { logger } from "../lib/logger.js";
 
 /**
@@ -37,41 +38,133 @@ export interface BrevoAttachment {
   name: string;
 }
 
+/** Metadata for admin Email Reports (`platform_emails`). */
+export interface BrevoEmailMeta {
+  emailType: string;
+  toUserId?: string | null;
+  toName?: string | null;
+  sentBy?: string;
+  /**
+   * When true, caller inserts into `platform_emails` itself (admin compose).
+   * Default false — every Brevo send is logged for the email report.
+   */
+  skipLog?: boolean;
+}
+
+async function logPlatformEmail(row: {
+  toEmail: string;
+  toUserId?: string | null;
+  toName?: string | null;
+  subject: string;
+  htmlBody: string;
+  sentBy: string;
+  emailType: string;
+  status: string;
+  errorMessage?: string | null;
+}): Promise<void> {
+  try {
+    await db.insert(platformEmailsTable).values({
+      toEmail: row.toEmail,
+      toUserId: row.toUserId ?? null,
+      toName: row.toName ?? null,
+      subject: row.subject,
+      htmlBody: row.htmlBody,
+      sentBy: row.sentBy,
+      emailType: row.emailType,
+      status: row.status,
+      errorMessage: row.errorMessage ?? null,
+    });
+  } catch (err) {
+    logger.warn({ err, to: row.toEmail, emailType: row.emailType }, "Failed to log platform email");
+  }
+}
+
 /**
  * Sends a transactional email via Brevo, optionally with file attachments.
  * Requires BREVO_API_KEY environment variable.
+ *
+ * When `meta` is provided (recommended), the send is written to `platform_emails`
+ * for the admin Email Reports page. OTP bodies are redacted before storage.
  */
 export async function sendBrevoEmail(
   to: string,
   subject: string,
   htmlBody: string,
   attachments?: BrevoAttachment[],
+  meta?: BrevoEmailMeta,
 ): Promise<void> {
   const apiKey = process.env["BREVO_API_KEY"];
   if (!apiKey) throw new Error("BREVO_API_KEY is not configured. Add it to the environment secrets.");
 
-  const resp = await fetch("https://api.brevo.com/v3/smtp/email", {
-    method: "POST",
-    headers: {
-      "api-key":      apiKey,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      sender:  { name: "SnapServe", email: "noreply@snapserve.ai" },
-      to:      [{ email: to }],
-      subject,
-      htmlContent: htmlBody,
-      ...(attachments && attachments.length > 0
-        ? { attachment: attachments.map((a) => ({ content: a.content, name: a.name })) }
-        : {}),
-    }),
-  });
+  const emailType = meta?.emailType ?? "transactional";
+  const sentBy = meta?.sentBy ?? "system";
+  const shouldLog = !meta?.skipLog;
+  // Never persist OTP / password-reset HTML (contains one-time codes).
+  const logBody =
+    emailType === "password_reset"
+      ? "<p>[redacted — password reset OTP]</p>"
+      : htmlBody;
 
-  if (!resp.ok) {
-    const text = await resp.text();
-    logger.warn({ status: resp.status, to }, `Brevo email failed: ${text}`);
-    throw new Error(`Brevo email error ${resp.status}: ${text}`);
+  let status = "sent";
+  let errorMessage: string | null = null;
+
+  try {
+    const resp = await fetch("https://api.brevo.com/v3/smtp/email", {
+      method: "POST",
+      headers: {
+        "api-key":      apiKey,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        sender:  { name: "SnapServe", email: "noreply@snapserve.ai" },
+        to:      [{ email: to }],
+        subject,
+        htmlContent: htmlBody,
+        ...(attachments && attachments.length > 0
+          ? { attachment: attachments.map((a) => ({ content: a.content, name: a.name })) }
+          : {}),
+      }),
+    });
+
+    if (!resp.ok) {
+      const text = await resp.text();
+      logger.warn({ status: resp.status, to, emailType }, `Brevo email failed: ${text}`);
+      status = "failed";
+      errorMessage = `Brevo email error ${resp.status}: ${text}`;
+      throw new Error(errorMessage);
+    }
+
+    logger.info({ to, emailType }, "Brevo email sent");
+  } catch (err) {
+    status = "failed";
+    errorMessage = err instanceof Error ? err.message : String(err);
+    if (shouldLog) {
+      await logPlatformEmail({
+        toEmail: to,
+        toUserId: meta?.toUserId,
+        toName: meta?.toName,
+        subject,
+        htmlBody: logBody,
+        sentBy,
+        emailType,
+        status,
+        errorMessage,
+      });
+    }
+    throw err;
   }
 
-  logger.info({ to }, "Brevo email sent");
+  if (shouldLog) {
+    await logPlatformEmail({
+      toEmail: to,
+      toUserId: meta?.toUserId,
+      toName: meta?.toName,
+      subject,
+      htmlBody: logBody,
+      sentBy,
+      emailType,
+      status,
+      errorMessage: null,
+    });
+  }
 }

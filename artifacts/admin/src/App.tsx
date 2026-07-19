@@ -21,6 +21,7 @@ import BoardRetention from "@/pages/board/retention";
 import BoardMoat from "@/pages/board/moat";
 import BoardUnitEconomics from "@/pages/board/unit-economics";
 import SignupsReport from "@/pages/reports/signups";
+import EmailsReport from "@/pages/reports/emails";
 import ManagedKeys from "@/pages/managed-keys";
 import ManagedNumbers from "@/pages/managed-numbers";
 import Voices from "@/pages/voices";
@@ -98,6 +99,7 @@ function Router() {
       <ProtectedRoute path="/board/moat" component={BoardMoat} />
       <ProtectedRoute path="/board/unit-economics" component={BoardUnitEconomics} />
       <ProtectedRoute path="/reports/signups" component={SignupsReport} />
+      <ProtectedRoute path="/reports/emails" component={EmailsReport} />
       <ProtectedRoute path="/managed-keys" component={ManagedKeys} />
       <ProtectedRoute path="/managed-numbers" component={ManagedNumbers} />
       <ProtectedRoute path="/voices" component={Voices} />

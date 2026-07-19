@@ -69,6 +69,76 @@ router.get("/admin/emails", async (req, res): Promise<void> => {
   }
 });
 
+// ─── Email reports (aggregates for admin dashboard) ───────────────────────────
+
+router.get("/admin/emails/report", async (req, res): Promise<void> => {
+  try {
+    const days = Math.min(90, Math.max(1, parseInt(String(req.query["days"] ?? "30"), 10) || 30));
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+    const [totals] = await db
+      .select({
+        total: sql<number>`count(*)::int`,
+        sent: sql<number>`count(*) filter (where ${platformEmailsTable.status} = 'sent')::int`,
+        failed: sql<number>`count(*) filter (where ${platformEmailsTable.status} = 'failed')::int`,
+      })
+      .from(platformEmailsTable)
+      .where(sql`${platformEmailsTable.sentAt} >= ${since}`);
+
+    const byType = await db
+      .select({
+        emailType: platformEmailsTable.emailType,
+        total: sql<number>`count(*)::int`,
+        sent: sql<number>`count(*) filter (where ${platformEmailsTable.status} = 'sent')::int`,
+        failed: sql<number>`count(*) filter (where ${platformEmailsTable.status} = 'failed')::int`,
+      })
+      .from(platformEmailsTable)
+      .where(sql`${platformEmailsTable.sentAt} >= ${since}`)
+      .groupBy(platformEmailsTable.emailType)
+      .orderBy(sql`count(*) desc`);
+
+    const byDay = await db
+      .select({
+        day: sql<string>`to_char(date_trunc('day', ${platformEmailsTable.sentAt}), 'YYYY-MM-DD')`,
+        total: sql<number>`count(*)::int`,
+        sent: sql<number>`count(*) filter (where ${platformEmailsTable.status} = 'sent')::int`,
+        failed: sql<number>`count(*) filter (where ${platformEmailsTable.status} = 'failed')::int`,
+      })
+      .from(platformEmailsTable)
+      .where(sql`${platformEmailsTable.sentAt} >= ${since}`)
+      .groupBy(sql`date_trunc('day', ${platformEmailsTable.sentAt})`)
+      .orderBy(sql`date_trunc('day', ${platformEmailsTable.sentAt})`);
+
+    const recentFailures = await db
+      .select({
+        id: platformEmailsTable.id,
+        toEmail: platformEmailsTable.toEmail,
+        subject: platformEmailsTable.subject,
+        emailType: platformEmailsTable.emailType,
+        errorMessage: platformEmailsTable.errorMessage,
+        sentAt: platformEmailsTable.sentAt,
+      })
+      .from(platformEmailsTable)
+      .where(
+        sql`${platformEmailsTable.sentAt} >= ${since} AND ${platformEmailsTable.status} = 'failed'`,
+      )
+      .orderBy(desc(platformEmailsTable.sentAt))
+      .limit(25);
+
+    res.json({
+      days,
+      since: since.toISOString(),
+      totals: totals ?? { total: 0, sent: 0, failed: 0 },
+      byType,
+      byDay,
+      recentFailures,
+    });
+  } catch (err) {
+    req.log.error({ err }, "admin/emails/report failed");
+    res.status(500).json({ error: "Failed to build email report" });
+  }
+});
+
 // ─── Get full email body ──────────────────────────────────────────────────────
 
 router.get("/admin/emails/:id", async (req, res): Promise<void> => {
@@ -107,7 +177,13 @@ router.post("/admin/emails/send", async (req, res): Promise<void> => {
   let errorMessage: string | null = null;
 
   try {
-    await sendBrevoEmail(toEmail, subject, htmlBody);
+    await sendBrevoEmail(toEmail, subject, htmlBody, undefined, {
+      emailType: emailType ?? "manual",
+      toUserId: toUserId ?? null,
+      toName: toName ?? null,
+      sentBy: "admin",
+      skipLog: true,
+    });
     logger.info({ toEmail, subject }, "Manual admin email sent");
   } catch (err) {
     status = "failed";
@@ -176,7 +252,13 @@ router.post("/admin/users/:clerkId/send-email", async (req, res): Promise<void> 
     let errorMessage: string | null = null;
 
     try {
-      await sendBrevoEmail(user.email, subject, htmlBody);
+      await sendBrevoEmail(user.email, subject, htmlBody, undefined, {
+        emailType: emailType ?? "manual",
+        toUserId: clerkId,
+        toName: user.name ?? null,
+        sentBy: "admin",
+        skipLog: true,
+      });
       logger.info({ toEmail: user.email, subject, clerkId }, "Admin email to user sent");
     } catch (err) {
       status = "failed";

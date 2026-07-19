@@ -82,6 +82,8 @@ async function runOnboardingDrip(): Promise<void> {
             user.email,
             "Create your first voice agent on SnapServe",
             onboardingDay1Email(user.name ?? "there"),
+            undefined,
+            { emailType: "onboarding_d1", toUserId: String(user.id), toName: user.name },
           );
           await markSent(key);
           logger.info({ userId: user.id }, "Onboarding Day 1 email sent");
@@ -100,6 +102,8 @@ async function runOnboardingDrip(): Promise<void> {
             user.email,
             "Ready to launch your first campaign?",
             onboardingDay3Email(user.name ?? "there"),
+            undefined,
+            { emailType: "onboarding_d3", toUserId: String(user.id), toName: user.name },
           );
           await markSent(key);
           logger.info({ userId: user.id }, "Onboarding Day 3 email sent");
@@ -166,7 +170,11 @@ async function runZeroAgentDrip(): Promise<void> {
       const key = `email:noagent:${step}:${user.id}`;
       if (await hasSent(key)) return;
       try {
-        await sendBrevoEmail(user.email!, subject, html);
+        await sendBrevoEmail(user.email!, subject, html, undefined, {
+          emailType: `noagent_${step}`,
+          toUserId: String(user.id),
+          toName: user.name,
+        });
         await markSent(key);
         logger.info({ userId: user.id, step }, "Zero-agent drip email sent");
       } catch (err) {
@@ -289,6 +297,8 @@ async function runMonthlySummary(): Promise<void> {
         user.email,
         `Your ${prevMonthLabel} summary — SnapServe`,
         monthlySummaryEmail(user.name ?? "there", stats),
+        undefined,
+        { emailType: "monthly_summary", toUserId: String(user.id), toName: user.name },
       );
       await markSent(sentKey);
       logger.info({ userId: user.id, month: prevMonthLabel }, "Monthly summary email sent");

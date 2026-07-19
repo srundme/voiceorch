@@ -105,6 +105,11 @@ export async function issueInvoice(params: IssueInvoiceParams): Promise<Invoice 
           `Tax Invoice ${invoiceNumber} — SnapServe`,
           renderInvoiceHtml(invoice!),
           [{ content: pdf.toString("base64"), name: `${invoiceNumber.replace(/\//g, "-")}.pdf` }],
+          {
+            emailType: "invoice",
+            toUserId: String(params.user.id),
+            toName: params.user.name ?? null,
+          },
         );
         await db.update(invoicesTable).set({ emailedAt: new Date() }).where(eq(invoicesTable.id, invoice!.id));
       } catch (emailErr) {
