@@ -5,6 +5,7 @@ import { toReadableError } from "../utils.js";
 import { logger } from "../../lib/logger.js";
 import { db, scheduledCallbacksTable, callsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
+import { startEarlyAmbientKeepalive } from "./early-ambient.js";
 
 /**
  * Plivo AudioSocket / Multistream WebSocket handler
@@ -117,6 +118,15 @@ export async function handlePlivoWebSocket(
           }
         }
 
+        // Ambient during createSession — Plivo previously sent nothing until
+        // the pipeline existed (pure dead air, including no agent bg noise).
+        const earlyAmbient = startEarlyAmbientKeepalive({
+          agentId,
+          format: "mulaw",
+          send: sendAudioToPlivo,
+        });
+        const stopEarlyAmbient = (): void => { earlyAmbient.stop(); };
+
         try {
           const { sessionId: sid } = await createSession({
             agentId,
@@ -129,8 +139,12 @@ export async function handlePlivoWebSocket(
             resumeContext,
             sourceCallbackReason,
             scheduledCallbackId: callbackId,
-            onAudioOut: sendAudioToPlivo,
+            onAudioOut: (audio: Buffer) => {
+              stopEarlyAmbient();
+              sendAudioToPlivo(audio);
+            },
             onCallEnd: () => {
+              stopEarlyAmbient();
               // Do NOT close the WS if the call was transferred — the provider is
               // redirecting the leg to the human agent; a close frame aborts it.
               const sess = sessionId ? getSession(sessionId) : null;
@@ -142,6 +156,7 @@ export async function handlePlivoWebSocket(
             },
             onBargeIn: sendBargeIn,
           });
+          stopEarlyAmbient();
           sessionId = sid;
           if (sessionEndedBeforeReady) {
             logger.warn({ sessionId, agentId }, "Plivo session ended before setup completed — ending immediately");
@@ -150,6 +165,7 @@ export async function handlePlivoWebSocket(
             logger.info({ sessionId, agentId }, "Plivo session started");
           }
         } catch (err) {
+          stopEarlyAmbient();
           logger.error(
             { err, agentId, externalCallId: callId, streamId, provider: "plivo", reason: toReadableError(err, "Plivo session setup failed") },
             "Failed to create Plivo session — closing socket before greeting",

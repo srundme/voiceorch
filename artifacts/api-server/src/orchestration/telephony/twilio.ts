@@ -4,6 +4,7 @@ import { toReadableError } from "../utils.js";
 import { logger } from "../../lib/logger.js";
 import { db, scheduledCallbacksTable, callsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
+import { startEarlyAmbientKeepalive } from "./early-ambient.js";
 
 /**
  * Twilio Media Streams WebSocket handler
@@ -112,6 +113,15 @@ export async function handleTwilioWebSocket(
           }
         } catch { /* non-critical */ }
 
+        // Ambient during createSession — Twilio previously sent nothing until the
+        // pipeline existed, so the caller heard pure dead air (no agent bg noise).
+        const earlyAmbient = startEarlyAmbientKeepalive({
+          agentId,
+          format: "mulaw",
+          send: sendAudioToTwilio,
+        });
+        const stopEarlyAmbient = (): void => { earlyAmbient.stop(); };
+
         try {
           const { sessionId: sid } = await createSession({
             agentId,
@@ -124,8 +134,12 @@ export async function handleTwilioWebSocket(
             resumeContext,
             sourceCallbackReason,
             scheduledCallbackId: callbackId,
-            onAudioOut: sendAudioToTwilio,
+            onAudioOut: (audio: Buffer) => {
+              stopEarlyAmbient();
+              sendAudioToTwilio(audio);
+            },
             onCallEnd: () => {
+              stopEarlyAmbient();
               // Do NOT close the WS if the call was transferred — the provider is
               // redirecting the leg to the human agent; a close frame aborts it.
               const sess = sessionId ? getSession(sessionId) : null;
@@ -142,6 +156,7 @@ export async function handleTwilioWebSocket(
               }
             },
           });
+          stopEarlyAmbient();
           sessionId = sid;
           if (sessionEndedBeforeReady) {
             logger.warn({ sessionId, agentId }, "Twilio session ended before setup completed — ending immediately");
@@ -150,6 +165,7 @@ export async function handleTwilioWebSocket(
             logger.info({ sessionId, callSid, agentId }, "Twilio session started");
           }
         } catch (err) {
+          stopEarlyAmbient();
           logger.error(
             { err, agentId, externalCallId: callSid, streamSid, provider: "twilio", reason: toReadableError(err, "Twilio session setup failed") },
             "Failed to create Twilio session — closing socket before greeting",

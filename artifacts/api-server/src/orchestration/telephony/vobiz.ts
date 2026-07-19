@@ -4,6 +4,7 @@ import { toReadableError } from "../utils.js";
 import { logger } from "../../lib/logger.js";
 import { db, scheduledCallbacksTable, callsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
+import { startEarlyAmbientKeepalive } from "./early-ambient.js";
 
 /**
  * Vobiz WebSocket handler
@@ -195,28 +196,25 @@ export async function handleVobizWebSocket(
           }
         }
 
-        // Measures the pre-pipeline setup window (WS start → session ready) that
-        // the caller hears as silence frames only — the "dead air before anything
-        // starts" symptom. Watch setupMs in prod: if it collapses to <1 s after
-        // the DB warm-pool change, the dead air was cold DB setup; if it stays
-        // high the delay is elsewhere (e.g. the media bridge before this event).
+        // Measures the pre-pipeline setup window (WS start → session ready).
+        // Watch setupMs in prod for DB/setup latency; caller should hear ambient
+        // (not dead air) during this window via early-ambient keepalive below.
         const sessionSetupStartedAt = Date.now();
 
-        // ── Silence keepalive during session init ───────────────────────────
+        // ── Ambient keepalive during session init ───────────────────────────
         // VoBiz drops the call if the audio bridge receives no data for ~2 s
-        // even with keepCallAlive="true". This happens when createSession is
-        // slow due to DB pool latency or cold connections. Sending 20 ms
-        // silence frames (PCM zeros) keeps the VoBiz bridge alive until the
-        // first real pipeline audio arrives via onAudioOut.
-        const SILENCE_MS      = 20;
-        const SILENCE_SAMPLES = (8000 * SILENCE_MS) / 1000;           // 160 @ 8 kHz
-        const silenceFrame    = Buffer.alloc(SILENCE_SAMPLES * 2, 0);  // 16-bit LE PCM
-        let silenceTimer: ReturnType<typeof setInterval> | null = setInterval(() => {
-          if (ws.readyState === ws.OPEN) sendAudioToVobiz(silenceFrame);
-        }, SILENCE_MS);
-        const stopSilence = (): void => {
-          if (silenceTimer) { clearInterval(silenceTimer); silenceTimer = null; }
-        };
+        // even with keepCallAlive="true". Previously we sent PCM zeros — the
+        // caller heard pure dead air (no agent bg noise either) until
+        // createSession finished and the pipeline started. Early ambient sends
+        // real comfort/agent ambient from WS start so that gap is never silent.
+        const earlyAmbient = startEarlyAmbientKeepalive({
+          agentId,
+          format: "pcm16",
+          send: (chunk) => {
+            if (ws.readyState === ws.OPEN) sendAudioToVobiz(chunk);
+          },
+        });
+        const stopSilence = (): void => { earlyAmbient.stop(); };
 
         // Load resumeContext and callback reason from the originating call if this is a callback
         let priorResumeContext: Parameters<typeof createSession>[0]["resumeContext"] | undefined;
