@@ -2,7 +2,7 @@
  * Workflow execution engine.
  *
  * A workflow_run walks the workflow's ordered steps. Inline steps
- * (sheet_append/update, condition, send_webhook) run synchronously; async steps
+ * (condition, send_webhook) run synchronously; async steps
  * (make_call, delay) park the run and are resumed by the poller in
  * workflow-worker.ts — this keeps execution restart-proof (no reliance on
  * in-memory timers surviving deploys).
@@ -24,7 +24,6 @@ import { randomBytes } from "node:crypto";
 import { logger } from "../lib/logger.js";
 import { normalizePhone } from "../lib/phone-normalize.js";
 import { fireCampaignCall } from "../orchestration/campaignCaller.js";
-import { appendRow, updateRow } from "./google-sheets.js";
 
 const CALL_TIMEOUT_MS = 20 * 60 * 1000; // give up waiting on a call after 20 min
 
@@ -44,11 +43,6 @@ function toStr(v: unknown): string {
   if (v === null || v === undefined) return "";
   if (typeof v === "object") return JSON.stringify(v);
   return String(v);
-}
-
-/** Replace {{path}} tokens with values resolved from the run context. */
-function interpolate(template: string, ctx: Ctx): string {
-  return template.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_, p: string) => toStr(getPath(ctx, p)));
 }
 
 /** Flatten top-level primitive context fields into a string map for lead vars. */
@@ -176,16 +170,6 @@ export async function advanceRun(runId: number): Promise<void> {
           await finishRun(run.id, context, "completed");
           return;
         }
-        idx++;
-        continue;
-      }
-      if (step.type === "sheet_append") {
-        await doSheetWrite(step, context, false);
-        idx++;
-        continue;
-      }
-      if (step.type === "sheet_update") {
-        await doSheetWrite(step, context, true);
         idx++;
         continue;
       }
@@ -344,31 +328,6 @@ function evalCondition(step: WorkflowStep, context: Ctx): boolean {
     case "gt": return Number(actual) > Number(expected);
     case "lt": return Number(actual) < Number(expected);
     default: return true;
-  }
-}
-
-// ── sheet write ─────────────────────────────────────────────────────────────────
-
-async function doSheetWrite(step: WorkflowStep, context: Ctx, isUpdate: boolean): Promise<void> {
-  if (!step.spreadsheetId || !step.sheetName) {
-    throw new Error("sheet step missing spreadsheetId/sheetName");
-  }
-  // connectionId is optional: when absent, the connector uses the shared-sheet
-  // service account.
-  const connectionId = step.connectionId ?? null;
-  const columnMap = step.columnMap ?? {};
-  const rowByHeader: Record<string, string> = {};
-  for (const [header, template] of Object.entries(columnMap)) {
-    rowByHeader[header] = interpolate(String(template), context);
-  }
-  if (isUpdate) {
-    const matchColumn = step.matchColumn ?? "";
-    const matchValue = toStr(getPath(context, step.matchField ?? step.phoneField ?? "phone") || context["phone"]);
-    const ok = await updateRow(connectionId, step.spreadsheetId, step.sheetName, matchColumn, matchValue, rowByHeader);
-    if (!ok) throw new Error("sheet_update failed");
-  } else {
-    const ok = await appendRow(connectionId, step.spreadsheetId, step.sheetName, rowByHeader);
-    if (!ok) throw new Error("sheet_append failed");
   }
 }
 

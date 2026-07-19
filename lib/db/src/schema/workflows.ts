@@ -14,31 +14,20 @@ export type WorkflowStatus = "draft" | "active" | "paused";
 export type WorkflowTriggerType =
   | "form_lead"        // website / embedded form lead (public token)
   | "instagram_lead"   // Meta/Instagram lead ad (public token, HMAC)
-  | "sheet_row"        // new row appended to a Google Sheet
   | "manual";          // fired from the dashboard / API
 
 export interface WorkflowTrigger {
   type: WorkflowTriggerType;
-  /** google_sheets_connections.id — required for sheet_row triggers. */
-  connectionId?: string;
-  spreadsheetId?: string;
-  spreadsheetName?: string;
-  /** Tab / worksheet name within the spreadsheet. */
-  sheetName?: string;
-  /** Header of the column that holds the phone number (sheet_row). */
-  phoneColumn?: string;
   /**
    * Optional mapping of incoming field name -> canonical context key.
-   * For form/instagram leads this maps posted field names; for sheets it maps
-   * column headers. Unmapped fields are still copied into context verbatim.
+   * For form/instagram leads this maps posted field names. Unmapped fields
+   * are still copied into context verbatim.
    */
   fieldMap?: Record<string, string>;
 }
 
 export type WorkflowStepType =
   | "make_call"
-  | "sheet_append"
-  | "sheet_update"
   | "condition"
   | "delay"
   | "send_webhook";
@@ -52,17 +41,6 @@ export interface WorkflowStep {
   agentId?: number;
   /** Context key holding the phone number (default: "phone"). */
   phoneField?: string;
-
-  // ── sheet_append / sheet_update ──────────────────────────────────────────────
-  connectionId?: string;
-  spreadsheetId?: string;
-  sheetName?: string;
-  /** Map of sheet column header -> template string (supports {{context.key}}). */
-  columnMap?: Record<string, string>;
-  /** sheet_update: header of the column used to locate the existing row. */
-  matchColumn?: string;
-  /** sheet_update: context key whose value must equal the matchColumn cell. */
-  matchField?: string;
 
   // ── condition (continue only if it evaluates true, else the run stops) ────────
   field?: string;                          // context path, e.g. "call.disposition.interested"
@@ -91,7 +69,7 @@ export const workflowsTable = pgTable("workflows", {
   /** Optional HMAC secret for verifying instagram_lead payloads. */
   hmacSecret: text("hmac_secret"),
 
-  /** Mutable checkpoint for sheet_row polling, e.g. { lastRow: 12 }. */
+  /** Mutable checkpoint for trigger polling / cursors. */
   triggerState: jsonb("trigger_state").$type<Record<string, unknown>>().default({}),
 
   totalRuns: integer("total_runs").notNull().default(0),
@@ -123,11 +101,10 @@ export const workflowRunsTable = pgTable("workflow_runs", {
   currentStepIndex: integer("current_step_index").notNull().default(0),
   /** Set while status = waiting_call (the campaign lead being dialed). */
   leadId: integer("lead_id"),
-  /** Resolved once the awaited call completes. */
   callId: integer("call_id"),
   /** Set while status = waiting_delay. */
   resumeAt: timestamp("resume_at", { withTimezone: true }),
-  /** How this run was started (form_lead | instagram_lead | sheet_row | manual | test). */
+  /** How this run was started (form_lead | instagram_lead | manual | test). */
   triggeredBy: text("triggered_by"),
   error: text("error"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

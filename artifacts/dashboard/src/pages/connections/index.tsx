@@ -1001,7 +1001,7 @@ function SetupSteps({ connection }: { connection: Connection }) {
   );
 }
 
-// ── Recipe cards (Zapier/Make, Google Sheets) ─────────────────────────────────
+// ── Recipe cards (Zapier/Make, generic webhook) ─────────────────────────────────
 
 function RecipeCard({
   icon, title, description, badge, children, comingSoon,
@@ -1055,60 +1055,6 @@ function RecipeCard({
       {expanded && children && (
         <div className="px-4 pb-4 border-t border-border/50 pt-3">{children}</div>
       )}
-    </div>
-  );
-}
-
-const APPS_SCRIPT_CODE = `// Google Apps Script — paste into your Sheet's Script Editor
-// Tools → Script editor → paste this → save → run setup() once to authorize
-
-const WEBHOOK_URL = "PASTE_YOUR_WEBHOOK_URL_HERE";
-
-function onFormSubmit(e) {
-  const values = e.namedValues;
-  const payload = {};
-  for (const key in values) {
-    payload[key] = values[key][0] || "";
-  }
-  UrlFetchApp.fetch(WEBHOOK_URL, {
-    method: "post",
-    contentType: "application/json",
-    payload: JSON.stringify(payload),
-    muteHttpExceptions: true,
-  });
-}
-
-// To trigger on new rows from a form: set up a Form Submit trigger
-// via Extensions → Apps Script → Triggers → Add trigger → onFormSubmit
-`;
-
-function GoogleSheetsRecipe({ firstWebhookUrl }: { firstWebhookUrl: string }) {
-  const script = APPS_SCRIPT_CODE.replace("PASTE_YOUR_WEBHOOK_URL_HERE", firstWebhookUrl || "https://your-domain.com/api/webhooks/lead/TOKEN");
-  const steps = [
-    "Open your Google Spreadsheet → Extensions → Apps Script",
-    "Replace the default code with the script below (update WEBHOOK_URL)",
-    "Save → Run setup() once to authorize → go back to the Sheet",
-    "Create a trigger: Triggers → Add Trigger → choose onFormSubmit → From spreadsheet → On form submit",
-    "Submit a test row from your linked Google Form to verify",
-  ];
-  return (
-    <div className="space-y-3">
-      <ol className="space-y-2.5">
-        {steps.map((s, i) => (
-          <li key={i} className="flex gap-2.5">
-            <span className="shrink-0 w-5 h-5 rounded-full bg-muted border border-border flex items-center justify-center text-[10px] font-semibold text-muted-foreground">{i + 1}</span>
-            <p className="text-xs text-muted-foreground">{s}</p>
-          </li>
-        ))}
-      </ol>
-      <div className="relative">
-        <div className="absolute top-2 right-2 z-10">
-          <CopyButton text={script} label="Copy script" />
-        </div>
-        <pre className="bg-muted rounded-lg p-3 text-[10px] font-mono text-muted-foreground overflow-x-auto max-h-52 whitespace-pre border border-border">
-          {script}
-        </pre>
-      </div>
     </div>
   );
 }
@@ -2378,20 +2324,12 @@ export default function ConnectionsPage() {
                   More ways to connect
                 </h2>
                 <p className="text-xs text-muted-foreground/55 mt-0.5">
-                  Google Sheets, Zapier, Make, and generic webhooks — coming soon
+                  Zapier, Make, and generic webhooks — coming soon
                 </p>
               </div>
               <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground/40 transition-transform group-open:rotate-180" />
             </summary>
             <div className="px-4 pb-4 space-y-2.5 border-t border-border/40 pt-3">
-              <RecipeCard
-                comingSoon
-                icon={<BrandLogo brand="googleSheets" size={16} />}
-                title="Google Sheets"
-                description="Forward new rows to your webhook via a Google Apps Script trigger"
-              >
-                <GoogleSheetsRecipe firstWebhookUrl={firstWebhookUrl} />
-              </RecipeCard>
               <RecipeCard
                 comingSoon
                 icon={<BrandLogo brand="zapier" size={15} />}

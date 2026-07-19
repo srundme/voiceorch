@@ -75,7 +75,6 @@ import bookRouter from "./book.js";
 import workshopRouter from "./workshop.js";
 import adminEventFeedbackRouter from "./admin-event-feedback.js";
 import workflowsRouter from "./workflows.js";
-import workflowsGoogleRouter from "./workflows-google.js";
 import workflowsPublicRouter from "./workflows-public.js";
 import { provisionUser } from "../middlewares/userProvisioning.js";
 
@@ -180,6 +179,5 @@ router.use(callbacksRouter);
 router.use(connectionsRouter);
 router.use(crmRouter);
 router.use(workflowsRouter);
-router.use(workflowsGoogleRouter);
 
 export default router;

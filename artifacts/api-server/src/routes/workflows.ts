@@ -16,7 +16,6 @@ import {
 } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logger } from "../lib/logger.js";
-import { readNewRows, getServiceAccountEmail } from "../services/google-sheets.js";
 import { startWorkflowRun } from "../services/workflow-engine.js";
 
 const router: IRouter = Router();
@@ -123,18 +122,7 @@ async function setStatus(clerkId: string, id: number, status: "active" | "paused
     .where(and(eq(workflowsTable.id, id), eq(workflowsTable.userId, clerkId))).limit(1);
   if (!existing) return null;
 
-  const patch: Record<string, unknown> = { status };
-  // Seed the sheet-row cursor at activation so pre-existing rows never dial.
-  if (status === "active" && existing.trigger?.type === "sheet_row") {
-    const t = existing.trigger;
-    if (t.spreadsheetId && t.sheetName) {
-      try {
-        const { lastRow } = await readNewRows(t.connectionId ?? null, t.spreadsheetId, t.sheetName, 1);
-        patch["triggerState"] = { ...(existing.triggerState ?? {}), lastRow };
-      } catch { /* worker will seed on first tick */ }
-    }
-  }
-  const [w] = await db.update(workflowsTable).set(patch)
+  const [w] = await db.update(workflowsTable).set({ status })
     .where(and(eq(workflowsTable.id, id), eq(workflowsTable.userId, clerkId))).returning();
   return w ?? null;
 }
@@ -211,14 +199,10 @@ function sleep(ms: number) { return new Promise<void>(r => setTimeout(r, ms)); }
 
 function buildSystemPrompt(ctx: {
   agents: Array<{ id: number; name: string }>;
-  serviceAccountEmail: string | null;
 }): string {
   const agentList = ctx.agents.length
     ? ctx.agents.map(a => `- "${a.name}" (agentId: ${a.id})`).join("\n")
     : "(none yet — tell the user to create an agent first)";
-  const sheets = ctx.serviceAccountEmail
-    ? `To use a Google Sheet, the user pastes their Sheet's URL in the side panel and shares that sheet (Editor access) with ${ctx.serviceAccountEmail}. Add sheet steps normally — do NOT set connectionId or spreadsheetId; the user picks the sheet + tab in the side panel.`
-    : `Google Sheets isn't set up on this server yet. You can still add sheet steps, but tell the user to paste their Sheet URL in the side panel once it's available.`;
 
   return `You are SnapServe's Workflow Builder. You help NON-TECHNICAL users create phone-call automations by chatting in plain language. Be warm, concise, and never show JSON or technical jargon in your "reply" text.
 
@@ -227,31 +211,25 @@ A workflow = ONE trigger + an ordered list of steps.
 TRIGGERS (pick one):
 - "form_lead": a lead arrives from a website form / landing page / Instagram form. (Gives the user a webhook URL to paste into their form tool.)
 - "instagram_lead": Instagram / Meta lead ads (same intake as form_lead).
-- "sheet_row": a new row is added to a Google Sheet.
 - "manual": the user triggers it themselves.
 
 STEP TYPES:
 - "make_call": the AI agent phones the lead. REQUIRES agentId (choose from the user's agents below by matching the name they mention; if unclear, ask which agent). Optional phoneField (context key holding the phone, default "phone").
-- "sheet_append": add a new row to a Google Sheet with call results. Field: columnMap (map of sheet column header -> template using {{tokens}}). Leave connectionId/spreadsheetId/sheetName empty — the user picks the sheet + tab in the side panel.
-- "sheet_update": update an existing row (matchColumn + matchField). Same fields as append plus matchColumn (e.g. "Phone") and matchField (context key, usually "phone").
 - "condition": continue only if a value matches. Fields: field (context path), op ("eq"|"neq"|"contains"|"exists"|"gt"|"lt"), value.
 - "delay": wait. Field: delaySeconds.
 - "send_webhook": POST all data to a URL. Field: url.
 
 CONTEXT TOKENS available in templates ({{token}}):
-- Trigger fields: {{phone}}, {{name}}, {{email}}, and any form/column field by its name.
+- Trigger fields: {{phone}}, {{name}}, {{email}}, and any form field by its name.
 - After a make_call step: {{call.connected}}, {{call.status}}, {{call.duration}}, {{call.summary}}, {{call.transcript}}, {{call.success}}, {{call.recordingUrl}}, and disposition fields like {{call.disposition.<key>}}.
 
 USER'S AGENTS:
 ${agentList}
 
-GOOGLE SHEETS: ${sheets}
-
 CONVERSATION RULES:
 1. Ask clarifying questions until you know: the trigger, which agent makes the call, and what to do with the results.
 2. Keep replies to 1-3 short sentences. One question at a time.
 3. When you have enough to build it, set "ready": true and include the full "workflow".
-4. Give sheet columns sensible headers (e.g. "Name", "Phone", "Called", "Outcome", "Summary", "Call Time").
 
 RESPOND WITH ONLY THIS JSON (no markdown fences, no prose outside it):
 {
@@ -263,8 +241,8 @@ When ready, "workflow" MUST look like:
 {
   "name": "short name",
   "description": "one line",
-  "trigger": { "type": "form_lead" | "instagram_lead" | "sheet_row" | "manual", "phoneColumn"?: "...", "fieldMap"?: { "SourceField": "contextKey" } },
-  "steps": [ { "id": "s1", "type": "make_call", "agentId": 123 }, { "id": "s2", "type": "sheet_append", "columnMap": { "Name": "{{name}}", "Phone": "{{phone}}", "Outcome": "{{call.status}}", "Summary": "{{call.summary}}" } } ]
+  "trigger": { "type": "form_lead" | "instagram_lead" | "manual", "fieldMap"?: { "SourceField": "contextKey" } },
+  "steps": [ { "id": "s1", "type": "make_call", "agentId": 123 }, { "id": "s2", "type": "send_webhook", "url": "https://example.com/hook" } ]
 }`;
 }
 
@@ -356,10 +334,7 @@ router.post("/workflows/chat", requireAuth, async (req, res): Promise<void> => {
     const agents = await db.select({ id: agentsTable.id, name: agentsTable.name })
       .from(agentsTable).where(eq(agentsTable.userId, clerkId));
 
-    const systemPrompt = buildSystemPrompt({
-      agents,
-      serviceAccountEmail: getServiceAccountEmail(),
-    });
+    const systemPrompt = buildSystemPrompt({ agents });
 
     const result = await callGemini(key, messages, systemPrompt);
 
