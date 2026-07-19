@@ -49,7 +49,7 @@ export default function AutomaticCallsPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Automatic Calls</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Watch a Google Sheet for leads, dial them automatically, and write results back.
+            Watch a Google Sheet for leads, dial them automatically, inject row data as lookup variables, and write results back.
           </p>
         </div>
         <Button asChild className="h-9">

@@ -246,6 +246,9 @@ async function enqueueRow(
 
   const leadData = {
     ...parsed.leadData,
+    ...(parsed.name
+      ? { name: parsed.name, customer_name: parsed.name, caller_name: parsed.name }
+      : {}),
     __sheet_pipeline_id: pipeline.id,
     __sheet_row_index: String(sheetRowIndex),
   };

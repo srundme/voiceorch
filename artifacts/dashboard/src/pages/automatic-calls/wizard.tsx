@@ -228,7 +228,7 @@ export default function AutomaticCallsWizardPage() {
         </Button>
         <div>
           <h1 className="text-xl font-semibold">Create Automatic Calls</h1>
-          <p className="text-xs text-muted-foreground">From Google Sheets → dial → write results back</p>
+          <p className="text-xs text-muted-foreground">Sheet → dial with lookup vars → write results back</p>
         </div>
       </div>
 

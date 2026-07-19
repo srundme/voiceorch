@@ -2323,7 +2323,7 @@ export default function ConnectionsPage() {
                   Google Sheets
                 </h2>
                 <p className="text-xs text-muted-foreground/60 mt-0.5">
-                  Connect Google accounts, then link sheets to agents for lookup and call logs
+                  Connect Google for Automatic Calls — watch a sheet, dial leads, write results back
                 </p>
               </div>
               <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 rounded-lg" onClick={() => void connectSheets()}>
@@ -2341,7 +2341,7 @@ export default function ConnectionsPage() {
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium">No Google Sheets account connected</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    After connecting, open an agent → Tools to attach multiple sheets for different use cases.
+                    After connecting, open Automatic Calls to create a sheet → dial pipeline.
                   </p>
                 </div>
               </div>

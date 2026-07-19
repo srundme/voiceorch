@@ -973,6 +973,11 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
       email:  campaignLeadResult.email ?? "",
       ...campaignLeadResult.leadData,
     };
+    // Sheet / lead name aliases for {{customer_name}} / {{caller_name}}
+    if (campaignLeadVars.name?.trim()) {
+      if (!campaignLeadVars["customer_name"]) campaignLeadVars["customer_name"] = campaignLeadVars.name;
+      if (!campaignLeadVars["caller_name"]) campaignLeadVars["caller_name"] = campaignLeadVars.name;
+    }
     logger.info({ campaignLeadId: params.campaignLeadId, phone: campaignLeadResult.phone }, "Campaign lead vars loaded into session");
 
     // ── Inject lead context block into system prompt ──────────────────────────
@@ -980,48 +985,23 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     // inside the block itself are also resolved.
     const leadContextBlock = buildLeadContextBlock(campaignLeadVars);
     if (leadContextBlock) {
-      agentConfig.systemPrompt = `${leadContextBlock}\n\n${agentConfig.systemPrompt}`;
+      const isSheetLead = !!(campaignLeadResult.leadData as Record<string, string> | undefined)?.["__sheet_pipeline_id"];
+      const labeled = isSheetLead
+        ? leadContextBlock.replace("=== LEAD CONTEXT ===", "=== SHEET LOOKUP ===")
+        : leadContextBlock;
+      agentConfig.systemPrompt = `${labeled}\n\n${agentConfig.systemPrompt}`;
       const fieldCount = Object.entries(campaignLeadVars).filter(
         ([, v]) => v && v.trim()
       ).length;
       logger.info(
-        { agentId: params.agentId, campaignLeadId: params.campaignLeadId, fieldCount },
+        { agentId: params.agentId, campaignLeadId: params.campaignLeadId, fieldCount, isSheetLead },
         "Campaign lead context injected into system prompt",
       );
     }
   }
 
-  // ── Google Sheets lookup (enabled lookup bindings) ─────────────────────────
-  // Bounded wait so a slow Sheets API never stalls call setup.
-  let sheetLookupVars: Record<string, string> = {};
-  const sheetLookupPhone = !isWebcall
-    ? (callDirection === "outbound" ? params.toNumber : params.fromNumber)
-    : "";
-  if (agent.userId && sheetLookupPhone) {
-    try {
-      const { lookupSheetsCallerContext } = await import("../services/sheets-writeback.js");
-      const lookupPromise = lookupSheetsCallerContext(agent.userId, params.agentId, sheetLookupPhone);
-      sheetLookupVars = await Promise.race([
-        lookupPromise,
-        new Promise<Record<string, string>>((resolve) =>
-          setTimeout(() => resolve({}), 2500),
-        ),
-      ]);
-      if (Object.keys(sheetLookupVars).length > 0) {
-        const sheetBlock = buildLeadContextBlock(sheetLookupVars);
-        if (sheetBlock) {
-          agentConfig.systemPrompt =
-            `${sheetBlock.replace("=== LEAD CONTEXT ===", "=== SHEET LOOKUP ===")}\n\n${agentConfig.systemPrompt}`;
-        }
-        logger.info(
-          { agentId: params.agentId, fieldCount: Object.keys(sheetLookupVars).length },
-          "Sheets lookup context injected into system prompt",
-        );
-      }
-    } catch (sheetLookupErr) {
-      logger.warn({ agentId: params.agentId, sheetLookupErr }, "Sheets session lookup skipped");
-    }
-  }
+  // ── Google Sheets lookup removed from agent Tools — Automatic Calls
+  // injects sheet row fields via campaign leadData at dial time.
 
   const dynVars: Record<string, string> = {
     to_number:     params.toNumber,
@@ -1031,7 +1011,6 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     date: now.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" }),
     ...Object.fromEntries(agentConfig.promptVariables.map(v => [v.key, v.defaultValue])),
     ...campaignLeadVars,
-    ...sheetLookupVars,
     ...Object.fromEntries(Object.entries(params.customParameters ?? {}).map(([k, v]) => [k, v])),
   };
 
@@ -2841,16 +2820,8 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
           }
 
           // ── Google Sheets writeback (after summary/disposition) ─────────────
-          import("../services/sheets-writeback.js").then(({ writeSheetsCallLog, writeSheetsOutcome, writeSheetAutoCallResults }) => {
-            writeSheetsCallLog(session.callId, {
-              callSummary: callSummary || null,
-              dispositionResult,
-            })
-              .catch((err) => logger.warn({ sessionId, err }, "Sheets call_log writeback failed"));
-            writeSheetsOutcome(session.callId, {
-              callSummary: callSummary || null,
-              dispositionResult,
-            }).catch((err) => logger.warn({ sessionId, err }, "Sheets outcome writeback failed"));
+          // ── Google Sheets Automatic Calls writeback (pipeline only) ─────────
+          import("../services/sheets-writeback.js").then(({ writeSheetAutoCallResults }) => {
             writeSheetAutoCallResults(session.callId, {
               callSummary: callSummary || null,
               dispositionResult,
