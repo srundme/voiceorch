@@ -19,6 +19,7 @@ import { WebcallPanel } from "@/components/webcall-panel";
 import { AgentConfigCard, EditConfigDialog } from "@/components/agent-config-card";
 import { GeminiLiveVoicePicker } from "@/components/gemini-live-voice-picker";
 import { CloneVoiceDialog, type ClonedVoiceResult } from "@/components/clone-voice-dialog";
+import { AgentSheetsPanel } from "@/components/agent-sheets-panel";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
@@ -2210,6 +2211,13 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
         <p className="text-xs text-muted-foreground mb-3">Built-in capabilities you can enable for this agent</p>
 
         <div className="space-y-2">
+
+        {agentId != null && (
+          <div className="mb-4">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-1">Data & Sheets</p>
+            <AgentSheetsPanel agentId={agentId} />
+          </div>
+        )}
 
         {/* ── Booking Tools ── */}
         <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-1 mt-3">Scheduling & Bookings</p>

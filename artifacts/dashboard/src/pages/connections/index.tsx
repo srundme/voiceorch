@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useLocation } from "wouter";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
 import {
   useListConnections,
   useUpdateConnectionWebhookConfig,
@@ -2225,6 +2225,55 @@ export default function ConnectionsPage() {
   const webhookConnections  = connections.filter(c => c.type === "webhook");
   const metaConnections     = connections.filter(c => c.type === "meta_lead_ads");
   const firstWebhookUrl     = webhookConnections[0]?.webhookUrl ?? "";
+  const { toast } = useToast();
+
+  const sheetsQ = useQuery({
+    queryKey: ["sheets-connections"],
+    queryFn: () => customFetch<Array<{ id: string; email: string; createdAt: string }>>("/api/sheets/google/connections"),
+  });
+  const disconnectSheets = useMutation({
+    mutationFn: (id: string) => customFetch(`/api/sheets/google/connections/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["sheets-connections"] });
+      toast({ title: "Google Sheets disconnected" });
+    },
+  });
+
+  const connectSheets = async () => {
+    try {
+      const { url } = await customFetch<{ url: string }>(
+        `/api/sheets/google/connect-url?returnTo=sheets&returnOrigin=${encodeURIComponent(window.location.origin)}`,
+      );
+      window.location.href = url;
+    } catch (err: any) {
+      toast({
+        title: "Could not start Google Sheets connect",
+        description: err?.message ?? String(err),
+        variant: "destructive",
+      });
+    }
+  };
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("sheets") === "connected") {
+      toast({ title: "Google Sheets connected" });
+      void qc.invalidateQueries({ queryKey: ["sheets-connections"] });
+      params.delete("sheets");
+      const next = `${window.location.pathname}${params.toString() ? `?${params}` : ""}`;
+      window.history.replaceState({}, "", next);
+    } else if (params.get("sheets") === "error") {
+      toast({
+        title: "Google Sheets connect failed",
+        description: params.get("reason") ?? "Unknown error",
+        variant: "destructive",
+      });
+      params.delete("sheets");
+      params.delete("reason");
+      const next = `${window.location.pathname}${params.toString() ? `?${params}` : ""}`;
+      window.history.replaceState({}, "", next);
+    }
+  }, [qc, toast]);
 
   const handleRefresh = useCallback(async () => {
     await qc.invalidateQueries({ queryKey: getListConnectionsQueryKey() });
@@ -2265,6 +2314,60 @@ export default function ConnectionsPage() {
 
           {/* 1. CRM Connectors — primary integrations */}
           <CrmConnectorSection />
+
+          {/* 1b. Google Sheets */}
+          <section className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/55">
+                  Google Sheets
+                </h2>
+                <p className="text-xs text-muted-foreground/60 mt-0.5">
+                  Connect Google accounts, then link sheets to agents for lookup and call logs
+                </p>
+              </div>
+              <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 rounded-lg" onClick={() => void connectSheets()}>
+                <BrandLogo brand="googleSheets" size={14} />
+                {(sheetsQ.data?.length ?? 0) > 0 ? "Connect another" : "Connect Google"}
+              </Button>
+            </div>
+            {sheetsQ.isLoading ? (
+              <div className="h-14 rounded-xl border border-border/50 bg-card/20 animate-pulse" />
+            ) : (sheetsQ.data?.length ?? 0) === 0 ? (
+              <div className="rounded-xl border border-dashed border-border/50 bg-card/20 px-4 py-5 flex items-center gap-3">
+                <div className="h-9 w-9 rounded-lg bg-muted/40 flex items-center justify-center shrink-0">
+                  <BrandLogo brand="googleSheets" size={18} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium">No Google Sheets account connected</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    After connecting, open an agent → Tools to attach multiple sheets for different use cases.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {(sheetsQ.data ?? []).map((c) => (
+                  <div key={c.id} className="rounded-xl border border-border/50 bg-card/30 px-4 py-3 flex items-center gap-3">
+                    <BrandLogo brand="googleSheets" size={18} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{c.email}</p>
+                      <p className="text-[11px] text-muted-foreground">Google Sheets connected</p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 text-xs text-muted-foreground hover:text-destructive"
+                      disabled={disconnectSheets.isPending}
+                      onClick={() => disconnectSheets.mutate(c.id)}
+                    >
+                      Disconnect
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
 
           {/* 2. Campaign Webhooks — compact searchable table */}
           <section className="space-y-3">
