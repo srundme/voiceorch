@@ -1,8 +1,8 @@
-const VBWatermark = () => (
+const SSWatermark = () => (
   <div style={{ position: "absolute", bottom: "2.8vh", left: "3vw", display: "flex", alignItems: "center", gap: "0.7vw" }}>
     <div style={{ width: "2.2vw", height: "0.3vh", background: "#FF6F00", borderRadius: "2px" }} />
-    <span style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#FF6F00", fontVariant: "small-caps", opacity: 0.85 }}>
-      Startup Singam 2026
+    <span style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#FF6F00", opacity: 0.85 }}>
+      snapserve.ai
     </span>
   </div>
 );
@@ -10,16 +10,16 @@ const VBWatermark = () => (
 export default function Slide12() {
   const bullets = [
     {
-      title: "TypeScript orchestration framework",
-      body: "Entire voice pipeline built in TypeScript on Node.js 24 — full type-safety from ASR transcript to TTS audio byte. Rapid iteration without sacrificing production reliability.",
+      title: "TypeScript orchestration — fully type-safe end to end",
+      body: "Entire voice pipeline built in TypeScript on Node.js 24 — from ASR transcript to TTS audio byte. Full type-safety across every provider boundary means rapid iteration without sacrificing production reliability.",
     },
     {
       title: "Decoupled, provider-agnostic architecture",
-      body: "STT, LLM, and TTS are abstract layers. Changing provider (e.g. Deepgram → Sarvam, OpenAI → Groq) requires a single config change — no pipeline surgery. Supports 3+ providers per layer today.",
+      body: "STT, LLM, and TTS are abstract adapter layers. Swapping a provider (e.g. Deepgram → Sarvam, OpenAI → Groq) is a single config change — no pipeline surgery. Each layer today supports 3+ providers in parallel.",
     },
     {
-      title: "Dynamic STT / LLM / TTS swapping",
-      body: "Provider selection happens at call-start based on agent config, caller language, and fallback chain. Latency routing and retry logic are baked in — a provider outage causes automatic failover, not a dropped call.",
+      title: "Dynamic provider selection + automatic failover",
+      body: "Provider selection happens at call-start based on agent config, caller language, and real-time performance. Retry logic and latency routing are baked in — a provider outage triggers automatic failover, not a dropped call.",
     },
   ];
 
@@ -35,7 +35,7 @@ export default function Slide12() {
       }}>
         <div>
           <div style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#FF6F00", marginBottom: "0.8vh" }}>
-            Any Additional Information
+            Technical Appendix
           </div>
           <h1 style={{ fontFamily: "var(--font-display-family)", fontSize: "2.6vw", fontWeight: 700, color: "#FFFFFF", margin: 0, lineHeight: 1.15 }}>
             Annexure 1 — The Tech Stack
@@ -55,9 +55,7 @@ export default function Slide12() {
               boxShadow: "0 0.6vh 1.8vh rgba(26,35,126,0.08)",
             }}
           >
-            <div style={{
-              width: "0.55vw", background: i % 2 === 0 ? "#1A237E" : "#FF6F00", flexShrink: 0,
-            }} />
+            <div style={{ width: "0.55vw", background: i % 2 === 0 ? "#1A237E" : "#FF6F00", flexShrink: 0 }} />
             <div style={{ padding: "2.4vh 2.2vw", display: "flex", flexDirection: "column", justifyContent: "center" }}>
               <div style={{ fontSize: "1.22vw", fontWeight: 700, color: "#1A237E", marginBottom: "1vh", lineHeight: 1.25 }}>
                 {title}
@@ -80,7 +78,7 @@ export default function Slide12() {
         </div>
       </div>
 
-      <VBWatermark />
+      <SSWatermark />
     </div>
   );
 }

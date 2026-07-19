@@ -4,7 +4,7 @@
     "position": 1,
     "filepath": "src/pages/slides/Slide1.tsx",
     "title": "Title",
-    "description": "SnapServe AI — Build and deploy voice AI agents without writing a line of code. Karthikeyan · Gopi N. Startup Singam 2026 2026.",
+    "description": "SnapServe AI — The voice AI that never forgets. Build and deploy Indian-language voice agents with cross-call persistent memory, no code required.",
     "speakerNotes": ""
   },
   {
@@ -12,7 +12,7 @@
     "position": 2,
     "filepath": "src/pages/slides/Slide2.tsx",
     "title": "The Team",
-    "description": "Karthikeyan (Founder & CEO, CMA US) and Gopi N. (Co-Founder & COO, CGI engineer) — the founding team.",
+    "description": "Karthikeyan (Founder & CEO, CMA US) and Gopi N. (Co-Founder & COO, CGI engineer) — two builders who shipped it themselves.",
     "speakerNotes": ""
   },
   {
@@ -20,7 +20,7 @@
     "position": 3,
     "filepath": "src/pages/slides/Slide3.tsx",
     "title": "The Problem",
-    "description": "India's $40B+ BPM industry — human agents forget context, today's AI is stateless, US-hosted, and non-compliant.",
+    "description": "India's $40B+ BPM industry — every AI call starts from scratch, US-hosted tools don't understand India, memory loss = revenue loss.",
     "speakerNotes": ""
   },
   {
@@ -28,7 +28,7 @@
     "position": 4,
     "filepath": "src/pages/slides/Slide4.tsx",
     "title": "The Solution",
-    "description": "SnapServe: Persistent Memory, Contextual Auto-Redial, Native Localization. Product Ready / Live in production.",
+    "description": "Memory · Language · Compliance in one platform. 10x cost advantage. Product ready and live in production.",
     "speakerNotes": ""
   },
   {
@@ -36,7 +36,7 @@
     "position": 5,
     "filepath": "src/pages/slides/Slide5.tsx",
     "title": "How It Works",
-    "description": "3 steps: Type a brief → SnapServe auto-configures STT/LLM/TTS with TRAI/DPDP guardrails → Link telephony & go live in < 5 minutes.",
+    "description": "3 steps: Describe your agent → Platform auto-configures STT/LLM/TTS with TRAI/DPDP guardrails → Get a number & go live in < 5 minutes.",
     "speakerNotes": ""
   },
   {
@@ -44,7 +44,7 @@
     "position": 6,
     "filepath": "src/pages/slides/Slide6.tsx",
     "title": "Market Opportunity",
-    "description": "TAM $35.2B / SAM $957M / Beachhead BFSI. Why now: smartphone penetration, localized speech models, DPDP/TRAI regulation.",
+    "description": "TAM $35.2B / SAM $957M / Beachhead BFSI. Why now: 800M connected Indians, India-first AI models arrived, DPDP/TRAI as sales advantage.",
     "speakerNotes": ""
   },
   {
@@ -52,7 +52,7 @@
     "position": 7,
     "filepath": "src/pages/slides/Slide7.tsx",
     "title": "Business Model",
-    "description": "Who pays / How they pay / Revenue per customer. 10x cost advantage. Revenue streams: No-code SaaS + Enterprise Proxy API.",
+    "description": "Per-minute SaaS with two tiers: Managed (₹4.2/min) + BYOP (₹2.9/min). 10x unit economics. Two streams: No-code SaaS + Enterprise Memory API.",
     "speakerNotes": ""
   },
   {
@@ -60,7 +60,7 @@
     "position": 8,
     "filepath": "src/pages/slides/Slide8.tsx",
     "title": "Roadmap & Milestones",
-    "description": "Four phases: TODAY / +12 MONTHS / +2 YEARS / +5 YEARS with milestones for each.",
+    "description": "TODAY / +12 MONTHS / +2 YEARS / +5 YEARS milestones. Live in production, pilots running, scaling to ₹100 Cr ARR.",
     "speakerNotes": ""
   },
   {
@@ -68,15 +68,15 @@
     "position": 9,
     "filepath": "src/pages/slides/Slide9.tsx",
     "title": "Key Risks & Mitigation",
-    "description": "Platform Competition / Regulatory Tightening / Dialect Latency — each with mitigation strategy.",
+    "description": "Platform Competition / Regulatory Tightening / Provider Model Quality — each with mitigation. Memory moat + compliance advantage.",
     "speakerNotes": ""
   },
   {
     "id": "c9f8e1d0-9d2a-44ac-9fa9-f62b8c9d0e10",
     "position": 10,
     "filepath": "src/pages/slides/Slide10.tsx",
-    "title": "Competition & Your Advantage",
-    "description": "Feature comparison: SnapServe vs Vapi/Retell/Bolna vs Status Quo. The Memory Layer moat.",
+    "title": "Competition & Advantage",
+    "description": "9-capability comparison: SnapServe vs Vapi/Retell/Bolna vs Status Quo. The memory moat: data that compounds and history that can't be copied.",
     "speakerNotes": ""
   },
   {
@@ -84,7 +84,7 @@
     "position": 11,
     "filepath": "src/pages/slides/Slide11.tsx",
     "title": "Financials & The Ask",
-    "description": "Raising ₹3 Crore pre-seed. Use of funds: 45% Tech, 30% GTM, 15% Salaries, 10% Ops. 3-year snapshot. Non-monetary ask.",
+    "description": "Raising ₹3 Crore pre-seed. 45% Tech, 30% GTM, 15% Team, 10% Ops. 3-year ARR targets. Strategic partnerships sought.",
     "speakerNotes": ""
   },
   {
@@ -92,7 +92,7 @@
     "position": 12,
     "filepath": "src/pages/slides/Slide12.tsx",
     "title": "Annexure 1 — Tech Stack",
-    "description": "TypeScript framework, decoupled provider-agnostic architecture, dynamic STT/LLM/TTS swapping.",
+    "description": "TypeScript orchestration, decoupled provider-agnostic architecture, dynamic provider selection with automatic failover.",
     "speakerNotes": ""
   },
   {
@@ -100,7 +100,7 @@
     "position": 13,
     "filepath": "src/pages/slides/Slide13.tsx",
     "title": "Annexure 2 — Memory Layer",
-    "description": "Independent context-caching layer, structural fact/commitment extraction, OpenAI-compatible interface for external devs.",
+    "description": "Provider-independent context layer, fact & commitment extraction after every call, OpenAI-compatible Memory Proxy API for Vapi/Bolna/Retell.",
     "speakerNotes": ""
   },
   {
@@ -108,7 +108,7 @@
     "position": 14,
     "filepath": "src/pages/slides/Slide14.tsx",
     "title": "Annexure 3 — Compliance Matrix",
-    "description": "Enterprise compliance: TRAI (DND, call hours), DPDP Act (consent, encryption, retention), IRDAI (disclosure, misselling prevention).",
+    "description": "TRAI (DND, call hours, caller ID), DPDP (consent, encryption, erasure), IRDAI (disclosure, misselling prevention). CTA: snapserve.ai",
     "speakerNotes": ""
   }
 ]

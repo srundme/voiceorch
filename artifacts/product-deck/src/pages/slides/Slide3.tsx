@@ -1,8 +1,8 @@
-const VBWatermark = () => (
+const SSWatermark = () => (
   <div style={{ position: "absolute", bottom: "2.8vh", left: "3vw", display: "flex", alignItems: "center", gap: "0.7vw" }}>
     <div style={{ width: "2.2vw", height: "0.3vh", background: "#FF6F00", borderRadius: "2px" }} />
-    <span style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#FF6F00", fontVariant: "small-caps", opacity: 0.85 }}>
-      Startup Singam 2026
+    <span style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#FF6F00", opacity: 0.85 }}>
+      snapserve.ai
     </span>
   </div>
 );
@@ -24,7 +24,7 @@ export default function Slide3() {
         <div>
           <div style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#FF6F00", marginBottom: "0.8vh" }}>The Problem</div>
           <h1 style={{ fontFamily: "var(--font-display-family)", fontSize: "2.6vw", fontWeight: 700, color: "#FFFFFF", margin: 0, lineHeight: 1.15 }}>
-            India's voice industry is massive — and broken
+            Every call starts from scratch. That's costing billions.
           </h1>
         </div>
         <span style={{ fontSize: "0.85vw", fontWeight: 600, color: "#4B6CB7", letterSpacing: "0.06em", paddingBottom: "0.3vh" }}>03 / 14</span>
@@ -40,23 +40,21 @@ export default function Slide3() {
           </div>
           <div style={{ width: "0.06vw", height: "3.6vh", background: "rgba(255,111,0,0.4)" }} />
           <div style={{ fontSize: "1.12vw", color: "#FFFFFF", lineHeight: 1.5 }}>
-            India's BPM industry exceeds <strong style={{ color: "#FF6F00" }}>$40B</strong> (NASSCOM), with voice as the largest channel — yet <strong>human agents forget context between calls.</strong>
+            India's BPM industry exceeds <strong style={{ color: "#FF6F00" }}>$40B</strong> (NASSCOM) — yet every AI call today treats the customer as a stranger, every single time.
           </div>
         </div>
 
         <div style={row}>
           <div style={{
             minWidth: "3vw", width: "3vw", height: "3vw", borderRadius: "50%",
-            background: "#1A237E", display: "flex", alignItems: "center", justifyContent: "center",
-            flexShrink: 0,
+            background: "#1A237E", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
           }}>
             <span style={{ color: "#FF6F00", fontWeight: 800, fontSize: "1.15vw" }}>01</span>
           </div>
           <div>
-            <div style={{ fontSize: "1.28vw", fontWeight: 700, color: "#1A237E", marginBottom: "0.8vh" }}>Who suffers</div>
+            <div style={{ fontSize: "1.28vw", fontWeight: 700, color: "#1A237E", marginBottom: "0.8vh" }}>AI tools don't understand India</div>
             <div style={{ fontSize: "1.05vw", color: "#3A3A5C", lineHeight: 1.6 }}>
-              Insurance renewals, lending collections, and customer support teams — high-volume outbound operations where
-              agents handle thousands of calls daily across insurers, banks, and BFSI companies.
+              US-hosted voice AI fails on Indian accents, can't switch between Tamil and English mid-sentence, and has zero understanding of TRAI, DPDP, or IRDAI requirements. The compliance gap alone is a liability.
             </div>
           </div>
         </div>
@@ -64,16 +62,14 @@ export default function Slide3() {
         <div style={row}>
           <div style={{
             minWidth: "3vw", width: "3vw", height: "3vw", borderRadius: "50%",
-            background: "#1A237E", display: "flex", alignItems: "center", justifyContent: "center",
-            flexShrink: 0,
+            background: "#1A237E", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
           }}>
             <span style={{ color: "#FF6F00", fontWeight: 800, fontSize: "1.15vw" }}>02</span>
           </div>
           <div>
-            <div style={{ fontSize: "1.28vw", fontWeight: 700, color: "#1A237E", marginBottom: "0.8vh" }}>How they cope today</div>
+            <div style={{ fontSize: "1.28vw", fontWeight: 700, color: "#1A237E", marginBottom: "0.8vh" }}>Human agents are stateless and expensive</div>
             <div style={{ fontSize: "1.05vw", color: "#3A3A5C", lineHeight: 1.6 }}>
-              Large human agent pools with constant re-briefing every call, or US-hosted AI tools that don't understand
-              Indian accents, switch languages mid-sentence, or carry TRAI/DPDP compliance — leaving a compliance-and-quality gap no tool fills.
+              Insurance renewals, collections, and verification teams run thousands of calls daily — re-briefing agents every call, losing context on every drop, and paying ₹8–₹15/min per agent with supervisor overhead.
             </div>
           </div>
         </div>
@@ -81,22 +77,20 @@ export default function Slide3() {
         <div style={row}>
           <div style={{
             minWidth: "3vw", width: "3vw", height: "3vw", borderRadius: "50%",
-            background: "#FF6F00", display: "flex", alignItems: "center", justifyContent: "center",
-            flexShrink: 0,
+            background: "#FF6F00", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
           }}>
             <span style={{ color: "#FFFFFF", fontWeight: 800, fontSize: "1.15vw" }}>03</span>
           </div>
           <div>
-            <div style={{ fontSize: "1.28vw", fontWeight: 700, color: "#1A237E", marginBottom: "0.8vh" }}>Why it matters</div>
+            <div style={{ fontSize: "1.28vw", fontWeight: 700, color: "#1A237E", marginBottom: "0.8vh" }}>Memory loss = revenue loss</div>
             <div style={{ fontSize: "1.05vw", color: "#3A3A5C", lineHeight: 1.6 }}>
-              Every dropped call that isn't resumed is a lost policy renewal or collection. Every non-compliant outreach is a
-              regulatory liability. The cost of leaving it unsolved compounds daily at scale.
+              A caller who said "I'll pay Friday" three calls ago gets asked for their name again today. Every dropped call that isn't resumed is a lost renewal. The compounding cost of context amnesia is invisible — until you measure it.
             </div>
           </div>
         </div>
       </div>
 
-      <VBWatermark />
+      <SSWatermark />
     </div>
   );
 }

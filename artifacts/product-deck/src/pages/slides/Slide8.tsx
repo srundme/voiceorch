@@ -1,8 +1,8 @@
-const VBWatermark = () => (
+const SSWatermark = () => (
   <div style={{ position: "absolute", bottom: "2.8vh", left: "3vw", display: "flex", alignItems: "center", gap: "0.7vw" }}>
     <div style={{ width: "2.2vw", height: "0.3vh", background: "#FF6F00", borderRadius: "2px" }} />
-    <span style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#FF6F00", fontVariant: "small-caps", opacity: 0.85 }}>
-      Startup Singam 2026
+    <span style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#FF6F00", opacity: 0.85 }}>
+      snapserve.ai
     </span>
   </div>
 );
@@ -26,7 +26,7 @@ export default function Slide8() {
         "Convert pilots to paid recurring campaigns",
         "Memory Proxy API publicly available",
         "10+ enterprise accounts onboarded",
-        "Tamil, Hindi, Hinglish, Marathi coverage",
+        "Tamil, Hindi, Hinglish, Marathi, Telugu coverage",
       ],
     },
     {
@@ -61,7 +61,7 @@ export default function Slide8() {
         <div>
           <div style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#FF6F00", marginBottom: "0.8vh" }}>Roadmap &amp; Milestones</div>
           <h1 style={{ fontFamily: "var(--font-display-family)", fontSize: "2.6vw", fontWeight: 700, color: "#FFFFFF", margin: 0, lineHeight: 1.15 }}>
-            Built today, scaling tomorrow
+            Live today. Scaling tomorrow.
           </h1>
         </div>
         <span style={{ fontSize: "0.85vw", fontWeight: 600, color: "#4B6CB7", letterSpacing: "0.06em", paddingBottom: "0.3vh" }}>08 / 14</span>
@@ -84,9 +84,7 @@ export default function Slide8() {
             }}
           >
             {i === 0 && (
-              <div style={{
-                position: "absolute", top: 0, left: 0, right: 0, height: "0.5vh", background: "#FF6F00",
-              }} />
+              <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "0.5vh", background: "#FF6F00" }} />
             )}
             <div style={{
               fontSize: "0.78vw", fontWeight: 800, letterSpacing: "0.2em",
@@ -104,10 +102,7 @@ export default function Slide8() {
                     background: i === 0 ? "#FF6F00" : "#1A237E",
                     marginTop: "0.65vh", flexShrink: 0,
                   }} />
-                  <div style={{
-                    fontSize: "1.05vw", lineHeight: 1.55,
-                    color: i === 0 ? "#C9D5F5" : "#3A3A5C",
-                  }}>
+                  <div style={{ fontSize: "1.05vw", lineHeight: 1.55, color: i === 0 ? "#C9D5F5" : "#3A3A5C" }}>
                     {item}
                   </div>
                 </div>
@@ -117,7 +112,7 @@ export default function Slide8() {
         ))}
       </div>
 
-      <VBWatermark />
+      <SSWatermark />
     </div>
   );
 }

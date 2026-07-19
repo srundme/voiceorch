@@ -1,8 +1,8 @@
-const VBWatermark = () => (
+const SSWatermark = () => (
   <div style={{ position: "absolute", bottom: "2.8vh", left: "3vw", display: "flex", alignItems: "center", gap: "0.7vw" }}>
     <div style={{ width: "2.2vw", height: "0.3vh", background: "#FF6F00", borderRadius: "2px" }} />
-    <span style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#FF6F00", fontVariant: "small-caps", opacity: 0.85 }}>
-      Startup Singam 2026
+    <span style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#FF6F00", opacity: 0.85 }}>
+      snapserve.ai
     </span>
   </div>
 );
@@ -28,7 +28,7 @@ export default function Slide7() {
         <div>
           <div style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#FF6F00", marginBottom: "0.8vh" }}>Business Model</div>
           <h1 style={{ fontFamily: "var(--font-display-family)", fontSize: "2.6vw", fontWeight: 700, color: "#FFFFFF", margin: 0, lineHeight: 1.15 }}>
-            Simple pricing, two revenue streams
+            Per-minute SaaS with two margin tiers.
           </h1>
         </div>
         <span style={{ fontSize: "0.85vw", fontWeight: 600, color: "#4B6CB7", letterSpacing: "0.06em", paddingBottom: "0.3vh" }}>07 / 14</span>
@@ -38,26 +38,26 @@ export default function Slide7() {
         <div style={{ display: "flex", gap: "2vw", flex: 1 }}>
           <div style={col}>
             <div style={label}>Who pays</div>
-            <div style={{ fontSize: "1.28vw", fontWeight: 700, color: "#1A237E", marginBottom: "1.4vh" }}>SMBs &amp; Enterprise BFSI</div>
+            <div style={{ fontSize: "1.28vw", fontWeight: 700, color: "#1A237E", marginBottom: "1.4vh" }}>BFSI · NBFCs · Enterprise</div>
             <div style={{ fontSize: "1.05vw", color: "#5B5470", lineHeight: 1.62 }}>
-              Mid-size insurers, NBFCs, and collections teams who run high-volume outbound calls daily — and need compliance built in from day one.
+              Mid-size insurers, collections teams, and NBFCs running high-volume outbound calls daily — where compliance is non-negotiable and context amnesia costs real money.
             </div>
           </div>
           <div style={{ ...col, background: "#F0F3FF", borderColor: "#C5CAE9" }}>
             <div style={label}>How they pay</div>
-            <div style={{ fontSize: "1.28vw", fontWeight: 700, color: "#1A237E", marginBottom: "1.4vh" }}>Per-minute + SaaS tier</div>
+            <div style={{ fontSize: "1.28vw", fontWeight: 700, color: "#1A237E", marginBottom: "1.4vh" }}>Per-minute + SaaS</div>
             <div style={{ fontSize: "1.05vw", color: "#5B5470", lineHeight: 1.62 }}>
-              <div style={{ marginBottom: "1vh" }}>
+              <div style={{ marginBottom: "1.2vh" }}>
                 <strong style={{ color: "#1A237E" }}>Managed plan:</strong>
-                <span style={{ marginLeft: "0.4vw" }}>₹4.2/min</span>
+                <span style={{ marginLeft: "0.4vw", fontWeight: 700, color: "#1A237E" }}>₹4.2/min</span>
                 <span style={{ color: "#9FA8DA", fontSize: "0.9vw", marginLeft: "0.4vw" }}>($0.05/min)</span>
-                <div style={{ fontSize: "0.92vw", color: "#7986CB", marginTop: "0.2vh" }}>SnapServe supplies all AI keys.</div>
+                <div style={{ fontSize: "0.92vw", color: "#7986CB", marginTop: "0.3vh" }}>SnapServe supplies all AI provider keys.</div>
               </div>
               <div>
                 <strong style={{ color: "#1A237E" }}>BYOP plan:</strong>
-                <span style={{ marginLeft: "0.4vw" }}>₹2.9/min</span>
+                <span style={{ marginLeft: "0.4vw", fontWeight: 700, color: "#1A237E" }}>₹2.9/min</span>
                 <span style={{ color: "#9FA8DA", fontSize: "0.9vw", marginLeft: "0.4vw" }}>($0.035/min)</span>
-                <div style={{ fontSize: "0.92vw", color: "#7986CB", marginTop: "0.2vh" }}>Enterprise brings own provider keys.</div>
+                <div style={{ fontSize: "0.92vw", color: "#7986CB", marginTop: "0.3vh" }}>Customer brings own provider keys — pure orchestration fee.</div>
               </div>
             </div>
           </div>
@@ -65,7 +65,7 @@ export default function Slide7() {
             <div style={{ ...label, color: "#FF6F00" }}>Revenue per customer</div>
             <div style={{ fontSize: "1.28vw", fontWeight: 700, color: "#FFFFFF", marginBottom: "1.4vh" }}>₹5L – ₹25L ARR</div>
             <div style={{ fontSize: "1.05vw", color: "#C9D5F5", lineHeight: 1.62 }}>
-              A 500-calls/day account at ₹3/min averages ₹45,000/month. Larger enterprise accounts with custom SLAs and proxy API access exceed ₹2L/month.
+              500 calls/day at ₹3/min = ₹45,000/month. Enterprise accounts with custom SLAs and Memory Proxy API access exceed ₹2L/month. Every new call enriches the memory graph — retention is structural.
             </div>
           </div>
         </div>
@@ -79,7 +79,7 @@ export default function Slide7() {
               Unit Economics
             </div>
             <div style={{ fontSize: "1.1vw", color: "#BF360C", lineHeight: 1.55 }}>
-              <strong>10× operational cost advantage</strong> over human agents at scale — AI call cost ≈ ₹0.50–₹2/min vs. ₹8–₹15/min for a human agent with supervision overhead.
+              <strong>10× cost advantage</strong> over human agents at scale — AI call cost ≈ ₹0.50–₹2/min vs. ₹8–₹15/min for a human agent with supervision overhead. The gap widens with volume.
             </div>
           </div>
           <div style={{
@@ -88,22 +88,22 @@ export default function Slide7() {
             boxShadow: "0 0.6vh 1.6vh rgba(26,35,126,0.07)",
           }}>
             <div style={{ fontSize: "0.78vw", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.14em", color: "#FF6F00", marginBottom: "0.8vh" }}>
-              Revenue Streams
+              Two Revenue Streams
             </div>
             <div style={{ display: "flex", gap: "1.4vw" }}>
               <div style={{ flex: 1, fontSize: "1.05vw", color: "#3A3A5C", lineHeight: 1.58 }}>
-                <strong style={{ color: "#1A237E" }}>No-code SaaS</strong> — dashboard for non-technical teams to build and manage agents.
+                <strong style={{ color: "#1A237E" }}>No-code SaaS</strong> — dashboard for non-technical business teams. Build, launch, and manage agents without a single engineer.
               </div>
               <div style={{ width: "0.06vw", background: "#E8EAF0" }} />
               <div style={{ flex: 1, fontSize: "1.05vw", color: "#3A3A5C", lineHeight: 1.58 }}>
-                <strong style={{ color: "#1A237E" }}>Enterprise Proxy API</strong> — memory-as-a-service for teams already on Vapi, Bolna, or Retell.
+                <strong style={{ color: "#1A237E" }}>Enterprise Memory API</strong> — memory-as-a-service for teams already on Vapi, Bolna, or Retell. Our distribution lives inside competitors' stacks.
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      <VBWatermark />
+      <SSWatermark />
     </div>
   );
 }

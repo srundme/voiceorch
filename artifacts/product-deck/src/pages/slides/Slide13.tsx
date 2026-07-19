@@ -1,8 +1,8 @@
-const VBWatermark = () => (
+const SSWatermark = () => (
   <div style={{ position: "absolute", bottom: "2.8vh", left: "3vw", display: "flex", alignItems: "center", gap: "0.7vw" }}>
     <div style={{ width: "2.2vw", height: "0.3vh", background: "#FF6F00", borderRadius: "2px" }} />
-    <span style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#FF6F00", fontVariant: "small-caps", opacity: 0.85 }}>
-      Startup Singam 2026
+    <span style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#FF6F00", opacity: 0.85 }}>
+      snapserve.ai
     </span>
   </div>
 );
@@ -10,16 +10,16 @@ const VBWatermark = () => (
 export default function Slide13() {
   const bullets = [
     {
-      title: "Independent context-caching layer",
-      body: "The Memory Layer sits outside any single LLM or telephony provider. It caches structured caller facts, commitments, and episode summaries in PostgreSQL — available to any conversation turn regardless of which STT/LLM/TTS is in use on that call.",
+      title: "Provider-independent context layer",
+      body: "The Memory Layer lives outside any single LLM or telephony provider. Structured caller facts, commitments, and episode summaries are cached in PostgreSQL — available to every conversation turn regardless of which STT/LLM/TTS is in use on that call.",
     },
     {
-      title: "Structural fact & commitment extraction",
-      body: "After each call the pipeline extracts caller-specific facts (name, policy number, outstanding balance, language preference) and commitments ('I will pay on Friday'). These are stored as typed key-value pairs and injected verbatim into the next call's system prompt — the agent always knows the caller without being told.",
+      title: "Fact & commitment extraction after every call",
+      body: "After each call, the pipeline automatically extracts caller-specific facts (name, policy number, outstanding balance, language preference) and commitments ('I will pay on Friday'). These are stored as typed key-value pairs and injected verbatim into the next call's system prompt — the agent always knows the caller without being told.",
     },
     {
-      title: "OpenAI-compatible interface for external devs",
-      body: "The Memory Proxy exposes an OpenAI-compatible API base. Any team already running Vapi, Bolna, or Retell can point their api_base at SnapServe and immediately gain persistent caller memory with zero code change — our distribution is built inside competitors' stacks.",
+      title: "OpenAI-compatible Memory Proxy API",
+      body: "Any team already running Vapi, Bolna, or Retell can point their api_base at SnapServe and gain persistent caller memory with zero code change. Our distribution network is built inside competitors' stacks — they send us usage, we grow the moat.",
     },
   ];
 
@@ -35,7 +35,7 @@ export default function Slide13() {
       }}>
         <div>
           <div style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#FF6F00", marginBottom: "0.8vh" }}>
-            Any Additional Information
+            Technical Appendix
           </div>
           <h1 style={{ fontFamily: "var(--font-display-family)", fontSize: "2.6vw", fontWeight: 700, color: "#FFFFFF", margin: 0, lineHeight: 1.15 }}>
             Annexure 2 — The Memory Layer
@@ -55,9 +55,7 @@ export default function Slide13() {
               boxShadow: "0 0.6vh 1.8vh rgba(26,35,126,0.08)",
             }}
           >
-            <div style={{
-              width: "0.55vw", background: i === 1 ? "#FF6F00" : "#1A237E", flexShrink: 0,
-            }} />
+            <div style={{ width: "0.55vw", background: i === 1 ? "#FF6F00" : "#1A237E", flexShrink: 0 }} />
             <div style={{ padding: "2.4vh 2.2vw", display: "flex", flexDirection: "column", justifyContent: "center" }}>
               <div style={{ fontSize: "1.22vw", fontWeight: 700, color: "#1A237E", marginBottom: "1vh", lineHeight: 1.25 }}>
                 {title}
@@ -76,12 +74,12 @@ export default function Slide13() {
           </div>
           <div style={{ width: "0.06vw", height: "3.2vh", background: "rgba(255,111,0,0.35)" }} />
           <div style={{ fontSize: "1.05vw", color: "#C9D5F5", lineHeight: 1.55 }}>
-            Every call enriches the knowledge graph. Caller data compounds with usage — competitors who copy the pipeline still start from zero caller history.
+            Every call enriches the knowledge graph. Caller data compounds with usage — competitors who copy our pipeline still start from zero caller history. The gap widens with every minute of calls processed.
           </div>
         </div>
       </div>
 
-      <VBWatermark />
+      <SSWatermark />
     </div>
   );
 }

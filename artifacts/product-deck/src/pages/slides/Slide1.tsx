@@ -1,8 +1,8 @@
-const VBWatermark = () => (
+const SSWatermark = () => (
   <div style={{ position: "absolute", bottom: "2.8vh", left: "3vw", display: "flex", alignItems: "center", gap: "0.7vw" }}>
     <div style={{ width: "2.2vw", height: "0.3vh", background: "#FF6F00", borderRadius: "2px" }} />
-    <span style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#FF6F00", fontVariant: "small-caps", opacity: 0.85 }}>
-      Startup Singam 2026
+    <span style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#FF6F00", opacity: 0.85 }}>
+      snapserve.ai
     </span>
   </div>
 );
@@ -20,16 +20,13 @@ export default function Slide1() {
         background: "linear-gradient(135deg, #1A237E 0%, #0D1B4B 60%)",
         clipPath: "polygon(18% 0, 100% 0, 100% 100%, 0% 100%)",
       }} />
-
       <div style={{
         position: "absolute", top: 0, right: 0, width: "36vw", height: "100vh",
         background: "rgba(255,111,0,0.06)",
         clipPath: "polygon(20% 0, 100% 0, 100% 100%, 2% 100%)",
       }} />
 
-      <div style={{
-        position: "absolute", top: "6vh", left: "7vw", display: "flex", alignItems: "center", gap: "1vw",
-      }}>
+      <div style={{ position: "absolute", top: "6vh", left: "7vw", display: "flex", alignItems: "center", gap: "1vw" }}>
         <div style={{
           width: "3.6vw", height: "3.6vw", borderRadius: "50%",
           background: "rgba(255,111,0,0.18)", border: "0.1vw solid rgba(255,111,0,0.4)",
@@ -47,9 +44,9 @@ export default function Slide1() {
       <div style={{
         position: "absolute", top: "7vh", right: "4vw",
         fontSize: "0.8vw", fontWeight: 600, letterSpacing: "0.18em",
-        textTransform: "uppercase", color: "#FF6F00", opacity: 0.9,
+        textTransform: "uppercase", color: "rgba(255,111,0,0.5)", opacity: 0.9,
       }}>
-        Startup Singam 2026
+        snapserve.ai
       </div>
 
       <div style={{
@@ -64,21 +61,19 @@ export default function Slide1() {
         </div>
 
         <h1 style={{
-          fontFamily: "var(--font-display-family)", fontSize: "5.8vw", fontWeight: 800,
+          fontFamily: "var(--font-display-family)", fontSize: "5.4vw", fontWeight: 800,
           lineHeight: 1.06, margin: 0, color: "#FFFFFF",
         }}>
-          SnapServe AI
+          The voice AI<br />that never forgets.
         </h1>
 
-        <div style={{
-          width: "5vw", height: "0.4vh", background: "#FF6F00", borderRadius: "2px", margin: "2.4vh 0",
-        }} />
+        <div style={{ width: "5vw", height: "0.4vh", background: "#FF6F00", borderRadius: "2px", margin: "2.4vh 0" }} />
 
         <p style={{
-          fontSize: "1.7vw", fontWeight: 400, lineHeight: 1.5, color: "#C9D5F5",
-          maxWidth: "48vw", margin: 0,
+          fontSize: "1.55vw", fontWeight: 400, lineHeight: 1.55, color: "#C9D5F5",
+          maxWidth: "46vw", margin: 0,
         }}>
-          Build and deploy voice AI agents without writing a line of code.
+          Build and deploy Indian-language voice agents with cross-call persistent memory — no code required.
         </p>
 
         <div style={{ marginTop: "4.5vh", display: "flex", flexDirection: "column", gap: "1.2vh" }}>
@@ -98,7 +93,7 @@ export default function Slide1() {
         01 / 14
       </div>
 
-      <VBWatermark />
+      <SSWatermark />
     </div>
   );
 }

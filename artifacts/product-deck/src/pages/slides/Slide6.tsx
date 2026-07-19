@@ -1,8 +1,8 @@
-const VBWatermark = () => (
+const SSWatermark = () => (
   <div style={{ position: "absolute", bottom: "2.8vh", left: "3vw", display: "flex", alignItems: "center", gap: "0.7vw" }}>
     <div style={{ width: "2.2vw", height: "0.3vh", background: "#FF6F00", borderRadius: "2px" }} />
-    <span style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#FF6F00", fontVariant: "small-caps", opacity: 0.85 }}>
-      Startup Singam 2026
+    <span style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#FF6F00", opacity: 0.85 }}>
+      snapserve.ai
     </span>
   </div>
 );
@@ -25,7 +25,7 @@ export default function Slide6() {
         <div>
           <div style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#FF6F00", marginBottom: "0.8vh" }}>Market Opportunity</div>
           <h1 style={{ fontFamily: "var(--font-display-family)", fontSize: "2.6vw", fontWeight: 700, color: "#FFFFFF", margin: 0, lineHeight: 1.15 }}>
-            A large, underserved market — primed to move now
+            A billion-dollar gap — and the window is now.
           </h1>
         </div>
         <span style={{ fontSize: "0.85vw", fontWeight: 600, color: "#4B6CB7", letterSpacing: "0.06em", paddingBottom: "0.3vh" }}>06 / 14</span>
@@ -44,9 +44,9 @@ export default function Slide6() {
             <div style={{ fontSize: "0.98vw", color: "#5B5470", lineHeight: 1.5, marginTop: "1vh" }}>India BPM + voice-AI segment (NASSCOM, 2024)</div>
           </div>
           <div style={{ ...marketBlock, background: "#1A237E", borderColor: "#1A237E" }}>
-            <div style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "#FF6F00", marginBottom: "1vh" }}>SOM — Beachhead</div>
+            <div style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "#FF6F00", marginBottom: "1vh" }}>Beachhead</div>
             <div style={{ fontFamily: "var(--font-display-family)", fontSize: "3.2vw", fontWeight: 800, color: "#FFFFFF" }}>BFSI</div>
-            <div style={{ fontSize: "0.98vw", color: "#C9D5F5", lineHeight: 1.5, marginTop: "1vh" }}>Insurance renewals, collections, verification — highest call volume, most compliance-heavy</div>
+            <div style={{ fontSize: "0.98vw", color: "#C9D5F5", lineHeight: 1.5, marginTop: "1vh" }}>Insurance renewals, collections, verification — highest call volume, most compliance-heavy, fastest to convert</div>
           </div>
         </div>
 
@@ -57,9 +57,9 @@ export default function Slide6() {
           <div style={{ fontSize: "0.78vw", fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "#FF6F00", marginBottom: "1.6vh" }}>Why Now?</div>
           <div style={{ display: "flex", gap: "2.4vw" }}>
             {[
-              { n: "01", title: "Smartphone penetration", body: "800M+ connected Indians ready for voice-first services — the mass market is here." },
-              { n: "02", title: "Localized speech models", body: "India-first STT/LLM/TTS reached production quality and low cost in the last 18 months." },
-              { n: "03", title: "DPDP / TRAI regulation", body: "Compliance is now a purchase driver, not an afterthought — built-in compliance wins deals." },
+              { n: "01", title: "800M+ connected Indians", body: "Smartphone penetration has created the mass market. Voice-first services are no longer a future bet — they're today's default channel." },
+              { n: "02", title: "India-first AI models arrived", body: "Sarvam, Deepgram, and Krutrim reached production quality and low cost in the last 18 months. The model layer is finally ready." },
+              { n: "03", title: "Regulation = sales advantage", body: "DPDP and TRAI compliance is now a procurement requirement. Built-in compliance is not a differentiator — it's a gate. We're already through it." },
             ].map(({ n, title, body }) => (
               <div key={n} style={{ flex: 1 }}>
                 <div style={{ fontSize: "1.3vw", fontWeight: 800, color: "#FF6F00", marginBottom: "0.6vh" }}>{n}</div>
@@ -74,11 +74,11 @@ export default function Slide6() {
           background: "#FFF3E0", border: "0.06vh solid #FFCC80", borderRadius: "1vw",
           padding: "1.8vh 2.4vw", fontSize: "1.05vw", color: "#BF360C", lineHeight: 1.55,
         }}>
-          <strong>Early adopters:</strong> Mid-size insurers and NBFCs running 500–5,000 outbound calls/day — large enough to need automation, small enough to move fast without enterprise procurement cycles.
+          <strong>Early adopters:</strong> Mid-size insurers and NBFCs running 500–5,000 outbound calls/day — large enough to need automation, small enough to move without 18-month procurement cycles.
         </div>
       </div>
 
-      <VBWatermark />
+      <SSWatermark />
     </div>
   );
 }

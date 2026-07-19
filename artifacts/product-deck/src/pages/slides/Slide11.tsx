@@ -1,8 +1,8 @@
-const VBWatermark = () => (
+const SSWatermark = () => (
   <div style={{ position: "absolute", bottom: "2.8vh", left: "3vw", display: "flex", alignItems: "center", gap: "0.7vw" }}>
     <div style={{ width: "2.2vw", height: "0.3vh", background: "#FF6F00", borderRadius: "2px" }} />
-    <span style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#FF6F00", fontVariant: "small-caps", opacity: 0.85 }}>
-      Startup Singam 2026
+    <span style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#FF6F00", opacity: 0.85 }}>
+      snapserve.ai
     </span>
   </div>
 );
@@ -10,8 +10,8 @@ const VBWatermark = () => (
 export default function Slide11() {
   const years = [
     { label: "Year 1", milestone: "10 paying clients · Prove unit economics · ₹50L ARR" },
-    { label: "Year 2", milestone: "50+ clients · Memory Proxy live · ₹3 Cr ARR" },
-    { label: "Year 3", milestone: "Market presence in UAE & Philippines · ₹10 Cr ARR" },
+    { label: "Year 2", milestone: "50+ clients · Memory Proxy API live · ₹3 Cr ARR" },
+    { label: "Year 3", milestone: "UAE & Southeast Asia expansion · ₹10 Cr ARR" },
   ];
 
   return (
@@ -24,7 +24,7 @@ export default function Slide11() {
         <div>
           <div style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#FF6F00", marginBottom: "0.8vh" }}>Financials &amp; The Ask</div>
           <h1 style={{ fontFamily: "var(--font-display-family)", fontSize: "2.6vw", fontWeight: 700, color: "#FFFFFF", margin: 0, lineHeight: 1.15 }}>
-            We want to raise ₹3 Crore (Pre-Seed)
+            Raising ₹3 Crore — Pre-Seed
           </h1>
         </div>
         <span style={{ fontSize: "0.85vw", fontWeight: 600, color: "#4B6CB7", letterSpacing: "0.06em", paddingBottom: "0.3vh" }}>11 / 14</span>
@@ -43,7 +43,7 @@ export default function Slide11() {
               {[
                 { pct: "45%", label: "Technology & Infrastructure", w: "45%", color: "#1A237E" },
                 { pct: "30%", label: "GTM & Sales", w: "30%", color: "#FF6F00" },
-                { pct: "15%", label: "Salaries", w: "15%", color: "#3949AB" },
+                { pct: "15%", label: "Team", w: "15%", color: "#3949AB" },
                 { pct: "10%", label: "Operations & Legal", w: "10%", color: "#7986CB" },
               ].map(({ pct, label, w, color }) => (
                 <div key={label}>
@@ -64,16 +64,20 @@ export default function Slide11() {
             display: "flex", flexDirection: "column", gap: "1.4vh",
           }}>
             <div style={{ fontSize: "0.78vw", fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "#FF6F00" }}>
-              Non-Monetary Ask from Startup Singam
+              What We're Looking For
             </div>
             <div style={{ fontSize: "1.05vw", color: "#C9D5F5", lineHeight: 1.62 }}>
               <div style={{ display: "flex", alignItems: "flex-start", gap: "0.7vw", marginBottom: "0.8vh" }}>
                 <span style={{ color: "#FF6F00", flexShrink: 0, marginTop: "0.1vh" }}>→</span>
-                <span>Strategic mentorship from South India's SaaS leaders (Zoho, Freshworks ecosystem) to scale our B2B Enterprise Proxy API.</span>
+                <span>Strategic mentorship from India's B2B SaaS leaders to accelerate our Enterprise Proxy API go-to-market.</span>
+              </div>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: "0.7vw", marginBottom: "0.8vh" }}>
+                <span style={{ color: "#FF6F00", flexShrink: 0, marginTop: "0.1vh" }}>→</span>
+                <span>Direct introductions to BFSI decision-makers — insurers, NBFCs, and collections teams running 500+ daily calls.</span>
               </div>
               <div style={{ display: "flex", alignItems: "flex-start", gap: "0.7vw" }}>
                 <span style={{ color: "#FF6F00", flexShrink: 0, marginTop: "0.1vh" }}>→</span>
-                <span>Direct enterprise introductions to local BFSI and NBFC networks to accelerate our pilot deployments.</span>
+                <span>Investors who understand Indian enterprise GTM and can open doors to Zoho / Freshworks ecosystem channels.</span>
               </div>
             </div>
           </div>
@@ -111,9 +115,10 @@ export default function Slide11() {
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: "0.7vh" }}>
               {[
-                { icon: "✓", text: "Product complete — live in production" },
+                { icon: "✓", text: "Full platform live in production" },
                 { icon: "✓", text: "Pilot calls running with early BFSI accounts" },
                 { icon: "✓", text: "12+ Indian languages validated end-to-end" },
+                { icon: "✓", text: "TRAI / DPDP / IRDAI guardrails active" },
                 { icon: "→", text: "Converting pilots to paid · Pre-seed closes this raise" },
               ].map(({ icon, text }) => (
                 <div key={text} style={{ display: "flex", alignItems: "flex-start", gap: "0.6vw", fontSize: "1.02vw", color: "#1B5E20", lineHeight: 1.5 }}>
@@ -126,7 +131,7 @@ export default function Slide11() {
         </div>
       </div>
 
-      <VBWatermark />
+      <SSWatermark />
     </div>
   );
 }

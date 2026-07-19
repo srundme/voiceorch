@@ -1,8 +1,8 @@
-const VBWatermark = () => (
+const SSWatermark = () => (
   <div style={{ position: "absolute", bottom: "2.8vh", left: "3vw", display: "flex", alignItems: "center", gap: "0.7vw" }}>
     <div style={{ width: "2.2vw", height: "0.3vh", background: "#FF6F00", borderRadius: "2px" }} />
-    <span style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#FF6F00", fontVariant: "small-caps", opacity: 0.85 }}>
-      Startup Singam 2026
+    <span style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#FF6F00", opacity: 0.85 }}>
+      snapserve.ai
     </span>
   </div>
 );
@@ -11,8 +11,8 @@ export default function Slide9() {
   const risks = [
     {
       risk: "Platform Competition",
-      description: "Vapi, Retell, or a large cloud provider adds memory to their voice stack.",
-      mitigation: "Our moat is the memory architecture and Indian-market specificity — not the voice pipeline itself. Data network effects (caller histories) grow with every call and can't be replicated overnight. We are also building the Memory Proxy so other platforms depend on us.",
+      description: "Vapi, Retell, or a cloud giant adds memory to their voice stack.",
+      mitigation: "Our moat is the memory architecture and Indian-market specificity — not the voice pipeline itself. Caller knowledge graphs grow with every call and can't be replicated overnight. We're also building the Memory Proxy so other platforms depend on us for memory — our distribution lives inside competitors' stacks.",
       icon: (
         <svg width="1.6vw" height="1.6vw" viewBox="0 0 24 24" fill="none" stroke="#FF6F00" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M18 20V10" /><path d="M12 20V4" /><path d="M6 20v-6" />
@@ -21,8 +21,8 @@ export default function Slide9() {
     },
     {
       risk: "Regulatory Tightening",
-      description: "TRAI or DPDP rules tighten further, restricting AI outbound calls.",
-      mitigation: "Compliance is built into the core — we track every regulation update and ship guardrails as platform updates. Stricter regulation is actually a competitive advantage: it raises the bar for self-hosted or unregulated competitors and makes our managed compliance a required feature.",
+      description: "TRAI or DPDP rules restrict AI outbound calls further.",
+      mitigation: "Compliance is baked into the core — we track every regulation update and ship guardrails as platform updates. Stricter regulation is a competitive advantage: it raises the bar for self-hosted or unregulated tools and makes our managed compliance module a mandatory purchase, not a nice-to-have.",
       icon: (
         <svg width="1.6vw" height="1.6vw" viewBox="0 0 24 24" fill="none" stroke="#FF6F00" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
@@ -30,9 +30,9 @@ export default function Slide9() {
       ),
     },
     {
-      risk: "Dialect Latency",
-      description: "Model quality for regional languages degrades or latency spikes in production.",
-      mitigation: "Provider-agnostic architecture means we swap engines without downtime. We run Deepgram, Sarvam, and Azure STT in parallel and route to the best performer per call. Continuous in-production latency monitoring alerts us before customers notice.",
+      risk: "Provider Model Quality",
+      description: "Regional language model quality degrades or latency spikes in production.",
+      mitigation: "Provider-agnostic architecture lets us swap engines without downtime. Deepgram, Sarvam, and Azure STT run in parallel — we route to the best performer per call. Continuous in-production latency monitoring surfaces issues before customers notice. No single-provider dependency risk.",
       icon: (
         <svg width="1.6vw" height="1.6vw" viewBox="0 0 24 24" fill="none" stroke="#FF6F00" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
@@ -51,7 +51,7 @@ export default function Slide9() {
         <div>
           <div style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#FF6F00", marginBottom: "0.8vh" }}>Key Risks &amp; Mitigation</div>
           <h1 style={{ fontFamily: "var(--font-display-family)", fontSize: "2.6vw", fontWeight: 700, color: "#FFFFFF", margin: 0, lineHeight: 1.15 }}>
-            We've thought through the risks
+            We've stress-tested every risk.
           </h1>
         </div>
         <span style={{ fontSize: "0.85vw", fontWeight: 600, color: "#4B6CB7", letterSpacing: "0.06em", paddingBottom: "0.3vh" }}>09 / 14</span>
@@ -93,7 +93,7 @@ export default function Slide9() {
         ))}
       </div>
 
-      <VBWatermark />
+      <SSWatermark />
     </div>
   );
 }

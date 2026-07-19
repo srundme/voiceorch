@@ -1,8 +1,8 @@
-const VBWatermark = () => (
+const SSWatermark = () => (
   <div style={{ position: "absolute", bottom: "2.8vh", left: "3vw", display: "flex", alignItems: "center", gap: "0.7vw" }}>
     <div style={{ width: "2.2vw", height: "0.3vh", background: "#FF6F00", borderRadius: "2px" }} />
-    <span style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#FF6F00", fontVariant: "small-caps", opacity: 0.85 }}>
-      Startup Singam 2026
+    <span style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#FF6F00", opacity: 0.85 }}>
+      snapserve.ai
     </span>
   </div>
 );
@@ -18,13 +18,13 @@ export default function Slide14() {
     {
       reg: "DPDP",
       full: "Digital Personal Data Protection Act, 2023",
-      description: "Caller consent captured and stored per DPDP requirements before any data is processed. Caller data is purpose-limited — facts extracted from calls are used only for service continuity, not sold or shared. Data retention windows enforced automatically; erasure requests handled via API. All PII is stored encrypted at rest (AES-256-GCM).",
+      description: "Caller consent captured and stored before any data is processed. Caller data is purpose-limited — facts extracted from calls are used only for service continuity, not sold or shared. Data retention windows enforced automatically; erasure requests handled via API. All PII encrypted at rest (AES-256-GCM).",
       color: "#FF6F00",
     },
     {
       reg: "IRDAI",
       full: "Insurance Regulatory & Development Authority of India",
-      description: "Mandatory disclosure of agent identity and insurer name at call start for insurance-sector deployments. Misselling prevention prompts baked into agent system — the agent cannot quote prices or make promises outside approved script. Call recordings retained per IRDAI audit requirements. Compliance module activates automatically when agent category is set to Insurance.",
+      description: "Mandatory disclosure of agent identity and insurer name at call start for insurance deployments. Misselling prevention prompts baked into the agent system — the agent cannot quote prices or make promises outside the approved script. Call recordings retained per IRDAI audit requirements. Compliance module activates automatically when agent category is set to Insurance.",
       color: "#1A237E",
     },
   ];
@@ -41,7 +41,7 @@ export default function Slide14() {
       }}>
         <div>
           <div style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#FF6F00", marginBottom: "0.8vh" }}>
-            Any Additional Information
+            Technical Appendix
           </div>
           <h1 style={{ fontFamily: "var(--font-display-family)", fontSize: "2.6vw", fontWeight: 700, color: "#FFFFFF", margin: 0, lineHeight: 1.15 }}>
             Annexure 3 — Enterprise Compliance Matrix
@@ -50,7 +50,7 @@ export default function Slide14() {
         <span style={{ fontSize: "0.85vw", fontWeight: 600, color: "#4B6CB7", letterSpacing: "0.06em", paddingBottom: "0.3vh" }}>14 / 14</span>
       </div>
 
-      <div style={{ flex: 1, padding: "2.8vh 6vw 6.5vh 6vw", display: "flex", flexDirection: "column", gap: "2vh" }}>
+      <div style={{ flex: 1, padding: "2.8vh 6vw 2vh 6vw", display: "flex", flexDirection: "column", gap: "2vh" }}>
         {rows.map(({ reg, full, description, color }) => (
           <div
             key={reg}
@@ -77,9 +77,29 @@ export default function Slide14() {
             </div>
           </div>
         ))}
+
+        <div style={{
+          background: "#0D1B4B", borderRadius: "1.1vw", padding: "2.2vh 3vw",
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+        }}>
+          <div>
+            <div style={{ fontSize: "1.4vw", fontWeight: 800, color: "#FFFFFF", marginBottom: "0.4vh" }}>
+              Ready to see it live?
+            </div>
+            <div style={{ fontSize: "1.05vw", color: "#9FA8DA" }}>
+              Book a demo or try it yourself at <span style={{ color: "#FF6F00", fontWeight: 700 }}>snapserve.ai</span>
+            </div>
+          </div>
+          <div style={{
+            background: "#FF6F00", borderRadius: "0.8vw", padding: "1.2vh 2.4vw",
+            fontSize: "1.05vw", fontWeight: 700, color: "#FFFFFF", whiteSpace: "nowrap",
+          }}>
+            snapserve.ai →
+          </div>
+        </div>
       </div>
 
-      <VBWatermark />
+      <SSWatermark />
     </div>
   );
 }

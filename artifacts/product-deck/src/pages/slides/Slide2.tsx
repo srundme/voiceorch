@@ -1,8 +1,8 @@
-const VBWatermark = () => (
+const SSWatermark = () => (
   <div style={{ position: "absolute", bottom: "2.8vh", left: "3vw", display: "flex", alignItems: "center", gap: "0.7vw" }}>
     <div style={{ width: "2.2vw", height: "0.3vh", background: "#FF6F00", borderRadius: "2px" }} />
-    <span style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#FF6F00", fontVariant: "small-caps", opacity: 0.85 }}>
-      Startup Singam 2026
+    <span style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#FF6F00", opacity: 0.85 }}>
+      snapserve.ai
     </span>
   </div>
 );
@@ -43,7 +43,7 @@ export default function Slide2() {
       className="w-screen h-screen overflow-hidden relative"
       style={{ background: "#FAFAFA", fontFamily: "var(--font-body-family)", display: "flex", flexDirection: "column" }}
     >
-      <SlideHeader section="The Team" title="The founders" slide="02 / 14" />
+      <SlideHeader section="The Team" title="Two builders who shipped it themselves" slide="02 / 14" />
 
       <div style={{ flex: 1, padding: "3.2vh 6vw 6.5vh 6vw", display: "flex", flexDirection: "column", gap: "2.4vh" }}>
         <div style={{ display: "flex", gap: "2.4vw", flex: 1 }}>
@@ -61,13 +61,13 @@ export default function Slide2() {
               Founder &amp; CEO
             </div>
             <div style={bullet}><span style={{ position: "absolute", left: 0, top: "0.7vh", width: "0.5vw", height: "0.5vw", borderRadius: "50%", background: "#1A237E" }} />
-              CMA (US) background — deep expertise in unit economics, financial modelling, and compliance frameworks.
+              CMA (US) — deep expertise in unit economics, financial modelling, and compliance frameworks.
             </div>
             <div style={bullet}><span style={{ position: "absolute", left: 0, top: "0.7vh", width: "0.5vw", height: "0.5vw", borderRadius: "50%", background: "#1A237E" }} />
-              Non-technical founder who engineered the core operational logic of SnapServe hands-on — knows every product nuance.
+              Non-technical founder who hand-built SnapServe's core operational logic — knows every product nuance end-to-end.
             </div>
             <div style={{ ...bullet, marginBottom: 0 }}><span style={{ position: "absolute", left: 0, top: "0.7vh", width: "0.5vw", height: "0.5vw", borderRadius: "50%", background: "#1A237E" }} />
-              Built the first prototype solo before bringing on engineering talent.
+              Took it from zero to production without external engineers — first principles founder.
             </div>
           </div>
 
@@ -85,13 +85,13 @@ export default function Slide2() {
               Co-Founder &amp; COO
             </div>
             <div style={bullet}><span style={{ position: "absolute", left: 0, top: "0.7vh", width: "0.5vw", height: "0.5vw", borderRadius: "50%", background: "#FF6F00" }} />
-              Software engineer from CGI — enterprise infrastructure, large-scale system design.
+              Enterprise engineer from CGI — large-scale infrastructure and system design.
             </div>
             <div style={bullet}><span style={{ position: "absolute", left: 0, top: "0.7vh", width: "0.5vw", height: "0.5vw", borderRadius: "50%", background: "#FF6F00" }} />
-              Took SnapServe from prototype to a production platform running live calls — owns the TypeScript orchestration stack end to end.
+              Owns the entire TypeScript orchestration stack — took SnapServe from prototype to live production calls.
             </div>
             <div style={{ ...bullet, marginBottom: 0 }}><span style={{ position: "absolute", left: 0, top: "0.7vh", width: "0.5vw", height: "0.5vw", borderRadius: "50%", background: "#FF6F00" }} />
-              Responsible for reliability, latency, and real-world telephony integrations.
+              Responsible for sub-second latency, multi-provider failover, and real-world telephony integrations.
             </div>
           </div>
         </div>
@@ -105,12 +105,12 @@ export default function Slide2() {
           </div>
           <div style={{ width: "0.06vw", height: "2.8vh", background: "#C5CAE9" }} />
           <div style={{ fontSize: "1.02vw", color: "#6B7280", fontStyle: "italic" }}>
-            Advisor seats open — introductions welcome.
+            Advisor seats open — introductions welcome. Strong domain fit in BFSI, SaaS, and Indian enterprise GTM preferred.
           </div>
         </div>
       </div>
 
-      <VBWatermark />
+      <SSWatermark />
     </div>
   );
 }

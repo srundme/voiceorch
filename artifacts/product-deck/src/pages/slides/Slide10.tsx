@@ -1,8 +1,8 @@
-const VBWatermark = () => (
+const SSWatermark = () => (
   <div style={{ position: "absolute", bottom: "2.8vh", left: "3vw", display: "flex", alignItems: "center", gap: "0.7vw" }}>
     <div style={{ width: "2.2vw", height: "0.3vh", background: "#FF6F00", borderRadius: "2px" }} />
-    <span style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#FF6F00", fontVariant: "small-caps", opacity: 0.85 }}>
-      Startup Singam 2026
+    <span style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#FF6F00", opacity: 0.85 }}>
+      snapserve.ai
     </span>
   </div>
 );
@@ -26,13 +26,13 @@ export default function Slide10() {
   const features = [
     { feature: "Zero-code agent builder", snap: <Check />, vapi: <Cross />, status: <Cross /> },
     { feature: "Persistent cross-call memory", snap: <Check />, vapi: <Cross />, status: <Cross /> },
-    { feature: "Dropped-call resume with context", snap: <Check />, vapi: <Cross />, status: <Cross /> },
+    { feature: "Dropped-call resume with full context", snap: <Check />, vapi: <Cross />, status: <Cross /> },
     { feature: "12+ Indian languages, natively", snap: <Check />, vapi: <Part />, status: <Cross /> },
     { feature: "Indian phone number provisioning (KYC)", snap: <Check />, vapi: <Cross />, status: <Cross /> },
     { feature: "Inbound + outbound campaigns in one platform", snap: <Check />, vapi: <Part />, status: <Cross /> },
     { feature: "IRDAI / TRAI / DPDP built-in", snap: <Check />, vapi: <Cross />, status: <Cross /> },
-    { feature: "Provider-agnostic STT / LLM / TTS (10+ models)", snap: <Check />, vapi: <Part />, status: <Cross /> },
-    { feature: "Cross-Session Historical Data Handover", snap: <Check />, vapi: <Cross />, status: <Cross /> },
+    { feature: "Provider-agnostic STT / LLM / TTS (12+ models)", snap: <Check />, vapi: <Part />, status: <Cross /> },
+    { feature: "Full cross-session history handover to human agent", snap: <Check />, vapi: <Cross />, status: <Cross /> },
   ];
 
   return (
@@ -43,9 +43,9 @@ export default function Slide10() {
       <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "0.55vh", background: "#FF6F00" }} />
       <div style={{ background: "#1A237E", padding: "3.2vh 6vw 2.8vh 6vw", display: "flex", alignItems: "flex-end", justifyContent: "space-between" }}>
         <div>
-          <div style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#FF6F00", marginBottom: "0.8vh" }}>Competition &amp; Your Advantage</div>
+          <div style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#FF6F00", marginBottom: "0.8vh" }}>Competition &amp; Advantage</div>
           <h1 style={{ fontFamily: "var(--font-display-family)", fontSize: "2.6vw", fontWeight: 700, color: "#FFFFFF", margin: 0, lineHeight: 1.15 }}>
-            Where SnapServe wins
+            No one checks all nine boxes. We do.
           </h1>
         </div>
         <span style={{ fontSize: "0.85vw", fontWeight: 600, color: "#4B6CB7", letterSpacing: "0.06em", paddingBottom: "0.3vh" }}>10 / 14</span>
@@ -59,7 +59,7 @@ export default function Slide10() {
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ background: "#F0F3FF" }}>
-                <th style={{ ...th, textAlign: "left" }}>Feature</th>
+                <th style={{ ...th, textAlign: "left" }}>Capability</th>
                 <th style={{ ...th, textAlign: "center", color: "#FF6F00" }}>SnapServe</th>
                 <th style={{ ...th, textAlign: "center" }}>Vapi · Retell · Bolna · Zen Voice</th>
                 <th style={{ ...th, textAlign: "center" }}>Status Quo (Human)</th>
@@ -84,23 +84,22 @@ export default function Slide10() {
         }}>
           <div style={{ flexShrink: 0 }}>
             <div style={{ fontSize: "0.78vw", fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "#FF6F00", marginBottom: "0.6vh" }}>
-              Your Advantage
+              The Moat
             </div>
             <div style={{ fontSize: "1.28vw", fontWeight: 700, color: "#FFFFFF", lineHeight: 1.25, maxWidth: "18vw" }}>
-              The Memory Layer Moat
+              Data that compounds.<br />History that can't be copied.
             </div>
           </div>
           <div style={{ width: "0.06vw", background: "rgba(255,111,0,0.35)", alignSelf: "stretch" }} />
           <div style={{ fontSize: "1.05vw", color: "#C9D5F5", lineHeight: 1.65, flex: 1 }}>
-            Every call enriches our caller knowledge graph. That data compounds — competitors who copy our pipeline still start from zero caller history.
-            The Memory Proxy also lets other platforms (Vapi, Bolna, Retell) route through SnapServe for memory, creating a distribution network inside our competitors' ecosystems.
-            This is not a feature — it is a structural moat that grows with usage.
-            While competitors can transfer a live call, our Memory Proxy pushes the user's complete historical knowledge graph to the human agent, ensuring deep customer empathy that stateless systems cannot fake.
+            Every call enriches SnapServe's caller knowledge graph. Competitors who copy our pipeline still start from zero caller history — you can't replicate three years of relationship data overnight.
+            The Memory Proxy lets Vapi, Bolna, and Retell customers plug directly into SnapServe's memory layer with one config change — our distribution grows inside competitors' ecosystems.
+            This isn't a feature advantage. It's a structural moat that strengthens with every call.
           </div>
         </div>
       </div>
 
-      <VBWatermark />
+      <SSWatermark />
     </div>
   );
 }
