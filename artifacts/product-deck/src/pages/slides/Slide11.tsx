@@ -107,23 +107,21 @@ export default function Slide11() {
           </div>
 
           <div style={{
-            background: "#E8F5E9", border: "0.06vh solid #A5D6A7",
-            borderRadius: "1.1vw", padding: "2.2vh 2.4vw",
+            background: "#1A237E", borderRadius: "1.1vw", padding: "2.2vh 2.4vw",
           }}>
-            <div style={{ fontSize: "0.78vw", fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase", color: "#2E7D32", marginBottom: "0.8vh" }}>
-              Current Traction
+            <div style={{ fontSize: "0.78vw", fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase", color: "#FF6F00", marginBottom: "0.8vh" }}>
+              18-Month Milestones
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.7vh" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.9vh" }}>
               {[
-                { icon: "✓", text: "Full platform live in production" },
-                { icon: "✓", text: "Pilot calls running with early BFSI accounts" },
-                { icon: "✓", text: "12+ Indian languages validated end-to-end" },
-                { icon: "✓", text: "TRAI / DPDP / IRDAI guardrails active" },
-                { icon: "→", text: "Converting pilots to paid · Pre-seed closes this raise" },
-              ].map(({ icon, text }) => (
-                <div key={text} style={{ display: "flex", alignItems: "flex-start", gap: "0.6vw", fontSize: "1.02vw", color: "#1B5E20", lineHeight: 1.5 }}>
-                  <span style={{ color: icon === "→" ? "#FF6F00" : "#2E7D32", fontWeight: 700, flexShrink: 0 }}>{icon}</span>
-                  <span>{text}</span>
+                { q: "Q1–Q2", text: "10 paying BFSI clients onboarded" },
+                { q: "Q3",    text: "Memory Proxy API in public beta" },
+                { q: "Q4",    text: "₹50L ARR · Unit economics validated" },
+                { q: "+18M",  text: "₹3 Cr ARR · Series A ready" },
+              ].map(({ q, text }) => (
+                <div key={q} style={{ display: "flex", alignItems: "center", gap: "1vw", fontSize: "1.02vw" }}>
+                  <div style={{ minWidth: "4.5vw", background: "rgba(255,111,0,0.18)", borderRadius: "0.5vw", padding: "0.3vh 0.6vw", textAlign: "center", fontSize: "0.82vw", fontWeight: 700, color: "#FF6F00" }}>{q}</div>
+                  <div style={{ color: "#C9D5F5", lineHeight: 1.4 }}>{text}</div>
                 </div>
               ))}
             </div>
