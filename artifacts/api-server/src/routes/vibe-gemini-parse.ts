@@ -72,3 +72,174 @@ export function looksLikePhoneSkip(text: string): boolean {
 export function replyAsksCallFlow(reply: string): boolean {
   return /walk me through|how should .+ handle|call (flow|script)|opening|main pitch/i.test(reply);
 }
+
+/** Short user nudges that mean "accept and continue" — not a substantive edit. */
+export function looksLikeAffirmation(text: string): boolean {
+  const t = text.trim().toLowerCase().replace(/[.!]+$/g, "").trim();
+  if (!t || t.length > 80) return false;
+  if (
+    /^(yes|yep|yeah|yup|ok|okay|k|sure|fine|good|great|perfect|done|continue|next|proceed|then|alright|all right|go ahead|go next|use it|use it as-?is|looks good|sounds good|that works|no changes|nothing to change|accepted)([\s,.-]*(please|thanks|thank you)?)?$/i
+      .test(t)
+  ) {
+    return true;
+  }
+  if (/^(yes|ok|okay|sure)[\s,]+(please\s+)?(continue|next|go|proceed|go ahead|go next)/i.test(t)) {
+    return true;
+  }
+  if (/^(use it|keep it|ship it|let'?s (go|continue|move on))/i.test(t)) {
+    return true;
+  }
+  return false;
+}
+
+function strField(cfg: Record<string, unknown>, key: string): string {
+  const v = cfg[key];
+  return typeof v === "string" ? v.trim() : "";
+}
+
+/**
+ * When the user only affirms, force the interviewer forward so it cannot
+ * re-confirm the same step. Fills sensible call-flow defaults if still empty.
+ */
+export function applyAffirmationPhaseAdvance(
+  parsed: GeminiVibeResponse,
+  lastUserText: string,
+): void {
+  const raw = lastUserText.trim().toLowerCase();
+  const isSkip = /^(skip|none|nope|no thanks|nothing|n\/a)([\s!.]*)$/i.test(raw);
+  if (!looksLikeAffirmation(lastUserText) && !isSkip) return;
+  if (!parsed.config) return;
+  const cfg = parsed.config as Record<string, unknown>;
+  const name = strField(cfg, "agentName") || "your agent";
+  const company = strField(cfg, "companyName") || "the business";
+  const phase = (parsed.phase || "").trim();
+
+  // "skip" only auto-advances soft optional steps (KB / compliance), not call_flow.
+  if (isSkip && phase !== "knowledge_base" && phase !== "features_compliance") return;
+
+  const notes = strField(cfg, "callFlowNotes");
+  let mandatory = strField(cfg, "mandatoryQuestions");
+  let rules = strField(cfg, "agentRules");
+  let callback = strField(cfg, "callbackGreeting");
+
+  // ── call_flow: one "okay" accepts the draft and moves on ───────────────
+  if (!isSkip && (phase === "call_flow" || phase === "voice_selection") && notes) {
+    if (!mandatory) {
+      cfg["mandatoryQuestions"] = [
+        "1. Caller full name",
+        "2. Reason for the call / what they need",
+        "3. Preferred next step (appointment time, callback, or decision)",
+      ].join("\n");
+      mandatory = String(cfg["mandatoryQuestions"]);
+    }
+    if (!rules) {
+      cfg["agentRules"] = [
+        "1. Be warm, clear, and concise — one question at a time",
+        `2. Never invent prices, availability, or policies for ${company}`,
+        "3. Confirm the next step before ending the call",
+      ].join("\n");
+      rules = String(cfg["agentRules"]);
+    }
+    if (!callback) {
+      cfg["callbackGreeting"] =
+        `Quick re-intro: greet by name if known, briefly remind them you're ${name} from ${company}, then pick up on their last need.`;
+      callback = String(cfg["callbackGreeting"]);
+    }
+    parsed.phase = "knowledge_base";
+    if (!/knowledge\s*base/i.test(parsed.reply)) {
+      parsed.reply =
+        `Got it — call flow locked in for ${name}. Does ${name} need a knowledge base? ` +
+        `What should ${name} know about ${company}'s products, services, pricing, or FAQs? ` +
+        `Or say "skip" to continue.`;
+    }
+    return;
+  }
+
+  // ── knowledge_base → gender ────────────────────────────────────────────
+  if (phase === "knowledge_base") {
+    parsed.phase = "features_gender";
+    if (!/sir|ma'?am|gender|male or female/i.test(parsed.reply)) {
+      parsed.reply =
+        `Okay. Should ${name} detect if the caller is male or female to address them as Sir or Ma'am?`;
+    }
+    return;
+  }
+
+  // ── gender → transfer ──────────────────────────────────────────────────
+  if (phase === "features_gender") {
+    parsed.phase = "features_transfer";
+    if (!/transfer/i.test(parsed.reply)) {
+      parsed.reply = `Got it. Should ${name} be able to transfer calls to a human agent?`;
+    }
+    return;
+  }
+
+  // ── transfer → voicemail ───────────────────────────────────────────────
+  if (phase === "features_transfer") {
+    parsed.phase = "features_voicemail";
+    if (!/voicemail/i.test(parsed.reply)) {
+      parsed.reply = `Okay. For unanswered outbound calls — should ${name} leave a voicemail?`;
+    }
+    return;
+  }
+
+  // ── voicemail → scheduling ─────────────────────────────────────────────
+  if (phase === "features_voicemail") {
+    parsed.phase = "features_scheduling";
+    if (!/schedul|appoint/i.test(parsed.reply)) {
+      parsed.reply = `Got it. Does ${name} need to book appointments or manage scheduling?`;
+    }
+    return;
+  }
+
+  // ── scheduling → compliance (when tools already set or scheduling off) ─
+  if (phase === "features_scheduling") {
+    const tools = cfg["schedulingTools"];
+    const enabled = cfg["schedulingEnabled"] === true;
+    const toolsReady = Array.isArray(tools) && tools.length > 0;
+    if (!enabled || toolsReady) {
+      if (!enabled) cfg["schedulingEnabled"] = false;
+      parsed.phase = "features_compliance";
+      if (!/compliance|dpdp|trai|irdai/i.test(parsed.reply)) {
+        parsed.reply =
+          `Okay. Any compliance standards for ${name}? Options: DPDP, TRAI, IRDAI — or none.`;
+      }
+    }
+    return;
+  }
+
+  // ── compliance → dispositions ──────────────────────────────────────────
+  if (phase === "features_compliance") {
+    parsed.phase = "dispositions";
+    if (!/hot|interested|outcome|disposition/i.test(parsed.reply)) {
+      parsed.reply =
+        `Got it. How would you define a HOT or Interested lead for ${name}? ` +
+        `What does a caller say that means they're interested — and what means Not Interested?`;
+    }
+    return;
+  }
+
+  // ── dispositions affirmed → phone or build ─────────────────────────────
+  if (phase === "dispositions") {
+    const dispositions = cfg["dispositions"];
+    const hasDisp = Array.isArray(dispositions) && dispositions.length > 0;
+    if (hasDisp) {
+      const direction = String(cfg["direction"] ?? "inbound");
+      if (direction === "outbound") {
+        parsed.phase = "build";
+        parsed.ready = true;
+        if (!/building/i.test(parsed.reply)) {
+          parsed.reply = `Perfect — I have everything I need! Building ${name} now...`;
+        }
+      } else {
+        parsed.phase = "phone_number";
+        if (!/phone number|connect a number|skip for now/i.test(parsed.reply)) {
+          parsed.reply =
+            `Great. Since ${name} takes incoming calls, let's connect a phone number — ` +
+            `pick one below, or skip for now.`;
+        }
+      }
+    }
+  }
+}
+

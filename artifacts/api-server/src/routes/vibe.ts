@@ -13,7 +13,7 @@ import { logger } from "../lib/logger.js";
 import { logActivity } from "../lib/activity.js";
 import { resolveAmdConfig } from "../orchestration/telephony/dial.js";
 import { trackEvent } from "../services/track-event.js";
-import { parseVibeGeminiJson, extractGeminiResponseText, parseVoicePick, looksLikePhoneAssign, looksLikePhoneSkip, replyAsksCallFlow } from "./vibe-gemini-parse.js";
+import { parseVibeGeminiJson, extractGeminiResponseText, parseVoicePick, looksLikePhoneAssign, looksLikePhoneSkip, replyAsksCallFlow, looksLikeAffirmation, applyAffirmationPhaseAdvance } from "./vibe-gemini-parse.js";
 import { buildPatternSystemPrompt } from "./vibe-system-prompt-pattern.js";
 import { filterVoicesByAgentGender } from "./vibe-agent-gender.js";
 
@@ -287,24 +287,17 @@ Turn 1 — Propose the flow (do NOT just ask):
   Close — the concrete next step (enrol / book / callback) and a warm sign-off.
 - Make it specific to their domain — never generic filler. Reuse their real details verbatim.
 - Put this full draft into callFlowNotes immediately (do not leave it empty), in the clean multi-line format.
-- End your reply with a short line offering edits AND a translation: "Use it as-is, change any step, or give me your own. Want me to show this in [agent's language, e.g. Tamil/Hindi] so it's easier to read? Just say the word." — ONLY offer translation when the agent's language is NOT English; if it is English, drop that sentence.
+- End your reply with: "Reply okay to use this and continue — or tell me what to change." (Offer Tamil/Hindi translation only when the agent's language is NOT English.)
 
 TRANSLATION:
 - If the user asks to see the flow in Tamil/Hindi/another language, RE-DISPLAY the same flow translated into that language in your reply, keeping the exact clean multi-line labelled layout. This is for the user's reading only — keep callFlowNotes itself in English (the agent still gets English instructions and speaks in its configured language) UNLESS the user explicitly says to store it in that language.
 
-Turn 2 — Confirm/refine, then propose must-ask questions + rules (still don't ask blind):
-- If the user edits anything, apply it to callFlowNotes and briefly re-confirm.
-- In the SAME message, PROPOSE sensible defaults derived from the purpose, each as a clean numbered/bulleted list (not a paragraph):
-  (a) Must-ask questions: suggest 2–4 questions [name] should ask on every call, as a numbered list, and put them in mandatoryQuestions. Say: "I'd also have [name] always ask these — add or remove any?"
-  (b) Rules: suggest 2–3 obvious dos/don'ts for this business (e.g. "Always confirm the batch start date", "Never promise a discount without approval") and put them in agentRules. Ask: "And a couple of ground rules — anything to change?"
-- The user can accept, edit, or add their own to all of the above.
+Turn 2 — On ANY acceptance ("okay", "yes", "use it", "looks good", …):
+- Do NOT stop at a confirmation-only reply.
+- Immediately fill sensible defaults for mandatoryQuestions, agentRules, and callbackGreeting if still empty (quick re-intro is fine for memory), then set phase="knowledge_base" and ask the knowledge-base question in the SAME message.
+- If they edit the flow instead of affirming, apply edits to callFlowNotes, then still propose must-ask + rules + memory briefly and invite one "okay to continue".
 
-Turn 3 — Repeat callers (ALWAYS ask, every direction — MEMORY IS A KEY SNAPSERVE STRENGTH):
-- Memory is one of SnapServe's biggest advantages: [name] remembers people it has already spoken to across calls. Make this its own clear, prominent question — never skip it and never bury it.
-- Ask: "One of [name]'s best features is memory — it remembers callers it has spoken to before. When [name] reaches someone it already knows, how should it open? I'd recommend picking up warmly from where they left off (referencing what was discussed) instead of re-introducing from scratch — but you can choose a quick re-intro or a fresh start."
-- Propose "pick up from where they left off" as the default and put that draft opening in callbackGreeting.
-- callFlowNotes, mandatoryQuestions, agentRules, and callbackGreeting MUST end up populated with your proposed drafts (refined by the user), not empty — unless the user explicitly says they want one left blank.
-→ Transition: set phase="knowledge_base" only after the user has accepted or edited the proposed flow (callFlowNotes populated), you have presented the must-ask questions + rules, AND you have asked the repeat-caller/memory question.
+→ Transition: set phase="knowledge_base" as soon as callFlowNotes is accepted (affirmation or explicit edit+continue). Do not make the user say okay three times for must-ask, rules, and memory separately.
 
 PHASE "knowledge_base"
 - Ask: "Does [name] need a knowledge base? You can upload documents in the platform after creation. For now — what should [name] know about [company]'s products, services, pricing, or FAQs? I'll bake this into the system prompt."
@@ -377,12 +370,13 @@ PHASE "build"
 - Set ready=true with the complete config
 
 RULES:
+- AUTO-ADVANCE (CRITICAL): When the user says "okay", "ok", "yes", "sure", "looks good", "use it", "continue", "next", "then", or similar — they are ACCEPTING the current step. Do NOT restate the same confirmation. In the SAME reply, move to the next unfinished phase and ask its question (or build if done). Never require the user to say "go next" twice.
 - FORMATTING: replies are shown as PLAIN TEXT — markdown is NOT rendered. NEVER use *, **, __, #, ##, or backticks; they appear literally as ugly characters. For emphasis use plain words. For any list (call flow, must-ask questions, rules, outcomes) use real line breaks with "1." / "2." or a leading "- ", never one dense paragraph.
 - Conversational and warm — like a helpful colleague, not a form
 - NEVER ask about STT/LLM/TTS — handled automatically
 - Always return the COMPLETE config with ALL previously collected fields in every response
 - Suggest sensible defaults when the user is unsure
-- 1–2 questions per turn max
+- 1–2 questions per turn max — but when the user affirms, prefer advancing over asking another confirmation on the same topic
 - The moment the config BECOMES multi-language (languageMode changes to "multi"), include one brief heads-up in your reply: the agent will start every call in English and automatically switch to the caller's language as soon as they respond in it — so "English (India)" will show as the agent's base language. Say this ONCE per language decision, not on every turn.
 
 RESPONSE FORMAT — ONLY valid JSON, no prose outside it:
@@ -924,6 +918,23 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
       ];
     }
 
+    // User only affirmed — force the model to advance instead of re-confirming.
+    if (!isRefine && looksLikeAffirmation(lastUserContent(messages))) {
+      contextualMessages = [
+        ...contextualMessages,
+        {
+          role: "user" as const,
+          content: [
+            `[SYSTEM TURN RULE — USER AFFIRMED / CONTINUE]`,
+            `The user said a short acceptance ("okay", "yes", "continue", etc.).`,
+            `Do NOT only restate what you already confirmed.`,
+            `In this reply: accept the current step, fill any missing sensible defaults for that step, set phase to the NEXT unfinished phase, and ask that next question (or build if ready).`,
+            `If call_flow notes are already set, jump to knowledge_base after filling mandatoryQuestions/agentRules/callbackGreeting defaults.`,
+          ].join("\n"),
+        },
+      ];
+    }
+
     let parsed: GeminiVibeResponse;
     try {
       parsed = await callGemini(geminiKey, contextualMessages);
@@ -994,6 +1005,11 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
           parsed.reply = `${parsed.reply.trim()} Perfect — I have everything I need! Building ${c.agentName || "your agent"} now...`;
         }
       }
+    }
+
+    // Affirmations ("okay", "yes", "then"…) must advance — never re-confirm the same step.
+    if (!isRefine) {
+      applyAffirmationPhaseAdvance(parsed, lastUser);
     }
 
     const reply = (parsed.reply ?? "Tell me about the agent you want to build!").trim();
