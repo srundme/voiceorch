@@ -8,38 +8,12 @@ const SSWatermark = () => (
 );
 
 export default function Slide9() {
-  const risks = [
-    {
-      risk: "Platform Competition",
-      description: "Vapi, Retell, or a cloud giant adds memory to their voice stack.",
-      mitigation: "Our moat is the memory architecture and Indian-market specificity — not the voice pipeline itself. Caller knowledge graphs grow with every call and can't be replicated overnight. We're also building the Memory Proxy so other platforms depend on us for memory — our distribution lives inside competitors' stacks.",
-      icon: (
-        <svg width="1.6vw" height="1.6vw" viewBox="0 0 24 24" fill="none" stroke="#FF6F00" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M18 20V10" /><path d="M12 20V4" /><path d="M6 20v-6" />
-        </svg>
-      ),
-    },
-    {
-      risk: "Regulatory Tightening",
-      description: "TRAI or DPDP rules restrict AI outbound calls further.",
-      mitigation: "Compliance is baked into the core — we track every regulation update and ship guardrails as platform updates. Stricter regulation is a competitive advantage: it raises the bar for self-hosted or unregulated tools and makes our managed compliance module a mandatory purchase, not a nice-to-have.",
-      icon: (
-        <svg width="1.6vw" height="1.6vw" viewBox="0 0 24 24" fill="none" stroke="#FF6F00" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
-        </svg>
-      ),
-    },
-    {
-      risk: "Provider Model Quality",
-      description: "Regional language model quality degrades or latency spikes in production.",
-      mitigation: "Provider-agnostic architecture lets us swap engines without downtime. Deepgram, Sarvam, and Azure STT run in parallel — we route to the best performer per call. Continuous in-production latency monitoring surfaces issues before customers notice. No single-provider dependency risk.",
-      icon: (
-        <svg width="1.6vw" height="1.6vw" viewBox="0 0 24 24" fill="none" stroke="#FF6F00" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
-        </svg>
-      ),
-    },
-  ];
+  const stat: React.CSSProperties = {
+    flex: 1, background: "#FFFFFF", border: "0.06vh solid #E8EAF0",
+    borderRadius: "1.2vw", padding: "2.8vh 2vw",
+    boxShadow: "0 0.8vh 2.2vh rgba(26,35,126,0.09)",
+    display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center",
+  };
 
   return (
     <div
@@ -49,48 +23,70 @@ export default function Slide9() {
       <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "0.55vh", background: "#FF6F00" }} />
       <div style={{ background: "#1A237E", padding: "3.2vh 6vw 2.8vh 6vw", display: "flex", alignItems: "flex-end", justifyContent: "space-between" }}>
         <div>
-          <div style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#FF6F00", marginBottom: "0.8vh" }}>Key Risks &amp; Mitigation</div>
+          <div style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#FF6F00", marginBottom: "0.8vh" }}>Traction</div>
           <h1 style={{ fontFamily: "var(--font-display-family)", fontSize: "2.6vw", fontWeight: 700, color: "#FFFFFF", margin: 0, lineHeight: 1.15 }}>
-            We've stress-tested every risk.
+            Product live. Calls running. Memory working.
           </h1>
         </div>
-        <span style={{ fontSize: "0.85vw", fontWeight: 600, color: "#4B6CB7", letterSpacing: "0.06em", paddingBottom: "0.3vh" }}>09 / 14</span>
+        <span style={{ fontSize: "0.85vw", fontWeight: 600, color: "#4B6CB7", letterSpacing: "0.06em", paddingBottom: "0.3vh" }}>05 / 14</span>
       </div>
 
-      <div style={{ flex: 1, padding: "2.8vh 6vw 6.5vh 6vw", display: "flex", flexDirection: "column", gap: "2vh" }}>
-        {risks.map(({ risk, description, mitigation, icon }) => (
-          <div
-            key={risk}
-            style={{
-              flex: 1, display: "flex", gap: "2.4vw", alignItems: "stretch",
-              background: "#FFFFFF", border: "0.06vh solid #E8EAF0",
-              borderRadius: "1.1vw", overflow: "hidden",
-              boxShadow: "0 0.6vh 1.8vh rgba(26,35,126,0.08)",
-            }}
-          >
-            <div style={{
-              width: "28vw", background: "#FFF8F0", borderRight: "0.06vh solid #FFCC80",
-              padding: "2.2vh 2vw", display: "flex", flexDirection: "column", justifyContent: "center", gap: "0.8vh",
-            }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.8vw" }}>
-                <div style={{
-                  width: "2.6vw", height: "2.6vw", borderRadius: "50%", background: "#FFF3E0",
-                  display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-                }}>
-                  {icon}
-                </div>
-                <div style={{ fontSize: "1.2vw", fontWeight: 700, color: "#BF360C" }}>{risk}</div>
-              </div>
-              <div style={{ fontSize: "1.02vw", color: "#8D4000", lineHeight: 1.58, paddingLeft: "3.4vw" }}>{description}</div>
+      <div style={{ flex: 1, padding: "2.8vh 6vw 6.5vh 6vw", display: "flex", flexDirection: "column", gap: "2.2vh" }}>
+        <div style={{ display: "flex", gap: "2vw" }}>
+          {[
+            { number: "12+", label: "Indian languages", sub: "Tamil · Hindi · Marathi · Telugu · Kannada + more — validated in live calls" },
+            { number: "5 min", label: "to deploy an agent", sub: "From sign-up to a live phone number — no engineers, no infra" },
+            { number: "3", label: "compliance layers", sub: "TRAI DND · DPDP consent · IRDAI disclosure — enforced on every call" },
+            { number: "100%", label: "memory carry-forward", sub: "No caller repeats themselves — context from every prior call is available" },
+          ].map(({ number, label, sub }) => (
+            <div key={label} style={stat}>
+              <div style={{ fontFamily: "var(--font-display-family)", fontSize: "3.4vw", fontWeight: 800, color: "#1A237E", lineHeight: 1 }}>{number}</div>
+              <div style={{ fontSize: "1.08vw", fontWeight: 700, color: "#FF6F00", marginTop: "0.8vh", marginBottom: "0.6vh" }}>{label}</div>
+              <div style={{ fontSize: "0.92vw", color: "#5B5470", lineHeight: 1.5 }}>{sub}</div>
             </div>
-            <div style={{ flex: 1, padding: "2.2vh 2vw", display: "flex", flexDirection: "column", justifyContent: "center" }}>
-              <div style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase", color: "#1A237E", marginBottom: "0.8vh" }}>
-                Mitigation
+          ))}
+        </div>
+
+        <div style={{
+          background: "#FFFFFF", border: "0.06vh solid #E8EAF0", borderRadius: "1.1vw",
+          padding: "2.4vh 2.8vw", boxShadow: "0 0.6vh 1.8vh rgba(26,35,126,0.07)",
+          display: "flex", gap: "3vw", alignItems: "stretch",
+        }}>
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: "1.2vh" }}>
+            <div style={{ fontSize: "0.78vw", fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "#FF6F00", marginBottom: "0.4vh" }}>
+              Where we are today
+            </div>
+            {[
+              { icon: "✓", text: "Full platform live in production — not a demo, not a prototype" },
+              { icon: "✓", text: "Pilot BFSI accounts onboarded — insurance and NBFC use cases running" },
+              { icon: "✓", text: "End-to-end call recordings, transcripts, and memory extractions working" },
+              { icon: "✓", text: "Caller memory persists across dropped calls, agent switches, and session gaps" },
+              { icon: "→", text: "Converting pilots to paid recurring subscriptions — this raise accelerates it" },
+            ].map(({ icon, text }) => (
+              <div key={text} style={{ display: "flex", alignItems: "flex-start", gap: "0.8vw", fontSize: "1.05vw", color: "#3A3A5C", lineHeight: 1.5 }}>
+                <span style={{ color: icon === "→" ? "#FF6F00" : "#1A237E", fontWeight: 800, flexShrink: 0, marginTop: "0.05vh" }}>{icon}</span>
+                <span>{text}</span>
               </div>
-              <div style={{ fontSize: "1.05vw", color: "#3A3A5C", lineHeight: 1.62 }}>{mitigation}</div>
+            ))}
+          </div>
+          <div style={{ width: "0.06vw", background: "#E8EAF0", alignSelf: "stretch" }} />
+          <div style={{ width: "26vw", display: "flex", flexDirection: "column", justifyContent: "center", gap: "1.6vh" }}>
+            <div style={{ fontSize: "0.78vw", fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "#FF6F00" }}>
+              What a pilot customer told us
+            </div>
+            <div style={{
+              background: "#F0F3FF", borderRadius: "1vw", padding: "2vh 1.8vw",
+              borderLeft: "0.3vw solid #1A237E",
+            }}>
+              <div style={{ fontSize: "1.08vw", fontStyle: "italic", color: "#1A237E", lineHeight: 1.65 }}>
+                "The agent remembered that the customer had already submitted documents last week and skipped straight to the renewal step. That's something our human agents miss half the time."
+              </div>
+              <div style={{ fontSize: "0.88vw", color: "#7986CB", marginTop: "1.2vh", fontWeight: 600 }}>
+                — Insurance renewal pilot, Tamil Nadu
+              </div>
             </div>
           </div>
-        ))}
+        </div>
       </div>
 
       <SSWatermark />
