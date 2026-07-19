@@ -76,14 +76,18 @@ export function replyAsksCallFlow(reply: string): boolean {
 /** Short user nudges that mean "accept and continue" — not a substantive edit. */
 export function looksLikeAffirmation(text: string): boolean {
   const t = text.trim().toLowerCase().replace(/[.!]+$/g, "").trim();
-  if (!t || t.length > 80) return false;
+  if (!t || t.length > 100) return false;
   if (
     /^(yes|yep|yeah|yup|ok|okay|k|sure|fine|good|great|perfect|done|continue|next|proceed|then|alright|all right|go ahead|go next|use it|use it as-?is|looks good|sounds good|that works|no changes|nothing to change|accepted)([\s,.-]*(please|thanks|thank you)?)?$/i
       .test(t)
   ) {
     return true;
   }
-  if (/^(yes|ok|okay|sure)[\s,]+(please\s+)?(continue|next|go|proceed|go ahead|go next)/i.test(t)) {
+  // "okay then", "ok then", "yes then", "alright then"
+  if (/^(yes|yep|yeah|ok|okay|sure|alright|all right)([\s,]+then)+([\s,.-]*(please|thanks|thank you)?)?$/i.test(t)) {
+    return true;
+  }
+  if (/^(yes|ok|okay|sure)[\s,]+(please\s+)?(continue|next|go|proceed|go ahead|go next|then)/i.test(t)) {
     return true;
   }
   if (/^(use it|keep it|ship it|let'?s (go|continue|move on))/i.test(t)) {
@@ -92,9 +96,36 @@ export function looksLikeAffirmation(text: string): boolean {
   return false;
 }
 
+/**
+ * Broader than looksLikeAffirmation: short "continue / next" intents even when
+ * wrapped in a brief status line ("I've added my KB docs. Continue.").
+ */
+export function looksLikeContinueIntent(text: string): boolean {
+  if (looksLikeAffirmation(text)) return true;
+  const t = text.trim().toLowerCase();
+  if (!t || t.length > 180) return false;
+  // Explicit continue/next as the action — not "don't continue" / edit requests.
+  if (/\b(don'?t|do not|never)\b.{0,20}\b(continue|next)\b/i.test(t)) return false;
+  if (/\b(change|edit|update|rewrite|make|add|remove|fix)\b/i.test(t) && !/\b(continue|next|go ahead)\s*\.?$/i.test(t)) {
+    return false;
+  }
+  if (/\b(continue|go next|next step|move on|proceed)\b/i.test(t)) return true;
+  return false;
+}
+
+/** Soft "none/skip" answers for optional steps (KB, compliance). */
+export function looksLikeSoftSkip(text: string): boolean {
+  const raw = text.trim().toLowerCase().replace(/[.!]+$/g, "").trim();
+  return /^(skip|none|no|nope|no thanks|nothing|n\/a|no need|not needed|without|without compliance)$/i.test(raw);
+}
+
 function strField(cfg: Record<string, unknown>, key: string): string {
   const v = cfg[key];
   return typeof v === "string" ? v.trim() : "";
+}
+
+function replyConfirmsNoCompliance(reply: string): boolean {
+  return /no compliance|without compliance|compliance.{0,40}(none|not applied|won'?t be applied|will not be applied)/i.test(reply);
 }
 
 /**
@@ -106,15 +137,22 @@ export function applyAffirmationPhaseAdvance(
   lastUserText: string,
 ): void {
   const raw = lastUserText.trim().toLowerCase();
-  const isSkip = /^(skip|none|nope|no thanks|nothing|n\/a)([\s!.]*)$/i.test(raw);
-  if (!looksLikeAffirmation(lastUserText) && !isSkip) return;
+  const isSkip = looksLikeSoftSkip(lastUserText);
+  const wantsContinue = looksLikeContinueIntent(lastUserText) || isSkip;
+  if (!wantsContinue) return;
   if (!parsed.config) return;
   const cfg = parsed.config as Record<string, unknown>;
   const name = strField(cfg, "agentName") || "your agent";
   const company = strField(cfg, "companyName") || "the business";
-  const phase = (parsed.phase || "").trim();
+  let phase = (parsed.phase || "").trim();
 
-  // "skip" only auto-advances soft optional steps (KB / compliance), not call_flow.
+  // Stuck-loop repair: model re-states "no compliance…" instead of advancing.
+  if (replyConfirmsNoCompliance(parsed.reply) && (looksLikeContinueIntent(lastUserText) || isSkip)) {
+    phase = "features_compliance";
+    parsed.phase = "features_compliance";
+  }
+
+  // "skip"/"no" only auto-advances soft optional steps (KB / compliance), not call_flow.
   if (isSkip && phase !== "knowledge_base" && phase !== "features_compliance") return;
 
   const notes = strField(cfg, "callFlowNotes");
@@ -210,10 +248,14 @@ export function applyAffirmationPhaseAdvance(
 
   // ── compliance → dispositions ──────────────────────────────────────────
   if (phase === "features_compliance") {
+    if (isSkip || /^(no|none)\b/i.test(raw)) {
+      cfg["compliance"] = { dpdp: false, trai: false, irdai: false };
+    }
     parsed.phase = "dispositions";
-    if (!/hot|interested|outcome|disposition/i.test(parsed.reply)) {
+    if (!/hot|interested|outcome|disposition/i.test(parsed.reply) || replyConfirmsNoCompliance(parsed.reply)) {
       parsed.reply =
-        `Got it. How would you define a HOT or Interested lead for ${name}? ` +
+        `Got it — no compliance standards for ${name}. ` +
+        `How would you define a HOT or Interested lead for ${name}? ` +
         `What does a caller say that means they're interested — and what means Not Interested?`;
     }
     return;

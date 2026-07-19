@@ -13,7 +13,7 @@ import { logger } from "../lib/logger.js";
 import { logActivity } from "../lib/activity.js";
 import { resolveAmdConfig } from "../orchestration/telephony/dial.js";
 import { trackEvent } from "../services/track-event.js";
-import { parseVibeGeminiJson, extractGeminiResponseText, parseVoicePick, looksLikePhoneAssign, looksLikePhoneSkip, replyAsksCallFlow, looksLikeAffirmation, applyAffirmationPhaseAdvance } from "./vibe-gemini-parse.js";
+import { parseVibeGeminiJson, extractGeminiResponseText, parseVoicePick, looksLikePhoneAssign, looksLikePhoneSkip, replyAsksCallFlow, looksLikeContinueIntent, applyAffirmationPhaseAdvance } from "./vibe-gemini-parse.js";
 import { buildPatternSystemPrompt } from "./vibe-system-prompt-pattern.js";
 import { filterVoicesByAgentGender } from "./vibe-agent-gender.js";
 
@@ -918,17 +918,18 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
       ];
     }
 
-    // User only affirmed — force the model to advance instead of re-confirming.
-    if (!isRefine && looksLikeAffirmation(lastUserContent(messages))) {
+    // User only affirmed / asked to continue — force the model to advance instead of re-confirming.
+    if (!isRefine && looksLikeContinueIntent(lastUserContent(messages))) {
       contextualMessages = [
         ...contextualMessages,
         {
           role: "user" as const,
           content: [
             `[SYSTEM TURN RULE — USER AFFIRMED / CONTINUE]`,
-            `The user said a short acceptance ("okay", "yes", "continue", etc.).`,
-            `Do NOT only restate what you already confirmed.`,
+            `The user said a short acceptance ("okay", "okay then", "yes", "continue", etc.) or asked to continue.`,
+            `Do NOT only restate what you already confirmed — especially do NOT repeat "no compliance standards will be applied".`,
             `In this reply: accept the current step, fill any missing sensible defaults for that step, set phase to the NEXT unfinished phase, and ask that next question (or build if ready).`,
+            `If you just finished compliance (including "none"/"no"), go to dispositions and ask the HOT / Interested lead question.`,
             `If call_flow notes are already set, jump to knowledge_base after filling mandatoryQuestions/agentRules/callbackGreeting defaults.`,
           ].join("\n"),
         },
