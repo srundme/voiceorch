@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { customFetch, useListAgents, useListPhoneNumbers } from "@workspace/api-client-react";
+import { customFetch, useListAgents } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -34,7 +34,6 @@ export default function AutomaticCallsWizardPage() {
     queryFn: () => customFetch<SheetsConn[]>(`${API}/sheets/google/connections`),
   });
   const { data: agents } = useListAgents();
-  const { data: phoneNumbers } = useListPhoneNumbers();
 
   const connections = connectionsQ.data ?? [];
   const connected = connections.length > 0;
@@ -52,7 +51,6 @@ export default function AutomaticCallsWizardPage() {
   const [nameCol, setNameCol] = useState("Name");
   const [emailCol, setEmailCol] = useState("Email");
   const [agentId, setAgentId] = useState<number | null>(null);
-  const [fromNumber, setFromNumber] = useState<string | null>(null);
   const [startMode, setStartMode] = useState<"new_only" | "backfill_then_watch">("new_only");
   const [writebackMode, setWritebackMode] = useState<"same_sheet" | "call_log" | "both">("same_sheet");
   /** Where Call Log rows go when writeback includes call_log */
@@ -203,7 +201,6 @@ export default function AutomaticCallsWizardPage() {
           },
           startMode,
           writebackMode,
-          fromNumber,
           createCallLogSheet: writebackMode !== "same_sheet" && callLogDest === "create_new",
           ...(writebackMode !== "same_sheet" && callLogDest === "existing" && callLogSpreadsheetId
             ? {
@@ -419,17 +416,9 @@ export default function AutomaticCallsWizardPage() {
                   ))}
                 </SelectContent>
               </Select>
-            </div>
-            <div>
-              <label className="text-xs font-medium">From number</label>
-              <Select value={fromNumber ?? ""} onValueChange={(v) => setFromNumber(v || null)}>
-                <SelectTrigger className="mt-1 h-9"><SelectValue placeholder="Optional" /></SelectTrigger>
-                <SelectContent>
-                  {(phoneNumbers ?? []).map((pn: { id: number; number: string }) => (
-                    <SelectItem key={pn.id} value={pn.number}>{pn.number}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <p className="mt-1.5 text-[11px] text-muted-foreground">
+                Calls use this agent’s number. If none is assigned, a managed number is used.
+              </p>
             </div>
           </div>
         )}
