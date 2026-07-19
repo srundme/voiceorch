@@ -73,8 +73,15 @@ router.post("/automatic-calls", requireAuth, async (req, res): Promise<void> => 
     });
     res.status(201).json(row);
   } catch (err: any) {
+    const msg = err?.message ?? "Failed to create pipeline";
     logger.warn({ err }, "automatic-calls: create failed");
-    res.status(400).json({ error: err?.message ?? "Failed to create pipeline" });
+    if (/sheet_auto_call_pipelines|does not exist|Failed query: insert/i.test(msg)) {
+      res.status(503).json({
+        error: "Database table missing. Run migration 0061_sheet_auto_calls.sql on Postgres, then retry.",
+      });
+      return;
+    }
+    res.status(400).json({ error: msg });
   }
 });
 
