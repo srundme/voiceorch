@@ -420,11 +420,12 @@ export async function writeSheetAutoCallResults(
   }
 
   const isFail = status === "failed" || status === "error";
-  await db.update(sheetAutoCallPipelinesTable)
-    .set({
-      dialedCount: sql`${sheetAutoCallPipelinesTable.dialedCount} + 1`,
-      ...(isFail ? { failedCount: sql`${sheetAutoCallPipelinesTable.failedCount} + 1` } : {}),
-      updatedAt: new Date(),
-    })
-    .where(eq(sheetAutoCallPipelinesTable.id, pipelineId));
+  if (isFail) {
+    await db.update(sheetAutoCallPipelinesTable)
+      .set({
+        failedCount: sql`${sheetAutoCallPipelinesTable.failedCount} + 1`,
+        updatedAt: new Date(),
+      })
+      .where(eq(sheetAutoCallPipelinesTable.id, pipelineId));
+  }
 }

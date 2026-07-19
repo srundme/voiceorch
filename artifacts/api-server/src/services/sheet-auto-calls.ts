@@ -427,6 +427,62 @@ export async function stopPipeline(userId: string, id: string) {
   return getPipeline(userId, id);
 }
 
+/** Re-fire dials for leads still pending after a lost setTimeout / TRAI deferral. */
+async function requeuePendingDials(pipeline: SheetAutoCallPipeline): Promise<number> {
+  if (!pipeline.campaignId) return 0;
+
+  const [campaign] = await db
+    .select()
+    .from(campaignsTable)
+    .where(eq(campaignsTable.id, pipeline.campaignId))
+    .limit(1);
+  if (!campaign || !campaign.isActive) return 0;
+
+  // Recover leads that were permanently skipped for outside-hours (pre-fix).
+  await db.execute(sql`
+    UPDATE campaign_leads cl
+    SET call_status = 'pending'
+    FROM sheet_auto_call_row_state rs
+    WHERE rs.lead_id = cl.id
+      AND rs.pipeline_id = ${pipeline.id}::uuid
+      AND cl.call_status = 'skipped'
+      AND cl.notes ILIKE '%Outside permitted calling hours%'
+  `);
+  await db.execute(sql`
+    UPDATE sheet_auto_call_row_state rs
+    SET status = 'enqueued',
+        error = 'Waiting for calling hours (9 AM–9 PM IST)',
+        updated_at = now()
+    FROM campaign_leads cl
+    WHERE rs.lead_id = cl.id
+      AND rs.pipeline_id = ${pipeline.id}::uuid
+      AND cl.call_status = 'pending'
+      AND cl.notes ILIKE '%Outside permitted calling hours%'
+      AND rs.status IN ('skipped', 'enqueued', 'failed')
+  `);
+
+  const stuck = await db
+    .select({
+      lead: campaignLeadsTable,
+    })
+    .from(sheetAutoCallRowStateTable)
+    .innerJoin(
+      campaignLeadsTable,
+      eq(sheetAutoCallRowStateTable.leadId, campaignLeadsTable.id),
+    )
+    .where(and(
+      eq(sheetAutoCallRowStateTable.pipelineId, pipeline.id),
+      eq(sheetAutoCallRowStateTable.status, "enqueued"),
+      eq(campaignLeadsTable.callStatus, "pending"),
+    ))
+    .limit(20);
+
+  for (const row of stuck) {
+    scheduleCampaignCall(row.lead, campaign);
+  }
+  return stuck.length;
+}
+
 /** One poll tick for a running pipeline — enqueue rows after cursor. */
 export async function pollOnce(pipelineId: string): Promise<void> {
   const [pipeline] = await db
@@ -449,6 +505,10 @@ export async function pollOnce(pipelineId: string): Promise<void> {
         { pipelineId, enqueued: result.enqueued, lastRow: result.lastRow },
         "sheet-auto-call: poll enqueued leads",
       );
+    }
+    const requeued = await requeuePendingDials(pipeline);
+    if (requeued > 0) {
+      logger.info({ pipelineId, requeued }, "sheet-auto-call: requeued pending dials");
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

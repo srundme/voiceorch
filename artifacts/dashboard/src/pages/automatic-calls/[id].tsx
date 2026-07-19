@@ -175,7 +175,12 @@ export default function AutomaticCallDetailPage() {
                 <li key={r.id} className="px-3 py-2 flex items-center gap-3 text-xs">
                   <span className="text-muted-foreground w-12 shrink-0">Row {r.sheetRowIndex}</span>
                   <span className="font-mono truncate flex-1">{r.phoneNormalized || "—"}</span>
-                  <span className="capitalize text-muted-foreground">{r.status}</span>
+                  <span className="capitalize text-muted-foreground shrink-0">{r.status}</span>
+                  {r.error && (
+                    <span className="text-amber-600 dark:text-amber-400 truncate max-w-[220px]" title={r.error}>
+                      {r.error}
+                    </span>
+                  )}
                   {r.callId != null && (
                     <Link href={`/app/calls/${r.callId}`} className="text-foreground underline-offset-2 hover:underline">
                       Call #{r.callId}

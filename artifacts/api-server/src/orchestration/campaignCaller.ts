@@ -18,6 +18,7 @@ import { normalizePhone } from "../lib/phone-normalize.js";
 import { isOnDnc } from "../lib/dnc-check.js";
 import { traiPreDialCheck, logPreDialDecision } from "../services/trai/index.js";
 import { scheduleRetry, resolveRetryConfig } from "../services/retryEngine.js";
+import { syncSheetAutoCallDialStatus } from "../services/sheet-auto-call-status.js";
 import { createHmac } from "node:crypto";
 import { APP_SECRET } from "../lib/app-secret.js";
 
@@ -47,6 +48,11 @@ export async function fireCampaignCall(lead: LeadRow, campaign: CampaignRow): Pr
       .set({ callStatus: "skipped", notes: "No agent assigned to campaign" })
       .where(eq(campaignLeadsTable.id, lead.id));
     await addTimelineEvent(lead.id, campaign.id, "call_failed", { reason: "No agent assigned" });
+    await syncSheetAutoCallDialStatus(lead, {
+      status: "skipped",
+      error: "No agent assigned to campaign",
+      bumpFailed: true,
+    });
     return;
   }
 
@@ -66,6 +72,11 @@ export async function fireCampaignCall(lead: LeadRow, campaign: CampaignRow): Pr
       .set({ callStatus: "skipped", notes: "Number on Do Not Call list" })
       .where(eq(campaignLeadsTable.id, lead.id));
     await addTimelineEvent(lead.id, campaign.id, "dnc_blocked", { normalizedPhone: normalized });
+    await syncSheetAutoCallDialStatus(lead, {
+      status: "skipped",
+      error: "Number on Do Not Call list",
+      bumpFailed: true,
+    });
     return;
   }
 
@@ -85,11 +96,23 @@ export async function fireCampaignCall(lead: LeadRow, campaign: CampaignRow): Pr
         allowed: traiResult.allowed, reason: traiResult.reason,
       });
       if (!traiResult.allowed) {
-        logger.info({ leadId: lead.id, phone: normalized, reason: traiResult.reason }, "Lead blocked by TRAI compliance — skipping");
-        await db.update(campaignLeadsTable)
-          .set({ callStatus: "skipped", notes: traiResult.reason ?? "Blocked by TRAI compliance" })
-          .where(eq(campaignLeadsTable.id, lead.id));
-        await addTimelineEvent(lead.id, campaign.id, "call_failed", { reason: traiResult.reason ?? "TRAI compliance block", normalizedPhone: normalized });
+        const reason = traiResult.reason ?? "Blocked by TRAI compliance";
+        const outsideHours = /Outside permitted calling hours/i.test(reason);
+        logger.info({ leadId: lead.id, phone: normalized, reason }, "Lead blocked by TRAI compliance — skipping");
+        if (outsideHours) {
+          // Keep pending so Automatic Calls / campaign refill can dial in-window.
+          await db.update(campaignLeadsTable)
+            .set({ callStatus: "pending", notes: reason })
+            .where(eq(campaignLeadsTable.id, lead.id));
+          await addTimelineEvent(lead.id, campaign.id, "call_failed", { reason, normalizedPhone: normalized, deferred: true });
+          await syncSheetAutoCallDialStatus(lead, { status: "enqueued", error: reason });
+        } else {
+          await db.update(campaignLeadsTable)
+            .set({ callStatus: "skipped", notes: reason })
+            .where(eq(campaignLeadsTable.id, lead.id));
+          await addTimelineEvent(lead.id, campaign.id, "call_failed", { reason, normalizedPhone: normalized });
+          await syncSheetAutoCallDialStatus(lead, { status: "skipped", error: reason, bumpFailed: true });
+        }
         return;
       }
     }
@@ -115,6 +138,10 @@ export async function fireCampaignCall(lead: LeadRow, campaign: CampaignRow): Pr
       await db.update(campaignLeadsTable)
         .set({ callStatus: "pending", notes: `Queued — concurrency limit (${limit}) reached` })
         .where(eq(campaignLeadsTable.id, lead.id));
+      await syncSheetAutoCallDialStatus(lead, {
+        status: "enqueued",
+        error: `Queued — concurrency limit (${limit}) reached`,
+      });
       return;
     }
   }
@@ -334,6 +361,7 @@ export async function fireCampaignCall(lead: LeadRow, campaign: CampaignRow): Pr
       .where(eq(campaignsTable.id, campaign.id));
 
     logger.info({ leadId: lead.id, campaignId: campaign.id, phone: lead.phone }, "Campaign call fired");
+    await syncSheetAutoCallDialStatus(lead, { status: "dialing", error: null, bumpDialed: true });
   } catch (err) {
     logger.error({ leadId: lead.id, campaignId: campaign.id, err }, "Campaign call failed");
     const errMsg = err instanceof Error ? err.message : String(err);
@@ -342,6 +370,7 @@ export async function fireCampaignCall(lead: LeadRow, campaign: CampaignRow): Pr
       .where(eq(campaignLeadsTable.id, lead.id));
 
     await addTimelineEvent(lead.id, campaign.id, "call_failed", { reason: errMsg, attempt: newAttempts });
+    await syncSheetAutoCallDialStatus(lead, { status: "failed", error: errMsg, bumpFailed: true });
 
     // Schedule auto-retry if attempts remaining
     const { maxAttempts, retryDelayMinutes } = await resolveRetryConfig(lead.batchId, campaign);
