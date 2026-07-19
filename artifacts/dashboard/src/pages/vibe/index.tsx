@@ -1470,8 +1470,8 @@ export default function VibePage() {
               rows={3}
               className="resize-none border-0 bg-transparent text-[15px] leading-relaxed rounded-[26px] rounded-b-none px-5 pt-5 pb-2 min-h-[88px] placeholder:text-muted-foreground/45 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none"
             />
-            <div className="flex items-center justify-between gap-3 px-3 pb-3">
-              <p className="text-[11px] text-muted-foreground/60 pl-2">
+            <div className="flex items-center justify-between gap-4 border-t border-border/25 px-4 pt-3 pb-3.5">
+              <p className="text-[12px] text-muted-foreground pl-1 min-w-0 truncate">
                 Tip: write like you&apos;re texting a friend
               </p>
               <Button
@@ -1483,10 +1483,10 @@ export default function VibePage() {
                   "h-10 w-10 rounded-full transition-all duration-200 shrink-0",
                   canSend
                     ? "bg-primary hover:bg-primary/90 text-primary-foreground shadow-md hover:scale-105"
-                    : "bg-muted/60 text-muted-foreground",
+                    : "bg-muted text-muted-foreground",
                 )}
               >
-                {isThinking ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUpRight className="h-4 w-4" />}
+                {isThinking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               </Button>
             </div>
             {urlPopover}
