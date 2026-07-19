@@ -15,6 +15,7 @@ import { resolveAmdConfig } from "../orchestration/telephony/dial.js";
 import { trackEvent } from "../services/track-event.js";
 import { parseVibeGeminiJson, extractGeminiResponseText, parseVoicePick, looksLikePhoneAssign, looksLikePhoneSkip, replyAsksCallFlow } from "./vibe-gemini-parse.js";
 import { buildPatternSystemPrompt } from "./vibe-system-prompt-pattern.js";
+import { filterVoicesByAgentGender } from "./vibe-agent-gender.js";
 
 const router = Router();
 
@@ -239,7 +240,7 @@ Collect these 5 things (can gather multiple per turn if the user volunteers them
 2. Company/brand name
 3. Language(s) the agent speaks — codes: ta-IN=Tamil, hi-IN=Hindi, te-IN=Telugu, kn-IN=Kannada, ml-IN=Malayalam, en-IN=English India, en-US=English US.
    ENGLISH DEFAULT: SnapServe is India-first. Whenever English is involved, ALWAYS use en-IN (English India) — NEVER en-US — unless the user explicitly asks for US/American English. This applies to the primary language, added languages, and the multilingual base language.
-   This answer is OPTIONAL: if the user is unsure or wants to skip, keep the default language and set languageChosen=false (all voices will be shown later).
+   This answer is OPTIONAL: if the user is unsure or wants to skip, keep the default language and set languageChosen=false (voices still show later, filtered by agent-name gender when clear).
    If they name exactly ONE language: set language=<its code> and languageChosen=true.
    If they name TWO OR MORE languages in one answer: NEVER assume which is primary. Do NOT set language or languageChosen yet — keep languageChosen=false and treat item 3 as NOT collected. Ask a follow-up listing the languages they mentioned, e.g. "Which of these — Tamil, Hindi, or English — should be [name]'s primary language?" Only after they explicitly answer: set language=<the confirmed primary's code>, languageChosen=true, put ALL mentioned languages (including the primary) in multilingualLanguages, and set languageMode="multi".
    MULTILINGUAL BELONGS HERE, at the start — decide it together with the primary language, NOT in a later phase. Right after the primary language is confirmed (single-language case), ask ONCE in the same or next turn: "Should [name] also speak any other languages, or just [primary]?" — If the user names more: add the primary + all named languages to multilingualLanguages and set languageMode="multi". If they say just the one / no: keep languageMode="single". If they already named multiple languages up front, this is already handled — do NOT re-ask.
@@ -250,6 +251,7 @@ Collect these 5 things (can gather multiple per turn if the user volunteers them
 
 PHASE "voice_selection"
 Voice cards are now shown directly in this chat — the user can preview and select one.
+- Voices are pre-filtered to match the agent's name gender when it is clearly male or female (e.g. Priya → female voices only; Arjun → male voices only). Unisex/unknown names show all voices.
 - Say: "I've pulled up the available voices — you can hit ▶ to preview each one and click Select when you find the right fit."
 - The list is sorted so voices matching the agent's language(s) appear first; the rest are below.
 - When the user picks (by name, "I'll go with …", or a voiceId): set voiceId and voiceName exactly from the available options list, and set gender from that voice.
@@ -1039,10 +1041,29 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
               description: v.description,
             }))
           : fallbackVoices;
-        emit({ type: "voice_options", voices: orderVoicesByLanguage(voiceList, agentLangs), agentLanguages: agentLangs });
+        const agentNameForGender = parsed.config?.agentName || "";
+        const { voices: genderedVoices, gender: nameGender } = filterVoicesByAgentGender(
+          voiceList,
+          agentNameForGender,
+        );
+        // Align config gender with the name so later defaults / prompt stay consistent
+        // until the user picks a specific voice.
+        if (nameGender && parsed.config && !parsed.config.voiceId) {
+          parsed.config.gender = nameGender;
+        }
+        emit({
+          type: "voice_options",
+          voices: orderVoicesByLanguage(genderedVoices, agentLangs),
+          agentLanguages: agentLangs,
+          ...(nameGender ? { genderFilter: nameGender } : {}),
+        });
       } catch (err) {
         logger.warn({ err }, "vibe-chat: failed to fetch voices, using defaults");
-        emit({ type: "voice_options", voices: orderVoicesByLanguage(fallbackVoices, agentLangs), agentLanguages: agentLangs });
+        const { voices: genderedFallback } = filterVoicesByAgentGender(
+          fallbackVoices,
+          parsed.config?.agentName,
+        );
+        emit({ type: "voice_options", voices: orderVoicesByLanguage(genderedFallback, agentLangs), agentLanguages: agentLangs });
       }
       emittedVoiceOptions = true;
     }

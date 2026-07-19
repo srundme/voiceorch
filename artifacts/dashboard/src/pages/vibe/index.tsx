@@ -173,12 +173,12 @@ function buildVibeProgress(opts: {
     { id: "direction", label: "Call type", done: has("direction") },
     { id: "voice", label: "Voice", done: has("voice") || !!opts.refineId },
     { id: "flow", label: "Script", done: opts.callFlowNotes.trim().length > 0 },
-    { id: "finish", label: "Finish", done: opts.phase === "done" || opts.dispositions.length > 0 },
+    { id: "finish", label: "Finish", done: opts.phase === "done" || opts.dispositions.length > 0 || !!opts.refineId },
   ];
   const doneCount = steps.filter(s => s.done).length;
   const next = steps.find(s => !s.done);
-  const currentLabel = opts.phase === "done"
-    ? "Ready!"
+  const currentLabel = (opts.phase === "done" || (opts.refineId && opts.dispositions.length > 0))
+    ? "Ready — keep editing anytime"
     : next
       ? `Next: ${next.label}`
       : "Almost done";
@@ -331,12 +331,12 @@ export default function VibePage() {
   const queryClient      = useQueryClient();
   const { toast }        = useToast();
   const [welcomeName, setWelcomeName] = useState("");
-  const refineId = useMemo(() => {
+  const [refineId, setRefineId] = useState<number | null>(() => {
     try {
       const v = new URLSearchParams(window.location.search).get("refine");
       return v ? parseInt(v, 10) : null;
     } catch { return null; }
-  }, []);
+  });
 
   const [messages,       setMessages]       = useState<ChatMsg[]>([GREETING]);
   const [input,          setInput]          = useState("");
@@ -851,8 +851,10 @@ export default function VibePage() {
 
   const send = useCallback(async (overrideText?: string) => {
     const text = (overrideText ?? input).trim();
+    // Allow chat after first create (refineId set) — only block while actively building/streaming
+    // or when browsing a read-only history draft.
     if (!text || phaseRef.current === "building" || phaseRef.current === "thinking"
-        || phaseRef.current === "streaming" || phaseRef.current === "done"
+        || phaseRef.current === "streaming"
         || viewMode === "history") return;
 
     if (!overrideText) setInput("");
@@ -1123,25 +1125,75 @@ export default function VibePage() {
                   })
                   .catch(() => { setPhase("idle"); });
               } else {
-                // New-agent creation: lock the composer as before.
-                // Fetch telephony provider for the Make a Call button.
-                fetch(`/api/agents/${evt.agentId as number}`, {
+                // New-agent creation: unlock left-side vibe as refine so they can
+                // keep editing while testing on the right — do NOT lock phase=done.
+                const newId = evt.agentId as number;
+                setLastSavedAgentId(newId);
+                setRefineId(newId);
+                try {
+                  const path = window.location.pathname;
+                  window.history.replaceState({}, "", `${path}?refine=${newId}`);
+                } catch { /* ignore */ }
+                fetch(`/api/agents/${newId}`, {
                   headers: { Authorization: `Bearer ${getToken() ?? ""}` },
                 })
                   .then(r => r.ok ? r.json() : null)
                   .then((a: Record<string, unknown> | null) => {
-                    if (a) setSavedTelephonyProvider(String(a.telephonyProvider ?? ""));
+                    if (!a) return;
+                    setSavedTelephonyProvider(String(a.telephonyProvider ?? ""));
+                    const acfg = (a.agentConfig ?? {}) as Record<string, unknown>;
+                    refineBaseRef.current = {
+                      agentName:              a.name,
+                      companyName:            acfg.companyName ?? "",
+                      language:               a.language ?? "en-IN",
+                      languageChosen:         true,
+                      languageMode:           acfg.isMultilingual ? "multi" : "single",
+                      multilingualLanguages:  acfg.multilingualLanguages ?? [],
+                      hasTamil:               String(a.language ?? "").includes("ta"),
+                      gender:                 "female",
+                      direction:              acfg.direction ?? "inbound",
+                      description:            a.description ?? "",
+                      voiceId:                a.ttsVoice ?? "",
+                      voiceName:              a.ttsVoiceName ?? "",
+                      callFlowNotes:          acfg.callFlowNotes ?? "",
+                      knowledgeBaseNotes:     acfg.knowledgeBaseNotes ?? "",
+                      genderDetectionEnabled: !!acfg.genderDetectionEnabled,
+                      maleSalutation:         (acfg.genderDetectionMaleSalutation as string) || "Sir",
+                      femaleSalutation:       (acfg.genderDetectionFemaleSalutation as string) || "Ma'am",
+                      callTransferEnabled:    !!acfg.callTransferEnabled,
+                      transferPhoneNumber:    (acfg.transferPhoneNumber as string) || "",
+                      transferName:           (acfg.transferName as string) || "",
+                      voicemailEnabled:       !!acfg.voicemailDetection,
+                      voicemailMessage:       (acfg.voicemailMessage as string) || "",
+                      schedulingEnabled:      !!acfg.schedulingEnabled,
+                      timezone:               (acfg.timezone as string) || "Asia/Kolkata",
+                      timezoneSet:            !!acfg.timezone,
+                      hostEmail:              "",
+                      hostEmailSet:           false,
+                      availabilityDays:       [1, 2, 3, 4, 5],
+                      availabilityStart:      "09:00",
+                      availabilityEnd:        "17:00",
+                      availabilitySet:        false,
+                      compliance:             acfg.compliance ?? { dpdp: false, trai: false, irdai: false },
+                      systemPrompt:           String(a.systemPrompt ?? "").slice(0, 3000),
+                      greetingMessage:        a.greetingMessage ?? "",
+                      dispositions:           [],
+                    };
+                    if (a.systemPrompt) setPromptPreview(String(a.systemPrompt));
                   })
                   .catch(() => {});
-                setLastSavedAgentId(evt.agentId as number);
-                // If scheduling was enabled, surface the Google Calendar connect panel
-                // as a full right-panel takeover so the user can connect Google right now
                 if (schedulingSetupRef.current) {
                   setShowCalPanel(true);
                 } else {
                   setPostBuildStep("hype");
                 }
-                setPhase("done");
+                setPhase("idle");
+                setMessages(prev => [...prev, {
+                  id: uid(),
+                  role: "ai",
+                  done: true,
+                  content: "Want to change anything? Just type on the left — or test the call on the right whenever you're ready.",
+                }]);
               }
               break;
 
@@ -1212,7 +1264,7 @@ export default function VibePage() {
       ));
       setPhase("idle");
     }
-  }, [input, viewMode, setPhase, appendAiDelta, attachVoicesToLastMsg, collapseVoicePickers,
+  }, [input, viewMode, refineId, setPhase, appendAiDelta, attachVoicesToLastMsg, collapseVoicePickers,
       attachNoticeToLastMsg,
       attachPhoneNumbersToLastMsg, collapsePhonePickers, queryClient]);
 
@@ -1376,7 +1428,7 @@ export default function VibePage() {
   }, [refineId, isMobile, setPhase]);
 
   const canSend = input.trim().length > 0
-    && phase !== "building" && phase !== "thinking" && phase !== "streaming" && phase !== "done"
+    && phase !== "building" && phase !== "thinking" && phase !== "streaming"
     && viewMode === "editing";
 
   const hasRightContent = fields.length > 0 || selectedVoice.length > 0 || features.length > 0
@@ -1465,8 +1517,14 @@ export default function VibePage() {
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKey}
-              placeholder={phase === "done" ? "Your agent is ready!" : "e.g. An agent that answers calls for my clinic and books appointments…"}
-              disabled={phase === "done" || phase === "building"}
+              placeholder={
+                lastSavedAgentId || refineId
+                  ? "Tell me what to change — e.g. make the greeting warmer…"
+                  : phase === "building"
+                    ? "Building your agent…"
+                    : "e.g. An agent that answers calls for my clinic and books appointments…"
+              }
+              disabled={phase === "building" || phase === "thinking" || phase === "streaming"}
               rows={3}
               className="resize-none border-0 bg-transparent text-[15px] leading-relaxed rounded-[26px] rounded-b-none px-5 pt-5 pb-2 min-h-[88px] placeholder:text-muted-foreground/45 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none"
             />
@@ -1503,8 +1561,14 @@ export default function VibePage() {
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={handleKey}
-          placeholder={phase === "done" ? "Your agent is ready!" : "Describe the AI voice agent you want to build…"}
-          disabled={phase === "done" || phase === "building"}
+          placeholder={
+            lastSavedAgentId || refineId
+              ? "Tell me what to change — e.g. make the greeting warmer…"
+              : phase === "building"
+                ? "Building your agent…"
+                : "Describe the AI voice agent you want to build…"
+          }
+          disabled={phase === "building" || phase === "thinking" || phase === "streaming"}
           rows={3}
           className="resize-none pr-20 text-sm rounded-xl bg-muted/20 border-border/50 focus-visible:ring-1 focus-visible:ring-primary/50"
         />
@@ -1512,7 +1576,7 @@ export default function VibePage() {
         {urlPopover}
         <button
           onClick={() => { setUrlInputOpen(v => !v); setUrlInputValue(""); }}
-          disabled={phase === "done" || phase === "building" || isThinking}
+          disabled={phase === "building" || phase === "thinking" || phase === "streaming" || isThinking}
           title="Add website URL for knowledge base"
           className={cn(
             "absolute right-20 bottom-2.5 flex h-8 w-8 items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded-lg transition-all disabled:opacity-30",
@@ -1523,7 +1587,7 @@ export default function VibePage() {
         </button>
         <button
           onClick={() => fileInputRef.current?.click()}
-          disabled={phase === "done" || phase === "building" || isThinking}
+          disabled={phase === "building" || phase === "thinking" || phase === "streaming" || isThinking}
           title="Upload document for knowledge base"
           className="absolute right-11 bottom-2.5 flex h-8 w-8 items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded-lg transition-all disabled:opacity-30"
         >
@@ -1856,7 +1920,9 @@ export default function VibePage() {
                         </p>
                       ) : phase !== "done" ? (
                         <p className="text-center text-[11px] text-muted-foreground/70">
-                          Progress saves automatically · leave anytime and open My drafts
+                          {lastSavedAgentId
+                            ? "Keep chatting to edit · test calls on the right anytime"
+                            : "Progress saves automatically · leave anytime and open My drafts"}
                         </p>
                       ) : null}
                     </div>
@@ -1932,7 +1998,7 @@ export default function VibePage() {
                   >
                     <PhoneOutgoing className="h-3 w-3" /> Make a Call
                   </Button>
-                  {phase === "done" && (
+                  {lastSavedAgentId != null && (
                     <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs rounded-lg bg-white/5 border-white/15"
                       onClick={() => navigate(`/app/agents/${lastSavedAgentId}`)}>
                       <Settings2 className="h-3 w-3" /> Edit
@@ -1985,6 +2051,10 @@ export default function VibePage() {
                   selectedVoice={selectedVoice}
                   onTest={() => setShowTestCall(true)}
                   onSkip={() => setPostBuildStep("rating")}
+                  onKeepEditing={() => {
+                    chatInputRef.current?.focus();
+                    chatInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+                  }}
                   navigate={navigate}
                 />
               ) : postBuildStep === "rating" ? (
@@ -1995,7 +2065,10 @@ export default function VibePage() {
                   onRate={setVibeRating}
                   comment={vibeComment}
                   onComment={setVibeComment}
-                  onRefine={() => navigate(`/app/vibe?refine=${lastSavedAgentId ?? createdId}`)}
+                  onRefine={() => {
+                    chatInputRef.current?.focus();
+                    setPostBuildStep(null);
+                  }}
                   onTestAgain={() => setShowTestCall(true)}
                   onLaunch={() => navigate(`/app/agents/${lastSavedAgentId ?? createdId}`)}
                 />
@@ -2410,7 +2483,14 @@ function VoicePickerList({ voices, agentLangs, selectedVoice, playingVoice, onPr
     <div className="space-y-2 pt-1">
       <div className="flex items-center justify-between gap-2">
         <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">
-          Available voices
+          {(() => {
+            const genders = new Set(
+              voices.map(v => (v.gender || "").toLowerCase()).filter(g => g === "male" || g === "female"),
+            );
+            if (genders.size === 1 && genders.has("female")) return "Female voices";
+            if (genders.size === 1 && genders.has("male")) return "Male voices";
+            return "Available voices";
+          })()}
         </p>
         {availableLangs.length > 0 && (
           <Select value={effectiveLang} onValueChange={setSelectedLang}>
@@ -2852,13 +2932,14 @@ function VibeCalendarPanel({
 /*  HypePanel — celebratory screen shown right after agent creation            */
 /* ═══════════════════════════════════════════════════════════════════════════ */
 
-function HypePanel({ name, fields, selectedVoice, onTest, onSkip, navigate, agentId }: {
+function HypePanel({ name, fields, selectedVoice, onTest, onSkip, onKeepEditing, navigate, agentId }: {
   name: string;
   agentId: number;
   fields: { key: string; label: string; value: string }[];
   selectedVoice: string | null;
   onTest: () => void;
   onSkip: () => void;
+  onKeepEditing: () => void;
   navigate: (to: string) => void;
 }) {
   const direction = fields.find(f => f.key === "direction")?.value;
@@ -2866,74 +2947,144 @@ function HypePanel({ name, fields, selectedVoice, onTest, onSkip, navigate, agen
   const initial   = (name || "A").charAt(0).toUpperCase();
 
   const badges = [
-    direction && { label: direction === "inbound" ? "Inbound" : "Outbound" },
+    direction && { label: direction === "inbound" ? "Inbound" : direction === "both" ? "Incoming & outgoing" : "Outbound" },
     language  && { label: language },
     selectedVoice && { label: selectedVoice },
   ].filter(Boolean) as { label: string }[];
 
+  const checklist = [
+    "System prompt written and ready",
+    "Voice selected and configured",
+    "Call flow and dispositions set",
+    "Agent is live — test calls work now",
+  ];
+
   return (
-    <div className="flex flex-col items-center text-center gap-6 py-10 px-6 max-w-md mx-auto animate-in fade-in zoom-in-95 duration-500">
+    <motion.div
+      className="flex flex-col items-center text-center gap-6 py-10 px-6 max-w-md mx-auto"
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+    >
       {/* Pulse avatar */}
-      <div className="relative flex items-center justify-center">
-        <div className="absolute h-28 w-28 rounded-full bg-emerald-500/10 animate-ping" style={{ animationDuration: "2.5s" }} />
-        <div className="absolute h-20 w-20 rounded-full bg-emerald-500/15 animate-ping" style={{ animationDuration: "2s" }} />
+      <motion.div
+        className="relative flex items-center justify-center"
+        initial={{ scale: 0.7, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ type: "spring", stiffness: 260, damping: 18, delay: 0.05 }}
+      >
+        <motion.div
+          className="absolute h-28 w-28 rounded-full bg-emerald-500/15"
+          animate={{ scale: [1, 1.35, 1], opacity: [0.45, 0, 0.45] }}
+          transition={{ duration: 2.4, repeat: Infinity, ease: "easeOut" }}
+        />
+        <motion.div
+          className="absolute h-20 w-20 rounded-full bg-emerald-500/20"
+          animate={{ scale: [1, 1.25, 1], opacity: [0.55, 0.1, 0.55] }}
+          transition={{ duration: 2.4, repeat: Infinity, ease: "easeOut", delay: 0.35 }}
+        />
         <div className="relative h-16 w-16 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-lg shadow-emerald-500/30">
           <span className="text-2xl font-bold text-white">{initial}</span>
         </div>
-      </div>
+      </motion.div>
 
       {/* Headline */}
-      <div>
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.18, duration: 0.4 }}
+      >
         <p className="text-xs font-medium text-emerald-400 uppercase tracking-widest mb-1">Agent ready</p>
         <h2 className="text-xl font-bold">Meet <span className="text-emerald-400">{name || "your agent"}</span>!</h2>
         <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
-          Your AI voice agent is live and configured. Hear it speak before you launch — this is the moment you've been building toward.
+          Hear it speak on the right — or keep typing on the left to tweak anything.
         </p>
-      </div>
+      </motion.div>
 
       {/* Badges */}
       {badges.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 justify-center">
+        <motion.div
+          className="flex flex-wrap gap-1.5 justify-center"
+          initial="hidden"
+          animate="show"
+          variants={{
+            hidden: {},
+            show: { transition: { staggerChildren: 0.07, delayChildren: 0.28 } },
+          }}
+        >
           {badges.map(b => (
-            <span key={b.label} className="text-[11px] font-medium px-2.5 py-1 rounded-full bg-muted/40 border border-border/60 text-muted-foreground">
+            <motion.span
+              key={b.label}
+              variants={{
+                hidden: { opacity: 0, y: 8 },
+                show: { opacity: 1, y: 0 },
+              }}
+              className="text-[11px] font-medium px-2.5 py-1 rounded-full bg-muted/40 border border-border/60 text-muted-foreground"
+            >
               {b.label}
-            </span>
+            </motion.span>
           ))}
-        </div>
+        </motion.div>
       )}
 
       {/* Capability checklist */}
-      <div className="w-full rounded-xl border border-border/50 bg-muted/10 p-4 text-left space-y-2">
-        {[
-          "System prompt written and ready",
-          "Voice selected and configured",
-          "Call flow and dispositions set",
-          "Agent is live — test calls work now",
-        ].map(item => (
-          <div key={item} className="flex items-center gap-2.5">
+      <motion.div
+        className="w-full rounded-xl border border-border/50 bg-muted/10 p-4 text-left space-y-2"
+        initial="hidden"
+        animate="show"
+        variants={{
+          hidden: { opacity: 0, y: 12 },
+          show: {
+            opacity: 1,
+            y: 0,
+            transition: { delay: 0.32, staggerChildren: 0.08 },
+          },
+        }}
+      >
+        {checklist.map(item => (
+          <motion.div
+            key={item}
+            className="flex items-center gap-2.5"
+            variants={{
+              hidden: { opacity: 0, x: -8 },
+              show: { opacity: 1, x: 0 },
+            }}
+          >
             <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
             <span className="text-xs text-muted-foreground">{item}</span>
-          </div>
+          </motion.div>
         ))}
-      </div>
+      </motion.div>
 
       {/* CTAs */}
-      <div className="flex flex-col gap-2 w-full">
+      <motion.div
+        className="flex flex-col gap-2 w-full"
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.55, duration: 0.4 }}
+      >
         <Button className="w-full gap-2 rounded-xl h-11 text-sm font-semibold" onClick={onTest}>
           <Phone className="h-4 w-4" /> Hear it speak — Test Web Call
         </Button>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" className="flex-1 gap-1.5 rounded-xl text-xs"
-            onClick={() => navigate(`/app/vibe?refine=${agentId}`)}>
-            <Sparkles className="h-3.5 w-3.5" /> Refine with AI
+            onClick={onKeepEditing}>
+            <Sparkles className="h-3.5 w-3.5" /> Keep editing in chat
           </Button>
           <Button variant="ghost" size="sm" className="flex-1 gap-1.5 rounded-xl text-xs text-muted-foreground"
             onClick={onSkip}>
             Skip to launch →
           </Button>
         </div>
-      </div>
-    </div>
+        <button
+          type="button"
+          className="text-[11px] text-muted-foreground/70 hover:text-muted-foreground underline-offset-2 hover:underline"
+          onClick={() => navigate(`/app/agents/${agentId}`)}
+        >
+          Open full editor
+        </button>
+      </motion.div>
+    </motion.div>
   );
 }
 
