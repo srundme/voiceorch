@@ -1,6 +1,7 @@
 /**
- * Agent → Google Sheets bindings (Phase 01).
+ * Agent → Google Sheets bindings.
  * Connect account, pick/create spreadsheet + tab, attach many sheets per agent.
+ * Runtime: Lookup injects row data at call start; Call log / Outcomes write after hangup.
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -191,7 +192,7 @@ export function AgentSheetsPanel({ agentId }: { agentId: number }) {
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold">Google Sheets</p>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Connect multiple sheets for different use cases — lookup, call log, outcomes.
+            Lookup injects caller data during the call. Call log and Outcomes write after hangup.
           </p>
         </div>
         <Button

@@ -1093,6 +1093,12 @@ router.patch("/calls/:id/end", requireAuth, async (req, res): Promise<void> => {
     writeCrmCallOutcome(call.id).catch(() => {});
   }).catch(() => {});
 
+  // Google Sheets writeback (fire-and-forget — call_log append + outcome upsert)
+  import("../services/sheets-writeback.js").then(({ writeSheetsCallLog, writeSheetsOutcome }) => {
+    writeSheetsCallLog(call.id).catch(() => {});
+    writeSheetsOutcome(call.id).catch(() => {});
+  }).catch(() => {});
+
   // Zelto call monitoring (fire-and-forget)
   import("../services/zelto.js").then(({ pushCallToZelto }) => {
     const endedAt  = new Date().toISOString();

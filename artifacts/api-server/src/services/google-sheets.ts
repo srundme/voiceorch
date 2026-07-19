@@ -1,5 +1,5 @@
 /**
- * Google Sheets connector — Phase 01 (connect / create / list / bind).
+ * Google Sheets connector — connect / create / bind + runtime read/write.
  *
  * Uses the same platform Google OAuth app as Calendar (GOOGLE_CLIENT_ID /
  * GOOGLE_CLIENT_SECRET) with Sheets + Drive scopes. Tokens live in
@@ -23,8 +23,14 @@ import {
   signOAuthState,
   verifyOAuthState,
 } from "./scheduling/google-calendar.js";
+import {
+  DEFAULT_COLUMN_MAPS,
+  defaultColumnMapForUseCase,
+  phonesMatch,
+  sheetRange,
+} from "./google-sheets-helpers.js";
 
-export { verifyOAuthState };
+export { verifyOAuthState, DEFAULT_COLUMN_MAPS, defaultColumnMapForUseCase, phonesMatch };
 
 const SCOPES = [
   "https://www.googleapis.com/auth/spreadsheets",
@@ -273,6 +279,301 @@ const TEMPLATES: Record<SheetTemplate, { tab: string; headers: string[] }> = {
   },
 };
 
+export async function ensureHeaders(
+  userId: string,
+  connectionId: string,
+  spreadsheetId: string,
+  sheetName: string,
+  headers: string[],
+): Promise<{ headers: string[]; wrote: boolean }> {
+  if (headers.length === 0) return { headers: [], wrote: false };
+  const auth = await getAuthedClient(connectionId, userId);
+  const sheets = google.sheets({ version: "v4", auth });
+  const range = sheetRange(sheetName, "1:1");
+  const existing = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range,
+    majorDimension: "ROWS",
+  });
+  const current = (existing.data.values?.[0] ?? []).map((h) => String(h ?? "").trim());
+  if (current.length === 0 || current.every((h) => !h)) {
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: sheetRange(sheetName, "A1"),
+      valueInputOption: "RAW",
+      requestBody: { values: [headers] },
+    });
+    return { headers, wrote: true };
+  }
+  const missing = headers.filter((h) => !current.some((c) => c.toLowerCase() === h.toLowerCase()));
+  if (missing.length === 0) return { headers: current, wrote: false };
+  const merged = [...current, ...missing];
+  await sheets.spreadsheets.values.update({
+    spreadsheetId,
+    range: sheetRange(sheetName, "A1"),
+    valueInputOption: "RAW",
+    requestBody: { values: [merged] },
+  });
+  return { headers: merged, wrote: true };
+}
+
+async function readSheetGrid(
+  userId: string,
+  connectionId: string,
+  spreadsheetId: string,
+  sheetName: string,
+): Promise<{ headers: string[]; rows: string[][] }> {
+  const auth = await getAuthedClient(connectionId, userId);
+  const sheets = google.sheets({ version: "v4", auth });
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: sheetRange(sheetName, "A1:ZZ500"),
+    majorDimension: "ROWS",
+  });
+  const values = (res.data.values ?? []) as string[][];
+  if (values.length === 0) return { headers: [], rows: [] };
+  const headers = (values[0] ?? []).map((h) => String(h ?? "").trim());
+  const rows = values.slice(1).map((r) => r.map((c) => String(c ?? "")));
+  return { headers, rows };
+}
+
+export async function lookupRowByPhone(
+  userId: string,
+  connectionId: string,
+  spreadsheetId: string,
+  sheetName: string,
+  matchColumn: string,
+  phone: string,
+): Promise<{
+  rowIndex: number;
+  headers: string[];
+  values: Record<string, string>;
+} | null> {
+  const { headers, rows } = await readSheetGrid(userId, connectionId, spreadsheetId, sheetName);
+  if (headers.length === 0) return null;
+  const matchIdx = headers.findIndex((h) => h.toLowerCase() === matchColumn.trim().toLowerCase());
+  if (matchIdx < 0) {
+    logger.warn({ spreadsheetId, sheetName, matchColumn }, "sheets: match column not found");
+    return null;
+  }
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i]!;
+    const cell = row[matchIdx] ?? "";
+    if (!phonesMatch(cell, phone)) continue;
+    const values: Record<string, string> = {};
+    for (let c = 0; c < headers.length; c++) {
+      const key = headers[c];
+      if (!key) continue;
+      const v = (row[c] ?? "").trim();
+      if (v) values[key] = v;
+    }
+    return { rowIndex: i + 2, headers, values }; // 1-based sheet row (header is 1)
+  }
+  return null;
+}
+
+function cellStr(v: string | number | null | undefined): string {
+  if (v == null) return "";
+  return String(v);
+}
+
+function resolveColumnMap(
+  useCase: SheetUseCase,
+  columnMap: Record<string, string> | null | undefined,
+): Record<string, string> {
+  if (columnMap && Object.keys(columnMap).length > 0) return columnMap;
+  return defaultColumnMapForUseCase(useCase);
+}
+
+function buildRowFromMap(
+  headers: string[],
+  fields: Record<string, string | number | null | undefined>,
+  columnMap: Record<string, string>,
+  existing?: string[],
+): string[] {
+  const byHeader = new Map<string, string>();
+  for (const [field, header] of Object.entries(columnMap)) {
+    if (!(field in fields)) continue;
+    byHeader.set(header.toLowerCase(), cellStr(fields[field]));
+  }
+  return headers.map((h, i) => {
+    const mapped = byHeader.get(h.toLowerCase());
+    if (mapped !== undefined) return mapped;
+    return existing?.[i] ?? "";
+  });
+}
+
+export async function appendCallLogRow(
+  userId: string,
+  connectionId: string,
+  spreadsheetId: string,
+  sheetName: string,
+  fields: Record<string, string | number | null | undefined>,
+  columnMap?: Record<string, string>,
+): Promise<{ updatedRange?: string }> {
+  const map = columnMap && Object.keys(columnMap).length > 0
+    ? columnMap
+    : DEFAULT_COLUMN_MAPS.call_log;
+  const desiredHeaders = [...new Set(Object.values(map))];
+  const { headers } = await ensureHeaders(userId, connectionId, spreadsheetId, sheetName, desiredHeaders);
+  const row = buildRowFromMap(headers, fields, map);
+  const auth = await getAuthedClient(connectionId, userId);
+  const sheets = google.sheets({ version: "v4", auth });
+  const res = await sheets.spreadsheets.values.append({
+    spreadsheetId,
+    range: sheetRange(sheetName, "A:A"),
+    valueInputOption: "RAW",
+    insertDataOption: "INSERT_ROWS",
+    requestBody: { values: [row] },
+  });
+  return { updatedRange: res.data.updates?.updatedRange ?? undefined };
+}
+
+export async function updateOutcomeRow(
+  userId: string,
+  connectionId: string,
+  spreadsheetId: string,
+  sheetName: string,
+  matchColumn: string,
+  phone: string,
+  fields: Record<string, string | number | null | undefined>,
+  opts?: {
+    columnMap?: Record<string, string>;
+    createIfMissing?: boolean;
+  },
+): Promise<{ rowIndex: number; created: boolean } | null> {
+  const map = opts?.columnMap && Object.keys(opts.columnMap).length > 0
+    ? opts.columnMap
+    : DEFAULT_COLUMN_MAPS.outcome;
+  const desiredHeaders = [...new Set([...Object.values(map), matchColumn])];
+  const { headers } = await ensureHeaders(userId, connectionId, spreadsheetId, sheetName, desiredHeaders);
+
+  const found = await lookupRowByPhone(userId, connectionId, spreadsheetId, sheetName, matchColumn, phone);
+  const auth = await getAuthedClient(connectionId, userId);
+  const sheets = google.sheets({ version: "v4", auth });
+
+  if (!found) {
+    if (!opts?.createIfMissing) return null;
+    const createFields = { ...fields, phone: fields.phone ?? phone };
+    const row = buildRowFromMap(headers, createFields, map);
+    await sheets.spreadsheets.values.append({
+      spreadsheetId,
+      range: sheetRange(sheetName, "A:A"),
+      valueInputOption: "RAW",
+      insertDataOption: "INSERT_ROWS",
+      requestBody: { values: [row] },
+    });
+    return { rowIndex: -1, created: true };
+  }
+
+  const { headers: gridHeaders, rows } = await readSheetGrid(userId, connectionId, spreadsheetId, sheetName);
+  const existing = rows[found.rowIndex - 2] ?? [];
+  const next = buildRowFromMap(gridHeaders.length ? gridHeaders : headers, fields, map, existing);
+  // Preserve match column phone if not in fields
+  const matchIdx = (gridHeaders.length ? gridHeaders : headers)
+    .findIndex((h) => h.toLowerCase() === matchColumn.toLowerCase());
+  if (matchIdx >= 0 && !next[matchIdx]) {
+    next[matchIdx] = existing[matchIdx] ?? phone;
+  }
+  await sheets.spreadsheets.values.update({
+    spreadsheetId,
+    range: sheetRange(sheetName, `A${found.rowIndex}`),
+    valueInputOption: "RAW",
+    requestBody: { values: [next] },
+  });
+  return { rowIndex: found.rowIndex, created: false };
+}
+
+export type EnabledSheetBinding = {
+  id: string;
+  connectionId: string;
+  label: string;
+  useCase: SheetUseCase;
+  spreadsheetId: string;
+  sheetName: string;
+  columnMap: Record<string, string>;
+  matchColumn: string | null;
+};
+
+export async function listEnabledBindings(
+  userId: string,
+  agentId: number,
+  useCase?: SheetUseCase,
+): Promise<EnabledSheetBinding[]> {
+  const rows = await db
+    .select({
+      id: agentSheetBindingsTable.id,
+      connectionId: agentSheetBindingsTable.connectionId,
+      label: agentSheetBindingsTable.label,
+      useCase: agentSheetBindingsTable.useCase,
+      spreadsheetId: agentSheetBindingsTable.spreadsheetId,
+      sheetName: agentSheetBindingsTable.sheetName,
+      columnMap: agentSheetBindingsTable.columnMap,
+      matchColumn: agentSheetBindingsTable.matchColumn,
+      enabled: agentSheetBindingsTable.enabled,
+    })
+    .from(agentSheetBindingsTable)
+    .where(and(
+      eq(agentSheetBindingsTable.userId, userId),
+      eq(agentSheetBindingsTable.agentId, agentId),
+      eq(agentSheetBindingsTable.enabled, true),
+    ));
+
+  return rows
+    .filter((r) => !useCase || r.useCase === useCase)
+    .map((r) => ({
+      id: r.id,
+      connectionId: r.connectionId,
+      label: r.label,
+      useCase: r.useCase,
+      spreadsheetId: r.spreadsheetId,
+      sheetName: r.sheetName,
+      columnMap: resolveColumnMap(r.useCase, r.columnMap as Record<string, string>),
+      matchColumn: r.matchColumn,
+    }));
+}
+
+/**
+ * Look up caller row(s) from enabled lookup bindings. Merges first hit's
+ * fields into a flat string map (sheet header → value), plus common aliases.
+ */
+export async function runLookupBindings(
+  userId: string,
+  agentId: number,
+  phone: string,
+): Promise<Record<string, string>> {
+  const bindings = await listEnabledBindings(userId, agentId, "lookup");
+  if (bindings.length === 0 || !phone.trim()) return {};
+
+  const merged: Record<string, string> = {};
+  for (const b of bindings) {
+    try {
+      const matchCol = b.matchColumn?.trim() || "Phone";
+      const hit = await lookupRowByPhone(
+        userId, b.connectionId, b.spreadsheetId, b.sheetName, matchCol, phone,
+      );
+      if (!hit) continue;
+      for (const [header, value] of Object.entries(hit.values)) {
+        if (!value) continue;
+        if (!(header in merged)) merged[header] = value;
+        const slug = header.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+        if (slug && !(slug in merged)) merged[slug] = value;
+      }
+      // Prefer first successful binding
+      if (Object.keys(merged).length > 0) {
+        logger.info(
+          { agentId, bindingId: b.id, fields: Object.keys(hit.values).length },
+          "sheets: lookup hit",
+        );
+        break;
+      }
+    } catch (err) {
+      logger.warn({ err, agentId, bindingId: b.id }, "sheets: lookup binding failed");
+    }
+  }
+  return merged;
+}
+
 export async function createSpreadsheet(
   userId: string,
   connectionId: string,
@@ -388,9 +689,10 @@ export async function createAgentBinding(
     spreadsheetTitle: input.spreadsheetTitle ?? null,
     sheetName: input.sheetName || "Sheet1",
     sheetGid: input.sheetGid ?? null,
-    matchColumn: input.matchColumn ?? null,
+    matchColumn: input.matchColumn
+      ?? (input.useCase === "lookup" || input.useCase === "outcome" ? "Phone" : null),
     enabled: true,
-    columnMap: {},
+    columnMap: defaultColumnMapForUseCase(input.useCase),
   }).returning();
   return row!;
 }

@@ -991,6 +991,38 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     }
   }
 
+  // ── Google Sheets lookup (enabled lookup bindings) ─────────────────────────
+  // Bounded wait so a slow Sheets API never stalls call setup.
+  let sheetLookupVars: Record<string, string> = {};
+  const sheetLookupPhone = !isWebcall
+    ? (callDirection === "outbound" ? params.toNumber : params.fromNumber)
+    : "";
+  if (agent.userId && sheetLookupPhone) {
+    try {
+      const { lookupSheetsCallerContext } = await import("../services/sheets-writeback.js");
+      const lookupPromise = lookupSheetsCallerContext(agent.userId, params.agentId, sheetLookupPhone);
+      sheetLookupVars = await Promise.race([
+        lookupPromise,
+        new Promise<Record<string, string>>((resolve) =>
+          setTimeout(() => resolve({}), 2500),
+        ),
+      ]);
+      if (Object.keys(sheetLookupVars).length > 0) {
+        const sheetBlock = buildLeadContextBlock(sheetLookupVars);
+        if (sheetBlock) {
+          agentConfig.systemPrompt =
+            `${sheetBlock.replace("=== LEAD CONTEXT ===", "=== SHEET LOOKUP ===")}\n\n${agentConfig.systemPrompt}`;
+        }
+        logger.info(
+          { agentId: params.agentId, fieldCount: Object.keys(sheetLookupVars).length },
+          "Sheets lookup context injected into system prompt",
+        );
+      }
+    } catch (sheetLookupErr) {
+      logger.warn({ agentId: params.agentId, sheetLookupErr }, "Sheets session lookup skipped");
+    }
+  }
+
   const dynVars: Record<string, string> = {
     to_number:     params.toNumber,
     from_number:   params.fromNumber,
@@ -999,6 +1031,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     date: now.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" }),
     ...Object.fromEntries(agentConfig.promptVariables.map(v => [v.key, v.defaultValue])),
     ...campaignLeadVars,
+    ...sheetLookupVars,
     ...Object.fromEntries(Object.entries(params.customParameters ?? {}).map(([k, v]) => [k, v])),
   };
 
@@ -2806,6 +2839,19 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
               logger.error({ sessionId, webhookUrl: ag.webhookUrl, err }, "Webhook delivery failed");
             });
           }
+
+          // ── Google Sheets writeback (after summary/disposition) ─────────────
+          import("../services/sheets-writeback.js").then(({ writeSheetsCallLog, writeSheetsOutcome }) => {
+            writeSheetsCallLog(session.callId, {
+              callSummary: callSummary || null,
+              dispositionResult,
+            })
+              .catch((err) => logger.warn({ sessionId, err }, "Sheets call_log writeback failed"));
+            writeSheetsOutcome(session.callId, {
+              callSummary: callSummary || null,
+              dispositionResult,
+            }).catch((err) => logger.warn({ sessionId, err }, "Sheets outcome writeback failed"));
+          }).catch(() => {});
 
           // ── Zelto call monitoring (fire-and-forget) ─────────────────────────
           // Placed inside this IIFE so callSummary, dispositionResult, avgSttMs

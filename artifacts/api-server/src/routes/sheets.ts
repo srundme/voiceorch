@@ -1,6 +1,6 @@
 /**
- * Google Sheets Phase 01 API — OAuth connect, list/create spreadsheets,
- * and multi-sheet agent bindings.
+ * Google Sheets API — OAuth connect, list/create spreadsheets,
+ * multi-sheet agent bindings, and runtime pull/push via bindings.
  */
 
 import { Router, type IRouter, type Request } from "express";

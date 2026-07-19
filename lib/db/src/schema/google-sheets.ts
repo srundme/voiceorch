@@ -26,8 +26,8 @@ export type SheetUseCase = "lookup" | "call_log" | "outcome" | "custom";
 
 /**
  * Agent ↔ spreadsheet bindings. One agent can have many sheets for different
- * use cases (lookup vs call log vs custom). Phase 01 = connect/create/bind only;
- * runtime pull/push lands in later phases.
+ * use cases (lookup vs call log vs outcome). Runtime: session-start lookup
+ * inject + post-call call_log append / outcome upsert.
  */
 export const agentSheetBindingsTable = pgTable("agent_sheet_bindings", {
   id: uuid("id").primaryKey().defaultRandom(),
