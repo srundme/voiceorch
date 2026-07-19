@@ -55,7 +55,10 @@ export default function AutomaticCallsWizardPage() {
   const [fromNumber, setFromNumber] = useState<string | null>(null);
   const [startMode, setStartMode] = useState<"new_only" | "backfill_then_watch">("new_only");
   const [writebackMode, setWritebackMode] = useState<"same_sheet" | "call_log" | "both">("same_sheet");
-  const [createCallLogSheet, setCreateCallLogSheet] = useState(false);
+  /** Where Call Log rows go when writeback includes call_log */
+  const [callLogDest, setCallLogDest] = useState<"same_tab" | "create_new" | "existing">("same_tab");
+  const [callLogSpreadsheetId, setCallLogSpreadsheetId] = useState("");
+  const [callLogSheetName, setCallLogSheetName] = useState("");
 
   useEffect(() => {
     if (connected && step === "connect") setStep("sheet");
@@ -65,16 +68,28 @@ export default function AutomaticCallsWizardPage() {
     if (!connectionId && connections[0]) setConnectionId(connections[0].id);
   }, [connections, connectionId]);
 
+  const needSpreadsheetList =
+    !!connectionId && (
+      (mode === "existing" && step === "sheet")
+      || (step === "modes" && writebackMode !== "same_sheet" && callLogDest === "existing")
+    );
+
   const spreadsheetsQ = useQuery({
     queryKey: ["sheets-spreadsheets", connectionId],
     queryFn: () => customFetch<Spreadsheet[]>(`${API}/sheets/google/connections/${connectionId}/spreadsheets`),
-    enabled: !!connectionId && mode === "existing" && step === "sheet",
+    enabled: needSpreadsheetList,
   });
 
   const tabsQ = useQuery({
     queryKey: ["sheets-tabs", connectionId, spreadsheetId],
     queryFn: () => customFetch<Tab[]>(`${API}/sheets/google/connections/${connectionId}/spreadsheets/${spreadsheetId}/tabs`),
     enabled: !!connectionId && !!spreadsheetId && mode === "existing",
+  });
+
+  const callLogTabsQ = useQuery({
+    queryKey: ["sheets-tabs", connectionId, callLogSpreadsheetId],
+    queryFn: () => customFetch<Tab[]>(`${API}/sheets/google/connections/${connectionId}/spreadsheets/${callLogSpreadsheetId}/tabs`),
+    enabled: !!connectionId && !!callLogSpreadsheetId && step === "modes" && callLogDest === "existing",
   });
 
   const headersQ = useQuery({
@@ -85,6 +100,13 @@ export default function AutomaticCallsWizardPage() {
       ),
     enabled: !!connectionId && !!spreadsheetId && !!sheetName && step === "map",
   });
+
+  useEffect(() => {
+    const tabs = callLogTabsQ.data ?? [];
+    if (tabs[0] && callLogDest === "existing" && !callLogSheetName) {
+      setCallLogSheetName(tabs[0].title);
+    }
+  }, [callLogTabsQ.data, callLogDest, callLogSheetName]);
 
   useEffect(() => {
     const tabs = tabsQ.data ?? [];
@@ -182,7 +204,13 @@ export default function AutomaticCallsWizardPage() {
           startMode,
           writebackMode,
           fromNumber,
-          createCallLogSheet: writebackMode !== "same_sheet" ? createCallLogSheet : false,
+          createCallLogSheet: writebackMode !== "same_sheet" && callLogDest === "create_new",
+          ...(writebackMode !== "same_sheet" && callLogDest === "existing" && callLogSpreadsheetId
+            ? {
+                callLogSpreadsheetId,
+                callLogSheetName: callLogSheetName || "Call Log",
+              }
+            : {}),
         }),
       });
 
@@ -207,7 +235,11 @@ export default function AutomaticCallsWizardPage() {
     }
     if (step === "map") return !!phoneCol.trim();
     if (step === "agent") return !!agentId;
-    if (step === "modes") return true;
+    if (step === "modes") {
+      if (writebackMode === "same_sheet") return true;
+      if (callLogDest === "existing") return !!callLogSpreadsheetId && !!callLogSheetName;
+      return true;
+    }
     return false;
   };
 
@@ -437,10 +469,56 @@ export default function AutomaticCallsWizardPage() {
                 </label>
               ))}
               {writebackMode !== "same_sheet" && (
-                <label className="flex items-center gap-2 text-xs pt-1">
-                  <input type="checkbox" checked={createCallLogSheet} onChange={(e) => setCreateCallLogSheet(e.target.checked)} />
-                  Create a separate Call Log spreadsheet (otherwise uses a Call Log tab on the same file)
-                </label>
+                <div className="space-y-2 pt-1 pl-1 border-l-2 border-border/40 ml-1">
+                  <p className="text-[11px] font-medium text-muted-foreground">Call Log destination</p>
+                  {([
+                    ["same_tab", "Same spreadsheet — Call Log tab", "Creates/uses a Call Log tab on the leads file"],
+                    ["create_new", "Create a new Call Log spreadsheet", "New Google Sheet with call-log headers"],
+                    ["existing", "Use an existing spreadsheet", "Pick any spreadsheet + tab you already have"],
+                  ] as const).map(([v, title, desc]) => (
+                    <label key={v} className={cn("flex gap-3 rounded-lg border px-3 py-2 cursor-pointer", callLogDest === v && "border-foreground/40 bg-muted/30")}>
+                      <input type="radio" className="mt-1" checked={callLogDest === v} onChange={() => setCallLogDest(v)} />
+                      <span>
+                        <span className="text-sm font-medium block">{title}</span>
+                        <span className="text-[11px] text-muted-foreground">{desc}</span>
+                      </span>
+                    </label>
+                  ))}
+                  {callLogDest === "existing" && (
+                    <div className="space-y-2 pt-1">
+                      <div>
+                        <label className="text-xs font-medium">Call Log spreadsheet</label>
+                        <Select
+                          value={callLogSpreadsheetId}
+                          onValueChange={(v) => {
+                            setCallLogSpreadsheetId(v);
+                            setCallLogSheetName("");
+                          }}
+                        >
+                          <SelectTrigger className="mt-1 h-9"><SelectValue placeholder="Pick a spreadsheet" /></SelectTrigger>
+                          <SelectContent>
+                            {(spreadsheetsQ.data ?? []).map((s) => (
+                              <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      {callLogSpreadsheetId && (
+                        <div>
+                          <label className="text-xs font-medium">Tab</label>
+                          <Select value={callLogSheetName} onValueChange={setCallLogSheetName}>
+                            <SelectTrigger className="mt-1 h-9"><SelectValue placeholder="Pick a tab" /></SelectTrigger>
+                            <SelectContent>
+                              {(callLogTabsQ.data ?? []).map((t) => (
+                                <SelectItem key={t.sheetId} value={t.title}>{t.title}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           </div>

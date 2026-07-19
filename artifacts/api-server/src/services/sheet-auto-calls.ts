@@ -113,28 +113,30 @@ export async function createPipeline(userId: string, input: CreatePipelineInput)
   let callLogSpreadsheetId = input.callLogSpreadsheetId ?? null;
   let callLogSheetName = input.callLogSheetName ?? null;
 
-  if (
-    (input.writebackMode === "call_log" || input.writebackMode === "both")
-    && input.createCallLogSheet
-    && !callLogSpreadsheetId
-  ) {
-    const created = await createSpreadsheet(userId, input.connectionId, {
-      title: `${input.name} — Call Log`,
-      template: "call_log",
-    });
-    callLogSpreadsheetId = created.spreadsheetId;
-    callLogSheetName = created.sheetName;
-  } else if (
-    (input.writebackMode === "call_log" || input.writebackMode === "both")
-    && !callLogSpreadsheetId
-  ) {
-    // Default: same spreadsheet, Call Log tab
-    callLogSpreadsheetId = input.spreadsheetId;
-    callLogSheetName = callLogSheetName || "Call Log";
-    await ensureHeaders(userId, input.connectionId, callLogSpreadsheetId, callLogSheetName, [
-      "Call ID", "Started At (IST)", "Duration (sec)", "Direction", "Phone",
-      "Caller Name", "Disposition", "Summary", "Recording", "Agent", "Cost (₹)",
-    ]);
+  if (input.writebackMode === "call_log" || input.writebackMode === "both") {
+    if (input.createCallLogSheet && !callLogSpreadsheetId) {
+      const created = await createSpreadsheet(userId, input.connectionId, {
+        title: `${input.name} — Call Log`,
+        template: "call_log",
+      });
+      callLogSpreadsheetId = created.spreadsheetId;
+      callLogSheetName = created.sheetName;
+    } else if (callLogSpreadsheetId) {
+      // Existing spreadsheet (or same file with explicit tab) — ensure call-log headers
+      callLogSheetName = callLogSheetName || "Call Log";
+      await ensureHeaders(userId, input.connectionId, callLogSpreadsheetId, callLogSheetName, [
+        "Call ID", "Started At (IST)", "Duration (sec)", "Direction", "Phone",
+        "Caller Name", "Disposition", "Summary", "Recording", "Agent", "Cost (₹)",
+      ]);
+    } else {
+      // Default: same spreadsheet, Call Log tab
+      callLogSpreadsheetId = input.spreadsheetId;
+      callLogSheetName = callLogSheetName || "Call Log";
+      await ensureHeaders(userId, input.connectionId, callLogSpreadsheetId, callLogSheetName, [
+        "Call ID", "Started At (IST)", "Duration (sec)", "Direction", "Phone",
+        "Caller Name", "Disposition", "Summary", "Recording", "Agent", "Cost (₹)",
+      ]);
+    }
   }
 
   if (input.writebackMode === "same_sheet" || input.writebackMode === "both") {
