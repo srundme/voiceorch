@@ -3,8 +3,16 @@
  * Fire-and-forget from endSession / PATCH /calls/:id/end — never blocks hangup.
  */
 
-import { and, eq } from "drizzle-orm";
-import { db, callsTable, agentsTable } from "@workspace/db";
+import { and, eq, isNull, desc } from "drizzle-orm";
+import {
+  db,
+  callsTable,
+  agentsTable,
+  campaignLeadsTable,
+  callerProfilesTable,
+  callerFactsTable,
+  canonicalizeCallerKey,
+} from "@workspace/db";
 import { logger } from "../lib/logger.js";
 import {
   listEnabledBindings,
@@ -66,6 +74,87 @@ function formatCostInr(costCents: number | null | undefined): string {
   return (costCents / 100).toFixed(2);
 }
 
+function nameFromDisposition(disp: unknown): string {
+  if (!disp || typeof disp !== "object") return "";
+  const obj = disp as Record<string, unknown>;
+  for (const k of ["name", "caller_name", "customer_name", "contact_name", "full_name"]) {
+    const v = obj[k];
+    if (typeof v === "string" && v.trim()) return v.trim();
+  }
+  return "";
+}
+
+/**
+ * Resolve human name for sheet writeback.
+ * Prefer campaign lead → caller memory profile → name fact → disposition.
+ */
+async function resolveCallerIdentity(
+  callId: number,
+  agentId: number,
+  phone: string,
+  disposition?: Record<string, unknown> | null,
+): Promise<{ name: string; email: string }> {
+  let name = "";
+  let email = "";
+
+  try {
+    const [lead] = await db
+      .select({
+        name: campaignLeadsTable.name,
+        email: campaignLeadsTable.email,
+        leadData: campaignLeadsTable.leadData,
+      })
+      .from(campaignLeadsTable)
+      .where(eq(campaignLeadsTable.callId, callId))
+      .limit(1);
+    if (lead) {
+      if (lead.name?.trim()) name = lead.name.trim();
+      if (lead.email?.trim()) email = lead.email.trim();
+      const ld = (lead.leadData ?? {}) as Record<string, unknown>;
+      if (!name && typeof ld["name"] === "string" && ld["name"].trim()) name = ld["name"].trim();
+      if (!email && typeof ld["email"] === "string" && ld["email"].trim()) email = ld["email"].trim();
+    }
+  } catch (err) {
+    logger.warn({ err, callId }, "sheets: campaign lead lookup failed");
+  }
+
+  if (!name && phone.trim()) {
+    try {
+      const key = canonicalizeCallerKey(phone) ?? phone;
+      const [profile] = await db
+        .select({ name: callerProfilesTable.name })
+        .from(callerProfilesTable)
+        .where(and(
+          eq(callerProfilesTable.agentId, agentId),
+          eq(callerProfilesTable.phoneNumber, key),
+        ))
+        .limit(1);
+      if (profile?.name?.trim()) name = profile.name.trim();
+
+      if (!name) {
+        const [fact] = await db
+          .select({ value: callerFactsTable.value })
+          .from(callerFactsTable)
+          .where(and(
+            eq(callerFactsTable.agentId, agentId),
+            eq(callerFactsTable.phoneNumber, key),
+            eq(callerFactsTable.key, "name"),
+            isNull(callerFactsTable.supersededById),
+          ))
+          .orderBy(desc(callerFactsTable.createdAt))
+          .limit(1);
+        if (fact?.value?.trim()) name = fact.value.trim();
+      }
+    } catch (err) {
+      logger.warn({ err, callId, agentId }, "sheets: caller memory name lookup failed");
+    }
+  }
+
+  if (!name) name = nameFromDisposition(disposition);
+
+  return { name, email };
+}
+
 /** Session-start: merge sheet row fields for enabled lookup bindings. */
 export async function lookupSheetsCallerContext(
   userId: string,
@@ -103,14 +192,17 @@ export async function writeSheetsCallLog(
   if (bindings.length === 0) return;
 
   const { phone, direction } = resolveCallPhone(call);
+  const disposition = opts?.dispositionResult ?? call.dispositionResult ?? null;
+  const identity = await resolveCallerIdentity(callId, call.agentId, phone, disposition);
+
   const fields: Record<string, string | number | null | undefined> = {
     callId: call.id,
     startedAt: formatIst(call.createdAt),
     durationSeconds: call.durationSeconds ?? 0,
     direction,
     phone,
-    callerName: "",
-    disposition: formatDisposition(opts?.dispositionResult ?? call.dispositionResult),
+    callerName: identity.name,
+    disposition: formatDisposition(disposition),
     summary: opts?.callSummary ?? call.callSummary ?? "",
     recordingUrl: call.recordingUrl ?? "",
     agentName: agent.name,
@@ -155,13 +247,15 @@ export async function writeSheetsOutcome(
   if (!phone?.trim()) return;
 
   const summary = opts?.callSummary ?? call.callSummary ?? "";
-  const disposition = formatDisposition(opts?.dispositionResult ?? call.dispositionResult);
+  const dispositionRaw = opts?.dispositionResult ?? call.dispositionResult ?? null;
+  const disposition = formatDisposition(dispositionRaw);
   const status = disposition || call.status || "completed";
+  const identity = await resolveCallerIdentity(callId, call.agentId, phone, dispositionRaw);
 
   const fields: Record<string, string | number | null | undefined> = {
     phone,
-    name: "",
-    email: "",
+    name: identity.name,
+    email: identity.email,
     status,
     lastCallAt: formatIst(call.endedAt ?? new Date()),
     disposition,
