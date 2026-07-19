@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { extractPhoneCandidates, phonesMatch } from "./google-sheets-helpers.js";
-import { parseSheetLeadRow } from "./sheet-auto-calls-helpers.js";
+import {
+  parseSheetLeadRow,
+  fuzzyDetectColumnMap,
+  isDoNotDialValue,
+  isRetryStatus,
+  friendlySheetStatus,
+  resolveDoNotDialHeader,
+} from "./sheet-auto-calls-helpers.js";
+import { issueRecordingShareToken, verifyRecordingShareToken } from "./recording-share.js";
 
 describe("parseSheetLeadRow", () => {
   const headers = ["Name", "Phone Number", "City", "Email"];
@@ -28,5 +36,47 @@ describe("parseSheetLeadRow", () => {
   it("returns null phoneNormalized for empty phone", () => {
     const parsed = parseSheetLeadRow(headers, ["A", "", "X", ""], { phone: "Phone Number" });
     expect(parsed.phoneNormalized).toBeNull();
+  });
+});
+
+describe("fuzzyDetectColumnMap", () => {
+  it("maps Mobile / Caller Name / Email", () => {
+    const map = fuzzyDetectColumnMap(["Caller Name", "Mobile", "Email", "City"]);
+    expect(map.phone).toBe("Mobile");
+    expect(map.name).toBe("Caller Name");
+    expect(map.email).toBe("Email");
+  });
+});
+
+describe("do-not-dial / retry / friendly status", () => {
+  it("detects DNC values and headers", () => {
+    expect(isDoNotDialValue("yes")).toBe(true);
+    expect(isDoNotDialValue("")).toBe(false);
+    expect(resolveDoNotDialHeader(["Phone", "Do Not Call"], { phone: "Phone" })).toBe("Do Not Call");
+  });
+
+  it("detects Retry status", () => {
+    expect(isRetryStatus("Retry")).toBe(true);
+    expect(isRetryStatus("Completed")).toBe(false);
+  });
+
+  it("maps friendly sheet statuses", () => {
+    expect(friendlySheetStatus("enqueued")).toBe("Queued");
+    expect(friendlySheetStatus("dialing")).toBe("Calling");
+    expect(friendlySheetStatus("completed")).toBe("Completed");
+    expect(friendlySheetStatus("no_answer")).toBe("No answer");
+    expect(friendlySheetStatus("failed")).toBe("Failed");
+  });
+});
+
+describe("recording share tokens", () => {
+  it("round-trips a valid token", () => {
+    const token = issueRecordingShareToken(3355);
+    expect(verifyRecordingShareToken(token)).toEqual({ callId: 3355 });
+  });
+
+  it("rejects tampered tokens", () => {
+    const token = issueRecordingShareToken(3355);
+    expect(verifyRecordingShareToken(token.replace(/.$/, "0"))).toBeNull();
   });
 });

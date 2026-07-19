@@ -269,7 +269,13 @@ export async function listSheetTabs(
 
 export type SheetTemplate = "blank" | "call_log" | "lead_pipeline";
 
-const TEMPLATES: Record<SheetTemplate, { tab: string; headers: string[] }> = {
+const TEMPLATES: Record<SheetTemplate, {
+  tab: string;
+  headers: string[];
+  sampleRows?: string[][];
+  instructions?: string[][];
+  extraTabs?: Array<{ tab: string; headers: string[] }>;
+}> = {
   blank: {
     tab: "Sheet1",
     headers: [],
@@ -284,7 +290,31 @@ const TEMPLATES: Record<SheetTemplate, { tab: string; headers: string[] }> = {
   lead_pipeline: {
     tab: "Leads",
     headers: [
-      "Phone", "Name", "Email", "Status", "Last Call At", "Disposition", "Notes", "Next Follow-up",
+      "Phone", "Name", "Email", "Status", "Last Call At", "Disposition",
+      "Summary", "Call ID", "Recording", "Do Not Call",
+    ],
+    sampleRows: [
+      ["9876543210", "Sample Lead", "sample@example.com", "", "", "", "", "", "", ""],
+      ["9123456780", "Demo Contact", "", "", "", "", "", "", "", ""],
+    ],
+    instructions: [
+      ["SnapServe Automatic Calls — how to use"],
+      [""],
+      ["1. Keep Phone in column A (required). Name/Email help the agent greet correctly."],
+      ["2. Leave Status blank for new leads. SnapServe writes Queued → Calling → Completed / Failed."],
+      ["3. Put yes in Do Not Call to skip a row without deleting it."],
+      ["4. Set Status to Retry to dial that row again."],
+      ["5. Call Log tab gets one append-only row per call attempt."],
+      ["6. Phones work as 9876543210 or +91…; cells with two numbers use the first."],
+    ],
+    extraTabs: [
+      {
+        tab: "Call Log",
+        headers: [
+          "Call ID", "Started At (IST)", "Duration (sec)", "Direction", "Phone",
+          "Caller Name", "Disposition", "Summary", "Recording", "Agent", "Cost (₹)",
+        ],
+      },
     ],
   },
 };
@@ -652,10 +682,20 @@ export async function createSpreadsheet(
   const sheets = google.sheets({ version: "v4", auth });
   const template = TEMPLATES[opts.template ?? "blank"];
 
+  const sheetDefs: Array<{ properties: { title: string } }> = [
+    { properties: { title: template.tab } },
+  ];
+  if (template.instructions?.length) {
+    sheetDefs.push({ properties: { title: "Instructions" } });
+  }
+  for (const extra of template.extraTabs ?? []) {
+    sheetDefs.push({ properties: { title: extra.tab } });
+  }
+
   const created = await sheets.spreadsheets.create({
     requestBody: {
       properties: { title: opts.title },
-      sheets: [{ properties: { title: template.tab } }],
+      sheets: sheetDefs,
     },
     fields: "spreadsheetId,properties.title,sheets.properties(sheetId,title)",
   });
@@ -666,11 +706,31 @@ export async function createSpreadsheet(
   const sheetGid = created.data.sheets?.[0]?.properties?.sheetId ?? null;
 
   if (template.headers.length > 0) {
+    const values: string[][] = [template.headers, ...(template.sampleRows ?? [])];
     await sheets.spreadsheets.values.update({
       spreadsheetId,
       range: sheetRange(sheetName, "A1"),
       valueInputOption: "RAW",
-      requestBody: { values: [template.headers] },
+      requestBody: { values },
+    });
+  }
+
+  if (template.instructions?.length) {
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: sheetRange("Instructions", "A1"),
+      valueInputOption: "RAW",
+      requestBody: { values: template.instructions },
+    });
+  }
+
+  for (const extra of template.extraTabs ?? []) {
+    if (extra.headers.length === 0) continue;
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: sheetRange(extra.tab, "A1"),
+      valueInputOption: "RAW",
+      requestBody: { values: [extra.headers] },
     });
   }
 

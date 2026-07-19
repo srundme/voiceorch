@@ -51,12 +51,16 @@ export default function AutomaticCallsWizardPage() {
   const [nameCol, setNameCol] = useState("Name");
   const [emailCol, setEmailCol] = useState("Email");
   const [agentId, setAgentId] = useState<number | null>(null);
-  const [startMode, setStartMode] = useState<"new_only" | "backfill_then_watch">("new_only");
-  const [writebackMode, setWritebackMode] = useState<"same_sheet" | "call_log" | "both">("same_sheet");
+  const [startMode, setStartMode] = useState<"new_only" | "backfill_then_watch">("backfill_then_watch");
+  const [writebackMode, setWritebackMode] = useState<"same_sheet" | "call_log" | "both">("both");
   /** Where Call Log rows go when writeback includes call_log */
   const [callLogDest, setCallLogDest] = useState<"same_tab" | "create_new" | "existing">("same_tab");
   const [callLogSpreadsheetId, setCallLogSpreadsheetId] = useState("");
   const [callLogSheetName, setCallLogSheetName] = useState("");
+  const [showCallLogAdvanced, setShowCallLogAdvanced] = useState(false);
+  const [previewRows, setPreviewRows] = useState<Array<{
+    sheetRowIndex: number; phone: string; name: string; email: string; phoneNormalized: string | null; skipReason: string | null;
+  }> | null>(null);
 
   useEffect(() => {
     if (connected && step === "connect") setStep("sheet");
@@ -117,20 +121,62 @@ export default function AutomaticCallsWizardPage() {
   useEffect(() => {
     const headers = headersQ.data?.headers ?? [];
     if (headers.length === 0) return;
-    const find = (re: RegExp) => headers.find((h) => re.test(h)) ?? "";
+    const find = (...res: RegExp[]) => {
+      for (const re of res) {
+        const hit = headers.find((h) => re.test(h.trim()));
+        if (hit) return hit;
+      }
+      return "";
+    };
     if (!headers.includes(phoneCol)) {
-      const p = find(/phone|mobile|whatsapp|contact/i) || headers[0] || "Phone";
+      const p = find(/^phone(\s*number)?$/i, /^mobile/i, /whatsapp/i, /phone/i, /mobile/i) || headers[0] || "Phone";
       setPhoneCol(p);
     }
-    if (!headers.includes(nameCol)) {
-      const n = find(/^name$|customer|caller|contact.?name/i) || "Name";
-      if (headers.includes(n) || n === "Name") setNameCol(n);
+    if (!headers.includes(nameCol) && nameCol !== "__none") {
+      const n = find(/^name$/i, /^caller\s*name$/i, /^customer\s*name$/i, /^full\s*name$/i, /name/i);
+      setNameCol(n || "__none");
     }
-    if (!headers.includes(emailCol)) {
-      const e = find(/email/i) || "Email";
-      if (headers.includes(e) || e === "Email") setEmailCol(e);
+    if (!headers.includes(emailCol) && emailCol !== "__none") {
+      const e = find(/^e-?mail$/i, /email/i);
+      setEmailCol(e || "__none");
     }
   }, [headersQ.data]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (step !== "map" || !connectionId || !spreadsheetId || !sheetName || !phoneCol) {
+      setPreviewRows(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const data = await customFetch<{
+          rows: Array<{
+            sheetRowIndex: number; phone: string; name: string; email: string;
+            phoneNormalized: string | null; skipReason: string | null;
+          }>;
+        }>(`${API}/automatic-calls/preview`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            connectionId,
+            spreadsheetId,
+            sheetName,
+            columnMap: {
+              phone: phoneCol,
+              ...(nameCol && nameCol !== "__none" ? { name: nameCol } : {}),
+              ...(emailCol && emailCol !== "__none" ? { email: emailCol } : {}),
+            },
+            limit: 3,
+          }),
+        });
+        if (!cancelled) setPreviewRows(data.rows);
+      } catch {
+        if (!cancelled) setPreviewRows(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [step, connectionId, spreadsheetId, sheetName, phoneCol, nameCol, emailCol]);
 
   const steps: Step[] = useMemo(
     () => (connected ? ["sheet", "map", "agent", "modes"] : ["connect", "sheet", "map", "agent", "modes"]),
@@ -212,10 +258,18 @@ export default function AutomaticCallsWizardPage() {
       });
 
       await customFetch(`${API}/automatic-calls/${pipeline.id}/start`, { method: "POST" });
-      return pipeline;
+      return { pipeline, spreadsheetId: sid };
     },
-    onSuccess: (pipeline) => {
-      toast({ title: "Automatic Calls started" });
+    onSuccess: ({ pipeline, spreadsheetId: sid }) => {
+      toast({
+        title: "Automatic Calls started",
+        description: sid
+          ? "Opening your spreadsheet — Status columns are ready."
+          : undefined,
+      });
+      if (sid) {
+        window.open(`https://docs.google.com/spreadsheets/d/${sid}/edit`, "_blank", "noopener");
+      }
       void qc.invalidateQueries({ queryKey: ["automatic-calls"] });
       setLocation(`/app/automatic-calls/${pipeline.id}`);
     },
@@ -314,7 +368,7 @@ export default function AutomaticCallsWizardPage() {
                 Use existing sheet
               </Button>
               <Button type="button" size="sm" variant={mode === "create" ? "default" : "outline"} className="h-8 text-xs" onClick={() => setMode("create")}>
-                Create new sheet
+                Use SnapServe template
               </Button>
             </div>
             {mode === "existing" ? (
@@ -366,7 +420,9 @@ export default function AutomaticCallsWizardPage() {
                   value={createTitle}
                   onChange={(e) => setCreateTitle(e.target.value)}
                 />
-                <p className="text-[11px] text-muted-foreground mt-1">Creates a Leads tab with Phone, Name, Email, Status…</p>
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Creates Leads + Call Log + Instructions with sample rows (Phone, Name, Status, Do Not Call…).
+                </p>
               </div>
             )}
           </div>
@@ -375,7 +431,11 @@ export default function AutomaticCallsWizardPage() {
         {step === "map" && (
           <div className="space-y-3">
             <p className="text-xs text-muted-foreground">
-              Map sheet columns. Phone is required. Long names and cells with two numbers are supported.
+              Map sheet columns. Phone is required. Columns are auto-detected when possible.
+            </p>
+            <p className="text-[11px] text-muted-foreground rounded-md border border-border/50 bg-muted/20 px-2.5 py-2">
+              India tip: phones as <span className="font-mono">9876543210</span> or <span className="font-mono">+91…</span> both work.
+              Cells with two numbers use the first valid mobile.
             </p>
             {headersQ.isLoading && <p className="text-xs text-muted-foreground flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> Reading headers…</p>}
             {(["phone", "name", "email"] as const).map((field) => {
@@ -401,6 +461,23 @@ export default function AutomaticCallsWizardPage() {
                 </div>
               );
             })}
+            {previewRows && previewRows.length > 0 && (
+              <div className="rounded-lg border border-border/50 overflow-hidden">
+                <p className="px-2.5 py-1.5 text-[11px] font-medium border-b border-border/40 bg-muted/20">
+                  We’ll dial these (first {previewRows.length} rows)
+                </p>
+                <ul className="divide-y divide-border/30 text-[11px]">
+                  {previewRows.map((r) => (
+                    <li key={r.sheetRowIndex} className="px-2.5 py-1.5 flex gap-2 items-center">
+                      <span className="text-muted-foreground w-10 shrink-0">Row {r.sheetRowIndex}</span>
+                      <span className="font-mono truncate">{r.phoneNormalized || r.phone || "—"}</span>
+                      <span className="truncate text-muted-foreground flex-1">{r.name || ""}</span>
+                      {r.skipReason && <span className="text-amber-600 shrink-0">{r.skipReason}</span>}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         )}
 
@@ -419,6 +496,11 @@ export default function AutomaticCallsWizardPage() {
               <p className="mt-1.5 text-[11px] text-muted-foreground">
                 Calls use this agent’s number. If none is assigned, a managed number is used.
               </p>
+              {nameCol && nameCol !== "__none" && (
+                <p className="mt-2 text-[11px] rounded-md border border-border/50 bg-muted/20 px-2.5 py-2 text-muted-foreground">
+                  Tip: add <span className="font-mono text-foreground">{"Hi {{name}}"}</span> to the agent greeting so it opens with the sheet name.
+                </p>
+              )}
             </div>
           </div>
         )}
@@ -427,6 +509,13 @@ export default function AutomaticCallsWizardPage() {
           <div className="space-y-5">
             <div className="space-y-2">
               <p className="text-xs font-medium">When you start</p>
+              <label className={cn("flex gap-3 rounded-lg border px-3 py-2.5 cursor-pointer", startMode === "backfill_then_watch" && "border-foreground/40 bg-muted/30")}>
+                <input type="radio" className="mt-1" checked={startMode === "backfill_then_watch"} onChange={() => setStartMode("backfill_then_watch")} />
+                <span>
+                  <span className="text-sm font-medium block">Backfill then watch</span>
+                  <span className="text-[11px] text-muted-foreground">We’ll dial existing rows, then keep watching for new ones.</span>
+                </span>
+              </label>
               <label className={cn("flex gap-3 rounded-lg border px-3 py-2.5 cursor-pointer", startMode === "new_only" && "border-foreground/40 bg-muted/30")}>
                 <input type="radio" className="mt-1" checked={startMode === "new_only"} onChange={() => setStartMode("new_only")} />
                 <span>
@@ -434,20 +523,13 @@ export default function AutomaticCallsWizardPage() {
                   <span className="text-[11px] text-muted-foreground">Ignore existing rows; dial only leads added after Start.</span>
                 </span>
               </label>
-              <label className={cn("flex gap-3 rounded-lg border px-3 py-2.5 cursor-pointer", startMode === "backfill_then_watch" && "border-foreground/40 bg-muted/30")}>
-                <input type="radio" className="mt-1" checked={startMode === "backfill_then_watch"} onChange={() => setStartMode("backfill_then_watch")} />
-                <span>
-                  <span className="text-sm font-medium block">Backfill then watch</span>
-                  <span className="text-[11px] text-muted-foreground">Dial all existing uncalled rows, then keep watching for new ones.</span>
-                </span>
-              </label>
             </div>
             <div className="space-y-2">
               <p className="text-xs font-medium">Write call results to</p>
               {([
+                ["both", "Both (recommended)", "Update the lead row and append to Call Log"],
                 ["same_sheet", "Same sheet", "Update Status / Summary / Disposition on the lead row"],
-                ["call_log", "Call Log", "Append one row per call to a Call Log tab/sheet"],
-                ["both", "Both", "Update the lead row and append to Call Log"],
+                ["call_log", "Call Log only", "Append one row per call to a Call Log tab/sheet"],
               ] as const).map(([v, title, desc]) => (
                 <label key={v} className={cn("flex gap-3 rounded-lg border px-3 py-2.5 cursor-pointer", writebackMode === v && "border-foreground/40 bg-muted/30")}>
                   <input type="radio" className="mt-1" checked={writebackMode === v} onChange={() => setWritebackMode(v)} />
@@ -458,51 +540,62 @@ export default function AutomaticCallsWizardPage() {
                 </label>
               ))}
               {writebackMode !== "same_sheet" && (
-                <div className="space-y-2 pt-1 pl-1 border-l-2 border-border/40 ml-1">
-                  <p className="text-[11px] font-medium text-muted-foreground">Call Log destination</p>
-                  {([
-                    ["same_tab", "Same spreadsheet — Call Log tab", "Creates/uses a Call Log tab on the leads file"],
-                    ["create_new", "Create a new Call Log spreadsheet", "New Google Sheet with call-log headers"],
-                    ["existing", "Use an existing spreadsheet", "Pick any spreadsheet + tab you already have"],
-                  ] as const).map(([v, title, desc]) => (
-                    <label key={v} className={cn("flex gap-3 rounded-lg border px-3 py-2 cursor-pointer", callLogDest === v && "border-foreground/40 bg-muted/30")}>
-                      <input type="radio" className="mt-1" checked={callLogDest === v} onChange={() => setCallLogDest(v)} />
-                      <span>
-                        <span className="text-sm font-medium block">{title}</span>
-                        <span className="text-[11px] text-muted-foreground">{desc}</span>
-                      </span>
-                    </label>
-                  ))}
-                  {callLogDest === "existing" && (
-                    <div className="space-y-2 pt-1">
-                      <div>
-                        <label className="text-xs font-medium">Call Log spreadsheet</label>
-                        <Select
-                          value={callLogSpreadsheetId}
-                          onValueChange={(v) => {
-                            setCallLogSpreadsheetId(v);
-                            setCallLogSheetName("");
-                          }}
-                        >
-                          <SelectTrigger className="mt-1 h-9"><SelectValue placeholder="Pick a spreadsheet" /></SelectTrigger>
-                          <SelectContent>
-                            {(spreadsheetsQ.data ?? []).map((s) => (
-                              <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      {callLogSpreadsheetId && (
-                        <div>
-                          <label className="text-xs font-medium">Tab</label>
-                          <Select value={callLogSheetName} onValueChange={setCallLogSheetName}>
-                            <SelectTrigger className="mt-1 h-9"><SelectValue placeholder="Pick a tab" /></SelectTrigger>
-                            <SelectContent>
-                              {(callLogTabsQ.data ?? []).map((t) => (
-                                <SelectItem key={t.sheetId} value={t.title}>{t.title}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    className="text-[11px] text-muted-foreground underline-offset-2 hover:underline"
+                    onClick={() => setShowCallLogAdvanced((v) => !v)}
+                  >
+                    {showCallLogAdvanced ? "Hide" : "Advanced"} Call Log destination
+                  </button>
+                  {(showCallLogAdvanced || callLogDest !== "same_tab") && (
+                    <div className="space-y-2 pt-2 pl-1 border-l-2 border-border/40 ml-1">
+                      <p className="text-[11px] font-medium text-muted-foreground">Default: same spreadsheet — Call Log tab</p>
+                      {([
+                        ["same_tab", "Same spreadsheet — Call Log tab", "Creates/uses a Call Log tab on the leads file"],
+                        ["create_new", "Create a new Call Log spreadsheet", "New Google Sheet with call-log headers"],
+                        ["existing", "Use an existing spreadsheet", "Pick any spreadsheet + tab you already have"],
+                      ] as const).map(([v, title, desc]) => (
+                        <label key={v} className={cn("flex gap-3 rounded-lg border px-3 py-2 cursor-pointer", callLogDest === v && "border-foreground/40 bg-muted/30")}>
+                          <input type="radio" className="mt-1" checked={callLogDest === v} onChange={() => setCallLogDest(v)} />
+                          <span>
+                            <span className="text-sm font-medium block">{title}</span>
+                            <span className="text-[11px] text-muted-foreground">{desc}</span>
+                          </span>
+                        </label>
+                      ))}
+                      {callLogDest === "existing" && (
+                        <div className="space-y-2 pt-1">
+                          <div>
+                            <label className="text-xs font-medium">Call Log spreadsheet</label>
+                            <Select
+                              value={callLogSpreadsheetId}
+                              onValueChange={(v) => {
+                                setCallLogSpreadsheetId(v);
+                                setCallLogSheetName("");
+                              }}
+                            >
+                              <SelectTrigger className="mt-1 h-9"><SelectValue placeholder="Pick a spreadsheet" /></SelectTrigger>
+                              <SelectContent>
+                                {(spreadsheetsQ.data ?? []).map((s) => (
+                                  <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          {callLogSpreadsheetId && (
+                            <div>
+                              <label className="text-xs font-medium">Tab</label>
+                              <Select value={callLogSheetName} onValueChange={setCallLogSheetName}>
+                                <SelectTrigger className="mt-1 h-9"><SelectValue placeholder="Pick a tab" /></SelectTrigger>
+                                <SelectContent>
+                                  {(callLogTabsQ.data ?? []).map((t) => (
+                                    <SelectItem key={t.sheetId} value={t.title}>{t.title}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>

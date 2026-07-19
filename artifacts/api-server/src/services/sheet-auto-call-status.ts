@@ -10,7 +10,11 @@ import {
   sheetAutoCallPipelinesTable,
   sheetAutoCallRowStateTable,
   type SheetAutoRowStatus,
+  type SheetAutoStatusColumns,
 } from "@workspace/db";
+import { updateSheetRowByIndex } from "./google-sheets.js";
+import { friendlySheetStatus } from "./sheet-auto-calls-helpers.js";
+import { logger } from "../lib/logger.js";
 
 type LeadLike = {
   id: number;
@@ -75,5 +79,31 @@ export async function syncSheetAutoCallDialStatus(
         updatedAt: new Date(),
       })
       .where(eq(sheetAutoCallPipelinesTable.id, meta.pipelineId));
+  }
+
+  // Mirror Queued / Calling / Failed into the sheet Status column
+  const [pipeline] = await db
+    .select()
+    .from(sheetAutoCallPipelinesTable)
+    .where(eq(sheetAutoCallPipelinesTable.id, meta.pipelineId))
+    .limit(1);
+  if (
+    pipeline
+    && (pipeline.writebackMode === "same_sheet" || pipeline.writebackMode === "both")
+  ) {
+    const col = (pipeline.sameSheetStatusColumns as SheetAutoStatusColumns | null)?.status ?? "Status";
+    const label = friendlySheetStatus(opts.status);
+    try {
+      await updateSheetRowByIndex(
+        pipeline.userId,
+        pipeline.connectionId,
+        pipeline.spreadsheetId,
+        pipeline.sheetName,
+        meta.sheetRowIndex,
+        { [col]: label },
+      );
+    } catch (err) {
+      logger.warn({ err, pipelineId: pipeline.id }, "sheet-auto-call: dial status sheet write failed");
+    }
   }
 }

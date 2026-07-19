@@ -15,6 +15,8 @@ import {
   pausePipeline,
   resumePipeline,
   stopPipeline,
+  previewDialRows,
+  retrySheetRow,
 } from "../services/sheet-auto-calls.js";
 
 const router: IRouter = Router();
@@ -150,6 +152,48 @@ router.post("/automatic-calls/:id/stop", requireAuth, async (req, res): Promise<
     res.json(row);
   } catch (err: any) {
     res.status(400).json({ error: err?.message ?? "Failed to stop" });
+  }
+});
+
+const PreviewBody = z.object({
+  connectionId: z.string().uuid(),
+  spreadsheetId: z.string().min(1),
+  sheetName: z.string().min(1),
+  columnMap: ColumnMapSchema.optional(),
+  limit: z.number().int().min(1).max(10).optional(),
+});
+
+router.post("/automatic-calls/preview", requireAuth, async (req, res): Promise<void> => {
+  try {
+    const userId = (req as any).clerkUserId as string;
+    const parsed = PreviewBody.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Validation failed", issues: parsed.error.issues });
+      return;
+    }
+    const data = await previewDialRows(userId, {
+      ...parsed.data,
+      columnMap: parsed.data.columnMap as { phone: string; name?: string; email?: string } | undefined,
+    });
+    res.json(data);
+  } catch (err: any) {
+    logger.warn({ err }, "automatic-calls: preview failed");
+    res.status(400).json({ error: err?.message ?? "Preview failed" });
+  }
+});
+
+router.post("/automatic-calls/:id/retry-row", requireAuth, async (req, res): Promise<void> => {
+  try {
+    const userId = (req as any).clerkUserId as string;
+    const sheetRowIndex = Number((req.body as { sheetRowIndex?: number })?.sheetRowIndex);
+    if (!Number.isFinite(sheetRowIndex) || sheetRowIndex < 2) {
+      res.status(400).json({ error: "sheetRowIndex (>= 2) is required" });
+      return;
+    }
+    const result = await retrySheetRow(userId, paramId(req), sheetRowIndex);
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err?.message ?? "Retry failed" });
   }
 });
 

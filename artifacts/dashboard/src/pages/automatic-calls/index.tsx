@@ -6,7 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { customFetch } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
-import { Plus, Sheet, Loader2, Play, Pause } from "lucide-react";
+import { Plus, Sheet, Loader2, Play, Pause, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const API = "/api";
@@ -17,6 +17,7 @@ type Pipeline = {
   status: string;
   startMode: string;
   writebackMode: string;
+  spreadsheetId: string;
   spreadsheetTitle: string | null;
   sheetName: string;
   agentId: number;
@@ -114,6 +115,19 @@ export default function AutomaticCallsPage() {
                 </p>
                 {p.lastError && (
                   <p className="text-[10px] text-rose-600 truncate max-w-[200px]">{p.lastError}</p>
+                )}
+                {p.spreadsheetId && (
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-foreground mt-0.5"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      window.open(`https://docs.google.com/spreadsheets/d/${p.spreadsheetId}/edit`, "_blank", "noopener");
+                    }}
+                  >
+                    Open sheet <ExternalLink className="h-2.5 w-2.5" />
+                  </button>
                 )}
               </div>
             </div>

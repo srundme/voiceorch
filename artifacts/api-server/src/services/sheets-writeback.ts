@@ -17,6 +17,8 @@ import {
 } from "@workspace/db";
 import { logger } from "../lib/logger.js";
 import { toAbsoluteAppUrl } from "../lib/app-domain.js";
+import { shareableRecordingUrl } from "./recording-share.js";
+import { friendlySheetStatus } from "./sheet-auto-calls-helpers.js";
 import {
   listEnabledBindings,
   appendCallLogRow,
@@ -25,11 +27,15 @@ import {
   runLookupBindings,
 } from "./google-sheets.js";
 
-/** Prefer stored recording path; always write a full URL into Sheets. */
+/** Prefer shareable link for Sheets; fall back to absolute auth URL. */
 function sheetRecordingUrl(call: { id: number; recordingUrl: string | null }): string {
-  const stored = (call.recordingUrl ?? "").trim();
-  const path = stored || `/api/storage/recordings/${call.id}`;
-  return toAbsoluteAppUrl(path);
+  try {
+    return shareableRecordingUrl(call.id);
+  } catch {
+    const stored = (call.recordingUrl ?? "").trim();
+    const path = stored || `/api/storage/recordings/${call.id}`;
+    return toAbsoluteAppUrl(path);
+  }
 }
 
 function formatIst(d: Date | string | null | undefined): string {
@@ -380,7 +386,7 @@ export async function writeSheetAutoCallResults(
   if ((mode === "same_sheet" || mode === "both") && sheetRowIndex != null) {
     try {
       const updates: Record<string, string> = {};
-      if (cols.status) updates[cols.status] = status;
+      if (cols.status) updates[cols.status] = friendlySheetStatus(status);
       if (cols.lastCallAt) updates[cols.lastCallAt] = formatIst(call.endedAt ?? new Date());
       if (cols.disposition) updates[cols.disposition] = disposition;
       if (cols.summary) updates[cols.summary] = summary;

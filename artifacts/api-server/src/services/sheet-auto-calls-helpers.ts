@@ -1,3 +1,7 @@
+/**
+ * Automatic Calls sheet-row parsing and UX helpers.
+ */
+
 import { extractPhoneCandidates } from "./google-sheets-helpers.js";
 import { normalizePhone } from "../lib/phone-normalize.js";
 import type { SheetAutoColumnMap } from "@workspace/db";
@@ -48,4 +52,98 @@ export function parseSheetLeadRow(
   if (phoneRaw) leadData["phone"] = phoneRaw;
 
   return { phoneRaw, phoneNormalized, name, email, leadData };
+}
+
+/** Fuzzy-match common India / CRM header names → columnMap. */
+export function fuzzyDetectColumnMap(headers: string[]): SheetAutoColumnMap {
+  const find = (...patterns: RegExp[]): string | undefined => {
+    for (const re of patterns) {
+      const hit = headers.find((h) => re.test(h.trim()));
+      if (hit) return hit;
+    }
+    return undefined;
+  };
+
+  const phone =
+    find(
+      /^phone(\s*number)?$/i,
+      /^mobile(\s*(no|number|num))?$/i,
+      /^whatsapp$/i,
+      /contact\s*(no|number|phone)?/i,
+      /phone/i,
+      /mobile/i,
+    ) ?? headers[0] ?? "Phone";
+
+  const name = find(
+    /^name$/i,
+    /^caller\s*name$/i,
+    /^customer\s*name$/i,
+    /^full\s*name$/i,
+    /^contact\s*name$/i,
+    /name/i,
+  );
+
+  const email = find(/^e-?mail$/i, /email/i);
+
+  return {
+    phone,
+    ...(name ? { name } : {}),
+    ...(email ? { email } : {}),
+  };
+}
+
+const TRUTHY_SKIP = new Set([
+  "yes", "y", "true", "1", "skip", "do not call", "dnc", "x", "✓", "✔",
+]);
+
+/** True when Do Not Call / Skip cell opts the row out of dialing. */
+export function isDoNotDialValue(raw: string | null | undefined): boolean {
+  const v = (raw ?? "").trim().toLowerCase();
+  if (!v) return false;
+  return TRUTHY_SKIP.has(v);
+}
+
+/** Resolve Do Not Call / Skip column header from map or sheet headers. */
+export function resolveDoNotDialHeader(
+  headers: string[],
+  columnMap: SheetAutoColumnMap,
+): string | undefined {
+  const mapped = columnMap["doNotCall"] || columnMap["skip"] || columnMap["do_not_call"];
+  if (mapped && headers.some((h) => h.toLowerCase() === mapped.toLowerCase())) return mapped;
+  return headers.find((h) =>
+    /^(do\s*not\s*call|dnc|skip|don'?t\s*call)$/i.test(h.trim()),
+  );
+}
+
+/** True when Status cell requests a re-dial. */
+export function isRetryStatus(raw: string | null | undefined): boolean {
+  const v = (raw ?? "").trim().toLowerCase();
+  return v === "retry" || v === "redial" || v === "re-dial" || v === "call again";
+}
+
+/**
+ * Human-readable Status values written into the sheet.
+ * Maps internal call/pipeline statuses to operator-friendly labels.
+ */
+export function friendlySheetStatus(raw: string | null | undefined): string {
+  const s = (raw ?? "").trim().toLowerCase();
+  if (!s) return "Completed";
+  if (s === "enqueued" || s === "pending" || s === "queued") return "Queued";
+  if (s === "dialing" || s === "calling" || s === "ringing" || s === "connected") return "Calling";
+  if (s === "completed" || s === "done" || s === "success") return "Completed";
+  if (s === "no_answer" || s === "no-answer" || s === "no answer" || s === "unanswered") return "No answer";
+  if (s === "busy") return "Busy";
+  if (s === "voicemail" || s === "machine") return "Voicemail";
+  if (s === "failed" || s === "error" || s === "cancelled" || s === "canceled") return "Failed";
+  if (s === "skipped") return "Skipped";
+  // Preserve title-ish custom dispositions already written by the agent
+  if (s.length <= 40 && !/[_-]/.test(s)) {
+    return raw!.trim().replace(/^\w/, (c) => c.toUpperCase());
+  }
+  return raw!.trim();
+}
+
+export function googleSheetUrl(spreadsheetId: string, gid?: number | null): string {
+  const base = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`;
+  return gid != null ? `${base}#gid=${gid}` : base;
 }
