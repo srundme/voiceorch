@@ -8,7 +8,7 @@
 
 import {
   db, campaignsTable, campaignLeadsTable, agentsTable, providersTable,
-  platformSettingsTable, callExecutionsTable, leadTimelineTable,
+  platformSettingsTable, callExecutionsTable, leadTimelineTable, phoneNumbersTable,
 } from "@workspace/db";
 import { eq, and, sql, inArray } from "drizzle-orm";
 import { dialTwilio, dialPlivo, dialVobiz, resolveAmdConfig } from "./telephony/dial.js";
@@ -26,6 +26,55 @@ import { getSelfBaseUrl } from "../lib/app-domain.js";
 
 function resolveBaseUrl(): string {
   return getSelfBaseUrl();
+}
+
+type AgentRow = typeof agentsTable.$inferSelect;
+
+/**
+ * Same from-number resolution as builder outbound (`/api/calls`):
+ * campaign override → agent assigned outbound → provider fromNumber → managed pool.
+ */
+async function resolveCampaignFromNumber(opts: {
+  campaignFrom: string | null | undefined;
+  agent: AgentRow;
+  provider: string;
+  credsFrom?: string | null;
+  isManaged: boolean;
+}): Promise<string> {
+  if (opts.campaignFrom?.trim()) return opts.campaignFrom.trim();
+
+  if (opts.agent.outboundPhoneNumberId) {
+    const [pn] = await db
+      .select({ number: phoneNumbersTable.number })
+      .from(phoneNumbersTable)
+      .where(eq(phoneNumbersTable.id, opts.agent.outboundPhoneNumberId))
+      .limit(1);
+    if (pn?.number) return pn.number;
+  }
+
+  if (opts.credsFrom?.trim()) return opts.credsFrom.trim();
+
+  if (opts.isManaged && opts.provider === "vobiz") {
+    const agentCfg = (opts.agent.agentConfig ?? {}) as Record<string, unknown>;
+    const [numbersRow] = await db
+      .select({ value: platformSettingsTable.value })
+      .from(platformSettingsTable)
+      .where(eq(platformSettingsTable.key, "managed_phone_numbers"))
+      .limit(1);
+    const numbers: string[] = numbersRow?.value
+      ? (JSON.parse(numbersRow.value) as string[])
+      : [];
+    const preferred = (agentCfg["preferredManagedNumber"] as string | undefined) ?? null;
+    if (preferred && numbers.includes(preferred)) return preferred;
+    if (numbers.length > 0) {
+      return numbers[Math.floor(Math.random() * numbers.length)]!;
+    }
+  }
+
+  throw new Error(
+    `No outbound from-number available for ${opts.provider}. ` +
+    `Assign a number on the agent, pick one in Automatic Calls, or configure managed phone numbers.`,
+  );
 }
 
 /**
@@ -298,10 +347,17 @@ export async function fireCampaignCall(lead: LeadRow, campaign: CampaignRow): Pr
     // AMD (synchronous voicemail detection) — normalised across both config shapes.
     const amd = resolveAmdConfig(agentCfg);
 
+    const fromNumber = await resolveCampaignFromNumber({
+      campaignFrom: campaign.fromNumber,
+      agent,
+      provider,
+      credsFrom: creds.fromNumber,
+      isManaged: creds.isManaged,
+    });
+
     if (provider === "twilio") {
       const accountSid = creds.accountSid;
-      const fromNumber = campaign.fromNumber ?? creds.fromNumber;
-      if (!accountSid || !fromNumber) throw new Error("Twilio config missing accountSid or fromNumber");
+      if (!accountSid) throw new Error("Twilio config missing accountSid");
       const recordingEnabled = agentCfg["recordingEnabled"] === true;
       const twilioLeadSig = createHmac("sha256", APP_SECRET).update(`campaignlead:${lead.id}`).digest("hex");
       await dialTwilio({
@@ -319,8 +375,7 @@ export async function fireCampaignCall(lead: LeadRow, campaign: CampaignRow): Pr
       });
     } else if (provider === "plivo") {
       const authId = creds.authId;
-      const fromNumber = campaign.fromNumber ?? creds.fromNumber;
-      if (!authId || !fromNumber) throw new Error("Plivo config missing authId or fromNumber");
+      if (!authId) throw new Error("Plivo config missing authId");
       const plivoLeadSig = createHmac("sha256", APP_SECRET).update(`campaignlead:${lead.id}`).digest("hex");
       await dialPlivo({
         authId,
@@ -333,8 +388,7 @@ export async function fireCampaignCall(lead: LeadRow, campaign: CampaignRow): Pr
       });
     } else if (provider === "vobiz") {
       const authId = creds.authId;
-      const fromNumber = campaign.fromNumber ?? creds.fromNumber;
-      if (!authId || !fromNumber) throw new Error("Vobiz config missing authId or fromNumber");
+      if (!authId) throw new Error("Vobiz config missing authId");
       const vobizLeadSig = createHmac("sha256", APP_SECRET).update(`campaignlead:${lead.id}`).digest("hex");
       // The dial response returns a `request_uuid`, NOT the live `call_uuid` that
       // /Call/{uuid}/Transfer/ requires — so we do NOT persist it for transfer.
@@ -346,11 +400,11 @@ export async function fireCampaignCall(lead: LeadRow, campaign: CampaignRow): Pr
         authToken: creds.apiKey,
         fromNumber,
         toNumber: lead.phone,
-        answerUrl: `${baseUrl}/api/webhooks/vobiz/voice?agentId=${agent.id}&campaignLeadId=${lead.id}&dir=out`,
+        answerUrl: `${baseUrl}/api/webhooks/vobiz/voice?agentId=${agent.id}&campaignLeadId=${lead.id}${creds.isManaged ? "&pt=1" : ""}&dir=out`,
         hangupUrl: `${baseUrl}/api/webhooks/vobiz/status?campaignLeadId=${lead.id}&campaignLeadSig=${vobizLeadSig}`,
         ...(amd.enabled ? { machineDetectionEnabled: true, machineDetectionUrl: `${baseUrl}/api/webhooks/vobiz/amd?agentId=${agent.id}` } : {}),
       });
-      logger.info({ leadId: lead.id, dialRequestUuid: dialRes.requestUuid }, "VoBiz campaign call dialed");
+      logger.info({ leadId: lead.id, dialRequestUuid: dialRes.requestUuid, fromNumber, managed: creds.isManaged }, "VoBiz campaign call dialed");
     } else {
       throw new Error(`Outbound not supported for provider: ${provider}`);
     }

@@ -186,6 +186,8 @@ async function ensureCampaign(pipeline: SheetAutoCallPipeline): Promise<number> 
     webhookToken: randomUUID(),
     status: "active",
     isActive: true,
+    // Match builder: dial anytime unless user configures hours on a normal campaign.
+    isCallingHoursEnabled: false,
   }).returning();
 
   await db.update(sheetAutoCallPipelinesTable)
@@ -438,27 +440,43 @@ async function requeuePendingDials(pipeline: SheetAutoCallPipeline): Promise<num
     .limit(1);
   if (!campaign || !campaign.isActive) return 0;
 
-  // Recover leads that were permanently skipped for outside-hours (pre-fix).
+  // Recover dials that failed only because from-number was missing (pre-fix),
+  // and TRAI outside-hours skips that should stay retryable.
   await db.execute(sql`
     UPDATE campaign_leads cl
-    SET call_status = 'pending'
+    SET call_status = 'pending',
+        call_attempts = CASE
+          WHEN cl.notes ILIKE '%fromNumber%'
+            OR cl.notes ILIKE '%from-number%'
+            OR cl.notes ILIKE '%No outbound from-number%'
+          THEN 0 ELSE cl.call_attempts END,
+        notes = CASE
+          WHEN cl.notes ILIKE '%Outside permitted calling hours%' THEN cl.notes
+          ELSE null END
     FROM sheet_auto_call_row_state rs
     WHERE rs.lead_id = cl.id
       AND rs.pipeline_id = ${pipeline.id}::uuid
-      AND cl.call_status = 'skipped'
-      AND cl.notes ILIKE '%Outside permitted calling hours%'
+      AND cl.call_status IN ('failed', 'skipped')
+      AND (
+        cl.notes ILIKE '%fromNumber%'
+        OR cl.notes ILIKE '%from-number%'
+        OR cl.notes ILIKE '%No outbound from-number%'
+        OR cl.notes ILIKE '%Outside permitted calling hours%'
+      )
   `);
   await db.execute(sql`
     UPDATE sheet_auto_call_row_state rs
     SET status = 'enqueued',
-        error = 'Waiting for calling hours (9 AM–9 PM IST)',
+        error = CASE
+          WHEN cl.notes ILIKE '%Outside permitted calling hours%'
+          THEN 'Waiting for calling hours (9 AM–9 PM IST)'
+          ELSE null END,
         updated_at = now()
     FROM campaign_leads cl
     WHERE rs.lead_id = cl.id
       AND rs.pipeline_id = ${pipeline.id}::uuid
       AND cl.call_status = 'pending'
-      AND cl.notes ILIKE '%Outside permitted calling hours%'
-      AND rs.status IN ('skipped', 'enqueued', 'failed')
+      AND rs.status IN ('failed', 'skipped')
   `);
 
   const stuck = await db
