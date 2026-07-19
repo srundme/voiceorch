@@ -28,7 +28,7 @@ export default function Slide5() {
             Describe → Configure → Live. Under 5 minutes.
           </h1>
         </div>
-        <span style={{ fontSize: "0.85vw", fontWeight: 600, color: "#4B6CB7", letterSpacing: "0.06em", paddingBottom: "0.3vh" }}>05 / 14</span>
+        <span style={{ fontSize: "0.85vw", fontWeight: 600, color: "#4B6CB7", letterSpacing: "0.06em", paddingBottom: "0.3vh" }}>06 / 14</span>
       </div>
 
       <div style={{ flex: 1, padding: "2.8vh 6vw 6.5vh 6vw", display: "flex", flexDirection: "column", gap: "2.4vh" }}>
@@ -102,30 +102,16 @@ export default function Slide5() {
         </div>
 
         <div style={{
-          background: "#1A237E", borderRadius: "1.1vw", padding: "2vh 2.4vw",
-          display: "flex", alignItems: "flex-start", gap: "2vw",
+          background: "#1A237E", borderRadius: "1.1vw", padding: "2.2vh 2.8vw",
+          display: "flex", alignItems: "center", gap: "3vw",
         }}>
-          <div style={{ fontSize: "0.78vw", fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase", color: "#FF6F00", whiteSpace: "nowrap", paddingTop: "0.2vh" }}>
-            Full Stack
+          <div style={{ fontSize: "1.18vw", fontStyle: "italic", color: "#C9D5F5", lineHeight: 1.6, flex: 1 }}>
+            "I described the agent in plain English. In under five minutes I had a live Tamil-speaking insurance agent with a real Indian mobile number — and it remembered everything from my test call."
           </div>
           <div style={{ width: "0.06vw", background: "rgba(255,111,0,0.35)", alignSelf: "stretch" }} />
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: "1.02vw", color: "#C9D5F5", lineHeight: 1.65, marginBottom: "0.8vh" }}>
-              Caller → <span style={{ color: "#FF6F00" }}>STT</span> (Deepgram · Sarvam · Azure · Whisper) → <span style={{ color: "#FF6F00" }}>LLM</span> (Sarvam · Gemini · Groq · OpenAI · Anthropic · DeepSeek · Mistral · Krutrim + more) → <span style={{ color: "#FF6F00" }}>TTS</span> (Cartesia · ElevenLabs · OpenAI · Azure · Deepgram) → Caller.
-            </div>
-            <div style={{ display: "flex", gap: "2.4vw" }}>
-              {[
-                { label: "4 STT providers", sub: "Deepgram · Sarvam · Azure · Whisper" },
-                { label: "12+ LLM models", sub: "Groq · Gemini · Sarvam · Krutrim · OpenAI + more" },
-                { label: "5 TTS providers", sub: "Cartesia · ElevenLabs · OpenAI · Azure · Deepgram" },
-                { label: "4 Telephony providers", sub: "Twilio · Plivo · Vonage · VoBiz" },
-              ].map(({ label, sub }) => (
-                <div key={label} style={{ flex: 1 }}>
-                  <div style={{ fontSize: "0.9vw", fontWeight: 700, color: "#FF6F00" }}>{label}</div>
-                  <div style={{ fontSize: "0.8vw", color: "#9FA8DA", marginTop: "0.2vh" }}>{sub}</div>
-                </div>
-              ))}
-            </div>
+          <div style={{ whiteSpace: "nowrap", textAlign: "center" }}>
+            <div style={{ fontFamily: "var(--font-display-family)", fontSize: "3vw", fontWeight: 800, color: "#FF6F00" }}>&lt; 5 min</div>
+            <div style={{ fontSize: "0.88vw", fontWeight: 600, color: "#9FA8DA", marginTop: "0.4vh", letterSpacing: "0.1em", textTransform: "uppercase" }}>from sign-up to live call</div>
           </div>
         </div>
       </div>
