@@ -22,6 +22,7 @@ import {
   deleteAgentBinding,
   verifyOAuthState,
   deriveSheetsRedirectUri,
+  readSheetGrid,
   type SheetTemplate,
 } from "../services/google-sheets.js";
 import type { SheetUseCase } from "@workspace/db";
@@ -162,6 +163,23 @@ router.get("/sheets/google/connections/:id/spreadsheets/:spreadsheetId/tabs", re
   } catch (err) {
     logger.warn({ err }, "sheets: listSheetTabs failed");
     res.status(400).json({ error: err instanceof Error ? err.message : "Failed to list tabs" });
+  }
+});
+
+router.get("/sheets/google/connections/:id/spreadsheets/:spreadsheetId/headers", requireAuth, async (req, res): Promise<void> => {
+  try {
+    const clerkId = (req as any).clerkUserId as string;
+    const sheetName = typeof req.query["sheetName"] === "string" ? req.query["sheetName"] : "Sheet1";
+    const grid = await readSheetGrid(
+      clerkId,
+      String(req.params["id"]),
+      String(req.params["spreadsheetId"]),
+      sheetName,
+    );
+    res.json({ headers: grid.headers, rowCount: grid.rows.length });
+  } catch (err) {
+    logger.warn({ err }, "sheets: read headers failed");
+    res.status(400).json({ error: err instanceof Error ? err.message : "Failed to read headers" });
   }
 });
 

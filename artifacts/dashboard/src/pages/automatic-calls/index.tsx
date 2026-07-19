@@ -1,0 +1,125 @@
+/**
+ * Automatic Calls — list pipelines that watch Google Sheets and dial leads.
+ */
+
+import { useQuery } from "@tanstack/react-query";
+import { Link } from "wouter";
+import { customFetch } from "@workspace/api-client-react";
+import { Button } from "@/components/ui/button";
+import { Plus, Sheet, Loader2, Play, Pause } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+const API = "/api";
+
+type Pipeline = {
+  id: string;
+  name: string;
+  status: string;
+  startMode: string;
+  writebackMode: string;
+  spreadsheetTitle: string | null;
+  sheetName: string;
+  agentId: number;
+  enqueuedCount: number;
+  dialedCount: number;
+  failedCount: number;
+  lastPolledAt: string | null;
+  lastError: string | null;
+  createdAt: string;
+};
+
+const STATUS_STYLE: Record<string, string> = {
+  draft: "bg-muted text-muted-foreground",
+  running: "bg-emerald-500/15 text-emerald-600",
+  paused: "bg-amber-500/15 text-amber-700",
+  stopped: "bg-rose-500/10 text-rose-600",
+};
+
+export default function AutomaticCallsPage() {
+  const q = useQuery({
+    queryKey: ["automatic-calls"],
+    queryFn: () => customFetch<Pipeline[]>(`${API}/automatic-calls`),
+  });
+
+  const rows = q.data ?? [];
+
+  return (
+    <div className="max-w-5xl mx-auto px-4 py-8 space-y-6">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Automatic Calls</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Watch a Google Sheet for leads, dial them automatically, and write results back.
+          </p>
+        </div>
+        <Button asChild className="h-9">
+          <Link href="/app/automatic-calls/new">
+            <Plus className="h-4 w-4 mr-1.5" />
+            Create
+          </Link>
+        </Button>
+      </div>
+
+      {q.isLoading && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground py-12 justify-center">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+        </div>
+      )}
+
+      {!q.isLoading && rows.length === 0 && (
+        <div className="rounded-xl border border-dashed border-border/70 px-6 py-14 text-center space-y-3">
+          <Sheet className="h-8 w-8 mx-auto text-muted-foreground/60" />
+          <p className="text-sm font-medium">No automatic call pipelines yet</p>
+          <p className="text-xs text-muted-foreground max-w-md mx-auto">
+            Connect a Google Sheet, pick an agent, and SnapServe will dial new leads as they appear.
+          </p>
+          <Button asChild size="sm" className="mt-2">
+            <Link href="/app/automatic-calls/new">Create pipeline</Link>
+          </Button>
+        </div>
+      )}
+
+      <div className="space-y-2">
+        {rows.map((p) => (
+          <Link
+            key={p.id}
+            href={`/app/automatic-calls/${p.id}`}
+            className="block rounded-xl border border-border/60 bg-card/40 px-4 py-3 hover:border-border transition-colors"
+          >
+            <div className="flex items-center gap-3">
+              <div className="h-9 w-9 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
+                {p.status === "running" ? (
+                  <Play className="h-4 w-4 text-emerald-600" />
+                ) : p.status === "paused" ? (
+                  <Pause className="h-4 w-4 text-amber-600" />
+                ) : (
+                  <Sheet className="h-4 w-4 text-muted-foreground" />
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium truncate">{p.name}</p>
+                  <span className={cn("text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded font-medium", STATUS_STYLE[p.status] ?? STATUS_STYLE.draft)}>
+                    {p.status}
+                  </span>
+                </div>
+                <p className="text-[11px] text-muted-foreground truncate mt-0.5">
+                  {p.spreadsheetTitle || "Sheet"} · {p.sheetName} · {p.startMode.replace(/_/g, " ")} · writeback {p.writebackMode.replace(/_/g, " ")}
+                </p>
+              </div>
+              <div className="text-right shrink-0 hidden sm:block">
+                <p className="text-xs text-muted-foreground">
+                  {p.enqueuedCount} queued · {p.dialedCount} dialed
+                  {p.failedCount > 0 ? ` · ${p.failedCount} failed` : ""}
+                </p>
+                {p.lastError && (
+                  <p className="text-[10px] text-rose-600 truncate max-w-[200px]">{p.lastError}</p>
+                )}
+              </div>
+            </div>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}

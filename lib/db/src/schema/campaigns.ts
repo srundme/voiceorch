@@ -10,7 +10,7 @@ export type CampaignFieldMappings = {
 
 export type BatchLeadSource = "csv" | "meta" | "webhook";
 
-export type CampaignLeadSource = "csv" | "webhook" | "meta_ads" | "crm";
+export type CampaignLeadSource = "csv" | "webhook" | "meta_ads" | "crm" | "google_sheets";
 export type CampaignTriggerMode = "instant" | "batch";
 
 export type DuplicatePolicy = "ignore" | "skip" | "reject_with_report";

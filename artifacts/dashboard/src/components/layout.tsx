@@ -7,7 +7,7 @@ import {
   Settings, Key, Webhook, Wallet, TrendingUp, ShieldCheck,
   Mic2, Menu, ChevronDown, ChevronLeft, ChevronRight,
   LogOut, Bell, Search, SlidersHorizontal, BookOpen, PhoneMissed, PlugZap, Sun, Moon, Sparkles,
-  ArrowRightLeft, Instagram,
+  ArrowRightLeft, Instagram, FileSpreadsheet,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useAuth } from "@/lib/auth";
@@ -81,6 +81,7 @@ const NAV_PRIMARY = [
   { name: "Vibe Build",      href: "/app/vibe",            icon: Sparkles },
   { name: "Agent Knowledge", href: "/app/knowledge-bases", icon: BookOpen },
   { name: "Campaigns",       href: "/app/campaigns",       icon: Zap },
+  { name: "Automatic Calls", href: "/app/automatic-calls", icon: FileSpreadsheet },
   { name: "Meta Leads",      href: "/app/meta-leads",      icon: Instagram },
   { name: "Connections",     href: "/app/connections",     icon: PlugZap },
   { name: "Scheduling",      href: "/app/scheduling",      icon: CalendarDays },
@@ -108,6 +109,7 @@ const ROUTE_TITLES: [string, string][] = [
   ["/app/agents",          "Agents"],
   ["/app/knowledge-bases", "Agent Knowledge"],
   ["/app/campaigns",       "Campaigns"],
+  ["/app/automatic-calls", "Automatic Calls"],
   ["/app/connections",     "Connections"],
   ["/app/scheduling",      "Scheduling"],
   ["/app/memory",          "Memory / CRM"],

@@ -2841,7 +2841,7 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
           }
 
           // ── Google Sheets writeback (after summary/disposition) ─────────────
-          import("../services/sheets-writeback.js").then(({ writeSheetsCallLog, writeSheetsOutcome }) => {
+          import("../services/sheets-writeback.js").then(({ writeSheetsCallLog, writeSheetsOutcome, writeSheetAutoCallResults }) => {
             writeSheetsCallLog(session.callId, {
               callSummary: callSummary || null,
               dispositionResult,
@@ -2851,6 +2851,10 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
               callSummary: callSummary || null,
               dispositionResult,
             }).catch((err) => logger.warn({ sessionId, err }, "Sheets outcome writeback failed"));
+            writeSheetAutoCallResults(session.callId, {
+              callSummary: callSummary || null,
+              dispositionResult,
+            }).catch((err) => logger.warn({ sessionId, err }, "Sheets auto-call writeback failed"));
           }).catch(() => {});
 
           // ── Zelto call monitoring (fire-and-forget) ─────────────────────────

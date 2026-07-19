@@ -3,7 +3,7 @@
  * Fire-and-forget from endSession / PATCH /calls/:id/end — never blocks hangup.
  */
 
-import { and, eq, isNull, desc } from "drizzle-orm";
+import { and, eq, isNull, desc, sql } from "drizzle-orm";
 import {
   db,
   callsTable,
@@ -11,6 +11,8 @@ import {
   campaignLeadsTable,
   callerProfilesTable,
   callerFactsTable,
+  sheetAutoCallPipelinesTable,
+  sheetAutoCallRowStateTable,
   canonicalizeCallerKey,
 } from "@workspace/db";
 import { logger } from "../lib/logger.js";
@@ -18,6 +20,7 @@ import {
   listEnabledBindings,
   appendCallLogRow,
   updateOutcomeRow,
+  updateSheetRowByIndex,
   runLookupBindings,
 } from "./google-sheets.js";
 
@@ -284,4 +287,144 @@ export async function writeSheetsOutcome(
       logger.warn({ err, callId, bindingId: b.id }, "sheets: outcome write failed");
     }
   }
+}
+
+/**
+ * Automatic Calls pipeline writeback — same-sheet row update and/or call log append.
+ * Resolves pipeline via campaign lead metadata `__sheet_pipeline_id`.
+ */
+export async function writeSheetAutoCallResults(
+  callId: number,
+  opts?: {
+    callSummary?: string | null;
+    dispositionResult?: Record<string, unknown> | null;
+  },
+): Promise<void> {
+  const [call] = await db.select().from(callsTable).where(eq(callsTable.id, callId)).limit(1);
+  if (!call?.userId) return;
+
+  let lead = (await db
+    .select()
+    .from(campaignLeadsTable)
+    .where(eq(campaignLeadsTable.callId, callId))
+    .limit(1))[0] ?? null;
+
+  // Fallback: row state already linked to this call
+  if (!lead) {
+    const [rs] = await db
+      .select()
+      .from(sheetAutoCallRowStateTable)
+      .where(eq(sheetAutoCallRowStateTable.callId, callId))
+      .limit(1);
+    if (rs?.leadId) {
+      lead = (await db.select().from(campaignLeadsTable).where(eq(campaignLeadsTable.id, rs.leadId)).limit(1))[0] ?? null;
+    }
+  }
+
+  if (!lead) return;
+  const ld = (lead.leadData ?? {}) as Record<string, string>;
+  const pipelineId = ld["__sheet_pipeline_id"];
+  if (!pipelineId) return;
+  const ri = Number(ld["__sheet_row_index"]);
+  const sheetRowIndex = Number.isFinite(ri) && ri >= 2 ? ri : null;
+
+  const [pipeline] = await db
+    .select()
+    .from(sheetAutoCallPipelinesTable)
+    .where(and(
+      eq(sheetAutoCallPipelinesTable.id, pipelineId),
+      eq(sheetAutoCallPipelinesTable.userId, call.userId),
+    ))
+    .limit(1);
+  if (!pipeline) return;
+
+  const { phone, direction } = resolveCallPhone(call);
+  const summary = opts?.callSummary ?? call.callSummary ?? "";
+  const disposition = formatDisposition(opts?.dispositionResult ?? call.dispositionResult);
+  const status = call.status || "completed";
+  const identity = await resolveCallerIdentity(
+    callId, call.agentId, phone, opts?.dispositionResult ?? call.dispositionResult,
+  );
+
+  const [agent] = await db
+    .select({ name: agentsTable.name })
+    .from(agentsTable)
+    .where(eq(agentsTable.id, call.agentId))
+    .limit(1);
+
+  if (sheetRowIndex != null) {
+    await db.update(sheetAutoCallRowStateTable)
+      .set({
+        callId,
+        leadId: lead.id,
+        status: status === "failed" || status === "error" ? "failed" : "completed",
+        updatedAt: new Date(),
+      })
+      .where(and(
+        eq(sheetAutoCallRowStateTable.pipelineId, pipelineId),
+        eq(sheetAutoCallRowStateTable.sheetRowIndex, sheetRowIndex),
+      ));
+  }
+
+  const mode = pipeline.writebackMode;
+  const cols = (pipeline.sameSheetStatusColumns ?? {}) as Record<string, string | undefined>;
+
+  if ((mode === "same_sheet" || mode === "both") && sheetRowIndex != null) {
+    try {
+      const updates: Record<string, string> = {};
+      if (cols.status) updates[cols.status] = status;
+      if (cols.lastCallAt) updates[cols.lastCallAt] = formatIst(call.endedAt ?? new Date());
+      if (cols.disposition) updates[cols.disposition] = disposition;
+      if (cols.summary) updates[cols.summary] = summary;
+      if (cols.callId) updates[cols.callId] = String(call.id);
+      if (cols.recording) updates[cols.recording] = call.recordingUrl ?? "";
+      await updateSheetRowByIndex(
+        call.userId,
+        pipeline.connectionId,
+        pipeline.spreadsheetId,
+        pipeline.sheetName,
+        sheetRowIndex,
+        updates,
+      );
+      logger.info({ callId, pipelineId, sheetRowIndex }, "sheet-auto-call: same-sheet write ok");
+    } catch (err) {
+      logger.warn({ err, callId, pipelineId }, "sheet-auto-call: same-sheet write failed");
+    }
+  }
+
+  if ((mode === "call_log" || mode === "both") && pipeline.callLogSpreadsheetId) {
+    try {
+      await appendCallLogRow(
+        call.userId,
+        pipeline.connectionId,
+        pipeline.callLogSpreadsheetId,
+        pipeline.callLogSheetName || "Call Log",
+        {
+          callId: call.id,
+          startedAt: formatIst(call.createdAt),
+          durationSeconds: call.durationSeconds ?? 0,
+          direction,
+          phone,
+          callerName: identity.name || lead.name || "",
+          disposition,
+          summary,
+          recordingUrl: call.recordingUrl ?? "",
+          agentName: agent?.name ?? "",
+          costCents: call.costCents != null && call.costCents > 0 ? (call.costCents / 100).toFixed(2) : "",
+        },
+      );
+      logger.info({ callId, pipelineId }, "sheet-auto-call: call_log append ok");
+    } catch (err) {
+      logger.warn({ err, callId, pipelineId }, "sheet-auto-call: call_log append failed");
+    }
+  }
+
+  const isFail = status === "failed" || status === "error";
+  await db.update(sheetAutoCallPipelinesTable)
+    .set({
+      dialedCount: sql`${sheetAutoCallPipelinesTable.dialedCount} + 1`,
+      ...(isFail ? { failedCount: sql`${sheetAutoCallPipelinesTable.failedCount} + 1` } : {}),
+      updatedAt: new Date(),
+    })
+    .where(eq(sheetAutoCallPipelinesTable.id, pipelineId));
 }

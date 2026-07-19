@@ -327,7 +327,7 @@ export async function ensureHeaders(
   return { headers: merged, wrote: true };
 }
 
-async function readSheetGrid(
+export async function readSheetGrid(
   userId: string,
   connectionId: string,
   spreadsheetId: string,
@@ -501,6 +501,58 @@ export async function updateOutcomeRow(
     requestBody: { values: [next] },
   });
   return { rowIndex: found.rowIndex, created: false };
+}
+
+/** Patch cells on a specific 1-based sheet row using header → value map. */
+export async function updateSheetRowByIndex(
+  userId: string,
+  connectionId: string,
+  spreadsheetId: string,
+  sheetName: string,
+  rowIndex: number,
+  updates: Record<string, string>,
+): Promise<void> {
+  if (rowIndex < 2 || Object.keys(updates).length === 0) return;
+  const { headers, rows } = await readSheetGrid(userId, connectionId, spreadsheetId, sheetName);
+  if (headers.length === 0) return;
+  const existing = rows[rowIndex - 2] ?? [];
+  const next = headers.map((h, i) => {
+    const key = Object.keys(updates).find((k) => k.toLowerCase() === h.toLowerCase());
+    if (key !== undefined) return updates[key] ?? "";
+    return existing[i] ?? "";
+  });
+  // Append any new headers that don't exist yet
+  const missingHeaders = Object.keys(updates).filter(
+    (k) => !headers.some((h) => h.toLowerCase() === k.toLowerCase()),
+  );
+  if (missingHeaders.length > 0) {
+    const { headers: merged } = await ensureHeaders(
+      userId, connectionId, spreadsheetId, sheetName, [...headers, ...missingHeaders],
+    );
+    const existing2 = rows[rowIndex - 2] ?? [];
+    const next2 = merged.map((h, i) => {
+      const key = Object.keys(updates).find((k) => k.toLowerCase() === h.toLowerCase());
+      if (key !== undefined) return updates[key] ?? "";
+      return existing2[i] ?? "";
+    });
+    const auth = await getAuthedClient(connectionId, userId);
+    const sheets = google.sheets({ version: "v4", auth });
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: sheetRange(sheetName, `A${rowIndex}`),
+      valueInputOption: "RAW",
+      requestBody: { values: [next2] },
+    });
+    return;
+  }
+  const auth = await getAuthedClient(connectionId, userId);
+  const sheets = google.sheets({ version: "v4", auth });
+  await sheets.spreadsheets.values.update({
+    spreadsheetId,
+    range: sheetRange(sheetName, `A${rowIndex}`),
+    valueInputOption: "RAW",
+    requestBody: { values: [next] },
+  });
 }
 
 export type EnabledSheetBinding = {

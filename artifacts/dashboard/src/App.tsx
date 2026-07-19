@@ -55,6 +55,9 @@ import KycPage from "@/pages/kyc";
 import ApiKeysPage from "@/pages/api-keys";
 import MetaLeadsPage from "@/pages/meta-leads";
 import ConnectionsPage from "@/pages/connections/index";
+import AutomaticCallsPage from "@/pages/automatic-calls/index";
+import AutomaticCallsWizardPage from "@/pages/automatic-calls/wizard";
+import AutomaticCallDetailPage from "@/pages/automatic-calls/[id]";
 import TransfersPage from "@/pages/transfers";
 import VoicesPage from "@/pages/voices";
 import TestSimulatorPage from "@/pages/test-simulator";
@@ -287,6 +290,9 @@ function AppRoutes() {
         <Route path="/app/campaigns/:id/batches/:batchId" component={BatchDetailPage} />
         <Route path="/app/campaigns/:id" component={CampaignDetailPage} />
         <Route path="/app/campaigns" component={CampaignsPage} />
+        <Route path="/app/automatic-calls/new" component={AutomaticCallsWizardPage} />
+        <Route path="/app/automatic-calls/:id" component={AutomaticCallDetailPage} />
+        <Route path="/app/automatic-calls" component={AutomaticCallsPage} />
         <Route path="/app/scheduling/bookings/:id" component={SchedulingBookingDetailPage} />
         <Route path="/app/scheduling/calendars" component={() => <SchedulingCalendarsPage />} />
         <Route path="/app/scheduling/event-types/:id" component={SchedulingEventTypeDetailPage} />

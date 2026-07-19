@@ -14,6 +14,7 @@ import { startAlertSweep } from "./services/usage/alert-engine.js";
 import { startRateLimitCleanup } from "./services/rate-limit-cleanup.js";
 import { startEmailScheduler } from "./services/onboarding-emails.js";
 import { startBatchScheduler } from "./services/batchScheduler.js";
+import { startSheetAutoCallPoller } from "./services/sheet-auto-calls.js";
 import { startDpdpRetentionSweep } from "./services/dpdpRetention.js";
 import { startPhoneRenewalSweep } from "./services/phone-renewal.js";
 import { startVobizWalletMonitor } from "./services/vobiz-wallet-monitor.js";
@@ -418,6 +419,7 @@ server.listen(port, () => {
       startRateLimitCleanup();
       startEmailScheduler();
       startBatchScheduler();
+      startSheetAutoCallPoller();
       startDpdpRetentionSweep();
       startPhoneRenewalSweep();
       startVobizWalletMonitor();

@@ -67,7 +67,7 @@ export function normalizeCallEngineAgentConfig(
   const needsVoiceFix = voice !== undefined && voice < CALL_ENGINE_SAFE.stopSpeakingVoiceFloor;
 
   if (needsWordFix || needsVoiceFix) {
-    let words = CALL_ENGINE_SAFE.wordsForInterruption;
+    let words: number = CALL_ENGINE_SAFE.wordsForInterruption;
     if (wordsCfg !== undefined && wordsCfg > 0) words = clampInterruptWords(wordsCfg);
     else if (wordsPlan !== undefined && wordsPlan > 0) words = clampInterruptWords(wordsPlan);
 

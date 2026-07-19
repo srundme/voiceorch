@@ -77,6 +77,7 @@ import adminEventFeedbackRouter from "./admin-event-feedback.js";
 import workflowsRouter from "./workflows.js";
 import workflowsPublicRouter from "./workflows-public.js";
 import sheetsRouter from "./sheets.js";
+import sheetAutoCallsRouter from "./sheet-auto-calls.js";
 import { provisionUser } from "../middlewares/userProvisioning.js";
 
 const router: IRouter = Router();
@@ -181,5 +182,6 @@ router.use(connectionsRouter);
 router.use(crmRouter);
 router.use(workflowsRouter);
 router.use(sheetsRouter);
+router.use(sheetAutoCallsRouter);
 
 export default router;
