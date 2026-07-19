@@ -192,7 +192,7 @@ export function AgentSheetsPanel({ agentId }: { agentId: number }) {
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold">Google Sheets</p>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Lookup injects caller data during the call. Call log and Outcomes write after hangup.
+            Lookup matches phone (even without +91, or two numbers in one cell) and turns Name + every column into {"{{name}}"} / {"{{customer_name}}"} variables during the call. Call log and Outcomes write after hangup.
           </p>
         </div>
         <Button

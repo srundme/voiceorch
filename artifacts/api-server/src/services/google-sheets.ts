@@ -27,10 +27,20 @@ import {
   DEFAULT_COLUMN_MAPS,
   defaultColumnMapForUseCase,
   phonesMatch,
+  cellMatchesPhone,
+  rowToPromptVars,
+  resolveMatchColumnIndex,
   sheetRange,
 } from "./google-sheets-helpers.js";
 
-export { verifyOAuthState, DEFAULT_COLUMN_MAPS, defaultColumnMapForUseCase, phonesMatch };
+export {
+  verifyOAuthState,
+  DEFAULT_COLUMN_MAPS,
+  defaultColumnMapForUseCase,
+  phonesMatch,
+  cellMatchesPhone,
+  rowToPromptVars,
+};
 
 const SCOPES = [
   "https://www.googleapis.com/auth/spreadsheets",
@@ -351,15 +361,24 @@ export async function lookupRowByPhone(
 } | null> {
   const { headers, rows } = await readSheetGrid(userId, connectionId, spreadsheetId, sheetName);
   if (headers.length === 0) return null;
-  const matchIdx = headers.findIndex((h) => h.toLowerCase() === matchColumn.trim().toLowerCase());
+
+  const matchIdx = resolveMatchColumnIndex(headers, matchColumn || "Phone");
+  const searchCols =
+    matchIdx >= 0
+      ? [matchIdx]
+      : headers.map((_, i) => i); // fall back: scan every column for a phone match
+
   if (matchIdx < 0) {
-    logger.warn({ spreadsheetId, sheetName, matchColumn }, "sheets: match column not found");
-    return null;
+    logger.warn(
+      { spreadsheetId, sheetName, matchColumn },
+      "sheets: match column not found — scanning all columns for phone",
+    );
   }
+
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i]!;
-    const cell = row[matchIdx] ?? "";
-    if (!phonesMatch(cell, phone)) continue;
+    const hit = searchCols.some((c) => cellMatchesPhone(row[c] ?? "", phone));
+    if (!hit) continue;
     const values: Record<string, string> = {};
     for (let c = 0; c < headers.length; c++) {
       const key = headers[c];
@@ -534,8 +553,8 @@ export async function listEnabledBindings(
 }
 
 /**
- * Look up caller row(s) from enabled lookup bindings. Merges first hit's
- * fields into a flat string map (sheet header → value), plus common aliases.
+ * Look up caller row(s) from enabled lookup bindings.
+ * Returns prompt variables: Name → name/customer_name/caller_name, plus every column slug.
  */
 export async function runLookupBindings(
   userId: string,
@@ -545,7 +564,6 @@ export async function runLookupBindings(
   const bindings = await listEnabledBindings(userId, agentId, "lookup");
   if (bindings.length === 0 || !phone.trim()) return {};
 
-  const merged: Record<string, string> = {};
   for (const b of bindings) {
     try {
       const matchCol = b.matchColumn?.trim() || "Phone";
@@ -553,25 +571,24 @@ export async function runLookupBindings(
         userId, b.connectionId, b.spreadsheetId, b.sheetName, matchCol, phone,
       );
       if (!hit) continue;
-      for (const [header, value] of Object.entries(hit.values)) {
-        if (!value) continue;
-        if (!(header in merged)) merged[header] = value;
-        const slug = header.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
-        if (slug && !(slug in merged)) merged[slug] = value;
-      }
-      // Prefer first successful binding
-      if (Object.keys(merged).length > 0) {
-        logger.info(
-          { agentId, bindingId: b.id, fields: Object.keys(hit.values).length },
-          "sheets: lookup hit",
-        );
-        break;
-      }
+      const vars = rowToPromptVars(hit.values);
+      if (Object.keys(vars).length === 0) continue;
+      logger.info(
+        {
+          agentId,
+          bindingId: b.id,
+          fields: Object.keys(hit.values).length,
+          vars: Object.keys(vars),
+          hasName: !!vars["name"],
+        },
+        "sheets: lookup hit → prompt vars",
+      );
+      return vars;
     } catch (err) {
       logger.warn({ err, agentId, bindingId: b.id }, "sheets: lookup binding failed");
     }
   }
-  return merged;
+  return {};
 }
 
 export async function createSpreadsheet(
