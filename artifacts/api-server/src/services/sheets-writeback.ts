@@ -16,6 +16,7 @@ import {
   canonicalizeCallerKey,
 } from "@workspace/db";
 import { logger } from "../lib/logger.js";
+import { toAbsoluteAppUrl } from "../lib/app-domain.js";
 import {
   listEnabledBindings,
   appendCallLogRow,
@@ -23,6 +24,13 @@ import {
   updateSheetRowByIndex,
   runLookupBindings,
 } from "./google-sheets.js";
+
+/** Prefer stored recording path; always write a full URL into Sheets. */
+function sheetRecordingUrl(call: { id: number; recordingUrl: string | null }): string {
+  const stored = (call.recordingUrl ?? "").trim();
+  const path = stored || `/api/storage/recordings/${call.id}`;
+  return toAbsoluteAppUrl(path);
+}
 
 function formatIst(d: Date | string | null | undefined): string {
   if (!d) return "";
@@ -207,7 +215,7 @@ export async function writeSheetsCallLog(
     callerName: identity.name,
     disposition: formatDisposition(disposition),
     summary: opts?.callSummary ?? call.callSummary ?? "",
-    recordingUrl: call.recordingUrl ?? "",
+    recordingUrl: sheetRecordingUrl(call),
     agentName: agent.name,
     costCents: formatCostInr(call.costCents),
   };
@@ -377,7 +385,7 @@ export async function writeSheetAutoCallResults(
       if (cols.disposition) updates[cols.disposition] = disposition;
       if (cols.summary) updates[cols.summary] = summary;
       if (cols.callId) updates[cols.callId] = String(call.id);
-      if (cols.recording) updates[cols.recording] = call.recordingUrl ?? "";
+      if (cols.recording) updates[cols.recording] = sheetRecordingUrl(call);
       await updateSheetRowByIndex(
         call.userId,
         pipeline.connectionId,
@@ -408,7 +416,7 @@ export async function writeSheetAutoCallResults(
           callerName: identity.name || lead.name || "",
           disposition,
           summary,
-          recordingUrl: call.recordingUrl ?? "",
+          recordingUrl: sheetRecordingUrl(call),
           agentName: agent?.name ?? "",
           costCents: call.costCents != null && call.costCents > 0 ? (call.costCents / 100).toFixed(2) : "",
         },

@@ -36,6 +36,18 @@ export function getSelfBaseUrl(): string {
 }
 
 /**
+ * Turn a relative app path (e.g. `/api/storage/recordings/3355`) into a full
+ * public URL. Absolute http(s) URLs are returned unchanged. Empty input → "".
+ */
+export function toAbsoluteAppUrl(pathOrUrl: string | null | undefined): string {
+  const raw = (pathOrUrl ?? "").trim();
+  if (!raw) return "";
+  if (/^https?:\/\//i.test(raw)) return raw;
+  const base = getSelfBaseUrl().replace(/\/+$/, "");
+  return raw.startsWith("/") ? `${base}${raw}` : `${base}/${raw}`;
+}
+
+/**
  * All trusted origins (for CORS and OAuth redirect-back validation).
  * Includes APP_BASE_URL (dashboard URL), APP_DOMAIN (API), and REPLIT_DOMAINS (compat).
  */
