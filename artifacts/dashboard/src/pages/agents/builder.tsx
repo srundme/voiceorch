@@ -9,7 +9,7 @@ import {
   User2, Sparkles, BookOpen, ToggleLeft, ToggleRight, Tag, Loader2, Square, AudioLines,
   Play, Pause,
   Timer, ShieldCheck, Layers, Gauge, MicOff, HelpCircle, PhoneOff,
-  History, GitBranch, Eye, RotateCcw, ChevronUp, AlertTriangle, ArrowLeftRight,
+  History, GitBranch, Eye, Camera, RotateCcw, ChevronUp, AlertTriangle, ArrowLeftRight,
   Upload, Archive, Info, AlertCircle, Calendar, Star,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
@@ -1060,36 +1060,6 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
                 />
               )} />
             </div>
-            <div className="flex items-center justify-between border-t border-border pt-2 mt-1">
-              <div>
-                <p className="text-[10px] font-medium text-foreground/80">Vision</p>
-                <p className="text-[9px] text-muted-foreground">
-                  See and analyze WhatsApp / uploaded photos mid-call (analyze_image).
-                </p>
-              </div>
-              <FormField control={form.control} name="visionEnabled" render={({ field }) => (
-                <Switch
-                  checked={field.value ?? false}
-                  onCheckedChange={(v) => field.onChange(v)}
-                />
-              )} />
-            </div>
-            {isGeminiLive && (
-              <div className="flex items-center justify-between border-t border-border pt-2 mt-1">
-                <div>
-                  <p className="text-[10px] font-medium text-foreground/80">Live camera</p>
-                  <p className="text-[9px] text-muted-foreground">
-                    Stream webcall camera into Gemini Live.
-                  </p>
-                </div>
-                <FormField control={form.control} name="visionLiveEnabled" render={({ field }) => (
-                  <Switch
-                    checked={field.value ?? false}
-                    onCheckedChange={(v) => field.onChange(v)}
-                  />
-                )} />
-              </div>
-            )}
           </EditConfigDialog>
 
           {/* ── Model dialog ── */}
@@ -2035,6 +2005,11 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
   const genderEnabled = form.watch("genderDetectionEnabled") ?? false;
   const voiceMemoryEnabled = form.watch("voiceMemoryEnabled") ?? false;
   const recordingEnabled = form.watch("recordingEnabled") ?? true;
+  const visionEnabled = form.watch("visionEnabled") ?? false;
+  const visionLiveEnabled = form.watch("visionLiveEnabled") ?? false;
+  const llmModel = form.watch("llmModel");
+  const voiceStack = form.watch("voiceStack");
+  const isGeminiLive = isGeminiLiveAgent({ llmModel, voiceStack });
   const watchedTools  = (form.watch("tools") ?? []) as any[];
   const { toast } = useToast();
 
@@ -2550,6 +2525,109 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
       </div>
       </div>
 
+      {/* ── Vision ─── */}
+      <div>
+        <div className="mb-3">
+          <h3 className="text-sm font-semibold mb-0.5">Vision</h3>
+          <p className="text-xs text-muted-foreground">
+            See photos mid-call (WhatsApp / upload) and optional live camera on webcall
+          </p>
+        </div>
+        <div className="space-y-2">
+          <div className={cn("rounded-xl border transition-all duration-150", visionEnabled ? "border-border/70 bg-card/40" : "border-border/40 bg-card/20")}>
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={(e) => {
+                if (!e.nativeEvent.isTrusted) return;
+                const next = !visionEnabled;
+                form.setValue("visionEnabled", next, { shouldDirty: true });
+                if (!next) form.setValue("visionLiveEnabled", false, { shouldDirty: true });
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  const next = !visionEnabled;
+                  form.setValue("visionEnabled", next, { shouldDirty: true });
+                  if (!next) form.setValue("visionLiveEnabled", false, { shouldDirty: true });
+                }
+              }}
+              className="w-full text-left p-4 flex items-start gap-3 cursor-pointer"
+            >
+              <div className="mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center shrink-0 bg-muted/30">
+                <Eye className={cn("h-4 w-4", visionEnabled ? "text-foreground/70" : "text-muted-foreground/35")} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className="text-xs font-semibold text-foreground/80">Photo analysis</span>
+                  <code className="text-[10px] font-mono text-muted-foreground/70">analyze_image</code>
+                </div>
+                <p className="text-[11px] text-muted-foreground/60 leading-relaxed">
+                  Caller sends a photo on WhatsApp or uploads mid-webcall. The agent calls analyze_image and speaks what it sees — damage, IDs, invoices, forms.
+                </p>
+              </div>
+              <div className="shrink-0 mt-1">
+                <Switch
+                  checked={visionEnabled}
+                  onCheckedChange={(v) => {
+                    form.setValue("visionEnabled", v, { shouldDirty: true });
+                    if (!v) form.setValue("visionLiveEnabled", false, { shouldDirty: true });
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                />
+              </div>
+            </div>
+          </div>
+
+          {isGeminiLive && (
+            <div className={cn("rounded-xl border transition-all duration-150", visionLiveEnabled ? "border-border/70 bg-card/40" : "border-border/40 bg-card/20")}>
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={(e) => {
+                  if (!e.nativeEvent.isTrusted) return;
+                  const next = !visionLiveEnabled;
+                  form.setValue("visionLiveEnabled", next, { shouldDirty: true });
+                  if (next) form.setValue("visionEnabled", true, { shouldDirty: true });
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    const next = !visionLiveEnabled;
+                    form.setValue("visionLiveEnabled", next, { shouldDirty: true });
+                    if (next) form.setValue("visionEnabled", true, { shouldDirty: true });
+                  }
+                }}
+                className="w-full text-left p-4 flex items-start gap-3 cursor-pointer"
+              >
+                <div className="mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center shrink-0 bg-muted/30">
+                  <Camera className={cn("h-4 w-4", visionLiveEnabled ? "text-foreground/70" : "text-muted-foreground/35")} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className="text-xs font-semibold text-foreground/80">Live camera</span>
+                    <span className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-muted/40 text-muted-foreground">Webcall</span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground/60 leading-relaxed">
+                    Stream the browser camera into Gemini Live (~2 fps) so the agent can describe what&apos;s in frame in realtime. Phone calls still use WhatsApp photos.
+                  </p>
+                </div>
+                <div className="shrink-0 mt-1">
+                  <Switch
+                    checked={visionLiveEnabled}
+                    onCheckedChange={(v) => {
+                      form.setValue("visionLiveEnabled", v, { shouldDirty: true });
+                      if (v) form.setValue("visionEnabled", true, { shouldDirty: true });
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* ── Custom Tools ─── */}
       <div>
         <div className="flex items-center justify-between mb-3">
@@ -2565,17 +2643,6 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
             <Button type="button" variant="outline" size="sm" className="h-7 text-xs"
               onClick={() => append({ type: "webhook", name: "custom_action", description: "Invoke when caller requests a specific action.", url: "", method: "POST", secret: "", preToolMessage: "One moment…", parameters: [] })}>
               <Webhook className="h-3.5 w-3.5 mr-1" /> Custom Function
-            </Button>
-            <Button type="button" variant="outline" size="sm" className="h-7 text-xs"
-              onClick={() => {
-                append({
-                  type: "analyze_image",
-                  name: "analyze_image",
-                  description: "Analyze a photo the caller sent (damage, ID, invoice, form). Use media_id or use_latest=true.",
-                });
-                form.setValue("visionEnabled", true);
-              }}>
-              <Wrench className="h-3.5 w-3.5 mr-1" /> Vision
             </Button>
           </div>
         </div>
