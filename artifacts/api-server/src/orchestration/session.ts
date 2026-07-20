@@ -2923,6 +2923,14 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
             }).catch((err) => logger.warn({ sessionId, err }, "Sheets auto-call writeback failed"));
           }).catch(() => {});
 
+          // ── WhatsApp post-call notify (custom outbound webhook → BSP template) ─
+          import("../services/whatsapp/outbound.js").then(({ dispatchWhatsappCallEnded }) => {
+            dispatchWhatsappCallEnded(session.callId, {
+              callSummary: callSummary || null,
+              dispositionResult,
+            }).catch((err) => logger.warn({ sessionId, err }, "WhatsApp post-call notify failed"));
+          }).catch(() => {});
+
           // ── Zelto call monitoring (fire-and-forget) ─────────────────────────
           // Placed inside this IIFE so callSummary, dispositionResult, avgSttMs
           // etc. are all in scope. No-ops when no Zelto key is configured.

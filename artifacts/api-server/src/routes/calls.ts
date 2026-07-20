@@ -1098,6 +1098,11 @@ router.patch("/calls/:id/end", requireAuth, async (req, res): Promise<void> => {
     writeSheetAutoCallResults(call.id).catch(() => {});
   }).catch(() => {});
 
+  // WhatsApp post-call notify (custom outbound webhook)
+  import("../services/whatsapp/outbound.js").then(({ dispatchWhatsappCallEnded }) => {
+    dispatchWhatsappCallEnded(call.id).catch(() => {});
+  }).catch(() => {});
+
   // Zelto call monitoring (fire-and-forget)
   import("../services/zelto.js").then(({ pushCallToZelto }) => {
     const endedAt  = new Date().toISOString();

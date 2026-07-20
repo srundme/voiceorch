@@ -7,7 +7,7 @@ import {
   Settings, Key, Webhook, Wallet, TrendingUp, ShieldCheck,
   Mic2, Menu, ChevronDown, ChevronLeft, ChevronRight,
   LogOut, Bell, Search, SlidersHorizontal, BookOpen, PhoneMissed, PlugZap, Sun, Moon, Sparkles,
-  ArrowRightLeft, Instagram, FileSpreadsheet,
+  ArrowRightLeft, Instagram, FileSpreadsheet, MessageCircle,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useAuth } from "@/lib/auth";
@@ -84,6 +84,7 @@ const NAV_PRIMARY = [
   { name: "Automatic Calls", href: "/app/automatic-calls", icon: FileSpreadsheet },
   { name: "Meta Leads",      href: "/app/meta-leads",      icon: Instagram },
   { name: "Connections",     href: "/app/connections",     icon: PlugZap },
+  { name: "WhatsApp",        href: "/app/whatsapp",        icon: MessageCircle },
   { name: "Scheduling",      href: "/app/scheduling",      icon: CalendarDays },
   { name: "Memory / CRM",    href: "/app/memory",          icon: Brain },
   { name: "Call Logs",       href: "/app/calls",           icon: Phone },
@@ -112,6 +113,7 @@ const ROUTE_TITLES: [string, string][] = [
   ["/app/campaigns",       "Campaigns"],
   ["/app/automatic-calls", "Automatic Calls"],
   ["/app/connections",     "Connections"],
+  ["/app/whatsapp",        "WhatsApp"],
   ["/app/scheduling",      "Scheduling"],
   ["/app/memory",          "Memory / CRM"],
   ["/app/calls",           "Call Logs"],

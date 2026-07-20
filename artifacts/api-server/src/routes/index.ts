@@ -78,6 +78,7 @@ import workflowsRouter from "./workflows.js";
 import workflowsPublicRouter from "./workflows-public.js";
 import sheetsRouter from "./sheets.js";
 import sheetAutoCallsRouter from "./sheet-auto-calls.js";
+import whatsappRouter from "./whatsapp.js";
 import { provisionUser } from "../middlewares/userProvisioning.js";
 
 const router: IRouter = Router();
@@ -104,6 +105,8 @@ router.use(adminEventFeedbackRouter);
 
 // Public campaign lead webhook — must be before provisionUser (no Clerk session needed)
 router.use(campaignWebhookRouter);
+// Public WhatsApp Request-a-Call webhook (also mounts authenticated CRUD under /whatsapp/*)
+router.use(whatsappRouter);
 
 
 // Public docs routes — changelog API (no session required)

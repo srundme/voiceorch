@@ -27,6 +27,7 @@ import WalletPage from "@/pages/wallet";
 import ActivityPage from "@/pages/activity";
 import PhoneNumbersPage from "@/pages/phone-numbers";
 import WebhooksPage from "@/pages/webhooks";
+import WhatsAppPage from "@/pages/whatsapp";
 import CallbacksPage from "@/pages/callbacks";
 import AgentAnalyticsPage from "@/pages/agent-analytics";
 import AnalyticsPage from "@/pages/analytics";
@@ -284,6 +285,7 @@ function AppRoutes() {
         <Route path="/app/activity" component={ActivityPage} />
         <Route path="/app/phone-numbers" component={PhoneNumbersPage} />
         <Route path="/app/connections" component={ConnectionsPage} />
+        <Route path="/app/whatsapp" component={WhatsAppPage} />
         <Route path="/app/webhooks" component={WebhooksPage} />
         <Route path="/app/callbacks" component={CallbacksPage} />
         <Route path="/app/analytics/agents/:id" component={AgentAnalyticsPage} />
