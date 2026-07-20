@@ -49,6 +49,8 @@ const DEFAULT_STATUS_COLS: SheetAutoStatusColumns = {
   summary: "Summary",
   callId: "Call ID",
   recording: "Recording",
+  nextFollowUp: "Next Follow-up",
+  meetingTime: "Meeting Time",
 };
 
 const CALL_LOG_HEADERS = [

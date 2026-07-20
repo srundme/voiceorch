@@ -291,11 +291,11 @@ const TEMPLATES: Record<SheetTemplate, {
     tab: "Leads",
     headers: [
       "Phone", "Name", "Email", "Status", "Last Call At", "Disposition",
-      "Summary", "Call ID", "Recording", "Do Not Call",
+      "Summary", "Call ID", "Recording", "Next Follow-up", "Meeting Time", "Do Not Call",
     ],
     sampleRows: [
-      ["9876543210", "Sample Lead", "sample@example.com", "", "", "", "", "", "", ""],
-      ["9123456780", "Demo Contact", "", "", "", "", "", "", "", ""],
+      ["9876543210", "Sample Lead", "sample@example.com", "", "", "", "", "", "", "", "", ""],
+      ["9123456780", "Demo Contact", "", "", "", "", "", "", "", "", "", ""],
     ],
     instructions: [
       ["SnapServe Automatic Calls — how to use"],
@@ -306,6 +306,9 @@ const TEMPLATES: Record<SheetTemplate, {
       ["4. Set Status to Retry to dial that row again."],
       ["5. Call Log tab gets one append-only row per call attempt."],
       ["6. Phones work as 9876543210 or +91…; cells with two numbers use the first."],
+      ["7. Status Callback / call later → SnapServe schedules a platform callback and fills Next Follow-up."],
+      ["8. Inbound calls from a sheet phone update the same lead row (Status / Summary / Disposition)."],
+      ["9. When a meeting is booked on the call, Meeting Time (IST) is written and Status becomes Booked."],
     ],
     extraTabs: [
       {

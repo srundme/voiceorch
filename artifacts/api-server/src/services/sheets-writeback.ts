@@ -3,7 +3,7 @@
  * Fire-and-forget from endSession / PATCH /calls/:id/end — never blocks hangup.
  */
 
-import { and, eq, isNull, desc, sql } from "drizzle-orm";
+import { and, eq, isNull, desc, sql, ne } from "drizzle-orm";
 import {
   db,
   callsTable,
@@ -13,7 +13,11 @@ import {
   callerFactsTable,
   sheetAutoCallPipelinesTable,
   sheetAutoCallRowStateTable,
+  scheduledCallbacksTable,
+  bookingsTable,
   canonicalizeCallerKey,
+  type SheetAutoCallPipeline,
+  type SheetAutoStatusColumns,
 } from "@workspace/db";
 import { logger } from "../lib/logger.js";
 import { toAbsoluteAppUrl } from "../lib/app-domain.js";
@@ -25,7 +29,16 @@ import {
   updateOutcomeRow,
   updateSheetRowByIndex,
   runLookupBindings,
+  lookupRowByPhone,
+  ensureHeaders,
 } from "./google-sheets.js";
+import {
+  isCallbackDisposition,
+  defaultNextDayCallbackAt,
+  extractExplicitCallbackAt,
+  formatSheetIst,
+} from "./sheet-auto-call-loops.js";
+import { phonesMatch, rowToPromptVars } from "./google-sheets-helpers.js";
 
 /** Prefer shareable link for Sheets; fall back to absolute auth URL. */
 function sheetRecordingUrl(call: { id: number; recordingUrl: string | null }): string {
@@ -36,21 +49,6 @@ function sheetRecordingUrl(call: { id: number; recordingUrl: string | null }): s
     const path = stored || `/api/storage/recordings/${call.id}`;
     return toAbsoluteAppUrl(path);
   }
-}
-
-function formatIst(d: Date | string | null | undefined): string {
-  if (!d) return "";
-  const date = typeof d === "string" ? new Date(d) : d;
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleString("en-IN", {
-    timeZone: "Asia/Kolkata",
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: true,
-  });
 }
 
 function formatDisposition(disp: unknown): string {
@@ -99,6 +97,36 @@ function nameFromDisposition(disp: unknown): string {
     if (typeof v === "string" && v.trim()) return v.trim();
   }
   return "";
+}
+
+function parseCallSheetMeta(metadata: string | null | undefined): {
+  pipelineId: string | null;
+  sheetRowIndex: number | null;
+} {
+  try {
+    const meta = metadata ? JSON.parse(metadata) as Record<string, unknown> : {};
+    const pipelineId =
+      typeof meta["__sheet_pipeline_id"] === "string" ? meta["__sheet_pipeline_id"] : null;
+    const ri = Number(meta["__sheet_row_index"]);
+    const sheetRowIndex = Number.isFinite(ri) && ri >= 2 ? ri : null;
+    return { pipelineId, sheetRowIndex };
+  } catch {
+    return { pipelineId: null, sheetRowIndex: null };
+  }
+}
+
+function statusColumnMap(pipeline: SheetAutoCallPipeline): SheetAutoStatusColumns {
+  const cols = (pipeline.sameSheetStatusColumns ?? {}) as SheetAutoStatusColumns;
+  return {
+    status: cols.status || "Status",
+    lastCallAt: cols.lastCallAt || "Last Call At",
+    disposition: cols.disposition || "Disposition",
+    summary: cols.summary || "Summary",
+    callId: cols.callId || "Call ID",
+    recording: cols.recording || "Recording",
+    nextFollowUp: cols.nextFollowUp || "Next Follow-up",
+    meetingTime: cols.meetingTime || "Meeting Time",
+  };
 }
 
 /**
@@ -172,19 +200,117 @@ async function resolveCallerIdentity(
   return { name, email };
 }
 
-/** Session-start: merge sheet row fields for enabled lookup bindings. */
+export type SheetSessionLookup = {
+  vars: Record<string, string>;
+  pipelineId?: string;
+  sheetRowIndex?: number;
+};
+
+/**
+ * Phone match against Automatic Calls pipelines for this user.
+ * Prefer same-agent running/paused, then same-agent other non-stopped, then any user pipeline.
+ */
+export async function lookupSheetAutoCallPipelines(
+  userId: string,
+  agentId: number,
+  phone: string,
+): Promise<SheetSessionLookup | null> {
+  if (!userId || !phone?.trim()) return null;
+
+  const pipelines = await db
+    .select()
+    .from(sheetAutoCallPipelinesTable)
+    .where(and(
+      eq(sheetAutoCallPipelinesTable.userId, userId),
+      ne(sheetAutoCallPipelinesTable.status, "stopped"),
+    ));
+
+  if (pipelines.length === 0) return null;
+
+  const rank = (p: SheetAutoCallPipeline): number => {
+    const sameAgent = p.agentId === agentId;
+    const active = p.status === "running" || p.status === "paused";
+    if (sameAgent && active) return 0;
+    if (sameAgent) return 1;
+    if (active) return 2;
+    return 3;
+  };
+
+  const ordered = [...pipelines].sort((a, b) => rank(a) - rank(b));
+
+  for (const pipeline of ordered) {
+    const matchCol = (pipeline.columnMap as { phone?: string })?.phone?.trim() || "Phone";
+    try {
+      const hit = await lookupRowByPhone(
+        userId,
+        pipeline.connectionId,
+        pipeline.spreadsheetId,
+        pipeline.sheetName,
+        matchCol,
+        phone,
+      );
+      if (!hit) continue;
+      const vars = rowToPromptVars(hit.values);
+      logger.info(
+        {
+          userId,
+          agentId,
+          pipelineId: pipeline.id,
+          sheetRowIndex: hit.rowIndex,
+          fields: Object.keys(vars).length,
+        },
+        "sheet-auto-call: inbound phone lookup hit",
+      );
+      return {
+        vars,
+        pipelineId: pipeline.id,
+        sheetRowIndex: hit.rowIndex,
+      };
+    } catch (err) {
+      logger.warn(
+        { err, pipelineId: pipeline.id, userId, agentId },
+        "sheet-auto-call: inbound lookup failed for pipeline",
+      );
+    }
+  }
+  return null;
+}
+
+/**
+ * Session-start lookup: legacy agent bindings first, else Automatic Calls pipelines.
+ */
+export async function lookupSheetsForSession(
+  userId: string,
+  agentId: number,
+  phone: string,
+): Promise<SheetSessionLookup> {
+  if (!userId || !phone?.trim()) return { vars: {} };
+  try {
+    const bindingVars = await runLookupBindings(userId, agentId, phone);
+    if (Object.keys(bindingVars).length > 0) {
+      return { vars: bindingVars };
+    }
+  } catch (err) {
+    logger.warn({ err, agentId, userId }, "sheets: binding lookup failed");
+  }
+
+  try {
+    const pipelineHit = await lookupSheetAutoCallPipelines(userId, agentId, phone);
+    if (pipelineHit) return pipelineHit;
+  } catch (err) {
+    logger.warn({ err, agentId, userId }, "sheets: pipeline lookup failed");
+  }
+  return { vars: {} };
+}
+
+/** @deprecated Prefer lookupSheetsForSession — returns vars only for older callers. */
 export async function lookupSheetsCallerContext(
   userId: string,
   agentId: number,
   phone: string,
 ): Promise<Record<string, string>> {
-  if (!userId || !phone?.trim()) return {};
-  try {
-    return await runLookupBindings(userId, agentId, phone);
-  } catch (err) {
-    logger.warn({ err, agentId, userId }, "sheets: session lookup failed");
-    return {};
-  }
+  const result = await lookupSheetsForSession(userId, agentId, phone);
+  return result.vars;
 }
 
 /** Append a row to each enabled call_log binding for this agent. */
@@ -214,7 +340,7 @@ export async function writeSheetsCallLog(
 
   const fields: Record<string, string | number | null | undefined> = {
     callId: call.id,
-    startedAt: formatIst(call.createdAt),
+    startedAt: formatSheetIst(call.createdAt),
     durationSeconds: call.durationSeconds ?? 0,
     direction,
     phone,
@@ -274,7 +400,7 @@ export async function writeSheetsOutcome(
     name: identity.name,
     email: identity.email,
     status,
-    lastCallAt: formatIst(call.endedAt ?? new Date()),
+    lastCallAt: formatSheetIst(call.endedAt ?? new Date()),
     disposition,
     notes: summary,
     nextFollowUp: "",
@@ -303,19 +429,25 @@ export async function writeSheetsOutcome(
   }
 }
 
+type ResolvedSheetTarget = {
+  pipeline: SheetAutoCallPipeline;
+  sheetRowIndex: number | null;
+  lead: typeof campaignLeadsTable.$inferSelect | null;
+  phone: string;
+  direction: string;
+};
+
 /**
- * Automatic Calls pipeline writeback — same-sheet row update and/or call log append.
- * Resolves pipeline via campaign lead metadata `__sheet_pipeline_id`.
+ * Resolve pipeline + row via campaign lead meta, row-state, or call metadata (inbound).
  */
-export async function writeSheetAutoCallResults(
+async function resolveSheetAutoCallTarget(
   callId: number,
-  opts?: {
-    callSummary?: string | null;
-    dispositionResult?: Record<string, unknown> | null;
-  },
-): Promise<void> {
+  opts?: { pipelineId?: string; sheetRowIndex?: number },
+): Promise<ResolvedSheetTarget | null> {
   const [call] = await db.select().from(callsTable).where(eq(callsTable.id, callId)).limit(1);
-  if (!call?.userId) return;
+  if (!call?.userId) return null;
+
+  const { phone, direction } = resolveCallPhone(call);
 
   let lead = (await db
     .select()
@@ -323,7 +455,6 @@ export async function writeSheetAutoCallResults(
     .where(eq(campaignLeadsTable.callId, callId))
     .limit(1))[0] ?? null;
 
-  // Fallback: row state already linked to this call
   if (!lead) {
     const [rs] = await db
       .select()
@@ -335,12 +466,26 @@ export async function writeSheetAutoCallResults(
     }
   }
 
-  if (!lead) return;
-  const ld = (lead.leadData ?? {}) as Record<string, string>;
-  const pipelineId = ld["__sheet_pipeline_id"];
-  if (!pipelineId) return;
-  const ri = Number(ld["__sheet_row_index"]);
-  const sheetRowIndex = Number.isFinite(ri) && ri >= 2 ? ri : null;
+  let pipelineId: string | null = opts?.pipelineId ?? null;
+  let sheetRowIndex: number | null =
+    opts?.sheetRowIndex != null && opts.sheetRowIndex >= 2 ? opts.sheetRowIndex : null;
+
+  if (lead) {
+    const ld = (lead.leadData ?? {}) as Record<string, string>;
+    if (!pipelineId) pipelineId = ld["__sheet_pipeline_id"] ?? null;
+    if (sheetRowIndex == null) {
+      const ri = Number(ld["__sheet_row_index"]);
+      if (Number.isFinite(ri) && ri >= 2) sheetRowIndex = ri;
+    }
+  }
+
+  if (!pipelineId || sheetRowIndex == null) {
+    const fromMeta = parseCallSheetMeta(call.metadata);
+    if (!pipelineId) pipelineId = fromMeta.pipelineId;
+    if (sheetRowIndex == null) sheetRowIndex = fromMeta.sheetRowIndex;
+  }
+
+  if (!pipelineId) return null;
 
   const [pipeline] = await db
     .select()
@@ -350,15 +495,155 @@ export async function writeSheetAutoCallResults(
       eq(sheetAutoCallPipelinesTable.userId, call.userId),
     ))
     .limit(1);
-  if (!pipeline) return;
+  if (!pipeline) return null;
 
-  const { phone, direction } = resolveCallPhone(call);
+  return { pipeline, sheetRowIndex, lead, phone, direction };
+}
+
+async function hasPendingCallback(
+  agentId: number,
+  phone: string,
+  campaignLeadId?: number | null,
+): Promise<boolean> {
+  if (campaignLeadId) {
+    const [byLead] = await db
+      .select({ id: scheduledCallbacksTable.id })
+      .from(scheduledCallbacksTable)
+      .where(and(
+        eq(scheduledCallbacksTable.campaignLeadId, campaignLeadId),
+        eq(scheduledCallbacksTable.status, "pending"),
+      ))
+      .limit(1);
+    if (byLead) return true;
+  }
+
+  const pending = await db
+    .select({ toNumber: scheduledCallbacksTable.toNumber })
+    .from(scheduledCallbacksTable)
+    .where(and(
+      eq(scheduledCallbacksTable.agentId, agentId),
+      eq(scheduledCallbacksTable.status, "pending"),
+    ))
+    .limit(100);
+  return pending.some((r) => phonesMatch(r.toNumber, phone));
+}
+
+async function scheduleSheetCallback(opts: {
+  callId: number;
+  agentId: number;
+  userId: string;
+  phone: string;
+  campaignLeadId: number | null;
+  dispositionText: string;
+  dispositionRaw: unknown;
+}): Promise<Date | null> {
+  const already = await hasPendingCallback(opts.agentId, opts.phone, opts.campaignLeadId);
+  if (already) {
+    logger.info({ callId: opts.callId, phone: opts.phone }, "sheet-auto-call: skip callback — pending exists");
+    return null;
+  }
+
+  const scheduledAt =
+    extractExplicitCallbackAt(opts.dispositionRaw) ?? defaultNextDayCallbackAt();
+
+  try {
+    await db.insert(scheduledCallbacksTable).values({
+      agentId: opts.agentId,
+      userId: opts.userId,
+      toNumber: opts.phone,
+      scheduledAt,
+      createdFromCallId: opts.callId,
+      campaignLeadId: opts.campaignLeadId,
+      reason: opts.dispositionText.slice(0, 500) || "callback_requested",
+      notes: "sheet_auto_call_callback",
+    });
+    logger.info(
+      { callId: opts.callId, scheduledAt, phone: opts.phone },
+      "sheet-auto-call: callback scheduled",
+    );
+    return scheduledAt;
+  } catch (err) {
+    logger.warn({ err, callId: opts.callId }, "sheet-auto-call: callback schedule failed");
+    return null;
+  }
+}
+
+/**
+ * Write Meeting Time + Status Booked onto the sheet row for a sheet-linked call.
+ */
+export async function writeSheetBookingForCall(
+  callId: number,
+  opts: { slotStart: Date | string; meetLink?: string | null },
+): Promise<void> {
+  try {
+    const target = await resolveSheetAutoCallTarget(callId);
+    if (!target || target.sheetRowIndex == null) return;
+    if (target.pipeline.writebackMode === "call_log") return;
+
+    const cols = statusColumnMap(target.pipeline);
+    const [call] = await db.select().from(callsTable).where(eq(callsTable.id, callId)).limit(1);
+    if (!call?.userId) return;
+
+    const headers = [cols.status!, cols.meetingTime!].filter(Boolean);
+    await ensureHeaders(
+      call.userId,
+      target.pipeline.connectionId,
+      target.pipeline.spreadsheetId,
+      target.pipeline.sheetName,
+      headers,
+    );
+
+    const updates: Record<string, string> = {};
+    if (cols.status) updates[cols.status] = "Booked";
+    if (cols.meetingTime) updates[cols.meetingTime] = formatSheetIst(opts.slotStart);
+
+    await updateSheetRowByIndex(
+      call.userId,
+      target.pipeline.connectionId,
+      target.pipeline.spreadsheetId,
+      target.pipeline.sheetName,
+      target.sheetRowIndex,
+      updates,
+    );
+    logger.info(
+      { callId, pipelineId: target.pipeline.id, sheetRowIndex: target.sheetRowIndex },
+      "sheet-auto-call: booking writeback ok",
+    );
+  } catch (err) {
+    logger.warn({ err, callId }, "sheet-auto-call: booking writeback failed");
+  }
+}
+
+/**
+ * Automatic Calls pipeline writeback — same-sheet row update and/or call log append.
+ * Resolves pipeline via campaign lead metadata or inbound call metadata.
+ */
+export async function writeSheetAutoCallResults(
+  callId: number,
+  opts?: {
+    callSummary?: string | null;
+    dispositionResult?: Record<string, unknown> | null;
+    pipelineId?: string;
+    sheetRowIndex?: number;
+  },
+): Promise<void> {
+  const [call] = await db.select().from(callsTable).where(eq(callsTable.id, callId)).limit(1);
+  if (!call?.userId) return;
+
+  const target = await resolveSheetAutoCallTarget(callId, {
+    pipelineId: opts?.pipelineId,
+    sheetRowIndex: opts?.sheetRowIndex,
+  });
+  if (!target) return;
+
+  const { pipeline, sheetRowIndex, lead, phone, direction } = target;
+  const pipelineId = pipeline.id;
+
   const summary = opts?.callSummary ?? call.callSummary ?? "";
-  const disposition = formatDisposition(opts?.dispositionResult ?? call.dispositionResult);
+  const dispositionRaw = opts?.dispositionResult ?? call.dispositionResult ?? null;
+  const disposition = formatDisposition(dispositionRaw);
   const status = call.status || "completed";
-  const identity = await resolveCallerIdentity(
-    callId, call.agentId, phone, opts?.dispositionResult ?? call.dispositionResult,
-  );
+  const identity = await resolveCallerIdentity(callId, call.agentId, phone, dispositionRaw);
 
   const [agent] = await db
     .select({ name: agentsTable.name })
@@ -366,7 +651,7 @@ export async function writeSheetAutoCallResults(
     .where(eq(agentsTable.id, call.agentId))
     .limit(1);
 
-  if (sheetRowIndex != null) {
+  if (sheetRowIndex != null && lead) {
     await db.update(sheetAutoCallRowStateTable)
       .set({
         callId,
@@ -381,17 +666,60 @@ export async function writeSheetAutoCallResults(
   }
 
   const mode = pipeline.writebackMode;
-  const cols = (pipeline.sameSheetStatusColumns ?? {}) as Record<string, string | undefined>;
+  const cols = statusColumnMap(pipeline);
+
+  let sheetStatusLabel = friendlySheetStatus(status);
+  let nextFollowUpValue = "";
+
+  const callbackHit = isCallbackDisposition(
+    disposition,
+    summary,
+    typeof dispositionRaw === "object" && dispositionRaw
+      ? String((dispositionRaw as Record<string, unknown>)["status"] ?? "")
+      : "",
+    sheetStatusLabel,
+  );
+
+  if (callbackHit && call.userId) {
+    const scheduledAt = await scheduleSheetCallback({
+      callId,
+      agentId: call.agentId,
+      userId: call.userId,
+      phone,
+      campaignLeadId: lead?.id ?? null,
+      dispositionText: disposition || summary,
+      dispositionRaw,
+    });
+    if (scheduledAt) {
+      sheetStatusLabel = "Callback scheduled";
+      nextFollowUpValue = formatSheetIst(scheduledAt);
+    }
+  }
 
   if ((mode === "same_sheet" || mode === "both") && sheetRowIndex != null) {
     try {
+      const headerNames = [
+        cols.status, cols.lastCallAt, cols.disposition, cols.summary,
+        cols.callId, cols.recording, cols.nextFollowUp,
+      ].filter(Boolean) as string[];
+      await ensureHeaders(
+        call.userId,
+        pipeline.connectionId,
+        pipeline.spreadsheetId,
+        pipeline.sheetName,
+        headerNames,
+      );
+
       const updates: Record<string, string> = {};
-      if (cols.status) updates[cols.status] = friendlySheetStatus(status);
-      if (cols.lastCallAt) updates[cols.lastCallAt] = formatIst(call.endedAt ?? new Date());
+      if (cols.status) updates[cols.status] = sheetStatusLabel;
+      if (cols.lastCallAt) updates[cols.lastCallAt] = formatSheetIst(call.endedAt ?? new Date());
       if (cols.disposition) updates[cols.disposition] = disposition;
       if (cols.summary) updates[cols.summary] = summary;
       if (cols.callId) updates[cols.callId] = String(call.id);
       if (cols.recording) updates[cols.recording] = sheetRecordingUrl(call);
+      if (cols.nextFollowUp && nextFollowUpValue) {
+        updates[cols.nextFollowUp] = nextFollowUpValue;
+      }
       await updateSheetRowByIndex(
         call.userId,
         pipeline.connectionId,
@@ -415,11 +743,11 @@ export async function writeSheetAutoCallResults(
         pipeline.callLogSheetName || "Call Log",
         {
           callId: call.id,
-          startedAt: formatIst(call.createdAt),
+          startedAt: formatSheetIst(call.createdAt),
           durationSeconds: call.durationSeconds ?? 0,
           direction,
           phone,
-          callerName: identity.name || lead.name || "",
+          callerName: identity.name || lead?.name || "",
           disposition,
           summary,
           recordingUrl: sheetRecordingUrl(call),
@@ -441,5 +769,29 @@ export async function writeSheetAutoCallResults(
         updatedAt: new Date(),
       })
       .where(eq(sheetAutoCallPipelinesTable.id, pipelineId));
+  }
+
+  // Safety net: booking created on this call but tool hook may have missed writeback
+  try {
+    const [booking] = await db
+      .select({
+        slotStart: bookingsTable.slotStart,
+        meetLink: bookingsTable.meetLink,
+        status: bookingsTable.status,
+      })
+      .from(bookingsTable)
+      .where(and(
+        eq(bookingsTable.callId, callId),
+        ne(bookingsTable.status, "cancelled"),
+      ))
+      .limit(1);
+    if (booking?.slotStart) {
+      await writeSheetBookingForCall(callId, {
+        slotStart: booking.slotStart,
+        meetLink: booking.meetLink,
+      });
+    }
+  } catch (err) {
+    logger.warn({ err, callId }, "sheet-auto-call: booking safety-net failed");
   }
 }

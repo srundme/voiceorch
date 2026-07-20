@@ -1000,8 +1000,65 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     }
   }
 
-  // ── Google Sheets lookup removed from agent Tools — Automatic Calls
-  // injects sheet row fields via campaign leadData at dial time.
+  // ── Inbound Automatic Calls sheet lookup (phone → same lead row) ────────────
+  // Outbound sheet dials already inject via campaign leadData. For inbound, match
+  // the caller phone against the user's Automatic Calls pipelines and stash
+  // pipeline/row meta on the call for hangup writeback.
+  let inboundSheetVars: Record<string, string> = {};
+  let inboundSheetMeta: { pipelineId: string; sheetRowIndex: number } | null = null;
+  const hasOutboundSheetLead = !!(
+    campaignLeadResult?.leadData as Record<string, string> | undefined
+  )?.["__sheet_pipeline_id"];
+  if (
+    !hasOutboundSheetLead
+    && callDirection === "inbound"
+    && !isWebcall
+    && agent.userId
+    && params.fromNumber?.trim()
+  ) {
+    try {
+      const { lookupSheetsForSession } = await import("../services/sheets-writeback.js");
+      const hit = await lookupSheetsForSession(agent.userId, params.agentId, params.fromNumber);
+      if (hit.pipelineId && hit.sheetRowIndex != null) {
+        inboundSheetMeta = { pipelineId: hit.pipelineId, sheetRowIndex: hit.sheetRowIndex };
+        inboundSheetVars = { ...hit.vars };
+        // Strip internal keys from prompt vars
+        delete inboundSheetVars["__sheet_pipeline_id"];
+        delete inboundSheetVars["__sheet_row_index"];
+        if (inboundSheetVars.name?.trim()) {
+          if (!inboundSheetVars["customer_name"]) inboundSheetVars["customer_name"] = inboundSheetVars.name;
+          if (!inboundSheetVars["caller_name"]) inboundSheetVars["caller_name"] = inboundSheetVars.name;
+        }
+        const sheetBlock = buildLeadContextBlock(inboundSheetVars);
+        if (sheetBlock) {
+          const labeled = sheetBlock.replace("=== LEAD CONTEXT ===", "=== SHEET LOOKUP ===");
+          agentConfig.systemPrompt = `${labeled}\n\n${agentConfig.systemPrompt}`;
+          logger.info(
+            {
+              agentId: params.agentId,
+              pipelineId: hit.pipelineId,
+              sheetRowIndex: hit.sheetRowIndex,
+              fieldCount: Object.keys(inboundSheetVars).length,
+            },
+            "Inbound sheet lookup injected into system prompt",
+          );
+        }
+      } else if (Object.keys(hit.vars).length > 0) {
+        // Legacy binding lookup (no pipeline writeback meta)
+        inboundSheetVars = hit.vars;
+        const sheetBlock = buildLeadContextBlock(inboundSheetVars);
+        if (sheetBlock) {
+          const labeled = sheetBlock.replace("=== LEAD CONTEXT ===", "=== SHEET LOOKUP ===");
+          agentConfig.systemPrompt = `${labeled}\n\n${agentConfig.systemPrompt}`;
+        }
+      }
+    } catch (sheetLookupErr) {
+      logger.warn(
+        { err: sheetLookupErr, agentId: params.agentId },
+        "Inbound sheet lookup failed — continuing without sheet context",
+      );
+    }
+  }
 
   const dynVars: Record<string, string> = {
     to_number:     params.toNumber,
@@ -1011,6 +1068,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     date: now.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" }),
     ...Object.fromEntries(agentConfig.promptVariables.map(v => [v.key, v.defaultValue])),
     ...campaignLeadVars,
+    ...inboundSheetVars,
     ...Object.fromEntries(Object.entries(params.customParameters ?? {}).map(([k, v]) => [k, v])),
   };
 
@@ -1237,6 +1295,12 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
             ...(params.platformTelephony ? { platformTelephony: true } : {}),
             direction: callDirection,
             ...(callerPhone ? { callerKey: callerPhone } : {}),
+            ...(inboundSheetMeta
+              ? {
+                  __sheet_pipeline_id: inboundSheetMeta.pipelineId,
+                  __sheet_row_index: inboundSheetMeta.sheetRowIndex,
+                }
+              : {}),
           }),
         }).where(eq(callsTable.id, existing.id)),
       );
@@ -1257,6 +1321,12 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
           ...(isWebcall ? { transport: "webcall", isTestCall: true } : {}),
           direction: callDirection,
           ...(callerPhone ? { callerKey: callerPhone } : {}),
+          ...(inboundSheetMeta
+            ? {
+                __sheet_pipeline_id: inboundSheetMeta.pipelineId,
+                __sheet_row_index: inboundSheetMeta.sheetRowIndex,
+              }
+            : {}),
         }) || null,
       }).returning(),
     );
@@ -2138,6 +2208,33 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
     const primaryLanguage = session.pipeline.getPreferredCallerLang() || session.configuredLanguage || null;
     const memoryRecognized = (session.callerProfileSnapshot?.callCount ?? 0) >= 1;
 
+    let transferMetaPatch: { metadata: string } | Record<string, never> = {};
+    if (session.wasTransferred && session.transferredTo) {
+      try {
+        const [existingCall] = await db
+          .select({ metadata: callsTable.metadata })
+          .from(callsTable)
+          .where(eq(callsTable.id, session.callId))
+          .limit(1);
+        let prevMeta: Record<string, unknown> = {};
+        try {
+          prevMeta = existingCall?.metadata
+            ? JSON.parse(existingCall.metadata) as Record<string, unknown>
+            : {};
+        } catch { /* ignore */ }
+        transferMetaPatch = {
+          metadata: JSON.stringify({
+            ...prevMeta,
+            transferredTo: session.transferredTo,
+          }),
+        };
+      } catch {
+        transferMetaPatch = {
+          metadata: JSON.stringify({ transferredTo: session.transferredTo }),
+        };
+      }
+    }
+
     await db.update(callsTable).set({
       status: callStatus,
       endedAt,
@@ -2152,9 +2249,7 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
       ...(tokensSavedValue > 0 ? { tokensSaved: tokensSavedValue } : {}),
       ...(recordingUrl ? { recordingUrl } : {}),
       ...(recordingError ? { recordingError } : {}),
-      ...(session.wasTransferred && session.transferredTo
-        ? { metadata: JSON.stringify({ transferredTo: session.transferredTo }) }
-        : {}),
+      ...transferMetaPatch,
     }).where(eq(callsTable.id, session.callId));
 
     // ── Mark campaign lead terminal (drains the active Connected count) ──────────

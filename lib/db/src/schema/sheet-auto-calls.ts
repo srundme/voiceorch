@@ -24,6 +24,8 @@ export type SheetAutoStatusColumns = {
   summary?: string;
   callId?: string;
   recording?: string;
+  nextFollowUp?: string;
+  meetingTime?: string;
 };
 
 /**
@@ -53,6 +55,8 @@ export const sheetAutoCallPipelinesTable = pgTable("sheet_auto_call_pipelines", 
     summary: "Summary",
     callId: "Call ID",
     recording: "Recording",
+    nextFollowUp: "Next Follow-up",
+    meetingTime: "Meeting Time",
   }),
   fromNumber: text("from_number"),
   concurrentCallLimit: integer("concurrent_call_limit").notNull().default(5),

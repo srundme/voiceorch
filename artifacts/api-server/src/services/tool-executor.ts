@@ -670,6 +670,14 @@ export async function executeNativeBooking(
       attendeeName,
     }, "success");
 
+    // Automatic Calls sheet: Meeting Time + Status Booked (fire-and-forget)
+    import("./sheets-writeback.js").then(({ writeSheetBookingForCall }) => {
+      writeSheetBookingForCall(callId, {
+        slotStart: confirmedBooking.slotStart,
+        meetLink: null,
+      }).catch((err) => logger.warn({ callId, err }, "sheet-auto-call: booking writeback failed"));
+    }).catch(() => {});
+
     // Create Google Calendar event with Meet link
     let meetLink: string | null = null;
     let googleEventId: string | null = null;
