@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams } from "wouter";
-import { AlertCircle, Camera, Loader2, Shield } from "lucide-react";
+import { AlertCircle, Camera, ImagePlus, Loader2, Mic, Shield } from "lucide-react";
 import { WebcallPanel } from "@/components/webcall-panel";
 import { Button } from "@/components/ui/button";
 
@@ -62,34 +62,59 @@ export default function WebcallJoinPage() {
     );
   }
 
+  const liveVision = meta.requireCamera || meta.visionLiveEnabled;
+  const photoVision = meta.visionEnabled && !liveVision;
+  const anyVision = liveVision || meta.visionEnabled;
+  const headline =
+    meta.label
+    || (liveVision ? "Verification call" : photoVision ? "Photo call" : meta.agentName);
+
   if (!consented) {
     return (
       <div className="min-h-dvh flex items-center justify-center bg-background p-6">
         <div className="max-w-md w-full rounded-2xl border border-border bg-card p-6 space-y-4">
           <div className="flex items-center gap-2 text-foreground">
             <Shield className="h-5 w-5" />
-            <h1 className="text-lg font-semibold">{meta.label || meta.agentName}</h1>
+            <h1 className="text-lg font-semibold">{headline}</h1>
           </div>
           {meta.purpose && (
             <p className="text-sm text-muted-foreground">{meta.purpose}</p>
           )}
           <p className="text-sm text-muted-foreground leading-relaxed">
-            You&apos;re about to join a live voice call with <span className="font-medium text-foreground">{meta.agentName}</span>.
-            {(meta.visionEnabled || meta.visionLiveEnabled || meta.requireCamera) && (
-              <> This session may use your <span className="font-medium text-foreground">microphone and camera</span> for verification.</>
+            You&apos;re about to join a live voice call with{" "}
+            <span className="font-medium text-foreground">{meta.agentName}</span>.
+            {liveVision && (
+              <> This session uses your <span className="font-medium text-foreground">microphone and camera</span> for live verification.</>
+            )}
+            {photoVision && (
+              <> You&apos;ll use your <span className="font-medium text-foreground">microphone</span>, and can <span className="font-medium text-foreground">upload or take photos</span> when asked.</>
             )}
           </p>
-          {meta.requireCamera && (
+          {liveVision && (
             <div className="flex items-start gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-[12px] text-muted-foreground">
               <Camera className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-              Camera is required for this link. Enable it before starting the call.
+              Camera is required. Turn it on, then start the call.
+            </div>
+          )}
+          {photoVision && (
+            <div className="flex items-start gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-[12px] text-muted-foreground">
+              <ImagePlus className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+              During the call, use the photo button to upload or capture an image.
+            </div>
+          )}
+          {!anyVision && (
+            <div className="flex items-start gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-[12px] text-muted-foreground">
+              <Mic className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+              Microphone access is needed for this call.
             </div>
           )}
           <Button className="w-full" onClick={() => setConsented(true)}>
             Continue
           </Button>
           <p className="text-[10px] text-muted-foreground/70 text-center">
-            By continuing you consent to audio{meta.requireCamera || meta.visionEnabled || meta.visionLiveEnabled ? " and camera" : ""} use for this session.
+            By continuing you consent to audio
+            {liveVision ? " and camera" : photoVision ? " and photo upload" : ""}{" "}
+            use for this session.
           </p>
         </div>
       </div>
@@ -99,7 +124,7 @@ export default function WebcallJoinPage() {
   return (
     <div className="min-h-dvh bg-background flex flex-col">
       <div className="px-4 py-3 border-b border-border">
-        <p className="text-sm font-semibold truncate">{meta.label || meta.agentName}</p>
+        <p className="text-sm font-semibold truncate">{headline}</p>
         {meta.purpose && <p className="text-[11px] text-muted-foreground truncate">{meta.purpose}</p>}
       </div>
       <div className="flex-1 min-h-0 p-3 sm:p-6 flex justify-center">

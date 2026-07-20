@@ -162,6 +162,11 @@ export type AgentConfig = {
     voiceName?: string;
     thinkingLevel?: "minimal" | "low" | "medium" | "high";
   };
+  /**
+   * Product kind shown in the builder: voice-only vs voice+vision.
+   * When absent, UI backfills from visionEnabled / visionLiveEnabled.
+   */
+  agentKind?: "voice" | "vision";
   /** When true, auto-attach the analyze_image tool so the agent can see photos. */
   visionEnabled?: boolean;
   /** Webcall + Gemini Live: stream camera frames via sendRealtimeInput({ video }). */

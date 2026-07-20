@@ -158,7 +158,9 @@ export function WebcallPanel({
     nextStartRef.current = playbackCtxRef.current?.currentTime ?? 0;
   }, []);
 
-  const cameraAllowed = !!(visionLiveEnabled || visionEnabled || requireCamera);
+  // Live camera chrome (preview / stream) — not for photo-upload-only agents.
+  const cameraAllowed = !!(visionLiveEnabled || requireCamera);
+  const photoUploadAllowed = !!visionEnabled;
 
   const startFrameCapture = useCallback(() => {
     if (frameTimerRef.current != null) return;
@@ -556,9 +558,21 @@ export function WebcallPanel({
               {shareToken ? agentName : `Live Test — ${agentName}`}
             </p>
             <p className="text-[10.5px] text-muted-foreground/60">
-              {state === "idle"       && (requireCamera && !cameraOn ? "Turn on your camera, then start the call" : "Talk to your agent right in the browser")}
+              {state === "idle"       && (
+                requireCamera && !cameraOn
+                  ? "Turn on your camera, then start the call"
+                  : photoUploadAllowed && !cameraAllowed
+                    ? "Start the call, then upload a photo when asked"
+                    : "Talk to your agent right in the browser"
+              )}
               {state === "connecting" && "Connecting…"}
-              {state === "live"       && (cameraOn ? "Connected — camera on" : "Connected — start speaking")}
+              {state === "live"       && (
+                cameraOn
+                  ? "Connected — camera on"
+                  : photoUploadAllowed
+                    ? "Connected — upload a photo when asked"
+                    : "Connected — start speaking"
+              )}
               {state === "ending"     && "Ending call…"}
               {state === "error"      && "Call ended with an error"}
             </p>
@@ -608,10 +622,14 @@ export function WebcallPanel({
               <Phone className="h-7 w-7 opacity-40" />
               <p className="text-[12px]">
                 {active
-                  ? "Listening… say hello to your agent."
+                  ? photoUploadAllowed
+                    ? "Listening… use Upload photo when the agent asks."
+                    : "Listening… say hello to your agent."
                   : requireCamera && !cameraOn
                     ? "Allow camera access, then press Start call."
-                    : "Press Start call to begin a live voice test."}
+                    : photoUploadAllowed && !cameraAllowed
+                      ? "Press Start call, then upload or take a photo mid-call."
+                      : "Press Start call to begin a live voice test."}
               </p>
             </div>
           )}
@@ -705,11 +723,18 @@ export function WebcallPanel({
                 </>
               )}
               {visionEnabled && (
-                <label className={"h-10 w-10 inline-flex items-center justify-center rounded-full border border-border cursor-pointer " + (state !== "live" || uploading ? "opacity-40 pointer-events-none" : "text-muted-foreground hover:text-foreground")}>
+                <label className={
+                  "h-10 inline-flex items-center justify-center gap-1.5 rounded-full border border-border cursor-pointer px-3 " +
+                  (state !== "live" || uploading
+                    ? "opacity-40 pointer-events-none"
+                    : "text-muted-foreground hover:text-foreground bg-sky-500/10 text-sky-400 border-sky-500/30")
+                }>
                   {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
+                  <span className="text-[11px] font-medium hidden sm:inline">Upload photo</span>
                   <input
                     type="file"
                     accept="image/*"
+                    capture="environment"
                     className="hidden"
                     disabled={state !== "live" || uploading}
                     onChange={(e) => {

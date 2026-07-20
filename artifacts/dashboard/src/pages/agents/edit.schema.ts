@@ -53,6 +53,7 @@ export const agentFormSchema = z.object({
   timezone:               z.string().optional(),
   autoSwitchToEnglish:    z.boolean().optional(),
   languageAutoDetect:     z.boolean().optional(),
+  agentKind:              z.enum(["voice", "vision"]).optional(),
   visionEnabled:          z.boolean().optional(),
   visionLiveEnabled:      z.boolean().optional(),
   machineDetectionMode:   z.enum(["disabled", "enable", "detect_message_end"]).optional(),

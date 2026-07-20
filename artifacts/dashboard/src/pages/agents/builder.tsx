@@ -75,6 +75,12 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError, mapApiErrors, isDestinationUnverifiedError } from "@/lib/format-api-error";
 import {
+  resolveAgentKind,
+  resolveVisionCaptureMode,
+  visionFlagsForCaptureMode,
+  type VisionCaptureMode,
+} from "@/lib/agent-kind";
+import {
   ASR_PROVIDERS, LLM_PROVIDERS, TTS_PROVIDERS,
   LANGUAGES, ASR_MODELS, LLM_MODELS, TTS_MODELS, TTS_VOICES, AGENT_TIMEZONES,
   isTamilLanguage, defaultGeminiModel, defaultLlmForLanguages,
@@ -93,7 +99,7 @@ const DASH_API   = `${_DASH_BASE}/api`;
 
 /* ── Types ──────────────────────────────────────────────────────────────────── */
 
-type TabId = "overview" | "prompt" | "voice" | "tools" | "analysis" | "voicemail" | "advanced" | "versions";
+type TabId = "overview" | "prompt" | "voice" | "vision" | "tools" | "analysis" | "voicemail" | "advanced" | "versions";
 
 interface TabDef { id: TabId; label: string; icon: React.ReactNode }
 
@@ -101,12 +107,18 @@ const TABS: TabDef[] = [
   { id: "overview",    label: "Overview",    icon: <Bot className="h-3.5 w-3.5" /> },
   { id: "prompt",      label: "Prompt",      icon: <FileText className="h-3.5 w-3.5" /> },
   { id: "voice",       label: "Voice",       icon: <Mic className="h-3.5 w-3.5" /> },
+  { id: "vision",      label: "Vision",      icon: <Eye className="h-3.5 w-3.5" /> },
   { id: "tools",       label: "Tools",       icon: <Wrench className="h-3.5 w-3.5" /> },
   { id: "analysis",    label: "Analysis",    icon: <BarChart3 className="h-3.5 w-3.5" /> },
   { id: "voicemail",   label: "Voicemail",   icon: <VoicemailIcon className="h-3.5 w-3.5" /> },
   { id: "advanced",    label: "Advanced",    icon: <SlidersHorizontal className="h-3.5 w-3.5" /> },
   { id: "versions",    label: "Versions",    icon: <History className="h-3.5 w-3.5" /> },
 ];
+
+function tabsForAgentKind(kind: "voice" | "vision"): TabDef[] {
+  if (kind === "vision") return TABS;
+  return TABS.filter((t) => t.id !== "vision");
+}
 
 /* ── Small helpers ──────────────────────────────────────────────────────────── */
 
@@ -1996,6 +2008,111 @@ function VoiceCallFeelPresets({ form }: { form: any }) {
 }
 
 
+/* ── Tab: Vision ────────────────────────────────────────────────────────────── */
+
+function VisionTab({ form, agentId }: { form: any; agentId: number | undefined }) {
+  const visionEnabled = form.watch("visionEnabled") ?? false;
+  const visionLiveEnabled = form.watch("visionLiveEnabled") ?? false;
+  const llmModel = form.watch("llmModel");
+  const voiceStack = form.watch("voiceStack");
+  const isGeminiLive = isGeminiLiveAgent({ llmModel, voiceStack });
+  const captureMode = resolveVisionCaptureMode({ visionEnabled, visionLiveEnabled });
+
+  const applyCaptureMode = (mode: VisionCaptureMode) => {
+    const flags = visionFlagsForCaptureMode(mode);
+    form.setValue("agentKind", "vision", { shouldDirty: true });
+    form.setValue("visionEnabled", flags.visionEnabled, { shouldDirty: true });
+    form.setValue("visionLiveEnabled", flags.visionLiveEnabled, { shouldDirty: true });
+    if ((mode === "live" || mode === "both") && !isGeminiLive) {
+      form.setValue("llmProvider", "google", { shouldDirty: true });
+      form.setValue("llmModel", GEMINI_LIVE_LLM_MODEL, { shouldDirty: true });
+      form.setValue("voiceStack", "gemini_live", { shouldDirty: true });
+    }
+  };
+
+  const modes: { id: VisionCaptureMode; label: string; desc: string; icon: React.ReactNode }[] = [
+    {
+      id: "photo",
+      label: "Photo upload",
+      desc: "Guest uploads or WhatsApps a still. Agent analyzes with analyze_image.",
+      icon: <Upload className="h-4 w-4" />,
+    },
+    {
+      id: "live",
+      label: "Live camera",
+      desc: "Realtime webcam into Gemini Live during webcall verification.",
+      icon: <Camera className="h-4 w-4" />,
+    },
+    {
+      id: "both",
+      label: "Photo + live",
+      desc: "Upload stills and stream live camera when needed.",
+      icon: <Eye className="h-4 w-4" />,
+    },
+  ];
+
+  return (
+    <div className="p-5 sm:p-6 space-y-8 max-w-3xl">
+      <div>
+        <div className="mb-3">
+          <h3 className="text-sm font-semibold mb-0.5">What the agent can see</h3>
+          <p className="text-xs text-muted-foreground">
+            Choose how guests share visuals on webcall (and WhatsApp for stills).
+          </p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          {modes.map((m) => {
+            const active = captureMode === m.id;
+            return (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => applyCaptureMode(m.id)}
+                className={cn(
+                  "text-left rounded-xl border p-3.5 transition-colors",
+                  active
+                    ? "border-foreground/40 bg-card shadow-sm"
+                    : "border-border/50 bg-card/20 hover:border-border hover:bg-card/40",
+                )}
+              >
+                <div className={cn("h-8 w-8 rounded-lg flex items-center justify-center mb-2", active ? "bg-foreground/10 text-foreground" : "bg-muted/40 text-muted-foreground")}>
+                  {m.icon}
+                </div>
+                <p className="text-xs font-semibold text-foreground/90">{m.label}</p>
+                <p className="text-[10px] text-muted-foreground/70 leading-relaxed mt-1">{m.desc}</p>
+              </button>
+            );
+          })}
+        </div>
+        {(captureMode === "live" || captureMode === "both") && !isGeminiLive && (
+          <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-2">
+            Live camera needs Gemini Live — selecting this mode switches the voice stack automatically. Save to apply.
+          </p>
+        )}
+      </div>
+
+      <div className="rounded-xl border border-border/60 bg-card/30 p-4 space-y-2">
+        <p className="text-xs font-semibold text-foreground/80">Guest experience</p>
+        <p className="text-[11px] text-muted-foreground leading-relaxed">
+          {captureMode === "photo"
+            ? "Join link guests start a voice call, then tap Upload / Take photo when the agent asks. Camera is not required up front."
+            : "Join link guests enable camera, then start the call. The agent can describe what is in frame in realtime."}
+        </p>
+        <p className="text-[11px] text-muted-foreground leading-relaxed">
+          Prompt tip: tell the agent what to ask for (ID front, invoice, damage photo) and when to call{" "}
+          <code className="text-[10px] font-mono">analyze_image</code>.
+        </p>
+      </div>
+
+      <WebcallShareLinksSection
+        agentId={agentId}
+        defaultRequireCamera={captureMode !== "photo"}
+        captureMode={captureMode}
+      />
+    </div>
+  );
+}
+
 /* ── Tab: Tools ─────────────────────────────────────────────────────────────── */
 
 type WebcallLinkRow = {
@@ -2011,12 +2128,26 @@ type WebcallLinkRow = {
   createdAt: string;
 };
 
-function WebcallShareLinksSection({ agentId }: { agentId: number | undefined }) {
+function WebcallShareLinksSection({
+  agentId,
+  defaultRequireCamera = true,
+  captureMode = "live",
+}: {
+  agentId: number | undefined;
+  defaultRequireCamera?: boolean;
+  captureMode?: VisionCaptureMode;
+}) {
   const { toast } = useToast();
   const [creating, setCreating] = useState(false);
-  const [label, setLabel] = useState("Verification call");
-  const [purpose, setPurpose] = useState("Please join to complete visual verification.");
-  const [requireCamera, setRequireCamera] = useState(true);
+  const [label, setLabel] = useState(
+    captureMode === "photo" ? "Photo verification" : "Verification call",
+  );
+  const [purpose, setPurpose] = useState(
+    captureMode === "photo"
+      ? "Please join and upload a photo when asked."
+      : "Please join to complete visual verification.",
+  );
+  const [requireCamera, setRequireCamera] = useState(defaultRequireCamera);
 
   const { data: links = [], refetch, isLoading } = useQuery({
     queryKey: ["webcall-links", agentId],
@@ -2086,9 +2217,11 @@ function WebcallShareLinksSection({ agentId }: { agentId: number | undefined }) 
   return (
     <div>
       <div className="mb-3">
-        <h3 className="text-sm font-semibold mb-0.5">Shareable webcall links</h3>
+        <h3 className="text-sm font-semibold mb-0.5">Shareable invite links</h3>
         <p className="text-xs text-muted-foreground">
-          Send a link so anyone can join this agent in the browser for verification (mic + camera). Billed to your wallet.
+          {captureMode === "photo"
+            ? "Send a link so guests can join in the browser and upload photos mid-call. Billed to your wallet."
+            : "Send a link so guests can join with mic and camera for verification. Billed to your wallet."}
         </p>
       </div>
 
@@ -2165,11 +2298,6 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
   const genderEnabled = form.watch("genderDetectionEnabled") ?? false;
   const voiceMemoryEnabled = form.watch("voiceMemoryEnabled") ?? false;
   const recordingEnabled = form.watch("recordingEnabled") ?? true;
-  const visionEnabled = form.watch("visionEnabled") ?? false;
-  const visionLiveEnabled = form.watch("visionLiveEnabled") ?? false;
-  const llmModel = form.watch("llmModel");
-  const voiceStack = form.watch("voiceStack");
-  const isGeminiLive = isGeminiLiveAgent({ llmModel, voiceStack });
   const watchedTools  = (form.watch("tools") ?? []) as any[];
   const { toast } = useToast();
 
@@ -2684,119 +2812,6 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
 
       </div>
       </div>
-
-      {/* ── Vision ─── */}
-      <div>
-        <div className="mb-3">
-          <h3 className="text-sm font-semibold mb-0.5">Vision</h3>
-          <p className="text-xs text-muted-foreground">
-            See photos mid-call (WhatsApp / upload) and optional live camera on webcall
-          </p>
-        </div>
-        <div className="space-y-2">
-          <div className={cn("rounded-xl border transition-all duration-150", visionEnabled ? "border-border/70 bg-card/40" : "border-border/40 bg-card/20")}>
-            <div
-              role="button"
-              tabIndex={0}
-              onClick={(e) => {
-                if (!e.nativeEvent.isTrusted) return;
-                const next = !visionEnabled;
-                form.setValue("visionEnabled", next, { shouldDirty: true });
-                if (!next) form.setValue("visionLiveEnabled", false, { shouldDirty: true });
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  const next = !visionEnabled;
-                  form.setValue("visionEnabled", next, { shouldDirty: true });
-                  if (!next) form.setValue("visionLiveEnabled", false, { shouldDirty: true });
-                }
-              }}
-              className="w-full text-left p-4 flex items-start gap-3 cursor-pointer"
-            >
-              <div className="mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center shrink-0 bg-muted/30">
-                <Eye className={cn("h-4 w-4", visionEnabled ? "text-foreground/70" : "text-muted-foreground/35")} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-0.5">
-                  <span className="text-xs font-semibold text-foreground/80">Photo analysis</span>
-                  <code className="text-[10px] font-mono text-muted-foreground/70">analyze_image</code>
-                </div>
-                <p className="text-[11px] text-muted-foreground/60 leading-relaxed">
-                  Caller sends a photo on WhatsApp or uploads mid-webcall. The agent calls analyze_image and speaks what it sees — damage, IDs, invoices, forms.
-                </p>
-              </div>
-              <div className="shrink-0 mt-1">
-                <Switch
-                  checked={visionEnabled}
-                  onCheckedChange={(v) => {
-                    form.setValue("visionEnabled", v, { shouldDirty: true });
-                    if (!v) form.setValue("visionLiveEnabled", false, { shouldDirty: true });
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className={cn(
-            "rounded-xl border transition-all duration-150",
-            !isGeminiLive ? "border-border/30 bg-card/10 opacity-70"
-              : visionLiveEnabled ? "border-border/70 bg-card/40" : "border-border/40 bg-card/20",
-          )}>
-            <div
-              role="button"
-              tabIndex={isGeminiLive ? 0 : -1}
-              onClick={(e) => {
-                if (!isGeminiLive || !e.nativeEvent.isTrusted) return;
-                const next = !visionLiveEnabled;
-                form.setValue("visionLiveEnabled", next, { shouldDirty: true });
-                if (next) form.setValue("visionEnabled", true, { shouldDirty: true });
-              }}
-              onKeyDown={(e) => {
-                if (!isGeminiLive) return;
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  const next = !visionLiveEnabled;
-                  form.setValue("visionLiveEnabled", next, { shouldDirty: true });
-                  if (next) form.setValue("visionEnabled", true, { shouldDirty: true });
-                }
-              }}
-              className={cn("w-full text-left p-4 flex items-start gap-3", isGeminiLive ? "cursor-pointer" : "cursor-not-allowed")}
-            >
-              <div className="mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center shrink-0 bg-muted/30">
-                <Camera className={cn("h-4 w-4", visionLiveEnabled && isGeminiLive ? "text-foreground/70" : "text-muted-foreground/35")} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-0.5">
-                  <span className="text-xs font-semibold text-foreground/80">Live camera</span>
-                  <span className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-muted/40 text-muted-foreground">Webcall</span>
-                </div>
-                <p className="text-[11px] text-muted-foreground/60 leading-relaxed">
-                  {isGeminiLive
-                    ? "Stream the browser camera into Gemini Live (~2 fps) so the agent can describe what's in frame in realtime. Phone calls still use WhatsApp / photo upload."
-                    : "Requires Gemini Live voice stack (Model → Gemini Live). On classic STT/LLM/TTS, use Photo analysis + upload instead."}
-                </p>
-              </div>
-              <div className="shrink-0 mt-1">
-                <Switch
-                  checked={isGeminiLive && visionLiveEnabled}
-                  disabled={!isGeminiLive}
-                  onCheckedChange={(v) => {
-                    if (!isGeminiLive) return;
-                    form.setValue("visionLiveEnabled", v, { shouldDirty: true });
-                    if (v) form.setValue("visionEnabled", true, { shouldDirty: true });
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Shareable join links ─── */}
-      <WebcallShareLinksSection agentId={agentId} />
 
       {/* ── Custom Tools ─── */}
       <div>
@@ -3525,6 +3540,7 @@ function AgentListPanel({ selectedId, onSelect, rateMap, className }: {
   className?: string;
 }) {
   const [search, setSearch] = useState("");
+  const [kindFilter, setKindFilter] = useState<"all" | "voice" | "vision">("all");
   const [, navigate] = useLocation();
   const { data: agents, isLoading } = useListAgents({ query: { queryKey: getListAgentsQueryKey() } });
   const userProviderNames = useUserProviderNames();
@@ -3532,9 +3548,11 @@ function AgentListPanel({ selectedId, onSelect, rateMap, className }: {
   const [showCreate, setShowCreate] = useState(false);
   const handleCreate = () => setShowCreate(true);
 
-  const filtered = (agents ?? []).filter(a =>
-    !search || a.name.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = (agents ?? []).filter(a => {
+    if (search && !a.name.toLowerCase().includes(search.toLowerCase())) return false;
+    if (kindFilter === "all") return true;
+    return resolveAgentKind((a as any).agentConfig) === kindFilter;
+  });
   const liveCount = (agents ?? []).filter(a => a.status === "active").length;
   const totalCount = agents?.length ?? 0;
 
@@ -3561,6 +3579,27 @@ function AgentListPanel({ selectedId, onSelect, rateMap, className }: {
           <Input value={search} onChange={e => setSearch(e.target.value)}
             placeholder="Search agents…" className="h-8 pl-8 text-xs rounded-full bg-muted/20 border-border/40" />
         </div>
+        <div className="flex gap-1">
+          {([
+            ["all", "All"],
+            ["voice", "Voice"],
+            ["vision", "Vision"],
+          ] as const).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setKindFilter(id)}
+              className={cn(
+                "flex-1 h-7 rounded-full text-[10px] font-medium border transition-colors",
+                kindFilter === id
+                  ? "bg-foreground text-background border-foreground"
+                  : "bg-muted/20 text-muted-foreground border-border/40 hover:bg-muted/40",
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
       <div className="flex-1 overflow-y-auto p-2 space-y-1">
         {isLoading && Array.from({ length: 4 }).map((_, i) => (
@@ -3568,10 +3607,10 @@ function AgentListPanel({ selectedId, onSelect, rateMap, className }: {
         ))}
         {!isLoading && filtered.length === 0 && (
           <div className="px-3 py-10 text-center space-y-2">
-            {search ? (
+            {search || kindFilter !== "all" ? (
               <>
                 <p className="text-xs font-medium text-foreground">No matches</p>
-                <p className="text-[11px] text-muted-foreground leading-relaxed">Try a different name, or clear the search.</p>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">Try a different filter or clear the search.</p>
               </>
             ) : (
               <>
@@ -3587,6 +3626,7 @@ function AgentListPanel({ selectedId, onSelect, rateMap, className }: {
         {filtered.map(agent => {
           const isSelected = agent.id === selectedId;
           const isLive = agent.status === "active";
+          const kind = resolveAgentKind((agent as any).agentConfig);
           const costCents = computeAgentRateCents(rateMap, agent as any, userProviderNames);
           return (
             <button key={agent.id} onClick={() => onSelect(agent.id)}
@@ -3597,7 +3637,10 @@ function AgentListPanel({ selectedId, onSelect, rateMap, className }: {
                   : "border-transparent hover:bg-muted/30 hover:border-border/30",
               )}>
               <div className="flex items-center justify-between gap-1.5">
-                <span className="text-[13px] font-medium truncate">{agent.name}</span>
+                <span className="text-[13px] font-medium truncate flex items-center gap-1.5 min-w-0">
+                  {kind === "vision" && <Camera className="h-3 w-3 text-sky-400 shrink-0" />}
+                  <span className="truncate">{agent.name}</span>
+                </span>
                 <span className={cn(
                   "shrink-0 rounded-md px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide border",
                   isLive
@@ -3608,6 +3651,14 @@ function AgentListPanel({ selectedId, onSelect, rateMap, className }: {
                 </span>
               </div>
               <div className="flex items-center gap-1.5 mt-1">
+                <span className={cn(
+                  "text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded border shrink-0",
+                  kind === "vision"
+                    ? "bg-sky-500/10 text-sky-400 border-sky-500/25"
+                    : "bg-muted/30 text-muted-foreground border-border/40",
+                )}>
+                  {kind === "vision" ? "Vision" : "Voice"}
+                </span>
                 <span className="text-[10px] text-muted-foreground/75 truncate">{agent.asrProvider} · {agent.ttsProvider}</span>
                 {costCents ? <span className="text-[10px] text-muted-foreground/55 ml-auto shrink-0">₹{(costCents / 100).toFixed(2)}</span> : null}
               </div>
@@ -4059,6 +4110,7 @@ const COMPARE_SECTIONS: Array<{ label: string; keys: string[] }> = [
   { label: "Telephony",     keys: ["telephonyProvider"] },
   { label: "Call Settings", keys: ["maxDuration", "silenceTimeoutSeconds", "language", "webhookUrl", "noiseCancellationEnabled", "backchannelingEnabled"] },
   { label: "Tools",         keys: ["tools"] },
+  { label: "Vision",        keys: ["agentConfig.agentKind", "agentConfig.visionEnabled", "agentConfig.visionLiveEnabled"] },
   { label: "Knowledge Base", keys: ["knowledgeSourceIds"] },
   { label: "Scheduling",    keys: ["schedulingCalendarId", "schedulingEventTypeId"] },
   { label: "Compliance",    keys: ["agentConfig.complianceDpdp", "agentConfig.complianceIrdai", "agentConfig.complianceTrai"] },
@@ -5462,7 +5514,7 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
       voicemailMessage: "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.",
       voicemailLeadInSeconds: 2,
       tools: [], genderDetectionEnabled: false, voiceMemoryEnabled: false, recordingEnabled: true, languageAutoDetect: false,
-      visionEnabled: false, visionLiveEnabled: false,
+      visionEnabled: false, visionLiveEnabled: false, agentKind: "voice",
       autoSwitchToEnglish: false,
       startSpeakingWaitSecs: 0, startSpeakingOnPunctuationSecs: 0.1,
       startSpeakingOnNoPunctuationSecs: 0.1, startSpeakingOnNumberSecs: 0,
@@ -5559,6 +5611,7 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
       languageAutoDetect:       (agent as any).agentConfig?.languageAutoDetect ?? false,
       visionEnabled:            (agent as any).agentConfig?.visionEnabled ?? false,
       visionLiveEnabled:        (agent as any).agentConfig?.visionLiveEnabled ?? false,
+      agentKind:                resolveAgentKind((agent as any).agentConfig),
       autoSwitchToEnglish:      (agent as any).agentConfig?.autoSwitchToEnglish ?? false,
       startSpeakingWaitSecs:            (agent as any).agentConfig?.startSpeakingPlan?.waitSeconds            ?? 0,
       startSpeakingOnPunctuationSecs:   (agent as any).agentConfig?.startSpeakingPlan?.onPunctuationSeconds   ?? 0.1,
@@ -5670,6 +5723,9 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
         ttsProvider:              "voice",
         llmProvider:              "overview",
         tools:                    "tools",
+        visionEnabled:            "vision",
+        visionLiveEnabled:        "vision",
+        agentKind:                "vision",
       };
       const firstFieldName = Object.keys(errors)[0];
       const targetTab = firstFieldName ? (fieldTabMap[firstFieldName] ?? null) : null;
@@ -5717,6 +5773,29 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
   const [showWebcall, setShowWebcall] = useState(() => _autoWebcall);
   const [savedFlash, setSavedFlash] = useState(false);
   const isDirty   = form.formState.isDirty;
+  const agentKind = resolveAgentKind({
+    agentKind: form.watch("agentKind"),
+    visionEnabled: form.watch("visionEnabled"),
+    visionLiveEnabled: form.watch("visionLiveEnabled"),
+  });
+  const visionCaptureMode = resolveVisionCaptureMode({
+    visionEnabled: form.watch("visionEnabled"),
+    visionLiveEnabled: form.watch("visionLiveEnabled"),
+  });
+  const visibleTabs = tabsForAgentKind(agentKind);
+  const webTestLabel =
+    agentKind !== "vision"
+      ? "Live Test"
+      : visionCaptureMode === "photo"
+        ? "Test with photo"
+        : "Test with camera";
+
+  useEffect(() => {
+    if (agentKind !== "vision" && activeTab === "vision") {
+      setActiveTab("overview");
+    }
+  }, [agentKind, activeTab]);
+
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
   const [renameValue, setRenameValue] = useState("");
   const handleRenameSave = () => {
@@ -5786,6 +5865,15 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
                 <span className={cn("h-1.5 w-1.5 rounded-full", agent.status === "active" ? "bg-emerald-400" : "bg-muted-foreground/50")} />
                 {agent.status === "active" ? "Live" : "Draft"}
               </span>
+              <span className={cn(
+                "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide shrink-0",
+                agentKind === "vision"
+                  ? "border-sky-500/25 bg-sky-500/10 text-sky-400"
+                  : "border-border/50 bg-muted/30 text-muted-foreground",
+              )}>
+                {agentKind === "vision" ? <Camera className="h-3 w-3" /> : <Mic className="h-3 w-3" />}
+                {agentKind === "vision" ? "Vision" : "Voice"}
+              </span>
               <span className="text-[11px] text-muted-foreground/50 tabular-nums shrink-0">#{String(agent.id).padStart(4, "0")}</span>
             </div>
             <AgentCostSummary form={form} rateMap={rateMap} agent={agent} />
@@ -5816,7 +5904,8 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem onClick={() => setShowWebcall(v => !v)}>
-                  <Mic className="h-3.5 w-3.5 mr-2" /> Web test
+                  {agentKind === "vision" ? <Camera className="h-3.5 w-3.5 mr-2" /> : <Mic className="h-3.5 w-3.5 mr-2" />}
+                  {webTestLabel}
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setPublishModalOpen(true)}>
                   <Upload className="h-3.5 w-3.5 mr-2" /> Publish
@@ -5882,7 +5971,7 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
         <Form {...form}>
           <div className="flex-1 flex flex-col min-w-0 min-h-0">
             <div className="flex items-center gap-1 px-5 sm:px-6 border-b border-border/40 overflow-x-auto shrink-0 bg-background/80 backdrop-blur-sm">
-              {TABS.map(tab => (
+              {visibleTabs.map(tab => (
                 <button key={tab.id} onClick={() => handleTabClick(tab.id)}
                   className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium whitespace-nowrap border-b-2 -mb-px transition-colors ${
                     activeTab === tab.id
@@ -5899,6 +5988,7 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
                 {activeTab === "overview"  && <OverviewTab form={form} agent={agent} />}
                 {activeTab === "prompt"    && <PromptTab form={form} />}
                 {activeTab === "voice"     && <VoiceTab form={form} />}
+                {activeTab === "vision"    && <VisionTab form={form} agentId={agentId} />}
                 {activeTab === "tools"     && <ToolsTab form={form} agentId={agentId} />}
                 {activeTab === "analysis"  && <AnalysisTab form={form} agentId={agentId} />}
                 {activeTab === "voicemail" && <VoicemailTab form={form} />}
@@ -5925,8 +6015,8 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
                   className="h-11 min-h-11 text-xs font-medium gap-1.5 rounded-xl"
                   onClick={() => setShowWebcall(v => !v)}
                 >
-                  <Mic className="h-4 w-4 shrink-0" />
-                  {showWebcall ? "Close" : "Web"}
+                  {agentKind === "vision" ? <Camera className="h-4 w-4 shrink-0" /> : <Mic className="h-4 w-4 shrink-0" />}
+                  {showWebcall ? "Close" : agentKind === "vision" ? (visionCaptureMode === "photo" ? "Photo" : "Camera") : "Web"}
                 </Button>
                 <Button
                   type="button"
@@ -5977,12 +6067,16 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
                   )}
                   onClick={() => setShowWebcall(v => !v)}
                 >
-                  <Mic className="h-3.5 w-3.5 shrink-0" />
-                  {showWebcall ? "Close" : "Web"}
+                  {agentKind === "vision" ? <Camera className="h-3.5 w-3.5 shrink-0" /> : <Mic className="h-3.5 w-3.5 shrink-0" />}
+                  {showWebcall ? "Close" : webTestLabel}
                 </Button>
               </div>
               <p className="text-[10px] text-muted-foreground/65 leading-snug px-0.5">
-                Phone = free outbound test (platform number) · Web = in-browser
+                {agentKind === "vision"
+                  ? visionCaptureMode === "photo"
+                    ? "Phone = outbound test · Photo test = upload stills mid-call"
+                    : "Phone = outbound test · Camera test = live video webcall"
+                  : "Phone = free outbound test (platform number) · Live Test = in-browser"}
               </p>
             </div>
 
@@ -6127,43 +6221,87 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
 function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [, navigate]  = useLocation();
   const queryClient   = useQueryClient();
-  const [step,        setStep]        = useState<"pick" | "scratch">("pick");
+  const [step,        setStep]        = useState<"pick" | "scratch" | "kind" | "vision-mode">("pick");
   const [agentName,   setAgentName]   = useState("");
+  const [agentKind,   setAgentKind]   = useState<"voice" | "vision">("voice");
+  const [captureMode, setCaptureMode] = useState<VisionCaptureMode>("photo");
   const [creating,    setCreating]    = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
-  const handleClose = () => { onClose(); setTimeout(() => { setStep("pick"); setAgentName(""); setCreateError(null); }, 200); };
+  const reset = () => {
+    setStep("pick");
+    setAgentName("");
+    setAgentKind("voice");
+    setCaptureMode("photo");
+    setCreateError(null);
+  };
+  const handleClose = () => { onClose(); setTimeout(reset, 200); };
 
   const handleVibe = () => { handleClose(); navigate("/app/vibe"); };
 
-  const handleScratch = async () => {
+  const handleScratch = async (
+    kind: "voice" | "vision" = agentKind,
+    mode: VisionCaptureMode = captureMode,
+  ) => {
     setCreating(true);
     setCreateError(null);
     try {
-      const name = agentName.trim() || "New Agent";
+      const name = agentName.trim() || (kind === "vision" ? "New Vision Agent" : "New Agent");
+      const flags = kind === "vision"
+        ? visionFlagsForCaptureMode(mode)
+        : { visionEnabled: false, visionLiveEnabled: false };
+      const useLive = kind === "vision" && (mode === "live" || mode === "both");
+
+      const body: Record<string, unknown> = {
+        name,
+        asrProvider: "sarvam",
+        asrModel: "saaras:v3",
+        asrLanguage: "",
+        language: "en-IN",
+        telephonyProvider: "vobiz",
+        systemPrompt: kind === "vision"
+          ? "You are a helpful AI voice assistant that can see photos and camera when the caller shares them. Ask clearly for what you need to see, then describe or verify it."
+          : "You are a helpful AI voice assistant.",
+        greetingMessage: kind === "vision"
+          ? "Hello! I can help over voice, and I can look at photos or your camera when needed. How can I help?"
+          : "Hello! How can I help you today?",
+        tools: [
+          { type: "end_call", name: "end_call", description: "End the call when the conversation is complete." },
+          ...(flags.visionEnabled
+            ? [{ type: "analyze_image", name: "analyze_image", description: "Analyze the latest photo the caller shared." }]
+            : []),
+        ],
+        agentConfig: {
+          agentKind: kind,
+          visionEnabled: flags.visionEnabled,
+          visionLiveEnabled: flags.visionLiveEnabled,
+          ...(useLive
+            ? {
+                voiceStack: "gemini_live",
+                geminiLive: { voiceName: "Kore", thinkingLevel: "minimal" },
+              }
+            : {}),
+        },
+      };
+
+      if (useLive) {
+        body.llmProvider = "google";
+        body.llmModel = GEMINI_LIVE_LLM_MODEL;
+        body.ttsProvider = "cartesia";
+        body.ttsModel = "sonic-3.5";
+        body.ttsVoice = "a8adc74b-c9c1-45e0-aae7-9a60ba64bbee";
+      } else {
+        body.llmProvider = "groq";
+        body.llmModel = "llama-3.3-70b-versatile";
+        body.ttsProvider = "cartesia";
+        body.ttsModel = "sonic-3.5";
+        body.ttsVoice = "a8adc74b-c9c1-45e0-aae7-9a60ba64bbee";
+      }
+
       const result = await customFetch<{ id: number }>(`${DASH_API}/agents`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name,
-          asrProvider: "sarvam",
-          asrModel: "saaras:v3",
-          // asrLanguage is an ASR-only override — leave it blank so the main
-          // `language` field (the Transcriber "Language" dropdown) stays the
-          // single source of truth. Seeding it to "en-IN" here previously stuck
-          // agents in English even after the user switched the dropdown to Tamil.
-          asrLanguage: "",
-          language: "en-IN",
-          llmProvider: "groq",
-          llmModel: "llama-3.3-70b-versatile",
-          ttsProvider: "cartesia",
-          ttsModel: "sonic-3.5",
-          ttsVoice: "a8adc74b-c9c1-45e0-aae7-9a60ba64bbee",
-          telephonyProvider: "vobiz",
-          systemPrompt: "You are a helpful AI voice assistant.",
-          greetingMessage: "Hello! How can I help you today?",
-          tools: [{ type: "end_call", name: "end_call", description: "End the call when the conversation is complete." }],
-        }),
+        body: JSON.stringify(body),
       });
       await queryClient.invalidateQueries({ queryKey: getListAgentsQueryKey() });
       handleClose();
@@ -6179,9 +6317,17 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Create a new agent</DialogTitle>
+          <DialogTitle>
+            {step === "pick" && "Create a new agent"}
+            {step === "scratch" && "Name your agent"}
+            {step === "kind" && "Choose agent type"}
+            {step === "vision-mode" && "How should it see?"}
+          </DialogTitle>
           <DialogDescription>
-            Recommended: Vibe Build walks you through everything in a short chat. Manual builder gives you every toggle — multilingual, tools, scheduling, and more.
+            {step === "pick" && "Build with AI for a guided setup, or configure manually from scratch."}
+            {step === "scratch" && "You can change this anytime in the builder."}
+            {step === "kind" && "Voice agents talk on phone and web. Vision agents can also see photos or live camera."}
+            {step === "vision-mode" && "This sets defaults — you can change it later in the Vision tab."}
           </DialogDescription>
         </DialogHeader>
 
@@ -6215,24 +6361,90 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
               </div>
             </button>
           </div>
-        ) : (
+        ) : step === "scratch" ? (
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
               <Label htmlFor="scratch-name">Agent name</Label>
               <Input
                 id="scratch-name"
-                placeholder="e.g. Sales Agent, Support Bot"
+                placeholder="e.g. Sales Agent, KYC Verifier"
                 value={agentName}
                 onChange={e => setAgentName(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && !creating && handleScratch()}
+                onKeyDown={e => e.key === "Enter" && setStep("kind")}
                 autoFocus
               />
             </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setStep("pick")}>Back</Button>
+              <Button onClick={() => setStep("kind")}>Continue</Button>
+            </DialogFooter>
+          </div>
+        ) : step === "kind" ? (
+          <div className="space-y-3 py-2">
+            <button
+              type="button"
+              onClick={() => { setAgentKind("voice"); void handleScratch("voice"); }}
+              disabled={creating}
+              className="w-full text-left rounded-xl border border-border/60 bg-card p-4 hover:border-primary/50 hover:bg-primary/5 transition-colors disabled:opacity-50"
+            >
+              <div className="flex items-start gap-3">
+                <div className="h-9 w-9 rounded-lg bg-muted flex items-center justify-center shrink-0">
+                  <Mic className="h-4 w-4 text-muted-foreground" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold">Voice agent</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Phone and web voice calls — mic only.</p>
+                </div>
+              </div>
+            </button>
+            <button
+              type="button"
+              onClick={() => { setAgentKind("vision"); setStep("vision-mode"); }}
+              disabled={creating}
+              className="w-full text-left rounded-xl border border-border/60 bg-card p-4 hover:border-primary/50 hover:bg-primary/5 transition-colors disabled:opacity-50"
+            >
+              <div className="flex items-start gap-3">
+                <div className="h-9 w-9 rounded-lg bg-sky-500/10 flex items-center justify-center shrink-0">
+                  <Eye className="h-4 w-4 text-sky-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold">Voice + Vision agent</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Voice plus camera or photo verification.</p>
+                </div>
+              </div>
+            </button>
             {createError && <p className="text-xs text-destructive">{createError}</p>}
             <DialogFooter>
-              <Button variant="ghost" onClick={() => setStep("pick")} disabled={creating}>Back</Button>
-              <Button onClick={handleScratch} disabled={creating}>
-                {creating ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Creating…</> : "Create agent"}
+              <Button variant="ghost" onClick={() => setStep("scratch")} disabled={creating}>Back</Button>
+            </DialogFooter>
+          </div>
+        ) : (
+          <div className="space-y-3 py-2">
+            {([
+              ["photo", "Photo upload", "Guest uploads stills mid-call / WhatsApp"],
+              ["live", "Live camera", "Realtime webcam for verification calls"],
+              ["both", "Photo + live", "Both upload and live camera"],
+            ] as const).map(([id, title, desc]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setCaptureMode(id)}
+                className={cn(
+                  "w-full text-left rounded-xl border p-3.5 transition-colors",
+                  captureMode === id
+                    ? "border-foreground/40 bg-card shadow-sm"
+                    : "border-border/60 bg-card/40 hover:border-border",
+                )}
+              >
+                <p className="text-sm font-semibold">{title}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>
+              </button>
+            ))}
+            {createError && <p className="text-xs text-destructive">{createError}</p>}
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setStep("kind")} disabled={creating}>Back</Button>
+              <Button onClick={() => void handleScratch("vision", captureMode)} disabled={creating}>
+                {creating ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Creating…</> : "Create vision agent"}
               </Button>
             </DialogFooter>
           </div>

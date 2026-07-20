@@ -23,6 +23,7 @@ import {
   voiceSecondsFromInterruptWords,
   type AgentFormValues,
 } from "./edit.schema";
+import { resolveAgentKind } from "@/lib/agent-kind";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -91,7 +92,7 @@ export type { AgentFormValues } from "./edit.schema";
 export function buildUpdateAgentPayload(data: AgentFormValues) {
   const {
     webhookSecret, promptVariables, vadSilenceMs, bargeInEnabled, bargeInEnergyThreshold, bargeInMinFrames, micSensitivity,
-    timezone, autoSwitchToEnglish, languageAutoDetect, visionEnabled, visionLiveEnabled, machineDetectionMode, voicemailAction, voicemailMessage, voicemailLeadInSeconds, genderDetectionEnabled, voiceMemoryEnabled, recordingEnabled,
+    timezone, autoSwitchToEnglish, languageAutoDetect, agentKind, visionEnabled, visionLiveEnabled, machineDetectionMode, voicemailAction, voicemailMessage, voicemailLeadInSeconds, genderDetectionEnabled, voiceMemoryEnabled, recordingEnabled,
     startSpeakingWaitSecs, startSpeakingOnPunctuationSecs, startSpeakingOnNoPunctuationSecs, startSpeakingOnNumberSecs,
     stopSpeakingNumWords, stopSpeakingVoiceSecs, stopSpeakingBackOffSecs,
     complianceIrdai, complianceDpdp, complianceTrai,
@@ -128,8 +129,22 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   if (timezone) agentConfig["timezone"] = timezone;
   agentConfig["autoSwitchToEnglish"] = !!autoSwitchToEnglish;
   agentConfig["languageAutoDetect"] = !!languageAutoDetect;
-  agentConfig["visionEnabled"] = !!visionEnabled;
-  agentConfig["visionLiveEnabled"] = !!visionLiveEnabled;
+  {
+    const kind =
+      agentKind === "vision" || agentKind === "voice"
+        ? agentKind
+        : visionEnabled || visionLiveEnabled
+          ? "vision"
+          : "voice";
+    agentConfig["agentKind"] = kind;
+    if (kind === "voice") {
+      agentConfig["visionEnabled"] = false;
+      agentConfig["visionLiveEnabled"] = false;
+    } else {
+      agentConfig["visionEnabled"] = !!visionEnabled;
+      agentConfig["visionLiveEnabled"] = !!visionLiveEnabled;
+    }
+  }
   agentConfig["machineDetectionMode"] = machineDetectionMode ?? "disabled";
   agentConfig["voicemailAction"] = voicemailAction ?? "hangup";
   if (voicemailMessage) agentConfig["voicemailMessage"] = voicemailMessage;
@@ -400,6 +415,7 @@ export default function AgentEdit() {
       languageAutoDetect: false,
       visionEnabled: false,
       visionLiveEnabled: false,
+      agentKind: "voice",
       machineDetectionMode: "disabled", voicemailAction: "hangup",
       voicemailMessage: "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.",
       voicemailLeadInSeconds: 2,
@@ -634,6 +650,7 @@ export default function AgentEdit() {
       languageAutoDetect:       ((agent as any).agentConfig?.languageAutoDetect as boolean | undefined) ?? false,
       visionEnabled:            ((agent as any).agentConfig?.visionEnabled as boolean | undefined) ?? false,
       visionLiveEnabled:        ((agent as any).agentConfig?.visionLiveEnabled as boolean | undefined) ?? false,
+      agentKind:                resolveAgentKind((agent as any).agentConfig),
       machineDetectionMode:     ((agent as any).agentConfig?.machineDetectionMode as string | undefined) as AgentFormValues["machineDetectionMode"] ?? "disabled",
       voicemailAction:          ((agent as any).agentConfig?.voicemailAction as string | undefined) as AgentFormValues["voicemailAction"] ?? "hangup",
       voicemailMessage:         ((agent as any).agentConfig?.voicemailMessage as string | undefined) ?? "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.",
