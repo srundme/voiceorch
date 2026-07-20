@@ -196,6 +196,7 @@ export type DisconnectReason =
   | "completed"
   | "user_hangup"
   | "silence_timeout"
+  | "media_disconnect"
   | "max_duration_reached"
   | "provider_error"
   | "insufficient_balance"
@@ -287,14 +288,14 @@ function normalizeDisconnectReason(raw: string): ReasonMapping {
       return { reason: "silence_timeout", label: "Silence timeout — no caller speech detected", outcome: "Timeout", expected: true, component: "STT" };
     case "media_disconnect":
     case "carrier_disconnect":
-      // Callers often hang up right after the agent asks a question — VoBiz closes
-      // the media WS in that window. Do NOT map this to provider_error (call 2626
-      // false "media disconnect" ops label). Treat as a normal disconnect.
+    case "early_media_drop":
+      // VoBiz often closes the media WS (4010 End Of XML / bridge idle) while the
+      // callee still has the phone up. Do NOT call this "Caller hung up".
       return {
-        reason: "user_hangup",
-        label: "Call ended while waiting for caller reply",
+        reason: "media_disconnect",
+        label: "Media stream closed by carrier (caller may still be on the line)",
         outcome: "Call Terminated",
-        expected: true,
+        expected: false,
         component: "Telephony",
       };
     case "timeout":

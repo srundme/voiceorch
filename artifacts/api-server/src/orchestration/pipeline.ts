@@ -375,12 +375,28 @@ const VOICE_LINKED_PHONE_NOTE =
  * seconds of latency (and cost) before the first word. The opening line only needs the
  * caller-memory block (so it can greet a returning caller by name/context) plus a
  * language + one-sentence-length instruction — nothing else.
+ *
+ * Outbound scripts often put the spoken opener under IDENTITY / CALL FLOW / GREETING
+ * while greetingMessage stays a stub ("Hello"). Include those so the greeting LLM
+ * can deliver the real pitch instead of a one-word opener that leaves dead air.
  */
+/** True when the static greeting is a one-word stub that should not open outbound calls. */
+function isStubGreeting(text: string): boolean {
+  const t = text.trim();
+  if (!t) return true;
+  if (t.length < 12) return true;
+  return /^(hi|hello|hey|hi there|hello there)[!.,\s]*$/i.test(t);
+}
+
 function buildCompactGreetingPrompt(fullSystemPrompt: string, language: string, resumeDropped = false): string {
   const memoryMatch = fullSystemPrompt.match(
     /=== CALLER MEMORY[\s\S]*?={20,}/,
   );
   const memoryBlock = memoryMatch?.[0] ?? "";
+  const identityMatch = fullSystemPrompt.match(/\bIDENTITY\b[\s\S]{0,800}?(?=\n---|\nCALL FLOW|\nGREETING|\n===|$)/i);
+  const callFlowMatch = fullSystemPrompt.match(/\bCALL FLOW\b[\s\S]{0,2200}?(?=\n===|\n\[|$)/i)
+    ?? fullSystemPrompt.match(/\bGREETING\b[\s\S]{0,1800}?(?=\n===|\n\[|$)/i);
+  const scriptBlock = [identityMatch?.[0], callFlowMatch?.[0]].filter(Boolean).join("\n\n");
   const langName = LANG_DISPLAY_NAMES[language] ?? language;
   const isEnglish = language.startsWith("en");
   // For non-English target languages, mirror the colloquial REGISTER + proper-noun
@@ -403,9 +419,13 @@ function buildCompactGreetingPrompt(fullSystemPrompt: string, language: string, 
       "as if starting fresh), (2) immediately continue from LAST EXCHANGES BEFORE THE CALL DROPPED " +
       "in CALLER MEMORY above — pick up the same topic mid-thread. Do NOT re-introduce yourself, " +
       "your company, or restart the sales pitch from the beginning."
-    : "[OPENING LENGTH] Your opening line must be ONE short, natural sentence — a brief greeting only. Do not list services, ask multiple questions, or explain anything yet; wait for the caller to respond.";
+    : scriptBlock
+      ? "[OPENING] Speak the GREETING / opening from CALL FLOW above as a single uninterrupted turn. " +
+        "Use the caller's company/contact name when present. Do not replace the scripted pitch with a one-word Hello."
+      : "[OPENING LENGTH] Your opening line must be ONE short, natural sentence — a brief greeting only. Do not list services, ask multiple questions, or explain anything yet; wait for the caller to respond.";
   const parts = [
     memoryBlock,
+    scriptBlock,
     languageInstruction,
     openingLengthRule,
   ].filter(Boolean);
@@ -3414,12 +3434,32 @@ export class OrchestrationPipeline implements VoiceSession {
       // (call 2683) — never a hardcoded cut-call phrase.
       const isReturningCaller = this.config.isReturningCaller === true;
       const resumeDropped = this.isResumeDroppedCall;
-      const useInstantReturning = isReturningCaller && !resumeDropped;
+      // Outbound (campaign / sheet / WhatsApp dial) must use the agent greeting /
+      // LLM opener — never the inbound "Hi! How are you?" returning-caller shortcut
+      // (call 3419: QuickBooks Betty pitch skipped for a prior callCount ≥ 1).
+      const useInstantReturning =
+        isReturningCaller && !resumeDropped && this.callDirection !== "outbound";
       const greetLang =
         this.currentLang || this.agent.sttConfig.language || this.agent.language || "en-IN";
       let greeting = useInstantReturning
         ? buildInstantReturningGreeting(this.config.returningCallerName, greetLang)
         : (resumeDropped ? "" : (this.agent.greetingMessage ?? ""));
+
+      // Stub static greetings ("Hello", "Hi!") on outbound leave the real pitch
+      // trapped in the system prompt CALL FLOW — the callee hears one word then
+      // silence and the carrier often drops the media WS (mislabeled hangup).
+      if (
+        !useInstantReturning
+        && !resumeDropped
+        && this.callDirection === "outbound"
+        && isStubGreeting(greeting)
+      ) {
+        logger.info(
+          { callId: this.config.callId, stub: greeting.slice(0, 40) },
+          "Pipeline: outbound stub greeting — generating opener from system prompt instead",
+        );
+        greeting = "";
+      }
 
       // Language-aware greeting: a non-English agent whose static welcome message
       // is still plain English (e.g. the builder default "Hello! How can I help
@@ -3510,8 +3550,13 @@ export class OrchestrationPipeline implements VoiceSession {
           // before the agent speaks. Fall back to the configured static greeting
           // if present, otherwise a minimal neutral opener, and continue the call.
           const reason = toReadableError(llmErr, "Greeting LLM error");
-          const fallback = (this.agent.greetingMessage ?? "").trim()
-            || neutralGreeting(this.agent.language);
+          // Prefer a real static greeting; never fall back to outbound stubs
+          // ("Hello") — that recreates the dead-air / media-drop failure mode.
+          let fallback = (this.agent.greetingMessage ?? "").trim();
+          if (this.callDirection === "outbound" && isStubGreeting(fallback)) {
+            fallback = "";
+          }
+          fallback = fallback || neutralGreeting(this.agent.language);
           logger.error(
             { callId: this.config.callId, agentId: this.agent.id, provider: this.agent.llmProvider, err: llmErr },
             `${reason} — falling back to a safe spoken opener instead of dropping the call`,
@@ -3605,7 +3650,15 @@ export class OrchestrationPipeline implements VoiceSession {
       // fully before we arm the stall backstop and enter Listening.
       await this.drainPlaybackTail();
       // First entry into Listening — arm the stall backstop.
-      if (!this.closed) this.safetyNet.beginListening();
+      if (!this.closed) {
+        this.safetyNet.beginListening();
+        // So a VoBiz media WS drop while we wait for the first reply is labeled
+        // media_disconnect instead of false "Caller hung up" (calls 3429/3432).
+        this.expectingShortReplyUntil = Math.max(
+          this.expectingShortReplyUntil,
+          Date.now() + 60_000,
+        );
+      }
     } catch (err) {
       // Greeting TTS synthesis / playback failed. Surface the TTS provider and a
       // human-readable reason so the failing dependency is identifiable, but do

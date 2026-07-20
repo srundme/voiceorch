@@ -2714,11 +2714,30 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
         // onCallEnd without a reason arg, so without the hint a silence-timeout
         // hangup would be mislabeled "Conversation completed"), otherwise derived
         // from the session's end flags.
-        const endRawReason = reason
-          ?? (session.wasTransferred ? "transfer_completed"
-              : session.pipeline.endReasonHint ? session.pipeline.endReasonHint
-              : session.naturalEndTriggered ? "completed"
-              : "user_hangup");
+        const endRawReason = (() => {
+          const raw = reason
+            ?? (session.wasTransferred ? "transfer_completed"
+                : session.pipeline.endReasonHint ? session.pipeline.endReasonHint
+                : session.naturalEndTriggered ? "completed"
+                : "user_hangup");
+          // Outbound dropped with zero turns after a short opener is almost never
+          // a deliberate callee hangup — VoBiz closed the media bridge (4010).
+          let direction = "inbound";
+          try {
+            const md = call.metadata ? JSON.parse(call.metadata) as Record<string, unknown> : {};
+            if (typeof md["direction"] === "string") direction = md["direction"];
+          } catch { /* ignore */ }
+          if (
+            raw === "user_hangup"
+            && metricsAcc.count === 0
+            && durationSeconds > 0
+            && durationSeconds < 45
+            && direction === "outbound"
+          ) {
+            return "early_media_drop";
+          }
+          return raw;
+        })();
         const { lastUser: endLastUser, lastAgent: endLastAgent } = session.pipeline.getLastTurnTexts();
         writeCallEndedLog(session.callId, ag.id, {
           rawReason: endRawReason,
