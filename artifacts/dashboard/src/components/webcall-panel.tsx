@@ -158,6 +158,81 @@ export function WebcallPanel({
     nextStartRef.current = playbackCtxRef.current?.currentTime ?? 0;
   }, []);
 
+  const cameraAllowed = !!(visionLiveEnabled || visionEnabled || requireCamera);
+
+  const startFrameCapture = useCallback(() => {
+    if (frameTimerRef.current != null) return;
+    const canvas = document.createElement("canvas");
+    frameTimerRef.current = window.setInterval(() => {
+      const ws = wsRef.current;
+      const video = videoElRef.current;
+      if (!ws || ws.readyState !== WebSocket.OPEN || !video || video.readyState < 2) return;
+      const w = video.videoWidth || 320;
+      const h = video.videoHeight || 240;
+      canvas.width = Math.min(w, 640);
+      canvas.height = Math.round(canvas.width * (h / Math.max(w, 1)));
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.55);
+      const b64 = dataUrl.split(",")[1];
+      if (!b64) return;
+      try {
+        ws.send(JSON.stringify({ type: "video_frame", data: b64, mimeType: "image/jpeg" }));
+      } catch { /* noop */ }
+    }, 500);
+  }, []);
+
+  const openCameraStream = useCallback(async (facing: FacingMode) => {
+    const vstream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: { ideal: facing },
+        width: { ideal: 640 },
+        height: { ideal: 480 },
+      },
+      audio: false,
+    });
+    videoStreamRef.current?.getTracks().forEach((t) => t.stop());
+    videoStreamRef.current = vstream;
+    if (videoElRef.current) {
+      videoElRef.current.srcObject = vstream;
+      void videoElRef.current.play().catch(() => {});
+    }
+    setFacingMode(facing);
+    setCameraOn(true);
+    startFrameCapture();
+  }, [startFrameCapture]);
+
+  const startCamera = useCallback(async () => {
+    if (!cameraAllowed || cameraOn) return;
+    setError(null);
+    try {
+      await openCameraStream(facingMode);
+    } catch {
+      // Fallback: try the other lens if the preferred one isn't available (common on desktops).
+      const fallback: FacingMode = facingMode === "user" ? "environment" : "user";
+      try {
+        await openCameraStream(fallback);
+      } catch (err2) {
+        setError(err2 instanceof Error ? err2.message : "Camera permission denied");
+      }
+    }
+  }, [cameraAllowed, cameraOn, facingMode, openCameraStream]);
+
+  const switchCamera = useCallback(async () => {
+    if (!cameraOn || switchingCamera) return;
+    const next: FacingMode = facingMode === "user" ? "environment" : "user";
+    setSwitchingCamera(true);
+    setError(null);
+    try {
+      await openCameraStream(next);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not switch camera");
+    } finally {
+      setSwitchingCamera(false);
+    }
+  }, [cameraOn, switchingCamera, facingMode, openCameraStream]);
+
   const start = useCallback(async () => {
     setError(null);
     setLines([]);
@@ -181,8 +256,21 @@ export function WebcallPanel({
         }
       }
 
-      if (requireCamera && (visionEnabled || visionLiveEnabled) && !cameraOn) {
-        throw new Error("This link requires your camera. Tap the camera button, then start the call.");
+      // If camera is required, turn it on before connecting (don't leave users stuck).
+      if (requireCamera && !cameraOn) {
+        try {
+          await openCameraStream(facingMode);
+        } catch {
+          try {
+            await openCameraStream(facingMode === "user" ? "environment" : "user");
+          } catch (camErr) {
+            throw new Error(
+              camErr instanceof Error
+                ? `Camera required: ${camErr.message}`
+                : "This link requires camera permission. Allow camera access and try again.",
+            );
+          }
+        }
       }
 
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -345,7 +433,7 @@ export function WebcallPanel({
       setState("error");
       teardown();
     }
-  }, [agentId, enqueueAudio, clearPlayback, teardown, shareToken, requireCamera, visionEnabled, visionLiveEnabled, cameraOn]);
+  }, [agentId, enqueueAudio, clearPlayback, teardown, shareToken, requireCamera, cameraOn, facingMode, openCameraStream]);
 
   const end = useCallback(() => {
     doneRef.current = true;
@@ -365,78 +453,6 @@ export function WebcallPanel({
       return next;
     });
   }, []);
-
-  const startFrameCapture = useCallback(() => {
-    if (frameTimerRef.current != null) return;
-    const canvas = document.createElement("canvas");
-    frameTimerRef.current = window.setInterval(() => {
-      const ws = wsRef.current;
-      const video = videoElRef.current;
-      if (!ws || ws.readyState !== WebSocket.OPEN || !video || video.readyState < 2) return;
-      const w = video.videoWidth || 320;
-      const h = video.videoHeight || 240;
-      canvas.width = Math.min(w, 640);
-      canvas.height = Math.round(canvas.width * (h / Math.max(w, 1)));
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const dataUrl = canvas.toDataURL("image/jpeg", 0.55);
-      const b64 = dataUrl.split(",")[1];
-      if (!b64) return;
-      try {
-        ws.send(JSON.stringify({ type: "video_frame", data: b64, mimeType: "image/jpeg" }));
-      } catch { /* noop */ }
-    }, 500);
-  }, []);
-
-  const openCameraStream = useCallback(async (facing: FacingMode) => {
-    const vstream = await navigator.mediaDevices.getUserMedia({
-      video: {
-        facingMode: { ideal: facing },
-        width: { ideal: 640 },
-        height: { ideal: 480 },
-      },
-      audio: false,
-    });
-    videoStreamRef.current?.getTracks().forEach((t) => t.stop());
-    videoStreamRef.current = vstream;
-    if (videoElRef.current) {
-      videoElRef.current.srcObject = vstream;
-      void videoElRef.current.play().catch(() => {});
-    }
-    setFacingMode(facing);
-    setCameraOn(true);
-    startFrameCapture();
-  }, [startFrameCapture]);
-
-  const startCamera = useCallback(async () => {
-    if ((!visionLiveEnabled && !visionEnabled) || cameraOn) return;
-    try {
-      await openCameraStream(facingMode);
-    } catch (err) {
-      // Fallback: try the other lens if the preferred one isn't available (common on desktops).
-      const fallback: FacingMode = facingMode === "user" ? "environment" : "user";
-      try {
-        await openCameraStream(fallback);
-      } catch (err2) {
-        setError(err2 instanceof Error ? err2.message : "Camera permission denied");
-      }
-    }
-  }, [visionLiveEnabled, visionEnabled, cameraOn, facingMode, openCameraStream]);
-
-  const switchCamera = useCallback(async () => {
-    if (!cameraOn || switchingCamera) return;
-    const next: FacingMode = facingMode === "user" ? "environment" : "user";
-    setSwitchingCamera(true);
-    setError(null);
-    try {
-      await openCameraStream(next);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not switch camera");
-    } finally {
-      setSwitchingCamera(false);
-    }
-  }, [cameraOn, switchingCamera, facingMode, openCameraStream]);
 
   /** Resize phone photos so base64 JSON stays under the API body limit. */
   const fileToCompressedBase64 = useCallback(async (file: File): Promise<{ data: string; mimeType: string }> => {
@@ -496,19 +512,27 @@ export function WebcallPanel({
 
   // Auto-start camera once the call is live (so the preview shows without an extra tap).
   useEffect(() => {
-    if (state !== "live" || (!visionLiveEnabled && !visionEnabled) || cameraOn || cameraAutoTriedRef.current) return;
+    if (state !== "live" || !cameraAllowed || cameraOn || cameraAutoTriedRef.current) return;
     cameraAutoTriedRef.current = true;
     void startCamera();
-  }, [state, visionLiveEnabled, visionEnabled, cameraOn, startCamera]);
+  }, [state, cameraAllowed, cameraOn, startCamera]);
+
+  // Guest join with requireCamera: prompt for camera while idle so preview appears before Start.
+  useEffect(() => {
+    if (!requireCamera || !cameraAllowed || cameraOn || (state !== "idle" && state !== "error")) return;
+    if (cameraAutoTriedRef.current) return;
+    cameraAutoTriedRef.current = true;
+    void startCamera();
+  }, [requireCamera, cameraAllowed, cameraOn, state, startCamera]);
 
   // Guest join page: optionally auto-start the call after mount.
   const autoStartTriedRef = useRef(false);
   useEffect(() => {
     if (!autoStart || autoStartTriedRef.current || state !== "idle") return;
-    if (requireCamera && (visionEnabled || visionLiveEnabled)) return; // wait for camera
+    if (requireCamera && !cameraOn) return; // wait for camera
     autoStartTriedRef.current = true;
     void start();
-  }, [autoStart, state, requireCamera, visionEnabled, visionLiveEnabled, start]);
+  }, [autoStart, state, requireCamera, cameraOn, start]);
 
   useEffect(() => () => { doneRef.current = true; teardown(); }, [teardown]);
   useEffect(() => { scrollEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [lines]);
@@ -528,9 +552,11 @@ export function WebcallPanel({
               : "bg-muted-foreground/40")
           } />
           <div className="min-w-0 flex-1">
-            <p className="text-[13px] font-semibold text-foreground truncate">Live Test — {agentName}</p>
+            <p className="text-[13px] font-semibold text-foreground truncate">
+              {shareToken ? agentName : `Live Test — ${agentName}`}
+            </p>
             <p className="text-[10.5px] text-muted-foreground/60">
-              {state === "idle"       && "Talk to your agent right in the browser"}
+              {state === "idle"       && (requireCamera && !cameraOn ? "Turn on your camera, then start the call" : "Talk to your agent right in the browser")}
               {state === "connecting" && "Connecting…"}
               {state === "live"       && (cameraOn ? "Connected — camera on" : "Connected — start speaking")}
               {state === "ending"     && "Ending call…"}
@@ -544,7 +570,7 @@ export function WebcallPanel({
           )}
         </div>
 
-        {(visionLiveEnabled || visionEnabled) && (
+        {cameraAllowed && (
           <div className={cameraOn
             ? "relative shrink-0 border-b border-border bg-black"
             : "absolute w-px h-px overflow-hidden opacity-0 pointer-events-none"}
@@ -581,7 +607,11 @@ export function WebcallPanel({
             <div className="h-full flex flex-col items-center justify-center text-center gap-2 text-muted-foreground/50">
               <Phone className="h-7 w-7 opacity-40" />
               <p className="text-[12px]">
-                {active ? "Listening… say hello to your agent." : "Press Start call to begin a live voice test."}
+                {active
+                  ? "Listening… say hello to your agent."
+                  : requireCamera && !cameraOn
+                    ? "Allow camera access, then press Start call."
+                    : "Press Start call to begin a live voice test."}
               </p>
             </div>
           )}
@@ -613,9 +643,32 @@ export function WebcallPanel({
         {/* Controls */}
         <div className="shrink-0 border-t border-border p-3 flex items-center justify-center gap-2.5">
           {state === "idle" || state === "error" ? (
-            <Button onClick={() => void start()} className="h-10 px-5 gap-2 rounded-full text-[13px]">
-              <Phone className="h-4 w-4" /> Start call
-            </Button>
+            <>
+              {cameraAllowed && (
+                <Button
+                  onClick={() => { if (cameraOn) stopCamera(); else void startCamera(); }}
+                  variant="outline"
+                  className={"h-10 w-10 p-0 rounded-full border-border " + (cameraOn ? "bg-sky-500/10 text-sky-400" : "text-muted-foreground")}
+                  title={cameraOn ? "Stop camera" : "Turn on camera"}
+                >
+                  <Camera className="h-4 w-4" />
+                </Button>
+              )}
+              {cameraAllowed && cameraOn && (
+                <Button
+                  onClick={() => void switchCamera()}
+                  variant="outline"
+                  disabled={switchingCamera}
+                  className="h-10 w-10 p-0 rounded-full border-border text-muted-foreground"
+                  title={facingMode === "user" ? "Switch to rear camera" : "Switch to front camera"}
+                >
+                  {switchingCamera ? <Loader2 className="h-4 w-4 animate-spin" /> : <SwitchCamera className="h-4 w-4" />}
+                </Button>
+              )}
+              <Button onClick={() => void start()} className="h-10 px-5 gap-2 rounded-full text-[13px]">
+                <Phone className="h-4 w-4" /> Start call
+              </Button>
+            </>
           ) : (
             <>
               <Button
@@ -627,7 +680,7 @@ export function WebcallPanel({
               >
                 {muted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
               </Button>
-              {(visionLiveEnabled || visionEnabled) && (
+              {cameraAllowed && (
                 <>
                   <Button
                     onClick={() => { if (cameraOn) stopCamera(); else void startCamera(); }}
