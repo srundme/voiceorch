@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Mic, MicOff, PhoneOff, Phone, Loader2, AlertCircle, X, Camera, ImagePlus } from "lucide-react";
+import { Mic, MicOff, PhoneOff, Phone, Loader2, AlertCircle, X, Camera, ImagePlus, SwitchCamera } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 /**
@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 
 type CallState = "idle" | "connecting" | "live" | "ending" | "error";
 type Line = { id: number; speaker: "user" | "agent"; text: string };
+type FacingMode = "user" | "environment";
 
 // Inlined AudioWorklet processor: posts a COPY of each Float32 frame to the main
 // thread (transferred, zero-copy). Resampling to 16 kHz + Int16 conversion is
@@ -62,6 +63,8 @@ export function WebcallPanel({
   const [muted, setMuted]   = useState(false);
   const [lines, setLines]   = useState<Line[]>([]);
   const [cameraOn, setCameraOn] = useState(false);
+  const [facingMode, setFacingMode] = useState<FacingMode>("user");
+  const [switchingCamera, setSwitchingCamera] = useState(false);
   const [uploading, setUploading] = useState(false);
 
   const wsRef          = useRef<WebSocket | null>(null);
@@ -346,42 +349,77 @@ export function WebcallPanel({
     });
   }, []);
 
+  const startFrameCapture = useCallback(() => {
+    if (frameTimerRef.current != null) return;
+    const canvas = document.createElement("canvas");
+    frameTimerRef.current = window.setInterval(() => {
+      const ws = wsRef.current;
+      const video = videoElRef.current;
+      if (!ws || ws.readyState !== WebSocket.OPEN || !video || video.readyState < 2) return;
+      const w = video.videoWidth || 320;
+      const h = video.videoHeight || 240;
+      canvas.width = Math.min(w, 640);
+      canvas.height = Math.round(canvas.width * (h / Math.max(w, 1)));
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.55);
+      const b64 = dataUrl.split(",")[1];
+      if (!b64) return;
+      try {
+        ws.send(JSON.stringify({ type: "video_frame", data: b64, mimeType: "image/jpeg" }));
+      } catch { /* noop */ }
+    }, 500);
+  }, []);
+
+  const openCameraStream = useCallback(async (facing: FacingMode) => {
+    const vstream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: { ideal: facing },
+        width: { ideal: 640 },
+        height: { ideal: 480 },
+      },
+      audio: false,
+    });
+    videoStreamRef.current?.getTracks().forEach((t) => t.stop());
+    videoStreamRef.current = vstream;
+    if (videoElRef.current) {
+      videoElRef.current.srcObject = vstream;
+      void videoElRef.current.play().catch(() => {});
+    }
+    setFacingMode(facing);
+    setCameraOn(true);
+    startFrameCapture();
+  }, [startFrameCapture]);
+
   const startCamera = useCallback(async () => {
     if ((!visionLiveEnabled && !visionEnabled) || cameraOn) return;
     try {
-      const vstream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } },
-        audio: false,
-      });
-      videoStreamRef.current = vstream;
-      if (videoElRef.current) {
-        videoElRef.current.srcObject = vstream;
-        void videoElRef.current.play().catch(() => {});
-      }
-      setCameraOn(true);
-      const canvas = document.createElement("canvas");
-      frameTimerRef.current = window.setInterval(() => {
-        const ws = wsRef.current;
-        const video = videoElRef.current;
-        if (!ws || ws.readyState !== WebSocket.OPEN || !video || video.readyState < 2) return;
-        const w = video.videoWidth || 320;
-        const h = video.videoHeight || 240;
-        canvas.width = Math.min(w, 640);
-        canvas.height = Math.round(canvas.width * (h / Math.max(w, 1)));
-        const ctx = canvas.getContext("2d");
-        if (!ctx) return;
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const dataUrl = canvas.toDataURL("image/jpeg", 0.55);
-        const b64 = dataUrl.split(",")[1];
-        if (!b64) return;
-        try {
-          ws.send(JSON.stringify({ type: "video_frame", data: b64, mimeType: "image/jpeg" }));
-        } catch { /* noop */ }
-      }, 500);
+      await openCameraStream(facingMode);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Camera permission denied");
+      // Fallback: try the other lens if the preferred one isn't available (common on desktops).
+      const fallback: FacingMode = facingMode === "user" ? "environment" : "user";
+      try {
+        await openCameraStream(fallback);
+      } catch (err2) {
+        setError(err2 instanceof Error ? err2.message : "Camera permission denied");
+      }
     }
-  }, [visionLiveEnabled, visionEnabled, cameraOn]);
+  }, [visionLiveEnabled, visionEnabled, cameraOn, facingMode, openCameraStream]);
+
+  const switchCamera = useCallback(async () => {
+    if (!cameraOn || switchingCamera) return;
+    const next: FacingMode = facingMode === "user" ? "environment" : "user";
+    setSwitchingCamera(true);
+    setError(null);
+    try {
+      await openCameraStream(next);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not switch camera");
+    } finally {
+      setSwitchingCamera(false);
+    }
+  }, [cameraOn, switchingCamera, facingMode, openCameraStream]);
 
   /** Resize phone photos so base64 JSON stays under the API body limit. */
   const fileToCompressedBase64 = useCallback(async (file: File): Promise<{ data: string; mimeType: string }> => {
@@ -492,9 +530,20 @@ export function WebcallPanel({
               className="w-full max-h-44 object-cover"
             />
             {cameraOn && (
-              <span className="absolute top-2 left-2 text-[10px] font-medium px-1.5 py-0.5 rounded bg-black/60 text-white">
-                {visionLiveEnabled ? "Live camera" : "Camera"}
-              </span>
+              <>
+                <span className="absolute top-2 left-2 text-[10px] font-medium px-1.5 py-0.5 rounded bg-black/60 text-white">
+                  {visionLiveEnabled ? "Live camera" : "Camera"} · {facingMode === "user" ? "Front" : "Rear"}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void switchCamera()}
+                  disabled={switchingCamera}
+                  className="absolute top-2 right-2 h-8 w-8 inline-flex items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80 disabled:opacity-50"
+                  title={facingMode === "user" ? "Switch to rear camera" : "Switch to front camera"}
+                >
+                  {switchingCamera ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <SwitchCamera className="h-3.5 w-3.5" />}
+                </button>
+              </>
             )}
           </div>
         )}
@@ -552,15 +601,28 @@ export function WebcallPanel({
                 {muted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
               </Button>
               {(visionLiveEnabled || visionEnabled) && (
-                <Button
-                  onClick={() => { if (cameraOn) stopCamera(); else void startCamera(); }}
-                  variant="outline"
-                  disabled={state !== "live"}
-                  className={"h-10 w-10 p-0 rounded-full border-border " + (cameraOn ? "bg-sky-500/10 text-sky-400" : "text-muted-foreground")}
-                  title={cameraOn ? "Stop camera" : "Start camera"}
-                >
-                  <Camera className="h-4 w-4" />
-                </Button>
+                <>
+                  <Button
+                    onClick={() => { if (cameraOn) stopCamera(); else void startCamera(); }}
+                    variant="outline"
+                    disabled={state !== "live"}
+                    className={"h-10 w-10 p-0 rounded-full border-border " + (cameraOn ? "bg-sky-500/10 text-sky-400" : "text-muted-foreground")}
+                    title={cameraOn ? "Stop camera" : "Start camera"}
+                  >
+                    <Camera className="h-4 w-4" />
+                  </Button>
+                  {cameraOn && (
+                    <Button
+                      onClick={() => void switchCamera()}
+                      variant="outline"
+                      disabled={state !== "live" || switchingCamera}
+                      className="h-10 w-10 p-0 rounded-full border-border text-muted-foreground"
+                      title={facingMode === "user" ? "Switch to rear camera" : "Switch to front camera"}
+                    >
+                      {switchingCamera ? <Loader2 className="h-4 w-4 animate-spin" /> : <SwitchCamera className="h-4 w-4" />}
+                    </Button>
+                  )}
+                </>
               )}
               {visionEnabled && (
                 <label className={"h-10 w-10 inline-flex items-center justify-center rounded-full border border-border cursor-pointer " + (state !== "live" || uploading ? "opacity-40 pointer-events-none" : "text-muted-foreground hover:text-foreground")}>
