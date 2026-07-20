@@ -14,6 +14,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import {
   Copy, CheckCircle2, MessageCircle, Plus, Trash2, Pencil, ExternalLink,
+  ArrowRight, PhoneIncoming, Send,
 } from "lucide-react";
 
 const API = "/api";
@@ -74,6 +75,123 @@ const SAMPLE_OUTBOUND = `{
   "template_hint": "booking_confirmed",
   "meeting_time": "20 Jul 2026, 10:00 am"
 }`;
+
+function SetupGuide({ hasConnection }: { hasConnection: boolean }) {
+  return (
+    <div className="mx-6 space-y-5">
+      <div className="rounded-lg border border-border/60 bg-card/30 p-5">
+        <h2 className="text-sm font-semibold">How to set this up</h2>
+        <p className="mt-1 text-xs text-muted-foreground max-w-2xl">
+          SnapServe does not send WhatsApp messages itself. Your Interakt / Wati / AiSensy / Zapier
+          account does. You connect the two with webhooks — about 10 minutes if templates already exist.
+        </p>
+
+        <ol className="mt-4 space-y-4">
+          <li className="flex gap-3">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-foreground text-background text-[11px] font-semibold">1</span>
+            <div className="min-w-0 space-y-1">
+              <p className="text-sm font-medium">Create a connection in SnapServe</p>
+              <p className="text-xs text-muted-foreground">
+                Click <strong>Add connection</strong>, pick the AI agent that should call the customer.
+                Optionally paste your Zapier / Make / n8n / BSP webhook URL for post-call messages.
+                {hasConnection ? " Then copy the inbound URL from your connection below." : ""}
+              </p>
+            </div>
+          </li>
+
+          <li className="flex gap-3">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-foreground text-background text-[11px] font-semibold">2</span>
+            <div className="min-w-0 space-y-1.5">
+              <p className="text-sm font-medium flex items-center gap-1.5">
+                <PhoneIncoming className="w-3.5 h-3.5 text-muted-foreground" />
+                Request a Call → AI dials (inbound)
+              </p>
+              <p className="text-xs text-muted-foreground">
+                In your WhatsApp tool, create a template with a button (e.g. “Request a Call”).
+                When that button is tapped, send a webhook to SnapServe:
+              </p>
+              <ul className="text-xs text-muted-foreground list-disc pl-4 space-y-1">
+                <li>
+                  <strong>Zapier / Make:</strong> Trigger = WhatsApp button / interactive reply → Action = Webhooks POST
+                  to your SnapServe inbound URL with the JSON below.
+                </li>
+                <li>
+                  <strong>Interakt / Wati / AiSensy:</strong> Use their “webhook on button click” or “automation” →
+                  POST the customer phone to the SnapServe inbound URL.
+                </li>
+                <li>
+                  Required field: <code className="text-[10px] bg-muted/50 px-1 rounded">phone</code>.
+                  Set <code className="text-[10px] bg-muted/50 px-1 rounded">event</code> to{" "}
+                  <code className="text-[10px] bg-muted/50 px-1 rounded">request_call</code>{" "}
+                  or use button id <code className="text-[10px] bg-muted/50 px-1 rounded">request_a_call</code>.
+                </li>
+              </ul>
+              <pre className="text-[11px] bg-muted/40 rounded-md p-3 overflow-x-auto whitespace-pre-wrap">{SAMPLE_INBOUND}</pre>
+              <p className="text-[11px] text-muted-foreground">
+                Tip: test with curl — you should get <code className="text-[10px]">action: &quot;dialed&quot;</code> and see a ringing call in Call Logs.
+              </p>
+            </div>
+          </li>
+
+          <li className="flex gap-3">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-foreground text-background text-[11px] font-semibold">3</span>
+            <div className="min-w-0 space-y-1.5">
+              <p className="text-sm font-medium flex items-center gap-1.5">
+                <Send className="w-3.5 h-3.5 text-muted-foreground" />
+                After the AI call → send WhatsApp (outbound)
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Create a Zap / automation that starts when SnapServe POSTs to your outbound URL.
+                Map fields to your approved WhatsApp template and send to{" "}
+                <code className="text-[10px] bg-muted/50 px-1 rounded">phone</code>.
+              </p>
+              <ul className="text-xs text-muted-foreground list-disc pl-4 space-y-1">
+                <li>
+                  Use <code className="text-[10px] bg-muted/50 px-1 rounded">template_hint</code> to pick the template:
+                  <code className="text-[10px] bg-muted/50 px-1 rounded ml-1">call_summary</code>,{" "}
+                  <code className="text-[10px] bg-muted/50 px-1 rounded">booking_confirmed</code>, or{" "}
+                  <code className="text-[10px] bg-muted/50 px-1 rounded">callback_scheduled</code>.
+                </li>
+                <li>
+                  For bookings, fill template variables from{" "}
+                  <code className="text-[10px] bg-muted/50 px-1 rounded">meeting_time</code> /{" "}
+                  <code className="text-[10px] bg-muted/50 px-1 rounded">meet_link</code>.
+                </li>
+                <li>
+                  Optional: verify <code className="text-[10px] bg-muted/50 px-1 rounded">X-SnapServe-Signature</code>{" "}
+                  with the outbound secret shown once when you create the connection.
+                </li>
+              </ul>
+              <pre className="text-[11px] bg-muted/40 rounded-md p-3 overflow-x-auto whitespace-pre-wrap">{SAMPLE_OUTBOUND}</pre>
+            </div>
+          </li>
+
+          <li className="flex gap-3">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-foreground text-background text-[11px] font-semibold">4</span>
+            <div className="min-w-0 space-y-1">
+              <p className="text-sm font-medium">Test end-to-end</p>
+              <p className="text-xs text-muted-foreground">
+                Send yourself the WhatsApp template → tap Request a Call → confirm the AI dials →
+                finish the call → confirm your BSP sends the follow-up template.
+                Check <strong>Last inbound</strong> / <strong>Last outbound</strong> on the connection card if something fails.
+              </p>
+            </div>
+          </li>
+        </ol>
+
+        <div className="mt-5 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground border-t border-border/50 pt-4">
+          <span>Flow:</span>
+          <span className="inline-flex items-center gap-1 rounded-md bg-muted/50 px-2 py-0.5">
+            WhatsApp button <ArrowRight className="w-3 h-3" /> SnapServe dials AI
+          </span>
+          <span className="inline-flex items-center gap-1 rounded-md bg-muted/50 px-2 py-0.5">
+            Call ends <ArrowRight className="w-3 h-3" /> Your webhook sends WhatsApp
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function WhatsAppPage() {
   const { toast } = useToast();
@@ -181,39 +299,25 @@ export default function WhatsAppPage() {
             <span>{createdSecret}</span>
             <CopyButton text={createdSecret} label="Copy" />
           </div>
+          <p className="mt-2 text-[11px] text-amber-200/80">
+            Next: copy the inbound webhook URL from your connection card and paste it into Zapier / your BSP.
+          </p>
           <Button variant="ghost" size="sm" className="mt-2 h-7 text-xs" onClick={() => setCreatedSecret(null)}>
             Dismiss
           </Button>
         </div>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-2 px-6">
-        <div className="rounded-lg border border-border/60 bg-card/40 p-4 space-y-2">
-          <h3 className="text-sm font-medium">Inbound — Request a Call</h3>
-          <p className="text-xs text-muted-foreground">
-            Point your BSP / Zapier button webhook at the SnapServe inbound URL. When someone taps
-            “Request a Call”, we dial your AI agent.
-          </p>
-          <pre className="text-[11px] bg-muted/40 rounded-md p-3 overflow-x-auto whitespace-pre-wrap">{SAMPLE_INBOUND}</pre>
-        </div>
-        <div className="rounded-lg border border-border/60 bg-card/40 p-4 space-y-2">
-          <h3 className="text-sm font-medium">Outbound — after each AI call</h3>
-          <p className="text-xs text-muted-foreground">
-            SnapServe POSTs this JSON to your outbound URL. Map <code className="text-[10px]">template_hint</code> to
-            your WhatsApp template and send to <code className="text-[10px]">phone</code>.
-          </p>
-          <pre className="text-[11px] bg-muted/40 rounded-md p-3 overflow-x-auto whitespace-pre-wrap">{SAMPLE_OUTBOUND}</pre>
-        </div>
-      </div>
+      <SetupGuide hasConnection={connections.length > 0} />
 
       {isLoading ? (
         <p className="text-sm text-muted-foreground px-6">Loading…</p>
       ) : connections.length === 0 ? (
-        <div className="px-6">
+        <div className="px-6 pb-8">
           <EmptyState
             icon={<MessageCircle className="w-5 h-5" />}
-            title="No WhatsApp connections"
-            description="Connect your WhatsApp stack via webhook — works with any Indian BSP."
+            title="No WhatsApp connections yet"
+            description="Start with step 1 above — add a connection, then wire your BSP webhooks."
             action={{
               label: "Add connection",
               onClick: () => {
@@ -226,6 +330,7 @@ export default function WhatsAppPage() {
         </div>
       ) : (
         <div className="space-y-3 px-6 pb-8">
+          <h2 className="text-sm font-semibold">Your connections</h2>
           {connections.map((c) => (
             <div key={c.id} className="rounded-lg border border-border/60 bg-card/30 p-4 space-y-3">
               <div className="flex flex-wrap items-start justify-between gap-2">
@@ -272,23 +377,31 @@ export default function WhatsAppPage() {
 
               <div className="space-y-2">
                 <div>
-                  <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Inbound webhook URL</Label>
+                  <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    Inbound webhook URL — paste this into Zapier / your BSP
+                  </Label>
                   <div className="mt-1 flex items-center gap-2 rounded-md bg-muted/40 px-2.5 py-1.5">
                     <code className="text-[11px] flex-1 break-all">{c.inboundWebhookUrl}</code>
                     <CopyButton text={c.inboundWebhookUrl} label="Copy" />
                   </div>
                 </div>
-                {c.outboundWebhookUrl && (
-                  <div>
-                    <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Your outbound URL</Label>
+                <div>
+                  <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    Your outbound URL — SnapServe POSTs here after each call
+                  </Label>
+                  {c.outboundWebhookUrl ? (
                     <div className="mt-1 flex items-center gap-2 rounded-md bg-muted/40 px-2.5 py-1.5">
                       <code className="text-[11px] flex-1 break-all">{c.outboundWebhookUrl}</code>
                       <a href={c.outboundWebhookUrl} target="_blank" rel="noreferrer" className="text-muted-foreground hover:text-foreground">
                         <ExternalLink className="w-3.5 h-3.5" />
                       </a>
                     </div>
-                  </div>
-                )}
+                  ) : (
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      Not set — edit this connection to add a Zapier/Make/BSP URL for post-call WhatsApp.
+                    </p>
+                  )}
+                </div>
               </div>
 
               {(c.lastInboundAt || c.lastOutboundAt || c.lastError) && (
@@ -309,7 +422,7 @@ export default function WhatsAppPage() {
           <DialogHeader>
             <DialogTitle>Add WhatsApp connection</DialogTitle>
             <DialogDescription>
-              Works with Interakt, Wati, AiSensy, Gupshup, Zapier — any tool that can POST a webhook.
+              After creating, copy the inbound URL into Zapier or your BSP. Works with Interakt, Wati, AiSensy, Gupshup.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
