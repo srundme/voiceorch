@@ -25,6 +25,10 @@ import {
 } from "./gemini-live-voices.js";
 import { toGeminiLiveTools } from "./gemini-tools.js";
 import { runLiveToolCall } from "./live-tool-runner.js";
+import {
+  CallVisionMemory,
+  extractKnownCallerNameFromPrompt,
+} from "../../vision-memory.js";
 
 const SCHEDULE_CALLBACK_TOOL = {
   name: "schedule_callback",
@@ -66,10 +70,16 @@ export class GeminiLivePipeline implements VoiceSession {
   private isPlayingOut = false;
   private lastVideoFrameAt = 0;
   private videoVisionAnnounced = false;
+  private visionMemory: CallVisionMemory | null = null;
 
   constructor(config: SessionConfig) {
     this.config = config;
     this.agent = config.agentConfig;
+    if (this.agent.visionEnabled || this.agent.visionLiveEnabled) {
+      this.visionMemory = new CallVisionMemory(
+        extractKnownCallerNameFromPrompt(this.agent.systemPrompt),
+      );
+    }
     const key = config.providerKeys.get("google") ?? config.providerKeys.get("gemini");
     if (!key) {
       throw new Error("Gemini Live requires a Google API key (managed or BYOP)");
@@ -167,6 +177,14 @@ export class GeminiLivePipeline implements VoiceSession {
 
   getExplicitLangRequestForMemory(): string | null {
     return null;
+  }
+
+  getVisionFamilyMembersFact(): string | null {
+    return this.visionMemory?.toFamilyMembersFact() ?? null;
+  }
+
+  setVisionPrimaryName(name: string): void {
+    this.visionMemory?.setPrimaryName(name);
   }
 
   notifyIncomingMedia(mediaId: number, meta?: { source?: string; mimeType?: string }): void {
@@ -286,7 +304,7 @@ export class GeminiLivePipeline implements VoiceSession {
       config: {
         responseModalities: [Modality.AUDIO],
         systemInstruction: this.agent.visionLiveEnabled
-          ? `${this.agent.systemPrompt}\n\n[LIVE CAMERA] The caller may stream webcam frames. When video is present, describe what you see when asked or when it becomes relevant — do not invent visual details.`
+          ? `${this.agent.systemPrompt}\n\n[LIVE CAMERA] The caller may stream webcam frames. When video is present, describe what you see when asked or when it becomes relevant — do not invent visual details. Remember VISION COMMON SENSE and VISION / PEOPLE MEMORY: the person on camera may not be the primary caller.`
           : this.agent.systemPrompt,
         speechConfig: {
           voiceConfig: {
@@ -394,6 +412,10 @@ export class GeminiLivePipeline implements VoiceSession {
             this.endReasonHint = "Tool ended call";
             this.config.onCallEnd();
           },
+          onAnalyzeImageResult: (text) => {
+            this.visionMemory?.noteVisualFinding(text);
+            this.pushVisionMemoryUpdate();
+          },
         },
         name,
         args,
@@ -415,6 +437,22 @@ export class GeminiLivePipeline implements VoiceSession {
       last.content = `${last.content} ${text}`.trim();
     } else {
       this.history.push({ role: "user", content: text });
+    }
+    if (this.visionMemory?.observeUserSpeech(text)) {
+      this.pushVisionMemoryUpdate();
+    }
+  }
+
+  private pushVisionMemoryUpdate(): void {
+    const block = this.visionMemory?.formatPromptBlock();
+    if (!block || !this.session || this.closed) return;
+    this.visionMemory?.consumeDirty();
+    try {
+      this.session.sendRealtimeInput({
+        text: `${block}\nAcknowledge silently and keep using this people map for the rest of the call.`,
+      });
+    } catch (err) {
+      logger.debug({ callId: this.config.callId, err }, "Live: vision memory update failed");
     }
   }
 

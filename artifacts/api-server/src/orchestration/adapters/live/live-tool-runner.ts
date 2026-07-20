@@ -20,6 +20,8 @@ export interface LiveToolRunnerDeps {
   onAgentText: (text: string) => void;
   speakText: (text: string) => Promise<void>;
   endCall: () => void;
+  /** Fired when analyze_image returns a successful description. */
+  onAnalyzeImageResult?: (text: string) => void;
 }
 
 /**
@@ -157,14 +159,19 @@ async function executeLiveAgentTool(
       return executeNativeReschedule(callId, agentId, tool, args);
     case "native_cancel":
       return executeNativeCancel(callId, agentId, tool, args);
-    case "analyze_image":
-      return executeAnalyzeImage({
+    case "analyze_image": {
+      const out = await executeAnalyzeImage({
         callId,
         agentId,
         userId: null,
         phone: config.callerPhone ?? null,
         args,
       });
+      if (out && !out.startsWith("analyze_image_error")) {
+        deps.onAnalyzeImageResult?.(out);
+      }
+      return out;
+    }
     case "send_sms":
       return undefined;
     default:

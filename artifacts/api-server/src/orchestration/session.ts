@@ -38,6 +38,7 @@ import { appendTraiDisclosure, scanForOptOut } from "../services/trai/index.js";
 import { appendDpdpDisclosure, scanAndRedactPII } from "../services/dpdp/index.js";
 import { appendIrdaiAiDisclosure } from "../services/irdai/index.js";
 import { appendGuardrails, redactTranscriptPII } from "../services/guardrails.js";
+import { appendVisionCommonSense } from "./vision-memory.js";
 import { phonesMatch } from "../services/google-sheets-helpers.js";
 import {
   attachPendingMediaToCall,
@@ -467,6 +468,9 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
       `(1) ask them to send a clear photo on WhatsApp or upload it, ` +
       `(2) when an image arrives or they confirm they sent it, call analyze_image with media_id or use_latest=true, ` +
       `(3) confirm concrete findings aloud in plain spoken language — never invent details you have not seen.`;
+  }
+  if (agentCfg["visionEnabled"] === true || agentCfg["visionLiveEnabled"] === true) {
+    effectiveSystemPrompt = appendVisionCommonSense(effectiveSystemPrompt);
   }
 
   // P1-K: Inject regulatory compliance disclosures into the system prompt
@@ -1840,6 +1844,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
           if (latched) {
             callerNameLatchedThisCall = latched.name;
             callerNameLatchTier = latched.tier;
+            pipeline.setVisionPrimaryName?.(latched.name);
           }
         });
         // Real-time structured fact latch — pattern-based detection, fire-and-forget
@@ -3150,6 +3155,12 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
                   // truth for the language_pref fact so the NEXT call greets the
                   // caller in the requested language. Null for strict-mode agents.
                   explicitLanguageRequest: session.pipeline.getExplicitLangRequestForMemory(),
+                  extraDurableFacts: (() => {
+                    const household = session.pipeline.getVisionFamilyMembersFact?.() ?? null;
+                    return household
+                      ? [{ key: "family_members", value: household, confidence: 0.9 }]
+                      : undefined;
+                  })(),
                 });
                 createExecutionLogger(session.callId, call.agentId)("Memory", "response", {
                   status: "success",

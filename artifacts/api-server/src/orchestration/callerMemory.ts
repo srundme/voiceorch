@@ -1030,8 +1030,13 @@ export async function updateCallerProfile(opts: {
    * multilingual (languageAutoDetect) agents; null/undefined = no-op.
    */
   explicitLanguageRequest?: string | null;
+  /**
+   * Extra durable facts learned mid-call (e.g. vision people map → family_members).
+   * Merged after LLM extraction; wins on conflict for the same key when confidence ≥ 0.8.
+   */
+  extraDurableFacts?: Array<{ key: string; value: string; confidence?: number }>;
 }): Promise<void> {
-  const { agentId, history, llm, existing, callId, wasDropped = false, durationSeconds, callerNameInCall, callerNameLatchTier, personaHash, finalLanguage, explicitLanguageRequest } = opts;
+  const { agentId, history, llm, existing, callId, wasDropped = false, durationSeconds, callerNameInCall, callerNameLatchTier, personaHash, finalLanguage, explicitLanguageRequest, extraDurableFacts } = opts;
   // Defense-in-depth: write under the SAME canonical key the read path uses.
   const phoneNumber = canonicalizeCallerKey(opts.phoneNumber) ?? opts.phoneNumber;
 
@@ -1274,6 +1279,15 @@ export async function updateCallerProfile(opts: {
   // Deduplicate by canonical key (last wins — later usually higher trust / fresher)
   const byKey = new Map<string, (typeof validFacts)[number]>();
   for (const f of validFacts) byKey.set(f.key, f);
+  // Vision / mid-call extras (e.g. family_members from people introductions)
+  for (const raw of extraDurableFacts ?? []) {
+    const normalized = normalizeDurableFact({
+      key: raw.key,
+      value: raw.value,
+      confidence: typeof raw.confidence === "number" ? raw.confidence : 0.85,
+    });
+    if (normalized) byKey.set(normalized.key, normalized);
+  }
   const uniqueFacts = [...byKey.values()];
 
   const newFactIds: number[] = [];
