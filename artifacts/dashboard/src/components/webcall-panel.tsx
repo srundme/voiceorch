@@ -50,6 +50,9 @@ export function WebcallPanel({
   onClose,
   visionLiveEnabled,
   visionEnabled,
+  shareToken,
+  requireCamera,
+  autoStart,
 }: {
   agentId: number;
   agentName: string;
@@ -57,6 +60,12 @@ export function WebcallPanel({
   onClose?: () => void;
   visionLiveEnabled?: boolean;
   visionEnabled?: boolean;
+  /** Guest join link token — connects via ?share= instead of session JWT. */
+  shareToken?: string;
+  /** Guest must enable camera before connecting. */
+  requireCamera?: boolean;
+  /** Start the call automatically after mount (join page). */
+  autoStart?: boolean;
 }) {
   const [state, setState]   = useState<CallState>("idle");
   const [error, setError]   = useState<string | null>(null);
@@ -157,18 +166,23 @@ export function WebcallPanel({
     setMuted(false);
     setState("connecting");
     try {
-      const token = localStorage.getItem("voiceorch:session");
-      if (!token) throw new Error("You need to be signed in to start a test call.");
-
-      // Preflight: check wallet balance before acquiring mic / opening the socket.
-      const walletResp = await fetch("/api/wallet/me", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (walletResp.ok) {
-        const walletData = await walletResp.json() as { balanceCents?: number };
-        if (typeof walletData.balanceCents === "number" && walletData.balanceCents <= 0) {
-          throw new Error("Insufficient balance. Please top up your wallet to start calls.");
+      const sessionToken = localStorage.getItem("voiceorch:session");
+      if (!shareToken) {
+        if (!sessionToken) throw new Error("You need to be signed in to start a test call.");
+        // Preflight: check wallet balance before acquiring mic / opening the socket.
+        const walletResp = await fetch("/api/wallet/me", {
+          headers: { Authorization: `Bearer ${sessionToken}` },
+        });
+        if (walletResp.ok) {
+          const walletData = await walletResp.json() as { balanceCents?: number };
+          if (typeof walletData.balanceCents === "number" && walletData.balanceCents <= 0) {
+            throw new Error("Insufficient balance. Please top up your wallet to start calls.");
+          }
         }
+      }
+
+      if (requireCamera && (visionEnabled || visionLiveEnabled) && !cameraOn) {
+        throw new Error("This link requires your camera. Tap the camera button, then start the call.");
       }
 
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -267,8 +281,11 @@ export function WebcallPanel({
 
       // ── WebSocket (absolute /api path → routed by the shared proxy) ────────
       const proto = location.protocol === "https:" ? "wss" : "ws";
+      const authQs = shareToken
+        ? `share=${encodeURIComponent(shareToken)}`
+        : `token=${encodeURIComponent(sessionToken!)}`;
       const ws = new WebSocket(
-        `${proto}://${location.host}/api/ws/webcall/${agentId}?token=${encodeURIComponent(token)}`,
+        `${proto}://${location.host}/api/ws/webcall/${agentId}?${authQs}`,
       );
       ws.binaryType = "arraybuffer";
       wsRef.current = ws;
@@ -328,7 +345,7 @@ export function WebcallPanel({
       setState("error");
       teardown();
     }
-  }, [agentId, enqueueAudio, clearPlayback, teardown]);
+  }, [agentId, enqueueAudio, clearPlayback, teardown, shareToken, requireCamera, visionEnabled, visionLiveEnabled, cameraOn]);
 
   const end = useCallback(() => {
     doneRef.current = true;
@@ -443,18 +460,19 @@ export function WebcallPanel({
 
   const uploadPhoto = useCallback(async (file: File) => {
     const callId = callIdRef.current;
-    const token = localStorage.getItem("voiceorch:session");
-    if (!callId || !token || !visionEnabled) return;
+    if (!callId || !visionEnabled) return;
+    const sessionToken = localStorage.getItem("voiceorch:session");
+    if (!shareToken && !sessionToken) return;
     setUploading(true);
     setError(null);
     try {
       const { data, mimeType } = await fileToCompressedBase64(file);
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (shareToken) headers["X-Webcall-Share"] = shareToken;
+      else headers["Authorization"] = `Bearer ${sessionToken}`;
       const resp = await fetch(`/api/calls/${callId}/media`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        headers,
         body: JSON.stringify({
           mimeType,
           fileName: file.name.replace(/\.\w+$/, "") + ".jpg",
@@ -474,7 +492,7 @@ export function WebcallPanel({
     } finally {
       setUploading(false);
     }
-  }, [visionEnabled, fileToCompressedBase64]);
+  }, [visionEnabled, fileToCompressedBase64, shareToken]);
 
   // Auto-start camera once the call is live (so the preview shows without an extra tap).
   useEffect(() => {
@@ -482,6 +500,15 @@ export function WebcallPanel({
     cameraAutoTriedRef.current = true;
     void startCamera();
   }, [state, visionLiveEnabled, visionEnabled, cameraOn, startCamera]);
+
+  // Guest join page: optionally auto-start the call after mount.
+  const autoStartTriedRef = useRef(false);
+  useEffect(() => {
+    if (!autoStart || autoStartTriedRef.current || state !== "idle") return;
+    if (requireCamera && (visionEnabled || visionLiveEnabled)) return; // wait for camera
+    autoStartTriedRef.current = true;
+    void start();
+  }, [autoStart, state, requireCamera, visionEnabled, visionLiveEnabled, start]);
 
   useEffect(() => () => { doneRef.current = true; teardown(); }, [teardown]);
   useEffect(() => { scrollEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [lines]);

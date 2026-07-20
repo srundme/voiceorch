@@ -1151,21 +1151,41 @@ router.get("/calls/:id/logs", requireAuth, async (req, res) => {
 });
 
 // ── POST /calls/:id/media — upload a still image for agent vision ───────────
-router.post("/calls/:id/media", requireAuth, async (req, res): Promise<void> => {
+// Auth: session JWT (owner Live Test) OR X-Webcall-Share (guest join link).
+router.post("/calls/:id/media", async (req, res): Promise<void> => {
   const callId = parseInt(String(req.params.id), 10);
   if (!Number.isFinite(callId)) {
     res.status(400).json({ error: "Invalid call id" });
     return;
   }
-  const clerkId = (req as any).clerkUserId as string;
   const [call] = await db.select().from(callsTable).where(eq(callsTable.id, callId));
   if (!call) {
     res.status(404).json({ error: "Call not found" });
     return;
   }
-  if (call.userId && call.userId !== clerkId) {
-    res.status(403).json({ error: "Forbidden" });
-    return;
+
+  const shareHeader = String(req.headers["x-webcall-share"] ?? "").trim();
+  let uploaderId: string | null = null;
+
+  if (shareHeader) {
+    const { resolveShareTokenForWebcall } = await import("../services/webcall-links.js");
+    const resolved = await resolveShareTokenForWebcall(shareHeader, call.agentId);
+    if (!resolved.ok) {
+      res.status(resolved.status).json({ error: resolved.error });
+      return;
+    }
+    uploaderId = resolved.ownerUserId;
+  } else {
+    const clerkId = (req as any).clerkUserId as string | undefined;
+    if (!clerkId) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+    if (call.userId && call.userId !== clerkId) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+    uploaderId = clerkId;
   }
 
   const body = (req.body ?? {}) as Record<string, unknown>;
@@ -1191,14 +1211,14 @@ router.post("/calls/:id/media", requireAuth, async (req, res): Promise<void> => 
     const row = await storeCallMedia({
       callId,
       agentId: call.agentId,
-      userId: clerkId,
+      userId: uploaderId,
       phone: call.toNumber ?? call.fromNumber ?? null,
-      source: "upload",
+      source: shareHeader ? "webcall" : "upload",
       mimeType,
       fileName,
       buffer,
     });
-    notifySessionIncomingMedia(callId, row.id, { source: "upload", mimeType: row.mimeType });
+    notifySessionIncomingMedia(callId, row.id, { source: shareHeader ? "webcall" : "upload", mimeType: row.mimeType });
     res.status(201).json({
       mediaId: row.id,
       url: `/api/storage/call-media/${row.id}`,

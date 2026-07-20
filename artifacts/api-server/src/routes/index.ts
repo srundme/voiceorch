@@ -79,6 +79,7 @@ import workflowsPublicRouter from "./workflows-public.js";
 import sheetsRouter from "./sheets.js";
 import sheetAutoCallsRouter from "./sheet-auto-calls.js";
 import whatsappRouter from "./whatsapp.js";
+import webcallLinksRouter from "./webcall-links.js";
 import { provisionUser } from "../middlewares/userProvisioning.js";
 
 const router: IRouter = Router();
@@ -107,6 +108,8 @@ router.use(adminEventFeedbackRouter);
 router.use(campaignWebhookRouter);
 // Public WhatsApp Request-a-Call webhook (also mounts authenticated CRUD under /whatsapp/*)
 router.use(whatsappRouter);
+// Public webcall join metadata + authenticated link CRUD
+router.use(webcallLinksRouter);
 
 
 // Public docs routes — changelog API (no session required)

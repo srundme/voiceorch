@@ -1,5 +1,6 @@
 // trigger rebuild — campaigns list CSV export button (dashboard Vite bundle)
 import http from "http";
+import { randomBytes } from "crypto";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { WebSocketServer } from "ws";
@@ -90,10 +91,10 @@ function isWsRateLimited(ip: string): boolean {
 server.on("upgrade", (request, socket, head) => { void (async () => {
   const url = request.url ?? "";
 
-  // Redact the session JWT (and any future secret query params) before ANY logging
-  // — the webcall transport carries ?token=<JWT> which must never reach the logs,
+  // Redact the session JWT / share token before ANY logging
+  // — the webcall transport carries ?token= / ?share= which must never reach the logs,
   // including the rate-limit warning below.
-  const safeUrl = url.replace(/([?&](?:token|auth)=)[^&]*/gi, "$1[redacted]");
+  const safeUrl = url.replace(/([?&](?:token|auth|share)=)[^&]*/gi, "$1[redacted]");
 
   // Match /api/ws/<provider>/<agentId>[?pt=1]
   const match = url.match(/^\/api\/ws\/(twilio|plivo|vobiz|webcall)\/(\d+)/);
@@ -154,59 +155,98 @@ server.on("upgrade", (request, socket, head) => { void (async () => {
   // platform number. Absent → inbound (the provider dialed us).
   const callDirection: "inbound" | "outbound" = qs.get("dir") === "out" ? "outbound" : "inbound";
 
-  // ── Webcall auth (browser "Live Test") ──────────────────────────────────────
-  // Unlike telephony providers (which are inbound from the provider and cannot
-  // present a bearer token), the browser CAN authenticate. Require a valid session
-  // JWT in ?token= AND that the authenticated user owns the agent — enforced BEFORE
-  // handleUpgrade so an unauthorized request never allocates a session/socket.
+  // ── Webcall auth (browser Live Test OR shareable guest link) ────────────────
+  // Live Test: ?token=<session JWT> — user must own the agent.
+  // Guest join: ?share=<webcall_links.token> — bills the agent owner.
   let webcallUserId: string | null = null;
+  let webcallGuestKey: string | null = null;
+  let webcallShareLinkId: number | null = null;
   if (provider === "webcall") {
-    const token   = qs.get("token");
-    const payload = token ? verifySessionToken(token) : null;
-    if (!payload) {
-      socket.write("HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\n\r\n");
-      socket.destroy();
-      return;
-    }
-    let agentRow: { userId: string | null } | undefined;
-    try {
-      const rows = await db
-        .select({ userId: agentsTable.userId })
-        .from(agentsTable)
-        .where(eq(agentsTable.id, agentId));
-      agentRow = rows[0];
-    } catch (err) {
-      logger.error({ err, agentId }, "Webcall upgrade — agent ownership lookup failed");
-      socket.write("HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\n\r\n");
-      socket.destroy();
-      return;
-    }
-    if (!agentRow || agentRow.userId !== payload.sub) {
-      logger.warn({ agentId, sub: payload.sub }, "Webcall upgrade rejected — agent ownership mismatch");
-      socket.write("HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n");
-      socket.destroy();
-      return;
-    }
-    // Balance gate — must match the REST POST /calls check
-    try {
-      const walletRows = await db
-        .select({ walletBalanceCents: usersTable.walletBalanceCents })
-        .from(usersTable)
-        .where(eq(usersTable.clerkId, payload.sub));
-      const walletUser = walletRows[0];
-      if (walletUser && walletUser.walletBalanceCents <= 0) {
-        logger.warn({ agentId, sub: payload.sub }, "Webcall upgrade rejected — insufficient balance");
-        socket.write("HTTP/1.1 402 Payment Required\r\nContent-Type: application/json\r\nContent-Length: 63\r\n\r\n{\"error\":\"Insufficient balance. Please top up your wallet.\"}");
+    const shareToken = qs.get("share");
+    const sessionToken = qs.get("token");
+
+    if (shareToken) {
+      try {
+        const { resolveShareTokenForWebcall, recordWebcallLinkUse } = await import("./services/webcall-links.js");
+        const resolved = await resolveShareTokenForWebcall(shareToken, agentId);
+        if (!resolved.ok) {
+          const body = JSON.stringify({ error: resolved.error });
+          socket.write(
+            `HTTP/1.1 ${resolved.status} Error\r\nContent-Type: application/json\r\nContent-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`,
+          );
+          socket.destroy();
+          return;
+        }
+        // Owner wallet gate (guest does not pay)
+        const walletRows = await db
+          .select({ walletBalanceCents: usersTable.walletBalanceCents })
+          .from(usersTable)
+          .where(eq(usersTable.clerkId, resolved.ownerUserId));
+        const walletUser = walletRows[0];
+        if (walletUser && walletUser.walletBalanceCents <= 0) {
+          logger.warn({ agentId, owner: resolved.ownerUserId }, "Webcall share rejected — owner insufficient balance");
+          socket.write("HTTP/1.1 402 Payment Required\r\nContent-Type: application/json\r\nContent-Length: 63\r\n\r\n{\"error\":\"Insufficient balance. Please top up your wallet.\"}");
+          socket.destroy();
+          return;
+        }
+        webcallUserId = resolved.ownerUserId;
+        webcallGuestKey = `guest-${resolved.link.id}-${randomBytes(4).toString("hex")}`;
+        webcallShareLinkId = resolved.link.id;
+        void recordWebcallLinkUse(resolved.link.id).catch((err) =>
+          logger.warn({ err, linkId: resolved.link.id }, "Failed to bump webcall link useCount"),
+        );
+      } catch (err) {
+        logger.error({ err, agentId }, "Webcall share upgrade failed");
+        socket.write("HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\n\r\n");
         socket.destroy();
         return;
       }
-    } catch (err) {
-      logger.error({ err, agentId }, "Webcall upgrade — wallet balance check failed");
-      socket.write("HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\n\r\n");
-      socket.destroy();
-      return;
+    } else {
+      const payload = sessionToken ? verifySessionToken(sessionToken) : null;
+      if (!payload) {
+        socket.write("HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\n\r\n");
+        socket.destroy();
+        return;
+      }
+      let agentRow: { userId: string | null } | undefined;
+      try {
+        const rows = await db
+          .select({ userId: agentsTable.userId })
+          .from(agentsTable)
+          .where(eq(agentsTable.id, agentId));
+        agentRow = rows[0];
+      } catch (err) {
+        logger.error({ err, agentId }, "Webcall upgrade — agent ownership lookup failed");
+        socket.write("HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\n\r\n");
+        socket.destroy();
+        return;
+      }
+      if (!agentRow || agentRow.userId !== payload.sub) {
+        logger.warn({ agentId, sub: payload.sub }, "Webcall upgrade rejected — agent ownership mismatch");
+        socket.write("HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n");
+        socket.destroy();
+        return;
+      }
+      try {
+        const walletRows = await db
+          .select({ walletBalanceCents: usersTable.walletBalanceCents })
+          .from(usersTable)
+          .where(eq(usersTable.clerkId, payload.sub));
+        const walletUser = walletRows[0];
+        if (walletUser && walletUser.walletBalanceCents <= 0) {
+          logger.warn({ agentId, sub: payload.sub }, "Webcall upgrade rejected — insufficient balance");
+          socket.write("HTTP/1.1 402 Payment Required\r\nContent-Type: application/json\r\nContent-Length: 63\r\n\r\n{\"error\":\"Insufficient balance. Please top up your wallet.\"}");
+          socket.destroy();
+          return;
+        }
+      } catch (err) {
+        logger.error({ err, agentId }, "Webcall upgrade — wallet balance check failed");
+        socket.write("HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\n\r\n");
+        socket.destroy();
+        return;
+      }
+      webcallUserId = payload.sub;
     }
-    webcallUserId = payload.sub;
   }
 
   wss.handleUpgrade(request, socket, head, (ws: import("ws").WebSocket) => {
@@ -215,7 +255,7 @@ server.on("upgrade", (request, socket, head) => { void (async () => {
       case "twilio":   void handleTwilioWebSocket(ws, agentId, campaignLeadId, callDirection, vobizCallbackId);                       break;
       case "plivo":    void handlePlivoWebSocket(ws, agentId, campaignLeadId, callDirection, vobizCallbackId);                        break;
       case "vobiz":    void handleVobizWebSocket(ws, agentId, platformTelephony, campaignLeadId, vobizFrom, vobizTo, voicemailDelivery, vobizCallUuid, callDirection, vobizCorrToken, vobizCallbackId, vobizAnsweredAt, amdMachineHint, amdArmed); break;
-      case "webcall":  void handleWebcallWebSocket(ws, agentId, webcallUserId!);                                                     break;
+      case "webcall":  void handleWebcallWebSocket(ws, agentId, webcallUserId!, webcallGuestKey ? { guestKey: webcallGuestKey, linkId: webcallShareLinkId } : undefined); break;
     }
   });
 })(); });

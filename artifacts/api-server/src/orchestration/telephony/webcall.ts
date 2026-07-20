@@ -35,6 +35,7 @@ export async function handleWebcallWebSocket(
   ws: WebSocket,
   agentId: number,
   userId: string,
+  opts?: { guestKey?: string; linkId?: number | null },
 ): Promise<void> {
   let sessionId: string | null = null;
   // The socket can close / error / send "end" while createSession is still
@@ -45,6 +46,7 @@ export async function handleWebcallWebSocket(
   // Guards against ending the same session twice (e.g. client sends "end" and
   // then the socket closes). endSession is idempotent, but this avoids the noise.
   let ending = false;
+  const guestKey = opts?.guestKey?.trim() || null;
 
   function sendJson(obj: unknown): void {
     if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(obj));
@@ -142,8 +144,9 @@ export async function handleWebcallWebSocket(
       telephonyProvider: "webcall",
       // Synthetic identifiers: session.ts maps "webcall-user-<id>" → "webcall:user_<id>"
       // so caller memory IS captured per authenticated user (not skipped).
+      // Guests use webcall-guest-* so they don't collide with the agent owner's memory.
       toNumber: `webcall-agent-${agentId}`,
-      fromNumber: `webcall-user-${userId}`,
+      fromNumber: guestKey ? `webcall-${guestKey}` : `webcall-user-${userId}`,
       rawPcmOutput: true,
       onAudioOut: sendAudio,
       onCallEnd: () => { ending = true; sendJson({ type: "call_end" }); ws.close(); },
@@ -157,7 +160,7 @@ export async function handleWebcallWebSocket(
       return;
     }
     sendJson({ type: "ready", callId: getSession(sid)?.callId ?? null });
-    logger.info({ sessionId, agentId, userId }, "Webcall session started");
+    logger.info({ sessionId, agentId, userId, guest: !!guestKey, linkId: opts?.linkId ?? null }, "Webcall session started");
   } catch (err) {
     const reason = toReadableError(err, "Webcall session setup failed");
     logger.error({ err, agentId, userId, reason }, "Failed to create webcall session");

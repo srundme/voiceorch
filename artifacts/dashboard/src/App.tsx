@@ -48,6 +48,7 @@ import SchedulingAvailabilityPage from "@/pages/scheduling/Availability";
 import SchedulingBookingDetailPage from "@/pages/scheduling/Bookings";
 import SchedulingConferencingPage from "@/pages/scheduling/Conferencing";
 import PublicBookingPage from "@/pages/book/[slug]";
+import WebcallJoinPage from "@/pages/join/[token]";
 import WorkshopFormPage from "@/pages/workshop/[slug]";
 import CancelBookingPage from "@/pages/book/cancel";
 import RescheduleBookingPage from "@/pages/book/reschedule";
@@ -377,6 +378,7 @@ function Router() {
           <Route path="/book/cancel" component={CancelBookingPage} />
           <Route path="/book/reschedule" component={RescheduleBookingPage} />
           <Route path="/book/:slug" component={PublicBookingPage} />
+          <Route path="/join/:token" component={WebcallJoinPage} />
           <Route path="/workshop/:slug" component={WorkshopFormPage} />
           <Route path="/docs" component={DocsPage} />
           <Route path="/docs/api-reference/:op" component={DocsPage} />
