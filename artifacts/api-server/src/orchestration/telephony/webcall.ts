@@ -105,11 +105,16 @@ export async function handleWebcallWebSocket(
       return;
     }
     // Text = control message.
-    let msg: { type?: string };
-    try { msg = JSON.parse(raw.toString()) as { type?: string }; } catch { return; }
+    let msg: { type?: string; data?: string; mimeType?: string };
+    try { msg = JSON.parse(raw.toString()) as { type?: string; data?: string; mimeType?: string }; } catch { return; }
     if (msg.type === "end") {
       logger.info({ sessionId, agentId }, "Webcall client requested end");
       requestEnd();
+      return;
+    }
+    if (msg.type === "video_frame" && typeof msg.data === "string" && sessionId) {
+      const session = getSession(sessionId);
+      session?.pipeline.onVideoFrame?.(msg.data, msg.mimeType ?? "image/jpeg");
     }
   });
 
@@ -151,7 +156,7 @@ export async function handleWebcallWebSocket(
       await endSession(sessionId);
       return;
     }
-    sendJson({ type: "ready" });
+    sendJson({ type: "ready", callId: getSession(sid)?.callId ?? null });
     logger.info({ sessionId, agentId, userId }, "Webcall session started");
   } catch (err) {
     const reason = toReadableError(err, "Webcall session setup failed");

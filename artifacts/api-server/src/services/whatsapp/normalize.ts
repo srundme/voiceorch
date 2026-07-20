@@ -8,6 +8,15 @@ export type WhatsappInboundEvent = {
   event: string;
   buttonId?: string;
   waMessageId?: string;
+  /** Present when the inbound message is an image (or image document). */
+  media?: {
+    kind: "image" | "document";
+    mimeType?: string;
+    mediaId?: string;
+    url?: string;
+    caption?: string;
+    fileName?: string;
+  };
   raw: Record<string, unknown>;
 };
 
@@ -139,16 +148,44 @@ function extractFromMetaCloud(body: Record<string, unknown>): Partial<WhatsappIn
   const buttonReply = asRecord(interactive?.["button_reply"] ?? null);
   const button = asRecord(msg?.["button"] ?? null);
   const profile = asRecord(contact?.["profile"] ?? null);
+  const image = asRecord(msg?.["image"] ?? null);
+  const document = asRecord(msg?.["document"] ?? null);
+  const msgType = pickString(msg?.["type"]);
 
   const phone = pickString(msg?.["from"], contact?.["wa_id"]);
   if (!phone) return null;
+
+  let media: WhatsappInboundEvent["media"] | undefined;
+  if (msgType === "image" || image) {
+    media = {
+      kind: "image",
+      mimeType: pickString(image?.["mime_type"], image?.["mimeType"]) ?? "image/jpeg",
+      mediaId: pickString(image?.["id"]),
+      url: pickString(image?.["url"], image?.["link"]),
+      caption: pickString(image?.["caption"]),
+      fileName: pickString(image?.["filename"]),
+    };
+  } else if (msgType === "document" || document) {
+    const mime = pickString(document?.["mime_type"], document?.["mimeType"]) ?? "";
+    if (mime.startsWith("image/") || /\.(jpe?g|png|webp|gif)$/i.test(pickString(document?.["filename"]) ?? "")) {
+      media = {
+        kind: "document",
+        mimeType: mime || "image/jpeg",
+        mediaId: pickString(document?.["id"]),
+        url: pickString(document?.["url"], document?.["link"]),
+        caption: pickString(document?.["caption"]),
+        fileName: pickString(document?.["filename"]),
+      };
+    }
+  }
 
   return {
     phone,
     name: pickString(profile?.["name"]),
     buttonId: pickString(buttonReply?.["id"], buttonReply?.["title"], button?.["payload"], button?.["text"]),
     waMessageId: pickString(msg?.["id"]),
-    event: "request_call",
+    event: media ? "image" : "request_call",
+    media,
   };
 }
 
@@ -168,6 +205,7 @@ export function normalizeWhatsappInbound(body: unknown): WhatsappInboundEvent | 
       event: meta.event ?? "request_call",
       buttonId: meta.buttonId,
       waMessageId: meta.waMessageId,
+      media: meta.media,
       raw: root,
     };
   }
@@ -176,12 +214,28 @@ export function normalizeWhatsappInbound(body: unknown): WhatsappInboundEvent | 
   const phone = extractPhone(flat);
   if (!phone) return null;
 
+  // Generic BSP image fields
+  let media: WhatsappInboundEvent["media"] | undefined;
+  const mediaUrl = pickString(flat["media_url"], flat["mediaUrl"], flat["image_url"], flat["imageUrl"]);
+  const mediaMime = pickString(flat["mime_type"], flat["mimeType"], flat["content_type"]);
+  if (mediaUrl || pickString(flat["type"]) === "image") {
+    media = {
+      kind: "image",
+      mimeType: mediaMime ?? "image/jpeg",
+      url: mediaUrl,
+      mediaId: pickString(flat["media_id"], flat["mediaId"]),
+      caption: pickString(flat["caption"], flat["text"], flat["body"]),
+      fileName: pickString(flat["filename"], flat["file_name"]),
+    };
+  }
+
   return {
     phone,
     name: extractName(flat),
-    event: extractEvent(flat),
+    event: media ? "image" : extractEvent(flat),
     buttonId: extractButtonId(flat),
     waMessageId: pickString(flat["wa_message_id"], flat["waMessageId"], flat["message_id"], flat["messageId"]),
+    media,
     raw: root,
   };
 }

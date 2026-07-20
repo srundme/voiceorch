@@ -37,4 +37,10 @@ export interface VoiceSession {
   /** Classic uses full AMD/media-drop hooks; Live provides no-op stubs in v1. */
   noteMediaDropIfWaitingForReply(): void;
   onExternalAmdSignal(verdict: "machine" | "human", source: string): void;
+
+  /** Optional: still-image arrived mid-call (WhatsApp / upload). */
+  notifyIncomingMedia?(mediaId: number, meta?: { source?: string; mimeType?: string }): void;
+
+  /** Optional: webcall camera JPEG frame for Gemini Live vision. */
+  onVideoFrame?(jpegBase64: string, mimeType?: string): void;
 }

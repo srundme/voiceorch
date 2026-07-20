@@ -1060,6 +1060,36 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
                 />
               )} />
             </div>
+            <div className="flex items-center justify-between border-t border-border pt-2 mt-1">
+              <div>
+                <p className="text-[10px] font-medium text-foreground/80">Vision</p>
+                <p className="text-[9px] text-muted-foreground">
+                  See and analyze WhatsApp / uploaded photos mid-call (analyze_image).
+                </p>
+              </div>
+              <FormField control={form.control} name="visionEnabled" render={({ field }) => (
+                <Switch
+                  checked={field.value ?? false}
+                  onCheckedChange={(v) => field.onChange(v)}
+                />
+              )} />
+            </div>
+            {isGeminiLive && (
+              <div className="flex items-center justify-between border-t border-border pt-2 mt-1">
+                <div>
+                  <p className="text-[10px] font-medium text-foreground/80">Live camera</p>
+                  <p className="text-[9px] text-muted-foreground">
+                    Stream webcall camera into Gemini Live.
+                  </p>
+                </div>
+                <FormField control={form.control} name="visionLiveEnabled" render={({ field }) => (
+                  <Switch
+                    checked={field.value ?? false}
+                    onCheckedChange={(v) => field.onChange(v)}
+                  />
+                )} />
+              </div>
+            )}
           </EditConfigDialog>
 
           {/* ── Model dialog ── */}
@@ -2535,6 +2565,17 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
             <Button type="button" variant="outline" size="sm" className="h-7 text-xs"
               onClick={() => append({ type: "webhook", name: "custom_action", description: "Invoke when caller requests a specific action.", url: "", method: "POST", secret: "", preToolMessage: "One moment…", parameters: [] })}>
               <Webhook className="h-3.5 w-3.5 mr-1" /> Custom Function
+            </Button>
+            <Button type="button" variant="outline" size="sm" className="h-7 text-xs"
+              onClick={() => {
+                append({
+                  type: "analyze_image",
+                  name: "analyze_image",
+                  description: "Analyze a photo the caller sent (damage, ID, invoice, form). Use media_id or use_latest=true.",
+                });
+                form.setValue("visionEnabled", true);
+              }}>
+              <Wrench className="h-3.5 w-3.5 mr-1" /> Vision
             </Button>
           </div>
         </div>
@@ -5184,6 +5225,7 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
       voicemailMessage: "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.",
       voicemailLeadInSeconds: 2,
       tools: [], genderDetectionEnabled: false, voiceMemoryEnabled: false, recordingEnabled: true, languageAutoDetect: false,
+      visionEnabled: false, visionLiveEnabled: false,
       autoSwitchToEnglish: false,
       startSpeakingWaitSecs: 0, startSpeakingOnPunctuationSecs: 0.1,
       startSpeakingOnNoPunctuationSecs: 0.1, startSpeakingOnNumberSecs: 0,
@@ -5278,6 +5320,8 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
       voiceMemoryEnabled:       (agent as any).agentConfig?.voiceMemoryEnabled ?? false,
       recordingEnabled:         (agent as any).agentConfig?.recordingEnabled ?? false,
       languageAutoDetect:       (agent as any).agentConfig?.languageAutoDetect ?? false,
+      visionEnabled:            (agent as any).agentConfig?.visionEnabled ?? false,
+      visionLiveEnabled:        (agent as any).agentConfig?.visionLiveEnabled ?? false,
       autoSwitchToEnglish:      (agent as any).agentConfig?.autoSwitchToEnglish ?? false,
       startSpeakingWaitSecs:            (agent as any).agentConfig?.startSpeakingPlan?.waitSeconds            ?? 0,
       startSpeakingOnPunctuationSecs:   (agent as any).agentConfig?.startSpeakingPlan?.onPunctuationSeconds   ?? 0.1,
@@ -5585,7 +5629,14 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
             "md:inset-auto md:bottom-4 md:right-4 md:w-[420px] md:h-[560px] md:rounded-2xl",
           )}
         >
-          <WebcallPanel agentId={agent.id} agentName={agent.name ?? "Agent"} compact onClose={() => setShowWebcall(false)} />
+          <WebcallPanel
+            agentId={agent.id}
+            agentName={agent.name ?? "Agent"}
+            compact
+            onClose={() => setShowWebcall(false)}
+            visionEnabled={!!(agent as any).agentConfig?.visionEnabled}
+            visionLiveEnabled={!!(agent as any).agentConfig?.visionLiveEnabled}
+          />
         </div>
       )}
 

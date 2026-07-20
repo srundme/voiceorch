@@ -38,6 +38,10 @@ import { appendTraiDisclosure, scanForOptOut } from "../services/trai/index.js";
 import { appendDpdpDisclosure, scanAndRedactPII } from "../services/dpdp/index.js";
 import { appendIrdaiAiDisclosure } from "../services/irdai/index.js";
 import { appendGuardrails, redactTranscriptPII } from "../services/guardrails.js";
+import { phonesMatch } from "../services/google-sheets-helpers.js";
+import {
+  attachPendingMediaToCall,
+} from "../services/call-media.js";
 import { resolveBillableDurationSeconds } from "./billable-duration.js";
 import { scheduleNetworkDropCallback } from "../services/autoRedial.js";
 import { refillCampaignForLead } from "../services/batchScheduler.js";
@@ -282,10 +286,25 @@ export async function createSession(params: {
     : [];
 
   // Parse tools JSON column (null-safe, type-cast to AgentTool[])
-  const tools = Array.isArray(agent.tools) ? (agent.tools as unknown as AgentTool[]) : [];
+  let tools = Array.isArray(agent.tools) ? (agent.tools as unknown as AgentTool[]) : [];
 
   // Read agentConfig JSONB for advanced settings
   const agentCfg = (agent.agentConfig ?? {}) as Record<string, unknown>;
+
+  // Vision: auto-attach analyze_image when enabled (unless already present).
+  if (agentCfg["visionEnabled"] === true && !tools.some((t) => t.type === "analyze_image")) {
+    tools = [
+      ...tools,
+      {
+        type: "analyze_image",
+        name: "analyze_image",
+        description:
+          "Analyze a photo or document the caller sent (WhatsApp, upload, or URL). " +
+          "Use for damage assessment, IDs, invoices, forms, or any visual evidence. " +
+          "When an image just arrived, call with media_id or use_latest=true.",
+      },
+    ];
+  }
 
   // AMD (voicemail) config — read once, used by both the voicemail-delivery config
   // and the acoustic-confirmation config below. Default action is "hangup" (never
@@ -439,6 +458,16 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
   // Conversation discipline — force one-step-at-a-time delivery, turn yielding
   // on "wait for response" markers, and resume-after-objection place-keeping.
   effectiveSystemPrompt += `\n\n${CONVERSATION_DISCIPLINE_BLOCK}`;
+
+  // Vision / claim-flow guidance — ask for photo → analyze_image → confirm aloud.
+  if (agentCfg["visionEnabled"] === true) {
+    effectiveSystemPrompt +=
+      `\n\n[VISION] You can see photos the caller sends (WhatsApp or mid-call upload) via the analyze_image tool. ` +
+      `When you need visual evidence (vehicle damage, ID, invoice, form, or any claim document): ` +
+      `(1) ask them to send a clear photo on WhatsApp or upload it, ` +
+      `(2) when an image arrives or they confirm they sent it, call analyze_image with media_id or use_latest=true, ` +
+      `(3) confirm concrete findings aloud in plain spoken language — never invent details you have not seen.`;
+  }
 
   // P1-K: Inject regulatory compliance disclosures into the system prompt
   const complianceCfg = agentCfg["compliance"] as { irdai?: boolean; dpdp?: boolean; trai?: boolean } | undefined;
@@ -641,6 +670,8 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
           ),
         }
       : null,
+    visionEnabled: agentCfg["visionEnabled"] === true,
+    visionLiveEnabled: agentCfg["visionLiveEnabled"] === true,
   };
   // Propagate endpointing silence into STTConfig so Azure adapter picks it up
   agentConfig.sttConfig.endpointingSilenceMs = agentConfig.asrEndpointingSilenceMs;
@@ -1879,6 +1910,26 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     sourceCallbackReason: params.sourceCallbackReason ?? null,
   });
 
+  // Attach any WhatsApp/upload images staged for this phone before the dial.
+  if (callerPhone && agentCfg["visionEnabled"] === true) {
+    void attachPendingMediaToCall(callRecord.id, params.agentId, callerPhone)
+      .then((attached) => {
+        if (!attached.length) return;
+        const ids = attached.map((m) => m.id).join(", ");
+        const note =
+          `[System] ${attached.length} image(s) were received before this call (media_id=${ids}). ` +
+          `Call analyze_image with media_id or use_latest=true when you need to see them.`;
+        const s = sessions.get(sessionId);
+        s?.pipeline.notifyIncomingMedia?.(attached[0]!.id, { source: attached[0]!.source, mimeType: attached[0]!.mimeType });
+        // Extra ids beyond the first: also notify
+        for (const m of attached.slice(1)) {
+          s?.pipeline.notifyIncomingMedia?.(m.id, { source: m.source, mimeType: m.mimeType });
+        }
+        logger.info({ callId: callRecord.id, mediaIds: ids, note: note.slice(0, 80) }, "Attached pending call media");
+      })
+      .catch((err) => logger.warn({ err, callId: callRecord.id }, "Failed to attach pending call media"));
+  }
+
   // Persist initial session metadata to Redis
   void saveSessionMeta(sessionId, {
     callId: callRecord.id,
@@ -1967,6 +2018,30 @@ export function getSessionByCallId(callDbId: number): ActiveSession | undefined 
     if (session.callId === callDbId) return session;
   }
   return undefined;
+}
+
+/** Find an in-progress session by caller phone (for WhatsApp image attach). */
+export function findActiveSessionByPhone(
+  phone: string,
+  agentId?: number,
+): ActiveSession | undefined {
+  for (const session of sessions.values()) {
+    if (agentId != null && session.agentId !== agentId) continue;
+    if (session.callerPhone && phonesMatch(session.callerPhone, phone)) return session;
+  }
+  return undefined;
+}
+
+/** Notify a live session that a still image arrived (WhatsApp / upload). */
+export function notifySessionIncomingMedia(
+  callId: number,
+  mediaId: number,
+  meta?: { source?: string; mimeType?: string },
+): boolean {
+  const session = getSessionByCallId(callId);
+  if (!session?.pipeline.notifyIncomingMedia) return false;
+  session.pipeline.notifyIncomingMedia(mediaId, meta);
+  return true;
 }
 
 /** Find the LIVE session by its provider-side call id (e.g. the VoBiz answer-webhook

@@ -59,6 +59,7 @@ import { toZonedTime, formatInTimeZone } from "date-fns-tz";
 import { db, bookingsTable, eventTypesTable, schedulingCalendarsTable, agentsTable, platformSettingsTable } from "@workspace/db";
 import { scheduleCallbackRequested } from "../services/autoRedial.js";
 import { resolveCallbackTime } from "../lib/tz-datetime.js";
+import { executeAnalyzeImage } from "../services/vision-analyze.js";
 import { eq, and, or, sql } from "drizzle-orm";
 import { getAvailableSlots } from "../services/scheduling/slot-engine.js";
 import type { TimeSlot } from "../services/scheduling/slot-engine.js";
@@ -4848,6 +4849,8 @@ export class OrchestrationPipeline implements VoiceSession {
         logger.info({ callId: this.config.callId, count: this.pendingListedBookings.length }, "Multiple bookings listed — activeRescheduleBooking deferred until booking_id is known");
       }
       return result;
+    } else if (tool.type === "analyze_image") {
+      return await this.executeAnalyzeImage(args);
     }
     return undefined;
   }
@@ -4953,6 +4956,28 @@ export class OrchestrationPipeline implements VoiceSession {
       await this.speakRaw(goodbye);
     }
     this.config.onCallEnd();
+  }
+
+  private async executeAnalyzeImage(args: Record<string, unknown>): Promise<string> {
+    return executeAnalyzeImage({
+      callId: this.config.callId,
+      agentId: this.agent.id,
+      userId: null,
+      phone: this.config.callerPhone ?? null,
+      args,
+    });
+  }
+
+  /** WhatsApp / upload delivered an image during this call — nudge the LLM. */
+  notifyIncomingMedia(mediaId: number, meta?: { source?: string; mimeType?: string }): void {
+    const src = meta?.source ?? "upload";
+    const note =
+      `[System] The caller just sent an image via ${src} (media_id=${mediaId}` +
+      `${meta?.mimeType ? `, ${meta.mimeType}` : ""}). ` +
+      `Call the analyze_image tool with media_id=${mediaId} (or use_latest=true) to see it, then describe findings to the caller.`;
+    this.conversationHistory.appendUser(note);
+    this.config.onTranscript("user", `[Image received: media_id=${mediaId}]`);
+    logger.info({ callId: this.config.callId, mediaId, source: src }, "Pipeline: incoming media notified");
   }
 
   private async executeCalCom(tool: AgentTool & { type: "cal_com" }, args: Record<string, unknown>): Promise<void> {

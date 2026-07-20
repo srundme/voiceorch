@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Mic, MicOff, PhoneOff, Phone, Loader2, AlertCircle, X } from "lucide-react";
+import { Mic, MicOff, PhoneOff, Phone, Loader2, AlertCircle, X, Camera, ImagePlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 /**
@@ -11,6 +11,10 @@ import { Button } from "@/components/ui/button";
  * flush, tail-drain) lives in the shared server pipeline — this component is a
  * pure transport + UI shell. Browser echo cancellation (getUserMedia
  * echoCancellation) keeps the agent's own voice out of the mic.
+ *
+ * Optional vision:
+ *   • visionLiveEnabled — stream ~2 fps JPEG frames for Gemini Live
+ *   • visionEnabled — upload a still photo mid-call for analyze_image
  */
 
 type CallState = "idle" | "connecting" | "live" | "ending" | "error";
@@ -38,28 +42,62 @@ registerProcessor('pcm-capture', PcmCaptureProcessor);
 // Target wire rate for mic audio. The server downsamples this 2:1 to 8 kHz.
 const TARGET_RATE = 16000;
 
-export function WebcallPanel({ agentId, agentName, compact, onClose }: { agentId: number; agentName: string; compact?: boolean; onClose?: () => void }) {
+export function WebcallPanel({
+  agentId,
+  agentName,
+  compact,
+  onClose,
+  visionLiveEnabled,
+  visionEnabled,
+}: {
+  agentId: number;
+  agentName: string;
+  compact?: boolean;
+  onClose?: () => void;
+  visionLiveEnabled?: boolean;
+  visionEnabled?: boolean;
+}) {
   const [state, setState]   = useState<CallState>("idle");
   const [error, setError]   = useState<string | null>(null);
   const [muted, setMuted]   = useState(false);
   const [lines, setLines]   = useState<Line[]>([]);
+  const [cameraOn, setCameraOn] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   const wsRef          = useRef<WebSocket | null>(null);
   const captureCtxRef  = useRef<AudioContext | null>(null);
   const playbackCtxRef = useRef<AudioContext | null>(null);
   const streamRef      = useRef<MediaStream | null>(null);
+  const videoStreamRef = useRef<MediaStream | null>(null);
+  const videoElRef     = useRef<HTMLVideoElement | null>(null);
+  const frameTimerRef  = useRef<number | null>(null);
   const workletRef     = useRef<AudioWorkletNode | null>(null);
   const sourceNodeRef  = useRef<MediaStreamAudioSourceNode | null>(null);
   const activeSources  = useRef<AudioBufferSourceNode[]>([]);
   const nextStartRef   = useRef(0);
   const lineIdRef      = useRef(0);
   const mutedRef       = useRef(false);
+  const callIdRef      = useRef<number | null>(null);
   // True once the call is intentionally finished or errored, so the ws.onclose
   // handler doesn't clobber the final UI state with an "idle" reset.
   const doneRef        = useRef(false);
   const scrollEndRef   = useRef<HTMLDivElement | null>(null);
 
+  const stopCamera = useCallback(() => {
+    if (frameTimerRef.current != null) {
+      window.clearInterval(frameTimerRef.current);
+      frameTimerRef.current = null;
+    }
+    videoStreamRef.current?.getTracks().forEach((t) => t.stop());
+    videoStreamRef.current = null;
+    if (videoElRef.current) {
+      videoElRef.current.srcObject = null;
+    }
+    setCameraOn(false);
+  }, []);
+
   const teardown = useCallback(() => {
+    stopCamera();
     try { wsRef.current?.close(); } catch { /* noop */ }
     wsRef.current = null;
     for (const s of activeSources.current) { try { s.stop(); } catch { /* noop */ } }
@@ -75,7 +113,8 @@ export function WebcallPanel({ agentId, agentName, compact, onClose }: { agentId
     try { void playbackCtxRef.current?.close(); } catch { /* noop */ }
     playbackCtxRef.current = null;
     nextStartRef.current = 0;
-  }, []);
+    callIdRef.current = null;
+  }, [stopCamera]);
 
   // Schedule one incoming 8 kHz PCM16 buffer onto the playback timeline.
   const enqueueAudio = useCallback((buf: ArrayBuffer) => {
@@ -235,6 +274,9 @@ export function WebcallPanel({ agentId, agentName, compact, onClose }: { agentId
         try { msg = JSON.parse(ev.data); } catch { return; }
         switch (msg.type) {
           case "ready":
+            if (typeof (msg as { callId?: number }).callId === "number") {
+              callIdRef.current = (msg as { callId: number }).callId;
+            }
             setState("live");
             break;
           case "transcript":
@@ -302,6 +344,81 @@ export function WebcallPanel({ agentId, agentName, compact, onClose }: { agentId
     });
   }, []);
 
+  const startCamera = useCallback(async () => {
+    if (!visionLiveEnabled || cameraOn) return;
+    try {
+      const vstream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment", width: { ideal: 640 }, height: { ideal: 480 } },
+        audio: false,
+      });
+      videoStreamRef.current = vstream;
+      if (videoElRef.current) {
+        videoElRef.current.srcObject = vstream;
+        void videoElRef.current.play().catch(() => {});
+      }
+      setCameraOn(true);
+      const canvas = document.createElement("canvas");
+      frameTimerRef.current = window.setInterval(() => {
+        const ws = wsRef.current;
+        const video = videoElRef.current;
+        if (!ws || ws.readyState !== WebSocket.OPEN || !video || video.readyState < 2) return;
+        const w = video.videoWidth || 320;
+        const h = video.videoHeight || 240;
+        canvas.width = Math.min(w, 640);
+        canvas.height = Math.round(canvas.width * (h / w));
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.55);
+        const b64 = dataUrl.split(",")[1];
+        if (!b64) return;
+        try {
+          ws.send(JSON.stringify({ type: "video_frame", data: b64, mimeType: "image/jpeg" }));
+        } catch { /* noop */ }
+      }, 500);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Camera permission denied");
+    }
+  }, [visionLiveEnabled, cameraOn]);
+
+  const uploadPhoto = useCallback(async (file: File) => {
+    const callId = callIdRef.current;
+    const token = localStorage.getItem("voiceorch:session");
+    if (!callId || !token || !visionEnabled) return;
+    setUploading(true);
+    try {
+      const buf = await file.arrayBuffer();
+      const bytes = new Uint8Array(buf);
+      let binary = "";
+      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]!);
+      const data = btoa(binary);
+      const resp = await fetch(`/api/calls/${callId}/media`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          mimeType: file.type || "image/jpeg",
+          fileName: file.name,
+          data,
+        }),
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({})) as { error?: string };
+        throw new Error(err.error || `Upload failed (${resp.status})`);
+      }
+      setLines((prev) => [
+        ...prev,
+        { id: lineIdRef.current++, speaker: "user", text: `[Photo uploaded: ${file.name}]` },
+      ]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Photo upload failed");
+    } finally {
+      setUploading(false);
+    }
+  }, [visionEnabled]);
+
   useEffect(() => () => { doneRef.current = true; teardown(); }, [teardown]);
   useEffect(() => { scrollEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [lines]);
 
@@ -324,7 +441,7 @@ export function WebcallPanel({ agentId, agentName, compact, onClose }: { agentId
             <p className="text-[10.5px] text-muted-foreground/60">
               {state === "idle"       && "Talk to your agent right in the browser"}
               {state === "connecting" && "Connecting…"}
-              {state === "live"       && "Connected — start speaking"}
+              {state === "live"       && (cameraOn ? "Connected — camera on" : "Connected — start speaking")}
               {state === "ending"     && "Ending call…"}
               {state === "error"      && "Call ended with an error"}
             </p>
@@ -335,6 +452,15 @@ export function WebcallPanel({ agentId, agentName, compact, onClose }: { agentId
             </button>
           )}
         </div>
+
+        {visionLiveEnabled && (
+          <video
+            ref={videoElRef}
+            muted
+            playsInline
+            className={cameraOn ? "w-full max-h-40 object-cover bg-black" : "hidden"}
+          />
+        )}
 
         {/* Transcript */}
         <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-2.5">
@@ -388,6 +514,33 @@ export function WebcallPanel({ agentId, agentName, compact, onClose }: { agentId
               >
                 {muted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
               </Button>
+              {visionLiveEnabled && (
+                <Button
+                  onClick={() => { if (cameraOn) stopCamera(); else void startCamera(); }}
+                  variant="outline"
+                  disabled={state !== "live"}
+                  className={"h-10 w-10 p-0 rounded-full border-border " + (cameraOn ? "bg-sky-500/10 text-sky-400" : "text-muted-foreground")}
+                  title={cameraOn ? "Stop camera" : "Start camera"}
+                >
+                  <Camera className="h-4 w-4" />
+                </Button>
+              )}
+              {visionEnabled && (
+                <label className={"h-10 w-10 inline-flex items-center justify-center rounded-full border border-border cursor-pointer " + (state !== "live" || uploading ? "opacity-40 pointer-events-none" : "text-muted-foreground hover:text-foreground")}>
+                  {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    disabled={state !== "live" || uploading}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) void uploadPhoto(f);
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
+              )}
               <Button
                 onClick={end}
                 disabled={state === "ending"}

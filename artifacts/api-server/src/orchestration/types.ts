@@ -47,6 +47,13 @@ export interface EndCallTool {
   goodbyeMessage?: string;
 }
 
+/** Analyze a still image (WhatsApp / upload / URL) via Gemini vision. */
+export interface AnalyzeImageTool {
+  type: "analyze_image";
+  name: string;
+  description: string;
+}
+
 /**
  * Sensible default farewell spoken when a call is ended by the AI (built-in
  * end_call tool or an end-call phrase) and the agent has no custom
@@ -169,7 +176,7 @@ export interface TransferAgentTool {
   targetAgentId: number;
 }
 
-export type AgentTool = CallTransferTool | WebhookTool | SendSmsTool | EndCallTool | CalComTool | NativeBookingTool | NativeRescheduleTool | NativeCancelTool | NativeCheckAvailabilityTool | NativeListBookingsTool | TransferColdTool | TransferWarmTool | TransferAgentTool;
+export type AgentTool = CallTransferTool | WebhookTool | SendSmsTool | EndCallTool | AnalyzeImageTool | CalComTool | NativeBookingTool | NativeRescheduleTool | NativeCancelTool | NativeCheckAvailabilityTool | NativeListBookingsTool | TransferColdTool | TransferWarmTool | TransferAgentTool;
 
 /** JSON Schema-compatible tool definition passed to LLM providers */
 export interface ToolDefinition {
@@ -408,6 +415,10 @@ export interface AgentConfig {
     voiceName: string;
     thinkingLevel: "minimal" | "low" | "medium" | "high";
   } | null;
+  /** Still-image vision tool (WhatsApp / upload). */
+  visionEnabled: boolean;
+  /** Webcall camera frames into Gemini Live sendRealtimeInput({ video }). */
+  visionLiveEnabled: boolean;
 }
 
 export interface ProviderKey {

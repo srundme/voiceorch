@@ -297,7 +297,7 @@ export interface DispositionField {
 }
 
 /**
- * Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, native_cancel, native_check_availability, native_list_bookings, transfer_cold, transfer_warm, or transfer_agent
+ * Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, native_cancel, native_check_availability, native_list_bookings, transfer_cold, transfer_warm, transfer_agent, or analyze_image
  */
 export type AgentToolType = typeof AgentToolType[keyof typeof AgentToolType];
 
@@ -316,6 +316,7 @@ export const AgentToolType = {
   transfer_cold: 'transfer_cold',
   transfer_warm: 'transfer_warm',
   transfer_agent: 'transfer_agent',
+  analyze_image: 'analyze_image',
 } as const;
 
 /**

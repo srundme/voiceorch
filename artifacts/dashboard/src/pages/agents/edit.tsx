@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useParams } from "wouter";
-import { ArrowLeft, Save, Bot, Plus, Trash2, PhoneForwarded, PhoneCall, Webhook, ChevronDown, ChevronUp, BookOpen, Sparkles, List, Pencil, X, ToggleLeft, ToggleRight, Calendar as CalendarIcon, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Save, Bot, Plus, Trash2, PhoneForwarded, PhoneCall, Webhook, ChevronDown, ChevronUp, BookOpen, Sparkles, List, Pencil, X, ToggleLeft, ToggleRight, Calendar as CalendarIcon, AlertTriangle, Eye } from "lucide-react";
 import {
   useGetAgent,
   useUpdateAgent,
@@ -91,7 +91,7 @@ export type { AgentFormValues } from "./edit.schema";
 export function buildUpdateAgentPayload(data: AgentFormValues) {
   const {
     webhookSecret, promptVariables, vadSilenceMs, bargeInEnabled, bargeInEnergyThreshold, bargeInMinFrames, micSensitivity,
-    timezone, autoSwitchToEnglish, languageAutoDetect, machineDetectionMode, voicemailAction, voicemailMessage, voicemailLeadInSeconds, genderDetectionEnabled, voiceMemoryEnabled, recordingEnabled,
+    timezone, autoSwitchToEnglish, languageAutoDetect, visionEnabled, visionLiveEnabled, machineDetectionMode, voicemailAction, voicemailMessage, voicemailLeadInSeconds, genderDetectionEnabled, voiceMemoryEnabled, recordingEnabled,
     startSpeakingWaitSecs, startSpeakingOnPunctuationSecs, startSpeakingOnNoPunctuationSecs, startSpeakingOnNumberSecs,
     stopSpeakingNumWords, stopSpeakingVoiceSecs, stopSpeakingBackOffSecs,
     complianceIrdai, complianceDpdp, complianceTrai,
@@ -128,6 +128,8 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   if (timezone) agentConfig["timezone"] = timezone;
   agentConfig["autoSwitchToEnglish"] = !!autoSwitchToEnglish;
   agentConfig["languageAutoDetect"] = !!languageAutoDetect;
+  agentConfig["visionEnabled"] = !!visionEnabled;
+  agentConfig["visionLiveEnabled"] = !!visionLiveEnabled;
   agentConfig["machineDetectionMode"] = machineDetectionMode ?? "disabled";
   agentConfig["voicemailAction"] = voicemailAction ?? "hangup";
   if (voicemailMessage) agentConfig["voicemailMessage"] = voicemailMessage;
@@ -395,6 +397,9 @@ export default function AgentEdit() {
       promptVariables: [], vadSilenceMs: 350, bargeInEnabled: true, bargeInEnergyThreshold: 1200, bargeInMinFrames: 4, micSensitivity: "normal",
       timezone: "",
       autoSwitchToEnglish: false,
+      languageAutoDetect: false,
+      visionEnabled: false,
+      visionLiveEnabled: false,
       machineDetectionMode: "disabled", voicemailAction: "hangup",
       voicemailMessage: "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.",
       voicemailLeadInSeconds: 2,
@@ -627,6 +632,8 @@ export default function AgentEdit() {
       timezone:                 ((agent as any).agentConfig?.timezone as string | undefined) ?? "",
       autoSwitchToEnglish:      ((agent as any).agentConfig?.autoSwitchToEnglish as boolean | undefined) ?? false,
       languageAutoDetect:       ((agent as any).agentConfig?.languageAutoDetect as boolean | undefined) ?? false,
+      visionEnabled:            ((agent as any).agentConfig?.visionEnabled as boolean | undefined) ?? false,
+      visionLiveEnabled:        ((agent as any).agentConfig?.visionLiveEnabled as boolean | undefined) ?? false,
       machineDetectionMode:     ((agent as any).agentConfig?.machineDetectionMode as string | undefined) as AgentFormValues["machineDetectionMode"] ?? "disabled",
       voicemailAction:          ((agent as any).agentConfig?.voicemailAction as string | undefined) as AgentFormValues["voicemailAction"] ?? "hangup",
       voicemailMessage:         ((agent as any).agentConfig?.voicemailMessage as string | undefined) ?? "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.",
@@ -1262,6 +1269,36 @@ export default function AgentEdit() {
                 />
               )} />
             </div>
+            <div className="flex items-center justify-between border-t pt-4 mt-2">
+              <div>
+                <p className="text-xs font-medium">Vision</p>
+                <p className="text-[11px] text-muted-foreground">
+                  Let the agent see and analyze photos (WhatsApp / upload) via the analyze_image tool. Ask the caller to send a picture, then call the tool.
+                </p>
+              </div>
+              <FormField control={form.control} name="visionEnabled" render={({ field }) => (
+                <Switch
+                  checked={field.value ?? false}
+                  onCheckedChange={(v) => field.onChange(v)}
+                />
+              )} />
+            </div>
+            {isGeminiLive && (
+              <div className="flex items-center justify-between border-t pt-4 mt-2">
+                <div>
+                  <p className="text-xs font-medium">Live camera (webcall)</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    Stream camera frames into Gemini Live on webcall so the agent can see in realtime.
+                  </p>
+                </div>
+                <FormField control={form.control} name="visionLiveEnabled" render={({ field }) => (
+                  <Switch
+                    checked={field.value ?? false}
+                    onCheckedChange={(v) => field.onChange(v)}
+                  />
+                )} />
+              </div>
+            )}
           </EditConfigDialog>
 
           {/* ── Model dialog ── */}
@@ -1768,6 +1805,21 @@ export default function AgentEdit() {
                   >
                     <Webhook className="h-4 w-4 mr-1" /> Custom Function
                   </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      appendTool({
+                        type: "analyze_image",
+                        name: "analyze_image",
+                        description: "Analyze a photo the caller sent (damage, ID, invoice, form). Use media_id or use_latest=true.",
+                      });
+                      form.setValue("visionEnabled", true);
+                    }}
+                  >
+                    <Eye className="h-4 w-4 mr-1" /> Vision
+                  </Button>
                 </div>
               </div>
             </CardHeader>
@@ -1900,6 +1952,10 @@ export default function AgentEdit() {
                           <span className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                             <Webhook className="h-3 w-3" /> Custom Function
                           </span>
+                        ) : toolType === "analyze_image" ? (
+                          <span className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                            <Eye className="h-3 w-3" /> Vision
+                          </span>
                         ) : (
                           <span className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                             <PhoneForwarded className="h-3 w-3" /> Call Transfer
@@ -1910,7 +1966,28 @@ export default function AgentEdit() {
                         </Button>
                       </div>
 
-                      {toolType === "webhook" ? (
+                      {toolType === "analyze_image" ? (
+                        <>
+                          <FormField control={form.control} name={`tools.${index}.name`} render={({ field: f }) => (
+                            <FormItem>
+                              <FormLabel className="text-xs">Function Name</FormLabel>
+                              <FormControl><Input placeholder="analyze_image" {...f} /></FormControl>
+                              <FormDescription className="text-[10px]">Usually leave as analyze_image</FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )} />
+                          <FormField control={form.control} name={`tools.${index}.description`} render={({ field: f }) => (
+                            <FormItem>
+                              <FormLabel className="text-xs">Description (shown to LLM)</FormLabel>
+                              <FormControl><Textarea className="min-h-[60px] text-sm" placeholder="Analyze a photo the caller sent…" {...f} /></FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )} />
+                          <p className="text-[11px] text-muted-foreground">
+                            Uses Gemini multimodal vision. Enable the Vision toggle in Language &amp; behaviour so photos from WhatsApp / upload are attached automatically.
+                          </p>
+                        </>
+                      ) : toolType === "webhook" ? (
                         /* ── Webhook / Custom Function fields ── */
                         <>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">

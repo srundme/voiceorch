@@ -312,6 +312,39 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
       if (t.type === "end_call") {
         return { ...END_CALL_TOOL_DEF };
       }
+      if (t.type === "analyze_image") {
+        return {
+          name: t.name?.trim() || "analyze_image",
+          description:
+            (t.description?.trim() ||
+              "Analyze a photo or document image the caller sent (WhatsApp, upload, or URL). " +
+              "Use when you need to see damage, IDs, invoices, forms, or anything visual. " +
+              "If the caller just sent an image and you have no media_id, call with use_latest=true.") +
+            " Speak the findings clearly to the caller after the tool returns.",
+          parameters: {
+            type: "object",
+            properties: {
+              media_id: {
+                type: "string",
+                description: "ID of a stored call image (from a WhatsApp/upload notification). Prefer this when known.",
+              },
+              image_url: {
+                type: "string",
+                description: "HTTPS URL of an image to download and analyze.",
+              },
+              use_latest: {
+                type: "string",
+                description: "Set to 'true' to analyze the most recent image on this call when media_id is unknown.",
+              },
+              question: {
+                type: "string",
+                description: "Optional focus question, e.g. 'Describe vehicle damage severity and location'.",
+              },
+            },
+            required: [],
+          },
+        };
+      }
       // Webhook: use caller-defined parameters if provided
       if (t.type === "webhook" && t.parameters) {
         return {

@@ -9,6 +9,7 @@ import {
   executeNativeCancel,
   executeWebhookTool,
 } from "../../../services/tool-executor.js";
+import { executeAnalyzeImage } from "../../../services/vision-analyze.js";
 import { scheduleCallbackRequested } from "../../../services/autoRedial.js";
 import { resolveCallbackTime } from "../../../lib/tz-datetime.js";
 import { logger } from "../../../lib/logger.js";
@@ -156,6 +157,16 @@ async function executeLiveAgentTool(
       return executeNativeReschedule(callId, agentId, tool, args);
     case "native_cancel":
       return executeNativeCancel(callId, agentId, tool, args);
+    case "analyze_image":
+      return executeAnalyzeImage({
+        callId,
+        agentId,
+        userId: null,
+        phone: config.callerPhone ?? null,
+        args,
+      });
+    case "send_sms":
+      return undefined;
     default:
       return `Tool type ${tool.type} is not supported on the Live stack yet.`;
   }

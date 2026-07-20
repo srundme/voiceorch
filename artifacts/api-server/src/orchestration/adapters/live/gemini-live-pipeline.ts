@@ -1,6 +1,7 @@
 import {
   GoogleGenAI,
   Modality,
+  MediaResolution,
   ThinkingLevel,
   type FunctionCall,
   type LiveServerMessage,
@@ -63,6 +64,7 @@ export class GeminiLivePipeline implements VoiceSession {
   private greetingSent = false;
   private pendingOut24k = Buffer.alloc(0);
   private isPlayingOut = false;
+  private lastVideoFrameAt = 0;
 
   constructor(config: SessionConfig) {
     this.config = config;
@@ -166,6 +168,40 @@ export class GeminiLivePipeline implements VoiceSession {
     return null;
   }
 
+  notifyIncomingMedia(mediaId: number, meta?: { source?: string; mimeType?: string }): void {
+    const src = meta?.source ?? "upload";
+    const note =
+      `The caller just sent an image via ${src} (media_id=${mediaId}). ` +
+      `Call the analyze_image tool with media_id=${mediaId} or use_latest=true to see it, then describe findings aloud.`;
+    void this.ensureConnected().then(() => {
+      if (this.closed || !this.session) return;
+      this.session.sendClientContent({
+        turns: [{ role: "user", parts: [{ text: note }] }],
+        turnComplete: true,
+      });
+    }).catch((err) => logger.warn({ callId: this.config.callId, err }, "Live: notifyIncomingMedia failed"));
+    this.config.onTranscript("user", `[Image received: media_id=${mediaId}]`);
+  }
+
+  onVideoFrame(jpegBase64: string, mimeType = "image/jpeg"): void {
+    if (this.closed || !this.agent.visionLiveEnabled) return;
+    const now = Date.now();
+    // Cap ~2 fps to control cost/latency
+    if (now - this.lastVideoFrameAt < 500) return;
+    this.lastVideoFrameAt = now;
+    const data = jpegBase64.replace(/^data:[^;]+;base64,/, "");
+    if (!data || data.length < 100) return;
+    void this.ensureConnected().then(() => {
+      if (this.closed || !this.session) return;
+      this.session.sendRealtimeInput({
+        video: {
+          data,
+          mimeType: mimeType.includes("png") ? "image/png" : "image/jpeg",
+        },
+      });
+    }).catch((err) => logger.debug({ callId: this.config.callId, err }, "Live: video frame send failed"));
+  }
+
   getRecording(): RecordingBuffer {
     return this.recording;
   }
@@ -229,6 +265,9 @@ export class GeminiLivePipeline implements VoiceSession {
             prebuiltVoiceConfig: { voiceName },
           },
         },
+        ...(this.agent.visionLiveEnabled
+          ? { mediaResolution: MediaResolution.MEDIA_RESOLUTION_LOW }
+          : {}),
         thinkingConfig: {
           thinkingLevel: thinkingMap[thinkingLevel] ?? ThinkingLevel.MINIMAL,
         },
