@@ -151,26 +151,57 @@ async function purchaseVobizNumber(
   return data.number;
 }
 
+type VobizNumberItem = { id: string; e164?: string; number?: string; application_id?: string | null };
+
+type ConfigureVobizResult = {
+  appId: string | null;
+  /** PATCH accepted (or number already had the SnapServe app_id). */
+  linked: boolean;
+  /** Re-fetched number list shows application_id === SnapServe app. */
+  verified: boolean;
+  detail: string;
+};
+
+function vobizDigits(n: string): string {
+  return n.replace(/\D/g, "");
+}
+
+function findVobizNumber(items: VobizNumberItem[], e164: string): VobizNumberItem | undefined {
+  const want = vobizDigits(e164);
+  return items.find((n) => {
+    const got = vobizDigits(n.e164 ?? n.number ?? "");
+    return got === want || got.endsWith(want) || want.endsWith(got);
+  });
+}
+
+async function listVobizNumbers(
+  authId: string,
+  headers: Record<string, string>,
+): Promise<VobizNumberItem[]> {
+  const resp = await fetch(`${VOBIZ_ACCOUNT_BASE}/${authId}/numbers`, { headers });
+  if (!resp.ok) return [];
+  const data = await resp.json() as { items?: VobizNumberItem[]; objects?: VobizNumberItem[] };
+  return data.items ?? data.objects ?? [];
+}
+
 /**
  * Ensure a SnapServe VoBiz Application exists with the correct inbound webhook
- * URLs and is set as the default_app. Also explicitly links the given number
- * to the app via UUID-based PATCH (best-effort; VoBiz may return 204 without
- * persisting on older accounts — use the VoBiz console as fallback).
- *
- * Returns the SnapServe app_id on success (so the caller can include it in
- * the purchase body to link at creation time), or null on failure.
- *
- * Non-fatal: logs warnings on failure but never throws so the caller succeeds.
+ * URLs and is set as the default_app. Explicitly links the given number to that
+ * app and verifies the link stuck (VoBiz sometimes returns 2xx without persisting).
  */
 async function configureVobizNumberWebhook(
   authId: string,
   authToken: string,
   e164: string,
   webhookBase: string,
-): Promise<string | null> {
+): Promise<ConfigureVobizResult> {
+  const fail = (detail: string): ConfigureVobizResult => ({
+    appId: null, linked: false, verified: false, detail,
+  });
+
   if (!webhookBase) {
     console.warn("configureVobizNumberWebhook: webhookBase is empty, skipping");
-    return null;
+    return fail("webhookBase is empty");
   }
   const answerUrl = `${webhookBase}/api/webhooks/vobiz/voice`;
   const hangupUrl = `${webhookBase}/api/webhooks/vobiz/status`;
@@ -216,15 +247,17 @@ async function configureVobizNumberWebhook(
         }),
       });
       if (!createResp.ok) {
-        console.warn(`configureVobizNumberWebhook: create app failed ${createResp.status}: ${await createResp.text()}`);
-        return null;
+        const errText = await createResp.text();
+        console.warn(`configureVobizNumberWebhook: create app failed ${createResp.status}: ${errText}`);
+        return fail(`create SnapServe app failed (${createResp.status})`);
       }
       const created = await createResp.json() as { app_id?: string };
       appId = created.app_id ?? null;
-      if (!appId) { console.warn("configureVobizNumberWebhook: create app returned no app_id"); return null; }
+      if (!appId) {
+        console.warn("configureVobizNumberWebhook: create app returned no app_id");
+        return fail("create SnapServe app returned no app_id");
+      }
     }
-
-    if (!appId) return null; // type guard
 
     // 4. Persist app_id to platform_settings.
     await db.insert(platformSettingsTable)
@@ -250,39 +283,88 @@ async function configureVobizNumberWebhook(
       console.info(`configureVobizNumberWebhook: SnapServe app ${appId} confirmed as default_app, answer_url=${answerUrl}`);
     }
 
-    // 6. Explicitly link the number to the app via UUID-based PATCH.
-    //    VoBiz REST API: GET /numbers returns {id (uuid), application_id}.
-    //    PATCH /numbers/{uuid} with application_id links the number to the app.
-    //    This is best-effort — console.vobiz.ai is the reliable fallback if API
-    //    PATCH silently ignores the field (VoBiz account-level permission).
-    if (e164) {
+    // 6. Link number → SnapServe app. Try UUID PATCH then E.164 path; verify by re-list.
+    if (!e164) {
+      return { appId, linked: false, verified: false, detail: "no e164 provided for number link" };
+    }
+
+    const digits = vobizDigits(e164);
+    let items = await listVobizNumbers(authId, h);
+    let match = findVobizNumber(items, e164);
+
+    if (match?.application_id && match.application_id === appId) {
+      console.info(`configureVobizNumberWebhook: ${e164} already linked to SnapServe app ${appId}`);
+      return { appId, linked: true, verified: true, detail: "already linked" };
+    }
+
+    const patchBody = JSON.stringify({ application_id: appId });
+    const patchTargets: string[] = [];
+    if (match?.id) patchTargets.push(`${VOBIZ_ACCOUNT_BASE}/${authId}/numbers/${match.id}`);
+    // VoBiz also accepts the bare E.164 path (same style as release).
+    patchTargets.push(`${VOBIZ_ACCOUNT_BASE}/${authId}/numbers/${encodeURIComponent(digits)}`);
+    if (e164.startsWith("+")) {
+      patchTargets.push(`${VOBIZ_ACCOUNT_BASE}/${authId}/numbers/${encodeURIComponent(e164)}`);
+    }
+
+    let linked = false;
+    let lastPatchStatus = 0;
+    for (const url of patchTargets) {
       try {
-        const numbersResp = await fetch(`${VOBIZ_ACCOUNT_BASE}/${authId}/numbers`, { headers: h });
-        if (numbersResp.ok) {
-          const numbersData = await numbersResp.json() as { items?: { id: string; e164: string; application_id?: string }[] };
-          const match = (numbersData.items ?? []).find(n => n.e164 === e164 || n.e164 === `+${e164}`);
-          if (match) {
-            const patchResp = await fetch(`${VOBIZ_ACCOUNT_BASE}/${authId}/numbers/${match.id}`, {
-              method:  "PATCH",
-              headers: h,
-              body:    JSON.stringify({ application_id: appId }),
-            });
-            if (patchResp.ok) {
-              console.info(`configureVobizNumberWebhook: linked ${e164} (uuid=${match.id}) to app ${appId}`);
-            } else {
-              console.warn(`configureVobizNumberWebhook: link number PATCH ${patchResp.status}`);
-            }
-          }
+        const patchResp = await fetch(url, { method: "PATCH", headers: h, body: patchBody });
+        lastPatchStatus = patchResp.status;
+        if (patchResp.ok || patchResp.status === 204) {
+          linked = true;
+          console.info(`configureVobizNumberWebhook: PATCH ok ${patchResp.status} ${url}`);
+          break;
         }
+        console.warn(`configureVobizNumberWebhook: PATCH ${patchResp.status} ${url}: ${(await patchResp.text()).slice(0, 200)}`);
       } catch (linkErr) {
-        console.warn("configureVobizNumberWebhook: number-link step failed (non-fatal):", linkErr);
+        console.warn("configureVobizNumberWebhook: PATCH failed:", linkErr);
       }
     }
 
-    return appId;
+    // Brief settle + verify (VoBiz UI "Not linked" is this field).
+    await new Promise((r) => setTimeout(r, 400));
+    items = await listVobizNumbers(authId, h);
+    match = findVobizNumber(items, e164);
+    const verified = !!(match?.application_id && match.application_id === appId);
+
+    // One retry if PATCH claimed success but list still shows unlinked.
+    if (linked && !verified) {
+      console.warn(`configureVobizNumberWebhook: link not verified for ${e164} — retrying PATCH`);
+      for (const url of patchTargets.slice(0, 2)) {
+        try {
+          await fetch(url, { method: "PATCH", headers: h, body: patchBody });
+        } catch { /* ignore */ }
+      }
+      await new Promise((r) => setTimeout(r, 600));
+      items = await listVobizNumbers(authId, h);
+      match = findVobizNumber(items, e164);
+    }
+    const verifiedFinal = !!(match?.application_id && match.application_id === appId);
+
+    const detail = verifiedFinal
+      ? "linked and verified"
+      : linked
+        ? `PATCH accepted but VoBiz still shows application_id=${match?.application_id ?? "null"} (expected ${appId})`
+        : match
+          ? `PATCH failed (last HTTP ${lastPatchStatus})`
+          : "number not found in VoBiz /numbers list";
+
+    console.info(
+      { e164, appId, linked: linked || verifiedFinal, verified: verifiedFinal, detail },
+      "configureVobizNumberWebhook: result",
+    );
+
+    return {
+      appId,
+      linked: linked || verifiedFinal,
+      verified: verifiedFinal,
+      detail,
+    };
   } catch (err) {
     console.warn("configureVobizNumberWebhook: unexpected error:", err);
-    return null;
+    return fail(err instanceof Error ? err.message : "unexpected error");
   }
 }
 
@@ -571,7 +653,8 @@ router.post("/phone-numbers/purchase/confirm", requireAuth, async (req, res): Pr
   }
 
   const webhookBase = deriveWebhookBase(req);
-  const snapserveAppId = await configureVobizNumberWebhook(authId!, authToken!, number, webhookBase);
+  const linkResult = await configureVobizNumberWebhook(authId!, authToken!, number, webhookBase);
+  const snapserveAppId = linkResult.appId;
 
   let vobizNumber: VobizOwnedNumber;
   try {
@@ -644,7 +727,15 @@ router.post("/phone-numbers/purchase/confirm", requireAuth, async (req, res): Pr
   });
 
   req.log.info({ number, userId: clerkId, vobizId: vobizNumber.id, nextRenewalAt }, "Phone number purchased and provisioned after confirmed payment");
-  res.status(201).json(await enrichNumber(row!));
+
+  // Purchase-with-application_id can still leave VoBiz "Not linked" — re-link + verify.
+  const postLink = await configureVobizNumberWebhook(authId!, authToken!, number, webhookBase);
+  req.log.info({ number, ...postLink }, "Vobiz inbound link after purchase");
+
+  res.status(201).json({
+    ...(await enrichNumber(row!)),
+    inboundLink: postLink,
+  });
 });
 
 /** Best-effort refund of a failed/aborted phone-number purchase payment. */
@@ -710,12 +801,40 @@ router.patch("/phone-numbers/:id/assign", requireAuth, async (req, res): Promise
       : `Phone number ${row.number} unassigned from agent`,
   });
 
-  res.json(AssignPhoneNumberResponse.parse(await enrichNumber(row)));
+  // Server-side VoBiz link — users must not wait for support to click APP SnapServe.
+  let inboundLink: ConfigureVobizResult | null = null;
+  if (body.data.agentId) {
+    const { authId, authToken, configured } = getPlatformVobizCreds();
+    if (configured) {
+      inboundLink = await configureVobizNumberWebhook(
+        authId!,
+        authToken!,
+        row.number,
+        deriveWebhookBase(req),
+      );
+      req.log.info(
+        { number: row.number, userId: clerkId, ...inboundLink },
+        "Vobiz inbound link after assign",
+      );
+    } else {
+      inboundLink = {
+        appId: null,
+        linked: false,
+        verified: false,
+        detail: "Platform carrier credentials not configured",
+      };
+    }
+  }
+
+  res.json({
+    ...AssignPhoneNumberResponse.parse(await enrichNumber(row)),
+    inboundLink,
+  });
 });
 
 // ── POST /phone-numbers/:id/configure-webhook ─────────────────────────────────
-// Idempotent repair: re-pushes the inbound answer URL to VoBiz for numbers
-// that were purchased before auto-configuration was added.
+// Idempotent repair: re-pushes the inbound answer URL to VoBiz and verifies
+// the number shows application_id = SnapServe (fixes "Not linked" in VoBiz UI).
 
 router.post("/phone-numbers/:id/configure-webhook", requireAuth, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
@@ -732,10 +851,27 @@ router.post("/phone-numbers/:id/configure-webhook", requireAuth, async (req, res
   if (!configured) { res.status(503).json({ error: "Platform carrier credentials not configured." }); return; }
 
   const webhookBase = deriveWebhookBase(req);
-  await configureVobizNumberWebhook(authId!, authToken!, row.number, webhookBase);
+  const result = await configureVobizNumberWebhook(authId!, authToken!, row.number, webhookBase);
 
-  req.log.info({ number: row.number, userId: clerkId }, "Vobiz inbound webhook reconfigured");
-  res.json({ ok: true, number: row.number, answerUrl: `${webhookBase}/api/webhooks/vobiz/voice` });
+  req.log.info({ number: row.number, userId: clerkId, ...result }, "Vobiz inbound webhook reconfigured");
+
+  if (!result.verified) {
+    res.status(502).json({
+      ok: false,
+      number: row.number,
+      answerUrl: `${webhookBase}/api/webhooks/vobiz/voice`,
+      ...result,
+      error: "Could not verify number is linked to the SnapServe app in VoBiz. Retry Fix inbound, or contact support.",
+    });
+    return;
+  }
+
+  res.json({
+    ok: true,
+    number: row.number,
+    answerUrl: `${webhookBase}/api/webhooks/vobiz/voice`,
+    ...result,
+  });
 });
 
 // ── DELETE /phone-numbers/:id ─────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useLocation } from "wouter";
-import { Phone, Plus, Trash2, Link2, Link2Off, Search, Loader2, Globe, AlertCircle, GitFork, ShieldCheck, ShieldAlert, ExternalLink, CheckCircle2, Lock, X } from "lucide-react";
+import { Phone, Plus, Trash2, Link2, Link2Off, Search, Loader2, Globe, AlertCircle, GitFork, ShieldCheck, ShieldAlert, ExternalLink, CheckCircle2, Lock, X, Wrench } from "lucide-react";
 import {
   useListPhoneNumbers,
   useListAvailablePhoneNumbers,
@@ -238,25 +238,28 @@ function AssignDialog({
     assign.mutate(
       { id: number.id, data: { agentId: newAgentId } },
       {
-        onSuccess: async () => {
+        onSuccess: (data) => {
           queryClient.invalidateQueries({ queryKey: getListPhoneNumbersQueryKey() });
-          // Auto-wire the VoBiz inbound webhook whenever a number is assigned to an agent,
-          // so the user doesn't have to click the wrench separately.
-          if (newAgentId !== null) {
-            try {
-              const token = localStorage.getItem("voiceorch:session");
-              await fetch(`/api/phone-numbers/${number.id}/configure-webhook`, {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  ...(token ? { Authorization: `Bearer ${token}` } : {}),
-                },
-              });
-            } catch {
-              // Non-fatal — number is assigned; webhook wiring can be retried via the wrench.
-            }
+          const link = (data as { inboundLink?: { verified?: boolean; detail?: string } | null })?.inboundLink;
+          if (newAgentId === null) {
+            toast({ title: "Number unassigned" });
+          } else if (link?.verified) {
+            toast({
+              title: "Number assigned",
+              description: "Inbound linked to SnapServe in VoBiz — callers can reach this agent.",
+            });
+          } else if (link) {
+            toast({
+              title: "Assigned — inbound link incomplete",
+              description: "Use Fix inbound on this number so VoBiz shows APP SnapServe. Outbound still works.",
+              variant: "destructive",
+            });
+          } else {
+            toast({
+              title: "Number assigned",
+              description: "If inbound fails, click Fix inbound on this number.",
+            });
           }
-          toast({ title: "Number assigned", description: newAgentId ? "Inbound routing wired automatically." : "Number unassigned." });
           onClose();
         },
         onError: (err: unknown) => toast({ title: "Error", variant: "destructive", description: formatApiError(err) }),
@@ -296,6 +299,73 @@ function AssignDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+async function configureInboundWebhook(numberId: number): Promise<{ ok: boolean; error?: string; verified?: boolean }> {
+  const token = localStorage.getItem("voiceorch:session");
+  const resp = await fetch(`/api/phone-numbers/${numberId}/configure-webhook`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+  const body = await resp.json().catch(() => ({})) as {
+    ok?: boolean;
+    error?: string;
+    verified?: boolean;
+    detail?: string;
+  };
+  if (!resp.ok || body.ok === false || body.verified === false) {
+    return {
+      ok: false,
+      verified: false,
+      error: body.error || body.detail || `HTTP ${resp.status}`,
+    };
+  }
+  return { ok: true, verified: true };
+}
+
+function FixInboundButton({ number }: { number: PhoneNumber }) {
+  const { toast } = useToast();
+  const [busy, setBusy] = useState(false);
+
+  async function handleFix() {
+    setBusy(true);
+    try {
+      const result = await configureInboundWebhook(number.id);
+      if (result.ok) {
+        toast({
+          title: "Inbound linked",
+          description: `${number.number} is now APP SnapServe in VoBiz. Test with a call in.`,
+        });
+      } else {
+        toast({
+          title: "Could not link inbound",
+          description: result.error || "Retry in a moment. If it keeps failing, contact support.",
+          variant: "destructive",
+        });
+      }
+    } catch (err) {
+      toast({ title: "Error", variant: "destructive", description: formatApiError(err) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-foreground"
+      onClick={() => void handleFix()}
+      disabled={busy}
+      title="Link this number to the SnapServe app in VoBiz so inbound calls work"
+    >
+      {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Wrench className="h-3 w-3" />}
+      Fix inbound
+    </Button>
   );
 }
 
@@ -913,6 +983,7 @@ export default function PhoneNumbersPage() {
                       <GitFork className="h-3 w-3" /> Rules
                     </Button>
                   )}
+                  <FixInboundButton number={n} />
                   <Button
                     variant="ghost"
                     size="sm"
