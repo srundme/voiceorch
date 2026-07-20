@@ -81,6 +81,7 @@ export function WebcallPanel({
   // True once the call is intentionally finished or errored, so the ws.onclose
   // handler doesn't clobber the final UI state with an "idle" reset.
   const doneRef        = useRef(false);
+  const cameraAutoTriedRef = useRef(false);
   const scrollEndRef   = useRef<HTMLDivElement | null>(null);
 
   const stopCamera = useCallback(() => {
@@ -114,6 +115,7 @@ export function WebcallPanel({
     playbackCtxRef.current = null;
     nextStartRef.current = 0;
     callIdRef.current = null;
+    cameraAutoTriedRef.current = false;
   }, [stopCamera]);
 
   // Schedule one incoming 8 kHz PCM16 buffer onto the playback timeline.
@@ -345,10 +347,10 @@ export function WebcallPanel({
   }, []);
 
   const startCamera = useCallback(async () => {
-    if (!visionLiveEnabled || cameraOn) return;
+    if ((!visionLiveEnabled && !visionEnabled) || cameraOn) return;
     try {
       const vstream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment", width: { ideal: 640 }, height: { ideal: 480 } },
+        video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } },
         audio: false,
       });
       videoStreamRef.current = vstream;
@@ -365,7 +367,7 @@ export function WebcallPanel({
         const w = video.videoWidth || 320;
         const h = video.videoHeight || 240;
         canvas.width = Math.min(w, 640);
-        canvas.height = Math.round(canvas.width * (h / w));
+        canvas.height = Math.round(canvas.width * (h / Math.max(w, 1)));
         const ctx = canvas.getContext("2d");
         if (!ctx) return;
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
@@ -379,19 +381,36 @@ export function WebcallPanel({
     } catch (err) {
       setError(err instanceof Error ? err.message : "Camera permission denied");
     }
-  }, [visionLiveEnabled, cameraOn]);
+  }, [visionLiveEnabled, visionEnabled, cameraOn]);
+
+  /** Resize phone photos so base64 JSON stays under the API body limit. */
+  const fileToCompressedBase64 = useCallback(async (file: File): Promise<{ data: string; mimeType: string }> => {
+    const bitmap = await createImageBitmap(file);
+    const maxEdge = 1280;
+    const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
+    const w = Math.max(1, Math.round(bitmap.width * scale));
+    const h = Math.max(1, Math.round(bitmap.height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Could not process image");
+    ctx.drawImage(bitmap, 0, 0, w, h);
+    bitmap.close();
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.72);
+    const data = dataUrl.split(",")[1];
+    if (!data) throw new Error("Could not encode image");
+    return { data, mimeType: "image/jpeg" };
+  }, []);
 
   const uploadPhoto = useCallback(async (file: File) => {
     const callId = callIdRef.current;
     const token = localStorage.getItem("voiceorch:session");
     if (!callId || !token || !visionEnabled) return;
     setUploading(true);
+    setError(null);
     try {
-      const buf = await file.arrayBuffer();
-      const bytes = new Uint8Array(buf);
-      let binary = "";
-      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]!);
-      const data = btoa(binary);
+      const { data, mimeType } = await fileToCompressedBase64(file);
       const resp = await fetch(`/api/calls/${callId}/media`, {
         method: "POST",
         headers: {
@@ -399,8 +418,8 @@ export function WebcallPanel({
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          mimeType: file.type || "image/jpeg",
-          fileName: file.name,
+          mimeType,
+          fileName: file.name.replace(/\.\w+$/, "") + ".jpg",
           data,
         }),
       });
@@ -417,7 +436,14 @@ export function WebcallPanel({
     } finally {
       setUploading(false);
     }
-  }, [visionEnabled]);
+  }, [visionEnabled, fileToCompressedBase64]);
+
+  // Auto-start camera once the call is live (so the preview shows without an extra tap).
+  useEffect(() => {
+    if (state !== "live" || (!visionLiveEnabled && !visionEnabled) || cameraOn || cameraAutoTriedRef.current) return;
+    cameraAutoTriedRef.current = true;
+    void startCamera();
+  }, [state, visionLiveEnabled, visionEnabled, cameraOn, startCamera]);
 
   useEffect(() => () => { doneRef.current = true; teardown(); }, [teardown]);
   useEffect(() => { scrollEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [lines]);
@@ -453,13 +479,24 @@ export function WebcallPanel({
           )}
         </div>
 
-        {visionLiveEnabled && (
-          <video
-            ref={videoElRef}
-            muted
-            playsInline
-            className={cameraOn ? "w-full max-h-40 object-cover bg-black" : "hidden"}
-          />
+        {(visionLiveEnabled || visionEnabled) && (
+          <div className={cameraOn
+            ? "relative shrink-0 border-b border-border bg-black"
+            : "absolute w-px h-px overflow-hidden opacity-0 pointer-events-none"}
+          >
+            <video
+              ref={videoElRef}
+              muted
+              playsInline
+              autoPlay
+              className="w-full max-h-44 object-cover"
+            />
+            {cameraOn && (
+              <span className="absolute top-2 left-2 text-[10px] font-medium px-1.5 py-0.5 rounded bg-black/60 text-white">
+                {visionLiveEnabled ? "Live camera" : "Camera"}
+              </span>
+            )}
+          </div>
         )}
 
         {/* Transcript */}
@@ -514,7 +551,7 @@ export function WebcallPanel({
               >
                 {muted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
               </Button>
-              {visionLiveEnabled && (
+              {(visionLiveEnabled || visionEnabled) && (
                 <Button
                   onClick={() => { if (cameraOn) stopCamera(); else void startCamera(); }}
                   variant="outline"

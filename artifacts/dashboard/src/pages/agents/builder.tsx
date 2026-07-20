@@ -2579,52 +2579,59 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
             </div>
           </div>
 
-          {isGeminiLive && (
-            <div className={cn("rounded-xl border transition-all duration-150", visionLiveEnabled ? "border-border/70 bg-card/40" : "border-border/40 bg-card/20")}>
-              <div
-                role="button"
-                tabIndex={0}
-                onClick={(e) => {
-                  if (!e.nativeEvent.isTrusted) return;
+          <div className={cn(
+            "rounded-xl border transition-all duration-150",
+            !isGeminiLive ? "border-border/30 bg-card/10 opacity-70"
+              : visionLiveEnabled ? "border-border/70 bg-card/40" : "border-border/40 bg-card/20",
+          )}>
+            <div
+              role="button"
+              tabIndex={isGeminiLive ? 0 : -1}
+              onClick={(e) => {
+                if (!isGeminiLive || !e.nativeEvent.isTrusted) return;
+                const next = !visionLiveEnabled;
+                form.setValue("visionLiveEnabled", next, { shouldDirty: true });
+                if (next) form.setValue("visionEnabled", true, { shouldDirty: true });
+              }}
+              onKeyDown={(e) => {
+                if (!isGeminiLive) return;
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
                   const next = !visionLiveEnabled;
                   form.setValue("visionLiveEnabled", next, { shouldDirty: true });
                   if (next) form.setValue("visionEnabled", true, { shouldDirty: true });
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    const next = !visionLiveEnabled;
-                    form.setValue("visionLiveEnabled", next, { shouldDirty: true });
-                    if (next) form.setValue("visionEnabled", true, { shouldDirty: true });
-                  }
-                }}
-                className="w-full text-left p-4 flex items-start gap-3 cursor-pointer"
-              >
-                <div className="mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center shrink-0 bg-muted/30">
-                  <Camera className={cn("h-4 w-4", visionLiveEnabled ? "text-foreground/70" : "text-muted-foreground/35")} />
+                }
+              }}
+              className={cn("w-full text-left p-4 flex items-start gap-3", isGeminiLive ? "cursor-pointer" : "cursor-not-allowed")}
+            >
+              <div className="mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center shrink-0 bg-muted/30">
+                <Camera className={cn("h-4 w-4", visionLiveEnabled && isGeminiLive ? "text-foreground/70" : "text-muted-foreground/35")} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className="text-xs font-semibold text-foreground/80">Live camera</span>
+                  <span className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-muted/40 text-muted-foreground">Webcall</span>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <span className="text-xs font-semibold text-foreground/80">Live camera</span>
-                    <span className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-muted/40 text-muted-foreground">Webcall</span>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground/60 leading-relaxed">
-                    Stream the browser camera into Gemini Live (~2 fps) so the agent can describe what&apos;s in frame in realtime. Phone calls still use WhatsApp photos.
-                  </p>
-                </div>
-                <div className="shrink-0 mt-1">
-                  <Switch
-                    checked={visionLiveEnabled}
-                    onCheckedChange={(v) => {
-                      form.setValue("visionLiveEnabled", v, { shouldDirty: true });
-                      if (v) form.setValue("visionEnabled", true, { shouldDirty: true });
-                    }}
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                </div>
+                <p className="text-[11px] text-muted-foreground/60 leading-relaxed">
+                  {isGeminiLive
+                    ? "Stream the browser camera into Gemini Live (~2 fps) so the agent can describe what's in frame in realtime. Phone calls still use WhatsApp / photo upload."
+                    : "Requires Gemini Live voice stack (Model → Gemini Live). On classic STT/LLM/TTS, use Photo analysis + upload instead."}
+                </p>
+              </div>
+              <div className="shrink-0 mt-1">
+                <Switch
+                  checked={isGeminiLive && visionLiveEnabled}
+                  disabled={!isGeminiLive}
+                  onCheckedChange={(v) => {
+                    if (!isGeminiLive) return;
+                    form.setValue("visionLiveEnabled", v, { shouldDirty: true });
+                    if (v) form.setValue("visionEnabled", true, { shouldDirty: true });
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                />
               </div>
             </div>
-          )}
+          </div>
         </div>
       </div>
 
@@ -5701,8 +5708,8 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
             agentName={agent.name ?? "Agent"}
             compact
             onClose={() => setShowWebcall(false)}
-            visionEnabled={!!(agent as any).agentConfig?.visionEnabled}
-            visionLiveEnabled={!!(agent as any).agentConfig?.visionLiveEnabled}
+            visionEnabled={!!(form.watch("visionEnabled") ?? (agent as any).agentConfig?.visionEnabled)}
+            visionLiveEnabled={!!(form.watch("visionLiveEnabled") ?? (agent as any).agentConfig?.visionLiveEnabled)}
           />
         </div>
       )}

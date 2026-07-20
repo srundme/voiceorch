@@ -69,12 +69,14 @@ app.use(cookieParser());
 // Capture raw body bytes so HMAC-based webhook signature verification
 // always operates on the exact bytes the sender signed, not a re-serialized
 // version that may differ in whitespace.
+// 12mb covers vision still-image uploads (base64 JSON). Default 100kb caused 413 on phone photos.
 app.use(express.json({
+  limit: "12mb",
   verify: (req: express.Request & { rawBody?: Buffer }, _res, buf) => {
     req.rawBody = buf;
   },
 }));
-app.use(express.urlencoded({ extended: true }));
+app.use(express.urlencoded({ extended: true, limit: "12mb" }));
 
 // Validate the platform session token (Bearer or ?token=) and populate
 // req.clerkUserId / req.sessionPayload before rate limiting + routing so the

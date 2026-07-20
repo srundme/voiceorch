@@ -28,6 +28,7 @@ import type { AgentConfig, AgentTool, ConversationTurn, LLMAdapter, LLMUsage, Se
 import { resolveGoodbyeMessage } from "./types.js";
 import type { VoiceSession } from "./voice-session.js";
 import { retrieveKbContext, retrieveKbContextMultiEx, resolveKbTurnBudgetMs, type KbRetrievalResult } from "./kb-retrieval.js";
+import { storeCallMedia } from "../services/call-media.js";
 import { KRUTRIM_AUTO_SUMMARY_TITLE } from "../services/kb-source-summary.js";
 import { getBackchannelFillers, pickBackchannelFiller } from "./backchannel.js";
 import { ConversationHistory } from "./conversation-history.js";
@@ -619,6 +620,10 @@ export class OrchestrationPipeline implements VoiceSession {
    */
   public endReasonHint: string | null = null;
   private isProcessing = false;
+  /** Throttle webcall camera frames stored for analyze_image. */
+  private lastCameraFrameAt = 0;
+  private cameraVisionKickScheduled = false;
+  private mediaVisionKickTimer: ReturnType<typeof setTimeout> | null = null;
   /**
    * Set to true the moment executeCallTransfer begins (before the provider API
    * call). Prevents any queued STT transcript — caller speech during the transfer
@@ -4968,7 +4973,7 @@ export class OrchestrationPipeline implements VoiceSession {
     });
   }
 
-  /** WhatsApp / upload delivered an image during this call — nudge the LLM. */
+  /** WhatsApp / upload / webcall camera delivered an image — nudge the LLM and kick a turn. */
   notifyIncomingMedia(mediaId: number, meta?: { source?: string; mimeType?: string }): void {
     const src = meta?.source ?? "upload";
     const note =
@@ -4978,6 +4983,69 @@ export class OrchestrationPipeline implements VoiceSession {
     this.conversationHistory.appendUser(note);
     this.config.onTranscript("user", `[Image received: media_id=${mediaId}]`);
     logger.info({ callId: this.config.callId, mediaId, source: src }, "Pipeline: incoming media notified");
+    this.scheduleVisionKickTurn(src);
+  }
+
+  /**
+   * Webcall camera JPEG frames. Classic stack cannot stream video into the LLM,
+   * so we store stills and kick analyze_image (same path as photo upload).
+   */
+  onVideoFrame(jpegBase64: string, mimeType = "image/jpeg"): void {
+    if (this.closed) return;
+    if (!this.agent.visionEnabled && !this.agent.visionLiveEnabled) return;
+    const now = Date.now();
+    if (now - this.lastCameraFrameAt < 2500) return;
+    this.lastCameraFrameAt = now;
+    const data = jpegBase64.replace(/^data:[^;]+;base64,/, "");
+    if (!data || data.length < 200) return;
+    void this.ingestCameraFrame(data, mimeType);
+  }
+
+  private async ingestCameraFrame(base64: string, mimeType: string): Promise<void> {
+    try {
+      const buffer = Buffer.from(base64, "base64");
+      if (buffer.length < 500 || buffer.length > 8 * 1024 * 1024) return;
+      const row = await storeCallMedia({
+        callId: this.config.callId,
+        agentId: this.agent.id,
+        userId: null,
+        phone: this.config.callerPhone ?? null,
+        source: "webcall",
+        mimeType: mimeType.includes("png") ? "image/png" : "image/jpeg",
+        fileName: `camera-${Date.now()}.jpg`,
+        buffer,
+      });
+      // First camera still of the call: ask the agent to look. Later frames just refresh latest media.
+      if (!this.cameraVisionKickScheduled) {
+        this.cameraVisionKickScheduled = true;
+        this.notifyIncomingMedia(row.id, { source: "webcall", mimeType: row.mimeType });
+      }
+    } catch (err) {
+      logger.warn({ callId: this.config.callId, err }, "Pipeline: camera frame ingest failed");
+    }
+  }
+
+  /** After an image arrives, run a turn once the pipeline is idle so the agent speaks findings. */
+  private scheduleVisionKickTurn(source: string): void {
+    if (this.mediaVisionKickTimer) return;
+    let tries = 0;
+    const attempt = () => {
+      this.mediaVisionKickTimer = null;
+      if (this.closed) return;
+      if (this.isProcessing || this.isPlaying || this.isSendingTtsAudio) {
+        if (++tries > 40) return;
+        this.mediaVisionKickTimer = setTimeout(attempt, 400);
+        return;
+      }
+      const prompt =
+        source === "webcall"
+          ? "My webcam is on. Call analyze_image with use_latest=true and briefly tell me what you see."
+          : "I just shared a photo. Call analyze_image with use_latest=true and briefly tell me what you see.";
+      void this.processTurn(prompt, 0).catch((err) =>
+        logger.warn({ callId: this.config.callId, err }, "Pipeline: vision kick turn failed"),
+      );
+    };
+    this.mediaVisionKickTimer = setTimeout(attempt, 250);
   }
 
   private async executeCalCom(tool: AgentTool & { type: "cal_com" }, args: Record<string, unknown>): Promise<void> {

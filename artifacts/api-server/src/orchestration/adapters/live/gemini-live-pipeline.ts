@@ -65,6 +65,7 @@ export class GeminiLivePipeline implements VoiceSession {
   private pendingOut24k = Buffer.alloc(0);
   private isPlayingOut = false;
   private lastVideoFrameAt = 0;
+  private videoVisionAnnounced = false;
 
   constructor(config: SessionConfig) {
     this.config = config;
@@ -184,21 +185,46 @@ export class GeminiLivePipeline implements VoiceSession {
   }
 
   onVideoFrame(jpegBase64: string, mimeType = "image/jpeg"): void {
-    if (this.closed || !this.agent.visionLiveEnabled) return;
+    if (this.closed) return;
+    if (!this.agent.visionLiveEnabled && !this.agent.visionEnabled) return;
     const now = Date.now();
-    // Cap ~2 fps to control cost/latency
     if (now - this.lastVideoFrameAt < 500) return;
     this.lastVideoFrameAt = now;
     const data = jpegBase64.replace(/^data:[^;]+;base64,/, "");
     if (!data || data.length < 100) return;
     void this.ensureConnected().then(() => {
       if (this.closed || !this.session) return;
-      this.session.sendRealtimeInput({
-        video: {
-          data,
-          mimeType: mimeType.includes("png") ? "image/png" : "image/jpeg",
-        },
+      if (this.agent.visionLiveEnabled) {
+        this.session.sendRealtimeInput({
+          video: {
+            data,
+            mimeType: mimeType.includes("png") ? "image/png" : "image/jpeg",
+          },
+        });
+        if (!this.videoVisionAnnounced) {
+          this.videoVisionAnnounced = true;
+          this.session.sendRealtimeInput({
+            text: "The caller's webcam just turned on. Briefly describe what you see in the video.",
+          });
+          this.config.onTranscript("user", "[Camera on — watching live]");
+          logger.info({ callId: this.config.callId }, "Live: first video frame + see-me nudge");
+        }
+        return;
+      }
+      // visionEnabled only: one still into the Live turn (no continuous video stream).
+      if (this.videoVisionAnnounced) return;
+      this.videoVisionAnnounced = true;
+      this.session.sendClientContent({
+        turns: [{
+          role: "user",
+          parts: [
+            { inlineData: { mimeType: mimeType.includes("png") ? "image/png" : "image/jpeg", data } },
+            { text: "This is a webcam still. Briefly describe what you see." },
+          ],
+        }],
+        turnComplete: true,
       });
+      this.config.onTranscript("user", "[Camera still shared]");
     }).catch((err) => logger.debug({ callId: this.config.callId, err }, "Live: video frame send failed"));
   }
 
@@ -259,13 +285,15 @@ export class GeminiLivePipeline implements VoiceSession {
       model,
       config: {
         responseModalities: [Modality.AUDIO],
-        systemInstruction: this.agent.systemPrompt,
+        systemInstruction: this.agent.visionLiveEnabled
+          ? `${this.agent.systemPrompt}\n\n[LIVE CAMERA] The caller may stream webcam frames. When video is present, describe what you see when asked or when it becomes relevant — do not invent visual details.`
+          : this.agent.systemPrompt,
         speechConfig: {
           voiceConfig: {
             prebuiltVoiceConfig: { voiceName },
           },
         },
-        ...(this.agent.visionLiveEnabled
+        ...(this.agent.visionLiveEnabled || this.agent.visionEnabled
           ? { mediaResolution: MediaResolution.MEDIA_RESOLUTION_LOW }
           : {}),
         thinkingConfig: {
