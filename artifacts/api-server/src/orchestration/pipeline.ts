@@ -5383,20 +5383,19 @@ export class OrchestrationPipeline implements VoiceSession {
     // instead of the call going dead after a no-op transfer.
     const ok = (await this.config.onCallTransfer?.(`agent:${targetAgentId}`)) ?? false;
     if (!ok) {
-      this.transferInitiated = false; // reset — call continues (agent-to-agent not implemented)
+      this.transferInitiated = false; // reset — call continues
       logger.warn({ callId: this.config.callId, targetAgentId }, "transfer_agent: handoff failed/unsupported — returning error to LLM");
       return "transfer_failed: unable to transfer to the requested agent right now";
     }
-    this.config.onCallEnd();
-
-    // Write lead transfer DB
+    // In-call squad handoff keeps the same media connection — do NOT end the call.
+    this.transferInitiated = false;
     void writeTransferLeadDb({
       callId: this.config.callId,
       campaignLeadId: this.config.campaignLeadId ?? null,
       transferTo: `agent:${targetAgentId}`,
       type: "agent",
     });
-    return undefined;
+    return "handoff_complete: a teammate is now continuing with the customer";
   }
 
   // ── Core turn logic ───────────────────────────────────────────────────────────

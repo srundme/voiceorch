@@ -11,6 +11,8 @@ export const phoneNumbersTable = pgTable("phone_numbers", {
   numberType:    text("number_type").notNull().default("local"),
   vobizNumberId: text("vobiz_number_id"),
   agentId:       integer("agent_id").references(() => agentsTable.id, { onDelete: "set null" }),
+  /** When set, inbound calls create/join a Squad live run (entry member answers). */
+  squadId:       integer("squad_id"),
   status:        text("status").notNull().default("active"),
   monthlyRateCents: integer("monthly_rate_cents").notNull().default(0),
   // Recurring monthly renewal charge (billed on the purchase-date anniversary,

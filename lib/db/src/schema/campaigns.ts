@@ -44,6 +44,8 @@ export const campaignsTable = pgTable("campaigns", {
   name:                 text("name").notNull(),
   description:          text("description"),
   agentId:              integer("agent_id").references(() => agentsTable.id, { onDelete: "set null" }),
+  /** When set, dials start a Squad live run (agentId remains the entry member). */
+  squadId:              integer("squad_id"),
   status:               text("status").notNull().default("draft"),
   webhookToken:         text("webhook_token").notNull().unique(),
   fieldMappings:        json("field_mappings").$type<CampaignFieldMappings>().notNull().default({ phone: "phone" }),

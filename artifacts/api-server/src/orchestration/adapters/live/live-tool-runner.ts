@@ -136,8 +136,8 @@ async function executeLiveAgentTool(
       const targetId = args["targetAgentId"] ?? tool.targetAgentId;
       const ok = (await config.onCallTransfer?.(`agent:${targetId}`)) ?? false;
       if (!ok) return "transfer_failed: agent-to-agent transfer is not supported";
-      endCall();
-      return undefined;
+      // In-call squad handoff keeps media open — do not end the call.
+      return "handoff_complete: a teammate is now continuing with the customer";
     }
     case "webhook":
       await executeWebhookTool(callId, tool, args);

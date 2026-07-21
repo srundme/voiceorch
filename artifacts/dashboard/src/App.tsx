@@ -16,6 +16,7 @@ import { recordInAppNavigation } from "@/lib/nav-history";
 import { SnapServeLoader } from "@/components/logo";
 import { VoiceAssistant } from "@/components/VoiceAssistant";
 import AgentBuilder from "@/pages/agents/builder";
+import SquadsPage from "@/pages/squads/index";
 
 import CallsList from "@/pages/calls/index";
 import CallDetail from "@/pages/calls/[id]";
@@ -275,8 +276,9 @@ function AppRoutes() {
         <Route path="/app/command-center" component={CommandCenterRedirect} />
         <Route path="/app/analytics" component={AnalyticsPage} />
         <Route path="/app/agents" component={AgentBuilder} />
-
         <Route path="/app/agents/:id" component={AgentBuilder} />
+        <Route path="/app/squads" component={SquadsPage} />
+        <Route path="/app/squads/:id" component={SquadsPage} />
         <Route path="/app/calls" component={CallsList} />
         <Route path="/app/calls/:id" component={CallDetail} />
         <Route path="/app/knowledge-bases" component={KnowledgeBasePage} />

@@ -78,6 +78,7 @@ import workflowsRouter from "./workflows.js";
 import workflowsPublicRouter from "./workflows-public.js";
 import sheetsRouter from "./sheets.js";
 import sheetAutoCallsRouter from "./sheet-auto-calls.js";
+import squadsRouter from "./squads.js";
 import whatsappRouter from "./whatsapp.js";
 import webcallLinksRouter from "./webcall-links.js";
 import { provisionUser } from "../middlewares/userProvisioning.js";
@@ -189,5 +190,6 @@ router.use(crmRouter);
 router.use(workflowsRouter);
 router.use(sheetsRouter);
 router.use(sheetAutoCallsRouter);
+router.use(squadsRouter);
 
 export default router;

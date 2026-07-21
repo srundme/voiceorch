@@ -1,6 +1,6 @@
 import { createHmac, createHash, randomBytes } from "crypto";
 import { getSelfBaseUrl } from "../lib/app-domain.js";
-import { db, agentsTable, callsTable, providersTable, platformSettingsTable, campaignLeadsTable, knowledgeEntriesTable, callTransfersTable, usersTable, walletTransactionsTable, bookingsTable, eventTypesTable, scheduledCallbacksTable, campaignsTable, executionLogsTable } from "@workspace/db";
+import { db, agentsTable, callsTable, providersTable, platformSettingsTable, campaignLeadsTable, knowledgeEntriesTable, callTransfersTable, usersTable, walletTransactionsTable, bookingsTable, eventTypesTable, scheduledCallbacksTable, campaignsTable, executionLogsTable, squadsTable, squadRunsTable, phoneNumbersTable } from "@workspace/db";
 import { createExecutionLogger, writeCallEndedLog, writeCallStartedLog, logRecordingEvent, EXEC_COMPONENTS } from "../services/execution-log.js";
 import { getFlatRateCentsPerMin, resolveAgentBillingMode } from "../services/minute-rates.js";
 import { getAttachedSourceIds, buildKnowledgeBaseBlockEx } from "./kb-retrieval.js";
@@ -66,6 +66,8 @@ import {
   type CallerContext,
   type NameLatchTier,
 } from "./callerMemory.js";
+import { performSquadAgentHandoff } from "../services/squad-handoff.js";
+import { completeLiveSquadRun } from "../services/squad-engine.js";
 
 
 /**
@@ -167,6 +169,9 @@ interface ActiveSession {
    *  language). Fallback source for the calls.primary_language analytics column
    *  when the pipeline didn't detect a caller language mid-call. */
   configuredLanguage: string | null;
+  /** Active Agent Squad live run, when this call is part of a squad. */
+  squadRunId: number | null;
+  squadId: number | null;
 }
 
 const sessions = new Map<string, ActiveSession>();
@@ -246,6 +251,9 @@ export async function createSession(params: {
     lastCustomerMessage?: string;
     toolResults?: string[];
   };
+  /** When this call belongs to an Agent Squad live run. */
+  squadRunId?: number;
+  squadId?: number;
 }): Promise<{ sessionId: string; callDbId: number }> {
 
   // Browser "Live Test" transport — labels the call record + lifecycle log so the
@@ -1555,28 +1563,155 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     }
   }
 
+  // ── Agent Squad live-run attach (inbound phone / campaign) ─────────────────
+  let attachedSquadRunId: number | null = params.squadRunId ?? null;
+  let attachedSquadId: number | null = params.squadId ?? null;
+  if (!attachedSquadRunId && agent.userId) {
+    try {
+      const { ensureLiveSquadRunForCall } = await import("../services/squad-engine.js");
+      let resolvedSquadId: number | null = params.squadId ?? null;
+      let phoneNumberId: number | null = null;
+      let campaignId: number | null = null;
+
+      if (params.campaignLeadId) {
+        const [lead] = await db.select({
+          campaignId: campaignLeadsTable.campaignId,
+        }).from(campaignLeadsTable).where(eq(campaignLeadsTable.id, params.campaignLeadId)).limit(1);
+        if (lead) {
+          campaignId = lead.campaignId;
+          const [camp] = await db.select({
+            squadId: campaignsTable.squadId,
+          }).from(campaignsTable).where(eq(campaignsTable.id, lead.campaignId)).limit(1);
+          if (camp?.squadId) resolvedSquadId = camp.squadId;
+        }
+      }
+
+      if (!resolvedSquadId && callDirection === "inbound" && params.toNumber) {
+        const [pn] = await db.select({
+          id: phoneNumbersTable.id,
+          squadId: phoneNumbersTable.squadId,
+        }).from(phoneNumbersTable)
+          .where(and(
+            eq(phoneNumbersTable.number, params.toNumber),
+            eq(phoneNumbersTable.userId, agent.userId),
+          ))
+          .limit(1);
+        if (pn?.squadId) {
+          resolvedSquadId = pn.squadId;
+          phoneNumberId = pn.id;
+        }
+      }
+
+      if (resolvedSquadId) {
+        const linked = await ensureLiveSquadRunForCall({
+          squadId: resolvedSquadId,
+          userId: agent.userId,
+          callId: callRecord.id,
+          entryAgentId: params.agentId,
+          triggeredBy: params.campaignLeadId ? "campaign" : "inbound",
+          campaignId,
+          campaignLeadId: params.campaignLeadId ?? null,
+          phoneNumberId,
+          goal: "Live squad call",
+        });
+        if (linked) {
+          attachedSquadRunId = linked.runId;
+          attachedSquadId = resolvedSquadId;
+          logger.info(
+            { callId: callRecord.id, squadId: resolvedSquadId, runId: linked.runId },
+            "Attached live squad run to call",
+          );
+        }
+      }
+    } catch (squadErr) {
+      logger.warn({ err: squadErr, callId: callRecord.id }, "Failed to attach squad run — call continues without squad");
+    }
+  }
+
   const onCallTransferHandler = async (to: string, operatorSummary?: string): Promise<boolean> => {
     const isWarm = !!operatorSummary;
     logger.info({ callId: callRecord.id, transferTo: to, warm: isWarm }, "Call transfer initiated");
 
-    // AI-to-AI transfer: agent: prefix means transfer to another agent
+    // AI-to-AI transfer: agent: prefix means transfer to another squad member
     if (to.startsWith("agent:")) {
       const targetAgentId = parseInt(to.slice(6), 10);
-      // Agent-to-agent (AI→AI) handoff is NOT implemented. This previously returned
-      // true and ended the call, so the caller was dropped into dead air whenever the
-      // LLM (or an IVR option) picked an agent transfer. Report failure instead so the
-      // pipeline keeps the current agent talking to the caller.
-      logger.warn({ callId: callRecord.id, targetAgentId }, "Agent-to-agent transfer requested but not implemented — refusing (call continues with current agent)");
-      logExec(EXEC_COMPONENTS.Tool, "system", {
-        status: "error",
-        metadata: {
-          event:   "Transfer Failed",
-          reason:  "agent_transfer_not_implemented",
-          target:  to,
-          message: "Agent-to-agent transfer is not supported",
+      const live = sessions.get(sessionId);
+      if (!live?.squadRunId || !live.squadId || !Number.isFinite(targetAgentId)) {
+        logger.warn({ callId: callRecord.id, targetAgentId }, "Agent-to-agent transfer refused — no active squad run");
+        logExec(EXEC_COMPONENTS.Tool, "system", {
+          status: "error",
+          metadata: {
+            event:   "Transfer Failed",
+            reason:  "agent_transfer_no_squad",
+            target:  to,
+            message: "Agent-to-agent transfer requires an active Squad run",
+          },
+        });
+        return false;
+      }
+
+      const [squad] = await db.select().from(squadsTable).where(eq(squadsTable.id, live.squadId)).limit(1);
+      if (!squad) {
+        logger.warn({ callId: callRecord.id, squadId: live.squadId }, "Squad missing for handoff");
+        return false;
+      }
+
+      const transcriptSummary = live.pipeline.getTranscript().slice(-4000);
+      const [runRow] = await db.select({ goal: squadRunsTable.goal })
+        .from(squadRunsTable).where(eq(squadRunsTable.id, live.squadRunId)).limit(1);
+      const result = await performSquadAgentHandoff({
+        squadId: live.squadId,
+        runId: live.squadRunId,
+        fromAgentId: live.agentId,
+        toAgentId: targetAgentId,
+        reason: operatorSummary?.trim() || "Specialist handoff",
+        goal: runRow?.goal ?? "Live squad call",
+        transcriptSummary,
+        language: live.pipeline.getPreferredCallerLang() ?? live.configuredLanguage,
+        squad,
+        previousPipeline: live.pipeline,
+        hooks: {
+          callId: callRecord.id,
+          telephonyProvider: params.telephonyProvider,
+          callerPhone,
+          campaignLeadId: params.campaignLeadId ?? null,
+          onAudioOut: params.onAudioOut,
+          onCallEnd: () => {
+            naturalEndTriggered = true;
+            params.onCallEnd();
+          },
+          onBargeIn: params.onBargeIn,
+          onTranscript: params.onTranscript,
+          rawPcmOutput: params.rawPcmOutput,
+          callDirection,
         },
       });
-      return false;
+
+      if (!result) {
+        logExec(EXEC_COMPONENTS.Tool, "system", {
+          status: "error",
+          metadata: {
+            event:   "Transfer Failed",
+            reason:  "squad_handoff_failed",
+            target:  to,
+            message: "Squad handoff failed; continuing with current agent",
+          },
+        });
+        return false;
+      }
+
+      live.pipeline = result.pipeline;
+      live.agentId = targetAgentId;
+      logExec(EXEC_COMPONENTS.Tool, "system", {
+        status: "success",
+        metadata: {
+          event:  "Squad Handoff",
+          target: to,
+          fromMember: "swapped",
+          toMemberId: result.toMemberId,
+        },
+      });
+      return true;
     }
 
     // Execute the actual provider-level call redirect
@@ -1913,6 +2048,8 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     agentLlmModel:        agent.llmModel ?? "",
     campaignLeadId:       params.campaignLeadId ?? null,
     sourceCallbackReason: params.sourceCallbackReason ?? null,
+    squadRunId:           attachedSquadRunId,
+    squadId:              attachedSquadId,
   });
 
   // Attach any WhatsApp/upload images staged for this phone before the dial.
@@ -2158,11 +2295,24 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
   const session = sessions.get(sessionId);
   if (!session) return;
 
+  const squadTranscriptPreview = session.squadRunId
+    ? session.pipeline.getTranscript().slice(0, 2000)
+    : null;
+
   sessions.delete(sessionId);
   session.pipeline.close();
   destroyAudioSession(String(session.callId));
   void patchSessionMeta(sessionId, { status: "ended" }, 3600);
   void removeSession(sessionId, session.callId);
+
+  if (session.squadRunId) {
+    void completeLiveSquadRun({
+      runId: session.squadRunId,
+      summary: squadTranscriptPreview,
+    }).catch((err) => {
+      logger.warn({ err, runId: session.squadRunId }, "Failed to complete live squad run");
+    });
+  }
 
   const endedAt = new Date();
   // Clamp to non-negative: startedAt is anchored to the carrier answer time,
@@ -3074,6 +3224,23 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
             }
           } catch (taskEndErr) {
             logger.warn({ sessionId, err: taskEndErr }, "Agent task call-end hook failed");
+          }
+
+          // ── Squad make_call step resume ─────────────────────────────────────
+          if (session.campaignLeadId) {
+            try {
+              const { onSquadCampaignCallEnded } = await import("../services/squad-engine.js");
+              await onSquadCampaignCallEnded({
+                leadId: session.campaignLeadId,
+                callId: session.callId,
+                summary: callSummary || null,
+                disposition: typeof dispositionResult === "string"
+                  ? dispositionResult
+                  : (dispositionResult ? JSON.stringify(dispositionResult) : null),
+              });
+            } catch (squadEndErr) {
+              logger.warn({ sessionId, err: squadEndErr }, "Squad campaign call-end hook failed");
+            }
           }
         })();
 

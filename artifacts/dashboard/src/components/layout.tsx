@@ -3,7 +3,7 @@ import { Link, useLocation } from "wouter";
 import { useTheme } from "@/components/theme-provider";
 import { GlobalSearch, useGlobalSearchTrigger } from "@/components/GlobalSearch";
 import {
-  Home, Users, Zap, CalendarDays, Brain, Phone,
+  Home, Users, UsersRound, Zap, CalendarDays, Brain, Phone,
   Settings, Key, Webhook, Wallet, TrendingUp, ShieldCheck,
   Mic2, Menu, ChevronDown, ChevronLeft, ChevronRight,
   LogOut, Bell, Search, SlidersHorizontal, BookOpen, PhoneMissed, PlugZap, Sun, Moon, Sparkles,
@@ -78,6 +78,7 @@ const LS_SETTINGS     = "snapserve:settings-open";
 const NAV_PRIMARY = [
   { name: "Home",            href: "/app/home",            icon: Home },
   { name: "Agents",          href: "/app/agents",          icon: Users },
+  { name: "Squads",          href: "/app/squads",          icon: UsersRound },
   { name: "Vibe Build",      href: "/app/vibe",            icon: Sparkles },
   { name: "Agent Knowledge", href: "/app/knowledge-bases", icon: BookOpen },
   { name: "Campaigns",       href: "/app/campaigns",       icon: Zap },
@@ -109,6 +110,7 @@ const ROUTE_TITLES: [string, string][] = [
   ["/app/command-center",  "Home"],
   ["/app/vibe",            "Vibe Build"],
   ["/app/agents",          "Agents"],
+  ["/app/squads",          "Squads"],
   ["/app/knowledge-bases", "Agent Knowledge"],
   ["/app/campaigns",       "Campaigns"],
   ["/app/automatic-calls", "Automatic Calls"],
