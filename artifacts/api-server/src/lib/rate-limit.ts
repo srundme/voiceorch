@@ -113,6 +113,56 @@ export const workshopSubmitRateLimit = rateLimit({
   },
 });
 
+export const voiceathonMetaRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    const key = (req.params["slug"] as string | undefined)
+      ?? (req.params["code"] as string | undefined)
+      ?? "meta";
+    return `${ipKeyGenerator(req.ip ?? req.socket?.remoteAddress ?? "unknown")}:va:${key}`;
+  },
+  message: { error: "Too many requests. Please slow down." },
+  handler: (req, res, _next, options) => {
+    logger.warn({ ip: req.ip }, "Rate limit exceeded (voiceathon meta)");
+    res.status(429).json(options.message);
+  },
+});
+
+export const voiceathonSubmitRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    const email = String((req.body as Record<string, unknown> | undefined)?.["leaderEmail"] ?? "unknown").toLowerCase();
+    return `${ipKeyGenerator(req.ip ?? req.socket?.remoteAddress ?? "unknown")}:va-reg:${email}`;
+  },
+  message: { error: "Too many registration attempts. Please try again in a minute." },
+  handler: (req, res, _next, options) => {
+    logger.warn({ ip: req.ip }, "Rate limit exceeded (voiceathon register)");
+    res.status(429).json(options.message);
+  },
+});
+
+export const voiceathonJudgeRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    const token = String(req.params["token"] ?? "unknown").slice(0, 24);
+    return `${ipKeyGenerator(req.ip ?? req.socket?.remoteAddress ?? "unknown")}:va-judge:${token}`;
+  },
+  message: { error: "Too many requests. Please slow down." },
+  handler: (req, res, _next, options) => {
+    logger.warn({ ip: req.ip }, "Rate limit exceeded (voiceathon judge)");
+    res.status(429).json(options.message);
+  },
+});
+
 export const exemptPaths = [
   "/api/healthz",
   "/api/campaign-webhook",

@@ -51,6 +51,12 @@ import SchedulingConferencingPage from "@/pages/scheduling/Conferencing";
 import PublicBookingPage from "@/pages/book/[slug]";
 import WebcallJoinPage from "@/pages/join/[token]";
 import WorkshopFormPage from "@/pages/workshop/[slug]";
+import EventsPage from "@/pages/events/index";
+import EventDetailPage from "@/pages/events/detail";
+import EventTeamPortalPage from "@/pages/events/team";
+import PublicEventPage from "@/pages/events/public";
+import JudgePortalPage from "@/pages/events/judge";
+import CertificateVerifyPage from "@/pages/events/certificate-verify";
 import CancelBookingPage from "@/pages/book/cancel";
 import RescheduleBookingPage from "@/pages/book/reschedule";
 import UsagePage from "@/pages/usage";
@@ -279,6 +285,9 @@ function AppRoutes() {
         <Route path="/app/agents/:id" component={AgentBuilder} />
         <Route path="/app/squads" component={SquadsPage} />
         <Route path="/app/squads/:id" component={SquadsPage} />
+        <Route path="/app/events/:id/team" component={EventTeamPortalPage} />
+        <Route path="/app/events/:id" component={EventDetailPage} />
+        <Route path="/app/events" component={EventsPage} />
         <Route path="/app/calls" component={CallsList} />
         <Route path="/app/calls/:id" component={CallDetail} />
         <Route path="/app/knowledge-bases" component={KnowledgeBasePage} />
@@ -382,6 +391,9 @@ function Router() {
           <Route path="/book/:slug" component={PublicBookingPage} />
           <Route path="/join/:token" component={WebcallJoinPage} />
           <Route path="/workshop/:slug" component={WorkshopFormPage} />
+          <Route path="/events/judge/:token" component={JudgePortalPage} />
+          <Route path="/events/certificates/:code/verify" component={CertificateVerifyPage} />
+          <Route path="/events/:slug" component={PublicEventPage} />
           <Route path="/docs" component={DocsPage} />
           <Route path="/docs/api-reference/:op" component={DocsPage} />
           <Route path="/docs/:section" component={DocsPage} />

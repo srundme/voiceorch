@@ -435,6 +435,13 @@
       "when": 1788200000000,
       "tag": "0066_squad_tasks",
       "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1788300000000,
+      "tag": "0067_voiceathon_events",
+      "breakpoints": true
     }
   ]
 }

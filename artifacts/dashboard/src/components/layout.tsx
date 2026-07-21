@@ -7,7 +7,7 @@ import {
   Settings, Key, Webhook, Wallet, TrendingUp, ShieldCheck,
   Mic2, Menu, ChevronDown, ChevronLeft, ChevronRight,
   LogOut, Bell, Search, SlidersHorizontal, BookOpen, PhoneMissed, PlugZap, Sun, Moon, Sparkles,
-  ArrowRightLeft, Instagram, FileSpreadsheet, MessageCircle,
+  ArrowRightLeft, Instagram, FileSpreadsheet, MessageCircle, Trophy,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useAuth } from "@/lib/auth";
@@ -79,6 +79,7 @@ const NAV_PRIMARY = [
   { name: "Home",            href: "/app/home",            icon: Home },
   { name: "Agents",          href: "/app/agents",          icon: Users },
   { name: "Squads",          href: "/app/squads",          icon: UsersRound },
+  { name: "Events",          href: "/app/events",          icon: Trophy },
   { name: "Vibe Build",      href: "/app/vibe",            icon: Sparkles },
   { name: "Agent Knowledge", href: "/app/knowledge-bases", icon: BookOpen },
   { name: "Campaigns",       href: "/app/campaigns",       icon: Zap },
@@ -111,6 +112,7 @@ const ROUTE_TITLES: [string, string][] = [
   ["/app/vibe",            "Vibe Build"],
   ["/app/agents",          "Agents"],
   ["/app/squads",          "Squads"],
+  ["/app/events",          "Events"],
   ["/app/knowledge-bases", "Agent Knowledge"],
   ["/app/campaigns",       "Campaigns"],
   ["/app/automatic-calls", "Automatic Calls"],

@@ -73,6 +73,8 @@ import connectionsRouter from "./connections.js";
 import crmRouter from "./crm.js";
 import bookRouter from "./book.js";
 import workshopRouter from "./workshop.js";
+import voiceathonPublicRouter from "./voiceathon-public.js";
+import voiceathonEventsRouter from "./voiceathon-events.js";
 import adminEventFeedbackRouter from "./admin-event-feedback.js";
 import workflowsRouter from "./workflows.js";
 import workflowsPublicRouter from "./workflows-public.js";
@@ -129,6 +131,9 @@ router.use(bookRouter);
 
 // Public workshop feedback form — anonymous students, no session required
 router.use(workshopRouter);
+
+// Public Voice-a-thon registration / judge / verify — no session required
+router.use(voiceathonPublicRouter);
 
 // Public workflow trigger intake (website / Instagram form leads) — no session
 router.use(workflowsPublicRouter);
@@ -191,5 +196,6 @@ router.use(workflowsRouter);
 router.use(sheetsRouter);
 router.use(sheetAutoCallsRouter);
 router.use(squadsRouter);
+router.use(voiceathonEventsRouter);
 
 export default router;

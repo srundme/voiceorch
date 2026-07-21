@@ -66,3 +66,4 @@ export * from "./whatsapp";
 export * from "./call-media";
 export * from "./webcall-links";
 export * from "./squads";
+export * from "./voiceathon-events";
