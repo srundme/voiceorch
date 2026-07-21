@@ -5782,6 +5782,24 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
     visionEnabled: form.watch("visionEnabled"),
     visionLiveEnabled: form.watch("visionLiveEnabled"),
   });
+
+  const switchAgentKind = (next: "voice" | "vision") => {
+    if (next === agentKind) return;
+    if (next === "vision") {
+      // Default new vision agents to still-photo capture; refine in Vision tab.
+      const flags = visionFlagsForCaptureMode("photo");
+      form.setValue("agentKind", "vision", { shouldDirty: true });
+      form.setValue("visionEnabled", flags.visionEnabled, { shouldDirty: true });
+      form.setValue("visionLiveEnabled", flags.visionLiveEnabled, { shouldDirty: true });
+      setActiveTab("vision");
+    } else {
+      form.setValue("agentKind", "voice", { shouldDirty: true });
+      form.setValue("visionEnabled", false, { shouldDirty: true });
+      form.setValue("visionLiveEnabled", false, { shouldDirty: true });
+      if (activeTab === "vision") setActiveTab("overview");
+    }
+  };
+
   const visibleTabs = tabsForAgentKind(agentKind);
   const webTestLabel =
     agentKind !== "vision"
@@ -5865,15 +5883,34 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
                 <span className={cn("h-1.5 w-1.5 rounded-full", agent.status === "active" ? "bg-emerald-400" : "bg-muted-foreground/50")} />
                 {agent.status === "active" ? "Live" : "Draft"}
               </span>
-              <span className={cn(
-                "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide shrink-0",
-                agentKind === "vision"
-                  ? "border-sky-500/25 bg-sky-500/10 text-sky-400"
-                  : "border-border/50 bg-muted/30 text-muted-foreground",
-              )}>
-                {agentKind === "vision" ? <Camera className="h-3 w-3" /> : <Mic className="h-3 w-3" />}
-                {agentKind === "vision" ? "Vision" : "Voice"}
-              </span>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    title="Switch agent type"
+                    className={cn(
+                      "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide shrink-0 transition-colors hover:opacity-80",
+                      agentKind === "vision"
+                        ? "border-sky-500/25 bg-sky-500/10 text-sky-400"
+                        : "border-border/50 bg-muted/30 text-muted-foreground",
+                    )}
+                  >
+                    {agentKind === "vision" ? <Camera className="h-3 w-3" /> : <Mic className="h-3 w-3" />}
+                    {agentKind === "vision" ? "Vision" : "Voice"}
+                    <ChevronDown className="h-3 w-3 opacity-70" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  <DropdownMenuItem onClick={() => switchAgentKind("voice")}>
+                    <Mic className="h-3.5 w-3.5 mr-2" /> Voice
+                    {agentKind === "voice" && <Check className="h-3.5 w-3.5 ml-auto" />}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => switchAgentKind("vision")}>
+                    <Camera className="h-3.5 w-3.5 mr-2" /> Vision
+                    {agentKind === "vision" && <Check className="h-3.5 w-3.5 ml-auto" />}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
               <span className="text-[11px] text-muted-foreground/50 tabular-nums shrink-0">#{String(agent.id).padStart(4, "0")}</span>
             </div>
             <AgentCostSummary form={form} rateMap={rateMap} agent={agent} />
