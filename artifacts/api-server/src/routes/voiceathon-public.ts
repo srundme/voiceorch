@@ -6,7 +6,7 @@
 
 import { Router, type IRouter } from "express";
 import { z } from "zod";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import {
   db,
   voiceathonEventsTable,
@@ -17,23 +17,30 @@ import {
   voiceathonJudgeAssignmentsTable,
   voiceathonScoresTable,
   voiceathonCertificatesTable,
+  voiceathonPhoneOtpsTable,
   webcallLinksTable,
   agentsTable,
 } from "@workspace/db";
 import { logger } from "../lib/logger.js";
-import { sendBrevoEmail } from "../services/brevo.js";
+import { sendBrevoEmail, sendBrevoSms } from "../services/brevo.js";
 import {
   voiceathonMetaRateLimit,
   voiceathonSubmitRateLimit,
   voiceathonJudgeRateLimit,
+  voiceathonOtpSendRateLimit,
+  voiceathonOtpVerifyRateLimit,
 } from "../lib/rate-limit.js";
-import { getSelfBaseUrl } from "../lib/app-domain.js";
 import {
   getEventBySlug,
   publicEventPayload,
   isRegistrationOpen,
   isJudgingOpen,
   normalizeEmail,
+  normalizeIndianPhone,
+  hashVoiceathonSecret,
+  matchesVoiceathonSecret,
+  mintOtpCode,
+  mintOtpVerificationToken,
   mintReferenceCode,
   countTeams,
   getJudgeByToken,
@@ -43,6 +50,16 @@ import {
 
 const router: IRouter = Router();
 
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "\"": "&quot;",
+    "'": "&#039;",
+  })[character]!);
+}
+
 const Slug = z
   .string()
   .min(1)
@@ -50,18 +67,27 @@ const Slug = z
   .regex(/^[a-z0-9][a-z0-9-]*$/i, "slug must be alphanumeric/dash");
 
 const MemberBody = z.object({
-  name: z.string().min(1).max(200),
-  email: z.string().email().max(320).optional().or(z.literal("")),
-  phone: z.string().max(40).optional().or(z.literal("")),
+  name: z.string().trim().min(1).max(200),
+  email: z.string().email().max(320),
+  phone: z.string().min(10).max(40),
+  linkedinUrl: z.string().url().max(500).refine(
+    (value) => /^https?:\/\/([a-z]{2,3}\.)?linkedin\.com\//i.test(value),
+    "LinkedIn profile URL is required",
+  ),
 });
 
 const RegisterBody = z.object({
-  teamName: z.string().min(1).max(200),
+  teamName: z.string().trim().min(1).max(200),
   institution: z.string().max(200).optional().or(z.literal("")),
   city: z.string().max(120).optional().or(z.literal("")),
-  leaderName: z.string().min(1).max(200),
+  leaderName: z.string().trim().min(1).max(200),
   leaderEmail: z.string().email().max(320),
-  leaderPhone: z.string().max(40).optional().or(z.literal("")),
+  leaderPhone: z.string().min(10).max(40),
+  leaderLinkedinUrl: z.string().url().max(500).refine(
+    (value) => /^https?:\/\/([a-z]{2,3}\.)?linkedin\.com\//i.test(value),
+    "LinkedIn profile URL is required",
+  ),
+  phoneVerificationToken: z.string().min(20).max(200),
   members: z.array(MemberBody).max(20).default([]),
 });
 
@@ -96,6 +122,100 @@ router.get("/voiceathon/public/:slug", voiceathonMetaRateLimit, async (req, res)
 
 // ── Team registration ────────────────────────────────────────────────────────
 
+router.post("/voiceathon/public/:slug/otp/send", voiceathonOtpSendRateLimit, async (req, res): Promise<void> => {
+  const slugParsed = Slug.safeParse(req.params["slug"]);
+  const body = z.object({ phone: z.string().min(10).max(40) }).safeParse(req.body);
+  if (!slugParsed.success || !body.success) {
+    res.status(400).json({ error: "Enter a valid mobile number" });
+    return;
+  }
+  const phone = normalizeIndianPhone(body.data.phone);
+  if (!phone) {
+    res.status(400).json({ error: "Enter a valid 10-digit Indian mobile number" });
+    return;
+  }
+  const ev = await getEventBySlug(slugParsed.data);
+  if (!ev || !isRegistrationOpen(ev)) {
+    res.status(403).json({ error: "Registration is not open" });
+    return;
+  }
+
+  // Invalidate earlier unused challenges for this event+phone so only the
+  // newest OTP remains valid (resend / concurrent send hardening).
+  await db.update(voiceathonPhoneOtpsTable)
+    .set({ consumedAt: new Date() })
+    .where(and(
+      eq(voiceathonPhoneOtpsTable.eventId, ev.id),
+      eq(voiceathonPhoneOtpsTable.phoneNormalized, phone),
+      isNull(voiceathonPhoneOtpsTable.consumedAt),
+    ));
+
+  const code = mintOtpCode();
+  const challengeToken = mintOtpVerificationToken();
+  const [otp] = await db.insert(voiceathonPhoneOtpsTable).values({
+    eventId: ev.id,
+    phoneNormalized: phone,
+    codeHash: hashVoiceathonSecret(code),
+    verificationTokenHash: hashVoiceathonSecret(challengeToken),
+    expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+  }).returning({ id: voiceathonPhoneOtpsTable.id });
+
+  try {
+    await sendBrevoSms(phone, `${code} is your SnapServe ${ev.title} registration OTP. Valid for 10 minutes. Do not share it.`);
+    res.json({ ok: true, challengeToken, expiresInSeconds: 600 });
+  } catch (err) {
+    await db.delete(voiceathonPhoneOtpsTable).where(eq(voiceathonPhoneOtpsTable.id, otp!.id));
+    logger.error({ err, eventId: ev.id }, "voiceathon OTP SMS failed");
+    res.status(503).json({ error: "Could not send OTP. Please try again." });
+  }
+});
+
+router.post("/voiceathon/public/:slug/otp/verify", voiceathonOtpVerifyRateLimit, async (req, res): Promise<void> => {
+  const slugParsed = Slug.safeParse(req.params["slug"]);
+  const body = z.object({
+    phone: z.string().min(10).max(40),
+    challengeToken: z.string().min(20).max(200),
+    code: z.string().regex(/^\d{6}$/),
+  }).safeParse(req.body);
+  if (!slugParsed.success || !body.success) {
+    res.status(400).json({ error: "Invalid OTP request" });
+    return;
+  }
+  const phone = normalizeIndianPhone(body.data.phone);
+  if (!phone) {
+    res.status(400).json({ error: "Invalid mobile number" });
+    return;
+  }
+  const ev = await getEventBySlug(slugParsed.data);
+  if (!ev) { res.status(404).json({ error: "Event not found" }); return; }
+
+  const [otp] = await db.select().from(voiceathonPhoneOtpsTable).where(and(
+    eq(voiceathonPhoneOtpsTable.eventId, ev.id),
+    eq(voiceathonPhoneOtpsTable.phoneNormalized, phone),
+    eq(voiceathonPhoneOtpsTable.verificationTokenHash, hashVoiceathonSecret(body.data.challengeToken)),
+    isNull(voiceathonPhoneOtpsTable.consumedAt),
+  )).orderBy(desc(voiceathonPhoneOtpsTable.createdAt)).limit(1);
+
+  if (!otp || otp.expiresAt < new Date() || otp.attempts >= 5) {
+    res.status(400).json({ error: "OTP expired. Request a new code." });
+    return;
+  }
+  if (!matchesVoiceathonSecret(body.data.code, otp.codeHash)) {
+    await db.update(voiceathonPhoneOtpsTable)
+      .set({ attempts: otp.attempts + 1 })
+      .where(eq(voiceathonPhoneOtpsTable.id, otp.id));
+    res.status(400).json({ error: "Incorrect OTP" });
+    return;
+  }
+
+  const verificationToken = mintOtpVerificationToken();
+  await db.update(voiceathonPhoneOtpsTable).set({
+    verifiedAt: new Date(),
+    verificationTokenHash: hashVoiceathonSecret(verificationToken),
+  }).where(eq(voiceathonPhoneOtpsTable.id, otp.id));
+  res.json({ ok: true, verificationToken });
+});
+
 router.post("/voiceathon/public/:slug/register", voiceathonSubmitRateLimit, async (req, res): Promise<void> => {
   const slugParsed = Slug.safeParse(req.params["slug"]);
   if (!slugParsed.success) { res.status(400).json({ error: "Invalid slug" }); return; }
@@ -118,22 +238,48 @@ router.post("/voiceathon/public/:slug/register", voiceathonSubmitRateLimit, asyn
 
     const b = parsed.data;
     const leaderEmailNorm = normalizeEmail(b.leaderEmail);
+    const leaderPhoneNorm = normalizeIndianPhone(b.leaderPhone);
+    if (!leaderPhoneNorm) {
+      res.status(400).json({ error: "Enter a valid leader mobile number" });
+      return;
+    }
+    const normalizedMembers = b.members.map((member) => ({
+      ...member,
+      phoneNormalized: normalizeIndianPhone(member.phone),
+    }));
+    if (normalizedMembers.some((member) => !member.phoneNormalized)) {
+      res.status(400).json({ error: "Every team member must have a valid Indian mobile number" });
+      return;
+    }
 
-    // Build full member list: leader + additional (dedupe leader email)
-    const extraMembers = (b.members ?? []).filter((m) => m.name.trim());
+    const [verifiedOtp] = await db.select().from(voiceathonPhoneOtpsTable).where(and(
+      eq(voiceathonPhoneOtpsTable.eventId, ev.id),
+      eq(voiceathonPhoneOtpsTable.phoneNormalized, leaderPhoneNorm),
+      eq(voiceathonPhoneOtpsTable.verificationTokenHash, hashVoiceathonSecret(b.phoneVerificationToken)),
+      isNull(voiceathonPhoneOtpsTable.consumedAt),
+    )).orderBy(desc(voiceathonPhoneOtpsTable.verifiedAt)).limit(1);
+    if (!verifiedOtp?.verifiedAt || verifiedOtp.expiresAt < new Date()) {
+      res.status(400).json({ error: "Verify the leader mobile number before registering" });
+      return;
+    }
+
+    // Build full member list: leader + additional members.
+    const extraMembers = normalizedMembers.filter((m) => m.name.trim());
     const allPeople = [
       {
         name: b.leaderName.trim(),
         email: b.leaderEmail.trim(),
         emailNormalized: leaderEmailNorm,
-        phone: b.leaderPhone?.trim() || null,
+        phone: leaderPhoneNorm,
+        linkedinUrl: b.leaderLinkedinUrl.trim(),
         role: "leader" as const,
       },
       ...extraMembers.map((m, i) => ({
         name: m.name.trim(),
-        email: m.email?.trim() || null,
-        emailNormalized: m.email?.trim() ? normalizeEmail(m.email) : null,
-        phone: m.phone?.trim() || null,
+        email: m.email.trim(),
+        emailNormalized: normalizeEmail(m.email),
+        phone: m.phoneNormalized!,
+        linkedinUrl: m.linkedinUrl.trim(),
         role: "member" as const,
         sortHint: i + 1,
       })),
@@ -155,80 +301,109 @@ router.post("/voiceathon/public/:slug/register", voiceathonSubmitRateLimit, asyn
       }
     }
 
-    // Duplicate leader email
-    const [dup] = await db.select({ id: voiceathonTeamsTable.id })
+    const teamNameNormalized = b.teamName.trim().replace(/\s+/g, " ").toLowerCase();
+    const [duplicateTeam] = await db.select({ id: voiceathonTeamsTable.id })
+      .from(voiceathonTeamsTable)
+      .where(and(
+        eq(voiceathonTeamsTable.eventId, ev.id),
+        eq(voiceathonTeamsTable.nameNormalized, teamNameNormalized),
+      ))
+      .limit(1);
+    if (duplicateTeam) {
+      res.status(409).json({ error: "This team name is already taken. Choose another name." });
+      return;
+    }
+
+    const [duplicateLeader] = await db.select({ id: voiceathonTeamsTable.id })
       .from(voiceathonTeamsTable)
       .where(and(
         eq(voiceathonTeamsTable.eventId, ev.id),
         eq(voiceathonTeamsTable.leaderEmailNormalized, leaderEmailNorm),
       ))
       .limit(1);
-    if (dup) {
+    if (duplicateLeader) {
       res.status(409).json({ error: "A team with this leader email is already registered" });
       return;
     }
 
     const referenceCode = mintReferenceCode();
-    const [team] = await db.insert(voiceathonTeamsTable).values({
-      eventId: ev.id,
-      name: b.teamName.trim(),
-      referenceCode,
-      institution: b.institution?.trim() || null,
-      city: b.city?.trim() || null,
-      leaderName: b.leaderName.trim(),
-      leaderEmail: b.leaderEmail.trim(),
-      leaderEmailNormalized: leaderEmailNorm,
-      leaderPhone: b.leaderPhone?.trim() || null,
-      status: "registered",
-    }).returning();
+    const team = await db.transaction(async (tx) => {
+      const [consumedOtp] = await tx.update(voiceathonPhoneOtpsTable)
+        .set({ consumedAt: new Date() })
+        .where(and(
+          eq(voiceathonPhoneOtpsTable.id, verifiedOtp.id),
+          isNull(voiceathonPhoneOtpsTable.consumedAt),
+        ))
+        .returning({ id: voiceathonPhoneOtpsTable.id });
+      if (!consumedOtp) throw new Error("OTP was already used");
 
-    await db.insert(voiceathonTeamMembersTable).values(
-      allPeople.map((p, i) => ({
-        teamId: team!.id,
-        name: p.name,
-        email: p.email,
-        emailNormalized: p.emailNormalized,
-        phone: p.phone,
-        role: p.role,
-        sortOrder: i,
-      })),
-    );
+      const [created] = await tx.insert(voiceathonTeamsTable).values({
+        eventId: ev.id,
+        name: b.teamName.trim(),
+        nameNormalized: teamNameNormalized,
+        referenceCode,
+        institution: b.institution?.trim() || null,
+        city: b.city?.trim() || null,
+        leaderName: b.leaderName.trim(),
+        leaderEmail: b.leaderEmail.trim(),
+        leaderEmailNormalized: leaderEmailNorm,
+        leaderPhone: leaderPhoneNorm,
+        leaderLinkedinUrl: b.leaderLinkedinUrl.trim(),
+        phoneVerifiedAt: verifiedOtp.verifiedAt,
+        status: "pending",
+      }).returning();
+      if (!created) throw new Error("Team insert failed");
 
-    const base = getSelfBaseUrl().replace(/\/$/, "");
-    const signInUrl = `${base}/sign-in`;
-    const teamPortalHint = `${base}/app/events/${ev.id}/team`;
+      await tx.insert(voiceathonTeamMembersTable).values(
+        allPeople.map((person, index) => ({
+          teamId: created.id,
+          name: person.name,
+          email: person.email,
+          emailNormalized: person.emailNormalized,
+          phone: person.phone,
+          linkedinUrl: person.linkedinUrl,
+          role: person.role,
+          sortOrder: index,
+        })),
+      );
+      return created;
+    });
 
     try {
       await sendBrevoEmail(
-        team!.leaderEmail,
-        `Registered for ${ev.title} — ${referenceCode}`,
-        `<p>Hi ${team!.leaderName},</p>
-         <p>Your team <strong>${team!.name}</strong> is registered for <strong>${ev.title}</strong>.</p>
+        team.leaderEmail,
+        `Registration received for ${ev.title} — ${referenceCode}`,
+        `<p>Hi ${escapeHtml(team.leaderName)},</p>
+         <p>We received the registration for team <strong>${escapeHtml(team.name)}</strong> at <strong>${escapeHtml(ev.title)}</strong>.</p>
          <p>Team reference: <strong>${referenceCode}</strong></p>
-         <p>Next steps:</p>
-         <ol>
-           <li>Sign in to SnapServe with this same email (<a href="${signInUrl}">${signInUrl}</a>).</li>
-           <li>Build your voice agent in the dashboard.</li>
-           <li>Open your team portal and submit your agent before the deadline: <a href="${teamPortalHint}">${teamPortalHint}</a></li>
-         </ol>
-         <p>Good luck!</p>`,
+         <p>SnapServe will review your team details. If approved, your official event ticket will be sent to this email.</p>`,
         undefined,
-        { emailType: "voiceathon_registration", toName: team!.leaderName },
+        { emailType: "voiceathon_registration", toName: team.leaderName },
       );
     } catch (mailErr) {
-      logger.warn({ err: mailErr, teamId: team!.id }, "Registration confirmation email failed");
+      logger.warn({ err: mailErr, teamId: team.id }, "Registration confirmation email failed");
     }
 
     res.status(201).json({
       ok: true,
       referenceCode,
-      teamName: team!.name,
+      teamName: team.name,
       eventTitle: ev.title,
-      message: "Registration confirmed. Sign in with your leader email to claim the team and submit your agent.",
+      status: "pending",
+      message: "Registration received and pending SnapServe approval.",
     });
   } catch (err: any) {
+    if (String(err?.message ?? "").includes("OTP was already used")) {
+      res.status(409).json({ error: "This OTP verification was already used. Verify the mobile number again." });
+      return;
+    }
     if (err?.code === "23505") {
-      res.status(409).json({ error: "A team with this leader email is already registered" });
+      const constraint = String(err?.constraint ?? "");
+      res.status(409).json({
+        error: constraint.includes("event_name")
+          ? "This team name is already taken. Choose another name."
+          : "A team with this leader email is already registered",
+      });
       return;
     }
     logger.error({ err, slug: slugParsed.data }, "voiceathon register failed");

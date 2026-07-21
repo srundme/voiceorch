@@ -61,9 +61,20 @@ type TeamRow = {
   city: string | null;
   leaderName: string;
   leaderEmail: string;
+  leaderPhone: string;
+  leaderLinkedinUrl: string;
   status: string;
   placement: string;
-  members: Array<{ id: number; name: string; email: string | null; role: string }>;
+  rejectionReason: string | null;
+  ticketCode: string | null;
+  members: Array<{
+    id: number;
+    name: string;
+    email: string | null;
+    phone: string | null;
+    linkedinUrl: string | null;
+    role: string;
+  }>;
   submission: { id: number; status: string; projectTitle: string | null; submittedAt: string | null } | null;
   createdAt: string;
 };
@@ -304,6 +315,43 @@ export default function VoiceathonEventDetailPage({ params }: { params: { id: st
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
+              <Label>Venue</Label>
+              <Input
+                defaultValue={event.venue ?? ""}
+                placeholder="Required before team approval"
+                onBlur={(e) => patchMut.mutate({ venue: e.target.value.trim() || null })}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Mode</Label>
+              <Select value={event.mode} onValueChange={(mode) => patchMut.mutate({ mode })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="offline">Offline</SelectItem>
+                  <SelectItem value="online">Online</SelectItem>
+                  <SelectItem value="hybrid">Hybrid</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Event starts</Label>
+              <Input
+                type="datetime-local"
+                defaultValue={toLocalInput(event.eventStartsAt)}
+                onBlur={(e) => patchMut.mutate({ eventStartsAt: fromLocalInput(e.target.value) })}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Event ends</Label>
+              <Input
+                type="datetime-local"
+                defaultValue={toLocalInput(event.eventEndsAt)}
+                onBlur={(e) => patchMut.mutate({ eventEndsAt: fromLocalInput(e.target.value) })}
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
               <Label>Registration opens</Label>
               <Input
                 type="datetime-local"
@@ -410,6 +458,7 @@ export default function VoiceathonEventDetailPage({ params }: { params: { id: st
                   <TableHead>Members</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Placement</TableHead>
+                  <TableHead>Review</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -425,11 +474,33 @@ export default function VoiceathonEventDetailPage({ params }: { params: { id: st
                     <TableCell>
                       <div className="text-sm">{t.leaderName}</div>
                       <div className="text-xs text-muted-foreground">{t.leaderEmail}</div>
+                      <div className="text-xs text-muted-foreground">{t.leaderPhone}</div>
+                      <a
+                        href={t.leaderLinkedinUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs underline"
+                      >
+                        LinkedIn
+                      </a>
                     </TableCell>
-                    <TableCell className="text-sm max-w-52">{t.members.map((m) => m.name).join(", ")}</TableCell>
+                    <TableCell className="text-sm max-w-64">
+                      {t.members.map((member) => (
+                        <div key={member.id} className="mb-2 last:mb-0">
+                          <div>{member.name} <span className="text-xs text-muted-foreground">({member.role})</span></div>
+                          <div className="text-xs text-muted-foreground">{member.email} · {member.phone}</div>
+                          {member.linkedinUrl && (
+                            <a href={member.linkedinUrl} target="_blank" rel="noreferrer" className="text-xs underline">
+                              LinkedIn profile
+                            </a>
+                          )}
+                        </div>
+                      ))}
+                    </TableCell>
                     <TableCell>
                       <Select
                         value={t.status}
+                        disabled={t.status === "pending" || t.status === "rejected"}
                         onValueChange={(v) => {
                           void adminFetch(`/voiceathon/events/${eventId}/teams/${t.id}`, {
                             method: "PATCH",
@@ -439,11 +510,81 @@ export default function VoiceathonEventDetailPage({ params }: { params: { id: st
                       >
                         <SelectTrigger className="w-[140px] h-8 text-xs"><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          {["registered", "claimed", "submitted", "disqualified", "withdrawn"].map((s) => (
+                          {[
+                            "pending", "approved", "rejected", "registered", "claimed",
+                            "submitted", "disqualified", "withdrawn",
+                          ].map((s) => (
                             <SelectItem key={s} value={s}>{s}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
+                    </TableCell>
+                    <TableCell>
+                      {t.status === "pending" ? (
+                        <div className="flex flex-col gap-1.5 min-w-24">
+                          <Button
+                            size="sm"
+                            onClick={async () => {
+                              try {
+                                await adminFetch(`/voiceathon/events/${eventId}/teams/${t.id}`, {
+                                  method: "PATCH",
+                                  body: JSON.stringify({ status: "approved" }),
+                                });
+                                void qc.invalidateQueries({ queryKey: ["admin", "voiceathon-teams", eventId] });
+                                toast({ title: "Approved — ticket emailed" });
+                              } catch (err) {
+                                toast({
+                                  title: "Approval failed",
+                                  description: formatAdminError(err),
+                                  variant: "destructive",
+                                });
+                              }
+                            }}
+                          >
+                            Approve + ticket
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-destructive"
+                            onClick={async () => {
+                              const reason = window.prompt("Why is this registration being rejected?");
+                              if (!reason?.trim()) return;
+                              try {
+                                await adminFetch(`/voiceathon/events/${eventId}/teams/${t.id}`, {
+                                  method: "PATCH",
+                                  body: JSON.stringify({ status: "rejected", rejectionReason: reason.trim() }),
+                                });
+                                void qc.invalidateQueries({ queryKey: ["admin", "voiceathon-teams", eventId] });
+                                toast({ title: "Registration rejected" });
+                              } catch (err) {
+                                toast({
+                                  title: "Rejection failed",
+                                  description: formatAdminError(err),
+                                  variant: "destructive",
+                                });
+                              }
+                            }}
+                          >
+                            Reject
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="text-xs text-muted-foreground max-w-36">
+                          {t.ticketCode ? (
+                            <button
+                              type="button"
+                              className="underline"
+                              onClick={() => adminDownload(
+                                `/voiceathon/events/${eventId}/teams/${t.id}/ticket.pdf`,
+                                `${t.ticketCode}.pdf`,
+                              )}
+                            >
+                              Ticket {t.ticketCode}
+                            </button>
+                          ) : t.rejectionReason || "Reviewed"}
+                        </div>
+                      )}
                     </TableCell>
                     <TableCell>
                       <Select
@@ -559,18 +700,40 @@ export default function VoiceathonEventDetailPage({ params }: { params: { id: st
                   <p className="text-sm font-medium">{j.name}</p>
                   <p className="text-xs text-muted-foreground">{j.email} · {j.assignmentCount} assigned · {j.status}</p>
                 </div>
-                {j.status !== "revoked" && (
+                <div className="flex gap-1.5">
                   <Button
                     size="sm"
                     variant="outline"
                     onClick={async () => {
-                      await adminFetch(`/voiceathon/events/${eventId}/judges/${j.id}/revoke`, { method: "POST" });
-                      void refetchJudges();
+                      try {
+                        const result = await adminFetch<{ inviteUrl: string }>(
+                          `/voiceathon/events/${eventId}/judges/${j.id}/regenerate`,
+                          { method: "POST" },
+                        );
+                        setLastInviteUrl(result.inviteUrl);
+                        await navigator.clipboard.writeText(result.inviteUrl);
+                        void refetchJudges();
+                        toast({ title: "New judge link emailed and copied" });
+                      } catch (err) {
+                        toast({ title: "Could not generate link", description: formatAdminError(err), variant: "destructive" });
+                      }
                     }}
                   >
-                    Revoke
+                    New link
                   </Button>
-                )}
+                  {j.status !== "revoked" && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={async () => {
+                        await adminFetch(`/voiceathon/events/${eventId}/judges/${j.id}/revoke`, { method: "POST" });
+                        void refetchJudges();
+                      }}
+                    >
+                      Revoke
+                    </Button>
+                  )}
+                </div>
               </CardContent>
             </Card>
           ))}

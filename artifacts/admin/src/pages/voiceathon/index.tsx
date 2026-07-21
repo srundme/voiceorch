@@ -1,21 +1,10 @@
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Link, useLocation } from "wouter";
-import { adminFetch, formatAdminError } from "@/lib/api";
+import { useQuery } from "@tanstack/react-query";
+import { Link } from "wouter";
+import { adminFetch } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogFooter,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
 import {
   Table,
   TableBody,
@@ -24,7 +13,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useToast } from "@/hooks/use-toast";
 import { Trophy, Plus, Copy, Check } from "lucide-react";
 
 export interface AdminVoiceathonEvent {
@@ -77,40 +65,10 @@ function ShareLink({ slug }: { slug: string }) {
 }
 
 export default function VoiceathonEventsPage() {
-  const [, setLocation] = useLocation();
-  const { toast } = useToast();
-  const qc = useQueryClient();
-  const [createOpen, setCreateOpen] = useState(false);
-  const [title, setTitle] = useState("");
-  const [tagline, setTagline] = useState("");
-  const [description, setDescription] = useState("");
-
   const { data: events = [], isLoading, error } = useQuery({
     queryKey: ["admin", "voiceathon-events"],
     queryFn: () => adminFetch<AdminVoiceathonEvent[]>("/voiceathon/events"),
     refetchInterval: 60_000,
-  });
-
-  const createMut = useMutation({
-    mutationFn: () =>
-      adminFetch<AdminVoiceathonEvent>("/voiceathon/events", {
-        method: "POST",
-        body: JSON.stringify({
-          title: title.trim(),
-          tagline: tagline.trim() || null,
-          description: description.trim() || null,
-        }),
-      }),
-    onSuccess: (ev) => {
-      void qc.invalidateQueries({ queryKey: ["admin", "voiceathon-events"] });
-      setCreateOpen(false);
-      setTitle("");
-      setTagline("");
-      setDescription("");
-      toast({ title: "Event created as draft" });
-      setLocation(`/voiceathon/${ev.id}`);
-    },
-    onError: (err) => toast({ title: "Create failed", description: formatAdminError(err), variant: "destructive" }),
   });
 
   return (
@@ -124,8 +82,8 @@ export default function VoiceathonEventsPage() {
             Create and run Voice-a-thon competitions: registration, submissions, judging, results, certificates.
           </p>
         </div>
-        <Button onClick={() => setCreateOpen(true)}>
-          <Plus className="h-4 w-4 mr-1.5" /> New event
+        <Button asChild>
+          <Link href="/voiceathon/new"><Plus className="h-4 w-4 mr-1.5" /> Create event form</Link>
         </Button>
       </div>
 
@@ -187,36 +145,6 @@ export default function VoiceathonEventsPage() {
         </CardContent>
       </Card>
 
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>New Voice-a-thon</DialogTitle>
-            <DialogDescription>
-              Created as a draft — configure dates, rules, and rubric, then publish to open registration.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div className="space-y-1.5">
-              <Label>Title</Label>
-              <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Campus Voice-a-thon 2026" />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Tagline (optional)</Label>
-              <Input value={tagline} onChange={(e) => setTagline(e.target.value)} placeholder="Build the best voice agent in 24 hours" />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Description (optional)</Label>
-              <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
-            <Button disabled={!title.trim() || createMut.isPending} onClick={() => createMut.mutate()}>
-              Create draft
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

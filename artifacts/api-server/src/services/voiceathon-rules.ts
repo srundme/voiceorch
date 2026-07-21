@@ -8,10 +8,19 @@ import type {
   VoiceathonRubricCriterion,
   VoiceathonCriterionScore,
 } from "@workspace/db";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 
 export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
+}
+
+export function normalizeIndianPhone(phone: string): string | null {
+  const digits = phone.replace(/\D/g, "");
+  const national = digits.startsWith("91") && digits.length === 12
+    ? digits.slice(2)
+    : digits;
+  if (!/^[6-9]\d{9}$/.test(national)) return null;
+  return `+91${national}`;
 }
 
 export function slugify(raw: string): string {
@@ -35,6 +44,28 @@ export function mintJudgeToken(): string {
 
 export function hashJudgeToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
+}
+
+export function hashVoiceathonSecret(secret: string): string {
+  return createHash("sha256").update(secret).digest("hex");
+}
+
+export function matchesVoiceathonSecret(secret: string, expectedHash: string): boolean {
+  const actual = Buffer.from(hashVoiceathonSecret(secret), "hex");
+  const expected = Buffer.from(expectedHash, "hex");
+  return actual.length === expected.length && timingSafeEqual(actual, expected);
+}
+
+export function mintOtpCode(): string {
+  return String(randomInt(100000, 1000000));
+}
+
+export function mintOtpVerificationToken(): string {
+  return `votp_${randomBytes(24).toString("hex")}`;
+}
+
+export function mintTicketCode(): string {
+  return `VA-${randomBytes(5).toString("hex").toUpperCase()}`;
 }
 
 export function mintVerificationCode(): string {

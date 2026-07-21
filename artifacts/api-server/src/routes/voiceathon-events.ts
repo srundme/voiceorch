@@ -28,6 +28,10 @@ import { logger } from "../lib/logger.js";
 import { sendBrevoEmail } from "../services/brevo.js";
 import { mintWebcallLinkToken } from "../services/webcall-links.js";
 import { renderVoiceathonCertificatePdf } from "../services/voiceathon-certificate.js";
+import {
+  renderVoiceathonTicketPdf,
+  voiceathonTicketEmailHtml,
+} from "../services/voiceathon-ticket.js";
 import { getSelfBaseUrl } from "../lib/app-domain.js";
 import {
   getOwnedEvent,
@@ -38,6 +42,7 @@ import {
   mintJudgeToken,
   hashJudgeToken,
   mintCertificateCode,
+  mintTicketCode,
   buildLeaderboard,
   findTeamByLeaderClaim,
   loadTeamWithMembers,
@@ -109,6 +114,16 @@ function parseDate(v: string | null | undefined): Date | null {
   if (v == null || v === "") return null;
   const d = new Date(v);
   return Number.isFinite(d.getTime()) ? d : null;
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "\"": "&quot;",
+    "'": "&#039;",
+  })[character]!);
 }
 
 function defaultRubric(): VoiceathonRubricCriterion[] {
@@ -329,9 +344,12 @@ router.patch("/voiceathon/events/:id/teams/:teamId", requireAuth, async (req, re
   if (!ev) { res.status(404).json({ error: "Event not found" }); return; }
 
   const body = z.object({
-    status: z.enum(["registered", "claimed", "submitted", "disqualified", "withdrawn"]).optional(),
+    status: z.enum([
+      "pending", "approved", "rejected", "registered", "claimed", "submitted", "disqualified", "withdrawn",
+    ]).optional(),
     placement: z.enum(["participant", "finalist", "winner", "runner_up"]).optional(),
     notes: z.string().max(5000).nullable().optional(),
+    rejectionReason: z.string().min(1).max(2000).nullable().optional(),
   }).safeParse(req.body);
   if (!body.success) {
     res.status(400).json({ error: "Invalid body", details: body.error.flatten() });
@@ -347,10 +365,98 @@ router.patch("/voiceathon/events/:id/teams/:teamId", requireAuth, async (req, re
   if (body.data.status !== undefined) set["status"] = body.data.status;
   if (body.data.placement !== undefined) set["placement"] = body.data.placement;
   if (body.data.notes !== undefined) set["notes"] = body.data.notes;
+  if (body.data.rejectionReason !== undefined) set["rejectionReason"] = body.data.rejectionReason;
+
+  if (body.data.status === "approved") {
+    if (!ev.venue || !ev.eventStartsAt) {
+      res.status(400).json({ error: "Set the event venue and start date before approving teams" });
+      return;
+    }
+    const members = await db.select({ id: voiceathonTeamMembersTable.id })
+      .from(voiceathonTeamMembersTable)
+      .where(eq(voiceathonTeamMembersTable.teamId, teamId));
+    const ticketCode = existing.ticketCode ?? mintTicketCode();
+    const issuedAt = new Date();
+    const ticketDetails = {
+      ticketCode,
+      eventTitle: ev.title,
+      teamName: existing.name,
+      leaderName: existing.leaderName,
+      leaderEmail: existing.leaderEmail,
+      venue: ev.venue,
+      eventStartsAt: ev.eventStartsAt,
+      teamSize: members.length,
+    };
+    const ticketPdf = await renderVoiceathonTicketPdf(ticketDetails);
+    await sendBrevoEmail(
+      existing.leaderEmail,
+      `ACCESS GRANTED: ${existing.name} approved for ${ev.title}`,
+      voiceathonTicketEmailHtml(ticketDetails),
+      [{ content: ticketPdf.toString("base64"), name: `${ticketCode}-${existing.name.replace(/[^a-z0-9]+/gi, "-")}.pdf` }],
+      { emailType: "voiceathon_ticket", toName: existing.leaderName, sentBy: "admin" },
+    );
+    set["ticketCode"] = ticketCode;
+    set["ticketIssuedAt"] = issuedAt;
+    set["reviewedAt"] = issuedAt;
+    set["reviewedBy"] = "admin";
+    set["rejectionReason"] = null;
+  } else if (body.data.status === "rejected") {
+    if (!body.data.rejectionReason?.trim()) {
+      res.status(400).json({ error: "A rejection reason is required" });
+      return;
+    }
+    set["reviewedAt"] = new Date();
+    set["reviewedBy"] = "admin";
+    try {
+      await sendBrevoEmail(
+        existing.leaderEmail,
+        `Update on your ${ev.title} registration`,
+        `<p>Hi ${escapeHtml(existing.leaderName)},</p>
+         <p>We could not approve team <strong>${escapeHtml(existing.name)}</strong> for <strong>${escapeHtml(ev.title)}</strong>.</p>
+         <p><strong>Reason:</strong> ${escapeHtml(body.data.rejectionReason.trim())}</p>
+         <p>If the registration window is still open, contact the SnapServe team for help.</p>`,
+        undefined,
+        { emailType: "voiceathon_rejection", toName: existing.leaderName, sentBy: "admin" },
+      );
+    } catch (err) {
+      logger.warn({ err, teamId }, "voiceathon rejection email failed");
+    }
+  }
 
   const [row] = await db.update(voiceathonTeamsTable).set(set)
     .where(eq(voiceathonTeamsTable.id, teamId)).returning();
   res.json(row);
+});
+
+router.get("/voiceathon/events/:id/teams/:teamId/ticket.pdf", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+  const id = parseInt(String(req.params["id"]), 10);
+  const teamId = parseInt(String(req.params["teamId"]), 10);
+  const ev = await getOwnedEvent(id, clerkId);
+  if (!ev) { res.status(404).json({ error: "Event not found" }); return; }
+  const [team] = await db.select().from(voiceathonTeamsTable)
+    .where(and(eq(voiceathonTeamsTable.id, teamId), eq(voiceathonTeamsTable.eventId, id)))
+    .limit(1);
+  if (!team?.ticketCode || !ev.venue || !ev.eventStartsAt) {
+    res.status(404).json({ error: "Ticket has not been issued" });
+    return;
+  }
+  const members = await db.select({ id: voiceathonTeamMembersTable.id })
+    .from(voiceathonTeamMembersTable)
+    .where(eq(voiceathonTeamMembersTable.teamId, teamId));
+  const pdf = await renderVoiceathonTicketPdf({
+    ticketCode: team.ticketCode,
+    eventTitle: ev.title,
+    teamName: team.name,
+    leaderName: team.leaderName,
+    leaderEmail: team.leaderEmail,
+    venue: ev.venue,
+    eventStartsAt: ev.eventStartsAt,
+    teamSize: members.length,
+  });
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="${team.ticketCode}.pdf"`);
+  res.send(pdf);
 });
 
 router.get("/voiceathon/events/:id/teams/export.csv", requireAuth, async (req, res): Promise<void> => {
@@ -600,6 +706,41 @@ router.post("/voiceathon/events/:id/judges/:judgeId/revoke", requireAuth, async 
     .returning();
   if (!row) { res.status(404).json({ error: "Judge not found" }); return; }
   res.json({ ok: true });
+});
+
+router.post("/voiceathon/events/:id/judges/:judgeId/regenerate", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+  const id = parseInt(String(req.params["id"]), 10);
+  const judgeId = parseInt(String(req.params["judgeId"]), 10);
+  const ev = await getOwnedEvent(id, clerkId);
+  if (!ev) { res.status(404).json({ error: "Event not found" }); return; }
+
+  const token = mintJudgeToken();
+  const [judge] = await db.update(voiceathonJudgesTable).set({
+    tokenHash: hashJudgeToken(token),
+    status: "invited",
+  }).where(and(
+    eq(voiceathonJudgesTable.id, judgeId),
+    eq(voiceathonJudgesTable.eventId, id),
+  )).returning();
+  if (!judge) { res.status(404).json({ error: "Judge not found" }); return; }
+
+  const inviteUrl = `${getSelfBaseUrl().replace(/\/$/, "")}/events/judge/${token}`;
+  try {
+    await sendBrevoEmail(
+      judge.email,
+      `New judging link for ${ev.title}`,
+      `<p>Hi ${escapeHtml(judge.name)},</p>
+       <p>Your judging access link for <strong>${escapeHtml(ev.title)}</strong> was regenerated.</p>
+       <p><a href="${inviteUrl}">Open judging portal</a></p>
+       <p>The previous link no longer works. Keep this link private.</p>`,
+      undefined,
+      { emailType: "voiceathon_judge_invite", toName: judge.name, sentBy: "admin" },
+    );
+  } catch (err) {
+    logger.warn({ err, judgeId }, "regenerated judge invite email failed");
+  }
+  res.json({ ok: true, inviteUrl });
 });
 
 // ── Results / leaderboard ────────────────────────────────────────────────────
@@ -868,6 +1009,17 @@ router.get("/voiceathon/events/:id/my-team", requireAuth, async (req, res): Prom
     res.status(404).json({ error: "No registration found for your email on this event" });
     return;
   }
+  if (team.status === "pending") {
+    res.status(403).json({ error: "Your registration is pending SnapServe approval", code: "approval_pending" });
+    return;
+  }
+  if (team.status === "rejected") {
+    res.status(403).json({
+      error: team.rejectionReason || "Your registration was not approved",
+      code: "registration_rejected",
+    });
+    return;
+  }
 
   // Claim on first access
   if (!team.claimedByUserId) {
@@ -878,7 +1030,7 @@ router.get("/voiceathon/events/:id/my-team", requireAuth, async (req, res): Prom
     const [claimed] = await db.update(voiceathonTeamsTable).set({
       claimedByUserId: clerkId,
       claimedAt: new Date(),
-      status: team.status === "registered" ? "claimed" : team.status,
+      status: team.status === "registered" || team.status === "approved" ? "claimed" : team.status,
     }).where(eq(voiceathonTeamsTable.id, team.id)).returning();
     team = claimed!;
   } else if (team.claimedByUserId !== clerkId) {

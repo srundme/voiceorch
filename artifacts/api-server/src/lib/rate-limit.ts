@@ -147,6 +147,30 @@ export const voiceathonSubmitRateLimit = rateLimit({
   },
 });
 
+export const voiceathonOtpSendRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 4,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    const phone = String((req.body as Record<string, unknown> | undefined)?.["phone"] ?? "unknown");
+    return `${ipKeyGenerator(req.ip ?? req.socket?.remoteAddress ?? "unknown")}:va-otp-send:${phone}`;
+  },
+  message: { error: "Too many OTP requests. Please try again in 15 minutes." },
+});
+
+export const voiceathonOtpVerifyRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 12,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    const phone = String((req.body as Record<string, unknown> | undefined)?.["phone"] ?? "unknown");
+    return `${ipKeyGenerator(req.ip ?? req.socket?.remoteAddress ?? "unknown")}:va-otp-verify:${phone}`;
+  },
+  message: { error: "Too many OTP verification attempts. Please try again later." },
+});
+
 export const voiceathonJudgeRateLimit = rateLimit({
   windowMs: 60 * 1000,
   max: 120,

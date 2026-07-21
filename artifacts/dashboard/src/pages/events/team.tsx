@@ -86,14 +86,20 @@ export default function EventTeamPortalPage() {
   }
 
   if (error || !data) {
+    const message = (error as Error)?.message ?? "";
+    const pending = message.toLowerCase().includes("pending");
+    const rejected = message.toLowerCase().includes("rejected")
+      || message.toLowerCase().includes("not approved");
     return (
       <div className="px-6 py-12 max-w-lg space-y-3">
         <Button variant="ghost" size="sm" onClick={() => setLocation("/app/events")}>
           <ArrowLeft className="w-4 h-4 mr-1" /> Events
         </Button>
-        <h1 className="text-lg font-semibold">No team found</h1>
+        <h1 className="text-lg font-semibold">
+          {pending ? "Registration under review" : rejected ? "Registration not approved" : "No team found"}
+        </h1>
         <p className="text-sm text-muted-foreground">
-          {(error as Error)?.message || "Register on the public event page with this account's email as the team leader, then come back here."}
+          {message || "Register on the public event page with this account's email as the team leader, then come back here."}
         </p>
       </div>
     );

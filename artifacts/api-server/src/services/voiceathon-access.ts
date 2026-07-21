@@ -17,10 +17,16 @@ import { and, eq, count } from "drizzle-orm";
 
 export {
   normalizeEmail,
+  normalizeIndianPhone,
   slugify,
   mintReferenceCode,
   mintJudgeToken,
   hashJudgeToken,
+  hashVoiceathonSecret,
+  matchesVoiceathonSecret,
+  mintOtpCode,
+  mintOtpVerificationToken,
+  mintTicketCode,
   mintVerificationCode,
   mintCertificateCode,
   isRegistrationOpen,

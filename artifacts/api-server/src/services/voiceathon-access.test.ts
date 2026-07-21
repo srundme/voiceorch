@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   normalizeEmail,
+  normalizeIndianPhone,
   slugify,
   canTransitionStatus,
   computeWeightedTotal,
@@ -11,6 +12,11 @@ import {
   mintJudgeToken,
   mintReferenceCode,
   mintCertificateCode,
+  mintOtpCode,
+  mintOtpVerificationToken,
+  mintTicketCode,
+  hashVoiceathonSecret,
+  matchesVoiceathonSecret,
 } from "./voiceathon-rules.js";
 import type { VoiceathonEvent } from "@workspace/db";
 
@@ -54,6 +60,18 @@ function event(partial: Partial<VoiceathonEvent> = {}): VoiceathonEvent {
 describe("normalizeEmail", () => {
   it("trims and lowercases", () => {
     expect(normalizeEmail("  Leader@Example.COM ")).toBe("leader@example.com");
+  });
+});
+
+describe("normalizeIndianPhone", () => {
+  it("normalizes Indian national and country-code formats", () => {
+    expect(normalizeIndianPhone("98765 43210")).toBe("+919876543210");
+    expect(normalizeIndianPhone("+91-98765-43210")).toBe("+919876543210");
+  });
+
+  it("rejects invalid mobile numbers", () => {
+    expect(normalizeIndianPhone("12345")).toBeNull();
+    expect(normalizeIndianPhone("5123456789")).toBeNull();
   });
 });
 
@@ -157,5 +175,17 @@ describe("tokens", () => {
   it("mints reference and certificate codes", () => {
     expect(mintReferenceCode()).toMatch(/^VA-[A-F0-9]+$/);
     expect(mintCertificateCode()).toMatch(/^VC-[A-F0-9]+$/);
+  });
+
+  it("mints OTP and approval-ticket credentials", () => {
+    expect(mintOtpCode()).toMatch(/^\d{6}$/);
+    expect(mintOtpVerificationToken()).toMatch(/^votp_[a-f0-9]{48}$/);
+    expect(mintTicketCode()).toMatch(/^VA-[A-F0-9]{10}$/);
+  });
+
+  it("compares OTP secrets against their hashes", () => {
+    const hash = hashVoiceathonSecret("123456");
+    expect(matchesVoiceathonSecret("123456", hash)).toBe(true);
+    expect(matchesVoiceathonSecret("654321", hash)).toBe(false);
   });
 });

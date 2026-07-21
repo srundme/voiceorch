@@ -77,6 +77,9 @@ export const voiceathonEventsTable = pgTable("voiceathon_events", {
 ]);
 
 export type VoiceathonTeamStatus =
+  | "pending"
+  | "approved"
+  | "rejected"
   | "registered"
   | "claimed"
   | "submitted"
@@ -89,6 +92,7 @@ export const voiceathonTeamsTable = pgTable("voiceathon_teams", {
   id: serial("id").primaryKey(),
   eventId: integer("event_id").notNull().references(() => voiceathonEventsTable.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
+  nameNormalized: text("name_normalized").notNull(),
   /** Unguessable public reference shown after registration. */
   referenceCode: text("reference_code").notNull().unique(),
   institution: text("institution"),
@@ -97,8 +101,15 @@ export const voiceathonTeamsTable = pgTable("voiceathon_teams", {
   leaderEmail: text("leader_email").notNull(),
   /** Lowercased/trimmed for claim matching. */
   leaderEmailNormalized: text("leader_email_normalized").notNull(),
-  leaderPhone: text("leader_phone"),
-  status: text("status").$type<VoiceathonTeamStatus>().notNull().default("registered"),
+  leaderPhone: text("leader_phone").notNull(),
+  leaderLinkedinUrl: text("leader_linkedin_url").notNull(),
+  phoneVerifiedAt: timestamp("phone_verified_at", { withTimezone: true }),
+  status: text("status").$type<VoiceathonTeamStatus>().notNull().default("pending"),
+  reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+  reviewedBy: text("reviewed_by"),
+  rejectionReason: text("rejection_reason"),
+  ticketCode: text("ticket_code").unique(),
+  ticketIssuedAt: timestamp("ticket_issued_at", { withTimezone: true }),
   claimedByUserId: text("claimed_by_user_id"),
   claimedAt: timestamp("claimed_at", { withTimezone: true }),
   placement: text("placement").$type<VoiceathonTeamPlacement>().notNull().default("participant"),
@@ -110,6 +121,7 @@ export const voiceathonTeamsTable = pgTable("voiceathon_teams", {
   index("voiceathon_teams_leader_email_idx").on(t.eventId, t.leaderEmailNormalized),
   index("voiceathon_teams_claimed_by_idx").on(t.claimedByUserId),
   uniqueIndex("voiceathon_teams_event_leader_uidx").on(t.eventId, t.leaderEmailNormalized),
+  uniqueIndex("voiceathon_teams_event_name_uidx").on(t.eventId, t.nameNormalized),
 ]);
 
 export const voiceathonTeamMembersTable = pgTable("voiceathon_team_members", {
@@ -119,11 +131,28 @@ export const voiceathonTeamMembersTable = pgTable("voiceathon_team_members", {
   email: text("email"),
   emailNormalized: text("email_normalized"),
   phone: text("phone"),
+  linkedinUrl: text("linkedin_url"),
   role: text("role").notNull().default("member"), // leader | member
   sortOrder: integer("sort_order").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   index("voiceathon_team_members_team_id_idx").on(t.teamId),
+]);
+
+export const voiceathonPhoneOtpsTable = pgTable("voiceathon_phone_otps", {
+  id: serial("id").primaryKey(),
+  eventId: integer("event_id").notNull().references(() => voiceathonEventsTable.id, { onDelete: "cascade" }),
+  phoneNormalized: text("phone_normalized").notNull(),
+  codeHash: text("code_hash").notNull(),
+  verificationTokenHash: text("verification_token_hash"),
+  attempts: integer("attempts").notNull().default(0),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  verifiedAt: timestamp("verified_at", { withTimezone: true }),
+  consumedAt: timestamp("consumed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("voiceathon_phone_otps_event_phone_idx").on(t.eventId, t.phoneNormalized),
+  index("voiceathon_phone_otps_expires_idx").on(t.expiresAt),
 ]);
 
 export type VoiceathonSubmissionStatus = "draft" | "submitted" | "withdrawn";
@@ -256,6 +285,7 @@ export type VoiceathonEvent = typeof voiceathonEventsTable.$inferSelect;
 export type InsertVoiceathonEvent = typeof voiceathonEventsTable.$inferInsert;
 export type VoiceathonTeam = typeof voiceathonTeamsTable.$inferSelect;
 export type VoiceathonTeamMember = typeof voiceathonTeamMembersTable.$inferSelect;
+export type VoiceathonPhoneOtp = typeof voiceathonPhoneOtpsTable.$inferSelect;
 export type VoiceathonSubmission = typeof voiceathonSubmissionsTable.$inferSelect;
 export type VoiceathonJudge = typeof voiceathonJudgesTable.$inferSelect;
 export type VoiceathonScore = typeof voiceathonScoresTable.$inferSelect;
