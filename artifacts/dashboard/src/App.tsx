@@ -52,7 +52,6 @@ import PublicBookingPage from "@/pages/book/[slug]";
 import WebcallJoinPage from "@/pages/join/[token]";
 import WorkshopFormPage from "@/pages/workshop/[slug]";
 import EventsPage from "@/pages/events/index";
-import EventDetailPage from "@/pages/events/detail";
 import EventTeamPortalPage from "@/pages/events/team";
 import PublicEventPage from "@/pages/events/public";
 import JudgePortalPage from "@/pages/events/judge";
@@ -286,7 +285,6 @@ function AppRoutes() {
         <Route path="/app/squads" component={SquadsPage} />
         <Route path="/app/squads/:id" component={SquadsPage} />
         <Route path="/app/events/:id/team" component={EventTeamPortalPage} />
-        <Route path="/app/events/:id" component={EventDetailPage} />
         <Route path="/app/events" component={EventsPage} />
         <Route path="/app/calls" component={CallsList} />
         <Route path="/app/calls/:id" component={CallDetail} />
