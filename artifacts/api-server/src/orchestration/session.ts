@@ -172,6 +172,14 @@ interface ActiveSession {
   /** Active Agent Squad live run, when this call is part of a squad. */
   squadRunId: number | null;
   squadId: number | null;
+  /**
+   * Agent that "owns" caller memory for this call. Pinned to the agent that
+   * answered (entry), so mid-call handoffs don't fragment facts across
+   * teammate agentIds. Falls back to the answering agentId when not in a squad.
+   */
+  memoryOwnerAgentId: number;
+  /** Transcript segments from earlier agents, accumulated across handoffs. */
+  handoffTranscriptAccum: string;
 }
 
 const sessions = new Map<string, ActiveSession>();
@@ -1602,6 +1610,17 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
         }
       }
 
+      // Membership fallback: the agent itself belongs to an active squad, so
+      // any call it answers (its own number, campaign, webcall) is squad-aware
+      // without extra wiring.
+      if (!resolvedSquadId) {
+        const { findSquadForAgent } = await import("../services/squad-teamwork.js");
+        const membershipTeam = await findSquadForAgent(params.agentId, agent.userId);
+        if (membershipTeam && membershipTeam.teammates.length > 0) {
+          resolvedSquadId = membershipTeam.squad.id;
+        }
+      }
+
       if (resolvedSquadId) {
         const linked = await ensureLiveSquadRunForCall({
           squadId: resolvedSquadId,
@@ -1621,6 +1640,32 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
             { callId: callRecord.id, squadId: resolvedSquadId, runId: linked.runId },
             "Attached live squad run to call",
           );
+
+          // Teamwork: auto-inject handoff/follow-up tools, teammate roster,
+          // shared caller notes, and any pending follow-up task context.
+          const {
+            loadSquadTeam,
+            buildSquadTools,
+            buildSquadPromptBlock,
+            buildSharedCallerFactsBlock,
+            consumeFollowupContext,
+          } = await import("../services/squad-teamwork.js");
+          const team = await loadSquadTeam(resolvedSquadId, params.agentId);
+          if (team && team.teammates.length > 0) {
+            const injectedTools = buildSquadTools(team, agentConfig.tools);
+            if (injectedTools.length > 0) {
+              agentConfig.tools = [...agentConfig.tools, ...injectedTools];
+            }
+            const [sharedFacts, followupCtx] = await Promise.all([
+              buildSharedCallerFactsBlock(team, callerPhone, params.agentId),
+              consumeFollowupContext(params.agentId, callerPhone),
+            ]);
+            const squadBlocks = [buildSquadPromptBlock(team), sharedFacts, followupCtx]
+              .filter(Boolean).join("\n\n");
+            if (squadBlocks) {
+              agentConfig.systemPrompt = `${agentConfig.systemPrompt}\n\n${squadBlocks}`;
+            }
+          }
         }
       }
     } catch (squadErr) {
@@ -1657,17 +1702,39 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
       }
 
       const transcriptSummary = live.pipeline.getTranscript().slice(-4000);
+      const fromAgentId = live.agentId;
       const [runRow] = await db.select({ goal: squadRunsTable.goal })
         .from(squadRunsTable).where(eq(squadRunsTable.id, live.squadRunId)).limit(1);
+
+      // Snapshot facts the answering/owning agent already knows about this caller
+      // so the receiving agent gets structured context, not just the transcript.
+      let durableFacts: Record<string, unknown> | undefined;
+      if (callerPhone) {
+        try {
+          const { loadCallerContext } = await import("./callerMemory.js");
+          const ownerId = live.memoryOwnerAgentId || fromAgentId;
+          const ctx = await loadCallerContext(ownerId, callerPhone);
+          if (ctx.facts.length > 0) {
+            durableFacts = {};
+            for (const f of ctx.facts.slice(0, 25)) {
+              durableFacts[f.key] = f.value;
+            }
+          }
+        } catch (factErr) {
+          logger.warn({ err: factErr, callId: callRecord.id }, "Failed to load durable facts for handoff");
+        }
+      }
+
       const result = await performSquadAgentHandoff({
         squadId: live.squadId,
         runId: live.squadRunId,
-        fromAgentId: live.agentId,
+        fromAgentId,
         toAgentId: targetAgentId,
         reason: operatorSummary?.trim() || "Specialist handoff",
         goal: runRow?.goal ?? "Live squad call",
         transcriptSummary,
         language: live.pipeline.getPreferredCallerLang() ?? live.configuredLanguage,
+        durableFacts,
         squad,
         previousPipeline: live.pipeline,
         hooks: {
@@ -1700,8 +1767,21 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
         return false;
       }
 
+      // Swap pointer first, THEN close the previous pipeline so inbound audio
+      // never lands on a closed instance and a failed close can't orphan the call.
+      const previous = result.previousPipeline;
+      live.handoffTranscriptAccum = [
+        live.handoffTranscriptAccum,
+        transcriptSummary,
+      ].filter(Boolean).join("\n--- handoff ---\n").slice(-12000);
       live.pipeline = result.pipeline;
       live.agentId = targetAgentId;
+      try {
+        previous.close();
+      } catch (closeErr) {
+        logger.warn({ err: closeErr, callId: callRecord.id }, "Error closing previous pipeline after handoff swap");
+      }
+
       logExec(EXEC_COMPONENTS.Tool, "system", {
         status: "success",
         metadata: {
@@ -1711,6 +1791,20 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
           toMemberId: result.toMemberId,
         },
       });
+
+      // Record the handoff as a squad task (audit trail visible in the UI).
+      void import("../services/squad-teamwork.js")
+        .then(({ recordHandoffTask }) => recordHandoffTask({
+          squadId: live.squadId!,
+          userId: squad.userId,
+          fromAgentId,
+          toAgentId: targetAgentId,
+          callId: callRecord.id,
+          callerPhone,
+          reason: operatorSummary?.trim() || "Specialist handoff",
+          contextSummary: transcriptSummary,
+        }))
+        .catch((err) => logger.warn({ err, callId: callRecord.id }, "Handoff task record failed"));
       return true;
     }
 
@@ -2050,6 +2144,8 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     sourceCallbackReason: params.sourceCallbackReason ?? null,
     squadRunId:           attachedSquadRunId,
     squadId:              attachedSquadId,
+    memoryOwnerAgentId:   params.agentId,
+    handoffTranscriptAccum: "",
   });
 
   // Attach any WhatsApp/upload images staged for this phone before the dial.
@@ -2296,7 +2392,10 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
   if (!session) return;
 
   const squadTranscriptPreview = session.squadRunId
-    ? session.pipeline.getTranscript().slice(0, 2000)
+    ? [
+        session.handoffTranscriptAccum,
+        session.pipeline.getTranscript(),
+      ].filter(Boolean).join("\n--- handoff ---\n").slice(0, 4000)
     : null;
 
   sessions.delete(sessionId);
@@ -3302,8 +3401,11 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
               if (memLlmKey) {
                 const memLlm = createLLMAdapter(memLlmProvider, memLlmKey, memLlmModel);
                 const history = session.pipeline.getHistory();
+                // Pin writes to the agent that answered the call so mid-call
+                // handoffs don't scatter facts across teammate agentIds.
+                const memoryAgentId = session.memoryOwnerAgentId || call.agentId;
                 await updateCallerProfile({
-                  agentId:           call.agentId,
+                  agentId:           memoryAgentId,
                   phoneNumber:       session.callerPhone!,
                   history,
                   llm:               memLlm,
@@ -3329,16 +3431,16 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
                       : undefined;
                   })(),
                 });
-                createExecutionLogger(session.callId, call.agentId)("Memory", "response", {
+                createExecutionLogger(session.callId, memoryAgentId)("Memory", "response", {
                   status: "success",
                   // wasDropped = call ended without naturalEndTriggered (user hung up
                   // mid-conversation) — memory is STILL saved; only callback-request
                   // detection is skipped for short/dropped calls.
-                  metadata: { updated: true, wasDropped, callbackDetectionSkipped: wasDropped, durationSeconds },
+                  metadata: { updated: true, wasDropped, callbackDetectionSkipped: wasDropped, durationSeconds, memoryAgentId },
                 });
                 if (!wasDropped) {
                   await detectCallbackRequest({
-                    agentId:        call.agentId,
+                    agentId:        memoryAgentId,
                     toNumber:       session.callerPhone!,
                     history,
                     llm:            memLlm,

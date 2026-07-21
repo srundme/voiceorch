@@ -4803,6 +4803,8 @@ export class OrchestrationPipeline implements VoiceSession {
       return await this.executeTransferWarm(tool, args);
     } else if (tool.type === "transfer_agent") {
       return await this.executeTransferAgent(tool, args);
+    } else if (tool.type === "squad_followup") {
+      return await this.executeSquadFollowup(args);
     } else if (tool.type === "webhook") {
       await this.executeWebhookTool(tool, args);
     } else if (tool.type === "send_sms") {
@@ -5396,6 +5398,30 @@ export class OrchestrationPipeline implements VoiceSession {
       type: "agent",
     });
     return "handoff_complete: a teammate is now continuing with the customer";
+  }
+
+  private async executeSquadFollowup(args: Record<string, unknown>): Promise<string> {
+    const targetAgentId = parseInt(String(args["targetAgentId"] ?? ""), 10);
+    const note = String(args["note"] ?? "").trim();
+    const delayMinutes = parseInt(String(args["delay_minutes"] ?? ""), 10);
+    if (!Number.isFinite(targetAgentId) || !note || !Number.isFinite(delayMinutes)) {
+      return "followup_failed: targetAgentId, note and delay_minutes are all required";
+    }
+    try {
+      const { createSquadFollowupTask } = await import("../services/squad-teamwork.js");
+      return await createSquadFollowupTask({
+        fromAgentId: this.config.agentConfig.id,
+        callId: this.config.callId,
+        callerPhone: this.config.callerPhone ?? null,
+        targetAgentId,
+        note,
+        delayMinutes,
+        contextSummary: this.getTranscript().slice(-2000),
+      });
+    } catch (err) {
+      logger.warn({ err, callId: this.config.callId }, "squad_followup tool failed");
+      return "followup_failed: internal error scheduling the follow-up";
+    }
   }
 
   // ── Core turn logic ───────────────────────────────────────────────────────────

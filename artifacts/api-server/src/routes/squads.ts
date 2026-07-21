@@ -11,6 +11,8 @@ import {
   squadRunsTable,
   squadRunStepsTable,
   squadRunEventsTable,
+  squadTasksTable,
+  scheduledCallbacksTable,
   agentsTable,
   phoneNumbersTable,
   campaignsTable,
@@ -370,6 +372,67 @@ router.post("/squads/:id/connect", requireAuth, async (req, res): Promise<void> 
 
   const [fresh] = await db.select().from(squadsTable).where(eq(squadsTable.id, id)).limit(1);
   res.json(await serializeSquad(fresh!));
+});
+
+// ── Tasks (handoffs + follow-ups between squad members) ──────────────────────
+
+router.get("/squads/:id/tasks", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+  const id = parseInt(String(req.params["id"]), 10);
+  const [s] = await db.select().from(squadsTable)
+    .where(and(eq(squadsTable.id, id), eq(squadsTable.userId, clerkId))).limit(1);
+  if (!s) { res.status(404).json({ error: "Squad not found" }); return; }
+
+  const tasks = await db.select().from(squadTasksTable)
+    .where(eq(squadTasksTable.squadId, id))
+    .orderBy(desc(squadTasksTable.createdAt))
+    .limit(100);
+
+  const agentIds = [...new Set(tasks.flatMap((t) => [t.fromAgentId, t.toAgentId]).filter((v): v is number => v != null))];
+  const agents = agentIds.length
+    ? await db.select({ id: agentsTable.id, name: agentsTable.name }).from(agentsTable)
+      .where(inArray(agentsTable.id, agentIds))
+    : [];
+  const nameById = new Map(agents.map((a) => [a.id, a.name]));
+
+  res.json(tasks.map((t) => ({
+    id: t.id,
+    type: t.type,
+    status: t.status,
+    fromAgentId: t.fromAgentId,
+    fromAgentName: t.fromAgentId != null ? nameById.get(t.fromAgentId) ?? null : null,
+    toAgentId: t.toAgentId,
+    toAgentName: t.toAgentId != null ? nameById.get(t.toAgentId) ?? null : null,
+    callId: t.callId,
+    callerPhone: t.callerPhone,
+    title: t.title,
+    note: t.note,
+    contextSummary: t.contextSummary,
+    dueAt: t.dueAt,
+    createdAt: t.createdAt,
+  })));
+});
+
+router.post("/squad-tasks/:taskId/cancel", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+  const taskId = parseInt(String(req.params["taskId"]), 10);
+  const [task] = await db.select().from(squadTasksTable)
+    .where(and(eq(squadTasksTable.id, taskId), eq(squadTasksTable.userId, clerkId))).limit(1);
+  if (!task) { res.status(404).json({ error: "Task not found" }); return; }
+  if (task.status === "completed" || task.status === "cancelled") {
+    res.status(400).json({ error: `Task already ${task.status}` });
+    return;
+  }
+  await db.update(squadTasksTable).set({ status: "cancelled" }).where(eq(squadTasksTable.id, taskId));
+  if (task.scheduledCallbackId) {
+    await db.update(scheduledCallbacksTable)
+      .set({ status: "cancelled", cancelledAt: new Date() })
+      .where(and(
+        eq(scheduledCallbacksTable.id, task.scheduledCallbackId),
+        eq(scheduledCallbacksTable.status, "pending"),
+      ));
+  }
+  res.json({ ok: true });
 });
 
 // ── Runs ─────────────────────────────────────────────────────────────────────

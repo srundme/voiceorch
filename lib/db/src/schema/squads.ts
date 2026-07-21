@@ -194,6 +194,46 @@ export const squadRunEventsTable = pgTable("squad_run_events", {
   index("squad_run_events_run_created_idx").on(t.runId, t.createdAt),
 ]);
 
+/**
+ * Squad tasks — lightweight records of work passed between squad members.
+ *  - "handoff":   a mid-call transfer that already happened (audit trail).
+ *  - "follow_up": a scheduled call the target agent must make later
+ *                 (backed by a scheduled_callbacks row that auto-dials).
+ */
+export type SquadTaskType = "handoff" | "follow_up";
+
+export type SquadTaskStatus =
+  | "pending"
+  | "scheduled"
+  | "completed"
+  | "failed"
+  | "cancelled";
+
+export const squadTasksTable = pgTable("squad_tasks", {
+  id: serial("id").primaryKey(),
+  squadId: integer("squad_id").notNull().references(() => squadsTable.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull(),
+  type: text("type").$type<SquadTaskType>().notNull(),
+  status: text("status").$type<SquadTaskStatus>().notNull().default("pending"),
+  fromAgentId: integer("from_agent_id").references(() => agentsTable.id, { onDelete: "set null" }),
+  toAgentId: integer("to_agent_id").references(() => agentsTable.id, { onDelete: "set null" }),
+  callId: integer("call_id").references(() => callsTable.id, { onDelete: "set null" }),
+  callerPhone: text("caller_phone"),
+  title: text("title").notNull().default(""),
+  note: text("note"),
+  /** Short conversation summary captured when the task was created. */
+  contextSummary: text("context_summary"),
+  dueAt: timestamp("due_at", { withTimezone: true }),
+  /** Backing scheduled_callbacks row that dials the follow-up call. */
+  scheduledCallbackId: integer("scheduled_callback_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+}, (t) => [
+  index("squad_tasks_squad_created_idx").on(t.squadId, t.createdAt),
+  index("squad_tasks_user_status_idx").on(t.userId, t.status),
+  index("squad_tasks_to_agent_idx").on(t.toAgentId),
+]);
+
 export type Squad = typeof squadsTable.$inferSelect;
 export type InsertSquad = typeof squadsTable.$inferInsert;
 export type SquadMember = typeof squadMembersTable.$inferSelect;
@@ -202,3 +242,5 @@ export type SquadRun = typeof squadRunsTable.$inferSelect;
 export type InsertSquadRun = typeof squadRunsTable.$inferInsert;
 export type SquadRunStep = typeof squadRunStepsTable.$inferSelect;
 export type SquadRunEvent = typeof squadRunEventsTable.$inferSelect;
+export type SquadTask = typeof squadTasksTable.$inferSelect;
+export type InsertSquadTask = typeof squadTasksTable.$inferInsert;

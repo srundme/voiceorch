@@ -304,6 +304,21 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
           },
         };
       }
+      if (t.type === "squad_followup") {
+        return {
+          name: t.name,
+          description: t.description,
+          parameters: {
+            type: "object",
+            properties: {
+              targetAgentId: { type: "string", description: "agentId of the teammate who should make the follow-up call (from your team roster)" },
+              note:          { type: "string", description: "What the teammate should do on the follow-up call, e.g. 'Schedule a demo — caller is interested in the premium plan'" },
+              delay_minutes: { type: "string", description: "Minutes from now to place the call, e.g. '120' for 2 hours, '1440' for tomorrow" },
+            },
+            required: ["targetAgentId", "note", "delay_minutes"],
+          },
+        };
+      }
       // End Call: always emit under the canonical `end_call` function name with
       // the built-in description, regardless of what (possibly blank) name was
       // persisted on the tool. This repairs existing agents whose stored end_call

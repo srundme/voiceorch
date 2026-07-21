@@ -133,11 +133,28 @@ async function executeLiveAgentTool(
       return undefined;
     }
     case "transfer_agent": {
-      const targetId = args["targetAgentId"] ?? tool.targetAgentId;
+      const targetId = tool.targetAgentId || args["targetAgentId"];
       const ok = (await config.onCallTransfer?.(`agent:${targetId}`)) ?? false;
       if (!ok) return "transfer_failed: agent-to-agent transfer is not supported";
       // In-call squad handoff keeps media open — do not end the call.
       return "handoff_complete: a teammate is now continuing with the customer";
+    }
+    case "squad_followup": {
+      const targetAgentId = parseInt(String(args["targetAgentId"] ?? ""), 10);
+      const note = String(args["note"] ?? "").trim();
+      const delayMinutes = parseInt(String(args["delay_minutes"] ?? ""), 10);
+      if (!Number.isFinite(targetAgentId) || !note || !Number.isFinite(delayMinutes)) {
+        return "followup_failed: targetAgentId, note and delay_minutes are all required";
+      }
+      const { createSquadFollowupTask } = await import("../../../services/squad-teamwork.js");
+      return createSquadFollowupTask({
+        fromAgentId: agentId,
+        callId,
+        callerPhone: config.callerPhone ?? null,
+        targetAgentId,
+        note,
+        delayMinutes,
+      });
     }
     case "webhook":
       await executeWebhookTool(callId, tool, args);

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useParams } from "wouter";
 import { customFetch, useListAgents } from "@workspace/api-client-react";
@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
@@ -17,7 +18,8 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import {
-  UsersRound, Plus, ArrowLeft, Play, Phone, Zap, Trash2, Link2, Loader2,
+  UsersRound, Plus, ArrowLeft, Phone, Trash2, Loader2, ArrowLeftRight,
+  CalendarClock, X, PhoneForwarded,
 } from "lucide-react";
 
 const API = "/api";
@@ -38,10 +40,6 @@ type Squad = {
   name: string;
   description: string | null;
   status: string;
-  supervisorAgentId: number | null;
-  entryMemberId: number | null;
-  limits: Record<string, number>;
-  handoffGreeting: string | null;
   members: SquadMember[];
   connections: {
     phoneNumbers: Array<{ id: number; number: string }>;
@@ -51,49 +49,39 @@ type Squad = {
   updatedAt: string;
 };
 
-type SquadRun = {
+type SquadTask = {
   id: number;
-  kind: string;
+  type: "handoff" | "follow_up";
   status: string;
-  goal: string;
-  triggeredBy: string;
-  activeMemberId: number | null;
-  activeCallId: number | null;
-  finalResult: string | null;
-  error: string | null;
+  fromAgentId: number | null;
+  fromAgentName: string | null;
+  toAgentId: number | null;
+  toAgentName: string | null;
+  callId: number | null;
+  callerPhone: string | null;
+  title: string;
+  note: string | null;
+  contextSummary: string | null;
+  dueAt: string | null;
   createdAt: string;
-  updatedAt: string;
 };
 
-type SquadRunDetail = SquadRun & {
-  context: Record<string, unknown>;
-  steps: Array<{
-    id: number;
-    stepIndex: number;
-    type: string;
-    status: string;
-    memberId: number | null;
-    input: Record<string, unknown>;
-    output: Record<string, unknown>;
-    error: string | null;
-  }>;
-  events: Array<{
-    id: number;
-    type: string;
-    message: string | null;
-    payload: Record<string, unknown> | null;
-    createdAt: string;
-  }>;
+type PhoneNumberRow = { id: number; number: string; agentId?: number | null };
+
+type MemberDraft = {
+  agentId: string;
+  roleName: string;
+  instructions: string;
 };
 
 function statusColor(status: string) {
-  if (status === "active" || status === "completed" || status === "running" || status === "live_call") {
+  if (["active", "completed", "scheduled"].includes(status)) {
     return "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300";
   }
-  if (status === "failed" || status === "cancelled") {
+  if (["failed", "cancelled"].includes(status)) {
     return "bg-red-500/15 text-red-700 dark:text-red-300";
   }
-  if (status === "awaiting_approval" || status === "waiting_call") {
+  if (status === "pending") {
     return "bg-amber-500/15 text-amber-700 dark:text-amber-300";
   }
   return "bg-muted text-muted-foreground";
@@ -120,13 +108,6 @@ function SquadListPage({ onOpen }: { onOpen: (id: number) => void }) {
     queryFn: () => customFetch<Squad[]>(`${API}/squads`),
   });
 
-  const { data: templates = [] } = useQuery({
-    queryKey: ["squad-templates"],
-    queryFn: () => customFetch<Array<{ id: string; name: string; description: string; roles: string[] }>>(
-      `${API}/squads/templates`,
-    ),
-  });
-
   const { data: agentsData } = useListAgents();
   const agents = agentsData ?? [];
 
@@ -136,7 +117,7 @@ function SquadListPage({ onOpen }: { onOpen: (id: number) => void }) {
     onSuccess: (s) => {
       void qc.invalidateQueries({ queryKey: ["squads"] });
       setCreateOpen(false);
-      toast({ title: "Squad created" });
+      toast({ title: "Squad created", description: "Members can now hand calls to each other." });
       onOpen(s.id);
     },
     onError: (err: Error) => toast({ title: "Create failed", description: err.message, variant: "destructive" }),
@@ -146,7 +127,7 @@ function SquadListPage({ onOpen }: { onOpen: (id: number) => void }) {
     <div className="flex flex-col h-full">
       <AppPageHeader
         title="Squads"
-        description="Teams of agents for task orchestration and live warm handoffs. Connect to inbound numbers and campaigns."
+        description="Put your agents on a team. They hand live calls to each other mid-conversation, share what they know about each caller, and schedule follow-up calls for one another."
         actions={
           <Button onClick={() => setCreateOpen(true)}>
             <Plus className="w-4 h-4 mr-1.5" /> New Squad
@@ -163,7 +144,7 @@ function SquadListPage({ onOpen }: { onOpen: (id: number) => void }) {
           <EmptyState
             icon={<UsersRound className="w-6 h-6" />}
             title="No squads yet"
-            description="Create a squad with a supervisor and specialists, then attach it to a phone number or campaign."
+            description="Pick two or more agents you already built — like a Lead Qualifier and a Meeting Scheduler — and they will work as a team automatically."
             action={{
               label: "Create squad",
               onClick: () => setCreateOpen(true),
@@ -183,7 +164,7 @@ function SquadListPage({ onOpen }: { onOpen: (id: number) => void }) {
                   <div>
                     <h3 className="font-medium text-sm">{s.name}</h3>
                     <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                      {s.description || `${s.members.length} members`}
+                      {s.description || `${s.members.length} agents working together`}
                     </p>
                   </div>
                   <Badge className={statusColor(s.status)} variant="secondary">{s.status}</Badge>
@@ -195,33 +176,28 @@ function SquadListPage({ onOpen }: { onOpen: (id: number) => void }) {
                     </span>
                   ))}
                 </div>
-                <div className="mt-3 flex gap-3 text-[11px] text-muted-foreground">
-                  <span className="inline-flex items-center gap-1">
-                    <Phone className="w-3 h-3" /> {s.connections.phoneNumbers.length}
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <Zap className="w-3 h-3" /> {s.connections.campaigns.length}
-                  </span>
-                </div>
               </button>
             ))}
           </div>
         )}
 
-        {templates.length > 0 && (
-          <div>
-            <h2 className="text-sm font-semibold mb-2">Starter templates</h2>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {templates.map((t) => (
-                <div key={t.id} className="rounded-lg border border-border/50 p-3">
-                  <p className="text-sm font-medium">{t.name}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{t.description}</p>
-                  <p className="text-[11px] text-muted-foreground mt-2">{t.roles.join(" → ")}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        <div className="rounded-xl border border-border/50 bg-muted/20 p-4 max-w-2xl">
+          <h2 className="text-sm font-semibold mb-2">How squads work</h2>
+          <ul className="text-xs text-muted-foreground space-y-1.5">
+            <li className="flex gap-2">
+              <ArrowLeftRight className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+              A caller talking to Agent 1 can be handed to Agent 2 mid-call — same phone call, no redial. Agent 2 receives the conversation so far and continues naturally.
+            </li>
+            <li className="flex gap-2">
+              <UsersRound className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+              Teammates share caller memory: whatever Agent 1 learned about a caller, Agent 2 already knows — even when the caller dials Agent 2&apos;s own number directly.
+            </li>
+            <li className="flex gap-2">
+              <CalendarClock className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+              Agents create tasks for each other: &quot;have the scheduler call this lead tomorrow at 3&quot; becomes an automatic outbound call with full context.
+            </li>
+          </ul>
+        </div>
       </div>
 
       <CreateSquadDialog
@@ -250,72 +226,108 @@ function CreateSquadDialog({
 }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [supervisorId, setSupervisorId] = useState<string>("");
-  const [specialistId, setSpecialistId] = useState<string>("");
+  const [drafts, setDrafts] = useState<MemberDraft[]>([
+    { agentId: "", roleName: "Lead Qualifier", instructions: "" },
+    { agentId: "", roleName: "Meeting Scheduler", instructions: "" },
+  ]);
 
-  const canSave = name.trim() && supervisorId && specialistId && supervisorId !== specialistId;
+  const usedIds = new Set(drafts.map((d) => d.agentId).filter(Boolean));
+  const filled = drafts.filter((d) => d.agentId && d.roleName.trim());
+  const canSave = name.trim() && filled.length >= 2
+    && new Set(filled.map((d) => d.agentId)).size === filled.length;
+
+  const setDraft = (i: number, patch: Partial<MemberDraft>) => {
+    setDrafts((prev) => prev.map((d, idx) => (idx === i ? { ...d, ...patch } : d)));
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>New Squad</DialogTitle>
           <DialogDescription>
-            Pick a supervisor and at least one specialist. You can add more members on the next screen.
+            Pick agents you already built and give each a role. Handoff tools, shared caller memory, and task creation are wired up automatically.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div>
             <Label>Name</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Lead qualification team" />
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Sales team" />
           </div>
           <div>
-            <Label>Description</Label>
+            <Label>Description (optional)</Label>
             <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
           </div>
-          <div>
-            <Label>Supervisor agent</Label>
-            <Select value={supervisorId} onValueChange={setSupervisorId}>
-              <SelectTrigger><SelectValue placeholder="Select agent" /></SelectTrigger>
-              <SelectContent>
-                {agents.map((a) => (
-                  <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label>Specialist agent</Label>
-            <Select value={specialistId} onValueChange={setSpecialistId}>
-              <SelectTrigger><SelectValue placeholder="Select agent" /></SelectTrigger>
-              <SelectContent>
-                {agents.map((a) => (
-                  <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+
+          {drafts.map((d, i) => (
+            <div key={i} className="rounded-lg border border-border/60 p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-medium text-muted-foreground">Agent {i + 1}</p>
+                {drafts.length > 2 && (
+                  <button type="button" onClick={() => setDrafts((prev) => prev.filter((_, idx) => idx !== i))}>
+                    <X className="w-3.5 h-3.5 text-muted-foreground" />
+                  </button>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <Select value={d.agentId} onValueChange={(v) => setDraft(i, { agentId: v })}>
+                  <SelectTrigger><SelectValue placeholder="Select agent" /></SelectTrigger>
+                  <SelectContent>
+                    {agents.map((a) => (
+                      <SelectItem
+                        key={a.id}
+                        value={String(a.id)}
+                        disabled={usedIds.has(String(a.id)) && d.agentId !== String(a.id)}
+                      >
+                        {a.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Input
+                  value={d.roleName}
+                  onChange={(e) => setDraft(i, { roleName: e.target.value })}
+                  placeholder="Role, e.g. Lead Qualifier"
+                />
+              </div>
+              <Input
+                value={d.instructions}
+                onChange={(e) => setDraft(i, { instructions: e.target.value })}
+                placeholder="What they handle, e.g. qualifying new leads (helps teammates know when to transfer)"
+              />
+            </div>
+          ))}
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setDrafts((prev) => [...prev, { agentId: "", roleName: "", instructions: "" }])}
+          >
+            <Plus className="w-3.5 h-3.5 mr-1" /> Add another agent
+          </Button>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
           <Button
             disabled={!canSave || saving}
             onClick={() => {
-              const sid = parseInt(supervisorId, 10);
-              const spid = parseInt(specialistId, 10);
               onSubmit({
                 name: name.trim(),
                 description: description.trim() || null,
-                supervisorAgentId: sid,
                 status: "active",
-                members: [
-                  { agentId: sid, roleName: "Supervisor", roleType: "supervisor", handoffEnabled: false, sortOrder: 0 },
-                  { agentId: spid, roleName: "Specialist", roleType: "specialist", handoffEnabled: true, sortOrder: 1 },
-                ],
+                members: filled.map((d, i) => ({
+                  agentId: parseInt(d.agentId, 10),
+                  roleName: d.roleName.trim(),
+                  roleType: "specialist",
+                  instructions: d.instructions.trim() || null,
+                  handoffEnabled: true,
+                  sortOrder: i,
+                })),
               });
             }}
           >
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Create"}
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Create squad"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -326,78 +338,36 @@ function CreateSquadDialog({
 function SquadDetailPage({ squadId, onBack }: { squadId: number; onBack: () => void }) {
   const { toast } = useToast();
   const qc = useQueryClient();
-  const [goal, setGoal] = useState("");
-  const [selectedRunId, setSelectedRunId] = useState<number | null>(null);
-  const [connectPhoneId, setConnectPhoneId] = useState("");
-  const [connectCampaignId, setConnectCampaignId] = useState("");
 
   const { data: squad, isLoading } = useQuery({
     queryKey: ["squad", squadId],
     queryFn: () => customFetch<Squad>(`${API}/squads/${squadId}`),
   });
 
-  const { data: runs = [] } = useQuery({
-    queryKey: ["squad-runs", squadId],
-    queryFn: () => customFetch<SquadRun[]>(`${API}/squads/${squadId}/runs`),
-    refetchInterval: 4000,
-  });
-
-  const { data: runDetail } = useQuery({
-    queryKey: ["squad-run", selectedRunId],
-    queryFn: () => customFetch<SquadRunDetail>(`${API}/squad-runs/${selectedRunId}`),
-    enabled: selectedRunId != null,
-    refetchInterval: 3000,
+  const { data: tasks = [] } = useQuery({
+    queryKey: ["squad-tasks", squadId],
+    queryFn: () => customFetch<SquadTask[]>(`${API}/squads/${squadId}/tasks`),
+    refetchInterval: 5000,
   });
 
   const { data: phones = [] } = useQuery({
     queryKey: ["phone-numbers"],
-    queryFn: () => customFetch<Array<{ id: number; number: string; squadId?: number | null }>>(`${API}/phone-numbers`),
+    queryFn: () => customFetch<PhoneNumberRow[]>(`${API}/phone-numbers`),
   });
 
-  const { data: campaigns = [] } = useQuery({
-    queryKey: ["campaigns-lite"],
-    queryFn: async () => {
-      const rows = await customFetch<Array<{ id: number; name: string }>>(`${API}/campaigns`);
-      return rows;
-    },
-  });
-
-  const startRun = useMutation({
+  const updateMut = useMutation({
     mutationFn: (body: Record<string, unknown>) =>
-      customFetch<{ runId: number }>(`${API}/squads/${squadId}/runs`, {
-        method: "POST",
-        body: JSON.stringify(body),
-      }),
-    onSuccess: (r) => {
-      void qc.invalidateQueries({ queryKey: ["squad-runs", squadId] });
-      setSelectedRunId(r.runId);
-      toast({ title: "Run started" });
-    },
-    onError: (err: Error) => toast({ title: "Run failed", description: err.message, variant: "destructive" }),
+      customFetch<Squad>(`${API}/squads/${squadId}`, { method: "PATCH", body: JSON.stringify(body) }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["squad", squadId] }),
+    onError: (err: Error) => toast({ title: "Update failed", description: err.message, variant: "destructive" }),
   });
 
-  const connectMut = useMutation({
-    mutationFn: (body: Record<string, unknown>) =>
-      customFetch<Squad>(`${API}/squads/${squadId}/connect`, {
-        method: "POST",
-        body: JSON.stringify(body),
-      }),
+  const cancelTaskMut = useMutation({
+    mutationFn: (taskId: number) =>
+      customFetch(`${API}/squad-tasks/${taskId}/cancel`, { method: "POST" }),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["squad", squadId] });
-      toast({ title: "Connected" });
-    },
-    onError: (err: Error) => toast({ title: "Connect failed", description: err.message, variant: "destructive" }),
-  });
-
-  const approveMut = useMutation({
-    mutationFn: (body: { stepId: number; approved: boolean }) =>
-      customFetch(`${API}/squad-runs/${selectedRunId}/approve`, {
-        method: "POST",
-        body: JSON.stringify(body),
-      }),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["squad-run", selectedRunId] });
-      toast({ title: "Updated" });
+      void qc.invalidateQueries({ queryKey: ["squad-tasks", squadId] });
+      toast({ title: "Follow-up cancelled" });
     },
   });
 
@@ -409,11 +379,6 @@ function SquadDetailPage({ squadId, onBack }: { squadId: number; onBack: () => v
     },
   });
 
-  const waitingStep = useMemo(
-    () => runDetail?.steps.find((s) => s.status === "waiting"),
-    [runDetail],
-  );
-
   if (isLoading || !squad) {
     return (
       <div className="flex items-center justify-center py-20 text-sm text-muted-foreground">
@@ -421,6 +386,13 @@ function SquadDetailPage({ squadId, onBack }: { squadId: number; onBack: () => v
       </div>
     );
   }
+
+  const phoneByAgent = new Map<number, string>();
+  for (const p of phones) {
+    if (p.agentId != null && !phoneByAgent.has(p.agentId)) phoneByAgent.set(p.agentId, p.number);
+  }
+
+  const isActive = squad.status === "active";
 
   return (
     <div className="flex flex-col h-full">
@@ -430,10 +402,16 @@ function SquadDetailPage({ squadId, onBack }: { squadId: number; onBack: () => v
         </Button>
         <AppPageHeader
           title={squad.name}
-          description={squad.description || "Squad builder"}
+          description={squad.description || "Agents on this team hand calls to each other and share caller context."}
           actions={
-            <div className="flex gap-2">
-              <Badge className={statusColor(squad.status)} variant="secondary">{squad.status}</Badge>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                <Switch
+                  checked={isActive}
+                  onCheckedChange={(on) => updateMut.mutate({ status: on ? "active" : "paused" })}
+                />
+                <span className="text-xs text-muted-foreground">{isActive ? "Active" : "Paused"}</span>
+              </div>
               <Button variant="outline" size="sm" onClick={() => deleteMut.mutate()}>
                 <Trash2 className="w-3.5 h-3.5" />
               </Button>
@@ -443,8 +421,13 @@ function SquadDetailPage({ squadId, onBack }: { squadId: number; onBack: () => v
       </div>
 
       <div className="px-6 pb-10 grid gap-6 lg:grid-cols-2 overflow-auto">
-        <section className="space-y-4">
-          <h2 className="text-sm font-semibold">Members</h2>
+        <section className="space-y-3">
+          <h2 className="text-sm font-semibold">Team</h2>
+          <p className="text-xs text-muted-foreground">
+            Each agent keeps its own prompt and phone number. While the squad is active, every member automatically
+            gets transfer tools for teammates, sees what teammates know about each caller, and can schedule
+            follow-up calls for one another.
+          </p>
           <div className="space-y-2">
             {squad.members.map((m) => (
               <div key={m.id ?? m.agentId} className="rounded-lg border border-border/60 p-3">
@@ -453,193 +436,77 @@ function SquadDetailPage({ squadId, onBack }: { squadId: number; onBack: () => v
                     <p className="text-sm font-medium">{m.roleName}</p>
                     <p className="text-xs text-muted-foreground">{m.agentName ?? `Agent #${m.agentId}`}</p>
                   </div>
-                  <div className="flex gap-1.5">
-                    <Badge variant="outline" className="text-[10px]">{m.roleType}</Badge>
-                    {m.handoffEnabled && <Badge variant="secondary" className="text-[10px]">handoff</Badge>}
+                  <div className="flex flex-col items-end gap-1">
+                    {phoneByAgent.has(m.agentId) ? (
+                      <span className="text-[11px] text-muted-foreground inline-flex items-center gap-1">
+                        <Phone className="w-3 h-3" /> {phoneByAgent.get(m.agentId)}
+                      </span>
+                    ) : (
+                      <span className="text-[11px] text-amber-600 dark:text-amber-400">no number assigned</span>
+                    )}
+                    {m.handoffEnabled && (
+                      <Badge variant="secondary" className="text-[10px]">receives handoffs</Badge>
+                    )}
                   </div>
                 </div>
                 {m.instructions && (
-                  <p className="text-xs text-muted-foreground mt-2 line-clamp-2">{m.instructions}</p>
+                  <p className="text-xs text-muted-foreground mt-2 line-clamp-2">Handles: {m.instructions}</p>
                 )}
               </div>
             ))}
           </div>
-
-          <h2 className="text-sm font-semibold pt-2">Connect</h2>
-          <p className="text-xs text-muted-foreground">
-            Primary triggers: attach an inbound number or campaign. Manual tests below are for setup only.
+          <p className="text-[11px] text-muted-foreground">
+            To change members or roles, delete and recreate the squad, or use the API. Agents without a phone
+            number can still receive in-call handoffs, but cannot make follow-up calls.
           </p>
-          <div className="flex flex-wrap gap-2 items-end">
-            <div className="min-w-[160px] flex-1">
-              <Label className="text-xs">Phone number</Label>
-              <Select value={connectPhoneId} onValueChange={setConnectPhoneId}>
-                <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                <SelectContent>
-                  {phones.map((p) => (
-                    <SelectItem key={p.id} value={String(p.id)}>{p.number}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <Button
-              size="sm"
-              variant="secondary"
-              disabled={!connectPhoneId || connectMut.isPending}
-              onClick={() => connectMut.mutate({ phoneNumberId: parseInt(connectPhoneId, 10) })}
-            >
-              <Link2 className="w-3.5 h-3.5 mr-1" /> Attach
-            </Button>
-          </div>
-          <div className="flex flex-wrap gap-2 items-end">
-            <div className="min-w-[160px] flex-1">
-              <Label className="text-xs">Campaign</Label>
-              <Select value={connectCampaignId} onValueChange={setConnectCampaignId}>
-                <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                <SelectContent>
-                  {campaigns.map((c) => (
-                    <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <Button
-              size="sm"
-              variant="secondary"
-              disabled={!connectCampaignId || connectMut.isPending}
-              onClick={() => connectMut.mutate({ campaignId: parseInt(connectCampaignId, 10) })}
-            >
-              <Link2 className="w-3.5 h-3.5 mr-1" /> Attach
-            </Button>
-          </div>
-          {(squad.connections.phoneNumbers.length > 0 || squad.connections.campaigns.length > 0) && (
-            <div className="text-xs text-muted-foreground space-y-1">
-              {squad.connections.phoneNumbers.map((p) => (
-                <div key={p.id} className="flex items-center gap-2">
-                  <Phone className="w-3 h-3" /> {p.number}
-                  <button
-                    type="button"
-                    className="underline"
-                    onClick={() => connectMut.mutate({ phoneNumberId: p.id, detach: true })}
-                  >
-                    detach
-                  </button>
-                </div>
-              ))}
-              {squad.connections.campaigns.map((c) => (
-                <div key={c.id} className="flex items-center gap-2">
-                  <Zap className="w-3 h-3" /> {c.name}
-                  <button
-                    type="button"
-                    className="underline"
-                    onClick={() => connectMut.mutate({ campaignId: c.id, detach: true })}
-                  >
-                    detach
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <h2 className="text-sm font-semibold pt-2">Test Squad</h2>
-          <Textarea
-            placeholder="Goal for a task run, e.g. Qualify this lead and summarize next steps"
-            value={goal}
-            onChange={(e) => setGoal(e.target.value)}
-            rows={3}
-          />
-          <div className="flex gap-2">
-            <Button
-              size="sm"
-              disabled={!goal.trim() || startRun.isPending}
-              onClick={() => startRun.mutate({ kind: "task", goal: goal.trim() })}
-            >
-              <Play className="w-3.5 h-3.5 mr-1" /> Task run
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={startRun.isPending}
-              onClick={() => startRun.mutate({ kind: "live_call", goal: goal.trim() || "Live call test" })}
-            >
-              Live call shell
-            </Button>
-          </div>
         </section>
 
-        <section className="space-y-4">
-          <h2 className="text-sm font-semibold">Runs</h2>
-          <div className="space-y-1 max-h-48 overflow-auto">
-            {runs.length === 0 && (
-              <p className="text-xs text-muted-foreground">No runs yet.</p>
-            )}
-            {runs.map((r) => (
-              <button
-                key={r.id}
-                type="button"
-                onClick={() => setSelectedRunId(r.id)}
-                className={`w-full text-left rounded-md border px-3 py-2 text-xs ${
-                  selectedRunId === r.id ? "border-foreground/30 bg-muted/40" : "border-border/50"
-                }`}
-              >
-                <div className="flex justify-between gap-2">
-                  <span className="font-medium truncate">{r.goal || r.kind}</span>
-                  <Badge className={statusColor(r.status)} variant="secondary">{r.status}</Badge>
+        <section className="space-y-3">
+          <h2 className="text-sm font-semibold">Activity — handoffs &amp; tasks</h2>
+          {tasks.length === 0 ? (
+            <p className="text-xs text-muted-foreground">
+              Nothing yet. Call any member&apos;s number — when the conversation needs a teammate, the agent
+              transfers the call or schedules a follow-up, and it shows up here.
+            </p>
+          ) : (
+            <div className="space-y-2 max-h-[32rem] overflow-auto">
+              {tasks.map((t) => (
+                <div key={t.id} className="rounded-lg border border-border/50 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="inline-flex items-center gap-1.5 text-xs font-medium">
+                      {t.type === "handoff"
+                        ? <PhoneForwarded className="w-3.5 h-3.5" />
+                        : <CalendarClock className="w-3.5 h-3.5" />}
+                      {t.type === "handoff" ? "Live handoff" : "Follow-up call"}
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <Badge className={statusColor(t.status)} variant="secondary">{t.status}</Badge>
+                      {t.type === "follow_up" && ["pending", "scheduled"].includes(t.status) && (
+                        <button
+                          type="button"
+                          title="Cancel follow-up"
+                          onClick={() => cancelTaskMut.mutate(t.id)}
+                        >
+                          <X className="w-3.5 h-3.5 text-muted-foreground" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <p className="text-xs mt-1.5">
+                    <span className="text-muted-foreground">{t.fromAgentName ?? "Agent"}</span>
+                    {" → "}
+                    <span className="font-medium">{t.toAgentName ?? "Agent"}</span>
+                    {t.callerPhone ? <span className="text-muted-foreground"> · {t.callerPhone}</span> : null}
+                  </p>
+                  {(t.note || t.title) && (
+                    <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{t.note || t.title}</p>
+                  )}
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    {new Date(t.createdAt).toLocaleString()}
+                    {t.dueAt ? ` · calls at ${new Date(t.dueAt).toLocaleString()}` : ""}
+                  </p>
                 </div>
-                <div className="text-muted-foreground mt-0.5">
-                  {r.kind} · {r.triggeredBy} · #{r.id}
-                </div>
-              </button>
-            ))}
-          </div>
-
-          {runDetail && (
-            <div className="rounded-xl border border-border/60 p-4 space-y-3">
-              <div className="flex justify-between">
-                <h3 className="text-sm font-semibold">Run #{runDetail.id}</h3>
-                <Badge className={statusColor(runDetail.status)} variant="secondary">{runDetail.status}</Badge>
-              </div>
-              {runDetail.finalResult && (
-                <p className="text-xs bg-muted/40 rounded p-2">{runDetail.finalResult}</p>
-              )}
-              {runDetail.error && (
-                <p className="text-xs text-red-600">{runDetail.error}</p>
-              )}
-              {waitingStep && (
-                <div className="flex gap-2">
-                  <Button size="sm" onClick={() => approveMut.mutate({ stepId: waitingStep.id, approved: true })}>
-                    Approve step
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => approveMut.mutate({ stepId: waitingStep.id, approved: false })}
-                  >
-                    Reject
-                  </Button>
-                </div>
-              )}
-              <div>
-                <p className="text-xs font-medium mb-1">Steps</p>
-                <ul className="space-y-1">
-                  {runDetail.steps.map((s) => (
-                    <li key={s.id} className="text-xs flex justify-between gap-2">
-                      <span>{s.stepIndex}. {s.type}</span>
-                      <span className="text-muted-foreground">{s.status}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <div>
-                <p className="text-xs font-medium mb-1">Timeline</p>
-                <ul className="space-y-1 max-h-40 overflow-auto">
-                  {runDetail.events.map((e) => (
-                    <li key={e.id} className="text-[11px] text-muted-foreground">
-                      <span className="font-medium text-foreground">{e.type}</span>
-                      {e.message ? ` — ${e.message}` : ""}
-                    </li>
-                  ))}
-                </ul>
-              </div>
+              ))}
             </div>
           )}
         </section>

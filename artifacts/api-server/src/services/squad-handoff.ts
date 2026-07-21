@@ -26,6 +26,12 @@ import {
   recordSquadHandoff,
   type HandoffPacket,
 } from "./squad-engine.js";
+import {
+  loadSquadTeam,
+  buildSquadTools,
+  buildSquadPromptBlock,
+  buildSharedCallerFactsBlock,
+} from "./squad-teamwork.js";
 
 const DEFAULT_SILENCE_TIMEOUT_SECONDS = 45;
 
@@ -82,12 +88,14 @@ async function loadProviderKeysMap(userId: string | null): Promise<Map<string, s
 async function buildTargetAgentConfig(
   agentId: number,
   packet: HandoffPacket,
+  squadId: number,
+  callerPhone: string | null,
 ): Promise<{ agentConfig: AgentConfig; providerKeys: Map<string, string> } | null> {
   const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, agentId)).limit(1);
   if (!agent) return null;
 
   const agentCfg = (agent.agentConfig ?? {}) as Record<string, unknown>;
-  const tools = Array.isArray(agent.tools) ? (agent.tools as unknown as AgentTool[]) : [];
+  let tools = Array.isArray(agent.tools) ? (agent.tools as unknown as AgentTool[]) : [];
   const endCallPhrases = agent.endCallPhrases
     ? agent.endCallPhrases.split(",").map((s) => s.trim()).filter(Boolean)
     : [];
@@ -95,6 +103,21 @@ async function buildTargetAgentConfig(
   let systemPrompt = agent.generatedPrompt ?? agent.systemPrompt ?? "";
   systemPrompt = appendGuardrails(systemPrompt, agent.name);
   systemPrompt = `${systemPrompt}\n\n${buildHandoffPromptBlock(packet)}`;
+
+  // The receiving agent is squad-aware too: it can hand the call back or
+  // onward, schedule follow-ups, and sees what teammates know about the caller.
+  try {
+    const team = await loadSquadTeam(squadId, agentId);
+    if (team && team.teammates.length > 0) {
+      const injected = buildSquadTools(team, tools);
+      if (injected.length > 0) tools = [...tools, ...injected];
+      const sharedFacts = await buildSharedCallerFactsBlock(team, callerPhone, agentId);
+      const blocks = [buildSquadPromptBlock(team), sharedFacts].filter(Boolean).join("\n\n");
+      if (blocks) systemPrompt = `${systemPrompt}\n\n${blocks}`;
+    }
+  } catch (err) {
+    logger.warn({ err, agentId, squadId }, "Squad teamwork injection failed for handoff target");
+  }
 
   const effectiveAgentLang =
     (typeof agentCfg["language"] === "string" && (agentCfg["language"] as string)) ||
@@ -256,10 +279,11 @@ export async function performSquadAgentHandoff(opts: {
   goal: string;
   transcriptSummary: string;
   language?: string | null;
+  durableFacts?: Record<string, unknown>;
   squad: Squad;
   hooks: HandoffSessionHooks;
   previousPipeline: VoiceSession;
-}): Promise<{ pipeline: VoiceSession; toMemberId: number } | null> {
+}): Promise<{ pipeline: VoiceSession; toMemberId: number; previousPipeline: VoiceSession } | null> {
   const validated = await validateSquadHandoff({
     squadId: opts.squadId,
     fromAgentId: opts.fromAgentId,
@@ -293,20 +317,18 @@ export async function performSquadAgentHandoff(opts: {
     goal: opts.goal,
     transcriptSummary: opts.transcriptSummary,
     language: opts.language,
+    durableFacts: opts.durableFacts,
   };
 
-  const built = await buildTargetAgentConfig(opts.toAgentId, packet);
+  const built = await buildTargetAgentConfig(opts.toAgentId, packet, opts.squadId, opts.hooks.callerPhone);
   if (!built) {
     await recordSquadHandoff({ runId: opts.runId, packet, outcome: "failed", error: "Target agent missing" });
     return null;
   }
 
-  try {
-    opts.previousPipeline.close();
-  } catch (err) {
-    logger.warn({ err, callId: opts.hooks.callId }, "Error closing previous pipeline before handoff");
-  }
-
+  // Build the new pipeline WHILE the previous one is still alive.
+  // Closing first used to leave the call dead if construction failed, and
+  // dropped inbound audio during the gap before session swapped pointers.
   const { agentConfig, providerKeys } = built;
   const hooks = opts.hooks;
 
@@ -342,7 +364,7 @@ export async function performSquadAgentHandoff(opts: {
           callDirection: hooks.callDirection,
         });
   } catch (err) {
-    logger.error({ err, callId: hooks.callId }, "Failed to create handoff pipeline");
+    logger.error({ err, callId: hooks.callId }, "Failed to create handoff pipeline — keeping previous agent");
     await recordSquadHandoff({
       runId: opts.runId,
       packet,
@@ -356,6 +378,9 @@ export async function performSquadAgentHandoff(opts: {
     (opts.squad.handoffGreeting && opts.squad.handoffGreeting.trim()) ||
     "Hi — I've been briefed on your conversation so far. How can I help?";
 
+  // Speak before the session swaps pointers — onAudioOut is shared, so the
+  // caller hears the greeting even while inbound audio still hits the old
+  // pipeline for a moment.
   try {
     await newPipeline.speakRaw(greeting);
   } catch (err) {
@@ -367,5 +392,6 @@ export async function performSquadAgentHandoff(opts: {
     { callId: hooks.callId, from: opts.fromAgentId, to: opts.toAgentId, runId: opts.runId },
     "Squad live handoff completed",
   );
-  return { pipeline: newPipeline, toMemberId: validated.to.id };
+  // Caller (session) must: live.pipeline = result.pipeline, THEN close the old one.
+  return { pipeline: newPipeline, toMemberId: validated.to.id, previousPipeline: opts.previousPipeline };
 }
