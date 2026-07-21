@@ -34,6 +34,7 @@ import {
   Calculator,
   Presentation,
   IndianRupee,
+  Trophy,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -115,6 +116,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/deployments",    label: "Deployments",      icon: Rocket },
     { href: "/emails",         label: "Emails",            icon: Mail },
     { href: "/events",           label: "Workshops",        icon: Presentation, section: "Workshops" },
+    { href: "/voiceathon",       label: "Voice-a-thons",    icon: Trophy, section: "Voice-a-thons" },
     { href: "/book-interns",     label: "Book Interns",     icon: GraduationCap, section: "Engineering Programme" },
     { href: "/family/companies", label: "Companies",      icon: Building2,  section: "Family Insurance" },
     { href: "/family/agents",    label: "AI Agents",      icon: ShieldCheck },

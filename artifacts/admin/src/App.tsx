@@ -51,6 +51,8 @@ import AlertsPage from "@/pages/usage/alerts";
 
 import EventsPage from "@/pages/events";
 import EventDetailPage from "@/pages/events/[id]";
+import VoiceathonEventsPage from "@/pages/voiceathon";
+import VoiceathonEventDetailPage from "@/pages/voiceathon/[id]";
 import BookInternsPage from "@/pages/book-interns";
 import FamilyCompaniesPage from "@/pages/family/companies";
 import FamilyCompanyDetailPage from "@/pages/family/company-detail";
@@ -132,6 +134,10 @@ function Router() {
       {/* Workshops */}
       <ProtectedRoute path="/events/:id" component={EventDetailPage} />
       <ProtectedRoute path="/events" component={EventsPage} />
+
+      {/* Voice-a-thons */}
+      <ProtectedRoute path="/voiceathon/:id" component={VoiceathonEventDetailPage} />
+      <ProtectedRoute path="/voiceathon" component={VoiceathonEventsPage} />
 
       {/* Engineering Programme */}
       <ProtectedRoute path="/book-interns" component={BookInternsPage} />
