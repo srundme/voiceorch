@@ -334,34 +334,47 @@ async function configureVobizNumberWebhook(
     const linkPayloads = [
       JSON.stringify({ app_id: appId }),
       JSON.stringify({ application_id: appId }),
+      JSON.stringify({ number: e164, app_id: appId }),
+      JSON.stringify({ number: digits, application_id: appId }),
     ];
-    const linkTargets: string[] = [];
+    const linkTargets: Array<{ url: string; headers: Record<string, string> }> = [];
+
+    // Account API targets (with Basic + X-Auth headers)
     if (match?.id) {
-      linkTargets.push(`${VOBIZ_ACCOUNT_BASE}/${authId}/Number/${match.id}/`);
-      linkTargets.push(`${VOBIZ_ACCOUNT_BASE}/${authId}/numbers/${match.id}`);
-      linkTargets.push(`${VOBIZ_ACCOUNT_BASE}/${authId}/Application/${appId}/Number/${match.id}/`);
+      linkTargets.push({ url: `${VOBIZ_ACCOUNT_BASE}/${authId}/Number/${match.id}/`, headers: h });
+      linkTargets.push({ url: `${VOBIZ_ACCOUNT_BASE}/${authId}/numbers/${match.id}`, headers: h });
+      linkTargets.push({ url: `${VOBIZ_ACCOUNT_BASE}/${authId}/Application/${appId}/Number/${match.id}/`, headers: h });
     }
-    linkTargets.push(`${VOBIZ_ACCOUNT_BASE}/${authId}/Number/${encodeURIComponent(digits)}/`);
-    linkTargets.push(`${VOBIZ_ACCOUNT_BASE}/${authId}/numbers/${encodeURIComponent(digits)}`);
-    linkTargets.push(`${VOBIZ_ACCOUNT_BASE}/${authId}/Application/${appId}/Number/${encodeURIComponent(digits)}/`);
+    linkTargets.push({ url: `${VOBIZ_ACCOUNT_BASE}/${authId}/Number/${encodeURIComponent(digits)}/`, headers: h });
+    linkTargets.push({ url: `${VOBIZ_ACCOUNT_BASE}/${authId}/numbers/${encodeURIComponent(digits)}`, headers: h });
+    linkTargets.push({ url: `${VOBIZ_ACCOUNT_BASE}/${authId}/Application/${appId}/Number/${encodeURIComponent(digits)}/`, headers: h });
     if (e164.startsWith("+")) {
-      linkTargets.push(`${VOBIZ_ACCOUNT_BASE}/${authId}/Number/${encodeURIComponent(e164)}/`);
-      linkTargets.push(`${VOBIZ_ACCOUNT_BASE}/${authId}/numbers/${encodeURIComponent(e164)}`);
+      linkTargets.push({ url: `${VOBIZ_ACCOUNT_BASE}/${authId}/Number/${encodeURIComponent(e164)}/`, headers: h });
+      linkTargets.push({ url: `${VOBIZ_ACCOUNT_BASE}/${authId}/numbers/${encodeURIComponent(e164)}`, headers: h });
     }
 
+    // Partner API targets (X-Auth headers)
+    const partnerH = { "X-Auth-ID": authId, "X-Auth-Token": authToken, "Accept": "application/json", "Content-Type": "application/json" };
+    linkTargets.push({ url: `https://api.vobiz.ai/api/v1/partner/numbers/assign`, headers: partnerH });
+    linkTargets.push({ url: `https://api.vobiz.ai/api/v1/partner/numbers/${encodeURIComponent(digits)}`, headers: partnerH });
+    linkTargets.push({ url: `https://api.vobiz.ai/api/v1/partner/numbers/${encodeURIComponent(digits)}/link`, headers: partnerH });
+
     let linked = false;
-    for (const url of linkTargets) {
-      for (const method of ["POST", "PATCH"]) {
+    for (const target of linkTargets) {
+      for (const method of ["POST", "PATCH", "PUT"]) {
         for (const body of linkPayloads) {
           try {
-            const resp = await fetch(url, { method, headers: h, body });
+            const resp = await fetch(target.url, { method, headers: target.headers, body });
+            const respText = await resp.text().catch(() => "");
             if (resp.ok || resp.status === 204) {
               linked = true;
-              console.info(`configureVobizNumberWebhook: ${method} ok ${resp.status} ${url}`);
+              console.info(`configureVobizNumberWebhook: ${method} SUCCESS ${resp.status} ${target.url} -> ${respText.slice(0, 200)}`);
               break;
+            } else {
+              console.info(`configureVobizNumberWebhook: ${method} ${resp.status} ${target.url} -> ${respText.slice(0, 150)}`);
             }
           } catch (linkErr) {
-            console.warn(`configureVobizNumberWebhook: ${method} failed:`, linkErr);
+            console.warn(`configureVobizNumberWebhook: ${method} error ${target.url}:`, linkErr);
           }
         }
         if (linked) break;
