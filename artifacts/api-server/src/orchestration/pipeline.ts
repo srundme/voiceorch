@@ -1136,8 +1136,11 @@ export class OrchestrationPipeline implements VoiceSession {
     return this.requestedLangLatch === "en-IN" || this.requestedLangLatch === "en-US";
   }
 
-  private backchannelFillerOpts(): { englishStrictAck?: boolean } {
-    return { englishStrictAck: this.isEnglishStrictAckMode() };
+  private backchannelFillerOpts(callerTranscript?: string | null): BackchannelFillerOptions {
+    return {
+      englishStrictAck: this.isEnglishStrictAckMode(),
+      callerTranscript: callerTranscript || this.lastUserTranscript,
+    };
   }
 
   /** Skip dead-air filler still in the play queue when LLM responds immediately after. */

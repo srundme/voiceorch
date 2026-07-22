@@ -1,121 +1,127 @@
-// Language-keyed backchannel filler bank.
+// Language-keyed backchannel filler bank with context-safe acknowledgments.
 //
 // When backchanneling is enabled, the agent speaks a short filler phrase
 // while the LLM warms up, filling the dead silence between the caller
 // finishing their sentence and the first agent word.
 //
-// Keys are base ISO language codes (the part before any region suffix):
-// "ta", "hi", "en", "te", "kn", "ml", "mr", "bn", "gu", etc.
-// "ta-IN", "hi-IN", "en-US" all resolve to their base code automatically.
-//
-// Phrases are intentionally short (1-3 syllables) so they don't bleed
-// into the real LLM response or annoy the caller.
+// Phrases are intentionally non-committal so they NEVER contradict the
+// subsequent LLM answer (e.g. never say "yes/ஆமா/हाँ" before a "no/இல்லை/नहीं" answer).
 
 const BACKCHANNEL_FILLERS: Record<string, string[]> = {
-  // Tamil — kept intentionally minimal. Only "okay" and "சரி" (seri) sound
-  // natural in sparing use; the rest ("ஆமா", "அப்படியா", "ஓ", "hmm") were
-  // overused and made the agent sound scripted/repetitive.
+  // Tamil — strictly non-committal acknowledgments (no polar "ஆமா" that can clash with "இல்ல")
   "ta": [
     "சரி",        // okay / right (seri)
     "hmm",
-    "ஆமா",       // mild yes (sparing)
     "okay",       // universal
   ],
 
-  // Hindi — casual spoken acknowledgments
+  // Hindi — neutral spoken acknowledgments (no polar "हाँ" that can clash with "नहीं")
   "hi": [
-    "हाँ",        // yes
     "अच्छा",     // I see / okay
     "हम्म",       // hmm
     "ठीक है",    // okay
-    "ओह",         // oh
   ],
 
-  // English — standard fillers
+  // English — standard neutral fillers
   "en": [
     "Got it.",
     "Okay.",
     "Mm-hmm.",
     "I see.",
-    "Sure.",
-    "Right.",
   ],
 
-  // Telugu
+  // Telugu — non-committal
   "te": [
     "సరే",        // okay
-    "అవును",     // yes
     "ఓహో",       // oh I see
     "hmm",
   ],
 
-  // Kannada
+  // Kannada — non-committal
   "kn": [
     "ಸರಿ",        // okay
-    "ಹೌದು",      // yes
     "ಓಹ್",        // oh
     "hmm",
   ],
 
-  // Malayalam
+  // Malayalam — non-committal
   "ml": [
     "ശരി",        // okay
     "ഉം",          // mm-hmm
-    "ആഹ്",        // ah yes
     "okay",
   ],
 
-  // Marathi
+  // Marathi — non-committal
   "mr": [
-    "हो",          // yes
     "बरं",          // okay
     "अच्छा",      // I see
     "hmm",
   ],
 
-  // Bengali
+  // Bengali — non-committal
   "bn": [
-    "হ্যাঁ",       // yes
     "বুঝলাম",    // understood
     "ঠিক আছে",  // okay
     "hmm",
   ],
 
-  // Gujarati
+  // Gujarati — non-committal
   "gu": [
-    "હા",           // yes
     "ઠીક",          // okay
     "અચ્છા",     // I see
     "hmm",
   ],
 };
 
+/** High-priority neutral fillers used when caller asks a question or has a complex prompt */
+const STRICT_NEUTRAL_FILLERS: Record<string, string[]> = {
+  "ta": ["சரி", "okay"],
+  "hi": ["ठीक है", "अच्छा"],
+  "en": ["Okay.", "Got it."],
+  "te": ["సరే"],
+  "kn": ["ಸರಿ"],
+  "ml": ["ശരി"],
+};
+
 export interface BackchannelFillerOptions {
   /** When caller explicitly requested English, only "Okay." is permitted. */
   englishStrictAck?: boolean;
+  /** Custom fillers configured on the agent */
+  customFillers?: string[];
+  /** Latest caller transcript text for semantic context filtering */
+  callerTranscript?: string | null;
 }
 
 /**
  * Resolve the predefined backchannel filler set for an agent's language.
- * Returns an empty array when the language has no predefined set (caller must
- * then skip injecting a filler — never fall back to another language).
  */
 export function getBackchannelFillers(
   language: string | null | undefined,
   opts?: BackchannelFillerOptions,
 ): string[] {
+  if (opts?.customFillers && opts.customFillers.length > 0) {
+    return opts.customFillers;
+  }
+
   if (!language) return [];
   const base = language.toLowerCase().split(/[-_]/)[0]!;
   if (base === "en" && opts?.englishStrictAck) return ["Okay."];
+
+  // If caller asked a question or transcript has question markers, restrict to strict neutral fillers
+  const transcript = opts?.callerTranscript?.trim() || "";
+  const isQuestion = transcript.endsWith("?") ||
+    /\b(what|why|when|where|how|who|can|is|are|do|does|did|will|would|could|என்ன|எப்போ|ஏன்|எப்படி|யாரு|இருக்கா|வருமா|என்னுடைய|क्या|कब|कहाँ|क्यों|कैसा|कैसे)\b/i.test(transcript);
+
+  if (isQuestion && STRICT_NEUTRAL_FILLERS[base]) {
+    return STRICT_NEUTRAL_FILLERS[base]!;
+  }
+
   return BACKCHANNEL_FILLERS[base] ?? [];
 }
 
 /**
  * Pick one random filler for the language, or null when none is available.
- *
- * When `lastPhrase` is provided and the pool has more than one option, the
- * same phrase is never picked twice in a row — avoids the robotic feel of
- * hearing e.g. "okay" back-to-back on consecutive turns.
+ * Avoids picking the exact same phrase twice in a row.
  */
 export function pickBackchannelFiller(
   language: string | null | undefined,
