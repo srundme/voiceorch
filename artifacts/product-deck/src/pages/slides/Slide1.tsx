@@ -90,7 +90,7 @@ export default function Slide1() {
         position: "absolute", bottom: "2.8vh", right: "4vw",
         fontSize: "0.85vw", fontWeight: 500, color: "#4B6CB7", letterSpacing: "0.06em",
       }}>
-        01 / 15
+        01 / 16
       </div>
 
       <SSWatermark />
