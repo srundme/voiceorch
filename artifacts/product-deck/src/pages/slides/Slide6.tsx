@@ -28,7 +28,7 @@ export default function Slide6() {
             A billion-dollar gap — and the window is now.
           </h1>
         </div>
-        <span style={{ fontSize: "0.85vw", fontWeight: 600, color: "#4B6CB7", letterSpacing: "0.06em", paddingBottom: "0.3vh" }}>08 / 15</span>
+        <span style={{ fontSize: "0.85vw", fontWeight: 600, color: "#4B6CB7", letterSpacing: "0.06em", paddingBottom: "0.3vh" }}>09 / 16</span>
       </div>
 
       <div style={{ flex: 1, padding: "2.6vh 6vw 6.5vh 6vw", display: "flex", flexDirection: "column", gap: "2.2vh" }}>
@@ -40,8 +40,8 @@ export default function Slide6() {
           </div>
           <div style={{ ...marketBlock, borderColor: "#C5CAE9", background: "#F0F3FF" }}>
             <div style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "#7986CB", marginBottom: "1vh" }}>SAM</div>
-            <div style={{ fontFamily: "var(--font-display-family)", fontSize: "3.2vw", fontWeight: 800, color: "#1A237E" }}>$957M</div>
-            <div style={{ fontSize: "0.98vw", color: "#5B5470", lineHeight: 1.5, marginTop: "1vh" }}>India BPM + voice-AI segment (NASSCOM, 2024)</div>
+            <div style={{ fontFamily: "var(--font-display-family)", fontSize: "3.2vw", fontWeight: 800, color: "#1A237E" }}>₹600 Cr/yr</div>
+            <div style={{ fontSize: "0.98vw", color: "#5B5470", lineHeight: 1.5, marginTop: "1vh" }}>~2,000 Indian companies running 500+ outbound calls/day at ₹3L/month average</div>
           </div>
           <div style={{ ...marketBlock, background: "#1A237E", borderColor: "#1A237E" }}>
             <div style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "#FF6F00", marginBottom: "1vh" }}>Beachhead</div>
