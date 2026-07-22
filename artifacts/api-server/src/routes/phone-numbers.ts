@@ -151,11 +151,18 @@ async function purchaseVobizNumber(
   return data.number;
 }
 
-type VobizNumberItem = { id: string; e164?: string; number?: string; application_id?: string | null };
+type VobizNumberItem = {
+  id?: string;
+  e164?: string;
+  number?: string;
+  app_id?: string | null;
+  application_id?: string | null;
+  application?: string | null;
+};
 
 type ConfigureVobizResult = {
   appId: string | null;
-  /** PATCH accepted (or number already had the SnapServe app_id). */
+  /** PATCH/POST accepted (or number already had the SnapServe app_id). */
   linked: boolean;
   /** Re-fetched number list shows application_id === SnapServe app. */
   verified: boolean;
@@ -174,14 +181,31 @@ function findVobizNumber(items: VobizNumberItem[], e164: string): VobizNumberIte
   });
 }
 
+function isVobizNumberLinked(item: VobizNumberItem | undefined, appId: string | null): boolean {
+  if (!item || !appId) return false;
+  const target = String(appId).trim();
+  const directId = String(item.app_id ?? item.application_id ?? "").trim();
+  if (directId === target) return true;
+  const appUrl = String(item.application ?? "").trim();
+  if (appUrl && appUrl.includes(target)) return true;
+  return false;
+}
+
 async function listVobizNumbers(
   authId: string,
   headers: Record<string, string>,
 ): Promise<VobizNumberItem[]> {
-  const resp = await fetch(`${VOBIZ_ACCOUNT_BASE}/${authId}/numbers`, { headers });
-  if (!resp.ok) return [];
-  const data = await resp.json() as { items?: VobizNumberItem[]; objects?: VobizNumberItem[] };
-  return data.items ?? data.objects ?? [];
+  for (const path of [`${VOBIZ_ACCOUNT_BASE}/${authId}/Number/`, `${VOBIZ_ACCOUNT_BASE}/${authId}/numbers`]) {
+    try {
+      const resp = await fetch(path, { headers });
+      if (resp.ok) {
+        const data = await resp.json() as { items?: VobizNumberItem[]; objects?: VobizNumberItem[] };
+        const list = data.items ?? data.objects ?? [];
+        if (list.length > 0) return list;
+      }
+    } catch { /* try next */ }
+  }
+  return [];
 }
 
 /**
@@ -292,7 +316,7 @@ async function configureVobizNumberWebhook(
     let items = await listVobizNumbers(authId, h);
     let match = findVobizNumber(items, e164);
 
-    if (match?.application_id && match.application_id === appId) {
+    if (isVobizNumberLinked(match, appId)) {
       console.info(`configureVobizNumberWebhook: ${e164} already linked to SnapServe app ${appId}`);
       return { appId, linked: true, verified: true, detail: "already linked" };
     }
@@ -337,28 +361,28 @@ async function configureVobizNumberWebhook(
     await new Promise((r) => setTimeout(r, 400));
     items = await listVobizNumbers(authId, h);
     match = findVobizNumber(items, e164);
-    const verified = !!(match?.application_id && match.application_id === appId);
+    const verified = isVobizNumberLinked(match, appId);
 
     // One retry if PATCH claimed success but list still shows unlinked.
     if (linked && !verified) {
-      console.warn(`configureVobizNumberWebhook: link not verified for ${e164} — retrying PATCH`);
-      for (const url of patchTargets.slice(0, 2)) {
+      console.warn(`configureVobizNumberWebhook: link not verified for ${e164} — retrying link POST`);
+      for (const url of linkTargets.slice(0, 2)) {
         try {
-          await fetch(url, { method: "PATCH", headers: h, body: patchBody });
+          await fetch(url, { method: "POST", headers: h, body: linkPayloads[0] });
         } catch { /* ignore */ }
       }
       await new Promise((r) => setTimeout(r, 600));
       items = await listVobizNumbers(authId, h);
       match = findVobizNumber(items, e164);
     }
-    const verifiedFinal = !!(match?.application_id && match.application_id === appId);
+    const verifiedFinal = isVobizNumberLinked(match, appId);
 
     const detail = verifiedFinal
       ? "linked and verified"
       : linked
-        ? `PATCH accepted but VoBiz still shows application_id=${match?.application_id ?? "null"} (expected ${appId})`
+        ? `LINK accepted but VoBiz still shows application=${match?.application ?? match?.app_id ?? match?.application_id ?? "null"} (expected ${appId})`
         : match
-          ? `PATCH failed (last HTTP ${lastPatchStatus})`
+          ? "LINK failed"
           : "number not found in VoBiz /numbers list";
 
     console.info(

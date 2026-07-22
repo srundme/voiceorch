@@ -77,6 +77,7 @@ describe("recording share tokens", () => {
 
   it("rejects tampered tokens", () => {
     const token = issueRecordingShareToken(3355);
-    expect(verifyRecordingShareToken(token.replace(/.$/, "0"))).toBeNull();
+    const tampered = token.slice(0, -2) + (token.endsWith("00") ? "11" : "00");
+    expect(verifyRecordingShareToken(tampered)).toBeNull();
   });
 });
