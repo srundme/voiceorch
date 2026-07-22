@@ -156,8 +156,22 @@ describe("isAccidentalInterruptPhrase", () => {
     expect(isAccidentalInterruptPhrase("hello world")).toBe(false);
   });
 
-  it("normalises Indian English STT phonetic mishearings", () => {
-    expect(normalizeSttPhonetics("Futures-ல explain பண்ண மாட்டேங்கிறீங்க")).toBe("features-ல explain பண்ண மாட்டேங்கிறீங்க");
-    expect(normalizeSttPhonetics("4 ஆமாம்")).toBe("ஆமாம்");
+  describe("normalizeSttPhonetics", () => {
+    it("replaces Futures-ல with features-ல", () => {
+      expect(normalizeSttPhonetics("Futures-ல explain panna maattengrnga")).toBe("features-ல explain panna maattengrnga");
+    });
+
+    it("strips stray single digits prefixing Indic words", () => {
+      expect(normalizeSttPhonetics("4 ஆமாம்")).toBe("ஆமாம்");
+    });
+
+    it("normalizes Tamil spoken emails into clean email strings", () => {
+      expect(normalizeSttPhonetics("karthik 1 2 3 அட் ஜிமெல் டாட் காம்")).toBe("karthik123@gmail.com");
+      expect(normalizeSttPhonetics("அட்ட ரைட் ஜிமெல் டாட் காம்")).toBe("@gmail.com");
+    });
+
+    it("normalizes Hindi spoken emails into clean email strings", () => {
+      expect(normalizeSttPhonetics("user name ऐट जीमेल डॉट कॉम")).toBe("username@gmail.com");
+    });
   });
 });

@@ -482,9 +482,61 @@ export function isSemanticInterrupt(text: string): boolean {
 }
 
 /**
+ * Normalises spoken Indian email tokens into valid formatted email strings.
+ * E.g., "karthik 1 2 3 அட் ஜிமெல் டாட் காம்" -> "karthik123@gmail.com"
+ * "user name ऐट जीमेल डॉट कॉम" -> "username@gmail.com"
+ */
+export function normalizeSpokenEmail(text: string): string {
+  if (!text) return text;
+  let s = text;
+
+  // Only apply email transformation if email-related tokens are present
+  const hasEmailToken = /(@|அட்|ऐट|at\s*the\s*rate|at\s*rate|டாட்|டட்காம்|डॉट|dot\s*com|dotcom|ஜிமெயில்|ஜிமெல்|जीमेल|gmail)/iu.test(s);
+  if (!hasEmailToken) return s;
+
+  // Convert spoken email domain tokens
+  s = s.replace(/(அட்ட\s*ரைட்|அட்\s*ரைட்|அட்|ऐट|at\s*the\s*rate|at\s*rate)/giu, "@");
+  s = s.replace(/(டாட்\s*காம்|டட்காம்|डॉट\s*कॉम|dot\s*com|dotcom)/giu, ".com");
+  s = s.replace(/(டாட்\s*இன்|डॉट\s*इन|dot\s*in)/giu, ".in");
+  s = s.replace(/(டாட்\s*ஆர்க்|डॉट\s*ऑर्ग|dot\s*org)/giu, ".org");
+  s = s.replace(/(டாட்|डॉट)/giu, ".");
+  s = s.replace(/(ஜிமெயில்|ஜிமெல்|जीमेल|jmail|g\s*mail)/giu, "gmail");
+  s = s.replace(/(யாகூ|याहू)/giu, "yahoo");
+  s = s.replace(/(ஹாட்மெயில்|हॉटमेल)/giu, "hotmail");
+
+  // Convert spoken digits inside Tamil/Hindi email contexts
+  s = s.replace(/\bஒன்று\b/giu, "1")
+       .replace(/\bஇரண்டு\b/giu, "2")
+       .replace(/\bமூன்று\b/giu, "3")
+       .replace(/\bநான்கு\b/giu, "4")
+       .replace(/\bஐந்து\b/giu, "5")
+       .replace(/\bஆறு\b/giu, "6")
+       .replace(/\bஏழு\b/giu, "7")
+       .replace(/\bஎட்டு\b/giu, "8")
+       .replace(/\bஒன்பது\b/giu, "9")
+       .replace(/\bபூஜ்ஜியம்\b/giu, "0")
+       .replace(/\bज़ीरो\b/giu, "0")
+       .replace(/\bजीरो\b/giu, "0");
+
+  // Convert standalone space-separated single digits "1 2 3" -> "123"
+  s = s.replace(/(\d)\s+(?=\d)/g, "$1");
+
+  // If text now contains '@', clean up whitespace around email characters
+  if (s.includes("@")) {
+    s = s.replace(/\s*@\s*/g, "@");
+    s = s.replace(/\s*\.\s*/g, ".");
+    // Remove spaces in username before '@'
+    s = s.replace(/(\b[a-zA-Z0-9.\-_]+(?:\s+[a-zA-Z0-9.\-_]+)+)@/, (m, p1) => p1.replace(/\s+/g, "") + "@");
+  }
+
+  return s;
+}
+
+/**
  * Normalises common Indian-English phonetic acoustic mishearings from STT.
  * E.g., Indian English "features" (pronounced /fiːtʃərz/) is often recognized as "Futures".
  * Stray STT digits prefixing Indic words (e.g. "4 ஆமாம்") are stripped.
+ * Spoken emails ("karthik at gmail dot com") are converted to valid email strings.
  */
 export function normalizeSttPhonetics(text: string): string {
   if (!text) return text;
@@ -497,6 +549,8 @@ export function normalizeSttPhonetics(text: string): string {
   });
   // Strip stray single digit prefixing Indic words (e.g., "4 ஆமாம்" -> "ஆமாம்")
   s = s.replace(/^\d\s+([\u0B80-\u0BFF\u0900-\u097F]+)/u, "$1");
+  // Normalize spoken email tokens
+  s = normalizeSpokenEmail(s);
   return s;
 }
 
