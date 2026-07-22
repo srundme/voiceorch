@@ -68,11 +68,13 @@ function deriveWebhookBase(req: import("express").Request): string {
 const VOBIZ_ACCOUNT_BASE = "https://api.vobiz.ai/api/v1/Account";
 
 function vobizHeaders(authId: string, authToken: string) {
+  const basicCreds = Buffer.from(`${authId}:${authToken}`).toString("base64");
   return {
-    "X-Auth-ID":    authId,
-    "X-Auth-Token": authToken,
-    "Accept":       "application/json",
-    "Content-Type": "application/json",
+    "Authorization": `Basic ${basicCreds}`,
+    "X-Auth-ID":     authId,
+    "X-Auth-Token":  authToken,
+    "Accept":        "application/json",
+    "Content-Type":  "application/json",
   };
 }
 
@@ -136,7 +138,10 @@ async function purchaseVobizNumber(
 ): Promise<VobizOwnedNumber> {
   const url = `${VOBIZ_ACCOUNT_BASE}/${authId}/numbers/purchase-from-inventory`;
   const body: Record<string, string> = { e164, currency: "INR" };
-  if (applicationId) body["application_id"] = applicationId;
+  if (applicationId) {
+    body["application_id"] = applicationId;
+    body["app_id"] = applicationId;
+  }
   const resp = await fetch(url, {
     method:  "POST",
     headers: vobizHeaders(authId, authToken),
