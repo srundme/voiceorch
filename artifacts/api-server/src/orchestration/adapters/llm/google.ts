@@ -409,8 +409,9 @@ export class GoogleLLM implements LLMAdapter {
     this.warmPromise = (async () => {
       try {
         if (!this.cacheManager) this.cacheManager = new GoogleAICacheManager(this.apiKey);
+        const modelName = this.model.startsWith("models/") ? this.model : `models/${this.model}`;
         const cc = await this.cacheManager.create({
-          model: this.model,
+          model: modelName,
           systemInstruction: base,
           contents: [],
           ...(tools ? { tools } : {}),
