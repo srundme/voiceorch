@@ -436,13 +436,21 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
           config: {
             display: {
               blocks: {
+                upi: {
+                  name: "UPI / GPay / PhonePe / Paytm",
+                  instruments: [{ method: "upi" }],
+                },
                 card: {
-                  name: "Pay using Card",
+                  name: "Cards",
                   instruments: [{ method: "card" }],
                 },
+                netbanking: {
+                  name: "Net Banking",
+                  instruments: [{ method: "netbanking" }],
+                },
               },
-              sequence: ["block.card"],
-              preferences: { show_default_blocks: false },
+              sequence: ["block.upi", "block.card", "block.netbanking"],
+              preferences: { show_default_blocks: true },
             },
           },
           modal: {
