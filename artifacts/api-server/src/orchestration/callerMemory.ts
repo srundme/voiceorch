@@ -385,6 +385,33 @@ export async function loadCallerContext(
       .catch((err) => logger.warn({ err, agentId, phoneNumber }, "Caller memory: self-heal name DB write failed"));
   }
 
+  // Self-heal mangled email facts on read (e.g., "ar.right.jimel.dot_five@gmail.com" from old pre-normalizer calls).
+  const sanitizedFacts = currentFacts.map((f) => {
+    if (f.key === "email" && f.value) {
+      let cleaned = f.value
+        .replace(/ar\.right/gi, "@")
+        .replace(/dot_five/gi, "5")
+        .replace(/\.?jimel\.?/gi, "gmail");
+      cleaned = normalizeSpokenEmail(cleaned);
+      const isValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleaned);
+      if (!isValid) {
+        logger.warn(
+          { agentId, phoneNumber, invalidEmail: f.value },
+          "Caller memory: discarded invalid stored email fact on read (self-heal)",
+        );
+        return null;
+      }
+      if (cleaned !== f.value) {
+        logger.info(
+          { agentId, phoneNumber, oldEmail: f.value, healedEmail: cleaned },
+          "Caller memory: self-healed stored email fact on read",
+        );
+        return { ...f, value: cleaned };
+      }
+    }
+    return f;
+  }).filter((f): f is CallerFact => f !== null);
+
   // ── Resume support: when the previous call ended abruptly (dropped within the
   //    window), load the tail of that last episode so the agent can pick the
   //    thread back up instead of restarting. Best-effort — never blocks memory. ──
@@ -403,7 +430,7 @@ export async function loadCallerContext(
   // memory. If it exists and differs from the current agent persona, the agent
   // was repurposed — flag it so domain memory is suppressed for this call.
   // Absence = first persona ever seen = no mismatch (nothing stale to suppress).
-  const storedPersonaHash = currentFacts.find(r => r.key === PERSONA_HASH_FACT_KEY)?.value ?? null;
+  const storedPersonaHash = sanitizedFacts.find(r => r.key === PERSONA_HASH_FACT_KEY)?.value ?? null;
   const personaChanged =
     !!currentPersonaHash && !!storedPersonaHash && storedPersonaHash !== currentPersonaHash;
   if (personaChanged) {
@@ -422,7 +449,7 @@ export async function loadCallerContext(
       phoneNumber,
       hit: !!normalizedProfile,
       callCount: normalizedProfile?.callCount ?? 0,
-      factCount: currentFacts.filter(r => r.key !== PERSONA_HASH_FACT_KEY).length,
+      factCount: sanitizedFacts.filter(r => r.key !== PERSONA_HASH_FACT_KEY).length,
       archiveCount: recentCalls.length,
     },
     "Caller memory retrieval",
@@ -430,7 +457,7 @@ export async function loadCallerContext(
 
   return {
     profile: normalizedProfile,
-    facts: currentFacts
+    facts: sanitizedFacts
       .filter(r => r.key !== PERSONA_HASH_FACT_KEY)
       .map(r => ({
         id:                r.id,
