@@ -546,24 +546,14 @@ export class SarvamSTT implements STTAdapter {
           //       "mujhe chahiye", "I want", Telugu/Kannada partials, etc.
           //       all wait 700 ms, which is enough to survive a normal human
           //       thinking pause (~1 s) while the STT silence window is shorter.
-          const THINKING_PAUSE_FLOOR_MS = 700;
           if (coalesceBuf && coalesceTimer) {
             clearTimeout(coalesceTimer);
-            const bufT   = coalesceBuf.trim();
-            const single = bufT.split(/\s+/).length === 1;
-            const clearlyComplete =
-              /[.?!।]$/.test(bufT) ||
-              (single && COMPLETE_SINGLE_WORDS.has(
-                bufT.toLowerCase().replace(/[।,!?.]+$/, ""),
-              ));
-            const newHold = clearlyComplete
-              ? 30
-              : Math.max(adaptiveHoldMs(), THINKING_PAUSE_FLOOR_MS);
-            coalesceTimer = setTimeout(emitCoalesced, newHold);
+            // speech_end received: caller has stopped speaking — flush immediately (30 ms fast-path)
+            coalesceTimer = setTimeout(emitCoalesced, 30);
             emitPartial();
             logger.debug(
-              { langCode, buf: coalesceBuf.slice(0, 60), newHold },
-              "Sarvam STT: speech_end fast-flush (pre-buffered) — coalesce shortened",
+              { langCode, buf: coalesceBuf.slice(0, 60) },
+              "Sarvam STT: speech_end received — flushing coalesce buffer immediately (30 ms)",
             );
           }
           _onSpeechEnd?.();
@@ -618,14 +608,12 @@ export class SarvamSTT implements STTAdapter {
           if (coalesceTimer) clearTimeout(coalesceTimer);
           const incomplete = looksIncomplete(coalesceBuf);
           const holdMs = speechEndReceived
-            ? (!incomplete ? 30 : adaptiveHoldMs())
-            : (incomplete ? COALESCE_INCOMPLETE_MS : adaptiveHoldMs());
-          if (speechEndReceived && !incomplete) {
-            logger.debug(
-              { langCode, buf: coalesceBuf.slice(0, 60) },
-              "Sarvam STT: post-speech_end fast-flush — coalesce set to 30 ms",
-            );
-          }
+            ? 30
+            : (incomplete ? COALESCE_INCOMPLETE_MS : 30);
+          logger.debug(
+            { langCode, buf: coalesceBuf.slice(0, 60), holdMs, speechEndReceived },
+            "Sarvam STT: scheduling coalesce emit",
+          );
           coalesceTimer = setTimeout(emitCoalesced, holdMs);
           emitPartial();
           return;
