@@ -507,7 +507,7 @@ export class GoogleLLM implements LLMAdapter {
         // relative to the cached prefix, now with better recency next to the query.
         const tail = systemPrompt.slice(base.length).replace(/^\s+/, "");
         const currentText = typeof lastMessage === "string" ? lastMessage : "";
-        const cachedMsg = tail ? `${tail}\n\n${currentText}` : currentText;
+        const cachedMsg = tail ? `[SYSTEM CONTEXT: ${tail}]\n\nCaller: ${currentText}` : currentText;
 
         let result: Awaited<ReturnType<import("@google/generative-ai").ChatSession["sendMessageStream"]>> | null = null;
         try {

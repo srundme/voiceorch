@@ -8430,9 +8430,10 @@ function stripMarkupTags(text: string): string {
  * trimmed. When no tag is present both fields reflect the original text.
  */
 function extractEmotionTag(text: string): { emotion: string | null; text: string } {
-  const match = /^\s*<emotion\s+value="([^"]+)"\s*\/?>/i.exec(text);
-  if (!match) return { emotion: null, text };
-  return { emotion: match[1]!.toLowerCase(), text: text.slice(match[0].length).replace(/^\s+/, "") };
+  const match = /^\s*<emotion\s+(?:value|type)="([^"]+)"\s*\/?>/i.exec(text);
+  const emotion = match ? match[1]!.toLowerCase() : null;
+  const cleanText = text.replace(/<\/?emotion[^>]*>/gi, "").replace(/<break[^>]*\/?>/gi, "").trim();
+  return { emotion, text: cleanText };
 }
 
 /**
