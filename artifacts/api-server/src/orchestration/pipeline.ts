@@ -1969,7 +1969,7 @@ export class OrchestrationPipeline implements VoiceSession {
                 const minChars = isIndic ? 14 : 8;
                 if (
                   threshold > 0
-                  && this.streamingBargeInWordCount > threshold
+                  && this.streamingBargeInWordCount >= threshold
                   && charCount >= minChars
                 ) {
                   // Path A: launch speculative LLM from substantive barge partial
@@ -2171,7 +2171,7 @@ export class OrchestrationPipeline implements VoiceSession {
         const threshold = (planNumWords && planNumWords > 0)
           ? planNumWords
           : this.interruptionMgr.getWordsForInterruption();
-        if (this.streamingBargeInWordCount > threshold) {
+        if (this.streamingBargeInWordCount >= threshold) {
           this.triggerBargeIn("word_count", transcript, { speculative: true });
           logger.info(
             { callId: this.config.callId, words: this.streamingBargeInWordCount, threshold },
