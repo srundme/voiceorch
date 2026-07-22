@@ -17,6 +17,8 @@ export interface InterruptionManagerOptions {
   incrementalDelayMs?: number;
   /** Min words for transcript barge-in (0 = disabled). */
   wordsForInterruption?: number;
+  /** Phrases that trigger immediate interruption regardless of word count (e.g. "stop", "wait"). */
+  accidentalInterruptionPhrases?: string[];
 }
 
 export class InterruptionManager {
@@ -26,16 +28,40 @@ export class InterruptionManager {
   private utteranceEndAt = -1;
   private readonly incrementalDelayMs: number;
   private readonly wordsForInterruption: number;
+  private readonly accidentalInterruptionPhrases: Set<string>;
   private turnId = 0;
   private bargeInCount = 0;
 
   constructor(opts: InterruptionManagerOptions = {}) {
     this.incrementalDelayMs = opts.incrementalDelayMs ?? 900;
     this.wordsForInterruption = opts.wordsForInterruption ?? 3;
+    this.accidentalInterruptionPhrases = new Set(
+      (opts.accidentalInterruptionPhrases ?? ["stop", "wait", "hold on", "hang up", "cancel", "pause", "shut up", " Listen", "வேண்டாம்", "நிறுத்து", "இருங்க", "ரூக்", "रुक", "रुको", "बस", "सुनो"])
+        .map((p) => p.trim().toLowerCase()),
+    );
   }
 
   getWordsForInterruption(): number {
     return this.wordsForInterruption;
+  }
+
+  /**
+   * Bolna-parity should_trigger_interruption:
+   * Returns true if user speech should trigger a barge-in during audio playback.
+   */
+  shouldTriggerInterruption(
+    wordCount: int,
+    transcript: string,
+    isAudioPlaying: boolean,
+    welcomePlayed = true,
+  ): boolean {
+    if (!isAudioPlaying || !welcomePlayed) return false;
+    if (this.wordsForInterruption === 0) return false;
+    const stripped = transcript.trim().toLowerCase();
+    return (
+      wordCount >= this.wordsForInterruption ||
+      this.accidentalInterruptionPhrases.has(stripped)
+    );
   }
 
   /** Start a new agent reply turn; returns the sequence id for TTS frames. */
@@ -106,3 +132,4 @@ export class InterruptionManager {
     return this.bargeInCount;
   }
 }
+

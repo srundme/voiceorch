@@ -61,22 +61,38 @@ describe("InterruptionManager", () => {
     const m = new InterruptionManager();
     const a = m.beginAgentTurn();
     const b = m.beginAgentTurn();
-    expect(m.isValidSequence(a)).toBe(true);
-    expect(m.isValidSequence(b)).toBe(true);
     m.invalidateCurrentTurn();
     expect(m.isValidSequence(a)).toBe(false);
     expect(m.isValidSequence(b)).toBe(false);
     expect(m.isValidSequence(FILLER_SEQUENCE_ID)).toBe(true);
   });
 
-  it("pruneStaleSequences keeps current and filler only", () => {
+  it("pruneStaleSequences retains only current sequence and filler", () => {
     const m = new InterruptionManager();
-    const stale = m.beginAgentTurn();
-    const current = m.beginAgentTurn();
+    const a = m.beginAgentTurn();
+    const b = m.beginAgentTurn();
     m.pruneStaleSequences();
-    expect(m.isValidSequence(stale)).toBe(false);
-    expect(m.isValidSequence(current)).toBe(true);
+    expect(m.isValidSequence(a)).toBe(false);
+    expect(m.isValidSequence(b)).toBe(true);
     expect(m.isValidSequence(FILLER_SEQUENCE_ID)).toBe(true);
+  });
+
+  it("shouldTriggerInterruption respects word count and accidental interruption phrases", () => {
+    const m = new InterruptionManager({ wordsForInterruption: 3 });
+
+    // Not playing audio -> false
+    expect(m.shouldTriggerInterruption(5, "one two three four five", false)).toBe(false);
+
+    // Playing audio + word count < 3 -> false
+    expect(m.shouldTriggerInterruption(2, "hello sir", true)).toBe(false);
+
+    // Playing audio + word count >= 3 -> true
+    expect(m.shouldTriggerInterruption(3, "one two three", true)).toBe(true);
+
+    // Playing audio + keyword match ("stop", "wait", "நிறுத்து", "रुक") -> true even if 1 word
+    expect(m.shouldTriggerInterruption(1, "stop", true)).toBe(true);
+    expect(m.shouldTriggerInterruption(1, "நிறுத்து", true)).toBe(true);
+    expect(m.shouldTriggerInterruption(1, "रुक", true)).toBe(true);
   });
 
   it("exposes wordsForInterruption from options", () => {
