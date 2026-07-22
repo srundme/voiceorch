@@ -99,11 +99,21 @@ export async function authenticateApiKey(
   res: Response,
   next: NextFunction,
 ): Promise<void> {
-  const auth = req.headers.authorization;
-  if (!auth?.startsWith("Bearer sk_live_")) { next(); return; }
+  const authHeader = req.headers.authorization;
+  const xApiKey = req.headers["x-api-key"] as string | undefined;
 
-  const key  = auth.slice(7);
-  const hash = hashKey(key);
+  let rawKey: string | null = null;
+  if (xApiKey && xApiKey.trim().startsWith("sk_live_")) {
+    rawKey = xApiKey.trim();
+  } else if (authHeader && authHeader.trim().startsWith("Bearer sk_live_")) {
+    rawKey = authHeader.trim().slice(7).trim();
+  } else if (authHeader && authHeader.trim().startsWith("sk_live_")) {
+    rawKey = authHeader.trim();
+  }
+
+  if (!rawKey) { next(); return; }
+
+  const hash = hashKey(rawKey);
 
   try {
     const [row] = await db
