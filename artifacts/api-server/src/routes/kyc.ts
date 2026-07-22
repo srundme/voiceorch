@@ -188,7 +188,12 @@ async function createVobizSubAccount(
   }
 }
 
-import { decryptKey } from "../lib/crypto.js";
+import {
+  provisionPartnerCustomerAccount,
+  transferMasterBalanceToSubAccount,
+  lookupPartnerCustomerByEmail,
+  type VobizPartnerCustomerAccount,
+} from "../services/vobiz-partner-service.js";
 
 export async function ensureVobizSubAccount(
   clerkId: string,
@@ -213,73 +218,66 @@ export async function ensureVobizSubAccount(
     return { authId, authToken };
   }
 
-  let vobizAccount: VobizCreateAccountResponse;
   const targetEmail = email ?? `${clerkId}@snapserve.ai`;
   const targetName = name ?? email ?? clerkId;
 
+  let vobizAccount: VobizPartnerCustomerAccount | VobizCreateAccountResponse | null = null;
+
   try {
-    vobizAccount = await createVobizSubAccount(targetName, targetEmail);
-  } catch (err: any) {
-    if (err instanceof VobizAccountExistsError) {
-      const existing = await fetchVobizSubAccountByEmail(targetEmail);
-      if (existing) {
-        vobizAccount = existing;
+    vobizAccount = await provisionPartnerCustomerAccount(targetName, targetEmail);
+  } catch { /* ignore error and fall back */ }
+
+  if (!vobizAccount?.auth_id) {
+    try {
+      vobizAccount = await createVobizSubAccount(targetName, targetEmail);
+    } catch (err: any) {
+      if (err instanceof VobizAccountExistsError) {
+        const existing = await lookupPartnerCustomerByEmail(targetEmail) ?? await fetchVobizSubAccountByEmail(targetEmail);
+        if (existing) {
+          vobizAccount = existing;
+        } else {
+          const authId = process.env["VOBIZ_AUTH_ID"] ?? "";
+          const authToken = process.env["VOBIZ_AUTH_TOKEN"] ?? "";
+          return { authId, authToken };
+        }
       } else {
         const authId = process.env["VOBIZ_AUTH_ID"] ?? "";
         const authToken = process.env["VOBIZ_AUTH_TOKEN"] ?? "";
         return { authId, authToken };
       }
-    } else {
-      const authId = process.env["VOBIZ_AUTH_ID"] ?? "";
-      const authToken = process.env["VOBIZ_AUTH_TOKEN"] ?? "";
-      return { authId, authToken };
     }
   }
+
+  const tokenToEncrypt = vobizAccount.auth_token ?? process.env["VOBIZ_AUTH_TOKEN"] ?? "";
 
   const [inserted] = await db
     .insert(vobizAccountsTable)
     .values({
       userId: clerkId,
       vobizAuthId: vobizAccount.auth_id,
-      vobizAuthTokenEncrypted: encryptKey(vobizAccount.auth_token),
+      vobizAuthTokenEncrypted: encryptKey(tokenToEncrypt),
       kycStatus: "pending",
     })
     .onConflictDoUpdate({
       target: vobizAccountsTable.userId,
       set: {
         vobizAuthId: vobizAccount.auth_id,
-        vobizAuthTokenEncrypted: encryptKey(vobizAccount.auth_token),
+        vobizAuthTokenEncrypted: encryptKey(tokenToEncrypt),
       },
     })
     .returning();
 
-  // Auto-fund sub-account with initial balance from master partner account
-  void transferVobizSubAccountBalance(inserted.vobizAuthId, 50);
+  // Auto-fund sub-account with operational balance from master partner wallet
+  void transferMasterBalanceToSubAccount(inserted.vobizAuthId, 50);
 
   return {
     authId: inserted.vobizAuthId,
-    authToken: decryptKey(inserted.vobizAuthTokenEncrypted),
+    authToken: tokenToEncrypt,
   };
 }
 
 export async function transferVobizSubAccountBalance(customerAuthId: string, amountInr: number = 50): Promise<boolean> {
-  const authId = process.env["VOBIZ_AUTH_ID"];
-  const authToken = process.env["VOBIZ_AUTH_TOKEN"];
-  if (!authId || !authToken || !customerAuthId) return false;
-
-  try {
-    const resp = await fetch(`${VOBIZ_PARTNER_BASE}/accounts/${customerAuthId}/transfer-balance`, {
-      method: "POST",
-      headers: partnerHeaders(),
-      body: JSON.stringify({ amount: amountInr }),
-    });
-    const text = await resp.text().catch(() => "");
-    logger.info({ customerAuthId, amountInr, status: resp.status, response: text.slice(0, 200) }, "transferVobizSubAccountBalance result");
-    return resp.ok;
-  } catch (e) {
-    logger.warn({ err: e, customerAuthId }, "transferVobizSubAccountBalance error");
-    return false;
-  }
+  return transferMasterBalanceToSubAccount(customerAuthId, amountInr);
 }
 
 /**

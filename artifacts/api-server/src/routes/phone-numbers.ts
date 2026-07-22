@@ -48,6 +48,7 @@ function addMarkup(monthlyRateCents: number): number {
 }
 
 import { ensureVobizSubAccount, transferVobizSubAccountBalance } from "./kyc.js";
+import { assignNumberToCustomer } from "../services/vobiz-partner-service.js";
 
 // ── Platform and Subaccount Vobiz credentials ──────────────────────────────
 async function getEffectiveVobizCreds(clerkId: string, name?: string | null, email?: string | null) {
@@ -971,6 +972,7 @@ router.post("/phone-numbers/:id/configure-webhook", requireAuth, async (req, res
   if (!creds.configured) { res.status(503).json({ error: "Platform carrier credentials not configured." }); return; }
 
   if (creds.isSubaccount && creds.authId) {
+    void assignNumberToCustomer(creds.authId, row.number);
     void transferVobizSubAccountBalance(creds.authId, 50);
   }
 
@@ -1006,6 +1008,66 @@ router.post("/phone-numbers/:id/configure-webhook", requireAuth, async (req, res
     number: row.number,
     answerUrl: `${webhookBase}/api/webhooks/vobiz/voice`,
     ...result,
+  });
+});
+
+// ── POST /phone-numbers/sync-vobiz-partner ─────────────────────────────────
+// Bulk partner sync: assigns all user numbers to their respective VoBiz sub-account,
+// transfers operational credit from master partner wallet, and links voice webhooks.
+
+router.post("/phone-numbers/sync-vobiz-partner", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, clerkId));
+  if (!user) { res.status(404).json({ error: "User not found" }); return; }
+
+  const creds = await getEffectiveVobizCreds(clerkId, user.name, user.email);
+  if (!creds.configured || !creds.authId) {
+    res.status(503).json({ error: "VoBiz partner credentials not configured" });
+    return;
+  }
+
+  const userNumbers = await db
+    .select()
+    .from(phoneNumbersTable)
+    .where(and(eq(phoneNumbersTable.userId, clerkId), eq(phoneNumbersTable.status, "active")));
+
+  const webhookBase = deriveWebhookBase(req);
+  const results = [];
+
+  for (const num of userNumbers) {
+    // 1. Assign DID to sub-account on VoBiz Partner Console
+    const assigned = await assignNumberToCustomer(creds.authId, num.number);
+
+    // 2. Transfer operational balance from Master Wallet to sub-account
+    await transferVobizSubAccountBalance(creds.authId, 50);
+
+    // 3. Configure voice app webhook
+    let linkResult = await configureVobizNumberWebhook(creds.authId, creds.authToken!, num.number, webhookBase);
+    if (!linkResult.verified && process.env["VOBIZ_AUTH_ID"] && process.env["VOBIZ_AUTH_TOKEN"]) {
+      const masterLink = await configureVobizNumberWebhook(
+        process.env["VOBIZ_AUTH_ID"],
+        process.env["VOBIZ_AUTH_TOKEN"],
+        num.number,
+        webhookBase,
+      );
+      if (masterLink.verified) linkResult = masterLink;
+    }
+
+    results.push({
+      number: num.number,
+      assignedToSubaccount: assigned,
+      subaccountAuthId: creds.authId,
+      linkResult,
+    });
+  }
+
+  res.json({
+    ok: true,
+    user: user.email ?? clerkId,
+    subaccountAuthId: creds.authId,
+    totalSynced: results.length,
+    results,
   });
 });
 
