@@ -65,7 +65,7 @@ const NAV_GROUPS: NavGroup[] = [
     icon: Code2,
     items: [
       { title: "API Reference", slug: "api-reference", icon: ScrollText },
-      { title: "SDKs", slug: "sdks", icon: Code2 },
+      { title: "API Wrappers & SDKs", slug: "sdks", icon: Code2 },
       { title: "Errors", slug: "errors", icon: CircleHelp },
       { title: "Pricing", slug: "pricing", icon: CreditCard },
       { title: "FAQ", slug: "faq", icon: CircleHelp },

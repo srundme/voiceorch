@@ -20,7 +20,7 @@ const SEARCH_DATA = [
   { title: "Webhooks", section: "Product", slug: "webhooks", content: "HMAC signature call.completed" },
   { title: "Wallet", section: "Product", slug: "wallet", content: "balance paise INR top-up card" },
   { title: "API Reference", section: "Reference", slug: "api-reference", content: "OpenAPI agents calls webhooks scheduling" },
-  { title: "SDKs", section: "Reference", slug: "sdks", content: "Node Python @snapserve/sdk" },
+  { title: "API Wrappers & SDKs", section: "Reference", slug: "sdks", content: "TypeScript Node Python Go client REST wrapper fetch urllib" },
   { title: "Errors", section: "Reference", slug: "errors", content: "401 402 429" },
   { title: "Pricing", section: "Reference", slug: "pricing", content: "₹5 minute welcome credit phone GST" },
   { title: "FAQ", section: "Reference", slug: "faq", content: "common questions calendar variables transcript" },

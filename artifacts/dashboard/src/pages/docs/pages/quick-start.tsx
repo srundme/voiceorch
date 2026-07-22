@@ -73,32 +73,43 @@ curl https://app.snapserve.ai/api/agents \\
   }'`,
           },
           {
-            label: "Node",
-            language: "javascript",
-            code: `import { SnapServe } from "@snapserve/sdk";
-
-const client = new SnapServe({ apiKey: process.env.SNAPSERVE_API_KEY });
-
-const agents = await client.agents.list();
-const call = await client.calls.outbound({
-  agentId: agents[0].id,
-  toNumber: "+919876543210",
+            label: "Node / TypeScript",
+            language: "typescript",
+            code: `const response = await fetch("https://app.snapserve.ai/api/calls/outbound", {
+  method: "POST",
+  headers: {
+    "Authorization": \`Bearer \${process.env.SNAPSERVE_API_KEY}\`,
+    "Content-Type": "application/json"
+  },
+  body: JSON.stringify({
+    agentId: 123,
+    toNumber: "+919876543210"
+  })
 });
-console.log(call.id);`,
+
+const call = await response.json();
+console.log("Call initiated ID:", call.id);`,
           },
           {
             label: "Python",
             language: "python",
             code: `import os
-from snapserve import SnapServe
+import json
+import urllib.request
 
-client = SnapServe(api_key=os.environ["SNAPSERVE_API_KEY"])
-agents = client.agents.list()
-call = client.calls.outbound(
-    agent_id=agents[0]["id"],
-    to_number="+919876543210",
+req = urllib.request.Request(
+    "https://app.snapserve.ai/api/calls/outbound",
+    data=json.dumps({"agentId": 123, "toNumber": "+919876543210"}).encode("utf-8"),
+    headers={
+        "Authorization": f"Bearer {os.environ['SNAPSERVE_API_KEY']}",
+        "Content-Type": "application/json"
+    },
+    method="POST"
 )
-print(call["id"])`,
+
+with urllib.request.urlopen(req) as resp:
+    call = json.loads(resp.read().decode("utf-8"))
+    print("Call ID:", call["id"])`,
           },
         ]}
       />
@@ -118,10 +129,10 @@ print(call["id"])`,
         guide: <Link href="/docs/outbound-calls">Outbound Calls</Link>.
       </p>
 
-      <h2 id="install-sdks">Install SDKs</h2>
-      <CodeBlock language="bash" code={`npm install @snapserve/sdk\n# or\npip install snapserve`} />
+      <h2 id="install-sdks">API Client Wrappers</h2>
       <p>
-        Resource map: <Link href="/docs/sdks">SDKs</Link>. Schemas:{" "}
+        Copy ready-to-use client wrapper classes for TypeScript, Python, and Go:{" "}
+        <Link href="/docs/sdks">API Wrappers & SDKs</Link>. Full OpenAPI interactive schemas:{" "}
         <Link href="/docs/api-reference">API Reference</Link>.
       </p>
     </div>

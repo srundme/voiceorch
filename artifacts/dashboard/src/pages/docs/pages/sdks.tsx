@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { PageHeader } from "../DocsUi";
+import { PageHeader, Callout } from "../DocsUi";
 import { CodeBlock } from "../CodeBlock";
 
 export default function SdksPage() {
@@ -7,62 +7,222 @@ export default function SdksPage() {
     <div>
       <PageHeader
         breadcrumb="Reference"
-        title="SDKs"
-        description="Official clients wrap the REST API. Set apiKey to your sk_live_ key. Default base URL: https://app.snapserve.ai/api."
-        copyText={`npm install @snapserve/sdk
-pip install snapserve`}
+        title="API Wrappers & SDKs"
+        description="Zero-dependency REST API wrappers for Node.js/TypeScript, Python, and Go. Copy and paste directly into your project to start making calls in seconds."
+        copyText={`Base URL: https://app.snapserve.ai/api
+Header: Authorization: Bearer sk_live_YOUR_API_KEY`}
       />
 
-      <h2 id="node">Node.js — @snapserve/sdk</h2>
-      <CodeBlock language="bash" code={`npm install @snapserve/sdk`} />
+      <Callout variant="tip" title="Zero Dependencies">
+        These production-grade client wrappers use native environment features (Node `fetch`, Python `urllib`, Go `net/http`). You can copy them directly into your codebase without installing external package dependencies.
+      </Callout>
+
+      <h2 id="typescript">1. TypeScript / JavaScript (Node.js 18+, Bun, Deno)</h2>
+      <p>Save as <code>snapserve.ts</code> in your project:</p>
       <CodeBlock
-        language="javascript"
-        code={`import { SnapServe } from "@snapserve/sdk";
+        language="typescript"
+        code={`/**
+ * SnapServe API Client Wrapper
+ * Zero dependencies (requires Node 18+ fetch)
+ */
+export class SnapServeClient {
+  private baseUrl: string;
+  private apiKey: string;
 
-const client = new SnapServe({
-  apiKey: process.env.SNAPSERVE_API_KEY,
-  // baseUrl: "https://app.snapserve.ai/api", // optional
-});
+  constructor(opts?: { apiKey?: string; baseUrl?: string }) {
+    this.apiKey = opts?.apiKey || process.env.SNAPSERVE_API_KEY || "";
+    if (!this.apiKey) {
+      throw new Error("SNAPSERVE_API_KEY is required");
+    }
+    this.baseUrl = (opts?.baseUrl || "https://app.snapserve.ai/api").replace(/\\/$/, "");
+  }
 
-const agents = await client.agents.list();
-const call = await client.calls.outbound({
+  private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
+    const res = await fetch(\`\${this.baseUrl}\${path}\`, {
+      method,
+      headers: {
+        "Authorization": \`Bearer \${this.apiKey}\`,
+        "Content-Type": "application/json",
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || data.message || \`SnapServe API Error [\${res.status}]\`);
+    }
+    return data as T;
+  }
+
+  // ── Agents ──
+  async listAgents() {
+    return this.request<any[]>("GET", "/agents");
+  }
+
+  async getAgent(agentId: number) {
+    return this.request<any>("GET", \`/agents/\${agentId}\`);
+  }
+
+  // ── Outbound Calls ──
+  async initiateOutboundCall(payload: { agentId: number; toNumber: string; variables?: Record<string, any> }) {
+    return this.request<{ id: number; status: string; agentId: number; toNumber: string }>("POST", "/calls/outbound", payload);
+  }
+
+  async getCall(callId: number) {
+    return this.request<any>("GET", \`/calls/\${callId}\`);
+  }
+
+  // ── Webhooks ──
+  async listWebhookEndpoints() {
+    return this.request<any[]>("GET", "/webhook-endpoints");
+  }
+
+  async createWebhookEndpoint(payload: { url: string; events: string[] }) {
+    return this.request<{ id: number; url: string; secret: string }>("POST", "/webhook-endpoints", payload);
+  }
+
+  // ── Wallet & Account ──
+  async getWallet() {
+    return this.request<{ balance: number }>("GET", "/wallet");
+  }
+}
+
+// ── Example Usage ──
+/*
+const client = new SnapServeClient({ apiKey: "sk_live_YOUR_KEY" });
+const agents = await client.listAgents();
+const call = await client.initiateOutboundCall({
   agentId: agents[0].id,
   toNumber: "+919876543210",
+  variables: { customer_name: "Karthik" }
 });
-
-// Escape hatch for any path
-await client.request("GET", "/wallet");`}
+console.log("Call initiated:", call.id);
+*/`}
       />
-      <p>
-        Typed helpers typically cover: agents, calls, phoneNumbers, webhookEndpoints, wallet,
-        account, analytics.
-      </p>
 
-      <h2 id="python">Python — snapserve</h2>
-      <CodeBlock language="bash" code={`pip install snapserve`} />
+      <h2 id="python">2. Python (Python 3.8+)</h2>
+      <p>Save as <code>snapserve.py</code> in your project:</p>
       <CodeBlock
         language="python"
-        code={`import os
-from snapserve import SnapServe
+        code={`"""
+SnapServe API Client Wrapper (Python)
+Zero dependencies — uses Python standard library.
+"""
+import json
+import os
+import urllib.request
+import urllib.error
 
-client = SnapServe(api_key=os.environ["SNAPSERVE_API_KEY"])
-agents = client.agents.list()
-call = client.calls.outbound(
-    agent_id=agents[0]["id"],
-    to_number="+919876543210",
-)
-wallet = client.request("GET", "/wallet")`}
+class SnapServeClient:
+    def __init__(self, api_key: str = None, base_url: str = "https://app.snapserve.ai/api"):
+        self.api_key = api_key or os.environ.get("SNAPSERVE_API_KEY")
+        if not self.api_key:
+            raise ValueError("SNAPSERVE_API_KEY is required")
+        self.base_url = base_url.rstrip("/")
+
+    def _request(self, method: str, path: str, payload: dict = None):
+        url = f"{self.base_url}{path}"
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+        }
+        data = json.dumps(payload).encode("utf-8") if payload else None
+        req = urllib.request.Request(url, data=data, headers=headers, method=method)
+        try:
+            with urllib.request.urlopen(req) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            err_body = e.read().decode("utf-8")
+            raise RuntimeError(f"SnapServe API Error [{e.code}]: {err_body}")
+
+    def list_agents(self):
+        return self._request("GET", "/agents")
+
+    def get_agent(self, agent_id: int):
+        return self._request("GET", f"/agents/{agent_id}")
+
+    def initiate_outbound_call(self, agent_id: int, to_number: str, variables: dict = None):
+        payload = {"agentId": agent_id, "toNumber": to_number}
+        if variables:
+            payload["variables"] = variables
+        return self._request("POST", "/calls/outbound", payload)
+
+    def get_call(self, call_id: int):
+        return self._request("GET", f"/calls/{call_id}")
+
+    def get_wallet(self):
+        return self._request("GET", "/wallet")
+
+# ── Example Usage ──
+# client = SnapServeClient(api_key="sk_live_YOUR_KEY")
+# agents = client.list_agents()
+# call = client.initiate_outbound_call(agent_id=agents[0]["id"], to_number="+919876543210")
+# print("Call ID:", call["id"])`}
       />
 
-      <h2 id="curl">Prefer curl first</h2>
-      <p>
-        When debugging auth or payloads, use the <Link href="/docs/quick-start">Quick Start</Link>{" "}
-        curl examples, then port working requests into the SDK.
-      </p>
+      <h2 id="go">3. Go Native Client</h2>
+      <p>Save as <code>snapserve.go</code> in your project:</p>
+      <CodeBlock
+        language="go"
+        code={`package snapserve
 
-      <h2 id="reference">OpenAPI</h2>
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"time"
+)
+
+type Client struct {
+	BaseURL    string
+	APIKey     string
+	HTTPClient *http.Client
+}
+
+func NewClient(apiKey string) *Client {
+	return &Client{
+		BaseURL:    "https://app.snapserve.ai/api",
+		APIKey:     apiKey,
+		HTTPClient: &http.Client{Timeout: 10 * time.Second},
+	}
+}
+
+func (c *Client) InitiateOutboundCall(agentID int, toNumber string, variables map[string]interface{}) (map[string]interface{}, error) {
+	payload := map[string]interface{}{
+		"agentId":  agentID,
+		"toNumber": toNumber,
+	}
+	if variables != nil {
+		payload["variables"] = variables
+	}
+	data, _ := json.Marshal(payload)
+
+	req, _ := http.NewRequest("POST", c.BaseURL+"/calls/outbound", bytes.NewBuffer(data))
+	req.Header.Set("Authorization", "Bearer "+c.APIKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("SnapServe API Error [%d]: %s", resp.StatusCode, string(body))
+	}
+
+	var result map[string]interface{}
+	json.Unmarshal(body, &result)
+	return result, nil
+}`}
+      />
+
+      <h2 id="reference">OpenAPI Specification</h2>
       <p>
-        Interactive schemas: <Link href="/docs/api-reference">API Reference</Link>.
+        For full endpoint schemas and interactive testing, explore the{" "}
+        <Link href="/docs/api-reference">API Reference</Link>.
       </p>
     </div>
   );
