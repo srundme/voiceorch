@@ -1325,6 +1325,14 @@ export class OrchestrationPipeline implements VoiceSession {
     return status === "SEND" && this.interruptionMgr.isValidSequence(sequenceId);
   }
 
+  /** Track telemetry mark ACKs from telephony carriers for frame-level barge-in alignment. */
+  onAudioMarkAck(markName: string): void {
+    logger.debug(
+      { callId: this.config.callId, markName },
+      "Telephony carrier audio mark ACK received",
+    );
+  }
+
   /**
    * Launch a speculative / eager LLM call using the barge-in partial text.
    * Tokens are buffered into `_specLlmState.storedTokens` (via a redirectable

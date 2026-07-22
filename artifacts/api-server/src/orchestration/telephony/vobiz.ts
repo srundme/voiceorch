@@ -29,9 +29,12 @@ import { startEarlyAmbientKeepalive } from "./early-ambient.js";
  */
 
 interface VobizMessage {
-  event: "connected" | "start" | "media" | "stop";
+  event: "connected" | "start" | "media" | "stop" | "mark";
   sequenceNumber?: number;
   streamId?: string;
+  mark?: {
+    name: string;
+  };
   start?: {
     callId?: string;
     streamId?: string;
@@ -306,6 +309,16 @@ export async function handleVobizWebSocket(
         // Pass directly to pipeline — no byte-swap needed.
         const pcm8k = Buffer.from(msg.media.payload, "base64");
         session.pipeline.onRawPcm8kIn(pcm8k);
+        break;
+      }
+
+      case "mark": {
+        if (sessionId && msg.mark?.name) {
+          const session = getSession(sessionId);
+          if (session) {
+            session.pipeline.onAudioMarkAck(msg.mark.name);
+          }
+        }
         break;
       }
 
