@@ -673,15 +673,12 @@ router.post("/webhooks/vobiz/voice", async (req, res): Promise<void> => {
   let routingRules: RoutingRule[] | null = null;
 
   if (!agentId) {
-    const toRaw: string = String(req.body?.To ?? req.body?.to ?? "").trim();
+    const toRaw: string = String(
+      req.body?.To ?? req.body?.to ?? req.body?.destination ?? req.body?.Destination ??
+      req.query?.To ?? req.query?.to ?? req.query?.destination ?? ""
+    ).trim();
+
     if (toRaw) {
-      // VoBiz delivers the dialed number in several shapes across carriers/routes:
-      // E.164 with '+' ("+917971442376"), bare with country code ("917971442376"),
-      // or — the one that used to silently miss — national trunk format with a
-      // leading '0' and NO country code ("07971442376"). The DB stores the E.164
-      // form, so we build every candidate: raw, the +/no-+ flip, and the canonical
-      // form (`canonicalizeCallerKey` drops the trunk 0 and adds the default CC),
-      // both with and without a leading '+'. Matching any one resolves the agent.
       const candidates = new Set<string>();
       const addCandidate = (v: string | null | undefined): void => {
         const s = (v ?? "").trim();
@@ -692,10 +689,31 @@ router.post("/webhooks/vobiz/voice", async (req, res): Promise<void> => {
       const canonTo = canonicalizeCallerKey(toRaw); // "07971442376" -> "917971442376"
       addCandidate(canonTo);
       if (canonTo) addCandidate(`+${canonTo}`);
-      const [pn] = await db
+
+      if (toRaw.length >= 10) {
+        const last10 = toRaw.slice(-10);
+        addCandidate(last10);
+        addCandidate(`+91${last10}`);
+        addCandidate(`91${last10}`);
+      }
+
+      let [pn] = await db
         .select({ agentId: phoneNumbersTable.agentId, routingRules: phoneNumbersTable.routingRules })
         .from(phoneNumbersTable)
         .where(inArray(phoneNumbersTable.number, [...candidates]));
+
+      if (!pn?.agentId && toRaw.length >= 10) {
+        const last10 = toRaw.slice(-10);
+        const [fallbackPn] = await db
+          .select({ agentId: phoneNumbersTable.agentId, routingRules: phoneNumbersTable.routingRules })
+          .from(phoneNumbersTable)
+          .where(and(
+            sql`RIGHT(REGEXP_REPLACE(${phoneNumbersTable.number}, '[^0-9]', '', 'g'), 10) = ${last10}`,
+            sql`${phoneNumbersTable.agentId} IS NOT NULL`
+          ));
+        if (fallbackPn?.agentId) pn = fallbackPn;
+      }
+
       if (pn?.agentId) {
         agentId = pn.agentId;
         platformTelephony = true;
