@@ -47,7 +47,24 @@ function addMarkup(monthlyRateCents: number): number {
   return monthlyRateCents > 0 ? FLAT_MONTHLY_RATE_CENTS : 0;
 }
 
-// ── Platform-level Vobiz credentials ────────────────────────────────────────
+// ── Platform and Subaccount Vobiz credentials ──────────────────────────────
+async function getEffectiveVobizCreds(clerkId: string) {
+  try {
+    const [sub] = await db
+      .select({ accountAuthId: vobizAccountsTable.accountAuthId, accountAuthToken: vobizAccountsTable.accountAuthToken })
+      .from(vobizAccountsTable)
+      .where(eq(vobizAccountsTable.userId, clerkId));
+
+    if (sub?.accountAuthId && sub?.accountAuthToken) {
+      return { authId: sub.accountAuthId, authToken: sub.accountAuthToken, configured: true, isSubaccount: true };
+    }
+  } catch { /* fall through to master */ }
+
+  const authId    = process.env["VOBIZ_AUTH_ID"];
+  const authToken = process.env["VOBIZ_AUTH_TOKEN"];
+  return { authId, authToken, configured: !!(authId && authToken), isSubaccount: false };
+}
+
 function getPlatformVobizCreds() {
   const authId    = process.env["VOBIZ_AUTH_ID"];
   const authToken = process.env["VOBIZ_AUTH_TOKEN"];
@@ -892,7 +909,7 @@ router.patch("/phone-numbers/:id/assign", requireAuth, async (req, res): Promise
   // Server-side VoBiz link — users must not wait for support to click APP SnapServe.
   let inboundLink: ConfigureVobizResult | null = null;
   if (body.data.agentId) {
-    const { authId, authToken, configured } = getPlatformVobizCreds();
+    const { authId, authToken, configured } = await getEffectiveVobizCreds(clerkId);
     if (configured) {
       inboundLink = await configureVobizNumberWebhook(
         authId!,
@@ -935,7 +952,7 @@ router.post("/phone-numbers/:id/configure-webhook", requireAuth, async (req, res
     .where(and(eq(phoneNumbersTable.id, id), eq(phoneNumbersTable.userId, clerkId)));
   if (!row) { res.status(404).json({ error: "Phone number not found" }); return; }
 
-  const { authId, authToken, configured } = getPlatformVobizCreds();
+  const { authId, authToken, configured } = await getEffectiveVobizCreds(clerkId);
   if (!configured) { res.status(503).json({ error: "Platform carrier credentials not configured." }); return; }
 
   const webhookBase = deriveWebhookBase(req);
