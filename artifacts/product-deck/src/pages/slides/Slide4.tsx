@@ -83,7 +83,7 @@ export default function Slide4() {
             Memory · Language · Compliance — in one platform.
           </h1>
         </div>
-        <span style={{ fontSize: "0.85vw", fontWeight: 600, color: "#4B6CB7", letterSpacing: "0.06em", paddingBottom: "0.3vh" }}>04 / 14</span>
+        <span style={{ fontSize: "0.85vw", fontWeight: 600, color: "#4B6CB7", letterSpacing: "0.06em", paddingBottom: "0.3vh" }}>04 / 15</span>
       </div>
 
       <div style={{ flex: 1, padding: "2vh 6vw 5.5vh 6vw", display: "flex", gap: "2vw" }}>
