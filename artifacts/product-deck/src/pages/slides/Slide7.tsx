@@ -28,10 +28,10 @@ export default function Slide7() {
         <div>
           <div style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#FF6F00", marginBottom: "0.8vh" }}>Business Model</div>
           <h1 style={{ fontFamily: "var(--font-display-family)", fontSize: "2.6vw", fontWeight: 700, color: "#FFFFFF", margin: 0, lineHeight: 1.15 }}>
-            Per-minute SaaS with two margin tiers.
+            Simple per-minute pricing. Flexible at scale.
           </h1>
         </div>
-        <span style={{ fontSize: "0.85vw", fontWeight: 600, color: "#4B6CB7", letterSpacing: "0.06em", paddingBottom: "0.3vh" }}>09 / 15</span>
+        <span style={{ fontSize: "0.85vw", fontWeight: 600, color: "#4B6CB7", letterSpacing: "0.06em", paddingBottom: "0.3vh" }}>10 / 16</span>
       </div>
 
       <div style={{ flex: 1, padding: "2.6vh 6vw 6.5vh 6vw", display: "flex", flexDirection: "column", gap: "2vh" }}>
@@ -46,18 +46,28 @@ export default function Slide7() {
           <div style={{ ...col, background: "#F0F3FF", borderColor: "#C5CAE9" }}>
             <div style={label}>How they pay</div>
             <div style={{ fontSize: "1.28vw", fontWeight: 700, color: "#1A237E", marginBottom: "1.4vh" }}>Per-minute + SaaS</div>
-            <div style={{ fontSize: "1.05vw", color: "#5B5470", lineHeight: 1.62 }}>
-              <div style={{ marginBottom: "1.2vh" }}>
-                <strong style={{ color: "#1A237E" }}>Managed plan:</strong>
-                <span style={{ marginLeft: "0.4vw", fontWeight: 700, color: "#1A237E" }}>₹4.2/min</span>
-                <span style={{ color: "#9FA8DA", fontSize: "0.9vw", marginLeft: "0.4vw" }}>($0.05/min)</span>
-                <div style={{ fontSize: "0.92vw", color: "#7986CB", marginTop: "0.3vh" }}>SnapServe supplies all AI provider keys.</div>
+            <div style={{ fontSize: "1.05vw", color: "#5B5470", lineHeight: 1.62, display: "flex", flexDirection: "column", gap: "1.2vh" }}>
+              <div style={{ padding: "1vh 0", borderBottom: "0.06vh solid #C5CAE9" }}>
+                <div style={{ display: "flex", alignItems: "baseline", gap: "0.6vw" }}>
+                  <strong style={{ color: "#1A237E" }}>Standard</strong>
+                  <span style={{ fontFamily: "var(--font-display-family)", fontWeight: 800, fontSize: "1.3vw", color: "#FF6F00" }}>₹5/min</span>
+                  <span style={{ fontSize: "0.88vw", color: "#9FA8DA" }}>all-in</span>
+                </div>
+                <div style={{ fontSize: "0.92vw", color: "#7986CB", marginTop: "0.3vh" }}>SnapServe supplies STT, LLM, TTS, and telephony — nothing to set up.</div>
               </div>
-              <div>
-                <strong style={{ color: "#1A237E" }}>BYOP plan:</strong>
-                <span style={{ marginLeft: "0.4vw", fontWeight: 700, color: "#1A237E" }}>₹2.9/min</span>
-                <span style={{ color: "#9FA8DA", fontSize: "0.9vw", marginLeft: "0.4vw" }}>($0.035/min)</span>
-                <div style={{ fontSize: "0.92vw", color: "#7986CB", marginTop: "0.3vh" }}>Customer brings own provider keys — pure orchestration fee.</div>
+              <div style={{ padding: "1vh 0", borderBottom: "0.06vh solid #C5CAE9" }}>
+                <div style={{ display: "flex", alignItems: "baseline", gap: "0.6vw" }}>
+                  <strong style={{ color: "#1A237E" }}>BYOP</strong>
+                  <span style={{ fontWeight: 700, fontSize: "1.1vw", color: "#1A237E" }}>Platform subscription only</span>
+                </div>
+                <div style={{ fontSize: "0.92vw", color: "#7986CB", marginTop: "0.3vh" }}>Customer brings their own API keys — pricing flexible, discuss with team.</div>
+              </div>
+              <div style={{ padding: "1vh 0" }}>
+                <div style={{ display: "flex", alignItems: "baseline", gap: "0.6vw" }}>
+                  <strong style={{ color: "#1A237E" }}>Enterprise</strong>
+                  <span style={{ fontWeight: 600, fontSize: "1.05vw", color: "#1A237E" }}>Volume reduction from ₹5/min</span>
+                </div>
+                <div style={{ fontSize: "0.92vw", color: "#7986CB", marginTop: "0.3vh" }}>Custom SLA, dedicated support, Memory Proxy API access.</div>
               </div>
             </div>
           </div>
@@ -65,7 +75,7 @@ export default function Slide7() {
             <div style={{ ...label, color: "#FF6F00" }}>Revenue per customer</div>
             <div style={{ fontSize: "1.28vw", fontWeight: 700, color: "#FFFFFF", marginBottom: "1.4vh" }}>₹5L – ₹25L ARR</div>
             <div style={{ fontSize: "1.05vw", color: "#C9D5F5", lineHeight: 1.62 }}>
-              500 calls/day at ₹3/min = ₹45,000/month. Enterprise accounts with custom SLAs and Memory Proxy API access exceed ₹2L/month. Every new call enriches the memory graph — retention is structural.
+              500 calls/day at ₹5/min avg = ₹75,000/month. Enterprise accounts with custom SLAs and Memory Proxy API access exceed ₹2L/month. Every new call enriches the memory graph — retention is structural.
             </div>
           </div>
         </div>
@@ -79,7 +89,7 @@ export default function Slide7() {
               Unit Economics
             </div>
             <div style={{ fontSize: "1.1vw", color: "#BF360C", lineHeight: 1.55 }}>
-              <strong>10× cost advantage</strong> over human agents at scale — AI call cost ≈ ₹0.50–₹2/min vs. ₹8–₹15/min for a human agent with supervision overhead. The gap widens with volume.
+              <strong>2–3× cost advantage</strong> over human agents today — ₹5/min AI vs. ₹8–₹15/min human agent with supervision overhead. The gap widens at scale.
             </div>
           </div>
           <div style={{
