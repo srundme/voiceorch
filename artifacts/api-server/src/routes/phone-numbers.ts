@@ -47,7 +47,7 @@ function addMarkup(monthlyRateCents: number): number {
   return monthlyRateCents > 0 ? FLAT_MONTHLY_RATE_CENTS : 0;
 }
 
-import { ensureVobizSubAccount } from "./kyc.js";
+import { ensureVobizSubAccount, transferVobizSubAccountBalance } from "./kyc.js";
 
 // ── Platform and Subaccount Vobiz credentials ──────────────────────────────
 async function getEffectiveVobizCreds(clerkId: string, name?: string | null, email?: string | null) {
@@ -969,6 +969,10 @@ router.post("/phone-numbers/:id/configure-webhook", requireAuth, async (req, res
   const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, clerkId));
   const creds = await getEffectiveVobizCreds(clerkId, user?.name, user?.email);
   if (!creds.configured) { res.status(503).json({ error: "Platform carrier credentials not configured." }); return; }
+
+  if (creds.isSubaccount && creds.authId) {
+    void transferVobizSubAccountBalance(creds.authId, 50);
+  }
 
   const webhookBase = deriveWebhookBase(req);
   let result = await configureVobizNumberWebhook(creds.authId!, creds.authToken!, row.number, webhookBase);

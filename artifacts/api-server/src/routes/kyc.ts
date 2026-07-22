@@ -253,10 +253,33 @@ export async function ensureVobizSubAccount(
     })
     .returning();
 
+  // Auto-fund sub-account with initial balance from master partner account
+  void transferVobizSubAccountBalance(inserted.vobizAuthId, 50);
+
   return {
     authId: inserted.vobizAuthId,
     authToken: decryptKey(inserted.vobizAuthTokenEncrypted),
   };
+}
+
+export async function transferVobizSubAccountBalance(customerAuthId: string, amountInr: number = 50): Promise<boolean> {
+  const authId = process.env["VOBIZ_AUTH_ID"];
+  const authToken = process.env["VOBIZ_AUTH_TOKEN"];
+  if (!authId || !authToken || !customerAuthId) return false;
+
+  try {
+    const resp = await fetch(`${VOBIZ_PARTNER_BASE}/accounts/${customerAuthId}/transfer-balance`, {
+      method: "POST",
+      headers: partnerHeaders(),
+      body: JSON.stringify({ amount: amountInr }),
+    });
+    const text = await resp.text().catch(() => "");
+    logger.info({ customerAuthId, amountInr, status: resp.status, response: text.slice(0, 200) }, "transferVobizSubAccountBalance result");
+    return resp.ok;
+  } catch (e) {
+    logger.warn({ err: e, customerAuthId }, "transferVobizSubAccountBalance error");
+    return false;
+  }
 }
 
 /**
