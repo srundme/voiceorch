@@ -28,7 +28,7 @@ export default function Slide9() {
             Product live. Calls running. Memory working.
           </h1>
         </div>
-        <span style={{ fontSize: "0.85vw", fontWeight: 600, color: "#4B6CB7", letterSpacing: "0.06em", paddingBottom: "0.3vh" }}>06 / 15</span>
+        <span style={{ fontSize: "0.85vw", fontWeight: 600, color: "#4B6CB7", letterSpacing: "0.06em", paddingBottom: "0.3vh" }}>07 / 16</span>
       </div>
 
       <div style={{ flex: 1, padding: "2.8vh 6vw 6.5vh 6vw", display: "flex", flexDirection: "column", gap: "2.2vh" }}>
@@ -58,10 +58,11 @@ export default function Slide9() {
             </div>
             {[
               { icon: "✓", text: "Full platform live in production — not a demo, not a prototype" },
-              { icon: "✓", text: "Pilot BFSI accounts onboarded — insurance and NBFC use cases running" },
+              { icon: "✓", text: "[X] pilot accounts live — insurance and NBFC" },
               { icon: "✓", text: "End-to-end call recordings, transcripts, and memory extractions working" },
               { icon: "✓", text: "Caller memory persists across dropped calls, agent switches, and session gaps" },
-              { icon: "→", text: "Converting pilots to paid recurring subscriptions — this raise accelerates it" },
+              { icon: "→", text: "[X] pilots in active paid contract discussions — this raise accelerates conversion" },
+              { icon: "→", text: "₹0 → first paid MRR target: Q1" },
             ].map(({ icon, text }) => (
               <div key={text} style={{ display: "flex", alignItems: "flex-start", gap: "0.8vw", fontSize: "1.05vw", color: "#3A3A5C", lineHeight: 1.5 }}>
                 <span style={{ color: icon === "→" ? "#FF6F00" : "#1A237E", fontWeight: 800, flexShrink: 0, marginTop: "0.05vh" }}>{icon}</span>
