@@ -297,30 +297,40 @@ async function configureVobizNumberWebhook(
       return { appId, linked: true, verified: true, detail: "already linked" };
     }
 
-    const patchBody = JSON.stringify({ application_id: appId });
-    const patchTargets: string[] = [];
-    if (match?.id) patchTargets.push(`${VOBIZ_ACCOUNT_BASE}/${authId}/numbers/${match.id}`);
-    // VoBiz also accepts the bare E.164 path (same style as release).
-    patchTargets.push(`${VOBIZ_ACCOUNT_BASE}/${authId}/numbers/${encodeURIComponent(digits)}`);
+    const linkPayloads = [
+      JSON.stringify({ app_id: appId }),
+      JSON.stringify({ application_id: appId }),
+    ];
+    const linkTargets: string[] = [];
+    if (match?.id) {
+      linkTargets.push(`${VOBIZ_ACCOUNT_BASE}/${authId}/Number/${match.id}/`);
+      linkTargets.push(`${VOBIZ_ACCOUNT_BASE}/${authId}/numbers/${match.id}`);
+    }
+    linkTargets.push(`${VOBIZ_ACCOUNT_BASE}/${authId}/Number/${encodeURIComponent(digits)}/`);
+    linkTargets.push(`${VOBIZ_ACCOUNT_BASE}/${authId}/numbers/${encodeURIComponent(digits)}`);
     if (e164.startsWith("+")) {
-      patchTargets.push(`${VOBIZ_ACCOUNT_BASE}/${authId}/numbers/${encodeURIComponent(e164)}`);
+      linkTargets.push(`${VOBIZ_ACCOUNT_BASE}/${authId}/Number/${encodeURIComponent(e164)}/`);
+      linkTargets.push(`${VOBIZ_ACCOUNT_BASE}/${authId}/numbers/${encodeURIComponent(e164)}`);
     }
 
     let linked = false;
-    let lastPatchStatus = 0;
-    for (const url of patchTargets) {
-      try {
-        const patchResp = await fetch(url, { method: "PATCH", headers: h, body: patchBody });
-        lastPatchStatus = patchResp.status;
-        if (patchResp.ok || patchResp.status === 204) {
-          linked = true;
-          console.info(`configureVobizNumberWebhook: PATCH ok ${patchResp.status} ${url}`);
-          break;
+    for (const url of linkTargets) {
+      for (const method of ["POST", "PATCH"]) {
+        for (const body of linkPayloads) {
+          try {
+            const resp = await fetch(url, { method, headers: h, body });
+            if (resp.ok || resp.status === 204) {
+              linked = true;
+              console.info(`configureVobizNumberWebhook: ${method} ok ${resp.status} ${url}`);
+              break;
+            }
+          } catch (linkErr) {
+            console.warn(`configureVobizNumberWebhook: ${method} failed:`, linkErr);
+          }
         }
-        console.warn(`configureVobizNumberWebhook: PATCH ${patchResp.status} ${url}: ${(await patchResp.text()).slice(0, 200)}`);
-      } catch (linkErr) {
-        console.warn("configureVobizNumberWebhook: PATCH failed:", linkErr);
+        if (linked) break;
       }
+      if (linked) break;
     }
 
     // Brief settle + verify (VoBiz UI "Not linked" is this field).

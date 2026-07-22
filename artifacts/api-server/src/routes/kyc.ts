@@ -142,6 +142,38 @@ async function createVobizSubAccount(
   email: string,
 ): Promise<VobizCreateAccountResponse> {
   const password = randomBytes(16).toString("hex") + "A1!";
+  const authId = process.env["VOBIZ_AUTH_ID"] ?? "";
+  const authToken = process.env["VOBIZ_AUTH_TOKEN"] ?? "";
+  const creds = Buffer.from(`${authId}:${authToken}`).toString("base64");
+
+  // 1. Try Plivo-standard Subaccount endpoint
+  if (authId && authToken) {
+    try {
+      const plivoSubResp = await fetch(`https://api.vobiz.ai/api/v1/Account/${authId}/Subaccount/`, {
+        method: "POST",
+        headers: {
+          Authorization: `Basic ${creds}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ name: name || email, enabled: true }),
+      });
+      if (plivoSubResp.ok) {
+        const data = await plivoSubResp.json() as { auth_id?: string; auth_token?: string };
+        if (data.auth_id && data.auth_token) {
+          return {
+            account: {
+              auth_id: data.auth_id,
+              auth_token: data.auth_token,
+            },
+          } as VobizCreateAccountResponse;
+        }
+      }
+    } catch (e) {
+      logger.warn({ err: e }, "Plivo-style Subaccount creation endpoint failed, trying partner API");
+    }
+  }
+
+  // 2. Partner API endpoint fallback
   const resp = await fetch(`${VOBIZ_PARTNER_BASE}/accounts`, {
     method:  "POST",
     headers: partnerHeaders(),
