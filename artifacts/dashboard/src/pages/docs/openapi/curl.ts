@@ -75,7 +75,7 @@ export interface CurlOptions {
 }
 
 export function buildCurl(op: IndexedOperation, opts: CurlOptions): string {
-  const token = opts.token?.trim() || "<token>";
+  const token = opts.token?.trim() || "sk_live_YOUR_API_KEY";
   const params = collectParameters(op);
 
   let pathStr = op.path;
