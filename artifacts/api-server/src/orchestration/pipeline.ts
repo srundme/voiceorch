@@ -50,7 +50,7 @@ import {
   isAffirmationOnlyUtterance,
   type TurnCloseReason,
 } from "./endpointing.js";
-import { checkTranscriptQuality, pickClarificationPhrase, isSemanticInterrupt, isAccidentalInterruptPhrase, shouldHoldFragmentForCoalesce, isUltraShortNoiseFragment, isCallerAudioDifficulty, isFalseInterruptionScrap, isTopicClarificationAsk, isBackchannelOnlyUtterance } from "./transcriptQuality.js";
+import { checkTranscriptQuality, pickClarificationPhrase, isSemanticInterrupt, isAccidentalInterruptPhrase, shouldHoldFragmentForCoalesce, isUltraShortNoiseFragment, isCallerAudioDifficulty, isFalseInterruptionScrap, isTopicClarificationAsk, isBackchannelOnlyUtterance, normalizeSttPhonetics } from "./transcriptQuality.js";
 import { buildInterruptionHint, joinHeardSentences, resolveSpokenForHistory, estimateHeardPrefix, composeHeardWithMid } from "./bargeHeard.js";
 import { getCachedFillerPcm, setCachedFillerPcm } from "./fillerPcmCache.js";
 import { FILLER_SEQUENCE_ID, InterruptionManager } from "./interruption-manager.js";
@@ -2067,7 +2067,8 @@ export class OrchestrationPipeline implements VoiceSession {
    * Called by the streaming STT callback when a final transcript arrives.
    * Handles barge-in detection and queuing if a turn is already in progress.
    */
-  private async handleStreamingTranscript(transcript: string, sttEmittedAt = Date.now(), closeReason: TurnCloseReason = "stt_final"): Promise<void> {
+  private async handleStreamingTranscript(rawTranscript: string, sttEmittedAt = Date.now(), closeReason: TurnCloseReason = "stt_final"): Promise<void> {
+    let transcript = normalizeSttPhonetics(rawTranscript);
     this._turnCloseReason = closeReason;
     const _tStreamNow = performance.now();
     // For Azure streaming, use lastPartialToFinalMs to back-compute when the caller

@@ -10,6 +10,7 @@ import {
   isTopicClarificationAsk,
   isAccidentalInterruptPhrase,
   isBackchannelOnlyUtterance,
+  normalizeSttPhonetics,
 } from "./transcriptQuality.js";
 import { isAffirmationOnlyUtterance } from "./endpointing.js";
 
@@ -148,10 +149,15 @@ describe("isAffirmationOnlyUtterance", () => {
 });
 
 describe("isAccidentalInterruptPhrase", () => {
-  it("matches Bolna accidental interruption phrases", () => {
-    expect(isAccidentalInterruptPhrase("wait")).toBe(true);
-    expect(isAccidentalInterruptPhrase("hold on")).toBe(true);
-    expect(isAccidentalInterruptPhrase("stop speaking")).toBe(true);
-    expect(isAccidentalInterruptPhrase("about insurance")).toBe(false);
+  it("identifies accidental interrupt phrases", () => {
+    expect(isAccidentalInterruptPhrase("stop")).toBe(true);
+    expect(isAccidentalInterruptPhrase("போதும்")).toBe(true);
+    expect(isAccidentalInterruptPhrase("रुको")).toBe(true);
+    expect(isAccidentalInterruptPhrase("hello world")).toBe(false);
+  });
+
+  it("normalises Indian English STT phonetic mishearings", () => {
+    expect(normalizeSttPhonetics("Futures-ல explain பண்ண மாட்டேங்கிறீங்க")).toBe("features-ல explain பண்ண மாட்டேங்கிறீங்க");
+    expect(normalizeSttPhonetics("4 ஆமாம்")).toBe("ஆமாம்");
   });
 });

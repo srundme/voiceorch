@@ -480,3 +480,23 @@ export function isSemanticInterrupt(text: string): boolean {
   if (isAccidentalInterruptPhrase(t)) return true;
   return SEMANTIC_INTERRUPT_PATTERNS.some(re => re.test(t));
 }
+
+/**
+ * Normalises common Indian-English phonetic acoustic mishearings from STT.
+ * E.g., Indian English "features" (pronounced /fiːtʃərz/) is often recognized as "Futures".
+ * Stray STT digits prefixing Indic words (e.g. "4 ஆமாம்") are stripped.
+ */
+export function normalizeSttPhonetics(text: string): string {
+  if (!text) return text;
+  let s = text;
+  // Replace "Futures-ல" / "Futures" when used in product feature contexts
+  s = s.replace(/\bFutures([-–—]\S+)?\b/gi, (match) => {
+    if (/Futures-ல/i.test(match)) return "Features-ல";
+    if (/Futures-ல/i.test(match)) return "features-ல";
+    return "features";
+  });
+  // Strip stray single digit prefixing Indic words (e.g., "4 ஆமாம்" -> "ஆமாம்")
+  s = s.replace(/^\d\s+([\u0B80-\u0BFF\u0900-\u097F]+)/u, "$1");
+  return s;
+}
+
