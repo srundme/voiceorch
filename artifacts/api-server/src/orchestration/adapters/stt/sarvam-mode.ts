@@ -21,8 +21,12 @@ export function resolveSarvamSttMode(
   if (explicitMode && VALID_MODES.has(explicitMode)) {
     return explicitMode as SarvamSttMode;
   }
-  // Always use codemix — callers are from all over India and may speak any
-  // language regardless of the configured language_code. codemix on saaras:v3
-  // handles pure English, pure Hindi/Tamil, and mixed-language speech correctly.
+  const lang = (languageCode ?? "en-IN").toLowerCase();
+  // Indic languages (ta-IN, hi-IN, te-IN etc) use `transcribe` mode (matching Bolna)
+  // to yield clean native script transcripts (e.g. ஃபீச்சர்ஸ் for "features")
+  // without phonetic English mangling (Futures-ல). en-IN / multilingual uses codemix.
+  if (lang.startsWith("ta") || lang.startsWith("hi") || lang.startsWith("te") || lang.startsWith("kn") || lang.startsWith("ml") || lang.startsWith("mr") || lang.startsWith("bn") || lang.startsWith("gu")) {
+    return "transcribe";
+  }
   return "codemix";
 }

@@ -8,13 +8,14 @@ describe("resolveSarvamSttMode", () => {
     expect(resolveSarvamSttMode("en-IN", "transcribe")).toBe("transcribe");
   });
 
-  it("defaults ALL languages to codemix (callers are multilingual)", () => {
+  it("defaults Indic languages to transcribe (clean native script) and en-IN to codemix", () => {
     expect(resolveSarvamSttMode("en-IN")).toBe("codemix");
     expect(resolveSarvamSttMode("en-US")).toBe("codemix");
-    expect(resolveSarvamSttMode("ta-IN")).toBe("codemix");
-    expect(resolveSarvamSttMode("hi-IN")).toBe("codemix");
-    expect(resolveSarvamSttMode("te-IN")).toBe("codemix");
+    expect(resolveSarvamSttMode("ta-IN")).toBe("transcribe");
+    expect(resolveSarvamSttMode("hi-IN")).toBe("transcribe");
+    expect(resolveSarvamSttMode("te-IN")).toBe("transcribe");
     expect(resolveSarvamSttMode(null)).toBe("codemix");
     expect(resolveSarvamSttMode(undefined)).toBe("codemix");
   });
 });
+
