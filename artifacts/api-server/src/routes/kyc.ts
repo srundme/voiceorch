@@ -186,7 +186,77 @@ async function createVobizSubAccount(
     const err = await resp.text();
     throw new Error(`Vobiz sub-account creation failed (${resp.status}): ${err}`);
   }
-  return resp.json() as Promise<VobizCreateAccountResponse>;
+}
+
+import { decryptKey } from "../lib/crypto.js";
+
+export async function ensureVobizSubAccount(
+  clerkId: string,
+  name?: string | null,
+  email?: string | null,
+): Promise<{ authId: string; authToken: string }> {
+  let [account] = await db
+    .select()
+    .from(vobizAccountsTable)
+    .where(eq(vobizAccountsTable.userId, clerkId));
+
+  if (account?.vobizAuthId && account?.vobizAuthTokenEncrypted) {
+    return {
+      authId: account.vobizAuthId,
+      authToken: decryptKey(account.vobizAuthTokenEncrypted),
+    };
+  }
+
+  if (!platformConfigured()) {
+    const authId = process.env["VOBIZ_AUTH_ID"] ?? "";
+    const authToken = process.env["VOBIZ_AUTH_TOKEN"] ?? "";
+    return { authId, authToken };
+  }
+
+  let vobizAccount: VobizCreateAccountResponse;
+  const targetEmail = email ?? `${clerkId}@snapserve.ai`;
+  const targetName = name ?? email ?? clerkId;
+
+  try {
+    vobizAccount = await createVobizSubAccount(targetName, targetEmail);
+  } catch (err: any) {
+    if (err instanceof VobizAccountExistsError) {
+      const existing = await fetchVobizSubAccountByEmail(targetEmail);
+      if (existing) {
+        vobizAccount = existing;
+      } else {
+        const authId = process.env["VOBIZ_AUTH_ID"] ?? "";
+        const authToken = process.env["VOBIZ_AUTH_TOKEN"] ?? "";
+        return { authId, authToken };
+      }
+    } else {
+      const authId = process.env["VOBIZ_AUTH_ID"] ?? "";
+      const authToken = process.env["VOBIZ_AUTH_TOKEN"] ?? "";
+      return { authId, authToken };
+    }
+  }
+
+  const [inserted] = await db
+    .insert(vobizAccountsTable)
+    .values({
+      userId: clerkId,
+      vobizAuthId: vobizAccount.auth_id,
+      vobizAuthTokenEncrypted: encryptKey(vobizAccount.auth_token),
+      kycStatus: "pending",
+    })
+    .onConflictDoUpdate({
+      target: vobizAccountsTable.userId,
+      set: {
+        vobizAuthId: vobizAccount.auth_id,
+        vobizAuthTokenEncrypted: encryptKey(vobizAccount.auth_token),
+      },
+    })
+    .returning();
+
+  return {
+    authId: inserted.vobizAuthId,
+    authToken: decryptKey(inserted.vobizAuthTokenEncrypted),
+  };
 }
 
 /**

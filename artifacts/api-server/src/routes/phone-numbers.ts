@@ -47,18 +47,18 @@ function addMarkup(monthlyRateCents: number): number {
   return monthlyRateCents > 0 ? FLAT_MONTHLY_RATE_CENTS : 0;
 }
 
-// ── Platform and Subaccount Vobiz credentials ──────────────────────────────
-async function getEffectiveVobizCreds(clerkId: string) {
-  try {
-    const [sub] = await db
-      .select({ accountAuthId: vobizAccountsTable.accountAuthId, accountAuthToken: vobizAccountsTable.accountAuthToken })
-      .from(vobizAccountsTable)
-      .where(eq(vobizAccountsTable.userId, clerkId));
+import { ensureVobizSubAccount } from "./kyc.js";
 
-    if (sub?.accountAuthId && sub?.accountAuthToken) {
-      return { authId: sub.accountAuthId, authToken: sub.accountAuthToken, configured: true, isSubaccount: true };
+// ── Platform and Subaccount Vobiz credentials ──────────────────────────────
+async function getEffectiveVobizCreds(clerkId: string, name?: string | null, email?: string | null) {
+  try {
+    const creds = await ensureVobizSubAccount(clerkId, name, email);
+    if (creds.authId && creds.authToken) {
+      return { authId: creds.authId, authToken: creds.authToken, configured: true, isSubaccount: true };
     }
-  } catch { /* fall through to master */ }
+  } catch (err) {
+    console.warn("getEffectiveVobizCreds error:", err);
+  }
 
   const authId    = process.env["VOBIZ_AUTH_ID"];
   const authToken = process.env["VOBIZ_AUTH_TOKEN"];
@@ -739,7 +739,7 @@ router.post("/phone-numbers/purchase/confirm", requireAuth, async (req, res): Pr
 
   const { number, countryCode, region, numberType, amountCents } = claimed;
 
-  const { authId, authToken, configured } = getPlatformVobizCreds();
+  const { authId, authToken, configured } = await getEffectiveVobizCreds(clerkId, user.name, user.email);
   if (!configured) {
     await db.update(phoneNumberOrdersTable)
       .set({ status: "failed", failureReason: "Platform carrier credentials not configured" })
