@@ -17,14 +17,23 @@ export default function Slide15() {
 
       <div style={{ background: "#1A237E", padding: "3.2vh 6vw 2.8vh 6vw", display: "flex", alignItems: "flex-end", justifyContent: "space-between" }}>
         <div>
-          <div style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#FF6F00", marginBottom: "0.8vh" }}>
-            Voice + Vision Agents
+          <div style={{ display: "flex", alignItems: "center", gap: "1.2vw", marginBottom: "0.8vh" }}>
+            <div style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#FF6F00" }}>
+              Live Today — Voice + Vision
+            </div>
+            <div style={{
+              background: "#1B5E20", color: "#A5D6A7",
+              fontSize: "0.7vw", fontWeight: 800, letterSpacing: "0.16em",
+              textTransform: "uppercase", padding: "0.25vh 0.8vw", borderRadius: "99px",
+            }}>
+              LIVE
+            </div>
           </div>
           <h1 style={{ fontFamily: "var(--font-display-family)", fontSize: "2.6vw", fontWeight: 700, color: "#FFFFFF", margin: 0, lineHeight: 1.15 }}>
             The agent that sees, hears, and remembers — without leaving the page.
           </h1>
         </div>
-        <span style={{ fontSize: "0.85vw", fontWeight: 600, color: "#4B6CB7", letterSpacing: "0.06em", paddingBottom: "0.3vh" }}>05 / 15</span>
+        <span style={{ fontSize: "0.85vw", fontWeight: 600, color: "#4B6CB7", letterSpacing: "0.06em", paddingBottom: "0.3vh" }}>06 / 16</span>
       </div>
 
       <div style={{ flex: 1, padding: "2.4vh 6vw 6.5vh 6vw", display: "flex", gap: "2vw" }}>
@@ -150,7 +159,7 @@ export default function Slide15() {
               <div>
                 <div style={{ fontSize: "1.02vw", fontWeight: 700, color: "#FF6F00" }}>SnapServe Voice + Vision</div>
                 <div style={{ fontSize: "0.94vw", color: "#5B5470", lineHeight: 1.52 }}>
-                  One embedded agent. Speaks. Sees. Verifies. Remembers. Compliant by default — no human in the loop required.
+                  Live today. One embedded agent that speaks, sees, verifies, and remembers — compliant by default, no human required, no app download.
                 </div>
               </div>
             </div>
@@ -161,7 +170,7 @@ export default function Slide15() {
             borderRadius: "1vw", padding: "1.6vh 1.8vw",
           }}>
             <div style={{ fontSize: "0.98vw", color: "#BF360C", lineHeight: 1.55 }}>
-              <strong>First target:</strong> Indian insurers running manual KYC calls — 40M+ verifications per year, ₹150+ per manual call. SnapServe cuts that to ₹8.
+              <strong>First target:</strong> Indian insurers running manual KYC calls — 40M+ verifications per year, ₹150+ per manual call. SnapServe cuts that to ₹8. <strong>Live in production — insurance pilots running now.</strong>
             </div>
           </div>
         </div>
