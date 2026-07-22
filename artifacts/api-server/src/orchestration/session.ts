@@ -808,9 +808,10 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     for (const f of callerCtxResult.facts) latchedFactsMap.set(f.key, f.value);
 
     // Override STT language from caller memory language_pref fact — only when the
-    // agent is in auto-detect mode. Strict fixed-language agents must not inherit
-    // a remembered preference from a prior multilingual call.
-    if (agentConfig.languageAutoDetect) {
+    // agent is in auto-detect mode AND NOT using Sarvam (Sarvam uses en-IN + codemix
+    // to handle all Indic languages dynamically; forcing hi-IN or ta-IN breaks multilingual calls).
+    const providerIsSarvam = (agent.asrProvider ?? "").toLowerCase() === "sarvam";
+    if (agentConfig.languageAutoDetect && !providerIsSarvam) {
       const LANG_PREF_TO_BCP47: Record<string, string> = {
         "english": "en-IN", "hindi": "hi-IN", "tamil": "ta-IN",
         "telugu": "te-IN", "kannada": "kn-IN", "malayalam": "ml-IN",
@@ -833,12 +834,6 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
           { agentId: params.agentId, callerPhone, langPref: langPrefRaw, from: prevSttLang, to: mappedSttLang },
           "STT language overridden from caller memory language_pref",
         );
-        if ((agent.asrProvider ?? "").toLowerCase() === "sarvam") {
-          agentConfig.sarvamSttMode = resolveSarvamSttMode(
-            mappedSttLang,
-            (agentCfg["sarvamSttMode"] as string | undefined) ?? null,
-          );
-        }
       }
     }
 
