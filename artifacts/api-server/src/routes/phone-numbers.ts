@@ -259,23 +259,22 @@ async function configureVobizNumberWebhook(
   const h = vobizHeaders(authId, authToken);
 
   try {
-    // 1. Look up cached app_id from platform_settings.
-    const [cached] = await db
-      .select({ value: platformSettingsTable.value })
-      .from(platformSettingsTable)
-      .where(eq(platformSettingsTable.key, "vobiz_snapserve_app_id"));
-    let appId: string | null = cached?.value ?? null;
+    let appId: string | null = null;
 
-    // 2. If we have a cached app_id, verify it still exists.
-    if (appId) {
-      const check = await fetch(`${VOBIZ_ACCOUNT_BASE}/${authId}/Application/${appId}/`, { headers: h });
-      if (!check.ok) {
-        console.warn(`configureVobizNumberWebhook: cached app ${appId} gone (${check.status}), will recreate`);
-        appId = null;
+    // 1. If master account, try reading cached master app ID from platform_settings
+    if (authId === process.env["VOBIZ_AUTH_ID"]) {
+      const [cached] = await db
+        .select({ value: platformSettingsTable.value })
+        .from(platformSettingsTable)
+        .where(eq(platformSettingsTable.key, "vobiz_snapserve_app_id"));
+      appId = cached?.value ?? null;
+      if (appId) {
+        const check = await fetch(`${VOBIZ_ACCOUNT_BASE}/${authId}/Application/${appId}/`, { headers: h });
+        if (!check.ok) appId = null;
       }
     }
 
-    // 3. If no valid app, find the SnapServe app or create a new one.
+    // 2. Query account's applications list for SnapServe app
     if (!appId) {
       const listResp = await fetch(`${VOBIZ_ACCOUNT_BASE}/${authId}/Application/`, { headers: h });
       if (listResp.ok) {
@@ -285,6 +284,7 @@ async function configureVobizNumberWebhook(
       }
     }
 
+    // 3. Create SnapServe app if it doesn't exist under this authId
     if (!appId) {
       const createResp = await fetch(`${VOBIZ_ACCOUNT_BASE}/${authId}/Application/`, {
         method:  "POST",
@@ -295,25 +295,28 @@ async function configureVobizNumberWebhook(
           answer_method:  "POST",
           hangup_url:     hangupUrl,
           hangup_method:  "POST",
+          default_app:    true,
         }),
       });
       if (!createResp.ok) {
         const errText = await createResp.text();
-        console.warn(`configureVobizNumberWebhook: create app failed ${createResp.status}: ${errText}`);
+        console.warn(`configureVobizNumberWebhook: create app failed for ${authId} ${createResp.status}: ${errText}`);
         return fail(`create SnapServe app failed (${createResp.status})`);
       }
       const created = await createResp.json() as { app_id?: string };
       appId = created.app_id ?? null;
       if (!appId) {
-        console.warn("configureVobizNumberWebhook: create app returned no app_id");
+        console.warn(`configureVobizNumberWebhook: create app returned no app_id for ${authId}`);
         return fail("create SnapServe app returned no app_id");
       }
     }
 
-    // 4. Persist app_id to platform_settings.
-    await db.insert(platformSettingsTable)
-      .values({ key: "vobiz_snapserve_app_id", value: appId })
-      .onConflictDoUpdate({ target: platformSettingsTable.key, set: { value: appId } });
+    // 4. If master account, update platform_settings cache
+    if (authId === process.env["VOBIZ_AUTH_ID"]) {
+      await db.insert(platformSettingsTable)
+        .values({ key: "vobiz_snapserve_app_id", value: appId })
+        .onConflictDoUpdate({ target: platformSettingsTable.key, set: { value: appId } });
+    }
 
     // 5. Ensure app is default_app and has correct URLs (idempotent update).
     const updateResp = await fetch(`${VOBIZ_ACCOUNT_BASE}/${authId}/Application/${appId}/`, {
