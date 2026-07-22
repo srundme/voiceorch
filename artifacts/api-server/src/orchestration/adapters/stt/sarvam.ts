@@ -247,7 +247,7 @@ export class SarvamSTT implements STTAdapter {
     // (800 ms is enough for a caller to continue a mid-sentence pause; 1200 ms
     // added dead air on multilingual calls where Sarvam's speech_end fires late).
     // Override per-deployment with env SARVAM_COALESCE_INCOMPLETE_MS.
-    const COALESCE_INCOMPLETE_MS = envInt("SARVAM_COALESCE_INCOMPLETE_MS", 800);
+    const COALESCE_INCOMPLETE_MS = envInt("SARVAM_COALESCE_INCOMPLETE_MS", 220);
     const PAUSE_HISTORY_MAX      = 5;
     const pauseHistory: number[] = [];
     let transcriptArrivedAt    = 0;   // wall-clock ms when last transcript buffered

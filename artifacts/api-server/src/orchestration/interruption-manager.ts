@@ -33,7 +33,7 @@ export class InterruptionManager {
   private bargeInCount = 0;
 
   constructor(opts: InterruptionManagerOptions = {}) {
-    this.incrementalDelayMs = opts.incrementalDelayMs ?? 900;
+    this.incrementalDelayMs = opts.incrementalDelayMs ?? 500;
     this.wordsForInterruption = opts.wordsForInterruption ?? 3;
     this.accidentalInterruptionPhrases = new Set(
       (opts.accidentalInterruptionPhrases ?? ["stop", "wait", "hold on", "hang up", "cancel", "pause", "shut up", " Listen", "வேண்டாம்", "நிறுத்து", "இருங்க", "ரூக்", "रुक", "रुको", "बस", "सुनो"])
