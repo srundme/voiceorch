@@ -43,7 +43,7 @@ export default function Slide2() {
       className="w-screen h-screen overflow-hidden relative"
       style={{ background: "#FAFAFA", fontFamily: "var(--font-body-family)", display: "flex", flexDirection: "column" }}
     >
-      <SlideHeader section="The Team" title="Two builders who shipped it themselves" slide="02 / 14" />
+      <SlideHeader section="The Team" title="Two builders who shipped it themselves" slide="02 / 15" />
 
       <div style={{ flex: 1, padding: "3.2vh 6vw 6.5vh 6vw", display: "flex", flexDirection: "column", gap: "2.4vh" }}>
         <div style={{ display: "flex", gap: "2.4vw", flex: 1 }}>
