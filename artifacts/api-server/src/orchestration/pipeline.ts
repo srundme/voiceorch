@@ -30,7 +30,7 @@ import type { VoiceSession } from "./voice-session.js";
 import { retrieveKbContext, retrieveKbContextMultiEx, resolveKbTurnBudgetMs, type KbRetrievalResult } from "./kb-retrieval.js";
 import { storeCallMedia } from "../services/call-media.js";
 import { KRUTRIM_AUTO_SUMMARY_TITLE } from "../services/kb-source-summary.js";
-import { getBackchannelFillers, pickBackchannelFiller } from "./backchannel.js";
+import { getBackchannelFillers, pickBackchannelFiller, type BackchannelFillerOptions } from "./backchannel.js";
 import { ConversationHistory } from "./conversation-history.js";
 import { performance } from "perf_hooks";
 import {
@@ -1137,9 +1137,10 @@ export class OrchestrationPipeline implements VoiceSession {
   }
 
   private backchannelFillerOpts(callerTranscript?: string | null): BackchannelFillerOptions {
+    const lastUserTurn = [...this.conversationHistory.messages].reverse().find((t) => t.role === "user");
     return {
       englishStrictAck: this.isEnglishStrictAckMode(),
-      callerTranscript: callerTranscript || this.lastUserTranscript,
+      callerTranscript: callerTranscript || lastUserTurn?.content || null,
     };
   }
 

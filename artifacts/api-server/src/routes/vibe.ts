@@ -1010,7 +1010,7 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
 
     // Affirmations ("okay", "yes", "then"…) must advance — never re-confirm the same step.
     if (!isRefine) {
-      applyAffirmationPhaseAdvance(parsed, lastUser);
+      applyAffirmationPhaseAdvance(parsed as any, lastUser);
     }
 
     const reply = (parsed.reply ?? "Tell me about the agent you want to build!").trim();

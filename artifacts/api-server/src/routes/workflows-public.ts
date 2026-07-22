@@ -68,7 +68,7 @@ router.post("/workflows/hook/:token", publicCors, async (req, res): Promise<void
       if (flat[posted] !== undefined) context[key] = flat[posted];
     }
   }
-  const phoneKey = trigger?.phoneColumn ?? trigger?.fieldMap?.["phone"] ?? "phone";
+  const phoneKey = (trigger as any)?.phoneColumn ?? trigger?.fieldMap?.["phone"] ?? "phone";
   if (!context["phone"] && flat[phoneKey]) context["phone"] = flat[phoneKey];
 
   if (!context["phone"]) {
