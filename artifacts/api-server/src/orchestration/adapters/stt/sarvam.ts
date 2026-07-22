@@ -293,30 +293,35 @@ export class SarvamSTT implements STTAdapter {
       "അതെ", "ഇല്ല", "ശരി", "ഓകെ", "ഹലോ",
     ]);
 
+    /** Single-word dangling connectors that genuinely indicate the caller was cut off mid-thought. */
+    const DANGLING_SINGLE_CONNECTORS = new Set([
+      "and", "or", "but", "because", "although", "though", "with", "for", "from", "into", "through", "of", "to",
+      " ke", " ki", " ka", " ko", " mein", " pe", " par", " se", " ne", " aur", " lekin", " jo", " kyunki", " jab",
+      "ஆனால்", "அல்லது", "ஏனெனில்", "மற்றும்", "எனவே", "அப்புறம்", "இருந்தாலும்", "சொல்லி", "பண்ணி", "வந்து",
+    ]);
+
     /**
      * Returns true when the transcript looks like a mid-sentence fragment that the
      * caller is still formulating. Triggers COALESCE_INCOMPLETE_MS hold instead of
      * the adaptive window so the caller can finish their thought.
      *
      * Patterns detected (Tamil-aware + generic):
-     *   • Single word (not in COMPLETE_SINGLE_WORDS) — likely a fragment
+     *   • Single dangling connector (e.g. "and", "but", "ஆனா") — incomplete
+     *   • Single content word (name, number, noun, answer)      — COMPLETE (emits immediately)
      *   • Ends with Tamil possessive suffix    — உங்களோட, என்னோட, அதோட, …
      *   • Ends with Tamil case markers         — -ஐ, -க்கு, -கிட்ட, -ல, -னால, …
      *   • Ends with common connective words    — "and", "or", "but", "also", "with"
-     *   • Ends with relative/attribute marker  — -ன, -ற (verb participial forms)
      *   • All-caps abbreviation (e.g. "DTDC") — likely partial proper noun phrase
      */
     function looksIncomplete(text: string): boolean {
       const t = text.trim();
       const words = t.split(/\s+/);
       if (words.length === 0) return false;
-      // Single word — check bypass list first: common complete responses (yes/no/ok/hello
-      // etc.) are NOT fragments and should dispatch immediately via the normal fast-path.
-      // Unknown single words still get the COALESCE_INCOMPLETE_MS hold.
+      // Single word: only return true if it is a known dangling connector ("and", "but", "ஆனா" etc.)
+      // All other single words (names, numbers, nouns, greetings, yes/no) emit IMMEDIATELY.
       if (words.length === 1) {
-        const w = words[0].toLowerCase().replace(/[।,!?.]+$/, ""); // strip trailing punctuation
-        if (COMPLETE_SINGLE_WORDS.has(w) || COMPLETE_SINGLE_WORDS.has(words[0])) return false;
-        return true;
+        const w = words[0].toLowerCase().replace(/[।,!?.]+$/, "");
+        return DANGLING_SINGLE_CONNECTORS.has(w) || DANGLING_SINGLE_CONNECTORS.has(words[0]);
       }
       const last = words[words.length - 1];
       // Tamil possessive / genitive suffixes → more to come
