@@ -4,25 +4,22 @@ import { toOpenAIMessages } from "./openai-messages.js";
 import { drainOpenAICompatibleStream } from "./openai-compat.js";
 
 /**
- * Qwen via Groq — OpenAI-compatible API
- * Models: qwen/qwen3-32b, qwen/qwen3-235b-a22b
- * Endpoint: https://api.groq.com/openai/v1 (Groq-hosted Qwen)
- *
- * Tool calling: supported on Qwen 3 models via Groq's function-calling interface.
+ * Qwen LLM Adapter — supports Groq (gsk_...) and OpenRouter (sk-or-v1-...).
+ * Groq models: qwen-2.5-32b, qwen-2.5-coder-32b, deepseek-r1-distill-qwen-32b
+ * OpenRouter models: qwen/qwen-2.5-72b-instruct, qwen/qwen-2.5-32b-instruct
  */
 
-const DEFAULT_MODEL = "qwen/qwen3-32b";
+const GROQ_QWEN_MODEL_MAP: Record<string, string> = {
+  "qwen/qwen3-32b": "qwen-2.5-32b",
+  "qwen3-32b": "qwen-2.5-32b",
+  "qwen/qwen3-235b-a22b": "qwen-2.5-32b",
+  "qwen/qwen-2.5-32b": "qwen-2.5-32b",
+  "qwen-32b": "qwen-2.5-32b",
+};
 
-/** Models that support function calling via Groq */
-const TOOL_CAPABLE_MODELS = new Set([
-  "qwen/qwen3-32b",
-  "qwen/qwen3-235b-a22b",
-]);
+const DEFAULT_GROQ_MODEL = "qwen-2.5-32b";
+const DEFAULT_OPENROUTER_MODEL = "qwen/qwen-2.5-72b-instruct";
 
-/**
- * Scheduling-related tool name fragments that warrant forcing tool_choice: "required".
- * This list covers the standard native tool names defined in buildToolDefs.
- */
 const SCHEDULING_TOOL_NAME_PATTERNS = [
   "check_availability",
   "book_appointment",
@@ -37,12 +34,21 @@ export class QwenLLM implements LLMAdapter {
   private maxTokens: number | undefined;
   private temperature: number | undefined;
 
-  constructor(apiKey: string, model: string | null, genParams?: LLMGenerationParams) {
-    this.client = new OpenAI({
-      apiKey,
-      baseURL: "https://api.groq.com/openai/v1",
-    });
-    this.model     = model?.trim() || DEFAULT_MODEL;
+  constructor(apiKey: string, rawModel: string | null, genParams?: LLMGenerationParams) {
+    const isOpenRouter = apiKey?.startsWith("sk-or-v1");
+    const baseURL = isOpenRouter
+      ? "https://openrouter.ai/api/v1"
+      : "https://api.groq.com/openai/v1";
+
+    this.client = new OpenAI({ apiKey, baseURL });
+
+    const trimmed = rawModel?.trim() || "";
+    if (isOpenRouter) {
+      this.model = trimmed || DEFAULT_OPENROUTER_MODEL;
+    } else {
+      this.model = GROQ_QWEN_MODEL_MAP[trimmed] || (trimmed.startsWith("qwen/") ? trimmed.slice(5) : (trimmed || DEFAULT_GROQ_MODEL));
+    }
+
     this.maxTokens = genParams?.maxTokens ?? undefined;
     const t = genParams?.temperature;
     this.temperature = typeof t === "number" && Number.isFinite(t) ? Math.min(2, Math.max(0, t)) : undefined;
@@ -59,40 +65,26 @@ export class QwenLLM implements LLMAdapter {
       onUsage?: (usage: LLMUsage) => void;
     }
   ): Promise<void> {
-    const supportsTools = TOOL_CAPABLE_MODELS.has(this.model);
-    const qwenTools = supportsTools && options?.tools?.length
+    const qwenTools = options?.tools?.length
       ? options.tools.map((t) => ({
           type: "function" as const,
           function: { name: t.name, description: t.description, parameters: t.parameters },
         }))
       : undefined;
 
-    // Use tool_choice: "required" when scheduling tools are present so the model
-    // is forced to invoke a tool rather than hallucinating slot times in plain text.
-    // Keep "auto" when only end_call is present to avoid forcing unnecessary tool calls.
     const hasSchedulingTools = options?.tools?.some(
       (t) => SCHEDULING_TOOL_NAME_PATTERNS.some((pattern) => t.name.includes(pattern)),
     ) ?? false;
     const toolChoice = qwenTools ? (hasSchedulingTools ? "required" : "auto") : undefined;
 
-    // Prepend /no_think to disable Qwen3 extended reasoning for voice calls.
-    // Think-block generation adds 200–600 ms to TTFT before the first spoken
-    // word; voice agents need low latency, not deep reasoning chains.
-    // This is Groq's documented per-request way to turn off thinking mode.
-    const voiceSystemPrompt = `/no_think\n${systemPrompt}`;
-
     const stream = await this.client.chat.completions.create({
       model:          this.model,
       stream:         true,
       stream_options: { include_usage: true },
-      // service_tier:"on_demand" guarantees dedicated LPU resources — no queueing
-      // delays — which is critical for voice turn latency.
-      service_tier:   "on_demand" as any,
-      // Capping output tokens reduces Decoding Time (Total = TTFT + OutputTok/Speed + net)
       ...(this.maxTokens ? { max_tokens: this.maxTokens } : {}),
       ...(this.temperature !== undefined ? { temperature: this.temperature } : {}),
       messages: [
-        { role: "system", content: voiceSystemPrompt },
+        { role: "system", content: systemPrompt },
         ...toOpenAIMessages(messages),
       ] as any,
       ...(qwenTools ? { tools: qwenTools, tool_choice: toolChoice } : {}),
