@@ -3007,10 +3007,9 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
           try {
             const billingMode     = await resolveAgentBillingMode(sessionCallUserId, ag);
             const rateCentsPerMin = getFlatRateCentsPerMin(billingMode);
-            const billableMinutes = Math.ceil(durationSeconds / 60);
             const modeLabel       = billingMode === "managed" ? "managed" : "BYOP";
-            const rateLabel       = `₹${(rateCentsPerMin / 100).toFixed(3)}/min (${modeLabel})`;
-            const debitCents      = Math.round(billableMinutes * rateCentsPerMin);
+            const rateLabel       = `₹${(rateCentsPerMin / 100).toFixed(2)}/min (${modeLabel})`;
+            const debitCents      = Math.max(1, Math.round((durationSeconds / 60) * rateCentsPerMin));
             if (debitCents > 0) {
               await db.update(callsTable).set({ costCents: debitCents }).where(eq(callsTable.id, session.callId));
               const [billingUser] = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.clerkId, sessionCallUserId));
@@ -3024,7 +3023,7 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
                   userId:      billingUser.id,
                   type:        "call_debit",
                   amountCents: -debitCents,
-                  description: `Call #${session.callId} — ${billableMinutes} min × ${rateLabel}`,
+                  description: `Call #${session.callId} — ${durationSeconds}s @ ${rateLabel}`,
                   status:      "completed",
                   callId:      session.callId,
                 });

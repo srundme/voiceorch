@@ -50,7 +50,7 @@ export class InterruptionManager {
    * Returns true if user speech should trigger a barge-in during audio playback.
    */
   shouldTriggerInterruption(
-    wordCount: int,
+    wordCount: number,
     transcript: string,
     isAudioPlaying: boolean,
     welcomePlayed = true,

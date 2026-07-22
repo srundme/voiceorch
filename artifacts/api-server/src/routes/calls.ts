@@ -973,11 +973,10 @@ router.patch("/calls/:id/end", requireAuth, async (req, res): Promise<void> => {
   const billingMode = alreadyBilled ? "managed" : await resolveAgentBillingMode(callClerkId, agentForBilling ?? {});
   const rateCentsPerMin = getFlatRateCentsPerMin(billingMode);
   const modeLabel = billingMode === "managed" ? "managed" : "BYOP";
-  const billableMinutes = durationSeconds <= 0 ? 0 : Math.ceil(durationSeconds / 60);
-  const rateLabel = `₹${(rateCentsPerMin / 100).toFixed(3)}/min (${modeLabel})`;
+  const rateLabel = `₹${(rateCentsPerMin / 100).toFixed(2)}/min (${modeLabel})`;
   const debitCents = alreadyBilled || durationSeconds <= 0
     ? 0
-    : Math.round(billableMinutes * rateCentsPerMin);
+    : Math.max(1, Math.round((durationSeconds / 60) * rateCentsPerMin));
 
   const callUpdateSet: Partial<typeof callsTable.$inferInsert> = {
     status: "completed",
@@ -1041,7 +1040,7 @@ router.patch("/calls/:id/end", requireAuth, async (req, res): Promise<void> => {
         userId:      user.id,
         type:        "call_debit",
         amountCents: -debitCents,
-        description: `Call #${call.id} — ${billableMinutes} min × ${rateLabel}`,
+        description: `Call #${call.id} — ${durationSeconds}s @ ${rateLabel}`,
         status:      "completed",
         callId:      call.id,
       });
