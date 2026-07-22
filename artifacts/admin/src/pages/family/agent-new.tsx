@@ -40,15 +40,8 @@ const ASR_PROVIDERS = [
 ];
 
 const LLM_PROVIDERS = [
-  { value: "openai",    label: "OpenAI" },
-  { value: "anthropic", label: "Anthropic Claude" },
   { value: "google",    label: "Google Gemini" },
-  { value: "deepseek",  label: "DeepSeek" },
-  { value: "mistral",   label: "Mistral AI" },
-  { value: "cohere",    label: "Cohere" },
-  { value: "qwen",      label: "Qwen (via Groq)" },
   { value: "groq",      label: "Groq" },
-  { value: "sarvam",    label: "Sarvam" },
 ];
 
 const TTS_PROVIDERS = [

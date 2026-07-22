@@ -4,14 +4,8 @@ export const ASR_PROVIDERS = [
 ];
 
 export const LLM_PROVIDERS = [
-  { value: "openai",    label: "OpenAI" },
   { value: "google",    label: "Google Gemini" },
-  { value: "qwen",      label: "Qwen (via Groq)" },
   { value: "groq",      label: "Groq" },
-  { value: "sarvam",    label: "Sarvam" },
-  { value: "together",  label: "Together AI (Qwen3.6 / MiniMax M3)" },
-  { value: "openrouter", label: "OpenRouter (Qwen3.5 / Qwen3.6)" },
-  { value: "krutrim",    label: "Krutrim (India-hosted — lowest latency for India)" },
 ];
 
 export const TTS_PROVIDERS = [

@@ -40,11 +40,8 @@ const ASR_PROVIDERS = [
   { value: "cartesia",   label: "Cartesia" },
 ];
 const LLM_PROVIDERS = [
-  { value: "openai",    label: "OpenAI" },          { value: "anthropic", label: "Anthropic Claude" },
-  { value: "google",    label: "Google Gemini" },   { value: "deepseek",  label: "DeepSeek" },
-  { value: "mistral",   label: "Mistral AI" },      { value: "cohere",    label: "Cohere" },
-  { value: "qwen",      label: "Qwen (via Groq)" }, { value: "groq",      label: "Groq" },
-  { value: "sarvam",    label: "Sarvam" },
+  { value: "google",    label: "Google Gemini" },
+  { value: "groq",      label: "Groq" },
 ];
 const TTS_PROVIDERS = [
   { value: "elevenlabs",    label: "ElevenLabs" },    { value: "openai_tts",    label: "OpenAI TTS" },

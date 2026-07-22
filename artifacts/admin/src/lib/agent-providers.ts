@@ -8,14 +8,8 @@ export const ASR_PROVIDERS = [
 ];
 
 export const LLM_PROVIDERS = [
-  { value: "openai",    label: "OpenAI" },
-  { value: "anthropic", label: "Anthropic" },
   { value: "google",    label: "Google Gemini" },
-  { value: "qwen",      label: "Qwen (via Groq)" },
   { value: "groq",      label: "Groq" },
-  { value: "sarvam",    label: "Sarvam" },
-  { value: "deepseek",  label: "DeepSeek" },
-  { value: "mistral",   label: "Mistral" },
 ];
 
 export const TTS_PROVIDERS = [
