@@ -8341,11 +8341,12 @@ function detectExplicitLanguageRequest(rawText: string): string | null {
     /\bcan\s+you\b/.test(t) ||
     /\b(pesu|pesunga|pesanum|pannunga|pannalam|matladu|maatladu|matladandi|helu|heli|parayu|samsarikku|bolna|bola)\b/.test(t) ||
     /\b(bol|bolo|boliye|baat|baatein|kar|karo|karein|kijiye|kije|chahiye|chaiye)\b/.test(t) ||
-    /பேச|பேசு|சொல்லு|बोल|बात|कीजिए|करो|करें|चाहिए|మాట్లాడ|ಮಾತನಾಡ|പറയ|സംസാരിക്ക|বল|বলুন|કહો|બોલ|ਬੋਲ|بولیں|بات/u.test(text);
+    /स्पीक|स्पिक|टॉक|பேச|பேசு|சொல்லு|बोल|बात|कीजिए|करो|करें|चाहिए|మాట్లాడ|ಮಾತನಾಡ|പറയ|സംസാരിക്ക|বল|বলুন|કહો|બોલ|ਬੋਲ|بولیں|بات/u.test(text);
   const hasInLang =
     mentioned.some((s) => s.inLang.test(t)) ||
-    // Native-script locatives: "<lang>में" (Devanagari), "தமிழில்/தமிழ்ல", "…த்தில்/யில்" etc.
-    /(अंग्रेज़ी|अंग्रेजी|हिन्दी|हिंदी|तमिल|तेलुगु|कन्नड़|कन्नड|मलयालम|मराठी|बांग्ला|बंगाली|गुजराती|पंजाबी|उड़िया|ओड़िया|उर्दू)\s*(में|मे)/u.test(text) ||
+    // Native-script locatives: "<lang>में/इन" (Devanagari), "தமிழில்/தமிழ்ல", "…த்தில்/யில்" etc.
+    /(अंग्रेज़ी|अंग्रेजी|हिन्दी|हिंदी|तमिल|तेलुगु|कन्नड़|कन्नड|मलयालम|मराठी|बांग्ला|बंगाली|गुजराती|पंजाबी|उड़िया|ओड़िया|उर्दू)\s*(में|मे|इन|इन्)/u.test(text) ||
+    /(स्पीक|स्पिक|टॉक|बोल|बोलो)\s*(इन|इन्|में|मे)\s*(अंग्रेज़ी|अंग्रेजी|हिन्दी|हिंदी|तमिल|तेलुगु|कन्नड़|कन्नड|मलयालम)/u.test(text) ||
     /தமிழ(ில்|்ல|ுல)|ஆங்கிலத்தில்|ஹிந்தியில்|இந்தியில்|தெலுங்கில்|கன்னடத்தில்|மலையாளத்தில்|উর্দু|ਵਿੱਚ/u.test(text);
   if (!hasRequestVerb && !hasInLang) {
     // ── Bare-imperative fast-path ──────────────────────────────────────────
