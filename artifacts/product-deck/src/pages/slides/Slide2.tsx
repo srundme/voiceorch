@@ -43,7 +43,7 @@ export default function Slide2() {
       className="w-screen h-screen overflow-hidden relative"
       style={{ background: "#FAFAFA", fontFamily: "var(--font-body-family)", display: "flex", flexDirection: "column" }}
     >
-      <SlideHeader section="The Team" title="Two builders who shipped it themselves" slide="02 / 15" />
+      <SlideHeader section="The Team" title="Two builders who shipped it themselves" slide="02 / 16" />
 
       <div style={{ flex: 1, padding: "3.2vh 6vw 6.5vh 6vw", display: "flex", flexDirection: "column", gap: "2.4vh" }}>
         <div style={{ display: "flex", gap: "2.4vw", flex: 1 }}>
@@ -93,6 +93,18 @@ export default function Slide2() {
             <div style={{ ...bullet, marginBottom: 0 }}><span style={{ position: "absolute", left: 0, top: "0.7vh", width: "0.5vw", height: "0.5vw", borderRadius: "50%", background: "#FF6F00" }} />
               Responsible for sub-second latency, multi-provider failover, and real-world telephony integrations.
             </div>
+          </div>
+        </div>
+
+        <div style={{
+          background: "#FFFFFF", border: "0.06vh solid #E8EAF0", borderRadius: "1vw",
+          padding: "2.2vh 2.4vw", boxShadow: "0 0.4vh 1.2vh rgba(26,35,126,0.07)",
+        }}>
+          <div style={{ fontSize: "0.78vw", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.16em", color: "#FF6F00", marginBottom: "1vh" }}>
+            Why Us
+          </div>
+          <div style={{ fontSize: "1.05vw", color: "#3A3A5C", lineHeight: 1.6 }}>
+            We spent 12+ months running a live voice AI agency in insurance — not as a side project, but as our primary business. We deployed real outbound call workflows for insurers, experienced context amnesia firsthand when customers repeated themselves on every call, and hit compliance walls that no existing tool helped us clear. SnapServe is the platform we needed and could not buy. We built it ourselves, in production, without external engineers.
           </div>
         </div>
 
