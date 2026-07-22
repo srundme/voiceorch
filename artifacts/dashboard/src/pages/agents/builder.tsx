@@ -2030,24 +2030,27 @@ function VisionTab({ form, agentId }: { form: any; agentId: number | undefined }
     }
   };
 
-  const modes: { id: VisionCaptureMode; label: string; desc: string; icon: React.ReactNode }[] = [
+  const modes: { id: VisionCaptureMode; label: string; badge: string; desc: string; icon: React.ReactNode }[] = [
     {
       id: "photo",
-      label: "Photo upload",
-      desc: "Guest uploads or WhatsApps a still. Agent analyzes with analyze_image.",
-      icon: <Upload className="h-4 w-4" />,
+      label: "Document & Image OCR",
+      badge: "Sarvam Vision",
+      desc: "Guest uploads/photos documents, Aadhaar IDs, invoices, or receipts mid-call. Analyzed using Sarvam Vision OCR & document extraction.",
+      icon: <Upload className="h-4 w-4 text-emerald-400" />,
     },
     {
       id: "live",
-      label: "Live camera",
-      desc: "Realtime webcam into Gemini Live during webcall verification.",
-      icon: <Camera className="h-4 w-4" />,
+      label: "Live Camera Inspection",
+      badge: "Gemini Live WebRTC",
+      desc: "Real-time webcam stream during a webcall. The agent continuously sees what is in frame for live physical inspections.",
+      icon: <Camera className="h-4 w-4 text-sky-400" />,
     },
     {
       id: "both",
-      label: "Photo + live",
-      desc: "Upload stills and stream live camera when needed.",
-      icon: <Eye className="h-4 w-4" />,
+      label: "Full Multimodal Vision",
+      badge: "Sarvam + Gemini",
+      desc: "Real-time camera feed during calls AND mid-call document/receipt file uploads.",
+      icon: <Eye className="h-4 w-4 text-purple-400" />,
     },
   ];
 
@@ -2055,12 +2058,12 @@ function VisionTab({ form, agentId }: { form: any; agentId: number | undefined }
     <div className="p-5 sm:p-6 space-y-8 max-w-3xl">
       <div>
         <div className="mb-3">
-          <h3 className="text-sm font-semibold mb-0.5">What the agent can see</h3>
+          <h3 className="text-sm font-semibold mb-0.5">Visual Capabilities & Vision Mode</h3>
           <p className="text-xs text-muted-foreground">
-            Choose how guests share visuals on webcall (and WhatsApp for stills).
+            Choose whether your agent reads uploaded documents/invoices (Sarvam Vision OCR) or inspects real-time camera video (Gemini Live).
           </p>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {modes.map((m) => {
             const active = captureMode === m.id;
             return (
@@ -2069,38 +2072,47 @@ function VisionTab({ form, agentId }: { form: any; agentId: number | undefined }
                 type="button"
                 onClick={() => applyCaptureMode(m.id)}
                 className={cn(
-                  "text-left rounded-xl border p-3.5 transition-colors",
+                  "text-left rounded-xl border p-3.5 transition-colors relative flex flex-col justify-between",
                   active
-                    ? "border-foreground/40 bg-card shadow-sm"
+                    ? "border-foreground/40 bg-card shadow-sm ring-1 ring-foreground/20"
                     : "border-border/50 bg-card/20 hover:border-border hover:bg-card/40",
                 )}
               >
-                <div className={cn("h-8 w-8 rounded-lg flex items-center justify-center mb-2", active ? "bg-foreground/10 text-foreground" : "bg-muted/40 text-muted-foreground")}>
-                  {m.icon}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className={cn("h-8 w-8 rounded-lg flex items-center justify-center", active ? "bg-foreground/10 text-foreground" : "bg-muted/40 text-muted-foreground")}>
+                      {m.icon}
+                    </div>
+                    <span className="text-[9px] font-mono font-medium px-1.5 py-0.5 rounded border border-white/10 bg-white/5 text-muted-foreground">
+                      {m.badge}
+                    </span>
+                  </div>
+                  <p className="text-xs font-semibold text-foreground/90">{m.label}</p>
+                  <p className="text-[10px] text-muted-foreground/70 leading-relaxed mt-1">{m.desc}</p>
                 </div>
-                <p className="text-xs font-semibold text-foreground/90">{m.label}</p>
-                <p className="text-[10px] text-muted-foreground/70 leading-relaxed mt-1">{m.desc}</p>
               </button>
             );
           })}
         </div>
         {(captureMode === "live" || captureMode === "both") && !isGeminiLive && (
-          <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-2">
-            Live camera needs Gemini Live — selecting this mode switches the voice stack automatically. Save to apply.
+          <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-2 flex items-center gap-1.5">
+            <span>⚠️</span> Live camera inspection requires Gemini Live — selecting this mode switches the voice stack automatically. Save to apply.
           </p>
         )}
       </div>
 
       <div className="rounded-xl border border-border/60 bg-card/30 p-4 space-y-2">
-        <p className="text-xs font-semibold text-foreground/80">Guest experience</p>
+        <p className="text-xs font-semibold text-foreground/80">Guest Experience Breakdown</p>
         <p className="text-[11px] text-muted-foreground leading-relaxed">
           {captureMode === "photo"
-            ? "Join link guests start a voice call, then tap Upload / Take photo when the agent asks. Camera is not required up front."
-            : "Join link guests enable camera, then start the call. The agent can describe what is in frame in realtime."}
+            ? "📄 Document Reader Mode (Sarvam Vision): Guest joins a voice call, then taps Upload Document or takes a photo of an invoice/ID when requested. Camera permission is NOT forced upfront."
+            : captureMode === "live"
+            ? "📹 Live Camera Mode (Gemini Live): Guest turns on their camera, then starts the webcall. The agent sees a 2 FPS video stream of whatever is in front of the lens in real-time."
+            : "⚡ Full Hybrid Mode: Guest streams live camera video AND can upload high-resolution document/receipt files during the call."}
         </p>
         <p className="text-[11px] text-muted-foreground leading-relaxed">
-          Prompt tip: tell the agent what to ask for (ID front, invoice, damage photo) and when to call{" "}
-          <code className="text-[10px] font-mono">analyze_image</code>.
+          Prompt tip: Tell the agent what documents to ask for (Aadhaar, Invoice, Bill, ID) and when to invoke{" "}
+          <code className="text-[10px] font-mono text-sky-400 bg-sky-950/40 px-1 py-0.5 rounded">analyze_image</code>.
         </p>
       </div>
 
