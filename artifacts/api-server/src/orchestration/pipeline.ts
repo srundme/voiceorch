@@ -2282,9 +2282,9 @@ export class OrchestrationPipeline implements VoiceSession {
           this.currentLang = detected;
           if (!detected.startsWith("en-")) {
             this.lastNonEnglishLang = detected;
-            // Passive non-English STT switch (2-turn consecutive guard).
+            // Non-English STT switch (immediate on turn 1 so old script doesn't mangled new language).
             if (!this.requestedLangLatch?.startsWith("en-")) {
-              this.maybeSwitchStreamingSttLang(detected);
+              this.maybeSwitchStreamingSttLang(detected, true);
             }
           } else {
             // English STT hot-swap: keep ASR aligned when caller converses in English.
