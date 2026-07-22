@@ -8824,8 +8824,8 @@ export function extractSentences(text: string, minCommaClauseChars = 8): { sente
       // Consume run of consecutive !/?
       while (i + 1 < text.length && (text[i + 1] === '!' || text[i + 1] === '?')) i++;
       const s = text.slice(segStart, i + 1).trim();
-      // Min 2 chars (not 4) so short Indic exclamations like "வணக்கம்!" fire immediately
-      if (s.length >= 2) sentences.push(s);
+      // Min 10 chars (or minCommaClauseChars) so short Indic phrases accumulate smoothly without micro-chunking
+      if (s.length >= Math.min(10, minCommaClauseChars)) sentences.push(s);
       i++;
       while (i < text.length && text[i] === ' ') i++;
       segStart = i;
