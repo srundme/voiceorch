@@ -123,7 +123,7 @@ const CACHE_ENABLED = process.env.GEMINI_CACHE_ENABLED !== "false" && process.en
 // gemini-2.5-flash requires a minimum cached-content size (~1024 tokens); below
 // this a create call errors, so skip caching for tiny prompts. ~4096 chars is a
 // safe floor (well above the token minimum) — real agent prompts are far larger.
-const CACHE_MIN_CHARS = Number(process.env.GEMINI_CACHE_MIN_CHARS) || 4096;
+const CACHE_MIN_CHARS = Number(process.env.GEMINI_CACHE_MIN_CHARS) || 1024;
 // TTL sized to comfortably outlast a typical call; on expiry mid-call the next
 // cached generation fails and we transparently fall back to uncached.
 const CACHE_TTL_SECONDS = Number(process.env.GEMINI_CACHE_TTL_SECONDS) || 900;
