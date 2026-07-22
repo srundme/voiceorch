@@ -1,18 +1,18 @@
 /**
  * Sarvam saaras:v3 STT mode resolution.
  *
- * `codemix` is ideal for Tamil/Hindi/etc. callers who mix English, but on
- * `en-IN` it often transcribes clear English as Indic script — use `transcribe`.
+ * `codemix` is used for ALL languages including en-IN. Callers from across
+ * India speak Tamil, Hindi, Telugu, English, or any mix — the multilingual
+ * toggle defaults to en-IN but the caller's actual language is unpredictable.
+ * `transcribe` mode force-fits non-English audio into English phonemes,
+ * producing garbled output (Hindi → Bengali script, dropped words).
+ * `codemix` handles all Indian languages + English mixing natively on saaras:v3
+ * and works well for pure English too.
  */
 
 export type SarvamSttMode = "transcribe" | "codemix" | "verbatim" | "translit";
 
 const VALID_MODES = new Set<string>(["transcribe", "codemix", "verbatim", "translit"]);
-
-/** Indic languages where codemix handles natural English mixing. */
-const CODEMIX_LANGS = new Set([
-  "ta", "hi", "te", "kn", "ml", "mr", "bn", "gu", "pa", "od", "or",
-]);
 
 export function resolveSarvamSttMode(
   languageCode: string | null | undefined,
@@ -21,8 +21,8 @@ export function resolveSarvamSttMode(
   if (explicitMode && VALID_MODES.has(explicitMode)) {
     return explicitMode as SarvamSttMode;
   }
-  const bare = (languageCode ?? "en-IN").split("-")[0]?.toLowerCase() ?? "en";
-  if (bare === "en") return "transcribe";
-  if (CODEMIX_LANGS.has(bare)) return "codemix";
-  return "transcribe";
+  // Always use codemix — callers are from all over India and may speak any
+  // language regardless of the configured language_code. codemix on saaras:v3
+  // handles pure English, pure Hindi/Tamil, and mixed-language speech correctly.
+  return "codemix";
 }

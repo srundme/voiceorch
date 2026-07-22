@@ -5,16 +5,16 @@ describe("resolveSarvamSttMode", () => {
   it("honours explicit agent override", () => {
     expect(resolveSarvamSttMode("en-IN", "codemix")).toBe("codemix");
     expect(resolveSarvamSttMode("ta-IN", "verbatim")).toBe("verbatim");
+    expect(resolveSarvamSttMode("en-IN", "transcribe")).toBe("transcribe");
   });
 
-  it("defaults en-IN to transcribe (avoids codemix script garbage)", () => {
-    expect(resolveSarvamSttMode("en-IN")).toBe("transcribe");
-    expect(resolveSarvamSttMode("en-US")).toBe("transcribe");
-  });
-
-  it("defaults Indic languages to codemix", () => {
+  it("defaults ALL languages to codemix (callers are multilingual)", () => {
+    expect(resolveSarvamSttMode("en-IN")).toBe("codemix");
+    expect(resolveSarvamSttMode("en-US")).toBe("codemix");
     expect(resolveSarvamSttMode("ta-IN")).toBe("codemix");
     expect(resolveSarvamSttMode("hi-IN")).toBe("codemix");
     expect(resolveSarvamSttMode("te-IN")).toBe("codemix");
+    expect(resolveSarvamSttMode(null)).toBe("codemix");
+    expect(resolveSarvamSttMode(undefined)).toBe("codemix");
   });
 });
