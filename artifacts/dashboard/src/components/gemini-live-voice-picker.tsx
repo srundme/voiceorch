@@ -18,9 +18,9 @@ export function GeminiLiveVoicePicker({
 
   useEffect(() => {
     void fetch("/api/gemini-live/voices")
-      .then((r) => r.ok ? r.json() : null)
-      .then((data: { voices?: Array<{ name: string; style: string }> } | null) => {
-        if (data?.voices?.length) setVoices(data.voices);
+      .then((r) => (r.ok ? (r.json() as Promise<{ voices?: Array<{ name: string; style: string }> }>) : null))
+      .then((data) => {
+        if (data?.voices?.length) setVoices(data.voices as unknown as typeof GEMINI_LIVE_VOICE_PRESETS);
       })
       .catch(() => { /* keep static fallback */ });
   }, []);
