@@ -48,7 +48,7 @@ export default function Slide10() {
             No one checks all nine boxes. We do.
           </h1>
         </div>
-        <span style={{ fontSize: "0.85vw", fontWeight: 600, color: "#4B6CB7", letterSpacing: "0.06em", paddingBottom: "0.3vh" }}>09 / 14</span>
+        <span style={{ fontSize: "0.85vw", fontWeight: 600, color: "#4B6CB7", letterSpacing: "0.06em", paddingBottom: "0.3vh" }}>10 / 15</span>
       </div>
 
       <div style={{ flex: 1, padding: "2vh 6vw 6.5vh 6vw", display: "flex", flexDirection: "column", gap: "1.8vh" }}>
