@@ -359,27 +359,69 @@ async function configureVobizNumberWebhook(
     linkTargets.push({ url: `https://api.vobiz.ai/api/v1/partner/numbers/${encodeURIComponent(digits)}`, headers: partnerH });
     linkTargets.push({ url: `https://api.vobiz.ai/api/v1/partner/numbers/${encodeURIComponent(digits)}/link`, headers: partnerH });
 
+    const formH = { ...h, "Content-Type": "application/x-www-form-urlencoded" };
+
+    // 1. AttachNumber endpoints (Plivo / VoBiz Applications API standard)
+    linkTargets.push({ url: `${VOBIZ_ACCOUNT_BASE}/${authId}/Application/${appId}/AttachNumber/`, headers: h });
+    linkTargets.push({ url: `${VOBIZ_ACCOUNT_BASE}/${authId}/Application/${appId}/AttachNumber/`, headers: formH });
+    linkTargets.push({ url: `${VOBIZ_ACCOUNT_BASE}/${authId}/Application/${appId}/attach_number/`, headers: h });
+    linkTargets.push({ url: `${VOBIZ_ACCOUNT_BASE}/${authId}/Application/${appId}/attach_number/`, headers: formH });
+
+    // Additional payloads for AttachNumber
+    const formPayloads = [
+      `number=${encodeURIComponent(digits)}`,
+      `number=${encodeURIComponent(e164)}`,
+      `numbers=${encodeURIComponent(digits)}`,
+      `numbers=${encodeURIComponent(e164)}`,
+      `app_id=${encodeURIComponent(appId)}`,
+    ];
+
     let linked = false;
-    for (const target of linkTargets) {
-      for (const method of ["POST", "PATCH", "PUT"]) {
-        for (const body of linkPayloads) {
-          try {
-            const resp = await fetch(target.url, { method, headers: target.headers, body });
-            const respText = await resp.text().catch(() => "");
-            if (resp.ok || resp.status === 204) {
-              linked = true;
-              console.info(`configureVobizNumberWebhook: ${method} SUCCESS ${resp.status} ${target.url} -> ${respText.slice(0, 200)}`);
-              break;
-            } else {
-              console.info(`configureVobizNumberWebhook: ${method} ${resp.status} ${target.url} -> ${respText.slice(0, 150)}`);
-            }
-          } catch (linkErr) {
-            console.warn(`configureVobizNumberWebhook: ${method} error ${target.url}:`, linkErr);
+    // Try AttachNumber endpoints first with form and JSON payloads
+    for (const targetUrl of [
+      `${VOBIZ_ACCOUNT_BASE}/${authId}/Application/${appId}/AttachNumber/`,
+      `${VOBIZ_ACCOUNT_BASE}/${authId}/Application/${appId}/attach_number/`,
+    ]) {
+      for (const payload of formPayloads) {
+        try {
+          const resp = await fetch(targetUrl, { method: "POST", headers: formH, body: payload });
+          const text = await resp.text().catch(() => "");
+          if (resp.ok || resp.status === 204) {
+            linked = true;
+            console.info(`configureVobizNumberWebhook: AttachNumber SUCCESS ${resp.status} ${targetUrl} -> ${text.slice(0, 200)}`);
+            break;
+          } else {
+            console.info(`configureVobizNumberWebhook: AttachNumber ${resp.status} ${targetUrl} (${payload}) -> ${text.slice(0, 150)}`);
           }
+        } catch (e) {
+          console.warn("configureVobizNumberWebhook: AttachNumber error:", e);
+        }
+      }
+      if (linked) break;
+    }
+
+    if (!linked) {
+      for (const target of linkTargets) {
+        for (const method of ["POST", "PATCH", "PUT"]) {
+          for (const body of linkPayloads) {
+            try {
+              const resp = await fetch(target.url, { method, headers: target.headers, body });
+              const respText = await resp.text().catch(() => "");
+              if (resp.ok || resp.status === 204) {
+                linked = true;
+                console.info(`configureVobizNumberWebhook: ${method} SUCCESS ${resp.status} ${target.url} -> ${respText.slice(0, 200)}`);
+                break;
+              } else {
+                console.info(`configureVobizNumberWebhook: ${method} ${resp.status} ${target.url} -> ${respText.slice(0, 150)}`);
+              }
+            } catch (linkErr) {
+              console.warn(`configureVobizNumberWebhook: ${method} error ${target.url}:`, linkErr);
+            }
+          }
+          if (linked) break;
         }
         if (linked) break;
       }
-      if (linked) break;
     }
 
     // Brief settle + verify (VoBiz UI "Not linked" is this field).
