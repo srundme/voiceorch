@@ -909,14 +909,25 @@ router.patch("/phone-numbers/:id/assign", requireAuth, async (req, res): Promise
   // Server-side VoBiz link — users must not wait for support to click APP SnapServe.
   let inboundLink: ConfigureVobizResult | null = null;
   if (body.data.agentId) {
-    const { authId, authToken, configured } = await getEffectiveVobizCreds(clerkId);
-    if (configured) {
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, clerkId));
+    const creds = await getEffectiveVobizCreds(clerkId, user?.name, user?.email);
+    if (creds.configured) {
       inboundLink = await configureVobizNumberWebhook(
-        authId!,
-        authToken!,
+        creds.authId!,
+        creds.authToken!,
         row.number,
         deriveWebhookBase(req),
       );
+      // If number wasn't found on subaccount, fallback to master account
+      if (!inboundLink.verified && creds.isSubaccount && process.env["VOBIZ_AUTH_ID"] && process.env["VOBIZ_AUTH_TOKEN"]) {
+        const masterLink = await configureVobizNumberWebhook(
+          process.env["VOBIZ_AUTH_ID"],
+          process.env["VOBIZ_AUTH_TOKEN"],
+          row.number,
+          deriveWebhookBase(req),
+        );
+        if (masterLink.verified) inboundLink = masterLink;
+      }
       req.log.info(
         { number: row.number, userId: clerkId, ...inboundLink },
         "Vobiz inbound link after assign",
@@ -952,11 +963,23 @@ router.post("/phone-numbers/:id/configure-webhook", requireAuth, async (req, res
     .where(and(eq(phoneNumbersTable.id, id), eq(phoneNumbersTable.userId, clerkId)));
   if (!row) { res.status(404).json({ error: "Phone number not found" }); return; }
 
-  const { authId, authToken, configured } = await getEffectiveVobizCreds(clerkId);
-  if (!configured) { res.status(503).json({ error: "Platform carrier credentials not configured." }); return; }
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, clerkId));
+  const creds = await getEffectiveVobizCreds(clerkId, user?.name, user?.email);
+  if (!creds.configured) { res.status(503).json({ error: "Platform carrier credentials not configured." }); return; }
 
   const webhookBase = deriveWebhookBase(req);
-  const result = await configureVobizNumberWebhook(authId!, authToken!, row.number, webhookBase);
+  let result = await configureVobizNumberWebhook(creds.authId!, creds.authToken!, row.number, webhookBase);
+
+  // If subaccount check returned unverified (e.g. for numbers purchased on master before fix), try master credentials
+  if (!result.verified && creds.isSubaccount && process.env["VOBIZ_AUTH_ID"] && process.env["VOBIZ_AUTH_TOKEN"]) {
+    const masterResult = await configureVobizNumberWebhook(
+      process.env["VOBIZ_AUTH_ID"],
+      process.env["VOBIZ_AUTH_TOKEN"],
+      row.number,
+      webhookBase,
+    );
+    if (masterResult.verified) result = masterResult;
+  }
 
   req.log.info({ number: row.number, userId: clerkId, ...result }, "Vobiz inbound webhook reconfigured");
 
