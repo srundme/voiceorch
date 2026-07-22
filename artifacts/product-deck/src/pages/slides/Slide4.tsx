@@ -83,7 +83,7 @@ export default function Slide4() {
             Memory · Language · Compliance — in one platform.
           </h1>
         </div>
-        <span style={{ fontSize: "0.85vw", fontWeight: 600, color: "#4B6CB7", letterSpacing: "0.06em", paddingBottom: "0.3vh" }}>04 / 15</span>
+        <span style={{ fontSize: "0.85vw", fontWeight: 600, color: "#4B6CB7", letterSpacing: "0.06em", paddingBottom: "0.3vh" }}>04 / 16</span>
       </div>
 
       <div style={{ flex: 1, padding: "2vh 6vw 5.5vh 6vw", display: "flex", gap: "2vw" }}>
@@ -129,12 +129,12 @@ export default function Slide4() {
             display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
             padding: "2.4vh 2vw", gap: "1.4vh",
           }}>
-            <div style={{ fontSize: "2.8vw", fontWeight: 900, color: "#FF6F00", lineHeight: 1 }}>10×</div>
+            <div style={{ fontSize: "2.8vw", fontWeight: 900, color: "#FF6F00", lineHeight: 1 }}>2–3×</div>
             <div style={{ fontSize: "1vw", fontWeight: 600, color: "#FFFFFF", textAlign: "center", lineHeight: 1.5 }}>
-              cost advantage over<br />human agents at scale
+              cost advantage,<br />widening at scale
             </div>
             <div style={{ fontSize: "0.88vw", color: "#9FA8DA", textAlign: "center", lineHeight: 1.5 }}>
-              ₹0.50–₹2/min vs.<br />₹8–₹15/min human
+              ₹5/min AI vs.<br />₹8–₹15/min human agent
             </div>
           </div>
           <div style={{
