@@ -47,7 +47,7 @@ export default function Slide14() {
             Annexure 3 — Enterprise Compliance Matrix
           </h1>
         </div>
-        <span style={{ fontSize: "0.85vw", fontWeight: 600, color: "#4B6CB7", letterSpacing: "0.06em", paddingBottom: "0.3vh" }}>15 / 15</span>
+        <span style={{ fontSize: "0.85vw", fontWeight: 600, color: "#4B6CB7", letterSpacing: "0.06em", paddingBottom: "0.3vh" }}>16 / 16</span>
       </div>
 
       <div style={{ flex: 1, padding: "2.8vh 6vw 2vh 6vw", display: "flex", flexDirection: "column", gap: "2vh" }}>
