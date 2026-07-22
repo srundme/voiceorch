@@ -9,7 +9,7 @@ import {
   kycAuditLogsTable,
 } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
-import { encryptKey } from "../lib/crypto.js";
+import { encryptKey, decryptKey } from "../lib/crypto.js";
 import { GetKycStatusResponse } from "@workspace/api-zod";
 import { logger } from "../lib/logger.js";
 
@@ -122,19 +122,23 @@ async function withRetry<T>(
 
 /* ── Vobiz API calls ─────────────────────────────────────────────────────── */
 
-interface VobizCreateAccountResponse {
-  auth_id:    string;
-  auth_token: string;
-  name:       string;
-  email:      string;
-  status:     string;
-}
-
-class VobizAccountExistsError extends Error {
-  constructor(public readonly email: string) {
-    super(`VoBiz account already exists for ${email}`);
+export class VobizAccountExistsError extends Error {
+  constructor(email: string) {
+    super(`Vobiz sub-account already exists for email: ${email}`);
     this.name = "VobizAccountExistsError";
   }
+}
+
+interface VobizCreateAccountResponse {
+  auth_id?: string;
+  auth_token?: string;
+  name?: string;
+  email?: string;
+  status?: string;
+  account?: {
+    auth_id: string;
+    auth_token: string;
+  };
 }
 
 async function createVobizSubAccount(
@@ -165,7 +169,7 @@ async function createVobizSubAccount(
               auth_id: data.auth_id,
               auth_token: data.auth_token,
             },
-          } as VobizCreateAccountResponse;
+          } as unknown as VobizCreateAccountResponse;
         }
       }
     } catch (e) {
@@ -186,6 +190,7 @@ async function createVobizSubAccount(
     const err = await resp.text();
     throw new Error(`Vobiz sub-account creation failed (${resp.status}): ${err}`);
   }
+  return (await resp.json()) as VobizCreateAccountResponse;
 }
 
 import {
@@ -254,7 +259,7 @@ export async function ensureVobizSubAccount(
     .insert(vobizAccountsTable)
     .values({
       userId: clerkId,
-      vobizAuthId: vobizAccount.auth_id,
+      vobizAuthId: vobizAccount.auth_id ?? "",
       vobizAuthTokenEncrypted: encryptKey(tokenToEncrypt),
       kycStatus: "pending",
     })
@@ -485,8 +490,8 @@ router.post("/kyc/start", requireAuth, async (req, res): Promise<void> => {
       .insert(vobizAccountsTable)
       .values({
         userId:                  clerkId,
-        vobizAuthId:             vobizAccount.auth_id,
-        vobizAuthTokenEncrypted: encryptKey(vobizAccount.auth_token),
+        vobizAuthId:             vobizAccount.auth_id ?? "",
+        vobizAuthTokenEncrypted: encryptKey(vobizAccount.auth_token ?? ""),
         kycStatus:               "pending",
       })
       .returning();

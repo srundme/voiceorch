@@ -43,6 +43,7 @@ import {
 export { canonicalizeCallerKey, isRealPhoneNumber, humanPhone, resolveCallerKey };
 export type { CallDirection };
 import { and, eq, ne, desc, isNull, inArray, sql } from "drizzle-orm";
+import { normalizeSpokenEmail } from "./transcriptQuality.js";
 import { createHash } from "node:crypto";
 import type { ConversationTurn } from "./types.js";
 import type { createLLMAdapter } from "./adapters/llm/index.js";
@@ -386,31 +387,34 @@ export async function loadCallerContext(
   }
 
   // Self-heal mangled email facts on read (e.g., "ar.right.jimel.dot_five@gmail.com" from old pre-normalizer calls).
-  const sanitizedFacts = currentFacts.map((f) => {
-    if (f.key === "email" && f.value) {
-      let cleaned = f.value
-        .replace(/ar\.right/gi, "@")
-        .replace(/dot_five/gi, "5")
-        .replace(/\.?jimel\.?/gi, "gmail");
-      cleaned = normalizeSpokenEmail(cleaned);
-      const isValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleaned);
-      if (!isValid) {
-        logger.warn(
-          { agentId, phoneNumber, invalidEmail: f.value },
-          "Caller memory: discarded invalid stored email fact on read (self-heal)",
-        );
-        return null;
+  const sanitizedFacts = currentFacts
+    .map((f) => {
+      if (!f) return null;
+      if (f.key === "email" && f.value) {
+        let cleaned = f.value
+          .replace(/ar\.right/gi, "@")
+          .replace(/dot_five/gi, "5")
+          .replace(/\.?jimel\.?/gi, "gmail");
+        cleaned = normalizeSpokenEmail(cleaned);
+        const isValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleaned);
+        if (!isValid) {
+          logger.warn(
+            { agentId, phoneNumber, invalidEmail: f.value },
+            "Caller memory: discarded invalid stored email fact on read (self-heal)",
+          );
+          return null;
+        }
+        if (cleaned !== f.value) {
+          logger.info(
+            { agentId, phoneNumber, oldEmail: f.value, healedEmail: cleaned },
+            "Caller memory: self-healed stored email fact on read",
+          );
+          return { ...f, value: cleaned };
+        }
       }
-      if (cleaned !== f.value) {
-        logger.info(
-          { agentId, phoneNumber, oldEmail: f.value, healedEmail: cleaned },
-          "Caller memory: self-healed stored email fact on read",
-        );
-        return { ...f, value: cleaned };
-      }
-    }
-    return f;
-  }).filter((f): f is CallerFact => f !== null);
+      return f;
+    })
+    .filter((f): f is NonNullable<typeof f> => f !== null);
 
   // ── Resume support: when the previous call ended abruptly (dropped within the
   //    window), load the tail of that last episode so the agent can pick the

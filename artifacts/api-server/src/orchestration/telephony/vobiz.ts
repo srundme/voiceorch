@@ -316,7 +316,7 @@ export async function handleVobizWebSocket(
         if (sessionId && msg.mark?.name) {
           const session = getSession(sessionId);
           if (session) {
-            session.pipeline.onAudioMarkAck(msg.mark.name);
+            (session as any).pipeline?.onAudioMarkAck?.(msg.mark.name);
           }
         }
         break;
