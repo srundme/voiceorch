@@ -57,11 +57,12 @@ import { FILLER_SEQUENCE_ID, InterruptionManager } from "./interruption-manager.
 import { logger } from "../lib/logger.js";
 import { format, addMinutes } from "date-fns";
 import { toZonedTime, formatInTimeZone } from "date-fns-tz";
-import { db, bookingsTable, eventTypesTable, schedulingCalendarsTable, agentsTable, platformSettingsTable, whatsappConnectionsTable } from "@workspace/db";
+import { db, bookingsTable, eventTypesTable, schedulingCalendarsTable, agentsTable, platformSettingsTable, whatsappConnectionsTable, visionIdentitiesTable, visionKycSessionsTable } from "@workspace/db";
 import { sendVobizWhatsappMessage } from "../services/vobiz-whatsapp-service.js";
 import { scheduleCallbackRequested } from "../services/autoRedial.js";
 import { resolveCallbackTime } from "../lib/tz-datetime.js";
 import { executeAnalyzeImage } from "../services/vision-analyze.js";
+import { VisionKycEngine } from "../services/vision-kyc-engine.js";
 import {
   CallVisionMemory,
   extractKnownCallerNameFromPrompt,
@@ -5042,11 +5043,67 @@ export class OrchestrationPipeline implements VoiceSession {
 
     logger.info(
       { callId: this.config.callId, targetName, verificationType },
-      "Executing Verify Visual Identity tool",
+      "Executing Verify Visual Identity tool with VisionKycEngine",
     );
 
-    const callerName = this.getVisionPrimaryName?.() || targetName;
-    return `Visual identity verification completed. Camera video feed & live observations match profile for ${callerName} (Confidence: 96%). Tell the caller their visual identity has been verified.`;
+    const callerPhone = this.config.callerPhone || "";
+    const primaryName = this.getVisionPrimaryName?.() || targetName;
+
+    // Fetch stored identity from DB if phone matches
+    let storedIdentity = null;
+    if (callerPhone) {
+      try {
+        const [found] = await db
+          .select()
+          .from(visionIdentitiesTable)
+          .where(eq(visionIdentitiesTable.phone, callerPhone));
+        if (found) storedIdentity = found;
+      } catch (err) {
+        logger.error({ err }, "Error fetching vision identity for phone");
+      }
+    }
+
+    // Get live frames captured from stream
+    const liveFrameData = this.visionMemory?.getLatestFrame?.()?.data || null;
+    const documentFrameData = this.visionMemory?.getLatestDocumentFrame?.()?.data || null;
+
+    const res = await VisionKycEngine.verify({
+      storedFaceBase64: storedIdentity?.facePhotoData || null,
+      liveFaceBase64: liveFrameData,
+      documentBase64: documentFrameData || storedIdentity?.panCardData || null,
+      expectedName: storedIdentity?.name || primaryName,
+      expectedPanNumber: storedIdentity?.panNumber || null,
+    });
+
+    // Write audit session log
+    try {
+      await db.insert(visionKycSessionsTable).values({
+        userId: this.agent.userId || "system",
+        callId: this.config.callId,
+        identityId: storedIdentity?.id || null,
+        agentId: this.agent.id,
+        callerPhone: callerPhone || "webcall",
+        status: res.status,
+        faceCaptureData: liveFrameData,
+        documentCaptureData: documentFrameData || storedIdentity?.panCardData || null,
+        faceMatchScore: res.faceMatchScore,
+        faceMatchPass: res.faceMatchPass,
+        documentOcrName: res.documentOcrName,
+        documentOcrNumber: res.documentOcrNumber,
+        documentOcrDob: res.documentOcrDob,
+        documentNameMatch: res.documentNameMatch,
+        documentFaceMatch: res.documentFaceMatch,
+        documentAuthentic: res.documentAuthentic,
+        documentAuthenticityScore: res.documentAuthenticityScore,
+        overallScore: res.overallScore,
+        summary: res.summary,
+        completedAt: new Date(),
+      });
+    } catch (dbErr) {
+      logger.error({ dbErr }, "Failed to write vision_kyc_session log");
+    }
+
+    return res.summary + " Speak this verification result clearly to the caller.";
   }
 
   private async executeExtractDocumentFields(
@@ -5201,6 +5258,7 @@ export class OrchestrationPipeline implements VoiceSession {
     this.lastCameraFrameAt = now;
     const data = jpegBase64.replace(/^data:[^;]+;base64,/, "");
     if (!data || data.length < 200) return;
+    this.visionMemory?.setLatestFrame(data, mimeType);
     void this.ingestCameraFrame(data, mimeType);
   }
 

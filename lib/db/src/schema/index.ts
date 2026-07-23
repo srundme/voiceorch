@@ -67,3 +67,4 @@ export * from "./call-media";
 export * from "./webcall-links";
 export * from "./squads";
 export * from "./voiceathon-events";
+export * from "./vision-kyc";

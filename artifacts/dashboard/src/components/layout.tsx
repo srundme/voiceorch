@@ -89,6 +89,7 @@ const NAV_PRIMARY = [
   { name: "WhatsApp",        href: "/app/whatsapp",        icon: MessageCircle },
   { name: "Scheduling",      href: "/app/scheduling",      icon: CalendarDays },
   { name: "Memory / CRM",    href: "/app/memory",          icon: Brain },
+  { name: "Vision KYC",      href: "/app/vision-kyc",      icon: ShieldCheck },
   { name: "Call Logs",       href: "/app/calls",           icon: Phone },
   { name: "Callbacks",       href: "/app/callbacks",       icon: PhoneMissed },
   { name: "Transfers",       href: "/app/transfers",       icon: ArrowRightLeft },
