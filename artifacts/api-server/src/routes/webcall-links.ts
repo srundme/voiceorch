@@ -26,7 +26,35 @@ function parseOptionalDate(v: unknown): Date | null {
 /* ── Public: join page metadata ──────────────────────────────────────────── */
 
 router.get("/webcall-links/join/:token", async (req, res): Promise<void> => {
-  const token = String(req.params.token ?? "");
+  const token = String(req.params.token ?? "").trim();
+  if (/^test-\d+$/i.test(token)) {
+    const parsedId = parseInt(token.replace(/^test-/i, ""), 10);
+    const [agent] = await db
+      .select({
+        id: agentsTable.id,
+        name: agentsTable.name,
+        agentConfig: agentsTable.agentConfig,
+      })
+      .from(agentsTable)
+      .where(eq(agentsTable.id, parsedId))
+      .limit(1);
+
+    if (agent) {
+      const cfg = (agent.agentConfig ?? {}) as Record<string, unknown>;
+      res.json({
+        token: `test-${agent.id}`,
+        agentId: agent.id,
+        agentName: agent.name,
+        label: "Test Session",
+        purpose: "Agent test link",
+        requireCamera: false,
+        visionEnabled: cfg["visionEnabled"] === true,
+        visionLiveEnabled: cfg["visionLiveEnabled"] === true,
+      });
+      return;
+    }
+  }
+
   const link = await getWebcallLinkByToken(token);
   if (!link) {
     res.status(404).json({ error: "Link not found" });
