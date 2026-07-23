@@ -210,9 +210,10 @@ export function WebcallPanel({
     timerRef.current = window.setInterval(() => {
       const ws = wsRef.current;
       const video = getEl();
-      if (!ws || ws.readyState !== WebSocket.OPEN || !video || video.readyState < 2) return;
-      const w = video.videoWidth || 320;
-      const h = video.videoHeight || 240;
+      if (!ws || ws.readyState !== WebSocket.OPEN || !video) return;
+      const w = video.videoWidth || (video as any).clientWidth || 640;
+      const h = video.videoHeight || (video as any).clientHeight || 480;
+      if (w <= 0 || h <= 0) return;
 
       // ⚡ ABR Video Stream Pipeline: 480p live stream vs 1080p OCR photo boost
       const targetMaxW = isHighResBoost ? 1920 : 640;
@@ -501,6 +502,9 @@ export function WebcallPanel({
               callIdRef.current = (msg as { callId: number }).callId;
             }
             setState("live");
+            if (cameraAllowed && !cameraOn) {
+              void startCamera();
+            }
             break;
           case "transcript":
             if (msg.speaker && msg.text) {
