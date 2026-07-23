@@ -4830,13 +4830,19 @@ export class OrchestrationPipeline implements VoiceSession {
       return await this.executeSendWhatsapp(tool, args);
     } else if (tool.type === "send_vision_email" || tool.type === "send_email" || (tool as any).name === "send_vision_email") {
       const toEmail = String(args["to_email"] ?? args["email"] ?? "").trim();
-      const subject = String(args["subject"] ?? "").trim();
+      const customerName = String(args["customer_name"] ?? args["name"] ?? "").trim();
+      const subject = String(args["subject"] ?? (tool as any).emailSubject ?? "").trim();
+      const bodyTemplate = String(args["body_template"] ?? (tool as any).emailBodyTemplate ?? "").trim();
       const meetingLink = String(args["meeting_link"] ?? "").trim();
+      const invoiceNo = String(args["invoice_no"] ?? args["order_id"] ?? "").trim();
       return await sharedExecuteNativeSendVisionEmail({
         agentId: this.agent.id,
         toEmail,
+        customerName: customerName || undefined,
         subject: subject || undefined,
+        bodyTemplate: bodyTemplate || undefined,
         meetingLink: meetingLink || undefined,
+        invoiceNo: invoiceNo || undefined,
       });
     } else if (tool.type === "verify_visual_identity") {
       return await this.executeVerifyVisualIdentity(tool, args);

@@ -2084,27 +2084,47 @@ export async function executeNativeSendVisionEmail(
   opts: {
     agentId: number;
     toEmail: string;
+    customerName?: string;
     subject?: string;
+    bodyTemplate?: string;
     meetingLink?: string;
+    invoiceNo?: string;
   }
 ): Promise<string> {
-  const { agentId, toEmail, subject, meetingLink } = opts;
+  const { agentId, toEmail, customerName = "Valued Customer", subject, bodyTemplate, meetingLink, invoiceNo = "" } = opts;
   if (!toEmail || !toEmail.includes("@")) {
     return "Error: Invalid or missing email address.";
   }
   const link = meetingLink || `https://app.snapserve.ai/join/test-${agentId}`;
-  const mailSubject = subject || "Action Required: Your Vision AI Inspection Session Link";
+
+  let mailSubject = subject || "Action Required: Your Vision AI Inspection Link";
+  mailSubject = mailSubject
+    .replace(/\{customer_name\}/gi, customerName)
+    .replace(/\{vision_link\}/gi, link)
+    .replace(/\{invoice_no\}/gi, invoiceNo);
+
+  let rawBody = bodyTemplate || "Hi {customer_name}, please click the link below to verify your item live on camera with our AI Inspector: {vision_link}";
+  rawBody = rawBody
+    .replace(/\{customer_name\}/gi, customerName)
+    .replace(/\{vision_link\}/gi, link)
+    .replace(/\{invoice_no\}/gi, invoiceNo);
+
   const htmlContent = `
-    <div style="font-family: sans-serif; padding: 20px; color: #333;">
-      <h2>Vision AI Camera Inspection Session</h2>
-      <p>Hello,</p>
-      <p>Please click the button below to join your live camera & document verification session:</p>
-      <p style="margin: 25px 0;">
-        <a href="${link}" style="background-color: #0284c7; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold;">
-          Join Vision AI Inspection
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; color: #1e293b; background-color: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0;">
+      <div style="margin-bottom: 20px;">
+        <h2 style="font-size: 18px; font-weight: 700; color: #0f172a; margin: 0 0 8px 0;">Vision AI Verification Link</h2>
+        <p style="font-size: 14px; color: #475569; line-height: 1.6; margin: 0;">${rawBody.replace(/\n/g, "<br/>")}</p>
+      </div>
+
+      <div style="margin: 24px 0;">
+        <a href="${link}" target="_blank" style="display: inline-block; background-color: #0284c7; color: #ffffff; font-size: 14px; font-weight: 600; padding: 12px 24px; text-decoration: none; border-radius: 8px; box-shadow: 0 2px 4px rgba(2, 132, 199, 0.2);">
+          Join Vision Camera Inspection →
         </a>
-      </p>
-      <p style="font-size: 12px; color: #666;">Or copy and paste this link into your browser: ${link}</p>
+      </div>
+
+      <div style="border-top: 1px solid #f1f5f9; padding-top: 16px; margin-top: 24px; font-size: 12px; color: #94a3b8;">
+        <p style="margin: 0;">Direct Link: <a href="${link}" style="color: #0284c7;">${link}</a></p>
+      </div>
     </div>
   `;
 
