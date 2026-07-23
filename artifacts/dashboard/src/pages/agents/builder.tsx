@@ -2120,26 +2120,40 @@ function VisionTab({ form, agentId }: { form: any; agentId: number | undefined }
     }
   };
 
-  const modes: { id: VisionCaptureMode; label: string; badge: string; desc: string; icon: React.ReactNode }[] = [
+  const modes: {
+    id: VisionCaptureMode;
+    label: string;
+    sublabel: string;
+    useCaseBadge: string;
+    desc: string;
+    bestFor: string;
+    icon: React.ReactNode;
+  }[] = [
     {
       id: "photo",
-      label: "Document & Image OCR",
-      badge: "Sarvam Vision",
-      desc: "Guest uploads/photos documents, Aadhaar IDs, invoices, or receipts mid-call. Analyzed using Sarvam Vision OCR & document extraction.",
+      label: "Document & Photo Uploads",
+      sublabel: "Snap & Send Mid-Call",
+      useCaseBadge: "Invoices, Receipts, IDs",
+      desc: "Caller uploads or takes a photo of a document/receipt mid-call. Analyzed instantly via Vision OCR. Camera permission is NOT forced upfront.",
+      bestFor: "Best for: Phone Calls, WhatsApp & Uploading Bills",
       icon: <Upload className="h-4 w-4 text-emerald-400" />,
     },
     {
       id: "live",
-      label: "Live Camera Inspection",
-      badge: "Gemini Live WebRTC",
-      desc: "Real-time webcam stream during a webcall. The agent continuously sees what is in frame for live physical inspections.",
+      label: "Live Video & Screen Share",
+      sublabel: "Continuous Realtime Stream",
+      useCaseBadge: "Webcam & Screen Share",
+      desc: "Real-time webcam or screen stream during a webcall. Agent sees 2 FPS video stream continuously for live inspection or IT helpdesk.",
+      bestFor: "Best for: Screen Sharing, IT Support & Damage Checks",
       icon: <Camera className="h-4 w-4 text-sky-400" />,
     },
     {
       id: "both",
-      label: "Full Multimodal Vision",
-      badge: "Sarvam + Gemini",
-      desc: "Real-time camera feed during calls AND mid-call document/receipt file uploads.",
+      label: "Full Hybrid Multimodal",
+      sublabel: "Recommended for Video KYC",
+      useCaseBadge: "Full KYC Suite",
+      desc: "Real-time video camera feed AND mid-call high-resolution document file uploads active simultaneously.",
+      bestFor: "Best for: Video KYC, Face Matching & Document OCR",
       icon: <Eye className="h-4 w-4 text-purple-400" />,
     },
   ];
@@ -2147,12 +2161,13 @@ function VisionTab({ form, agentId }: { form: any; agentId: number | undefined }
   return (
     <div className="p-5 sm:p-6 space-y-8 max-w-3xl">
       <div>
-        <div className="mb-3">
+        <div className="mb-4">
           <h3 className="text-sm font-semibold mb-0.5">Visual Capabilities & Vision Mode</h3>
           <p className="text-xs text-muted-foreground">
-            Choose whether your agent reads uploaded documents/invoices (Sarvam Vision OCR) or inspects real-time camera video (Gemini Live).
+            Select how your AI agent perceives visual information during calls. Choose based on your business workflow.
           </p>
         </div>
+
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {modes.map((m) => {
             const active = captureMode === m.id;
@@ -2162,30 +2177,57 @@ function VisionTab({ form, agentId }: { form: any; agentId: number | undefined }
                 type="button"
                 onClick={() => applyCaptureMode(m.id)}
                 className={cn(
-                  "text-left rounded-xl border p-3.5 transition-colors relative flex flex-col justify-between",
+                  "text-left rounded-xl border p-4 transition-all relative flex flex-col justify-between space-y-3",
                   active
-                    ? "border-foreground/40 bg-card shadow-sm ring-1 ring-foreground/20"
+                    ? "border-sky-500/50 bg-sky-500/5 shadow-md ring-1 ring-sky-500/30"
                     : "border-border/50 bg-card/20 hover:border-border hover:bg-card/40",
                 )}
               >
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <div className={cn("h-8 w-8 rounded-lg flex items-center justify-center", active ? "bg-foreground/10 text-foreground" : "bg-muted/40 text-muted-foreground")}>
+                    <div className={cn("h-9 w-9 rounded-xl flex items-center justify-center border", active ? "bg-sky-500/20 text-sky-400 border-sky-500/40" : "bg-muted/40 text-muted-foreground border-border/40")}>
                       {m.icon}
                     </div>
-                    <span className="text-[9px] font-mono font-medium px-1.5 py-0.5 rounded border border-white/10 bg-white/5 text-muted-foreground">
-                      {m.badge}
+                    <span className={cn("text-[9px] font-semibold px-2 py-0.5 rounded-full border", active ? "bg-sky-500/20 text-sky-300 border-sky-500/40" : "bg-muted/30 text-muted-foreground border-border/40")}>
+                      {m.useCaseBadge}
                     </span>
                   </div>
-                  <p className="text-xs font-semibold text-foreground/90">{m.label}</p>
-                  <p className="text-[10px] text-muted-foreground/70 leading-relaxed mt-1">{m.desc}</p>
+                  <p className="text-xs font-bold text-foreground">{m.label}</p>
+                  <p className="text-[10px] font-medium text-sky-400/90 mb-1">{m.sublabel}</p>
+                  <p className="text-[10px] text-muted-foreground leading-relaxed">{m.desc}</p>
+                </div>
+
+                <div className="pt-2 border-t border-border/30">
+                  <span className="text-[9.5px] font-semibold text-foreground/80 block">{m.bestFor}</span>
                 </div>
               </button>
             );
           })}
         </div>
+
+        {/* Mode Selector Decision Guide */}
+        <div className="mt-4 rounded-xl border border-border/60 bg-muted/20 p-4 space-y-2 text-xs">
+          <div className="flex items-center gap-1.5 font-semibold text-foreground">
+            <Sparkles className="h-3.5 w-3.5 text-sky-400" /> Which mode should I choose for my agent?
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1 text-[11px] text-muted-foreground">
+            <div className="p-2.5 rounded-lg border border-border/40 bg-card/30 space-y-1">
+              <span className="font-semibold text-emerald-400 block">📄 Document &amp; Photo</span>
+              <p className="leading-snug">Choose when callers only need to photo an Invoice, Electricity Bill, or Receipt mid-call. No live camera required.</p>
+            </div>
+            <div className="p-2.5 rounded-lg border border-border/40 bg-card/30 space-y-1">
+              <span className="font-semibold text-sky-400 block">📹 Live Camera &amp; Screen</span>
+              <p className="leading-snug">Choose for Screen Sharing, IT Helpdesk, or inspecting physical damage (vehicles/appliances) live on camera.</p>
+            </div>
+            <div className="p-2.5 rounded-lg border border-border/40 bg-card/30 space-y-1">
+              <span className="font-semibold text-purple-400 block">👁️ Full Multimodal Hybrid</span>
+              <p className="leading-snug">Choose for Video KYC! Combines live face camera feed with high-res PAN/Aadhaar document uploads.</p>
+            </div>
+          </div>
+        </div>
+
         {(captureMode === "live" || captureMode === "both") && !isGeminiLive && (
-          <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-2 flex items-center gap-1.5">
+          <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-3 flex items-center gap-1.5">
             <span>⚠️</span> Live camera inspection requires Gemini Live — selecting this mode switches the voice stack automatically. Save to apply.
           </p>
         )}
