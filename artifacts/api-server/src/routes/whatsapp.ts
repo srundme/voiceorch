@@ -42,6 +42,7 @@ function formatConnection(row: typeof whatsappConnectionsTable.$inferSelect, opt
     vobizPhone: row.vobizPhone,
     postCallTemplate: row.postCallTemplate,
     midCallEnabled: row.midCallEnabled,
+    rules: row.rules ?? [],
     inboundToken: row.inboundToken,
     inboundWebhookUrl: inboundUrl(row.inboundToken),
     outboundWebhookUrl: row.outboundWebhookUrl,
@@ -183,6 +184,7 @@ router.post("/whatsapp/connections", requireAuth, async (req, res): Promise<void
     vobizPhone: typeof body.vobizPhone === "string" ? body.vobizPhone.trim() : null,
     postCallTemplate: typeof body.postCallTemplate === "string" ? body.postCallTemplate.trim() : null,
     midCallEnabled: typeof body.midCallEnabled === "boolean" ? body.midCallEnabled : true,
+    rules: Array.isArray((body as any).rules) ? (body as any).rules : [],
     inboundToken,
     outboundWebhookUrl: body.outboundWebhookUrl?.trim() || null,
     outboundSecret,
@@ -210,6 +212,7 @@ router.patch("/whatsapp/connections/:id", requireAuth, async (req, res): Promise
   if (typeof body["vobizPhone"] === "string" || body["vobizPhone"] === null) updates.vobizPhone = body["vobizPhone"] ? String(body["vobizPhone"]).trim() : null;
   if (typeof body["postCallTemplate"] === "string" || body["postCallTemplate"] === null) updates.postCallTemplate = body["postCallTemplate"] ? String(body["postCallTemplate"]).trim() : null;
   if (typeof body["midCallEnabled"] === "boolean") updates.midCallEnabled = body["midCallEnabled"];
+  if (Array.isArray(body["rules"])) updates.rules = body["rules"];
   if (typeof body["outboundWebhookUrl"] === "string" || body["outboundWebhookUrl"] === null) {
     updates.outboundWebhookUrl = typeof body["outboundWebhookUrl"] === "string"
       ? body["outboundWebhookUrl"].trim() || null

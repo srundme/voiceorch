@@ -31,6 +31,7 @@ type WaConnection = {
   vobizPhone: string | null;
   postCallTemplate: string | null;
   midCallEnabled: boolean;
+  rules?: WhatsappRule[];
   inboundToken: string;
   inboundWebhookUrl: string;
   outboundWebhookUrl: string | null;
@@ -222,7 +223,7 @@ export default function WhatsAppPage() {
   const [vobizChannelId, setVobizChannelId] = useState("");
   const [vobizPhone, setVobizPhone] = useState("");
   const [postCallTemplate, setPostCallTemplate] = useState("");
-  const [midCallEnabled, setMidCallEnabled] = useState(true);
+  const [rules, setRules] = useState<WhatsappRule[]>([]);
   const [outboundUrl, setOutboundUrl] = useState("");
   const [requestCall, setRequestCall] = useState(true);
   const [postCall, setPostCall] = useState(true);
@@ -237,6 +238,7 @@ export default function WhatsAppPage() {
     setVobizPhone("");
     setPostCallTemplate("");
     setMidCallEnabled(true);
+    setRules([]);
     setOutboundUrl("");
     setRequestCall(true);
     setPostCall(true);
@@ -255,6 +257,7 @@ export default function WhatsAppPage() {
           vobizPhone: vobizPhone.trim() || null,
           postCallTemplate: postCallTemplate.trim() || null,
           midCallEnabled,
+          rules,
           outboundWebhookUrl: outboundUrl.trim() || null,
           requestCallEnabled: requestCall,
           postCallEnabled: postCall,
@@ -556,6 +559,108 @@ export default function WhatsAppPage() {
                     <p className="text-[11px] text-muted-foreground">Allows AI to send links/brochures to caller during the call</p>
                   </div>
                   <Switch checked={midCallEnabled} onCheckedChange={setMidCallEnabled} />
+                </div>
+
+                <div className="pt-2 border-t border-border/50">
+                  <div className="flex items-center justify-between mb-2">
+                    <div>
+                      <Label className="text-xs font-semibold text-foreground">Dynamic Template Triggers ({rules.length})</Label>
+                      <p className="text-[11px] text-muted-foreground">Trigger specific templates mid-call or post-call based on intent</p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={() => {
+                        const newRule: WhatsappRule = {
+                          id: `rule_${Date.now()}`,
+                          name: "Send Store Location",
+                          triggerType: "mid_call_intent",
+                          condition: "caller asks for address or location",
+                          templateName: "location_map_v1",
+                          enabled: true,
+                        };
+                        setRules([...rules, newRule]);
+                      }}
+                    >
+                      <Plus className="w-3 h-3 mr-1" /> Add Rule
+                    </Button>
+                  </div>
+
+                  {rules.length > 0 && (
+                    <div className="space-y-2.5 max-h-52 overflow-y-auto pr-1">
+                      {rules.map((rule, idx) => (
+                        <div key={rule.id} className="p-2.5 bg-card/60 rounded-md border border-border/60 text-xs space-y-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <Input
+                              className="h-7 text-xs font-medium bg-background"
+                              value={rule.name}
+                              placeholder="Rule Name (e.g. Send Payment Link)"
+                              onChange={(e) => {
+                                const next = [...rules];
+                                next[idx]!.name = e.target.value;
+                                setRules(next);
+                              }}
+                            />
+                            <button
+                              type="button"
+                              className="text-destructive hover:text-red-400 p-1"
+                              onClick={() => setRules(rules.filter((_, i) => i !== idx))}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <Label className="text-[10px] text-muted-foreground">Trigger Type</Label>
+                              <select
+                                className="mt-0.5 w-full h-7 rounded border border-input bg-background px-1.5 text-[11px]"
+                                value={rule.triggerType}
+                                onChange={(e) => {
+                                  const next = [...rules];
+                                  next[idx]!.triggerType = e.target.value as any;
+                                  setRules(next);
+                                }}
+                              >
+                                <option value="mid_call_intent">⚡ Live Mid-Call Intent</option>
+                                <option value="post_call_disposition">📊 Post-Call Disposition</option>
+                                <option value="post_call_transcript_ai">🤖 Post-Call AI Analysis</option>
+                              </select>
+                            </div>
+                            <div>
+                              <Label className="text-[10px] text-muted-foreground">Meta Template Name</Label>
+                              <Input
+                                className="mt-0.5 h-7 text-[11px] bg-background"
+                                placeholder="e.g. location_map_v1"
+                                value={rule.templateName}
+                                onChange={(e) => {
+                                  const next = [...rules];
+                                  next[idx]!.templateName = e.target.value;
+                                  setRules(next);
+                                }}
+                              />
+                            </div>
+                          </div>
+
+                          <div>
+                            <Label className="text-[10px] text-muted-foreground">Condition / Intent Description</Label>
+                            <Input
+                              className="mt-0.5 h-7 text-[11px] bg-background"
+                              placeholder="e.g. caller asks for payment link or outcome is Booked"
+                              value={rule.condition}
+                              onChange={(e) => {
+                                const next = [...rules];
+                                next[idx]!.condition = e.target.value;
+                                setRules(next);
+                              }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </>
             ) : (

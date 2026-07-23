@@ -132,13 +132,33 @@ export async function dispatchWhatsappCallEnded(
         if (meetLink) {
           textMsg += `\n\nBooking confirmed! Meeting link: ${meetLink}`;
         }
+        let chosenTemplate = conn.postCallTemplate || undefined;
+
+        // Evaluate post-call rules (disposition and transcript AI rules)
+        const postRules = (conn.rules ?? []).filter((r) => r.enabled && (r.triggerType === "post_call_disposition" || r.triggerType === "post_call_transcript_ai"));
+        const dispositionStr = JSON.stringify(opts?.dispositionResult ?? call.dispositionResult ?? "").toLowerCase();
+        const summaryStr = (opts?.callSummary ?? "").toLowerCase();
+
+        const matchedRule = postRules.find((r) => {
+          const cond = (r.condition || "").toLowerCase();
+          return (cond && (dispositionStr.includes(cond) || summaryStr.includes(cond)));
+        }) || postRules[0];
+
+        if (matchedRule) {
+          if (matchedRule.templateName) chosenTemplate = matchedRule.templateName;
+          if (matchedRule.staticVars && Object.keys(matchedRule.staticVars).length > 0) {
+            const extra = Object.entries(matchedRule.staticVars).map(([k, v]) => `${k}: ${v}`).join("\n");
+            textMsg += `\n\n${extra}`;
+          }
+        }
+
         const res = await sendVobizWhatsappMessage({
           userId: call.userId,
           toPhone: phone,
           channelId: conn.vobizChannelId,
           wabaId: conn.vobizWabaId,
           text: textMsg,
-          templateName: conn.postCallTemplate || undefined,
+          templateName: chosenTemplate,
         });
 
         if (!res.success) {

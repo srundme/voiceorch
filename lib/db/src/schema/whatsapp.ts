@@ -4,6 +4,17 @@ import {
 import { agentsTable } from "./agents";
 import { campaignsTable } from "./campaigns";
 
+export interface WhatsappRule {
+  id: string;
+  name: string;
+  triggerType: "mid_call_intent" | "post_call_disposition" | "post_call_transcript_ai";
+  condition: string;
+  templateName: string;
+  templateLanguage?: string;
+  staticVars?: Record<string, string>;
+  enabled: boolean;
+}
+
 /**
  * WhatsApp webhook connection (provider-agnostic).
  * - Inbound: BSP / Zapier POSTs button clicks → SnapServe dials the AI agent.
@@ -52,6 +63,8 @@ export const whatsappConnectionsTable = pgTable("whatsapp_connections", {
   postCallTemplate: text("post_call_template"),
   /** Enable mid-call agent tool execution (`send_whatsapp`) */
   midCallEnabled: boolean("mid_call_enabled").notNull().default(true),
+  /** Dynamic WhatsApp rules (mid-call intent triggers + post-call AI disposition/transcript rules) */
+  rules: jsonb("rules").$type<WhatsappRule[]>().notNull().default([]),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 }, (t) => [

@@ -4960,14 +4960,39 @@ export class OrchestrationPipeline implements VoiceSession {
       return "error: WhatsApp integration is not enabled for this agent";
     }
 
+    let effectiveMessage = message;
+    let effectiveTemplate = templateName;
+
+    // Check if any configured mid-call rule matches
+    const midCallRules = (conn.rules ?? []).filter((r) => r.enabled && r.triggerType === "mid_call_intent");
+    const matchedRule = midCallRules.find(
+      (r) =>
+        (templateName && r.templateName.toLowerCase() === templateName.toLowerCase()) ||
+        (message && r.name.toLowerCase().includes(message.toLowerCase())),
+    ) || midCallRules[0];
+
+    if (matchedRule) {
+      if (matchedRule.templateName) effectiveTemplate = matchedRule.templateName;
+      if (matchedRule.staticVars && Object.keys(matchedRule.staticVars).length > 0) {
+        const extraVars = Object.entries(matchedRule.staticVars)
+          .map(([k, v]) => `${k}: ${v}`)
+          .join("\n");
+        if (effectiveMessage) {
+          effectiveMessage += `\n\n${extraVars}`;
+        } else {
+          effectiveMessage = extraVars;
+        }
+      }
+    }
+
     if (conn.provider === "vobiz") {
       const res = await sendVobizWhatsappMessage({
         userId,
         toPhone: callerPhone,
         channelId: conn.vobizChannelId ?? undefined,
         wabaId: conn.vobizWabaId ?? undefined,
-        text: message,
-        templateName,
+        text: effectiveMessage,
+        templateName: effectiveTemplate,
       });
 
       if (res.success) {
