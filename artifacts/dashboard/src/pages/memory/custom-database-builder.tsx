@@ -309,46 +309,44 @@ export function CustomDatabaseBuilder({ defaultAgentId }: { defaultAgentId?: num
   return (
     <div className="space-y-6">
       {/* Header Bar */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-muted/20 p-4 rounded-2xl border border-border/50">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 rounded-2xl border border-border/40 bg-card/30">
         <div>
-          <h2 className="text-base font-bold flex items-center gap-2 text-foreground">
-            <Database className="h-4 w-4 text-sky-400" /> Dynamic Ground-Truth Database Builder
+          <h2 className="text-sm font-semibold flex items-center gap-2 text-foreground">
+            <Database className="h-4 w-4 text-primary" /> Reference Product &amp; Invoice Database
           </h2>
-          <p className="text-xs text-muted-foreground">
-            Upload your reference product photos, invoices, or barcodes for Vision AI to cross-verify live on calls.
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Store reference product photos, invoices, or barcodes for Vision AI to verify live on calls.
           </p>
         </div>
 
         <Button
           onClick={() => setShowCreateModal(true)}
-          className="bg-sky-500 hover:bg-sky-400 text-black font-bold text-xs gap-1.5 shadow-md shadow-sky-950/20"
+          size="sm"
+          className="h-8 text-xs font-semibold gap-1.5 shrink-0"
         >
-          <Plus className="h-4 w-4" /> Create Custom Table
+          <Plus className="h-3.5 w-3.5" /> Create Custom Table
         </Button>
       </div>
 
       {/* Database Selector Pills */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-2">
-        {databases.map((dbItem) => (
-          <button
-            key={dbItem.id}
-            onClick={() => setSelectedDb(dbItem)}
-            className={`px-3.5 py-2 rounded-xl border text-xs font-semibold shrink-0 transition-all flex items-center gap-2 ${
-              selectedDb?.id === dbItem.id
-                ? "bg-sky-500/20 text-sky-300 border-sky-500/40 shadow-sm ring-1 ring-sky-500/30"
-                : "bg-card/40 border-border/50 text-muted-foreground hover:bg-card/80"
-            }`}
-          >
-            <Database className="h-3.5 w-3.5" />
-            <span>{dbItem.name}</span>
-            {dbItem.agentId && (
-              <Badge variant="outline" className="text-[8px] bg-sky-500/10 text-sky-400 border-sky-500/30 px-1">
-                Linked
-              </Badge>
-            )}
-          </button>
-        ))}
-      </div>
+      {databases.length > 0 && (
+        <div className="flex items-center gap-2 overflow-x-auto pb-1">
+          {databases.map((dbItem) => (
+            <button
+              key={dbItem.id}
+              onClick={() => setSelectedDb(dbItem)}
+              className={`px-3 py-1.5 rounded-xl border text-xs font-medium shrink-0 transition-all flex items-center gap-2 ${
+                selectedDb?.id === dbItem.id
+                  ? "bg-card text-foreground border-border/80 shadow-sm"
+                  : "bg-muted/20 border-border/30 text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Database className="h-3.5 w-3.5 text-muted-foreground" />
+              <span>{dbItem.name}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Selected Table Data View */}
       {selectedDb && (

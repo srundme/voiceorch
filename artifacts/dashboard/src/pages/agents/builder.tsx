@@ -2150,23 +2150,23 @@ function VisionTab({ form, agentId }: { form: any; agentId: number | undefined }
           className={cn(
             "rounded-2xl border p-5 transition-all cursor-pointer flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4",
             isVisionActive
-              ? "border-sky-500/60 bg-gradient-to-r from-sky-500/10 via-cyan-500/5 to-purple-500/10 shadow-lg shadow-sky-950/20 ring-1 ring-sky-500/40"
-              : "border-border/50 bg-card/20 hover:border-border hover:bg-card/40"
+              ? "border-border/80 bg-card/60 shadow-sm ring-1 ring-border/40"
+              : "border-border/40 bg-card/20 hover:border-border/60 hover:bg-card/30"
           )}
         >
           <div className="flex items-start gap-4">
-            <div className={cn("h-12 w-12 rounded-2xl flex items-center justify-center shrink-0 border", isVisionActive ? "bg-sky-500/20 text-sky-400 border-sky-500/40 shadow-inner" : "bg-muted/40 text-muted-foreground border-border/40")}>
-              <Eye className="h-6 w-6" />
+            <div className={cn("h-11 w-11 rounded-xl flex items-center justify-center shrink-0 border transition-all", isVisionActive ? "bg-primary/10 text-primary border-primary/20" : "bg-muted/30 text-muted-foreground border-border/40")}>
+              <Eye className="h-5 w-5" />
             </div>
             <div className="space-y-1">
               <div className="flex items-center gap-2">
-                <span className="text-sm font-bold text-foreground">Vision AI Engine</span>
-                <Badge variant="outline" className={cn("text-[9.5px] px-2.5 py-0.5 font-mono font-bold", isVisionActive ? "bg-sky-500/20 text-sky-300 border-sky-500/40" : "bg-muted/30 text-muted-foreground")}>
-                  {isVisionActive ? "ACTIVE" : "DISABLED"}
+                <span className="text-sm font-semibold text-foreground">Vision AI Engine</span>
+                <Badge variant="outline" className={cn("text-[10px] px-2 py-0.5 font-medium rounded-full", isVisionActive ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" : "bg-muted/30 text-muted-foreground")}>
+                  {isVisionActive ? "Active" : "Disabled"}
                 </Badge>
               </div>
               <p className="text-xs text-muted-foreground leading-relaxed max-w-xl">
-                Unifies Live Webcam Stream, Desktop Screen Share, and Mid-Call Document Photo Snaps into 1 seamless Vision AI capability.
+                Equips your agent with live camera video streaming, 1x/2x/3x zoom, desktop screen share, and document photo uploads.
               </p>
             </div>
           </div>
@@ -2180,22 +2180,22 @@ function VisionTab({ form, agentId }: { form: any; agentId: number | undefined }
 
         {/* Unified Capabilities Overview */}
         {isVisionActive && (
-          <div className="mt-4 rounded-xl border border-sky-500/30 bg-sky-500/5 p-4 space-y-3">
-            <div className="flex items-center gap-1.5 font-semibold text-xs text-sky-300">
-              <Sparkles className="h-3.5 w-3.5 text-sky-400" /> Active Visual Inputs Included:
+          <div className="mt-3.5 rounded-xl border border-border/40 bg-card/20 p-3.5 space-y-2.5">
+            <div className="text-[11px] font-medium text-muted-foreground">
+              Active Visual Perception Inputs:
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-              <div className="flex items-center gap-2 p-2.5 rounded-lg border border-border/40 bg-card/30">
-                <Camera className="h-4 w-4 text-sky-400 shrink-0" />
-                <span className="text-[11px] font-medium text-foreground">Live Webcam Stream</span>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+              <div className="flex items-center gap-2 p-2 rounded-lg border border-border/30 bg-background/40">
+                <Camera className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <span className="text-[11px] text-foreground/90 font-medium">Live Webcam Stream</span>
               </div>
-              <div className="flex items-center gap-2 p-2.5 rounded-lg border border-border/40 bg-card/30">
-                <Eye className="h-4 w-4 text-purple-400 shrink-0" />
-                <span className="text-[11px] font-medium text-foreground">Desktop Screen Share</span>
+              <div className="flex items-center gap-2 p-2 rounded-lg border border-border/30 bg-background/40">
+                <Eye className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <span className="text-[11px] text-foreground/90 font-medium">Desktop Screen Share</span>
               </div>
-              <div className="flex items-center gap-2 p-2.5 rounded-lg border border-border/40 bg-card/30">
-                <Upload className="h-4 w-4 text-emerald-400 shrink-0" />
-                <span className="text-[11px] font-medium text-foreground">Document &amp; Photo Snaps</span>
+              <div className="flex items-center gap-2 p-2 rounded-lg border border-border/30 bg-background/40">
+                <Upload className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <span className="text-[11px] text-foreground/90 font-medium">Document &amp; Photo Snaps</span>
               </div>
             </div>
           </div>
