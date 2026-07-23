@@ -5252,8 +5252,8 @@ export class OrchestrationPipeline implements VoiceSession {
 
   /**
    * Webcall camera JPEG frames. Classic stack cannot stream video into the LLM,
-   * so we store stills and kick analyze_image (same path as photo upload).
-   */
+  private lastVisionKickTime = 0;
+
   onVideoFrame(jpegBase64: string, mimeType = "image/jpeg"): void {
     if (this.closed) return;
     if (!this.agent.visionEnabled && !this.agent.visionLiveEnabled) return;
@@ -5280,9 +5280,11 @@ export class OrchestrationPipeline implements VoiceSession {
         fileName: `camera-${Date.now()}.jpg`,
         buffer,
       });
-      // First camera still of the call: ask the agent to look. Later frames just refresh latest media.
-      if (!this.cameraVisionKickScheduled) {
+      // Camera still ingested: if it's the first still OR if a significant visual scene change occurred (>6s since last kick), schedule proactive vision turn.
+      const now = Date.now();
+      if (!this.cameraVisionKickScheduled || (now - this.lastVisionKickTime > 6000)) {
         this.cameraVisionKickScheduled = true;
+        this.lastVisionKickTime = now;
         this.notifyIncomingMedia(row.id, { source: "webcall", mimeType: row.mimeType });
       }
     } catch (err) {

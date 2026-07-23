@@ -472,9 +472,14 @@ export function WebcallPanel({
 
       // ── WebSocket (absolute /api path → routed by the shared proxy) ────────
       const proto = location.protocol === "https:" ? "wss" : "ws";
+      let persistentGuestId = localStorage.getItem("snapserve_guest_id");
+      if (!persistentGuestId) {
+        persistentGuestId = `guest_${Math.random().toString(36).substring(2, 10)}`;
+        localStorage.setItem("snapserve_guest_id", persistentGuestId);
+      }
       const authQs = shareToken
-        ? `share=${encodeURIComponent(shareToken)}`
-        : `token=${encodeURIComponent(sessionToken!)}`;
+        ? `share=${encodeURIComponent(shareToken)}&guestId=${encodeURIComponent(persistentGuestId)}`
+        : `token=${encodeURIComponent(sessionToken!)}&guestId=${encodeURIComponent(persistentGuestId)}`;
       const ws = new WebSocket(
         `${proto}://${location.host}/api/ws/webcall/${agentId}?${authQs}`,
       );
