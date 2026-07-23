@@ -146,6 +146,29 @@ router.delete("/custom-databases/:id/rows/:rowId", async (req, res): Promise<voi
   }
 });
 
+// Bulk import rows into custom database
+router.post("/custom-databases/:id/bulk-import", async (req, res): Promise<void> => {
+  const id = parseInt(req.params["id"] as string, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid ID" }); return; }
+  const rowsPayload = req.body?.rows;
+  if (!Array.isArray(rowsPayload) || rowsPayload.length === 0) {
+    res.status(400).json({ error: "Invalid or empty rows array" });
+    return;
+  }
+  try {
+    const toInsert = rowsPayload.map((r: any) => ({
+      databaseId: id,
+      data: r.data || r,
+      referenceImageUrls: Array.isArray(r.referenceImageUrls) ? r.referenceImageUrls : [],
+    }));
+    await db.insert(customDatabaseRowsTable).values(toInsert);
+    res.json({ success: true, count: toInsert.length });
+  } catch (err) {
+    logger.error({ err, databaseId: id }, "Failed bulk import");
+    res.status(500).json({ error: "Bulk import failed" });
+  }
+});
+
 // Query custom database (Used by Vision AI Agent tool executor!)
 router.post("/custom-databases/:id/query", async (req, res): Promise<void> => {
   const id = parseInt(req.params["id"] as string, 10);
