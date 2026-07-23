@@ -2289,6 +2289,23 @@ function VisionTab({ form, agentId }: { form: any; agentId: number | undefined }
           >
             + IT Screen Troubleshooter
           </Button>
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs border-sky-500/40 text-sky-300 hover:bg-sky-500/10"
+            onClick={() => {
+              const retailPrompt =
+                "\n\n[RETAIL BARCODE & PRODUCT MATCHING]\n" +
+                "You are an AI Product Verification Agent. Ask the caller to point their camera at the item or invoice. " +
+                "Invoke `query_custom_database` to look up the invoice record and verify if the delivered item matches the stored product photo.";
+              const cur = form.getValues("systemPrompt") ?? "";
+              form.setValue("systemPrompt", `${cur}${retailPrompt}`, { shouldDirty: true });
+            }}
+          >
+            + Retail & Product Verifier
+          </Button>
         </div>
       </div>
 
