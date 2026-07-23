@@ -232,6 +232,14 @@ export interface SendWhatsappTool {
   messageTemplate?: string;
 }
 
+export interface SendVisionEmailTool {
+  type: "send_vision_email" | "send_email";
+  name: string;
+  description: string;
+  toEmail?: string;
+  subject?: string;
+}
+
 export interface QueryCustomDatabaseTool {
   type: "query_custom_database";
   name: string;
@@ -239,7 +247,7 @@ export interface QueryCustomDatabaseTool {
   databaseId?: number;
 }
 
-export type AgentTool = CallTransferTool | WebhookTool | SendSmsTool | SendWhatsappTool | EndCallTool | AnalyzeImageTool | VerifyVisualIdentityTool | ExtractDocumentFieldsTool | InspectPhysicalAssetTool | InspectScreenTool | ReadCallerGestureTool | ScanBarcodeQrTool | CalComTool | NativeBookingTool | NativeRescheduleTool | NativeCancelTool | NativeCheckAvailabilityTool | NativeListBookingsTool | TransferColdTool | TransferWarmTool | TransferAgentTool | SquadFollowupTool | QueryCustomDatabaseTool;
+export type AgentTool = CallTransferTool | WebhookTool | SendSmsTool | SendWhatsappTool | SendVisionEmailTool | EndCallTool | AnalyzeImageTool | VerifyVisualIdentityTool | ExtractDocumentFieldsTool | InspectPhysicalAssetTool | InspectScreenTool | ReadCallerGestureTool | ScanBarcodeQrTool | CalComTool | NativeBookingTool | NativeRescheduleTool | NativeCancelTool | NativeCheckAvailabilityTool | NativeListBookingsTool | TransferColdTool | TransferWarmTool | TransferAgentTool | SquadFollowupTool | QueryCustomDatabaseTool;
 
 /** JSON Schema-compatible tool definition passed to LLM providers */
 export interface ToolDefinition {

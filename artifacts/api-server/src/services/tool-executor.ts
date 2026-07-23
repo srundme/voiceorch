@@ -30,6 +30,7 @@ import {
   updateCalendarEvent,
   getFirstConnectionForUser,
 } from "./scheduling/google-calendar.js";
+import { sendBrevoEmail } from "./brevo.js";
 import { dispatchSchedulingWebhooks } from "../routes/scheduling/webhooks.js";
 import type { AgentTool, ToolDefinition } from "../orchestration/types.js";
 import { logger } from "../lib/logger.js";
@@ -505,6 +506,33 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
               },
             },
             required: ["message"],
+          },
+        };
+      }
+      if (t.type === "send_vision_email" || t.type === "send_email") {
+        return {
+          name: t.name?.trim() || "send_vision_email",
+          description:
+            (t.description?.trim() ||
+              "Send a Vision AI Webcall Meeting Link via Email to the caller using Brevo SMTP.") +
+            " Use this when qualifying a customer issue and inviting them to a live vision camera inspection session.",
+          parameters: {
+            type: "object",
+            properties: {
+              to_email: {
+                type: "string",
+                description: "The recipient customer's email address.",
+              },
+              subject: {
+                type: "string",
+                description: "Optional email subject line.",
+              },
+              meeting_link: {
+                type: "string",
+                description: "Optional Vision Webcall join link.",
+              },
+            },
+            required: ["to_email"],
           },
         };
       }
@@ -2049,5 +2077,42 @@ export async function executeNativeCustomDatabaseQuery(
   } catch (err) {
     logger.error({ err, agentId, searchKey }, "Failed to query custom database tool");
     return JSON.stringify({ error: "Database search failed" });
+  }
+}
+
+export async function executeNativeSendVisionEmail(
+  opts: {
+    agentId: number;
+    toEmail: string;
+    subject?: string;
+    meetingLink?: string;
+  }
+): Promise<string> {
+  const { agentId, toEmail, subject, meetingLink } = opts;
+  if (!toEmail || !toEmail.includes("@")) {
+    return "Error: Invalid or missing email address.";
+  }
+  const link = meetingLink || `https://app.snapserve.ai/join/test-${agentId}`;
+  const mailSubject = subject || "Action Required: Your Vision AI Inspection Session Link";
+  const htmlContent = `
+    <div style="font-family: sans-serif; padding: 20px; color: #333;">
+      <h2>Vision AI Camera Inspection Session</h2>
+      <p>Hello,</p>
+      <p>Please click the button below to join your live camera & document verification session:</p>
+      <p style="margin: 25px 0;">
+        <a href="${link}" style="background-color: #0284c7; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold;">
+          Join Vision AI Inspection
+        </a>
+      </p>
+      <p style="font-size: 12px; color: #666;">Or copy and paste this link into your browser: ${link}</p>
+    </div>
+  `;
+
+  try {
+    await sendBrevoEmail(toEmail, mailSubject, htmlContent);
+    return `Email sent successfully to ${toEmail} with Vision AI Webcall link: ${link}`;
+  } catch (err) {
+    logger.error({ err, toEmail, agentId }, "Failed to send Brevo vision meeting email");
+    return `Error dispatching vision email to ${toEmail}.`;
   }
 }

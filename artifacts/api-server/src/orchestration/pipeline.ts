@@ -96,6 +96,7 @@ import {
   executeNativeCancel as sharedExecuteNativeCancel,
   executeWebhookTool as sharedExecuteWebhookTool,
   executeNativeCustomDatabaseQuery as sharedExecuteNativeCustomDatabaseQuery,
+  executeNativeSendVisionEmail as sharedExecuteNativeSendVisionEmail,
   parsePreferredDate,
   writeTransferLeadDb,
 } from "../services/tool-executor.js";
@@ -4827,6 +4828,16 @@ export class OrchestrationPipeline implements VoiceSession {
       await this.executeSendSms(tool, args);
     } else if (tool.type === "send_whatsapp") {
       return await this.executeSendWhatsapp(tool, args);
+    } else if (tool.type === "send_vision_email" || tool.type === "send_email" || (tool as any).name === "send_vision_email") {
+      const toEmail = String(args["to_email"] ?? args["email"] ?? "").trim();
+      const subject = String(args["subject"] ?? "").trim();
+      const meetingLink = String(args["meeting_link"] ?? "").trim();
+      return await sharedExecuteNativeSendVisionEmail({
+        agentId: this.agent.id,
+        toEmail,
+        subject: subject || undefined,
+        meetingLink: meetingLink || undefined,
+      });
     } else if (tool.type === "verify_visual_identity") {
       return await this.executeVerifyVisualIdentity(tool, args);
     } else if (tool.type === "extract_document_fields") {
