@@ -486,7 +486,7 @@ export default function WhatsAppPage() {
                   }`}
                   onClick={() => setProvider("vobiz")}
                 >
-                  ⚡ SnapServe WhatsApp
+                  SnapServe WhatsApp
                 </button>
                 <button
                   type="button"
@@ -495,7 +495,7 @@ export default function WhatsAppPage() {
                   }`}
                   onClick={() => setProvider("webhook")}
                 >
-                  🔗 Custom Webhook
+                  Custom Webhook
                 </button>
               </div>
             </div>
@@ -625,9 +625,9 @@ export default function WhatsAppPage() {
                                   setRules(next);
                                 }}
                               >
-                                <option value="mid_call_intent">⚡ Live Mid-Call Intent</option>
-                                <option value="post_call_disposition">📊 Post-Call Disposition</option>
-                                <option value="post_call_transcript_ai">🤖 Post-Call AI Analysis</option>
+                                <option value="mid_call_intent">Live Mid-Call Intent</option>
+                                <option value="post_call_disposition">Post-Call Disposition</option>
+                                <option value="post_call_transcript_ai">Post-Call AI Analysis</option>
                               </select>
                             </div>
                             <div>
@@ -714,7 +714,7 @@ export default function WhatsAppPage() {
                   }`}
                   onClick={() => setProvider("vobiz")}
                 >
-                  ⚡ SnapServe WhatsApp
+                  SnapServe WhatsApp
                 </button>
                 <button
                   type="button"
@@ -723,7 +723,7 @@ export default function WhatsAppPage() {
                   }`}
                   onClick={() => setProvider("webhook")}
                 >
-                  🔗 Custom Webhook
+                  Custom Webhook
                 </button>
               </div>
             </div>

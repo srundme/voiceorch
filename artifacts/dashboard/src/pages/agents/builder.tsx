@@ -2108,7 +2108,7 @@ function VisionTab({ form, agentId }: { form: any; agentId: number | undefined }
             ? "📄 Document Reader Mode (Sarvam Vision): Guest joins a voice call, then taps Upload Document or takes a photo of an invoice/ID when requested. Camera permission is NOT forced upfront."
             : captureMode === "live"
             ? "📹 Live Camera Mode (Gemini Live): Guest turns on their camera, then starts the webcall. The agent sees a 2 FPS video stream of whatever is in front of the lens in real-time."
-            : "⚡ Full Hybrid Mode: Guest streams live camera video AND can upload high-resolution document/receipt files during the call."}
+            : "Full Hybrid Mode: Guest streams live camera video AND can upload high-resolution document/receipt files during the call."}
         </p>
         <p className="text-[11px] text-muted-foreground leading-relaxed">
           Prompt tip: Tell the agent what documents to ask for (Aadhaar, Invoice, Bill, ID) and when to invoke{" "}
