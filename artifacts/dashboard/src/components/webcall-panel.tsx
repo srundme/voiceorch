@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Mic, MicOff, PhoneOff, Phone, Loader2, AlertCircle, X, Camera, ImagePlus, SwitchCamera, Monitor, MonitorOff } from "lucide-react";
+import { Mic, MicOff, PhoneOff, Phone, Loader2, AlertCircle, X, Camera, ImagePlus, SwitchCamera, Monitor, MonitorOff, ZoomIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 /**
  * Webcall 2.0 — browser "Live Test" transport for an agent.
@@ -181,6 +182,27 @@ export function WebcallPanel({
   const cameraAllowed = !!(visionLiveEnabled || requireCamera);
   const photoUploadAllowed = !!visionEnabled;
 
+  const [zoomLevel, setZoomLevel] = useState<number>(1);
+  const zoomLevelRef = useRef<number>(1);
+  useEffect(() => { zoomLevelRef.current = zoomLevel; }, [zoomLevel]);
+
+  const applyZoom = useCallback(async (level: number) => {
+    setZoomLevel(level);
+    const track = videoStreamRef.current?.getVideoTracks()[0];
+    if (track) {
+      try {
+        const capabilities = track.getCapabilities() as any;
+        if (capabilities?.zoom) {
+          await track.applyConstraints({
+            advanced: [{ zoom: Math.min(level, capabilities.zoom.max || level) }],
+          } as any);
+        }
+      } catch {
+        /* Fallback: digital crop canvas zoom handling */
+      }
+    }
+  }, []);
+
   /** Capture frames from a given <video> element and stream over WebSocket. */
   const startFrameCaptureFromEl = useCallback((getEl: () => HTMLVideoElement | null, timerRef: React.MutableRefObject<number | null>) => {
     if (timerRef.current != null) return;
@@ -195,7 +217,18 @@ export function WebcallPanel({
       canvas.height = Math.round(canvas.width * (h / Math.max(w, 1)));
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      
+      const zoom = zoomLevelRef.current || 1;
+      if (zoom > 1) {
+        const cropW = w / zoom;
+        const cropH = h / zoom;
+        const cropX = (w - cropW) / 2;
+        const cropY = (h - cropH) / 2;
+        ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, canvas.width, canvas.height);
+      } else {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      }
+
       const dataUrl = canvas.toDataURL("image/jpeg", 0.60);
       const b64 = dataUrl.split(",")[1];
       if (!b64) return;
@@ -730,6 +763,28 @@ export function WebcallPanel({
             {cameraOn && !screenShareOn && (
               <div className="absolute inset-0 pointer-events-none border border-sky-500/20 flex items-center justify-center">
                 <div className="w-full h-[1px] bg-gradient-to-r from-transparent via-sky-400/60 to-transparent animate-pulse" />
+              </div>
+            )}
+
+            {/* Camera Zoom Controls (1x, 2x, 3x) */}
+            {cameraOn && !screenShareOn && (
+              <div className="absolute bottom-2 left-2 flex items-center gap-1 bg-black/70 backdrop-blur-md p-1 rounded-xl border border-white/20 z-10 shadow-lg">
+                <ZoomIn className="h-3 w-3 text-cyan-400 ml-1 mr-0.5" />
+                {[1, 2, 3].map((lvl) => (
+                  <button
+                    key={lvl}
+                    type="button"
+                    onClick={() => void applyZoom(lvl)}
+                    className={cn(
+                      "text-[9.5px] font-mono font-bold px-2 py-0.5 rounded-md transition-all",
+                      zoomLevel === lvl
+                        ? "bg-cyan-500 text-black shadow-sm"
+                        : "text-white/80 hover:bg-white/20 hover:text-white"
+                    )}
+                  >
+                    {lvl}x
+                  </button>
+                ))}
               </div>
             )}
           </div>
