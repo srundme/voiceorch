@@ -764,10 +764,22 @@ export function WebcallPanel({
               </>
             )}
 
-            {/* AI Vision Perception Scanning Reticle Line */}
+            {/* AI Vision Perception AR Target Frame & Laser Line */}
             {cameraOn && !screenShareOn && (
-              <div className="absolute inset-0 pointer-events-none border border-sky-500/20 flex items-center justify-center">
-                <div className="w-full h-[1px] bg-gradient-to-r from-transparent via-sky-400/60 to-transparent animate-pulse" />
+              <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+                <div className="relative w-44 h-28 border border-sky-400/40 rounded-lg flex items-center justify-center">
+                  <div className="absolute top-0 left-0 w-3 h-3 border-t-2 border-l-2 border-sky-400 -mt-0.5 -ml-0.5" />
+                  <div className="absolute top-0 right-0 w-3 h-3 border-t-2 border-r-2 border-sky-400 -mt-0.5 -mr-0.5" />
+                  <div className="absolute bottom-0 left-0 w-3 h-3 border-b-2 border-l-2 border-sky-400 -mb-0.5 -ml-0.5" />
+                  <div className="absolute bottom-0 right-0 w-3 h-3 border-b-2 border-r-2 border-sky-400 -mb-0.5 -mr-0.5" />
+
+                  {/* Scanning Laser Line */}
+                  <div className="w-full h-[1.5px] bg-gradient-to-r from-transparent via-sky-400 to-transparent animate-pulse" />
+
+                  <span className="absolute -bottom-5 text-[8.5px] font-mono uppercase tracking-wider text-sky-300 bg-black/80 px-2 py-0.5 rounded border border-sky-500/30">
+                    Align Item / Document Here
+                  </span>
+                </div>
               </div>
             )}
 
