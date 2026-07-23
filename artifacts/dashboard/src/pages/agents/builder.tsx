@@ -116,7 +116,7 @@ const TABS: TabDef[] = [
 ];
 
 function tabsForAgentKind(kind: "voice" | "vision"): TabDef[] {
-  if (kind === "vision") return TABS;
+  if (kind === "vision") return TABS.filter((t) => t.id !== "voicemail");
   return TABS.filter((t) => t.id !== "vision");
 }
 
@@ -1405,6 +1405,10 @@ function VoiceTab({ form }: { form: any }) {
   const ttsProvider   = form.watch("ttsProvider");
   const ttsVoice      = form.watch("ttsVoice");
   const ttsModel      = form.watch("ttsModel");
+  const llmModel      = form.watch("llmModel");
+  const voiceStack    = form.watch("voiceStack");
+  const agentKind     = form.watch("agentKind");
+  const isGeminiLive  = isGeminiLiveAgent({ llmModel, voiceStack }) || agentKind === "vision";
   const agentLanguage = (form.watch("language") as string) ?? "en-US";
   const [cloneOpenV, setCloneOpenV] = useState(false);
   const queryClient = useQueryClient();
@@ -1675,10 +1679,96 @@ function VoiceTab({ form }: { form: any }) {
     </div>
   );
 
+  if (isGeminiLive) {
+    return (
+      <div className="relative p-6 space-y-8 max-w-3xl">
+        {/* Banner */}
+        <div className="rounded-xl border border-sky-500/30 bg-sky-500/10 p-4 flex items-start gap-3">
+          <div className="h-8 w-8 rounded-lg bg-sky-500/20 text-sky-400 flex items-center justify-center shrink-0 mt-0.5 font-bold">
+            <Sparkles className="h-4 w-4" />
+          </div>
+          <div>
+            <h4 className="text-xs font-bold text-sky-300">Gemini Live Realtime Audio Engine</h4>
+            <p className="text-[11px] text-sky-200/80 leading-relaxed mt-0.5">
+              This agent uses native bidirectional audio streaming. Gemini Live generates speech directly with zero-latency voice synthesis. Classic STT/TTS providers (Cartesia, ElevenLabs, Deepgram) and telephony noise filters are automatically bypassed.
+            </p>
+          </div>
+        </div>
+
+        {/* Gemini Live Voice Selection */}
+        <section className="space-y-4">
+          <div>
+            <h3 className="text-[13px] font-semibold text-foreground tracking-tight">Realtime Preset Voice</h3>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              Choose the natural voice tone and personality for your agent during live video/audio calls.
+            </p>
+          </div>
+          <div className="rounded-xl border border-border/50 bg-card/40 p-4 space-y-4">
+            <FormField control={form.control} name="geminiLiveVoiceName" render={({ field }) => (
+              <FormItem className="space-y-2">
+                <FormLabel className="text-xs text-muted-foreground">Preset Voice</FormLabel>
+                <FormControl>
+                  <GeminiLiveVoicePicker value={field.value ?? "Kore"} onChange={field.onChange} />
+                </FormControl>
+              </FormItem>
+            )} />
+          </div>
+        </section>
+
+        {/* Gemini Live Reasoning & Thinking Level */}
+        <section className="space-y-4">
+          <div>
+            <h3 className="text-[13px] font-semibold text-foreground tracking-tight">Reasoning &amp; Thinking Level</h3>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              Control how much internal deliberation Gemini Live performs before speaking. Minimal delivers the lowest latency for fluid conversation.
+            </p>
+          </div>
+          <div className="rounded-xl border border-border/50 bg-card/40 p-4 space-y-3">
+            <FormField control={form.control} name="geminiLiveThinkingLevel" render={({ field }) => (
+              <FormItem className="space-y-1 max-w-sm">
+                <FormLabel className="text-xs text-muted-foreground">Thinking Level</FormLabel>
+                <SmallSelect
+                  value={field.value ?? "minimal"}
+                  onChange={field.onChange}
+                  options={GEMINI_LIVE_THINKING_LEVELS.map(p => ({ value: p.value, label: p.label }))}
+                />
+              </FormItem>
+            )} />
+          </div>
+        </section>
+
+        {/* Primary Language */}
+        <section className="space-y-4">
+          <div>
+            <h3 className="text-[13px] font-semibold text-foreground tracking-tight">Primary Language</h3>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              Primary spoken dialect used for voice synthesis and vision understanding.
+            </p>
+          </div>
+          <div className="rounded-xl border border-border/50 bg-card/40 p-4 space-y-3">
+            <FormField control={form.control} name="language" render={({ field }) => (
+              <FormItem className="space-y-1 max-w-sm">
+                <FormLabel className="text-xs text-muted-foreground">Language</FormLabel>
+                <SmallSelect
+                  value={field.value ?? "en-IN"}
+                  onChange={field.onChange}
+                  options={[
+                    { value: "en-IN", label: "English (India)" },
+                    { value: "hi-IN", label: "Hindi (India)" },
+                    { value: "en-US", label: "English (US)" },
+                    { value: "en-GB", label: "English (UK)" },
+                  ]}
+                />
+              </FormItem>
+            )} />
+          </div>
+        </section>
+      </div>
+    );
+  }
+
   return (
     <div className="relative p-6 space-y-8 max-w-3xl">
-
-      {/* ── SPEAK ── */}
       <section className="space-y-4">
         <div>
           <h3 className="text-[13px] font-semibold text-foreground tracking-tight">Speak</h3>
@@ -3742,7 +3832,11 @@ function AgentListPanel({ selectedId, onSelect, rateMap, className }: {
                 )}>
                   {kind === "vision" ? "Vision" : "Voice"}
                 </span>
-                <span className="text-[10px] text-muted-foreground/75 truncate">{agent.asrProvider} · {agent.ttsProvider}</span>
+                <span className="text-[10px] text-muted-foreground/75 truncate">
+                  {kind === "vision" || isGeminiLiveAgent({ llmModel: agent.llmModel, voiceStack: (agent as any).agentConfig?.voiceStack })
+                    ? "Gemini Live"
+                    : `${agent.asrProvider} · ${agent.ttsProvider}`}
+                </span>
                 {costCents ? <span className="text-[10px] text-muted-foreground/55 ml-auto shrink-0">₹{(costCents / 100).toFixed(2)}</span> : null}
               </div>
             </button>
