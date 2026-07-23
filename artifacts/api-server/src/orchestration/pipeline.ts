@@ -5253,11 +5253,11 @@ export class OrchestrationPipeline implements VoiceSession {
   onVideoFrame(jpegBase64: string, mimeType = "image/jpeg"): void {
     if (this.closed) return;
     if (!this.agent.visionEnabled && !this.agent.visionLiveEnabled) return;
-    const now = Date.now();
-    if (now - this.lastCameraFrameAt < 2500) return;
-    this.lastCameraFrameAt = now;
     const data = jpegBase64.replace(/^data:[^;]+;base64,/, "");
     if (!data || data.length < 200) return;
+    if (this.visionMemory && !this.visionMemory.shouldProcessFrame(data)) {
+      return; // Motion delta below threshold — skip sending duplicate frame
+    }
     this.visionMemory?.setLatestFrame(data, mimeType);
     void this.ingestCameraFrame(data, mimeType);
   }

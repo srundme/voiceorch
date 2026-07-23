@@ -71,6 +71,64 @@ export class CallVisionMemory {
   private people: VisionPerson[] = [];
   private visualNotes: string[] = [];
   private dirty = false;
+  private lastFrameHash = 0;
+  private lastFrameTime = 0;
+  private latestFrame: { data: string; mimeType: string } | null = null;
+  private latestDocumentFrame: { data: string; mimeType: string } | null = null;
+
+  /**
+   * Simple Difference Hash (dHash) approximation on base64 image data.
+   * Compares character sample differences to compute visual delta.
+   */
+  private computeFrameHash(b64Data: string): number {
+    let hash = 0;
+    const len = b64Data.length;
+    const step = Math.max(1, Math.floor(len / 128));
+    for (let i = 0; i < len; i += step) {
+      const code = b64Data.charCodeAt(i);
+      hash = (hash << 5) - hash + code;
+      hash |= 0;
+    }
+    return hash;
+  }
+
+  /**
+   * Evaluates if an incoming video frame contains significant visual delta.
+   * Returns true if frame should be processed by Vision AI.
+   * Forces forwarding at least once every 5 seconds to ensure heartbeat continuity.
+   */
+  shouldProcessFrame(b64Data: string, minIntervalMs = 500, maxHeartbeatMs = 5000): boolean {
+    const now = Date.now();
+    if (this.lastFrameTime > 0 && (now - this.lastFrameTime) < minIntervalMs) return false;
+
+    const newHash = this.computeFrameHash(b64Data);
+    const hashDiff = Math.abs(newHash - this.lastFrameHash);
+
+    // If frame is virtually identical and within max heartbeat window, skip
+    if (this.lastFrameHash !== 0 && hashDiff < 100 && (now - this.lastFrameTime) < maxHeartbeatMs) {
+      return false;
+    }
+
+    this.lastFrameHash = newHash;
+    this.lastFrameTime = now;
+    return true;
+  }
+
+  setLatestFrame(data: string, mimeType = "image/jpeg"): void {
+    this.latestFrame = { data, mimeType };
+  }
+
+  getLatestFrame(): { data: string; mimeType: string } | null {
+    return this.latestFrame;
+  }
+
+  setLatestDocumentFrame(data: string, mimeType = "image/jpeg"): void {
+    this.latestDocumentFrame = { data, mimeType };
+  }
+
+  getLatestDocumentFrame(): { data: string; mimeType: string } | null {
+    return this.latestDocumentFrame;
+  }
 
   constructor(primaryName?: string | null) {
     if (primaryName?.trim()) {

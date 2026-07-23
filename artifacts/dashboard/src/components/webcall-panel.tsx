@@ -710,8 +710,9 @@ export function WebcallPanel({
             />
             {cameraOn && !screenShareOn && (
               <>
-                <span className="absolute top-2 left-2 text-[10px] font-medium px-1.5 py-0.5 rounded bg-black/60 text-white">
-                  {visionLiveEnabled ? "Live camera" : "Camera"} · {facingMode === "user" ? "Front" : "Rear"}
+                <span className="absolute top-2 left-2 text-[10px] font-medium px-1.5 py-0.5 rounded bg-black/60 text-white flex items-center gap-1.5">
+                  <span className="h-1.5 w-1.5 rounded-full bg-sky-400 animate-ping" />
+                  {visionLiveEnabled ? "Live Camera · AI Perception Active" : "Camera"} · {facingMode === "user" ? "Front" : "Rear"}
                 </span>
                 <button
                   type="button"
@@ -723,6 +724,13 @@ export function WebcallPanel({
                   {switchingCamera ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <SwitchCamera className="h-3.5 w-3.5" />}
                 </button>
               </>
+            )}
+
+            {/* AI Vision Perception Scanning Reticle Line */}
+            {cameraOn && !screenShareOn && (
+              <div className="absolute inset-0 pointer-events-none border border-sky-500/20 flex items-center justify-center">
+                <div className="w-full h-[1px] bg-gradient-to-r from-transparent via-sky-400/60 to-transparent animate-pulse" />
+              </div>
             )}
           </div>
         )}
