@@ -396,6 +396,7 @@ function Router() {
           <Route path="/events/judge/:token" component={JudgePortalPage} />
           <Route path="/events/certificates/:code/verify" component={CertificateVerifyPage} />
           <Route path="/events/:slug" component={PublicEventPage} />
+          <Route path="/voiceathon" component={PublicEventPage} />
           <Route path="/docs" component={DocsPage} />
           <Route path="/docs/api-reference/:op" component={DocsPage} />
           <Route path="/docs/:section" component={DocsPage} />
