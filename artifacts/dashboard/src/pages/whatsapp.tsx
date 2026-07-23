@@ -25,6 +25,12 @@ type WaConnection = {
   agentId: number;
   agentName?: string | null;
   campaignId: number | null;
+  provider: "vobiz" | "webhook";
+  vobizWabaId: string | null;
+  vobizChannelId: string | null;
+  vobizPhone: string | null;
+  postCallTemplate: string | null;
+  midCallEnabled: boolean;
   inboundToken: string;
   inboundWebhookUrl: string;
   outboundWebhookUrl: string | null;
@@ -212,14 +218,22 @@ export default function WhatsAppPage() {
   const [editConn, setEditConn] = useState<WaConnection | null>(null);
   const [name, setName] = useState("WhatsApp");
   const [agentId, setAgentId] = useState<number | "">("");
-  const [outboundUrl, setOutboundUrl] = useState("");
-  const [requestCall, setRequestCall] = useState(true);
-  const [postCall, setPostCall] = useState(true);
-  const [createdSecret, setCreatedSecret] = useState<string | null>(null);
+  const [provider, setProvider] = useState<"vobiz" | "webhook">("vobiz");
+  const [vobizWabaId, setVobizWabaId] = useState("");
+  const [vobizChannelId, setVobizChannelId] = useState("");
+  const [vobizPhone, setVobizPhone] = useState("");
+  const [postCallTemplate, setPostCallTemplate] = useState("");
+  const [midCallEnabled, setMidCallEnabled] = useState(true);
 
   const resetForm = () => {
     setName("WhatsApp");
     setAgentId(agents[0]?.id ?? "");
+    setProvider("vobiz");
+    setVobizWabaId("");
+    setVobizChannelId("");
+    setVobizPhone("");
+    setPostCallTemplate("");
+    setMidCallEnabled(true);
     setOutboundUrl("");
     setRequestCall(true);
     setPostCall(true);
@@ -232,6 +246,12 @@ export default function WhatsAppPage() {
         body: JSON.stringify({
           name,
           agentId: Number(agentId),
+          provider,
+          vobizWabaId: vobizWabaId.trim() || null,
+          vobizChannelId: vobizChannelId.trim() || null,
+          vobizPhone: vobizPhone.trim() || null,
+          postCallTemplate: postCallTemplate.trim() || null,
+          midCallEnabled,
           outboundWebhookUrl: outboundUrl.trim() || null,
           requestCallEnabled: requestCall,
           postCallEnabled: postCall,
@@ -420,18 +440,18 @@ export default function WhatsAppPage() {
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Add WhatsApp connection</DialogTitle>
+            <DialogTitle>Add WhatsApp Connection</DialogTitle>
             <DialogDescription>
-              After creating, copy the inbound URL into Zapier or your BSP. Works with Interakt, Wati, AiSensy, Gupshup.
+              Connect WhatsApp to your AI agent natively via Vobiz or via custom Webhooks (Zapier/n8n).
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div>
-              <Label className="text-xs">Name</Label>
+              <Label className="text-xs">Connection Name</Label>
               <Input className="mt-1 h-9" value={name} onChange={(e) => setName(e.target.value)} />
             </div>
             <div>
-              <Label className="text-xs">AI agent to dial *</Label>
+              <Label className="text-xs">AI agent *</Label>
               <select
                 className="mt-1 w-full h-9 rounded-md border border-input bg-background px-2 text-sm"
                 value={agentId}
@@ -444,33 +464,90 @@ export default function WhatsAppPage() {
               </select>
             </div>
             <div>
-              <Label className="text-xs">Your outbound webhook URL (optional)</Label>
-              <Input
-                className="mt-1 h-9"
-                placeholder="https://hooks.zapier.com/… or your BSP endpoint"
-                value={outboundUrl}
-                onChange={(e) => setOutboundUrl(e.target.value)}
-              />
-              <p className="text-[11px] text-muted-foreground mt-1">
-                After each AI call we POST here so you can send a WhatsApp template.
-              </p>
+              <Label className="text-xs">Integration Provider</Label>
+              <div className="grid grid-cols-2 gap-2 mt-1">
+                <button
+                  type="button"
+                  className={`px-3 py-2 text-xs font-medium rounded-md border ${
+                    provider === "vobiz" ? "border-primary bg-primary/10 text-primary" : "border-input bg-background"
+                  }`}
+                  onClick={() => setProvider("vobiz")}
+                >
+                  ⚡ Vobiz Native WhatsApp
+                </button>
+                <button
+                  type="button"
+                  className={`px-3 py-2 text-xs font-medium rounded-md border ${
+                    provider === "webhook" ? "border-primary bg-primary/10 text-primary" : "border-input bg-background"
+                  }`}
+                  onClick={() => setProvider("webhook")}
+                >
+                  🔗 Custom Webhook
+                </button>
+              </div>
             </div>
-            <div className="flex items-center justify-between">
-              <Label className="text-xs">Request a Call → dial AI</Label>
-              <Switch checked={requestCall} onCheckedChange={setRequestCall} />
-            </div>
-            <div className="flex items-center justify-between">
-              <Label className="text-xs">Post-call WhatsApp notify</Label>
+
+            {provider === "vobiz" ? (
+              <>
+                <div>
+                  <Label className="text-xs">Vobiz WABA ID (optional)</Label>
+                  <Input
+                    className="mt-1 h-9"
+                    placeholder="e.g. 123456789012345"
+                    value={vobizWabaId}
+                    onChange={(e) => setVobizWabaId(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Vobiz Channel ID (optional)</Label>
+                  <Input
+                    className="mt-1 h-9"
+                    placeholder="e.g. 0a1b2c3d-4e5f-6a7b-8c9d..."
+                    value={vobizChannelId}
+                    onChange={(e) => setVobizChannelId(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Post-Call Meta Template (optional)</Label>
+                  <Input
+                    className="mt-1 h-9"
+                    placeholder="e.g. call_summary_v1 (leave empty for text)"
+                    value={postCallTemplate}
+                    onChange={(e) => setPostCallTemplate(e.target.value)}
+                  />
+                </div>
+                <div className="flex items-center justify-between pt-1">
+                  <div>
+                    <Label className="text-xs font-medium">Mid-Call Agent Tool (`send_whatsapp`)</Label>
+                    <p className="text-[11px] text-muted-foreground">Allows AI to send links/brochures to caller during the call</p>
+                  </div>
+                  <Switch checked={midCallEnabled} onCheckedChange={setMidCallEnabled} />
+                </div>
+              </>
+            ) : (
+              <div>
+                <Label className="text-xs">Outbound Webhook URL</Label>
+                <Input
+                  className="mt-1 h-9"
+                  placeholder="https://hooks.zapier.com/… or your BSP endpoint"
+                  value={outboundUrl}
+                  onChange={(e) => setOutboundUrl(e.target.value)}
+                />
+              </div>
+            )}
+
+            <div className="flex items-center justify-between pt-1">
+              <Label className="text-xs">Post-call WhatsApp Summary</Label>
               <Switch checked={postCall} onCheckedChange={setPostCall} />
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="mt-4">
             <Button variant="ghost" onClick={() => setCreateOpen(false)}>Cancel</Button>
             <Button
               disabled={!agentId || createMut.isPending}
               onClick={() => createMut.mutate()}
             >
-              Create
+              Connect WhatsApp
             </Button>
           </DialogFooter>
         </DialogContent>

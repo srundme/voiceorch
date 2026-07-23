@@ -183,7 +183,14 @@ export interface SquadFollowupTool {
   description: string;
 }
 
-export type AgentTool = CallTransferTool | WebhookTool | SendSmsTool | EndCallTool | AnalyzeImageTool | CalComTool | NativeBookingTool | NativeRescheduleTool | NativeCancelTool | NativeCheckAvailabilityTool | NativeListBookingsTool | TransferColdTool | TransferWarmTool | TransferAgentTool | SquadFollowupTool;
+export interface SendWhatsappTool {
+  type: "send_whatsapp";
+  name: string;
+  description: string;
+  messageTemplate?: string;
+}
+
+export type AgentTool = CallTransferTool | WebhookTool | SendSmsTool | SendWhatsappTool | EndCallTool | AnalyzeImageTool | CalComTool | NativeBookingTool | NativeRescheduleTool | NativeCancelTool | NativeCheckAvailabilityTool | NativeListBookingsTool | TransferColdTool | TransferWarmTool | TransferAgentTool | SquadFollowupTool;
 
 /** JSON Schema-compatible tool definition passed to LLM providers */
 export interface ToolDefinition {
@@ -256,6 +263,7 @@ export interface LLMGenerationParams {
 
 export interface AgentConfig {
   id: number;
+  userId?: string;
   name: string;
   systemPrompt: string;
   temperature: number;

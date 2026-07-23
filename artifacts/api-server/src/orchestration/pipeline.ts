@@ -57,7 +57,8 @@ import { FILLER_SEQUENCE_ID, InterruptionManager } from "./interruption-manager.
 import { logger } from "../lib/logger.js";
 import { format, addMinutes } from "date-fns";
 import { toZonedTime, formatInTimeZone } from "date-fns-tz";
-import { db, bookingsTable, eventTypesTable, schedulingCalendarsTable, agentsTable, platformSettingsTable } from "@workspace/db";
+import { db, bookingsTable, eventTypesTable, schedulingCalendarsTable, agentsTable, platformSettingsTable, whatsappConnectionsTable } from "@workspace/db";
+import { sendVobizWhatsappMessage } from "../services/vobiz-whatsapp-service.js";
 import { scheduleCallbackRequested } from "../services/autoRedial.js";
 import { resolveCallbackTime } from "../lib/tz-datetime.js";
 import { executeAnalyzeImage } from "../services/vision-analyze.js";
@@ -4822,6 +4823,8 @@ export class OrchestrationPipeline implements VoiceSession {
       await this.executeWebhookTool(tool, args);
     } else if (tool.type === "send_sms") {
       await this.executeSendSms(tool, args);
+    } else if (tool.type === "send_whatsapp") {
+      return await this.executeSendWhatsapp(tool, args);
     } else if (tool.type === "end_call") {
       await this.executeEndCall(tool);
     } else if (tool.type === "cal_com") {
@@ -4919,6 +4922,78 @@ export class OrchestrationPipeline implements VoiceSession {
 
   private async executeWebhookTool(tool: AgentTool & { type: "webhook" }, args: Record<string, unknown>): Promise<void> {
     await sharedExecuteWebhookTool(this.config.callId, tool, args);
+  }
+
+  private async executeSendWhatsapp(
+    tool: AgentTool,
+    args: Record<string, unknown>,
+  ): Promise<string> {
+    const callerPhone = this.config.callerPhone;
+    if (!callerPhone) {
+      logger.warn({ callId: this.config.callId }, "Send WhatsApp: no caller phone available");
+      return "error: recipient phone number is missing";
+    }
+
+    const agentId = this.config.agentConfig.id;
+    const userId = this.config.agentConfig.userId;
+    const message = (args["message"] as string) || (tool as any).messageTemplate || "";
+    const templateName = (args["template_name"] as string) || undefined;
+
+    logger.info(
+      { callId: this.config.callId, agentId, to: callerPhone, templateName },
+      "Executing Send WhatsApp tool",
+    );
+
+    // Look up active WhatsApp connection for this agent
+    const [conn] = await db
+      .select()
+      .from(whatsappConnectionsTable)
+      .where(
+        and(
+          eq(whatsappConnectionsTable.agentId, agentId),
+          eq(whatsappConnectionsTable.active, true),
+        ),
+      );
+
+    if (!conn) {
+      logger.warn({ callId: this.config.callId, agentId }, "Send WhatsApp: no active connection found for agent");
+      return "error: WhatsApp integration is not enabled for this agent";
+    }
+
+    if (conn.provider === "vobiz") {
+      const res = await sendVobizWhatsappMessage({
+        userId,
+        toPhone: callerPhone,
+        channelId: conn.vobizChannelId ?? undefined,
+        wabaId: conn.vobizWabaId ?? undefined,
+        text: message,
+        templateName,
+      });
+
+      if (res.success) {
+        return `WhatsApp message sent successfully to ${callerPhone}. Tell the caller you have sent it.`;
+      }
+      return `error: failed to send WhatsApp message (${res.error})`;
+    }
+
+    // Fallback: Custom Webhook
+    if (conn.outboundWebhookUrl) {
+      const result = await sharedExecuteWebhookTool(
+        this.config.callId,
+        {
+          name: "send_whatsapp",
+          description: "Send WhatsApp message via webhook",
+          type: "webhook",
+          url: conn.outboundWebhookUrl,
+          method: "POST",
+          secret: conn.outboundSecret ?? undefined,
+        },
+        { callId: this.config.callId, toPhone: callerPhone, message, templateName, args },
+      );
+      return result;
+    }
+
+    return "error: no outbound WhatsApp destination configured";
   }
 
   private async executeSendSms(tool: AgentTool & { type: "send_sms" }, _args: Record<string, unknown>): Promise<void> {

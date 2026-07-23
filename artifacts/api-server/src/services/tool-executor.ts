@@ -360,6 +360,29 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
           },
         };
       }
+      if (t.type === "send_whatsapp") {
+        return {
+          name: t.name?.trim() || "send_whatsapp",
+          description:
+            (t.description?.trim() ||
+              "Send a WhatsApp text message, details, or link directly to the caller's phone number during the call.") +
+            " Use this when the caller asks for information, links, address, or confirmation via WhatsApp.",
+          parameters: {
+            type: "object",
+            properties: {
+              message: {
+                type: "string",
+                description: "The text message, link, or details to send to the caller's WhatsApp.",
+              },
+              template_name: {
+                type: "string",
+                description: "Optional Meta WhatsApp template name if sending a pre-approved template.",
+              },
+            },
+            required: ["message"],
+          },
+        };
+      }
       // Webhook: use caller-defined parameters if provided
       if (t.type === "webhook" && t.parameters) {
         return {

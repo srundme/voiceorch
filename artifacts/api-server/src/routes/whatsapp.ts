@@ -36,6 +36,12 @@ function formatConnection(row: typeof whatsappConnectionsTable.$inferSelect, opt
     name: row.name,
     agentId: row.agentId,
     campaignId: row.campaignId,
+    provider: row.provider,
+    vobizWabaId: row.vobizWabaId,
+    vobizChannelId: row.vobizChannelId,
+    vobizPhone: row.vobizPhone,
+    postCallTemplate: row.postCallTemplate,
+    midCallEnabled: row.midCallEnabled,
     inboundToken: row.inboundToken,
     inboundWebhookUrl: inboundUrl(row.inboundToken),
     outboundWebhookUrl: row.outboundWebhookUrl,
@@ -123,6 +129,12 @@ router.post("/whatsapp/connections", requireAuth, async (req, res): Promise<void
     name?: string;
     agentId?: number;
     campaignId?: number | null;
+    provider?: "vobiz" | "webhook";
+    vobizWabaId?: string | null;
+    vobizChannelId?: string | null;
+    vobizPhone?: string | null;
+    postCallTemplate?: string | null;
+    midCallEnabled?: boolean;
     outboundWebhookUrl?: string | null;
     requestCallEnabled?: boolean;
     postCallEnabled?: boolean;
@@ -165,6 +177,12 @@ router.post("/whatsapp/connections", requireAuth, async (req, res): Promise<void
     name: (body.name ?? "WhatsApp").trim() || "WhatsApp",
     agentId,
     campaignId: body.campaignId ?? null,
+    provider: body.provider === "vobiz" ? "vobiz" : "webhook",
+    vobizWabaId: typeof body.vobizWabaId === "string" ? body.vobizWabaId.trim() : null,
+    vobizChannelId: typeof body.vobizChannelId === "string" ? body.vobizChannelId.trim() : null,
+    vobizPhone: typeof body.vobizPhone === "string" ? body.vobizPhone.trim() : null,
+    postCallTemplate: typeof body.postCallTemplate === "string" ? body.postCallTemplate.trim() : null,
+    midCallEnabled: typeof body.midCallEnabled === "boolean" ? body.midCallEnabled : true,
     inboundToken,
     outboundWebhookUrl: body.outboundWebhookUrl?.trim() || null,
     outboundSecret,
@@ -186,6 +204,12 @@ router.patch("/whatsapp/connections/:id", requireAuth, async (req, res): Promise
 
   const updates: Record<string, unknown> = { updatedAt: new Date() };
   if (typeof body["name"] === "string") updates.name = body["name"].trim() || "WhatsApp";
+  if (typeof body["provider"] === "string") updates.provider = body["provider"] === "vobiz" ? "vobiz" : "webhook";
+  if (typeof body["vobizWabaId"] === "string" || body["vobizWabaId"] === null) updates.vobizWabaId = body["vobizWabaId"] ? String(body["vobizWabaId"]).trim() : null;
+  if (typeof body["vobizChannelId"] === "string" || body["vobizChannelId"] === null) updates.vobizChannelId = body["vobizChannelId"] ? String(body["vobizChannelId"]).trim() : null;
+  if (typeof body["vobizPhone"] === "string" || body["vobizPhone"] === null) updates.vobizPhone = body["vobizPhone"] ? String(body["vobizPhone"]).trim() : null;
+  if (typeof body["postCallTemplate"] === "string" || body["postCallTemplate"] === null) updates.postCallTemplate = body["postCallTemplate"] ? String(body["postCallTemplate"]).trim() : null;
+  if (typeof body["midCallEnabled"] === "boolean") updates.midCallEnabled = body["midCallEnabled"];
   if (typeof body["outboundWebhookUrl"] === "string" || body["outboundWebhookUrl"] === null) {
     updates.outboundWebhookUrl = typeof body["outboundWebhookUrl"] === "string"
       ? body["outboundWebhookUrl"].trim() || null

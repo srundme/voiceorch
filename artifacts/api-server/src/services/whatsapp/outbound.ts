@@ -52,6 +52,8 @@ async function postOutbound(
   }
 }
 
+import { sendVobizWhatsappMessage } from "../vobiz-whatsapp-service.js";
+
 /**
  * Fire-and-forget: notify all active WhatsApp connections for this agent
  * that have post-call outbound enabled.
@@ -76,8 +78,7 @@ export async function dispatchWhatsappCallEnded(
       eq(whatsappConnectionsTable.postCallEnabled, true),
     ));
 
-  const withUrl = connections.filter((c) => (c.outboundWebhookUrl ?? "").trim());
-  if (withUrl.length === 0) return;
+  if (connections.length === 0) return;
 
   let direction = "inbound";
   try {
@@ -124,14 +125,36 @@ export async function dispatchWhatsappCallEnded(
     meetLink,
   });
 
-  for (const conn of withUrl) {
+  for (const conn of connections) {
     try {
-      await postOutbound(conn.outboundWebhookUrl!.trim(), conn.outboundSecret, payload);
+      if (conn.provider === "vobiz") {
+        let textMsg = `Call Summary from ${agent?.name || "AI Agent"}:\n${opts?.callSummary || "Call completed."}`;
+        if (meetLink) {
+          textMsg += `\n\nBooking confirmed! Meeting link: ${meetLink}`;
+        }
+        const res = await sendVobizWhatsappMessage({
+          userId: call.userId,
+          toPhone: phone,
+          channelId: conn.vobizChannelId,
+          wabaId: conn.vobizWabaId,
+          text: textMsg,
+          templateName: conn.postCallTemplate || undefined,
+        });
+
+        if (!res.success) {
+          throw new Error(res.error || "Vobiz WhatsApp send failed");
+        }
+      } else if (conn.outboundWebhookUrl?.trim()) {
+        await postOutbound(conn.outboundWebhookUrl.trim(), conn.outboundSecret, payload);
+      } else {
+        continue;
+      }
+
       await db.update(whatsappConnectionsTable)
         .set({ lastOutboundAt: new Date(), lastError: null, updatedAt: new Date() })
         .where(eq(whatsappConnectionsTable.id, conn.id));
       logger.info(
-        { callId, connectionId: conn.id, phone },
+        { callId, connectionId: conn.id, phone, provider: conn.provider },
         "whatsapp: post-call outbound ok",
       );
     } catch (err) {
@@ -141,7 +164,7 @@ export async function dispatchWhatsappCallEnded(
         .where(eq(whatsappConnectionsTable.id, conn.id))
         .catch(() => {});
       logger.warn(
-        { err, callId, connectionId: conn.id },
+        { err, callId, connectionId: conn.id, provider: conn.provider },
         "whatsapp: post-call outbound failed",
       );
     }
