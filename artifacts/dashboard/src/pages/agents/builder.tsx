@@ -2120,20 +2120,15 @@ function VisionTab({ form, agentId }: { form: any; agentId: number | undefined }
     }
   };
 
-  const isWebcamEnabled = captureMode === "live" || captureMode === "both";
-  const isUploadsEnabled = captureMode === "photo" || captureMode === "both";
+  const isVisionActive = visionEnabled || captureMode === "both" || captureMode === "live" || captureMode === "photo";
 
-  const toggleCapability = (cap: "webcam" | "uploads") => {
-    if (cap === "webcam") {
-      if (isWebcamEnabled && isUploadsEnabled) applyCaptureMode("photo");
-      else if (isWebcamEnabled && !isUploadsEnabled) applyCaptureMode("photo"); // Fallback
-      else if (!isWebcamEnabled && isUploadsEnabled) applyCaptureMode("both");
-      else applyCaptureMode("live");
-    } else if (cap === "uploads") {
-      if (isUploadsEnabled && isWebcamEnabled) applyCaptureMode("live");
-      else if (isUploadsEnabled && !isWebcamEnabled) applyCaptureMode("live"); // Fallback
-      else if (!isUploadsEnabled && isWebcamEnabled) applyCaptureMode("both");
-      else applyCaptureMode("photo");
+  const toggleVisionAI = () => {
+    if (isVisionActive) {
+      form.setValue("visionEnabled", false, { shouldDirty: true });
+      form.setValue("visionLiveEnabled", false, { shouldDirty: true });
+      form.setValue("agentKind", "voice", { shouldDirty: true });
+    } else {
+      applyCaptureMode("both");
     }
   };
 
@@ -2141,80 +2136,72 @@ function VisionTab({ form, agentId }: { form: any; agentId: number | undefined }
     <div className="p-5 sm:p-6 space-y-8 max-w-3xl">
       <div>
         <div className="mb-4">
-          <h3 className="text-sm font-semibold mb-0.5">Dynamic Visual Capabilities</h3>
+          <h3 className="text-sm font-semibold mb-0.5">Vision AI Intelligence</h3>
           <p className="text-xs text-muted-foreground">
-            Configure the visual inputs your AI agent can perceive. Toggle features dynamically for any custom workflow.
+            Enable multimodal vision perception for your agent. When active, your AI agent sees live webcam video, desktop screen share, and analyzes uploaded photos or documents in real-time.
           </p>
         </div>
 
-        {/* Feature Switches */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {/* Webcam & Live Video */}
-          <div
-            onClick={() => toggleCapability("webcam")}
-            className={cn(
-              "rounded-xl border p-4 transition-all cursor-pointer flex items-start gap-3.5",
-              isWebcamEnabled
-                ? "border-sky-500/50 bg-sky-500/5 ring-1 ring-sky-500/30"
-                : "border-border/50 bg-card/20 hover:border-border hover:bg-card/40"
-            )}
-          >
-            <div className={cn("h-10 w-10 rounded-xl flex items-center justify-center shrink-0 border", isWebcamEnabled ? "bg-sky-500/20 text-sky-400 border-sky-500/40" : "bg-muted/40 text-muted-foreground border-border/40")}>
-              <Camera className="h-5 w-5" />
+        {/* Master Vision AI Card */}
+        <div
+          onClick={toggleVisionAI}
+          className={cn(
+            "rounded-2xl border p-5 transition-all cursor-pointer flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4",
+            isVisionActive
+              ? "border-sky-500/60 bg-gradient-to-r from-sky-500/10 via-cyan-500/5 to-purple-500/10 shadow-lg shadow-sky-950/20 ring-1 ring-sky-500/40"
+              : "border-border/50 bg-card/20 hover:border-border hover:bg-card/40"
+          )}
+        >
+          <div className="flex items-start gap-4">
+            <div className={cn("h-12 w-12 rounded-2xl flex items-center justify-center shrink-0 border", isVisionActive ? "bg-sky-500/20 text-sky-400 border-sky-500/40 shadow-inner" : "bg-muted/40 text-muted-foreground border-border/40")}>
+              <Eye className="h-6 w-6" />
             </div>
-            <div className="space-y-1 flex-1">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-foreground">Live Webcam Stream</span>
-                <Badge variant="outline" className={cn("text-[9px] px-2 py-0", isWebcamEnabled ? "bg-sky-500/20 text-sky-300 border-sky-500/40" : "bg-muted/30 text-muted-foreground")}>
-                  {isWebcamEnabled ? "Active" : "Disabled"}
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-bold text-foreground">Vision AI Engine</span>
+                <Badge variant="outline" className={cn("text-[9.5px] px-2.5 py-0.5 font-mono font-bold", isVisionActive ? "bg-sky-500/20 text-sky-300 border-sky-500/40" : "bg-muted/30 text-muted-foreground")}>
+                  {isVisionActive ? "ACTIVE" : "DISABLED"}
                 </Badge>
               </div>
-              <p className="text-[11px] text-muted-foreground leading-relaxed">
-                Allows the agent to see live 2 FPS video stream from caller webcam or desktop screen share.
+              <p className="text-xs text-muted-foreground leading-relaxed max-w-xl">
+                Unifies Live Webcam Stream, Desktop Screen Share, and Mid-Call Document Photo Snaps into 1 seamless Vision AI capability.
               </p>
             </div>
           </div>
 
-          {/* Photo & Document Uploads */}
-          <div
-            onClick={() => toggleCapability("uploads")}
-            className={cn(
-              "rounded-xl border p-4 transition-all cursor-pointer flex items-start gap-3.5",
-              isUploadsEnabled
-                ? "border-emerald-500/50 bg-emerald-500/5 ring-1 ring-emerald-500/30"
-                : "border-border/50 bg-card/20 hover:border-border hover:bg-card/40"
-            )}
-          >
-            <div className={cn("h-10 w-10 rounded-xl flex items-center justify-center shrink-0 border", isUploadsEnabled ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40" : "bg-muted/40 text-muted-foreground border-border/40")}>
-              <Upload className="h-5 w-5" />
+          <Switch
+            checked={isVisionActive}
+            onCheckedChange={toggleVisionAI}
+            className="shrink-0"
+          />
+        </div>
+
+        {/* Unified Capabilities Overview */}
+        {isVisionActive && (
+          <div className="mt-4 rounded-xl border border-sky-500/30 bg-sky-500/5 p-4 space-y-3">
+            <div className="flex items-center gap-1.5 font-semibold text-xs text-sky-300">
+              <Sparkles className="h-3.5 w-3.5 text-sky-400" /> Active Visual Inputs Included:
             </div>
-            <div className="space-y-1 flex-1">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-foreground">Mid-Call Photo Snap</span>
-                <Badge variant="outline" className={cn("text-[9px] px-2 py-0", isUploadsEnabled ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40" : "bg-muted/30 text-muted-foreground")}>
-                  {isUploadsEnabled ? "Active" : "Disabled"}
-                </Badge>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+              <div className="flex items-center gap-2 p-2.5 rounded-lg border border-border/40 bg-card/30">
+                <Camera className="h-4 w-4 text-sky-400 shrink-0" />
+                <span className="text-[11px] font-medium text-foreground">Live Webcam Stream</span>
               </div>
-              <p className="text-[11px] text-muted-foreground leading-relaxed">
-                Caller can upload high-resolution document photos, invoices, or IDs mid-call for Vision OCR.
-              </p>
+              <div className="flex items-center gap-2 p-2.5 rounded-lg border border-border/40 bg-card/30">
+                <Eye className="h-4 w-4 text-purple-400 shrink-0" />
+                <span className="text-[11px] font-medium text-foreground">Desktop Screen Share</span>
+              </div>
+              <div className="flex items-center gap-2 p-2.5 rounded-lg border border-border/40 bg-card/30">
+                <Upload className="h-4 w-4 text-emerald-400 shrink-0" />
+                <span className="text-[11px] font-medium text-foreground">Document &amp; Photo Snaps</span>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
-        {/* Dynamic Vision Capabilities Guidance */}
-        <div className="mt-4 rounded-xl border border-border/60 bg-muted/20 p-4 space-y-2 text-xs">
-          <div className="flex items-center gap-1.5 font-semibold text-foreground">
-            <Sparkles className="h-3.5 w-3.5 text-sky-400" /> Fully Dynamic Vision Engine
-          </div>
-          <p className="text-[11px] text-muted-foreground leading-relaxed">
-            You can combine live camera feed with mid-call photo uploads on any custom agent. The agent dynamically perceives visual input based on your custom system prompt and tools.
-          </p>
-        </div>
-
-        {isWebcamEnabled && !isGeminiLive && (
+        {isVisionActive && !isGeminiLive && (
           <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-3 flex items-center gap-1.5">
-            <span>⚠️</span> Live camera inspection requires Gemini Live — selecting this switches the voice stack automatically. Save to apply.
+            <span>⚠️</span> Vision AI uses Gemini Live for real-time video stream processing — voice stack automatically set to Gemini Live. Save to apply.
           </p>
         )}
       </div>
