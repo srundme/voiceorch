@@ -19,6 +19,18 @@ import {
 
 const API = "/api";
 
+// Local type mirroring lib/db WhatsappRule (dashboard doesn't depend on @workspace/db)
+interface WhatsappRule {
+  id: string;
+  name: string;
+  triggerType: "mid_call_intent" | "post_call_disposition" | "post_call_transcript_ai";
+  condition: string;
+  templateName: string;
+  templateLanguage?: string;
+  staticVars?: Record<string, string>;
+  enabled: boolean;
+}
+
 type WaConnection = {
   id: string;
   name: string;

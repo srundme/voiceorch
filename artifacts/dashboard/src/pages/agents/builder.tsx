@@ -2127,8 +2127,8 @@ function VisionTab({ form, agentId }: { form: any; agentId: number | undefined }
                 "You are an AI Video KYC Agent. Inspect the caller's face and video feed. " +
                 "Ask the caller to present an official ID card (Aadhaar, Passport, or License) to the camera. " +
                 "Run `verify_visual_identity` to confirm their face and ID card match saved records, then greet them by name.";
-              setSystemPrompt((prev) => `${prev}${kycPrompt}`);
-              toast({ title: "Video KYC Preset Added" });
+              const cur = form.getValues("systemPrompt") ?? "";
+              form.setValue("systemPrompt", `${cur}${kycPrompt}`, { shouldDirty: true });
             }}
           >
             + Video KYC & Verification
@@ -2144,8 +2144,8 @@ function VisionTab({ form, agentId }: { form: any; agentId: number | undefined }
                 "\n\n[DOCUMENT OCR & FIELD EXTRACTION]\n" +
                 "You are an AI Document Reader Agent. When the caller holds up an ID card, invoice, receipt, or agreement, " +
                 "invoke `extract_document_fields` to pull name, ID number, and dates, then confirm the extracted details aloud.";
-              setSystemPrompt((prev) => `${prev}${ocrPrompt}`);
-              toast({ title: "Document OCR Preset Added" });
+              const cur = form.getValues("systemPrompt") ?? "";
+              form.setValue("systemPrompt", `${cur}${ocrPrompt}`, { shouldDirty: true });
             }}
           >
             + Document OCR & Field Extractor
@@ -2161,8 +2161,8 @@ function VisionTab({ form, agentId }: { form: any; agentId: number | undefined }
                 "\n\n[PHYSICAL ASSET & DAMAGE INSPECTION]\n" +
                 "You are an AI Visual Inspection Agent. Ask the user to point their phone camera at the damaged vehicle, property, or hardware component. " +
                 "Invoke `inspect_physical_asset` to evaluate damage severity and broken parts, then summarize the repair findings.";
-              setSystemPrompt((prev) => `${prev}${assetPrompt}`);
-              toast({ title: "Asset Inspection Preset Added" });
+              const cur = form.getValues("systemPrompt") ?? "";
+              form.setValue("systemPrompt", `${cur}${assetPrompt}`, { shouldDirty: true });
             }}
           >
             + Insurance & Damage Inspection
@@ -2178,8 +2178,8 @@ function VisionTab({ form, agentId }: { form: any; agentId: number | undefined }
                 "\n\n[IT HELPDESK & SCREEN TROUBLESHOOTING]\n" +
                 "You are an AI Screen Troubleshooting Agent. Ask the user to show their computer or TV screen to the camera. " +
                 "Invoke `inspect_screen` to read on-screen error codes and dialogs, then guide the user step-by-step.";
-              setSystemPrompt((prev) => `${prev}${screenPrompt}`);
-              toast({ title: "Screen Reader Preset Added" });
+              const cur = form.getValues("systemPrompt") ?? "";
+              form.setValue("systemPrompt", `${cur}${screenPrompt}`, { shouldDirty: true });
             }}
           >
             + IT Screen Troubleshooter
