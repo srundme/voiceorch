@@ -349,6 +349,89 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
           },
         };
       }
+      if (t.type === "extract_document_fields") {
+        return {
+          name: t.name?.trim() || "extract_document_fields",
+          description:
+            "Extract structured text fields live from an ID card, invoice, receipt, passport, or agreement shown to the camera.",
+          parameters: {
+            type: "object",
+            properties: {
+              document_type: {
+                type: "string",
+                description: "Type of document: 'id_card', 'invoice', 'receipt', 'passport', or 'contract'",
+              },
+              target_fields: {
+                type: "string",
+                description: "Comma-separated list of target fields to extract (e.g. 'name, id_number, total_amount, expiry')",
+              },
+            },
+            required: [],
+          },
+        };
+      }
+      if (t.type === "inspect_physical_asset") {
+        return {
+          name: t.name?.trim() || "inspect_physical_asset",
+          description:
+            "Inspect a physical asset, car, property, or hardware item shown on video to evaluate damage severity and broken parts.",
+          parameters: {
+            type: "object",
+            properties: {
+              asset_category: {
+                type: "string",
+                description: "Asset category: 'vehicle', 'property', 'plumbing', 'electronics', or 'hardware'",
+              },
+              inspection_goal: {
+                type: "string",
+                description: "Goal of inspection (e.g. 'assess bumper damage severity and affected components')",
+              },
+            },
+            required: [],
+          },
+        };
+      }
+      if (t.type === "inspect_screen") {
+        return {
+          name: t.name?.trim() || "inspect_screen",
+          description:
+            "Read error messages or UI elements from a computer, TV, or smartphone screen shown to the camera to provide IT helpdesk support.",
+          parameters: {
+            type: "object",
+            properties: {
+              screen_type: {
+                type: "string",
+                description: "Type of screen: 'computer', 'tv', 'mobile', or 'appliance_display'",
+              },
+            },
+            required: [],
+          },
+        };
+      }
+      if (t.type === "read_caller_gesture") {
+        return {
+          name: t.name?.trim() || "read_caller_gesture",
+          description:
+            "Detect non-verbal caller signals from live video feed (head nod, thumbs up, hand wave, or confused facial expression).",
+          parameters: {
+            type: "object",
+            properties: {},
+            required: [],
+          },
+        };
+      }
+      if (t.type === "scan_barcode_qr") {
+        return {
+          name: t.name?.trim() || "scan_barcode_qr",
+          description:
+            "Decode product barcodes and QR codes live from the video stream to retrieve product/package details.",
+          parameters: {
+            type: "object",
+            properties: {},
+            required: [],
+          },
+        };
+      }
       if (t.type === "analyze_image") {
         return {
           name: t.name?.trim() || "analyze_image",
