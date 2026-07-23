@@ -24,6 +24,7 @@ import { dispatchWebhooks } from "./webhook-endpoints.js";
 import { disposeCall } from "../services/disposition.js";
 import { traiPreDialCheck, logPreDialDecision } from "../services/trai/index.js";
 import { evaluateIrdaiGate, IRDAI_BLOCKED_MESSAGE, IRDAI_BLOCKED_CODE } from "../services/irdai/gate.js";
+import { listCallMediaForCall } from "../services/call-media.js";
 
 function parseLatencyBody(body: unknown): { sttLatencyMs?: number; llmLatencyMs?: number; ttsFirstChunkMs?: number } {
   if (!body || typeof body !== "object") return {};
@@ -638,10 +639,28 @@ router.get("/calls/:id", requireAuth, async (req, res): Promise<void> => {
     .from(callExecutionsTable)
     .where(eq(callExecutionsTable.callId, call.id));
   const enriched = {
-    ...(await enrichCall(call, exec?.campaignId ?? null)),
+    ...call,
     campaignId: exec?.campaignId ?? null,
   };
-  res.json(GetCallResponse.parse(enriched));
+  res.json(GetCallResponse.parse(await enrichCall(enriched as any)));
+});
+
+router.get("/calls/:id/media", requireAuth, async (req, res): Promise<void> => {
+  const callId = parseInt(req.params["id"] as string, 10);
+  if (isNaN(callId)) { res.status(400).json({ error: "Invalid call ID" }); return; }
+  try {
+    const mediaRows = await listCallMediaForCall(callId, 50);
+    res.json(mediaRows.map((m) => ({
+      id: m.id,
+      mimeType: m.mimeType,
+      fileName: m.fileName,
+      url: `/api/media/${m.id}`,
+      createdAt: m.createdAt.toISOString(),
+    })));
+  } catch (err) {
+    req.log.error({ err, callId }, "Failed to fetch call media timeline");
+    res.status(500).json({ error: "Failed to fetch call media" });
+  }
 });
 
 // Caller-scoped memory context for the caller on a given call. Mirrors the

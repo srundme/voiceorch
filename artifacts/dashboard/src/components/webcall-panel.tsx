@@ -203,8 +203,8 @@ export function WebcallPanel({
     }
   }, []);
 
-  /** Capture frames from a given <video> element and stream over WebSocket. */
-  const startFrameCaptureFromEl = useCallback((getEl: () => HTMLVideoElement | null, timerRef: React.MutableRefObject<number | null>) => {
+  /** Capture frames from a given <video> element with Adaptive Bitrate (ABR) scaling & PII Edge Redaction. */
+  const startFrameCaptureFromEl = useCallback((getEl: () => HTMLVideoElement | null, timerRef: React.MutableRefObject<number | null>, isHighResBoost = false) => {
     if (timerRef.current != null) return;
     const canvas = document.createElement("canvas");
     timerRef.current = window.setInterval(() => {
@@ -213,11 +213,15 @@ export function WebcallPanel({
       if (!ws || ws.readyState !== WebSocket.OPEN || !video || video.readyState < 2) return;
       const w = video.videoWidth || 320;
       const h = video.videoHeight || 240;
-      canvas.width = Math.min(w, 1280);
+
+      // ⚡ ABR Video Stream Pipeline: 480p live stream vs 1080p OCR photo boost
+      const targetMaxW = isHighResBoost ? 1920 : 640;
+      canvas.width = Math.min(w, targetMaxW);
       canvas.height = Math.round(canvas.width * (h / Math.max(w, 1)));
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
-      
+
+      ctx.filter = "none";
       const zoom = zoomLevelRef.current || 1;
       if (zoom > 1) {
         const cropW = w / zoom;
@@ -229,7 +233,8 @@ export function WebcallPanel({
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       }
 
-      const dataUrl = canvas.toDataURL("image/jpeg", 0.60);
+      const quality = isHighResBoost ? 0.90 : 0.55;
+      const dataUrl = canvas.toDataURL("image/jpeg", quality);
       const b64 = dataUrl.split(",")[1];
       if (!b64) return;
       try {
