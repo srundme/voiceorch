@@ -229,20 +229,25 @@ export class GeminiLivePipeline implements VoiceSession {
         }
         return;
       }
-      // visionEnabled only: one still into the Live turn (no continuous video stream).
-      if (this.videoVisionAnnounced) return;
+      // visionEnabled only (no continuous stream): send periodic stills every ~8s so
+      // the LLM stays aware of screen/camera changes rather than seeing only one frame.
+      if (this.videoVisionAnnounced && now - (this as any)._lastStillAt < 8000) return;
+      (this as any)._lastStillAt = now;
+      const isFirst = !this.videoVisionAnnounced;
       this.videoVisionAnnounced = true;
       this.session.sendClientContent({
         turns: [{
           role: "user",
           parts: [
             { inlineData: { mimeType: mimeType.includes("png") ? "image/png" : "image/jpeg", data } },
-            { text: "This is a webcam still. Briefly describe what you see." },
+            { text: isFirst
+              ? "The caller's webcam / screen share just turned on. Briefly describe what you see."
+              : "Updated frame from the caller's camera or screen share. Note any changes." },
           ],
         }],
         turnComplete: true,
       });
-      this.config.onTranscript("user", "[Camera still shared]");
+      if (isFirst) this.config.onTranscript("user", "[Camera / screen share active]");
     }).catch((err) => logger.debug({ callId: this.config.callId, err }, "Live: video frame send failed"));
   }
 
