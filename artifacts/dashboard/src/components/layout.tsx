@@ -79,7 +79,6 @@ const NAV_PRIMARY = [
   { name: "Home",            href: "/app/home",            icon: Home },
   { name: "Agents",          href: "/app/agents",          icon: Users },
   { name: "Squads",          href: "/app/squads",          icon: UsersRound },
-  { name: "Voice-a-thon",    href: "/app/voiceathon",      icon: Trophy },
   { name: "Vibe Build",      href: "/app/vibe",            icon: Sparkles },
   { name: "Agent Knowledge", href: "/app/knowledge-bases", icon: BookOpen },
   { name: "Campaigns",       href: "/app/campaigns",       icon: Zap },

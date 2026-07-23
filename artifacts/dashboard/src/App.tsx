@@ -286,10 +286,6 @@ function AppRoutes() {
         <Route path="/app/agents/:id" component={AgentBuilder} />
         <Route path="/app/squads" component={SquadsPage} />
         <Route path="/app/squads/:id" component={SquadsPage} />
-        <Route path="/app/events/:id/team" component={EventTeamPortalPage} />
-        <Route path="/app/events/voiceathon" component={PublicEventPage} />
-        <Route path="/app/voiceathon" component={PublicEventPage} />
-        <Route path="/app/events" component={EventsPage} />
         <Route path="/app/calls" component={CallsList} />
         <Route path="/app/calls/:id" component={CallDetail} />
         <Route path="/app/knowledge-bases" component={KnowledgeBasePage} />
