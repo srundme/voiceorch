@@ -42,7 +42,7 @@ type CustomDatabaseRow = {
   createdAt: string;
 };
 
-export function CustomDatabaseBuilder() {
+export function CustomDatabaseBuilder({ defaultAgentId }: { defaultAgentId?: number }) {
   const { toast } = useToast();
   const { data: agents } = useListAgents();
   const [databases, setDatabases] = useState<CustomDatabase[]>([]);
@@ -55,7 +55,14 @@ export function CustomDatabaseBuilder() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [tableName, setTableName] = useState("");
   const [tableDesc, setTableDesc] = useState("");
-  const [linkedAgentId, setLinkedAgentId] = useState<string>("none");
+  const [linkedAgentId, setLinkedAgentId] = useState<string>(defaultAgentId ? String(defaultAgentId) : "none");
+
+  useEffect(() => {
+    if (defaultAgentId) {
+      setLinkedAgentId(String(defaultAgentId));
+    }
+  }, [defaultAgentId]);
+
   const [columns, setColumns] = useState<CustomColumnDef[]>([
     { key: "invoice_no", label: "Invoice Number", type: "text" },
     { key: "product_name", label: "Product Name", type: "text" },
@@ -333,22 +340,31 @@ export function CustomDatabaseBuilder() {
               />
             </div>
 
-            <div>
-              <Label className="text-xs">Link to Vision Agent (Optional)</Label>
-              <Select value={linkedAgentId} onValueChange={setLinkedAgentId}>
-                <SelectTrigger className="mt-1 text-xs">
-                  <SelectValue placeholder="Select Agent" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None (General Table)</SelectItem>
-                  {(agents ?? []).map((a) => (
-                    <SelectItem key={a.id} value={String(a.id)}>
-                      {a.name} (ID: {a.id})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {defaultAgentId ? (
+              <div className="p-2.5 rounded-xl border border-sky-500/30 bg-sky-500/10 text-xs flex items-center justify-between">
+                <span className="text-muted-foreground text-[11px]">Vision AI Binding:</span>
+                <Badge className="bg-sky-500 text-black font-bold text-[10px]">
+                  Auto-Linked to This Agent (#{defaultAgentId})
+                </Badge>
+              </div>
+            ) : (
+              <div>
+                <Label className="text-xs">Link to Vision Agent (Optional)</Label>
+                <Select value={linkedAgentId} onValueChange={setLinkedAgentId}>
+                  <SelectTrigger className="mt-1 text-xs">
+                    <SelectValue placeholder="Select Agent" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None (General Table)</SelectItem>
+                    {(agents ?? []).map((a) => (
+                      <SelectItem key={a.id} value={String(a.id)}>
+                        {a.name} (ID: {a.id})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             <div className="space-y-2">
               <div className="flex items-center justify-between">

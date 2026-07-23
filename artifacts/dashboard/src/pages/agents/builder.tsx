@@ -2324,7 +2324,7 @@ function VisionTab({ form, agentId }: { form: any; agentId: number | undefined }
 
       {/* Synthetic Product & Invoice Database Section right in Vision Tab */}
       <div className="rounded-xl border border-border/60 bg-card/30 p-4 space-y-3">
-        <CustomDatabaseBuilder />
+        <CustomDatabaseBuilder defaultAgentId={agentId} />
       </div>
 
       <WebcallShareLinksSection
