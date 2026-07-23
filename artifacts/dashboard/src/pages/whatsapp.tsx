@@ -224,6 +224,10 @@ export default function WhatsAppPage() {
   const [vobizPhone, setVobizPhone] = useState("");
   const [postCallTemplate, setPostCallTemplate] = useState("");
   const [midCallEnabled, setMidCallEnabled] = useState(true);
+  const [outboundUrl, setOutboundUrl] = useState("");
+  const [requestCall, setRequestCall] = useState(true);
+  const [postCall, setPostCall] = useState(true);
+  const [createdSecret, setCreatedSecret] = useState<string | null>(null);
 
   const resetForm = () => {
     setName("WhatsApp");
@@ -376,6 +380,12 @@ export default function WhatsAppPage() {
                     setEditConn(c);
                     setName(c.name);
                     setAgentId(c.agentId);
+                    setProvider(c.provider ?? "vobiz");
+                    setVobizWabaId(c.vobizWabaId ?? "");
+                    setVobizChannelId(c.vobizChannelId ?? "");
+                    setVobizPhone(c.vobizPhone ?? "");
+                    setPostCallTemplate(c.postCallTemplate ?? "");
+                    setMidCallEnabled(c.midCallEnabled ?? true);
                     setOutboundUrl(c.outboundWebhookUrl ?? "");
                     setRequestCall(c.requestCallEnabled);
                     setPostCall(c.postCallEnabled);
@@ -557,28 +567,88 @@ export default function WhatsAppPage() {
       <Dialog open={!!editConn} onOpenChange={(o) => !o && setEditConn(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Edit WhatsApp connection</DialogTitle>
+            <DialogTitle>Edit WhatsApp Connection</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <div>
-              <Label className="text-xs">Name</Label>
+              <Label className="text-xs">Connection Name</Label>
               <Input className="mt-1 h-9" value={name} onChange={(e) => setName(e.target.value)} />
             </div>
             <div>
-              <Label className="text-xs">Outbound webhook URL</Label>
-              <Input
-                className="mt-1 h-9"
-                value={outboundUrl}
-                onChange={(e) => setOutboundUrl(e.target.value)}
-                placeholder="https://…"
-              />
+              <Label className="text-xs">Integration Provider</Label>
+              <div className="grid grid-cols-2 gap-2 mt-1">
+                <button
+                  type="button"
+                  className={`px-3 py-2 text-xs font-medium rounded-md border ${
+                    provider === "vobiz" ? "border-primary bg-primary/10 text-primary" : "border-input bg-background"
+                  }`}
+                  onClick={() => setProvider("vobiz")}
+                >
+                  ⚡ Vobiz Native WhatsApp
+                </button>
+                <button
+                  type="button"
+                  className={`px-3 py-2 text-xs font-medium rounded-md border ${
+                    provider === "webhook" ? "border-primary bg-primary/10 text-primary" : "border-input bg-background"
+                  }`}
+                  onClick={() => setProvider("webhook")}
+                >
+                  🔗 Custom Webhook
+                </button>
+              </div>
             </div>
-            <div className="flex items-center justify-between">
-              <Label className="text-xs">Request a Call → dial AI</Label>
-              <Switch checked={requestCall} onCheckedChange={setRequestCall} />
-            </div>
-            <div className="flex items-center justify-between">
-              <Label className="text-xs">Post-call WhatsApp notify</Label>
+
+            {provider === "vobiz" ? (
+              <>
+                <div>
+                  <Label className="text-xs">Vobiz WABA ID (optional)</Label>
+                  <Input
+                    className="mt-1 h-9"
+                    placeholder="e.g. 123456789012345"
+                    value={vobizWabaId}
+                    onChange={(e) => setVobizWabaId(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Vobiz Channel ID (optional)</Label>
+                  <Input
+                    className="mt-1 h-9"
+                    placeholder="e.g. 0a1b2c3d-4e5f-6a7b-8c9d..."
+                    value={vobizChannelId}
+                    onChange={(e) => setVobizChannelId(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Post-Call Meta Template (optional)</Label>
+                  <Input
+                    className="mt-1 h-9"
+                    placeholder="e.g. call_summary_v1"
+                    value={postCallTemplate}
+                    onChange={(e) => setPostCallTemplate(e.target.value)}
+                  />
+                </div>
+                <div className="flex items-center justify-between pt-1">
+                  <div>
+                    <Label className="text-xs font-medium">Mid-Call Agent Tool (`send_whatsapp`)</Label>
+                    <p className="text-[11px] text-muted-foreground">Allows AI to send links/brochures to caller during the call</p>
+                  </div>
+                  <Switch checked={midCallEnabled} onCheckedChange={setMidCallEnabled} />
+                </div>
+              </>
+            ) : (
+              <div>
+                <Label className="text-xs">Outbound Webhook URL</Label>
+                <Input
+                  className="mt-1 h-9"
+                  placeholder="https://hooks.zapier.com/…"
+                  value={outboundUrl}
+                  onChange={(e) => setOutboundUrl(e.target.value)}
+                />
+              </div>
+            )}
+
+            <div className="flex items-center justify-between pt-1">
+              <Label className="text-xs">Post-call WhatsApp Summary</Label>
               <Switch checked={postCall} onCheckedChange={setPostCall} />
             </div>
             <div className="flex items-center justify-between">
@@ -589,7 +659,7 @@ export default function WhatsAppPage() {
               />
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="mt-4">
             <Button variant="ghost" onClick={() => setEditConn(null)}>Cancel</Button>
             <Button
               disabled={!editConn || patchMut.isPending}
@@ -599,6 +669,12 @@ export default function WhatsAppPage() {
                   id: editConn.id,
                   body: {
                     name,
+                    provider,
+                    vobizWabaId: vobizWabaId.trim() || null,
+                    vobizChannelId: vobizChannelId.trim() || null,
+                    vobizPhone: vobizPhone.trim() || null,
+                    postCallTemplate: postCallTemplate.trim() || null,
+                    midCallEnabled,
                     outboundWebhookUrl: outboundUrl.trim() || null,
                     requestCallEnabled: requestCall,
                     postCallEnabled: postCall,
@@ -607,7 +683,7 @@ export default function WhatsAppPage() {
                 });
               }}
             >
-              Save
+              Save Changes
             </Button>
           </DialogFooter>
         </DialogContent>
