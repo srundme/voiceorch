@@ -88,8 +88,7 @@ function SetupGuide({ hasConnection }: { hasConnection: boolean }) {
       <div className="rounded-lg border border-border/60 bg-card/30 p-5">
         <h2 className="text-sm font-semibold">How to set this up</h2>
         <p className="mt-1 text-xs text-muted-foreground max-w-2xl">
-          SnapServe does not send WhatsApp messages itself. Your Interakt / Wati / AiSensy / Zapier
-          account does. You connect the two with webhooks — about 10 minutes if templates already exist.
+          SnapServe sends WhatsApp messages natively via <strong>SnapServe Engine</strong> or connects to custom webhooks (Zapier / n8n / BSP).
         </p>
 
         <ol className="mt-4 space-y-4">
@@ -300,7 +299,7 @@ export default function WhatsAppPage() {
     <div className="space-y-6">
       <AppPageHeader
         title="WhatsApp"
-        description="Request a Call button → AI dials. After each call, SnapServe notifies your webhook so you can send a WhatsApp template via Interakt, Wati, AiSensy, or any BSP."
+        description="Connect WhatsApp to AI Agents. Enable mid-call interactive links & automatic post-call WhatsApp summaries natively via SnapServe or custom webhooks."
         actions={
           <Button
             size="sm"
@@ -448,20 +447,20 @@ export default function WhatsAppPage() {
 
       {/* Create */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Add WhatsApp Connection</DialogTitle>
             <DialogDescription>
-              Connect WhatsApp to your AI agent natively via Vobiz or via custom Webhooks (Zapier/n8n).
+              Connect WhatsApp to your AI agent natively via SnapServe Engine or via custom Webhooks (Zapier/n8n).
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3">
+          <div className="space-y-3.5">
             <div>
               <Label className="text-xs">Connection Name</Label>
               <Input className="mt-1 h-9" value={name} onChange={(e) => setName(e.target.value)} />
             </div>
             <div>
-              <Label className="text-xs">AI agent *</Label>
+              <Label className="text-xs">AI Agent *</Label>
               <select
                 className="mt-1 w-full h-9 rounded-md border border-input bg-background px-2 text-sm"
                 value={agentId}
@@ -474,21 +473,21 @@ export default function WhatsAppPage() {
               </select>
             </div>
             <div>
-              <Label className="text-xs">Integration Provider</Label>
+              <Label className="text-xs">Integration Mode</Label>
               <div className="grid grid-cols-2 gap-2 mt-1">
                 <button
                   type="button"
-                  className={`px-3 py-2 text-xs font-medium rounded-md border ${
-                    provider === "vobiz" ? "border-primary bg-primary/10 text-primary" : "border-input bg-background"
+                  className={`px-3 py-2 text-xs font-medium rounded-md border transition-all ${
+                    provider === "vobiz" ? "border-primary bg-primary/10 text-primary font-semibold" : "border-input bg-background"
                   }`}
                   onClick={() => setProvider("vobiz")}
                 >
-                  ⚡ Vobiz Native WhatsApp
+                  ⚡ SnapServe WhatsApp
                 </button>
                 <button
                   type="button"
-                  className={`px-3 py-2 text-xs font-medium rounded-md border ${
-                    provider === "webhook" ? "border-primary bg-primary/10 text-primary" : "border-input bg-background"
+                  className={`px-3 py-2 text-xs font-medium rounded-md border transition-all ${
+                    provider === "webhook" ? "border-primary bg-primary/10 text-primary font-semibold" : "border-input bg-background"
                   }`}
                   onClick={() => setProvider("webhook")}
                 >
@@ -499,20 +498,42 @@ export default function WhatsAppPage() {
 
             {provider === "vobiz" ? (
               <>
+                <div className="p-3 bg-muted/40 rounded-lg border border-border/50 text-xs space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-foreground flex items-center gap-1.5">
+                      <MessageCircle className="w-3.5 h-3.5 text-emerald-500" />
+                      How to get a WABA ID & Channel ID?
+                    </span>
+                    <a
+                      href="https://business.facebook.com"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[11px] text-primary hover:underline flex items-center gap-0.5"
+                    >
+                      Meta Manager <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
+                  <ol className="list-decimal list-inside text-[11px] text-muted-foreground space-y-1 pl-1">
+                    <li>Log into <strong>Meta Business Manager</strong> &rarr; <em>WhatsApp Accounts</em>.</li>
+                    <li>Copy your 15-digit <strong>WABA ID</strong> under Business Info.</li>
+                    <li>Enter your business phone number to receive Meta SMS verification.</li>
+                  </ol>
+                </div>
+
                 <div>
-                  <Label className="text-xs">Vobiz WABA ID (optional)</Label>
+                  <Label className="text-xs">WhatsApp Business Account ID (WABA ID)</Label>
                   <Input
                     className="mt-1 h-9"
-                    placeholder="e.g. 123456789012345"
+                    placeholder="e.g. 123456789012345 (from Meta Manager)"
                     value={vobizWabaId}
                     onChange={(e) => setVobizWabaId(e.target.value)}
                   />
                 </div>
                 <div>
-                  <Label className="text-xs">Vobiz Channel ID (optional)</Label>
+                  <Label className="text-xs">WhatsApp Channel ID (optional)</Label>
                   <Input
                     className="mt-1 h-9"
-                    placeholder="e.g. 0a1b2c3d-4e5f-6a7b-8c9d..."
+                    placeholder="e.g. 0a1b2c3d-4e5f-6a7b..."
                     value={vobizChannelId}
                     onChange={(e) => setVobizChannelId(e.target.value)}
                   />
@@ -521,10 +542,13 @@ export default function WhatsAppPage() {
                   <Label className="text-xs">Post-Call Meta Template (optional)</Label>
                   <Input
                     className="mt-1 h-9"
-                    placeholder="e.g. call_summary_v1 (leave empty for text)"
+                    placeholder="e.g. call_summary_v1 (Meta approved template name)"
                     value={postCallTemplate}
                     onChange={(e) => setPostCallTemplate(e.target.value)}
                   />
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    Meta requires approved templates for outbound post-call messages. Leave blank to send session text.
+                  </p>
                 </div>
                 <div className="flex items-center justify-between pt-1">
                   <div>
@@ -565,31 +589,31 @@ export default function WhatsAppPage() {
 
       {/* Edit */}
       <Dialog open={!!editConn} onOpenChange={(o) => !o && setEditConn(null)}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit WhatsApp Connection</DialogTitle>
           </DialogHeader>
-          <div className="space-y-3">
+          <div className="space-y-3.5">
             <div>
               <Label className="text-xs">Connection Name</Label>
               <Input className="mt-1 h-9" value={name} onChange={(e) => setName(e.target.value)} />
             </div>
             <div>
-              <Label className="text-xs">Integration Provider</Label>
+              <Label className="text-xs">Integration Mode</Label>
               <div className="grid grid-cols-2 gap-2 mt-1">
                 <button
                   type="button"
-                  className={`px-3 py-2 text-xs font-medium rounded-md border ${
-                    provider === "vobiz" ? "border-primary bg-primary/10 text-primary" : "border-input bg-background"
+                  className={`px-3 py-2 text-xs font-medium rounded-md border transition-all ${
+                    provider === "vobiz" ? "border-primary bg-primary/10 text-primary font-semibold" : "border-input bg-background"
                   }`}
                   onClick={() => setProvider("vobiz")}
                 >
-                  ⚡ Vobiz Native WhatsApp
+                  ⚡ SnapServe WhatsApp
                 </button>
                 <button
                   type="button"
-                  className={`px-3 py-2 text-xs font-medium rounded-md border ${
-                    provider === "webhook" ? "border-primary bg-primary/10 text-primary" : "border-input bg-background"
+                  className={`px-3 py-2 text-xs font-medium rounded-md border transition-all ${
+                    provider === "webhook" ? "border-primary bg-primary/10 text-primary font-semibold" : "border-input bg-background"
                   }`}
                   onClick={() => setProvider("webhook")}
                 >
@@ -601,7 +625,7 @@ export default function WhatsAppPage() {
             {provider === "vobiz" ? (
               <>
                 <div>
-                  <Label className="text-xs">Vobiz WABA ID (optional)</Label>
+                  <Label className="text-xs">WhatsApp Business Account ID (WABA ID)</Label>
                   <Input
                     className="mt-1 h-9"
                     placeholder="e.g. 123456789012345"
@@ -610,10 +634,10 @@ export default function WhatsAppPage() {
                   />
                 </div>
                 <div>
-                  <Label className="text-xs">Vobiz Channel ID (optional)</Label>
+                  <Label className="text-xs">WhatsApp Channel ID (optional)</Label>
                   <Input
                     className="mt-1 h-9"
-                    placeholder="e.g. 0a1b2c3d-4e5f-6a7b-8c9d..."
+                    placeholder="e.g. 0a1b2c3d-4e5f-6a7b..."
                     value={vobizChannelId}
                     onChange={(e) => setVobizChannelId(e.target.value)}
                   />
