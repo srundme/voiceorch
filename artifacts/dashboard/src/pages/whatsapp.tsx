@@ -223,6 +223,7 @@ export default function WhatsAppPage() {
   const [vobizChannelId, setVobizChannelId] = useState("");
   const [vobizPhone, setVobizPhone] = useState("");
   const [postCallTemplate, setPostCallTemplate] = useState("");
+  const [midCallEnabled, setMidCallEnabled] = useState(true);
   const [rules, setRules] = useState<WhatsappRule[]>([]);
   const [outboundUrl, setOutboundUrl] = useState("");
   const [requestCall, setRequestCall] = useState(true);
