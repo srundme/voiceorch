@@ -19,6 +19,7 @@ import { WebcallPanel } from "@/components/webcall-panel";
 import { AgentConfigCard, EditConfigDialog } from "@/components/agent-config-card";
 import { GeminiLiveVoicePicker } from "@/components/gemini-live-voice-picker";
 import { CloneVoiceDialog, type ClonedVoiceResult } from "@/components/clone-voice-dialog";
+import { CustomDatabaseBuilder } from "../memory/custom-database-builder";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
@@ -2307,6 +2308,11 @@ function VisionTab({ form, agentId }: { form: any; agentId: number | undefined }
             + Retail & Product Verifier
           </Button>
         </div>
+      </div>
+
+      {/* Synthetic Product & Invoice Database Section right in Vision Tab */}
+      <div className="rounded-xl border border-border/60 bg-card/30 p-4 space-y-3">
+        <CustomDatabaseBuilder />
       </div>
 
       <WebcallShareLinksSection
