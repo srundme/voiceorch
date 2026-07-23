@@ -201,6 +201,8 @@ router.use(workflowsRouter);
 router.use(sheetsRouter);
 router.use(sheetAutoCallsRouter);
 router.use(squadsRouter);
-router.use(voiceathonEventsRouter);
+import customDatabasesRouter from "./custom-databases.js";
+
+router.use(customDatabasesRouter);
 
 export default router;

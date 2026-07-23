@@ -95,6 +95,7 @@ import {
   executeNativeReschedule as sharedExecuteNativeReschedule,
   executeNativeCancel as sharedExecuteNativeCancel,
   executeWebhookTool as sharedExecuteWebhookTool,
+  executeNativeCustomDatabaseQuery as sharedExecuteNativeCustomDatabaseQuery,
   parsePreferredDate,
   writeTransferLeadDb,
 } from "../services/tool-executor.js";
@@ -4838,6 +4839,9 @@ export class OrchestrationPipeline implements VoiceSession {
       return await this.executeReadCallerGesture(tool, args);
     } else if (tool.type === "scan_barcode_qr") {
       return await this.executeScanBarcodeQr(tool, args);
+    } else if (tool.type === "query_custom_database" || (tool as any).name === "query_custom_database") {
+      const searchKey = String(args["searchKey"] ?? args["query"] ?? "").trim();
+      return await sharedExecuteNativeCustomDatabaseQuery(this.agent.id, searchKey);
     } else if (tool.type === "end_call") {
       await this.executeEndCall(tool);
     } else if (tool.type === "cal_com") {

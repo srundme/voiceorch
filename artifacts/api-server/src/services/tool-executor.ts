@@ -12,6 +12,8 @@ import {
   leadTransfersTable,
   leadTimelineTable,
   callExecutionsTable,
+  customDatabasesTable,
+  customDatabaseRowsTable,
   type AgentConfig,
 } from "@workspace/db";
 import { eq, and, or, sql } from "drizzle-orm";
@@ -346,6 +348,24 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
               },
             },
             required: [],
+          },
+        };
+      }
+      if (t.type === "query_custom_database") {
+        return {
+          name: t.name?.trim() || "query_custom_database",
+          description:
+            t.description ||
+            "Query the dynamic custom database to look up records, invoice details, product images, or customer data by invoice number, phone, barcode, or SKU.",
+          parameters: {
+            type: "object",
+            properties: {
+              searchKey: {
+                type: "string",
+                description: "The search query (e.g. Invoice Number #INV-9841, Phone, Product SKU, or Barcode)",
+              },
+            },
+            required: ["searchKey"],
           },
         };
       }
@@ -1993,5 +2013,41 @@ export async function writeTransferLeadDb(
     });
   } catch (err) {
     logger.warn({ callId, campaignLeadId, err }, "Transfer DB: lead_timeline insert failed");
+  }
+}
+
+export async function executeNativeCustomDatabaseQuery(
+  agentId: number,
+  searchKey: string,
+): Promise<string> {
+  try {
+    const [database] = await db
+      .select()
+      .from(customDatabasesTable)
+      .where(eq(customDatabasesTable.agentId, agentId));
+
+    const targetDb = database || (await db.select().from(customDatabasesTable).limit(1))[0];
+    if (!targetDb) return JSON.stringify({ error: "No custom database configured." });
+
+    const rows = await db
+      .select()
+      .from(customDatabaseRowsTable)
+      .where(eq(customDatabaseRowsTable.databaseId, targetDb.id));
+
+    const matches = rows.filter((r) => JSON.stringify(r.data).toLowerCase().includes(searchKey.toLowerCase()));
+
+    return JSON.stringify({
+      databaseName: targetDb.name,
+      query: searchKey,
+      matchCount: matches.length,
+      results: matches.map((m) => ({
+        id: m.id,
+        record: m.data,
+        referencePhotos: m.referenceImageUrls,
+      })),
+    });
+  } catch (err) {
+    logger.error({ err, agentId, searchKey }, "Failed to query custom database tool");
+    return JSON.stringify({ error: "Database search failed" });
   }
 }
