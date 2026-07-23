@@ -520,7 +520,7 @@ export default function WhatsAppPage() {
                   <ol className="list-decimal list-inside text-[11px] text-muted-foreground space-y-1 pl-1">
                     <li>Log into <strong>Meta Business Manager</strong> &rarr; <em>WhatsApp Accounts</em>.</li>
                     <li>Copy your 15-digit <strong>WABA ID</strong> under Business Info.</li>
-                    <li>Enter your business phone number to receive Meta SMS verification.</li>
+                    <li>Register your AI Agent's phone number to receive Meta SMS verification.</li>
                   </ol>
                 </div>
 
