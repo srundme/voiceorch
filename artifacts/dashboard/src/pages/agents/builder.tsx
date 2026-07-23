@@ -10,7 +10,7 @@ import {
   Play, Pause,
   Timer, ShieldCheck, Layers, Gauge, MicOff, HelpCircle, PhoneOff,
   History, GitBranch, Eye, Camera, Link2, Copy, RotateCcw, ChevronUp, AlertTriangle, ArrowLeftRight,
-  Upload, Archive, Info, AlertCircle, Calendar, Star,
+  Upload, Archive, Info, AlertCircle, Calendar, Star, Code,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { motion } from "framer-motion";
@@ -6198,36 +6198,84 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
                   Unsaved changes — save before testing so the call uses the latest config.
                 </p>
               )}
-              <div className="grid grid-cols-2 gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-10 text-[12px] font-medium gap-1.5 rounded-xl border-border/60 bg-card/40 hover:bg-card/70"
-                  onClick={() => setCallDialog(true)}
-                >
-                  <Phone className="h-3.5 w-3.5 shrink-0" />
-                  Phone
-                </Button>
-                <Button
-                  type="button"
-                  variant={showWebcall ? "default" : "outline"}
-                  className={cn(
-                    "h-10 text-[12px] font-medium gap-1.5 rounded-xl",
-                    !showWebcall && "border-border/60 bg-card/40 hover:bg-card/70",
-                  )}
-                  onClick={() => setShowWebcall(v => !v)}
-                >
-                  {agentKind === "vision" ? <Camera className="h-3.5 w-3.5 shrink-0" /> : <Mic className="h-3.5 w-3.5 shrink-0" />}
-                  {showWebcall ? "Close" : webTestLabel}
-                </Button>
-              </div>
-              <p className="text-[10px] text-muted-foreground/65 leading-snug px-0.5">
-                {agentKind === "vision"
-                  ? visionCaptureMode === "photo"
-                    ? "Phone = outbound test · Photo test = upload stills mid-call"
-                    : "Phone = outbound test · Camera test = live video webcall"
-                  : "Phone = free outbound test (platform number) · Live Test = in-browser"}
-              </p>
+              {agentKind === "vision" ? (
+                <div className="space-y-2">
+                  <Button
+                    type="button"
+                    variant={showWebcall ? "default" : "outline"}
+                    className={cn(
+                      "w-full h-11 text-xs font-bold gap-2 rounded-xl bg-sky-500 hover:bg-sky-400 text-black shadow-md shadow-sky-950/20",
+                      showWebcall && "bg-destructive hover:bg-destructive/90 text-white"
+                    )}
+                    onClick={() => setShowWebcall((v) => !v)}
+                  >
+                    <Camera className="h-4 w-4 shrink-0" />
+                    {showWebcall ? "Close Vision Test" : "Test Live Vision Webcall"}
+                  </Button>
+
+                  <div className="grid grid-cols-2 gap-1.5 pt-1">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 text-[11px] font-medium gap-1 rounded-lg border-border/50 bg-card/30"
+                      onClick={() => {
+                        const url = `${window.location.origin}/join/test-${agentId}`;
+                        navigator.clipboard.writeText(url);
+                        toast({ title: "Copied Webcall URL", description: url });
+                      }}
+                    >
+                      <Link2 className="h-3 w-3 text-sky-400" /> Copy Link
+                    </Button>
+
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 text-[11px] font-medium gap-1 rounded-lg border-border/50 bg-card/30"
+                      onClick={() => {
+                        const embed = `<iframe src="${window.location.origin}/join/test-${agentId}" width="100%" height="600" allow="camera; microphone; display-capture"></iframe>`;
+                        navigator.clipboard.writeText(embed);
+                        toast({ title: "Copied Embed Code", description: "HTML iframe code snippet copied." });
+                      }}
+                    >
+                      <Code className="h-3 w-3 text-purple-400" /> Embed Code
+                    </Button>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground/70 leading-snug px-0.5 pt-0.5">
+                    Vision agents test over webcall with live camera, screen share, and photo uploads.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-10 text-[12px] font-medium gap-1.5 rounded-xl border-border/60 bg-card/40 hover:bg-card/70"
+                      onClick={() => setCallDialog(true)}
+                    >
+                      <Phone className="h-3.5 w-3.5 shrink-0" />
+                      Phone
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={showWebcall ? "default" : "outline"}
+                      className={cn(
+                        "h-10 text-[12px] font-medium gap-1.5 rounded-xl",
+                        !showWebcall && "border-border/60 bg-card/40 hover:bg-card/70",
+                      )}
+                      onClick={() => setShowWebcall((v) => !v)}
+                    >
+                      <Mic className="h-3.5 w-3.5 shrink-0" />
+                      {showWebcall ? "Close" : webTestLabel}
+                    </Button>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground/65 leading-snug px-0.5">
+                    Phone = free outbound test (platform number) · Live Test = in-browser
+                  </p>
+                </>
+              )}
             </div>
 
             {/* Inbound assign — same APIs as Phone Numbers */}
