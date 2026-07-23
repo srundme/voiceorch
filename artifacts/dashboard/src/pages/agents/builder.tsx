@@ -2120,115 +2120,101 @@ function VisionTab({ form, agentId }: { form: any; agentId: number | undefined }
     }
   };
 
-  const modes: {
-    id: VisionCaptureMode;
-    label: string;
-    sublabel: string;
-    useCaseBadge: string;
-    desc: string;
-    bestFor: string;
-    icon: React.ReactNode;
-  }[] = [
-    {
-      id: "photo",
-      label: "Document & Photo Uploads",
-      sublabel: "Snap & Send Mid-Call",
-      useCaseBadge: "Invoices, Receipts, IDs",
-      desc: "Caller uploads or takes a photo of a document/receipt mid-call. Analyzed instantly via Vision OCR. Camera permission is NOT forced upfront.",
-      bestFor: "Best for: Phone Calls, WhatsApp & Uploading Bills",
-      icon: <Upload className="h-4 w-4 text-emerald-400" />,
-    },
-    {
-      id: "live",
-      label: "Live Video & Screen Share",
-      sublabel: "Continuous Realtime Stream",
-      useCaseBadge: "Webcam & Screen Share",
-      desc: "Real-time webcam or screen stream during a webcall. Agent sees 2 FPS video stream continuously for live inspection or IT helpdesk.",
-      bestFor: "Best for: Screen Sharing, IT Support & Damage Checks",
-      icon: <Camera className="h-4 w-4 text-sky-400" />,
-    },
-    {
-      id: "both",
-      label: "Full Hybrid Multimodal",
-      sublabel: "Recommended for Video KYC",
-      useCaseBadge: "Full KYC Suite",
-      desc: "Real-time video camera feed AND mid-call high-resolution document file uploads active simultaneously.",
-      bestFor: "Best for: Video KYC, Face Matching & Document OCR",
-      icon: <Eye className="h-4 w-4 text-purple-400" />,
-    },
-  ];
+  const isWebcamEnabled = captureMode === "live" || captureMode === "both";
+  const isUploadsEnabled = captureMode === "photo" || captureMode === "both";
+
+  const toggleCapability = (cap: "webcam" | "uploads") => {
+    if (cap === "webcam") {
+      if (isWebcamEnabled && isUploadsEnabled) applyCaptureMode("photo");
+      else if (isWebcamEnabled && !isUploadsEnabled) applyCaptureMode("photo"); // Fallback
+      else if (!isWebcamEnabled && isUploadsEnabled) applyCaptureMode("both");
+      else applyCaptureMode("live");
+    } else if (cap === "uploads") {
+      if (isUploadsEnabled && isWebcamEnabled) applyCaptureMode("live");
+      else if (isUploadsEnabled && !isWebcamEnabled) applyCaptureMode("live"); // Fallback
+      else if (!isUploadsEnabled && isWebcamEnabled) applyCaptureMode("both");
+      else applyCaptureMode("photo");
+    }
+  };
 
   return (
     <div className="p-5 sm:p-6 space-y-8 max-w-3xl">
       <div>
         <div className="mb-4">
-          <h3 className="text-sm font-semibold mb-0.5">Visual Capabilities & Vision Mode</h3>
+          <h3 className="text-sm font-semibold mb-0.5">Dynamic Visual Capabilities</h3>
           <p className="text-xs text-muted-foreground">
-            Select how your AI agent perceives visual information during calls. Choose based on your business workflow.
+            Configure the visual inputs your AI agent can perceive. Toggle features dynamically for any custom workflow.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {modes.map((m) => {
-            const active = captureMode === m.id;
-            return (
-              <button
-                key={m.id}
-                type="button"
-                onClick={() => applyCaptureMode(m.id)}
-                className={cn(
-                  "text-left rounded-xl border p-4 transition-all relative flex flex-col justify-between space-y-3",
-                  active
-                    ? "border-sky-500/50 bg-sky-500/5 shadow-md ring-1 ring-sky-500/30"
-                    : "border-border/50 bg-card/20 hover:border-border hover:bg-card/40",
-                )}
-              >
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <div className={cn("h-9 w-9 rounded-xl flex items-center justify-center border", active ? "bg-sky-500/20 text-sky-400 border-sky-500/40" : "bg-muted/40 text-muted-foreground border-border/40")}>
-                      {m.icon}
-                    </div>
-                    <span className={cn("text-[9px] font-semibold px-2 py-0.5 rounded-full border", active ? "bg-sky-500/20 text-sky-300 border-sky-500/40" : "bg-muted/30 text-muted-foreground border-border/40")}>
-                      {m.useCaseBadge}
-                    </span>
-                  </div>
-                  <p className="text-xs font-bold text-foreground">{m.label}</p>
-                  <p className="text-[10px] font-medium text-sky-400/90 mb-1">{m.sublabel}</p>
-                  <p className="text-[10px] text-muted-foreground leading-relaxed">{m.desc}</p>
-                </div>
+        {/* Feature Switches */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* Webcam & Live Video */}
+          <div
+            onClick={() => toggleCapability("webcam")}
+            className={cn(
+              "rounded-xl border p-4 transition-all cursor-pointer flex items-start gap-3.5",
+              isWebcamEnabled
+                ? "border-sky-500/50 bg-sky-500/5 ring-1 ring-sky-500/30"
+                : "border-border/50 bg-card/20 hover:border-border hover:bg-card/40"
+            )}
+          >
+            <div className={cn("h-10 w-10 rounded-xl flex items-center justify-center shrink-0 border", isWebcamEnabled ? "bg-sky-500/20 text-sky-400 border-sky-500/40" : "bg-muted/40 text-muted-foreground border-border/40")}>
+              <Camera className="h-5 w-5" />
+            </div>
+            <div className="space-y-1 flex-1">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-foreground">Live Webcam Stream</span>
+                <Badge variant="outline" className={cn("text-[9px] px-2 py-0", isWebcamEnabled ? "bg-sky-500/20 text-sky-300 border-sky-500/40" : "bg-muted/30 text-muted-foreground")}>
+                  {isWebcamEnabled ? "Active" : "Disabled"}
+                </Badge>
+              </div>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                Allows the agent to see live 2 FPS video stream from caller webcam or desktop screen share.
+              </p>
+            </div>
+          </div>
 
-                <div className="pt-2 border-t border-border/30">
-                  <span className="text-[9.5px] font-semibold text-foreground/80 block">{m.bestFor}</span>
-                </div>
-              </button>
-            );
-          })}
+          {/* Photo & Document Uploads */}
+          <div
+            onClick={() => toggleCapability("uploads")}
+            className={cn(
+              "rounded-xl border p-4 transition-all cursor-pointer flex items-start gap-3.5",
+              isUploadsEnabled
+                ? "border-emerald-500/50 bg-emerald-500/5 ring-1 ring-emerald-500/30"
+                : "border-border/50 bg-card/20 hover:border-border hover:bg-card/40"
+            )}
+          >
+            <div className={cn("h-10 w-10 rounded-xl flex items-center justify-center shrink-0 border", isUploadsEnabled ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40" : "bg-muted/40 text-muted-foreground border-border/40")}>
+              <Upload className="h-5 w-5" />
+            </div>
+            <div className="space-y-1 flex-1">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-foreground">Mid-Call Photo Snap</span>
+                <Badge variant="outline" className={cn("text-[9px] px-2 py-0", isUploadsEnabled ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40" : "bg-muted/30 text-muted-foreground")}>
+                  {isUploadsEnabled ? "Active" : "Disabled"}
+                </Badge>
+              </div>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                Caller can upload high-resolution document photos, invoices, or IDs mid-call for Vision OCR.
+              </p>
+            </div>
+          </div>
         </div>
 
-        {/* Mode Selector Decision Guide */}
+        {/* Dynamic Vision Capabilities Guidance */}
         <div className="mt-4 rounded-xl border border-border/60 bg-muted/20 p-4 space-y-2 text-xs">
           <div className="flex items-center gap-1.5 font-semibold text-foreground">
-            <Sparkles className="h-3.5 w-3.5 text-sky-400" /> Which mode should I choose for my agent?
+            <Sparkles className="h-3.5 w-3.5 text-sky-400" /> Fully Dynamic Vision Engine
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1 text-[11px] text-muted-foreground">
-            <div className="p-2.5 rounded-lg border border-border/40 bg-card/30 space-y-1">
-              <span className="font-semibold text-emerald-400 block">📄 Document &amp; Photo</span>
-              <p className="leading-snug">Choose when callers only need to photo an Invoice, Electricity Bill, or Receipt mid-call. No live camera required.</p>
-            </div>
-            <div className="p-2.5 rounded-lg border border-border/40 bg-card/30 space-y-1">
-              <span className="font-semibold text-sky-400 block">📹 Live Camera &amp; Screen</span>
-              <p className="leading-snug">Choose for Screen Sharing, IT Helpdesk, or inspecting physical damage (vehicles/appliances) live on camera.</p>
-            </div>
-            <div className="p-2.5 rounded-lg border border-border/40 bg-card/30 space-y-1">
-              <span className="font-semibold text-purple-400 block">👁️ Full Multimodal Hybrid</span>
-              <p className="leading-snug">Choose for Video KYC! Combines live face camera feed with high-res PAN/Aadhaar document uploads.</p>
-            </div>
-          </div>
+          <p className="text-[11px] text-muted-foreground leading-relaxed">
+            You can combine live camera feed with mid-call photo uploads on any custom agent. The agent dynamically perceives visual input based on your custom system prompt and tools.
+          </p>
         </div>
 
-        {(captureMode === "live" || captureMode === "both") && !isGeminiLive && (
+        {isWebcamEnabled && !isGeminiLive && (
           <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-3 flex items-center gap-1.5">
-            <span>⚠️</span> Live camera inspection requires Gemini Live — selecting this mode switches the voice stack automatically. Save to apply.
+            <span>⚠️</span> Live camera inspection requires Gemini Live — selecting this switches the voice stack automatically. Save to apply.
           </p>
         )}
       </div>
