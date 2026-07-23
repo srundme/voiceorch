@@ -318,7 +318,6 @@ function AppRoutes() {
         <Route path="/app/settings/profile" component={ProfilePage} />
         <Route path="/app/usage" component={UsagePage} />
         <Route path="/app/kyc" component={KycPage} />
-        <Route path="/app/vision-kyc" component={VisionKycPage} />
         <Route path="/app/api-keys" component={ApiKeysPage} />
         <Route path="/app/meta-leads" component={MetaLeadsPage} />
         <Route path="/app/transfers" component={TransfersPage} />
@@ -389,7 +388,6 @@ function Router() {
           <Route path="/book/reschedule" component={RescheduleBookingPage} />
           <Route path="/book/:slug" component={PublicBookingPage} />
           <Route path="/join/:token" component={WebcallJoinPage} />
-          <Route path="/vision-onboarding/:token" component={VisionOnboardingPage} />
           <Route path="/workshop/:slug" component={WorkshopFormPage} />
           <Route path="/events/judge/:token" component={JudgePortalPage} />
           <Route path="/events/certificates/:code/verify" component={CertificateVerifyPage} />
