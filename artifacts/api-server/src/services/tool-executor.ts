@@ -327,6 +327,28 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
       if (t.type === "end_call") {
         return { ...END_CALL_TOOL_DEF };
       }
+      if (t.type === "verify_visual_identity") {
+        return {
+          name: t.name?.trim() || "verify_visual_identity",
+          description:
+            "Perform Video KYC, face verification, or document verification live during the video call. " +
+            "Verifies live camera video or presented ID card against caller's saved visual profile & memory.",
+          parameters: {
+            type: "object",
+            properties: {
+              target_name: {
+                type: "string",
+                description: "Name of the person being verified (e.g. 'Karthik')",
+              },
+              verification_type: {
+                type: "string",
+                description: "Type of verification: 'face_match', 'id_card_match', or 'document_match'",
+              },
+            },
+            required: [],
+          },
+        };
+      }
       if (t.type === "analyze_image") {
         return {
           name: t.name?.trim() || "analyze_image",

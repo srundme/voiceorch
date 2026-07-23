@@ -2112,8 +2112,28 @@ function VisionTab({ form, agentId }: { form: any; agentId: number | undefined }
         </p>
         <p className="text-[11px] text-muted-foreground leading-relaxed">
           Prompt tip: Tell the agent what documents to ask for (Aadhaar, Invoice, Bill, ID) and when to invoke{" "}
-          <code className="text-[10px] font-mono text-sky-400 bg-sky-950/40 px-1 py-0.5 rounded">analyze_image</code>.
+          <code className="text-[10px] font-mono text-sky-400 bg-sky-950/40 px-1 py-0.5 rounded">analyze_image</code> or{" "}
+          <code className="text-[10px] font-mono text-sky-400 bg-sky-950/40 px-1 py-0.5 rounded">verify_visual_identity</code>.
         </p>
+        <div className="pt-1">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs"
+            onClick={() => {
+              const kycPrompt =
+                "\n\n[VIDEO KYC & VISUAL VERIFICATION]\n" +
+                "You are an AI Video KYC Agent. Inspect the caller's face and video feed. " +
+                "Ask the caller to present an official ID card (Aadhaar, Passport, or License) to the camera. " +
+                "Run `verify_visual_identity` to confirm their face and ID card match saved records, then greet them by name.";
+              setSystemPrompt((prev) => `${prev}${kycPrompt}`);
+              toast({ title: "Video KYC Preset Added to Prompt" });
+            }}
+          >
+            + Add Video KYC & Face Verification Prompt
+          </Button>
+        </div>
       </div>
 
       <WebcallShareLinksSection

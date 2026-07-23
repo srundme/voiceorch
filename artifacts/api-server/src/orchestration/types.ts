@@ -54,6 +54,13 @@ export interface AnalyzeImageTool {
   description: string;
 }
 
+/** Perform Video KYC & live visual identity verification (face match / document match). */
+export interface VerifyVisualIdentityTool {
+  type: "verify_visual_identity";
+  name: string;
+  description: string;
+}
+
 /**
  * Sensible default farewell spoken when a call is ended by the AI (built-in
  * end_call tool or an end-call phrase) and the agent has no custom
@@ -190,7 +197,7 @@ export interface SendWhatsappTool {
   messageTemplate?: string;
 }
 
-export type AgentTool = CallTransferTool | WebhookTool | SendSmsTool | SendWhatsappTool | EndCallTool | AnalyzeImageTool | CalComTool | NativeBookingTool | NativeRescheduleTool | NativeCancelTool | NativeCheckAvailabilityTool | NativeListBookingsTool | TransferColdTool | TransferWarmTool | TransferAgentTool | SquadFollowupTool;
+export type AgentTool = CallTransferTool | WebhookTool | SendSmsTool | SendWhatsappTool | EndCallTool | AnalyzeImageTool | VerifyVisualIdentityTool | CalComTool | NativeBookingTool | NativeRescheduleTool | NativeCancelTool | NativeCheckAvailabilityTool | NativeListBookingsTool | TransferColdTool | TransferWarmTool | TransferAgentTool | SquadFollowupTool;
 
 /** JSON Schema-compatible tool definition passed to LLM providers */
 export interface ToolDefinition {
