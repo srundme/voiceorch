@@ -2102,6 +2102,7 @@ function VoiceCallFeelPresets({ form }: { form: any }) {
 /* ── Tab: Vision ────────────────────────────────────────────────────────────── */
 
 function VisionTab({ form, agentId }: { form: any; agentId: number | undefined }) {
+  const { toast } = useToast();
   const visionEnabled = form.watch("visionEnabled") ?? false;
   const visionLiveEnabled = form.watch("visionLiveEnabled") ?? false;
   const llmModel = form.watch("llmModel");
@@ -2207,95 +2208,21 @@ function VisionTab({ form, agentId }: { form: any; agentId: number | undefined }
         )}
       </div>
 
-      <div className="rounded-xl border border-border/60 bg-card/30 p-4 space-y-2">
-        <p className="text-xs font-semibold text-foreground/80">Guest Experience Breakdown</p>
-        <p className="text-[11px] text-muted-foreground leading-relaxed">
-          {captureMode === "photo"
-            ? "📄 Document Reader Mode (Sarvam Vision): Guest joins a voice call, then taps Upload Document or takes a photo of an invoice/ID when requested. Camera permission is NOT forced upfront."
-            : captureMode === "live"
-            ? "📹 Live Camera Mode (Gemini Live): Guest turns on their camera, then starts the webcall. The agent sees a 2 FPS video stream of whatever is in front of the lens in real-time."
-            : "Full Hybrid Mode: Guest streams live camera video AND can upload high-resolution document/receipt files during the call."}
-        </p>
-        <p className="text-[11px] text-muted-foreground leading-relaxed">
-          Prompt tip: Tell the agent what documents to ask for (Aadhaar, Invoice, Bill, ID) and when to invoke{" "}
-          <code className="text-[10px] font-mono text-sky-400 bg-sky-950/40 px-1 py-0.5 rounded">analyze_image</code> or{" "}
-          <code className="text-[10px] font-mono text-sky-400 bg-sky-950/40 px-1 py-0.5 rounded">verify_visual_identity</code>.
-        </p>
-        <div className="pt-1 flex flex-wrap gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-7 text-xs"
-            onClick={() => {
-              const kycPrompt =
-                "\n\n[VIDEO KYC & VISUAL VERIFICATION]\n" +
-                "You are an AI Video KYC Agent. Inspect the caller's face and video feed. " +
-                "Ask the caller to present an official ID card (Aadhaar, Passport, or License) to the camera. " +
-                "Run `verify_visual_identity` to confirm their face and ID card match saved records, then greet them by name.";
-              const cur = form.getValues("systemPrompt") ?? "";
-              form.setValue("systemPrompt", `${cur}${kycPrompt}`, { shouldDirty: true });
-            }}
-          >
-            + Video KYC & Verification
-          </Button>
+      {/* Vision AI Starter Presets */}
+      <div className="rounded-2xl border border-border/60 bg-card/30 p-5 space-y-4">
+        <div>
+          <h4 className="text-xs font-bold text-foreground flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-sky-400" /> Vision AI Starter Templates
+          </h4>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Click any template to equip your agent with tailored visual perception rules and automated tool instructions.
+          </p>
+        </div>
 
-          <Button
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {/* Card 1: Retail */}
+          <button
             type="button"
-            variant="outline"
-            size="sm"
-            className="h-7 text-xs"
-            onClick={() => {
-              const ocrPrompt =
-                "\n\n[DOCUMENT OCR & FIELD EXTRACTION]\n" +
-                "You are an AI Document Reader Agent. When the caller holds up an ID card, invoice, receipt, or agreement, " +
-                "invoke `extract_document_fields` to pull name, ID number, and dates, then confirm the extracted details aloud.";
-              const cur = form.getValues("systemPrompt") ?? "";
-              form.setValue("systemPrompt", `${cur}${ocrPrompt}`, { shouldDirty: true });
-            }}
-          >
-            + Document OCR & Field Extractor
-          </Button>
-
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-7 text-xs"
-            onClick={() => {
-              const assetPrompt =
-                "\n\n[PHYSICAL ASSET & DAMAGE INSPECTION]\n" +
-                "You are an AI Visual Inspection Agent. Ask the user to point their phone camera at the damaged vehicle, property, or hardware component. " +
-                "Invoke `inspect_physical_asset` to evaluate damage severity and broken parts, then summarize the repair findings.";
-              const cur = form.getValues("systemPrompt") ?? "";
-              form.setValue("systemPrompt", `${cur}${assetPrompt}`, { shouldDirty: true });
-            }}
-          >
-            + Insurance & Damage Inspection
-          </Button>
-
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-7 text-xs"
-            onClick={() => {
-              const screenPrompt =
-                "\n\n[IT HELPDESK & SCREEN TROUBLESHOOTING]\n" +
-                "You are an AI Screen Troubleshooting Agent. Ask the user to show their computer or TV screen to the camera. " +
-                "Invoke `inspect_screen` to read on-screen error codes and dialogs, then guide the user step-by-step.";
-              const cur = form.getValues("systemPrompt") ?? "";
-              form.setValue("systemPrompt", `${cur}${screenPrompt}`, { shouldDirty: true });
-            }}
-          >
-            + IT Screen Troubleshooter
-          </Button>
-
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-7 text-xs border-sky-500/40 text-sky-300 hover:bg-sky-500/10"
             onClick={() => {
               const retailPrompt =
                 "\n\n[RETAIL BARCODE & PRODUCT MATCHING]\n" +
@@ -2303,10 +2230,95 @@ function VisionTab({ form, agentId }: { form: any; agentId: number | undefined }
                 "Invoke `query_custom_database` to look up the invoice record and verify if the delivered item matches the stored product photo.";
               const cur = form.getValues("systemPrompt") ?? "";
               form.setValue("systemPrompt", `${cur}${retailPrompt}`, { shouldDirty: true });
+              toast({ title: "Template Applied", description: "Configured agent for Retail & Product Returns verification." });
             }}
+            className="p-3.5 rounded-xl border border-border/50 bg-card/20 hover:border-sky-500/50 hover:bg-sky-500/5 text-left transition-all space-y-1 group"
           >
-            + Retail & Product Verifier
-          </Button>
+            <div className="flex items-center gap-2">
+              <span className="text-base">🛍️</span>
+              <span className="text-xs font-bold text-foreground group-hover:text-sky-300 transition-colors">
+                Retail &amp; Product Returns
+              </span>
+            </div>
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              Verifies invoice numbers, reads barcodes, and checks delivered items against reference product photos.
+            </p>
+          </button>
+
+          {/* Card 2: Insurance */}
+          <button
+            type="button"
+            onClick={() => {
+              const assetPrompt =
+                "\n\n[PHYSICAL ASSET & DAMAGE INSPECTION]\n" +
+                "You are an AI Visual Inspection Agent. Ask the user to point their phone camera at the damaged vehicle, property, or hardware component. " +
+                "Invoke `inspect_physical_asset` to evaluate damage severity and broken parts, then summarize the repair findings.";
+              const cur = form.getValues("systemPrompt") ?? "";
+              form.setValue("systemPrompt", `${cur}${assetPrompt}`, { shouldDirty: true });
+              toast({ title: "Template Applied", description: "Configured agent for Insurance & Damage Claims." });
+            }}
+            className="p-3.5 rounded-xl border border-border/50 bg-card/20 hover:border-sky-500/50 hover:bg-sky-500/5 text-left transition-all space-y-1 group"
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-base">🚗</span>
+              <span className="text-xs font-bold text-foreground group-hover:text-sky-300 transition-colors">
+                Insurance &amp; Damage Claims
+              </span>
+            </div>
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              Inspects car dents, bumper damage live on camera, and verifies RC book documents.
+            </p>
+          </button>
+
+          {/* Card 3: Document OCR */}
+          <button
+            type="button"
+            onClick={() => {
+              const ocrPrompt =
+                "\n\n[DOCUMENT OCR & FIELD EXTRACTION]\n" +
+                "You are an AI Document Reader Agent. When the caller holds up an ID card, invoice, receipt, or agreement, " +
+                "invoke `extract_document_fields` to pull name, ID number, and dates, then confirm the extracted details aloud.";
+              const cur = form.getValues("systemPrompt") ?? "";
+              form.setValue("systemPrompt", `${cur}${ocrPrompt}`, { shouldDirty: true });
+              toast({ title: "Template Applied", description: "Configured agent for Document OCR & ID Field Extractor." });
+            }}
+            className="p-3.5 rounded-xl border border-border/50 bg-card/20 hover:border-sky-500/50 hover:bg-sky-500/5 text-left transition-all space-y-1 group"
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-base">📄</span>
+              <span className="text-xs font-bold text-foreground group-hover:text-sky-300 transition-colors">
+                Document OCR &amp; ID Extraction
+              </span>
+            </div>
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              Reads text from Aadhaar, PAN cards, Salary Slips, Invoices, and Receipts automatically.
+            </p>
+          </button>
+
+          {/* Card 4: Screen Share */}
+          <button
+            type="button"
+            onClick={() => {
+              const screenPrompt =
+                "\n\n[IT HELPDESK & SCREEN TROUBLESHOOTING]\n" +
+                "You are an AI Screen Troubleshooting Agent. Ask the user to show their computer screen or desktop share. " +
+                "Invoke `inspect_screen` to read on-screen error codes and dialogs, then guide the user step-by-step.";
+              const cur = form.getValues("systemPrompt") ?? "";
+              form.setValue("systemPrompt", `${cur}${screenPrompt}`, { shouldDirty: true });
+              toast({ title: "Template Applied", description: "Configured agent for Screen Share & IT Helpdesk." });
+            }}
+            className="p-3.5 rounded-xl border border-border/50 bg-card/20 hover:border-sky-500/50 hover:bg-sky-500/5 text-left transition-all space-y-1 group"
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-base">💻</span>
+              <span className="text-xs font-bold text-foreground group-hover:text-sky-300 transition-colors">
+                Screen Share &amp; IT Helpdesk
+              </span>
+            </div>
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              Watches candidate code live or inspects software UI error dialogs on desktop screen share.
+            </p>
+          </button>
         </div>
       </div>
 
