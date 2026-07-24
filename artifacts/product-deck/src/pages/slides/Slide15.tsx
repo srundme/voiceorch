@@ -102,7 +102,7 @@ export default function Slide15() {
             {[
               { step: "01", label: "Customer opens your app", sub: "No redirect. No download." },
               { step: "02", label: "Agent joins: voice + camera feed", sub: "Sees the screen in real time" },
-              { step: "03", label: "Document screened + identity matched", sub: "DPDP / IRDAI compliant audit" },
+              { step: "03", label: "Identity confirmed", sub: "Compliance logged automatically" },
               { step: "04", label: "KYC approved — agent continues the conversation", sub: "Memory layer updated instantly" },
             ].map(({ step, label, sub }, i) => (
               <div key={step} style={{ display: "flex", flexDirection: "column", position: "relative" }}>
