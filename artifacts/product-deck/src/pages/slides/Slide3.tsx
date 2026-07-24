@@ -90,7 +90,7 @@ export default function Slide3() {
         </div>
       </div>
 
-      <SSWatermark />
+
     </div>
   );
 }
