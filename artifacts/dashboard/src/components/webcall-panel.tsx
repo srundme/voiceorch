@@ -177,8 +177,8 @@ export function WebcallPanel({
     nextStartRef.current = playbackCtxRef.current?.currentTime ?? 0;
   }, []);
 
-  // Live camera chrome (preview / stream) — not for photo-upload-only agents.
-  const cameraAllowed = !!(visionLiveEnabled || requireCamera);
+  // Live camera chrome (preview / stream) — enabled for any vision-capable agent.
+  const cameraAllowed = !!(visionEnabled || visionLiveEnabled || requireCamera);
   const photoUploadAllowed = !!visionEnabled;
 
   /** Capture frames from a given <video> element and stream over WebSocket. */
@@ -458,6 +458,9 @@ export function WebcallPanel({
               callIdRef.current = (msg as { callId: number }).callId;
             }
             setState("live");
+            if (cameraAllowed && !cameraOn) {
+              void startCamera();
+            }
             break;
           case "transcript":
             if (msg.speaker && msg.text) {
