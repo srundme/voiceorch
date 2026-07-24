@@ -99,7 +99,7 @@ export default function Slide14() {
         </div>
       </div>
 
-      <SSWatermark />
+
     </div>
   );
 }
