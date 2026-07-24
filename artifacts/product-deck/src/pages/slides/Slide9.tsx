@@ -58,10 +58,10 @@ export default function Slide9() {
             </div>
             {[
               { icon: "✓", text: "Full platform live in production — not a demo, not a prototype" },
-              { icon: "✓", text: "[X] pilot accounts live — insurance and NBFC" },
+              { icon: "✓", text: "3 pilot accounts live — insurance and NBFC" },
               { icon: "✓", text: "End-to-end call recordings, transcripts, and memory extractions working" },
               { icon: "✓", text: "Caller memory persists across dropped calls, agent switches, and session gaps" },
-              { icon: "→", text: "[X] pilots in active paid contract discussions — this raise accelerates conversion" },
+              { icon: "→", text: "2 pilots in active paid contract discussions — this raise accelerates conversion" },
               { icon: "→", text: "₹0 → first paid MRR target: Q1" },
             ].map(({ icon, text }) => (
               <div key={text} style={{ display: "flex", alignItems: "flex-start", gap: "0.8vw", fontSize: "1.05vw", color: "#3A3A5C", lineHeight: 1.5 }}>
