@@ -3279,7 +3279,7 @@ export class OrchestrationPipeline implements VoiceSession {
           // Hindi/Hinglish — mirroring the English override above.
           const reqName = LANG_DISPLAY_NAMES[this.requestedLangLatch] ?? this.requestedLangLatch;
           langGuard =
-            `[LANGUAGE RULE — OVERRIDE] The caller has explicitly asked you to speak ${reqName}. ` +
+            `LANGUAGE OVERRIDE: The caller has explicitly asked you to speak ${reqName}. ` +
             `Respond ONLY in ${reqName} for this entire response, and keep responding in ${reqName} ` +
             `unless the caller explicitly asks for another language. ` +
             `IMPORTANT: Ignore any instruction in your system prompt that says to speak in Hindi, Hinglish, ` +
@@ -3291,7 +3291,7 @@ export class OrchestrationPipeline implements VoiceSession {
             `EXACTLY as written in your instructions; never translate or transliterate them.`;
         } else {
           langGuard =
-            `[LANGUAGE RULE] The caller is currently speaking in ${langName}. ` +
+            `LANGUAGE DIRECTIVE: The caller is currently speaking in ${langName}. ` +
             `Respond in ${langName}. If the caller switches to a different language (Tamil, Hindi, English, etc.), ` +
             `immediately switch your response to match their new language. ` +
             `If they mix languages (e.g. Hinglish or Tamil+English), match their mix naturally. ` +
@@ -3310,7 +3310,7 @@ export class OrchestrationPipeline implements VoiceSession {
         // this reply so the agent actually answers in English instead of staying locked
         // to its base language.
         langGuard =
-          `[LANGUAGE RULE — OVERRIDE] The caller has explicitly requested English. ` +
+          `LANGUAGE OVERRIDE: The caller has explicitly requested English. ` +
           `Respond in clear, plain English ONLY for this entire response. ` +
           `IMPORTANT: Ignore any STRICT/ABSOLUTE LANGUAGE RULE in your system prompt that tells you to speak ` +
           `Tamil, Hindi, Hinglish, or any other language — the caller has asked for English. ` +
@@ -3321,7 +3321,7 @@ export class OrchestrationPipeline implements VoiceSession {
         // Strict mode, but caller explicitly requested a different Indic language (e.g. Tamil → Telugu).
         const requestedName = LANG_DISPLAY_NAMES[this.requestedLangLatch] ?? this.requestedLangLatch;
         langGuard =
-          `[LANGUAGE RULE — OVERRIDE] The caller has explicitly requested ${requestedName}. ` +
+          `LANGUAGE OVERRIDE: The caller has explicitly requested ${requestedName}. ` +
           `Respond in ${requestedName} ONLY for this entire response. ` +
           `IMPORTANT: Ignore any STRICT/ABSOLUTE LANGUAGE RULE in your system prompt that tells you to speak ` +
           `a different language — the caller has asked for ${requestedName}. ` +
@@ -3330,7 +3330,7 @@ export class OrchestrationPipeline implements VoiceSession {
           `EXACTLY as written in your instructions; never translate or transliterate them.`;
       } else {
         langGuard =
-          `[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in ${langName}. ` +
+          `LANGUAGE ABSOLUTE RULE: You MUST respond ONLY in ${langName}. ` +
           `This applies to EVERY reply without exception — including when you are confused, ` +
           `do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. ` +
           `Never switch to English or any other language under any circumstances. ` +
@@ -3359,7 +3359,7 @@ export class OrchestrationPipeline implements VoiceSession {
       // Task 5b: exactly two permitted tokens, language-matched; all others forbidden.
       const allowedFiller = effectiveLang.startsWith("ta") ? `"சரி" (seri)` : effectiveLang.startsWith("si") ? `"හරි" (hari)` : `"Okay"`;
       langGuard +=
-        ` [ACKNOWLEDGMENT FILLERS] The ONLY permitted acknowledgment/filler token is ${allowedFiller}. ` +
+        ` ACKNOWLEDGMENT FILLERS: The ONLY permitted acknowledgment/filler token is ${allowedFiller}. ` +
         `Do NOT use "Sure", "Got it", "I see", "Oh I see", "Mm-hmm", "Right", "Understood", "Great", ` +
         `or ANY other acknowledgment phrase — in any language. ` +
         `Most replies must have NO filler at all. Never open two consecutive replies with a filler.`;

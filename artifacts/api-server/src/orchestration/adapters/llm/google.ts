@@ -33,6 +33,10 @@ const GEMINI_PLANNING_CUE_RE =
 export function stripGeminiThinkingPreamble(text: string): string {
   if (!text) return text;
   let out = text;
+
+  // Strip any leaked prompt rule blocks (e.g. [LANGUAGE RULE ...], [Language: ...], [ACKNOWLEDGMENT FILLERS ...])
+  out = out.replace(/\[(?:LANGUAGE RULE|LANGUAGE|Language|Reminder|DATE NOTE|ACKNOWLEDGMENT FILLERS|CONTEXT)[^\]]*\][^\n.]*([\n.]|$)?/gi, "");
+
   for (;;) {
     const m = out.match(GEMINI_BRACKET_LINE_RE);
     if (!m) break;
