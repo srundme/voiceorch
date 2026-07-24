@@ -78,7 +78,7 @@ export default function Slide6() {
         </div>
       </div>
 
-      <SSWatermark />
+
     </div>
   );
 }
