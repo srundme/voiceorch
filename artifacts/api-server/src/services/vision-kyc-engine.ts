@@ -126,12 +126,12 @@ Return JSON strictly in this format:
       // ── 2. Document OCR & Verification ─────────────────────────────────────
       if (documentBase64) {
         try {
-          const prompt = `Analyze this government ID / PAN card / Passport document.
-1. Extract the full Name, Document ID Number (e.g. PAN card number), and Date of Birth if visible.
-2. Evaluate document authenticity: check for editing artifacts, screen reflections, font mismatches, or digital tampering.
-
-Expected Customer Name: "${expectedName || ""}"
-Expected Document/PAN Number: "${expectedPanNumber || ""}"
+          const hasExpectedName = expectedName && expectedName !== "Caller" && expectedName !== "User" && expectedName !== "Guest";
+          const prompt = `Analyze this government ID card / PAN card / Passport / Driver License / Identification Document.
+1. Extract the full Name, Document ID Number (e.g. PAN, Aadhaar, Passport, Driver License number), and Date of Birth if visible.
+2. Evaluate document authenticity and legibility.
+${hasExpectedName ? `Expected Customer Name: "${expectedName}"` : "Note: No specific expected name specified; extract whatever name appears on the card."}
+${expectedPanNumber ? `Expected Document/PAN Number: "${expectedPanNumber}"` : ""}
 
 Return JSON strictly in this format:
 {
@@ -163,7 +163,7 @@ Return JSON strictly in this format:
           documentOcrDob = parsed.extractedDob || expectedDob || "";
           documentAuthentic = parsed.isAuthentic ?? true;
           documentAuthenticityScore = parsed.authenticityScore ?? 95;
-          documentNameMatch = parsed.nameMatchesExpected ?? true;
+          documentNameMatch = hasExpectedName ? (parsed.nameMatchesExpected ?? true) : true;
           documentFaceMatch = true;
         } catch (err) {
           logger.error({ err }, "Document OCR Gemini call failed");

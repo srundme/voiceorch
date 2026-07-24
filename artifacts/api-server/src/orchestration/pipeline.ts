@@ -5087,12 +5087,14 @@ export class OrchestrationPipeline implements VoiceSession {
     // Get live frames captured from stream
     const liveFrameData = this.visionMemory?.getLatestFrame?.()?.data || null;
     const documentFrameData = this.visionMemory?.getLatestDocumentFrame?.()?.data || null;
+    // Fall back to the live camera frame (showing ID card held to camera) if no separate document upload exists
+    const activeDocBase64 = documentFrameData || liveFrameData || storedIdentity?.panCardData || null;
 
     const res = await VisionKycEngine.verify({
       storedFaceBase64: storedIdentity?.facePhotoData || null,
       liveFaceBase64: liveFrameData,
-      documentBase64: documentFrameData || storedIdentity?.panCardData || null,
-      expectedName: storedIdentity?.name || primaryName,
+      documentBase64: activeDocBase64,
+      expectedName: storedIdentity?.name || (primaryName !== "Caller" ? primaryName : null),
       expectedPanNumber: storedIdentity?.panNumber || null,
     });
 
