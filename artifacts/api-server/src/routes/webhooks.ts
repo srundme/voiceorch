@@ -795,17 +795,17 @@ router.post("/webhooks/vobiz/voice", async (req, res): Promise<void> => {
       { agentId, callUuid: answerCallUuid, hint: parseMachineFlag(rawMachineField) },
       "AMD enabled (VoBiz outbound) — arming acoustic confirmation unconditionally; async machine_detection_url callback will corroborate",
     );
-    res.set("Content-Type", "text/xml").send(
-      getVobizAnswerXML(wsBaseUrl, agentId, platformTelephony, {
-        campaignLeadId, from: inboundFrom, to: inboundTo,
-        amdArm: true,
-        amdMachineHint: parseMachineFlag(rawMachineField) === "machine",
-        callDirection, corr,
-        callUuid: answerCallUuid,
-        cbId: answerCbId,
-        answeredAt: answeredAtMs,
-      }),
-    );
+    const xml = getVobizAnswerXML(wsBaseUrl, agentId, platformTelephony, {
+      campaignLeadId, from: inboundFrom, to: inboundTo,
+      amdArm: true,
+      amdMachineHint: parseMachineFlag(rawMachineField) === "machine",
+      callDirection, corr,
+      callUuid: answerCallUuid,
+      cbId: answerCbId,
+      answeredAt: answeredAtMs,
+    });
+    req.log.info({ xml }, "VoBiz outbound AMD answer XML returned");
+    res.set("Content-Type", "text/xml").send(xml);
     return;
   }
 
@@ -869,14 +869,14 @@ router.post("/webhooks/vobiz/voice", async (req, res): Promise<void> => {
 
   // Cancel pending auto-redials when the caller rings us first (they're reachable)
   if (inboundFrom) void cancelPendingRedials(agentId, inboundFrom);
-  res.set("Content-Type", "text/xml").send(
-    getVobizAnswerXML(wsBaseUrl, agentId, platformTelephony, {
-      campaignLeadId, from: inboundFrom, to: inboundTo, callDirection, corr,
-      callUuid: String(req.body?.CallUUID ?? req.body?.call_uuid ?? "") || undefined,
-      cbId: answerCbId,
-      answeredAt: answeredAtMs,
-    })
-  );
+  const xml = getVobizAnswerXML(wsBaseUrl, agentId, platformTelephony, {
+    campaignLeadId, from: inboundFrom, to: inboundTo, callDirection, corr,
+    callUuid: String(req.body?.CallUUID ?? req.body?.call_uuid ?? "") || undefined,
+    cbId: answerCbId,
+    answeredAt: answeredAtMs,
+  });
+  req.log.info({ xml }, "VoBiz answer XML returned");
+  res.set("Content-Type", "text/xml").send(xml);
 });
 
 // ── P2-C: Recording callback ──────────────────────────────────────────────────
