@@ -506,6 +506,9 @@ export function WebcallPanel({
               callIdRef.current = (msg as { callId: number }).callId;
             }
             setState("live");
+            if (cameraAllowed && !cameraOn) {
+              void startCamera();
+            }
             break;
           case "transcript":
             if (msg.speaker && msg.text) {
@@ -628,18 +631,21 @@ export function WebcallPanel({
     }
   }, [visionEnabled, fileToCompressedBase64, shareToken]);
 
+  const liveCameraAutoTriedRef = useRef(false);
+  const idleCameraAutoTriedRef = useRef(false);
+
   // Auto-start camera once the call is live (so the preview shows without an extra tap).
   useEffect(() => {
-    if (state !== "live" || !cameraAllowed || cameraOn || cameraAutoTriedRef.current) return;
-    cameraAutoTriedRef.current = true;
+    if (state !== "live" || !cameraAllowed || cameraOn || liveCameraAutoTriedRef.current) return;
+    liveCameraAutoTriedRef.current = true;
     void startCamera();
   }, [state, cameraAllowed, cameraOn, startCamera]);
 
   // Guest join with requireCamera: prompt for camera while idle so preview appears before Start.
   useEffect(() => {
     if (!requireCamera || !cameraAllowed || cameraOn || (state !== "idle" && state !== "error")) return;
-    if (cameraAutoTriedRef.current) return;
-    cameraAutoTriedRef.current = true;
+    if (idleCameraAutoTriedRef.current) return;
+    idleCameraAutoTriedRef.current = true;
     void startCamera();
   }, [requireCamera, cameraAllowed, cameraOn, state, startCamera]);
 
