@@ -5323,7 +5323,7 @@ export class OrchestrationPipeline implements VoiceSession {
       }
       const prompt =
         source === "webcall"
-          ? "My webcam is on. Call analyze_image with use_latest=true and briefly tell me what you see."
+          ? "My camera / screen share is live. Call analyze_image with use_latest=true and briefly describe what you see on my screen or camera."
           : "I just shared a photo. Call analyze_image with use_latest=true and briefly tell me what you see.";
       void this.processTurn(prompt, 0).catch((err) =>
         logger.warn({ callId: this.config.callId, err }, "Pipeline: vision kick turn failed"),
@@ -6558,6 +6558,22 @@ export class OrchestrationPipeline implements VoiceSession {
       this.pendingTopicClarificationNote = false;
     }
 
+    // Caller is asking about visual content, screen share, or dashboard.
+    if ((this.agent.visionEnabled || this.agent.visionLiveEnabled) && historyForLlm.length > 0) {
+      const lastTurn = historyForLlm[historyForLlm.length - 1]!;
+      if (lastTurn.role === "user" && /screen|dashboard|see|look|camera|show|shared|view|window|display/i.test(lastTurn.content)) {
+        const vhint =
+          `[SCREEN SHARE & VISION IS ACTIVE] The caller is asking about what you see or mentioning screen share / dashboard / camera. ` +
+          `Live video and desktop screen share frames are actively being captured. ` +
+          `CALL analyze_image(use_latest=true) RIGHT NOW to view their screen/camera. ` +
+          `Do NOT say "I cannot see your screen" or "I cannot see your dashboard" without calling analyze_image first!`;
+        historyForLlm = [
+          ...historyForLlm.slice(0, -1),
+          { ...lastTurn, content: `${lastTurn.content}\n\n${vhint}` },
+        ];
+      }
+    }
+
     // Layer 4: Staged Prompt — override system prompt with active stage block
     if (tokenOptEnabled && this.agent.stagedPromptEnabled && this.agent.stagedPromptStages.length > 0) {
       const stage = this.agent.stagedPromptStages[this.currentStageIndex];
@@ -6623,6 +6639,17 @@ export class OrchestrationPipeline implements VoiceSession {
     const visionBlock = this.visionMemory?.formatPromptBlock();
     if (visionBlock) {
       systemPromptForTurn += `\n\n${visionBlock}`;
+    }
+
+    if (this.agent.visionEnabled || this.agent.visionLiveEnabled) {
+      systemPromptForTurn +=
+        `\n\n=== VISION & SCREEN SHARE CAPABILITIES ===\n` +
+        `Live webcam camera video and desktop screen sharing are ENABLED and ACTIVE on this webcall.\n` +
+        `The caller's camera feed and screen share frames are being captured live.\n` +
+        `IMPORTANT: You DO have visual perception capability via the analyze_image tool! ` +
+        `If the caller asks "can you see my screen", "can you see the dashboard", "what do you see", or asks any visual question, ` +
+        `YOU MUST IMMEDIATELY CALL analyze_image(use_latest=true) to view the latest screen/camera capture before answering. ` +
+        `NEVER claim that you cannot see their screen or dashboard without calling analyze_image first.`;
     }
 
     // ── [CURRENT DATE & TIME] — appended LAST for prompt-cache stability ──────
