@@ -7345,6 +7345,14 @@ export class OrchestrationPipeline implements VoiceSession {
    * guard (2 finals) unless `immediate` (explicit caller language request).
    */
   private maybeSwitchStreamingSttLang(targetLang: string, immediate = false): void {
+    // DO NOT reconnect or switch STT WebSocket while agent is speaking or during echo grace.
+    // Acoustic echo from the speaker during greeting/reply can trigger false LID and destroy the STT connection.
+    const isSpeaking =
+      Date.now() < this.bargeInSentenceStartAt + this.bargeInEchoGraceMs ||
+      Date.now() < this.greetingEchoHoldUntil ||
+      Date.now() < this.bargeInHoldUntil;
+    if (isSpeaking) return;
+
     const { shouldSwitch, gate } = shouldSwitchSttLang(
       { pendingLang: this._pendingSttSwitchLang, pendingCount: this._pendingSttSwitchCount },
       targetLang,
