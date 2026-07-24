@@ -129,7 +129,7 @@ export default function Slide11() {
         </div>
       </div>
 
-      <SSWatermark />
+
     </div>
   );
 }
