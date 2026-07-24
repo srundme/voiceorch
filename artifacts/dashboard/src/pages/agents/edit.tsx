@@ -1286,36 +1286,6 @@ export default function AgentEdit() {
                 />
               )} />
             </div>
-            <div className="flex items-center justify-between border-t pt-4 mt-2">
-              <div>
-                <p className="text-xs font-medium">Vision</p>
-                <p className="text-[11px] text-muted-foreground">
-                  Let the agent see and analyze photos (WhatsApp / upload) via the analyze_image tool. Ask the caller to send a picture, then call the tool.
-                </p>
-              </div>
-              <FormField control={form.control} name="visionEnabled" render={({ field }) => (
-                <Switch
-                  checked={field.value ?? false}
-                  onCheckedChange={(v) => field.onChange(v)}
-                />
-              )} />
-            </div>
-            {isGeminiLive && (
-              <div className="flex items-center justify-between border-t pt-4 mt-2">
-                <div>
-                  <p className="text-xs font-medium">Live camera (webcall)</p>
-                  <p className="text-[11px] text-muted-foreground">
-                    Stream camera frames into Gemini Live on webcall so the agent can see in realtime.
-                  </p>
-                </div>
-                <FormField control={form.control} name="visionLiveEnabled" render={({ field }) => (
-                  <Switch
-                    checked={field.value ?? false}
-                    onCheckedChange={(v) => field.onChange(v)}
-                  />
-                )} />
-              </div>
-            )}
           </EditConfigDialog>
 
           {/* ── Model dialog ── */}

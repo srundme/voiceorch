@@ -62,12 +62,7 @@ export default function WebcallJoinPage() {
     );
   }
 
-  const liveVision = meta.requireCamera || meta.visionLiveEnabled;
-  const photoVision = meta.visionEnabled && !liveVision;
-  const anyVision = liveVision || meta.visionEnabled;
-  const headline =
-    meta.label
-    || (liveVision ? "Verification call" : photoVision ? "Photo call" : meta.agentName);
+  const headline = meta.label || meta.agentName || "Voice Call";
 
   if (!consented) {
     return (
@@ -83,38 +78,16 @@ export default function WebcallJoinPage() {
           <p className="text-sm text-muted-foreground leading-relaxed">
             You&apos;re about to join a live voice call with{" "}
             <span className="font-medium text-foreground">{meta.agentName}</span>.
-            {liveVision && (
-              <> This session uses your <span className="font-medium text-foreground">microphone and camera</span> for live verification.</>
-            )}
-            {photoVision && (
-              <> You&apos;ll use your <span className="font-medium text-foreground">microphone</span>, and can <span className="font-medium text-foreground">upload or take photos</span> when asked.</>
-            )}
           </p>
-          {liveVision && (
-            <div className="flex items-start gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-[12px] text-muted-foreground">
-              <Camera className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-              Camera is required. Turn it on, then start the call.
-            </div>
-          )}
-          {photoVision && (
-            <div className="flex items-start gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-[12px] text-muted-foreground">
-              <ImagePlus className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-              During the call, use the photo button to upload or capture an image.
-            </div>
-          )}
-          {!anyVision && (
-            <div className="flex items-start gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-[12px] text-muted-foreground">
-              <Mic className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-              Microphone access is needed for this call.
-            </div>
-          )}
+          <div className="flex items-start gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-[12px] text-muted-foreground">
+            <Mic className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+            Microphone access is needed for this call.
+          </div>
           <Button className="w-full" onClick={() => setConsented(true)}>
             Continue
           </Button>
           <p className="text-[10px] text-muted-foreground/70 text-center">
-            By continuing you consent to audio
-            {liveVision ? " and camera" : photoVision ? " and photo upload" : ""}{" "}
-            use for this session.
+            By continuing you consent to audio use for this session.
           </p>
         </div>
       </div>
