@@ -20,6 +20,9 @@ export class GeminiSTT implements STTAdapter {
 
   async transcribe(audioBuffer: Buffer, sampleRate = 16000): Promise<string> {
     if (!audioBuffer || audioBuffer.length === 0) return "";
+    // Only transcribe if we have at least ~0.2s of audio (3200 bytes at 16kHz PCM16)
+    if (audioBuffer.length < 3200) return "";
+
     const wav = pcmToWav(audioBuffer, sampleRate);
     const base64Wav = wav.toString("base64");
 
@@ -70,7 +73,30 @@ export class GeminiSTT implements STTAdapter {
     onTranscript: (text: string, isFinal: boolean, detectedLanguage?: string, metadata?: SttFinalMetadata) => void,
     onClose?: () => void,
   ): StreamSTT {
-    const chunks: Buffer[] = [];
+    let chunks: Buffer[] = [];
+    let isTranscribing = false;
+
+    const processAudioBuffer = async () => {
+      if (chunks.length === 0 || isTranscribing) return;
+      const audioToTranscribe = Buffer.concat(chunks);
+      chunks = []; // Clear queue
+      isTranscribing = true;
+
+      try {
+        const text = await this.transcribe(audioToTranscribe);
+        if (text && text.trim().length > 0) {
+          logger.info({ text: text.trim() }, "Gemini STT transcribed speech successfully");
+          onTranscript(text.trim(), true, this.cfg.language ?? undefined);
+        }
+      } catch (err) {
+        logger.warn({ err }, "Gemini streaming STT transcribe error");
+      } finally {
+        isTranscribing = false;
+        if (chunks.length > 0) {
+          void processAudioBuffer();
+        }
+      }
+    };
 
     return {
       sendAudio: (audioChunk: Buffer) => {
@@ -78,24 +104,13 @@ export class GeminiSTT implements STTAdapter {
           chunks.push(audioChunk);
         }
       },
+      flush: () => {
+        void processAudioBuffer();
+      },
       close: () => {
-        if (chunks.length === 0) {
+        void processAudioBuffer().finally(() => {
           onClose?.();
-          return;
-        }
-        const fullBuffer = Buffer.concat(chunks);
-        this.transcribe(fullBuffer)
-          .then((text) => {
-            if (text) {
-              onTranscript(text, true, this.cfg.language ?? undefined);
-            }
-          })
-          .catch((err) => {
-            logger.warn({ err }, "Gemini streaming STT transcribe error");
-          })
-          .finally(() => {
-            onClose?.();
-          });
+        });
       },
     };
   }
