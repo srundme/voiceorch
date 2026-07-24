@@ -321,33 +321,7 @@ router.post("/calls/outbound", requireAuth, async (req, res): Promise<void> => {
         }
       } else {
         // ── Managed platform number — no personal number/KYC required ──
-        if (agent.userId) {
-          const [kycAccount] = await db
-            .select({ kycStatus: vobizAccountsTable.kycStatus })
-            .from(vobizAccountsTable)
-            .where(eq(vobizAccountsTable.userId, agent.userId));
-          const hasKyc = kycAccount?.kycStatus === "completed";
 
-          if (!hasKyc) {
-            // Without KYC the destination must have been OTP-verified first
-            const now = new Date();
-            const [verified] = await db
-              .select()
-              .from(verifiedPhoneDestinationsTable)
-              .where(and(
-                eq(verifiedPhoneDestinationsTable.userId, agent.userId),
-                eq(verifiedPhoneDestinationsTable.phoneNumber, toNumber),
-                gt(verifiedPhoneDestinationsTable.expiresAt, now),
-              ));
-            if (!verified) {
-              res.status(403).json({
-                error: "Please verify the destination number via OTP before calling without KYC.",
-                code: "DESTINATION_UNVERIFIED",
-              });
-              return;
-            }
-          }
-        }
 
         // Load platform managed credentials
         const [authIdRow, authTokenRow, numbersRow] = await Promise.all([
