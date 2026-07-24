@@ -1,11 +1,12 @@
 import { pcmToWav } from "../../audio.js";
-import type { STTAdapter, SttFinalMetadata } from "./base.js";
-import type { STTConfig, StreamSTT } from "../../types.js";
+import type { STTAdapter } from "./base.js";
+import type { STTConfig } from "../../types.js";
 import { logger } from "../../../lib/logger.js";
 
 /**
  * Gemini Direct Audio Input STT Adapter
  * Uses gemini-2.5-flash native audio input capabilities to transcribe speech.
+ * Operates as a high-precision batch STT adapter driven by pipeline.ts VAD.
  */
 export class GeminiSTT implements STTAdapter {
   private key: string;
@@ -20,8 +21,8 @@ export class GeminiSTT implements STTAdapter {
 
   async transcribe(audioBuffer: Buffer, sampleRate = 16000): Promise<string> {
     if (!audioBuffer || audioBuffer.length === 0) return "";
-    // Only transcribe if we have at least ~0.2s of audio (3200 bytes at 16kHz PCM16)
-    if (audioBuffer.length < 3200) return "";
+    // Only transcribe if we have at least ~0.15s of audio (2400 bytes at 16kHz PCM16)
+    if (audioBuffer.length < 2400) return "";
 
     const wav = pcmToWav(audioBuffer, sampleRate);
     const base64Wav = wav.toString("base64");
@@ -66,52 +67,7 @@ export class GeminiSTT implements STTAdapter {
       .join("")
       .trim();
 
+    logger.info({ text, bytes: audioBuffer.length }, "Gemini STT speech transcribed successfully");
     return text;
-  }
-
-  transcribeStream(
-    onTranscript: (text: string, isFinal: boolean, detectedLanguage?: string, metadata?: SttFinalMetadata) => void,
-    onClose?: () => void,
-  ): StreamSTT {
-    let chunks: Buffer[] = [];
-    let isTranscribing = false;
-
-    const processAudioBuffer = async () => {
-      if (chunks.length === 0 || isTranscribing) return;
-      const audioToTranscribe = Buffer.concat(chunks);
-      chunks = []; // Clear queue
-      isTranscribing = true;
-
-      try {
-        const text = await this.transcribe(audioToTranscribe);
-        if (text && text.trim().length > 0) {
-          logger.info({ text: text.trim() }, "Gemini STT transcribed speech successfully");
-          onTranscript(text.trim(), true, this.cfg.language ?? undefined);
-        }
-      } catch (err) {
-        logger.warn({ err }, "Gemini streaming STT transcribe error");
-      } finally {
-        isTranscribing = false;
-        if (chunks.length > 0) {
-          void processAudioBuffer();
-        }
-      }
-    };
-
-    return {
-      sendAudio: (audioChunk: Buffer) => {
-        if (audioChunk && audioChunk.length > 0) {
-          chunks.push(audioChunk);
-        }
-      },
-      flush: () => {
-        void processAudioBuffer();
-      },
-      close: () => {
-        void processAudioBuffer().finally(() => {
-          onClose?.();
-        });
-      },
-    };
   }
 }
