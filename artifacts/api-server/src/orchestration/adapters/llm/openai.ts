@@ -60,7 +60,13 @@ export class OpenAILLM implements LLMAdapter {
 
   constructor(apiKey: string, model: string | null, genParams?: LLMGenerationParams) {
     this.client = new OpenAI({ apiKey });
-    this.model = model ?? "gpt-4o-mini";
+    let resolvedModel = model ?? "gpt-4.1-mini";
+    if (resolvedModel === "gpt-5.1-mini" || resolvedModel === "gpt-5-mini") {
+      resolvedModel = "gpt-4.1-mini";
+    } else if (resolvedModel === "gpt-5.1" || resolvedModel === "gpt-5") {
+      resolvedModel = "gpt-4.1";
+    }
+    this.model = resolvedModel;
     const t = genParams?.temperature;
     this.temperature =
       typeof t === "number" && Number.isFinite(t) ? Math.min(2, Math.max(0, t)) : undefined;
