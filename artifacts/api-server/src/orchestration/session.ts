@@ -1178,20 +1178,22 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
 
   // Provider name → platform_settings key
   const MANAGED: Record<string, string> = {
-    qwen:         "managed_qwen_key",
-    groq:         "managed_qwen_key",
-    google:       "managed_gemini_key",
-    gemini:       "managed_gemini_key",
-    gemini_audio: "managed_gemini_key",
-    deepgram:     "managed_deepgram_key",
-    sarvam:       "managed_sarvam_key",
-    cartesia:     "managed_cartesia_key",
-    openai:       "managed_openai_key",
-    azure:        "managed_azure_speech_key",
-    assemblyai:   "managed_assemblyai_key",
-    together:     "managed_together_key",
-    openrouter:   "managed_openrouter_key",
-    krutrim:      "managed_krutrim_key",
+    qwen:          "managed_qwen_key",
+    groq:          "managed_qwen_key",
+    google:        "managed_gemini_key",
+    gemini:        "managed_gemini_key",
+    gemini_audio:  "managed_gemini_key",
+    google_speech: "managed_gemini_key",
+    google_stt:    "managed_gemini_key",
+    deepgram:      "managed_deepgram_key",
+    sarvam:        "managed_sarvam_key",
+    cartesia:      "managed_cartesia_key",
+    openai:        "managed_openai_key",
+    azure:         "managed_azure_speech_key",
+    assemblyai:    "managed_assemblyai_key",
+    together:      "managed_together_key",
+    openrouter:    "managed_openrouter_key",
+    krutrim:       "managed_krutrim_key",
   };
   // Providers that also need an extra-config blob — key stores the region string, not JSON
   // (matches what the admin Managed Keys panel writes as managed_azure_speech_region)
@@ -1275,6 +1277,8 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     providerKeys.get("google") ||
     providerKeys.get("gemini") ||
     providerKeys.get("gemini_audio") ||
+    providerKeys.get("google_speech") ||
+    providerKeys.get("google_stt") ||
     settingsMap.get("managed_gemini_key") ||
     process.env["GEMINI_API_KEY"] ||
     process.env["GOOGLE_API_KEY"];
@@ -1282,6 +1286,8 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     if (!providerKeys.has("google")) providerKeys.set("google", googleKey);
     if (!providerKeys.has("gemini")) providerKeys.set("gemini", googleKey);
     if (!providerKeys.has("gemini_audio")) providerKeys.set("gemini_audio", googleKey);
+    if (!providerKeys.has("google_speech")) providerKeys.set("google_speech", googleKey);
+    if (!providerKeys.has("google_stt")) providerKeys.set("google_stt", googleKey);
   }
 
   // For outbound VoBiz calls the HTTP route (calls.ts) already created an "exec_*"

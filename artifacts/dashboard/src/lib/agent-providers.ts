@@ -1,8 +1,8 @@
 export const ASR_PROVIDERS = [
-  { value: "gemini_audio", label: "Gemini Audio Direct In (No-STT)" },
-  { value: "sarvam",       label: "Sarvam" },
-  { value: "azure",        label: "Azure Speech" },
-  { value: "deepgram",     label: "Deepgram" },
+  { value: "google_speech", label: "Google Cloud Speech-to-Text v2" },
+  { value: "sarvam",        label: "Sarvam" },
+  { value: "azure",         label: "Azure Speech" },
+  { value: "deepgram",      label: "Deepgram" },
 ];
 
 export const LLM_PROVIDERS = [
@@ -23,9 +23,10 @@ export const TELEPHONY_PROVIDERS = [
 ];
 
 export const ASR_MODELS: Record<string, { value: string; label: string }[]> = {
-  gemini_audio: [
-    { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash — Direct Audio (Recommended)" },
-    { value: "gemini-2.5-pro",   label: "Gemini 2.5 Pro — Direct Audio (Deep reasoning)" },
+  google_speech: [
+    { value: "telephony",   label: "Telephony — Enhanced for Phone & Voice (Recommended)" },
+    { value: "chirp_2",     label: "Chirp 2 — Multilingual Universal Speech Model" },
+    { value: "latest_long", label: "Latest Long — Conversational Speech" },
   ],
   azure:  [{ value: "en-US-standard", label: "Auto (base model from language)" }, { value: "en-US-enhanced", label: "Auto — enhanced (base model from language)" }, { value: "en-IN-standard", label: "Auto — Indic (base model from language)" }],
   sarvam: [
