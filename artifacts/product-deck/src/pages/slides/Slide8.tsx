@@ -13,9 +13,9 @@ export default function Slide8() {
       label: "TODAY",
       color: "#FF6F00",
       items: [
+        "155 Active Users onboarded",
         "Full platform live in production",
         "Multilingual voice agents with cross-call memory",
-        "Onboarding first pilot clients in BFSI",
         "TRAI / DPDP / IRDAI guardrails active",
       ],
     },
@@ -23,10 +23,10 @@ export default function Slide8() {
       label: "+12 MONTHS",
       color: "#1A237E",
       items: [
-        "Convert pilots to paid recurring campaigns",
+        "Convert pilot users to paid recurring campaigns",
+        "Expand footprint across India via reseller networks and direct business owners",
+        "Implement SnapServe as the primary L1 Qualifier and customer support engine for 1,000+ businesses",
         "Memory Proxy API publicly available",
-        "10+ enterprise accounts onboarded",
-        "Tamil, Hindi, Hinglish, Marathi, Telugu coverage",
       ],
     },
     {
