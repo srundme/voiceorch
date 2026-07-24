@@ -78,10 +78,10 @@ export default function Slide1() {
 
         <div style={{ marginTop: "4.5vh", display: "flex", flexDirection: "column", gap: "1.2vh" }}>
           <div style={{ fontSize: "1.05vw", fontWeight: 600, color: "#FFFFFF" }}>
-            Karthikeyan&ensp;<span style={{ color: "#FF6F00" }}>|</span>&ensp;Founder &amp; CEO
+            Karthikeyan Loganathan&ensp;<span style={{ color: "#FF6F00" }}>|</span>&ensp;Co-Founder &amp; CEO
           </div>
           <div style={{ fontSize: "1.05vw", fontWeight: 600, color: "#FFFFFF" }}>
-            Gopi N.&ensp;<span style={{ color: "#FF6F00" }}>|</span>&ensp;Co-Founder &amp; COO
+            Gopi N&ensp;<span style={{ color: "#FF6F00" }}>|</span>&ensp;Co-Founder &amp; COO
           </div>
         </div>
       </div>
