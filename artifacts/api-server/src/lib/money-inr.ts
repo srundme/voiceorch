@@ -11,8 +11,11 @@ export const CURRENCY_INR = "INR" as const;
 /** ₹500 signup free credit */
 export const SIGNUP_CREDIT_PAISE = 50_000;
 
-/** ₹800 phone number base (purchase & renewal before GST) */
+/** ₹800 phone number base for first purchase (₹700 rental + ₹100 setup before GST) */
 export const PHONE_BASE_PAISE = 80_000;
+
+/** ₹700 phone number base for monthly renewals (telephony rental before GST) */
+export const PHONE_RENEWAL_BASE_PAISE = 70_000;
 
 /** Flat ₹5 / minute platform fee */
 export const RATE_PAISE_PER_MIN = 500;
@@ -34,8 +37,11 @@ export function withGstPaise(basePaise: number): number {
   return basePaise + gstPortionPaise(basePaise);
 }
 
-/** Phone purchase / renewal: ₹800 + 18% GST = ₹944 */
+/** First phone purchase: ₹800 + 18% GST = ₹944 */
 export const PHONE_TOTAL_PAISE = withGstPaise(PHONE_BASE_PAISE);
+
+/** Monthly renewal: ₹700 + 18% GST = ₹826 */
+export const PHONE_RENEWAL_TOTAL_PAISE = withGstPaise(PHONE_RENEWAL_BASE_PAISE);
 
 export function formatInr(paise: number): string {
   const sign = paise < 0 ? "-" : "";

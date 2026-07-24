@@ -11,6 +11,7 @@ import {
   GST_RATE,
   PHONE_BASE_PAISE,
   PHONE_TOTAL_PAISE,
+  PHONE_RENEWAL_TOTAL_PAISE,
   formatInr,
   gstPortionPaise,
 } from "../lib/money-inr.js";
@@ -32,8 +33,8 @@ const router: IRouter = Router();
 // SnapServe charges ₹800 + 18% GST for any phone number (first purchase via
 // Razorpay INR card checkout). Carrier VoBiz INR cost is never surfaced. Renewal
 // every 30 days debits ₹800 + GST from the wallet (see services/phone-renewal.ts).
-const FLAT_MONTHLY_RATE_CENTS = PHONE_BASE_PAISE; // ₹800 base
-export const RENEWAL_RATE_CENTS = PHONE_TOTAL_PAISE; // ₹800 + 18% GST wallet debit
+const FLAT_MONTHLY_RATE_CENTS = PHONE_BASE_PAISE; // ₹800 base for first purchase
+export const RENEWAL_RATE_CENTS = PHONE_RENEWAL_TOTAL_PAISE; // ₹700 + 18% GST = ₹826 wallet debit
 export const RENEWAL_INTERVAL_DAYS = 30;
 
 function getRazorpay() {

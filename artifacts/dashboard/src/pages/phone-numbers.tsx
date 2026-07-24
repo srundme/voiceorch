@@ -548,13 +548,13 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
             </div>
             <div className="flex justify-between px-4 py-2.5">
               <span className="text-muted-foreground">Renews every 30 days (wallet)</span>
-              <span className="text-foreground">₹{PHONE_BASE_INR} + GST</span>
+              <span className="text-foreground">₹700 + GST (₹826)</span>
             </div>
           </div>
           <div className="flex items-start gap-3 p-3 rounded-lg border border-zinc-500/20 bg-zinc-500/5 text-foreground text-xs">
             <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
             <span>
-              You&apos;ll pay ₹{PHONE_TOTAL_INR} now by card (₹{PHONE_BASE_INR} + 18% GST). The number then renews at ₹{PHONE_BASE_INR} + GST from your wallet every 30 days until you release it.
+              You&apos;ll pay ₹{PHONE_TOTAL_INR} now by card (₹800 + 18% GST). Since the ₹100 setup fee is one-time, the number then renews at ₹700 + 18% GST (₹826 total) from your wallet every 30 days.
             </span>
           </div>
           <DialogFooter>
