@@ -216,15 +216,15 @@ const VOICEMAIL_GREETING_ENERGY_THRESHOLD = 300;                    // RMS bar f
 // media stream and confirm acoustically first. All thresholds bias strongly
 // toward "human": ambiguity, silence, or a short utterance resolve to human.
 const AMD_CONFIRM_WINDOW_MS =                                       // hard cap: resolve human after this long
-  Number(process.env["AMD_CONFIRM_WINDOW_MS"]) || 4000;
+  Number(process.env["AMD_CONFIRM_WINDOW_MS"]) || 1200;
 const AMD_CONTINUOUS_GREETING_MS =                                  // continuous speech run that CONFIRMS a machine
-  Number(process.env["AMD_CONTINUOUS_GREETING_MS"]) || 3000;
+  Number(process.env["AMD_CONTINUOUS_GREETING_MS"]) || 2500;
 const AMD_SPEECH_GAP_MS =                                           // silence gap that ends a continuous speech run
-  Number(process.env["AMD_SPEECH_GAP_MS"]) || 400;
+  Number(process.env["AMD_SPEECH_GAP_MS"]) || 300;
 const AMD_HUMAN_PAUSE_MS =                                          // pause after a SHORT utterance ("hello?") → human
-  Number(process.env["AMD_HUMAN_PAUSE_MS"]) || 700;
+  Number(process.env["AMD_HUMAN_PAUSE_MS"]) || 400;
 const AMD_NO_SPEECH_HUMAN_MS =                                      // no greeting heard at all by this point → human
-  Number(process.env["AMD_NO_SPEECH_HUMAN_MS"]) || 1500;
+  Number(process.env["AMD_NO_SPEECH_HUMAN_MS"]) || 250;
 const AMD_CONFIRM_ENERGY_THRESHOLD =                               // RMS bar for "someone is speaking" during confirm
   Number(process.env["AMD_CONFIRM_ENERGY_THRESHOLD"]) || VOICEMAIL_GREETING_ENERGY_THRESHOLD;
 // External (async provider callback) AMD corroboration — VoBiz delivers its
