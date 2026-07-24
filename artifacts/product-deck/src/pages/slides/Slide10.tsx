@@ -27,7 +27,7 @@ export default function Slide10() {
     { feature: "Zero-code agent builder", snap: <Check />, vapi: <Cross />, status: <Cross /> },
     { feature: "Persistent cross-call memory", snap: <Check />, vapi: <Cross />, status: <Cross /> },
     { feature: "Dropped-call resume with full context", snap: <Check />, vapi: <Cross />, status: <Cross /> },
-    { feature: "12+ Indian languages, natively", snap: <Check />, vapi: <Part />, status: <Cross /> },
+    { feature: "18+ Indian languages, natively", snap: <Check />, vapi: <Part />, status: <Cross /> },
     { feature: "Indian phone number provisioning (KYC)", snap: <Check />, vapi: <Cross />, status: <Cross /> },
     { feature: "Inbound + outbound campaigns in one platform", snap: <Check />, vapi: <Part />, status: <Cross /> },
     { feature: "IRDAI / TRAI / DPDP built-in", snap: <Check />, vapi: <Cross />, status: <Cross /> },
@@ -93,13 +93,13 @@ export default function Slide10() {
           <div style={{ width: "0.06vw", background: "rgba(255,111,0,0.35)", alignSelf: "stretch" }} />
           <div style={{ fontSize: "1.05vw", color: "#C9D5F5", lineHeight: 1.65, flex: 1 }}>
             Every call enriches SnapServe's caller knowledge graph. Competitors who copy our pipeline still start from zero caller history — you can't replicate three years of relationship data overnight.
-            The Memory Proxy lets Vapi, Bolna, and Retell customers plug directly into SnapServe's memory layer with one config change — our distribution grows inside competitors' ecosystems.
+            SnapServe is fully self-hostable: deploy the complete end-to-end call cycle on your own infrastructure, with on-premise data residency, end-to-end encryption, and zero dependency on any third-party cloud.
             This isn't a feature advantage. It's a structural moat that strengthens with every call.
           </div>
         </div>
       </div>
 
-      <SSWatermark />
+
     </div>
   );
 }
