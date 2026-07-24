@@ -38,7 +38,7 @@ export default function Slide4() {
     },
     {
       color: "#EEF0FB", iconColor: "#1A237E",
-      title: "12+ Indian Languages, Natively",
+      title: "18+ Indian Languages, Natively",
       body: "Hindi · Tamil · Telugu · Kannada · Malayalam · Marathi · Bengali · Gujarati · Punjabi · Odia + more. Not translated — natively modelled.",
       icon: (
         <svg width="1.3vw" height="1.3vw" viewBox="0 0 24 24" fill="none" stroke="#1A237E" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
