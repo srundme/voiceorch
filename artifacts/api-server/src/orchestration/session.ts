@@ -1213,6 +1213,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
   // Managed-plan agents need the platform key for every provider; BYOP agents
   // only need it as a fallback for providers the user hasn't configured.
   const settingsKeysNeeded = new Set<string>();
+  settingsKeysNeeded.add("managed_gemini_key");
   for (const providerName of requiredProviders) {
     if (MANAGED[providerName] && (isManaged || !providerKeys.has(providerName))) {
       settingsKeysNeeded.add(MANAGED[providerName]!);
@@ -1274,6 +1275,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     providerKeys.get("google") ||
     providerKeys.get("gemini") ||
     providerKeys.get("gemini_audio") ||
+    settingsMap.get("managed_gemini_key") ||
     process.env["GEMINI_API_KEY"] ||
     process.env["GOOGLE_API_KEY"];
   if (googleKey) {
