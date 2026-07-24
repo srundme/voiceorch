@@ -53,14 +53,14 @@ export default function Slide7() {
                   <span style={{ fontFamily: "var(--font-display-family)", fontWeight: 800, fontSize: "1.3vw", color: "#FF6F00" }}>₹5/min</span>
                   <span style={{ fontSize: "0.88vw", color: "#9FA8DA" }}>all-in</span>
                 </div>
-                <div style={{ fontSize: "0.92vw", color: "#7986CB", marginTop: "0.3vh" }}>SnapServe supplies STT, LLM, TTS, and telephony — nothing to set up.</div>
+                <div style={{ fontSize: "0.92vw", color: "#7986CB", marginTop: "0.3vh" }}>SnapServe supplies speech recognition, AI brain, voice, and telephony — nothing to set up.</div>
               </div>
               <div style={{ padding: "1vh 0", borderBottom: "0.06vh solid #C5CAE9" }}>
                 <div style={{ display: "flex", alignItems: "baseline", gap: "0.6vw" }}>
-                  <strong style={{ color: "#1A237E" }}>BYOP</strong>
-                  <span style={{ fontWeight: 700, fontSize: "1.1vw", color: "#1A237E" }}>Platform subscription only</span>
+                  <strong style={{ color: "#1A237E" }}>Self-serve plan</strong>
+                  <span style={{ fontWeight: 600, fontSize: "1vw", color: "#5B5470" }}>— subscription only</span>
                 </div>
-                <div style={{ fontSize: "0.92vw", color: "#7986CB", marginTop: "0.3vh" }}>Customer brings their own API keys — pricing flexible, discuss with team.</div>
+                <div style={{ fontSize: "0.92vw", color: "#7986CB", marginTop: "0.3vh" }}>You bring your own AI keys, we handle the orchestration. Pricing flexible — talk to us.</div>
               </div>
               <div style={{ padding: "1vh 0" }}>
                 <div style={{ display: "flex", alignItems: "baseline", gap: "0.6vw" }}>
@@ -75,7 +75,7 @@ export default function Slide7() {
             <div style={{ ...label, color: "#FF6F00" }}>Revenue per customer</div>
             <div style={{ fontSize: "1.28vw", fontWeight: 700, color: "#FFFFFF", marginBottom: "1.4vh" }}>₹5L – ₹25L ARR</div>
             <div style={{ fontSize: "1.05vw", color: "#C9D5F5", lineHeight: 1.62 }}>
-              500 calls/day at ₹5/min avg = ₹75,000/month. Enterprise accounts with custom SLAs and Memory Proxy API access exceed ₹2L/month. Every new call enriches the memory graph — retention is structural.
+              10 clients at avg ₹10L/yr = ₹1 Cr ARR in Year 1. Enterprise accounts exceed ₹2L/month. Every new call enriches the memory — retention is structural.
             </div>
           </div>
         </div>
