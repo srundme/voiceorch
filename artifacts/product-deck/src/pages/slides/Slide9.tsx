@@ -34,10 +34,10 @@ export default function Slide9() {
       <div style={{ flex: 1, padding: "2.8vh 6vw 6.5vh 6vw", display: "flex", flexDirection: "column", gap: "2.2vh" }}>
         <div style={{ display: "flex", gap: "2vw" }}>
           {[
-            { number: "12+", label: "Indian languages", sub: "Tamil · Hindi · Marathi · Telugu · Kannada + more — validated in live calls" },
-            { number: "5 min", label: "to deploy an agent", sub: "From sign-up to a live phone number — no engineers, no infra" },
-            { number: "3", label: "compliance layers", sub: "TRAI DND · DPDP consent · IRDAI disclosure — enforced on every call" },
-            { number: "100%", label: "memory carry-forward", sub: "No caller repeats themselves — context from every prior call is available" },
+            { number: "155", label: "Total Users", sub: "Active accounts on the platform" },
+            { number: "1,175", label: "Total Calls", sub: "All time — insurance, NBFC, and collections" },
+            { number: "1,496", label: "Total Minutes", sub: "Voice minutes consumed across all agents" },
+            { number: "18+", label: "Indian Languages", sub: "Tamil · Hindi · Marathi · Telugu · Kannada + more" },
           ].map(({ number, label, sub }) => (
             <div key={label} style={stat}>
               <div style={{ fontFamily: "var(--font-display-family)", fontSize: "3.4vw", fontWeight: 800, color: "#1A237E", lineHeight: 1 }}>{number}</div>
@@ -58,11 +58,9 @@ export default function Slide9() {
             </div>
             {[
               { icon: "✓", text: "Full platform live in production — not a demo, not a prototype" },
-              { icon: "✓", text: "3 pilot accounts live — insurance and NBFC" },
-              { icon: "✓", text: "End-to-end call recordings, transcripts, and memory extractions working" },
+              { icon: "✓", text: "2 paid clients successfully onboarded and active" },
+              { icon: "✓", text: "Aggressively scaling to hit 1,000 users by the end of August" },
               { icon: "✓", text: "Caller memory persists across dropped calls, agent switches, and session gaps" },
-              { icon: "→", text: "2 pilots in active paid contract discussions — this raise accelerates conversion" },
-              { icon: "→", text: "₹0 → first paid MRR target: Q1" },
             ].map(({ icon, text }) => (
               <div key={text} style={{ display: "flex", alignItems: "flex-start", gap: "0.8vw", fontSize: "1.05vw", color: "#3A3A5C", lineHeight: 1.5 }}>
                 <span style={{ color: icon === "→" ? "#FF6F00" : "#1A237E", fontWeight: 800, flexShrink: 0, marginTop: "0.05vh" }}>{icon}</span>
