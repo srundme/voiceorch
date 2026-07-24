@@ -1037,17 +1037,22 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
                 <FormField control={form.control} name="sarvamSttMode" render={({ field }) => {
                   const lang = form.watch("language") ?? "";
                   const autoDefault = lang.toLowerCase().startsWith("en") ? "transcribe" : "codemix";
+                  const currentValue = field.value ?? autoDefault;
                   return (
                   <FormItem className="space-y-1">
-                    <FormLabel className="text-[10px] text-muted-foreground">STT Mode</FormLabel>
-                    <SmallSelect value={field.value ?? autoDefault} onChange={field.onChange}
+                    <FormLabel className="text-[10px] font-medium text-foreground/80">Speech Mode</FormLabel>
+                    <SmallSelect value={currentValue} onChange={field.onChange}
                       options={[
-                        { value: "codemix", label: "Codemix (Regional + English)" },
-                        { value: "verbatim", label: "Verbatim (exact words)" },
-                        { value: "transcribe", label: "Transcribe (English / strict)" },
+                        { value: "codemix", label: "Mixed / Hinglish (English + Regional words)" },
+                        { value: "verbatim", label: "Native Script (Pure Regional script, e.g. हिंदी)" },
+                        { value: "transcribe", label: "English Only (Strict English text)" },
                       ]} />
-                    <p className="text-[9px] text-muted-foreground">
-                      Auto: English agents use Transcribe; Indic agents use Codemix.
+                    <p className="text-[9.5px] text-muted-foreground leading-snug mt-1">
+                      {currentValue === "verbatim"
+                        ? "Speech is transcribed into native regional script (e.g. हिंदी / தமிழ்)."
+                        : currentValue === "transcribe"
+                        ? "Speech is transcribed into standard English text."
+                        : "Recommended: Captures mixed English + regional words (Hinglish, Tanglish, etc.)."}
                     </p>
                   </FormItem>
                   );
