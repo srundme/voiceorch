@@ -118,7 +118,7 @@ function KycBanner() {
 
   const hasActiveSession =
     kycData?.sessionStatus &&
-    !["revoked", "kyc_completed"].includes(kycData.sessionStatus);
+    !["revoked", "kyc_completed", "expired"].includes(kycData.sessionStatus);
 
   const isFailed = kycData?.kycStatus === "failed";
 

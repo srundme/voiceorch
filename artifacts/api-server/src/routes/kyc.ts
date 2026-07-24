@@ -431,13 +431,31 @@ router.get("/kyc/status", requireAuth, async (req, res): Promise<void> => {
     .orderBy(desc(vobizKycSessionsTable.createdAt))
     .limit(1);
 
+  const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+  let sessionStatus = session?.status ?? null;
+  let widgetUrl = session?.widgetUrl ?? null;
+
+  if (session && sessionStatus && !["kyc_completed", "revoked", "expired"].includes(sessionStatus)) {
+    const ageMs = Date.now() - session.createdAt.getTime();
+    if (ageMs > SEVEN_DAYS_MS) {
+      sessionStatus = "expired";
+      // Auto-update session status in DB async
+      db.update(vobizKycSessionsTable)
+        .set({ status: "expired" })
+        .where(eq(vobizKycSessionsTable.id, session.id))
+        .catch((err) => logger.warn({ err }, "Failed to auto-expire stale KYC session"));
+    }
+  }
+
+  if (sessionStatus === "kyc_completed" || sessionStatus === "revoked" || sessionStatus === "expired") {
+    widgetUrl = null;
+  }
+
   res.json(GetKycStatusResponse.parse({
     kycStatus:     account.kycStatus,
     sessionId:     session?.vobizSessionId ?? null,
-    sessionStatus: session?.status         ?? null,
-    widgetUrl:     session?.status === "kyc_completed" || session?.status === "revoked"
-                     ? null
-                     : (session?.widgetUrl ?? null),
+    sessionStatus: sessionStatus,
+    widgetUrl:     widgetUrl,
     completedAt:   account.updatedAt?.toISOString() ?? null,
   }));
 });
