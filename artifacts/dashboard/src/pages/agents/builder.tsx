@@ -5796,10 +5796,17 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
     if (!confirm(`Delete "${agentName}"? This cannot be undone.`)) return;
     try {
       await deleteAgent.mutateAsync({ id: agentId });
-      queryClient.invalidateQueries({ queryKey: getListAgentsQueryKey() });
-      navigate("/app/agents");
+      try { localStorage.removeItem(LAST_AGENT_ID_KEY); } catch {}
+      await queryClient.invalidateQueries({ queryKey: getListAgentsQueryKey() });
+      const nextList = (queryClient.getQueryData(getListAgentsQueryKey()) as any[])?.filter(a => a.id !== agentId) || [];
+      if (nextList.length > 0) {
+        navigate(`/app/agents/${nextList[0].id}`, { replace: true });
+      } else {
+        navigate("/app/agents", { replace: true });
+      }
+      toast({ title: "Agent deleted", description: `"${agentName}" has been deleted.` });
     } catch (err) {
-      toast({ title: "Error", description: formatApiError(err), variant: "destructive" });
+      toast({ title: "Delete failed", description: formatApiError(err), variant: "destructive" });
     }
   };
 
@@ -6606,8 +6613,14 @@ export default function AgentBuilder() {
 
   // /app/agents opens Studio and lands on last (or first) agent — no gallery hub
   useEffect(() => {
-    if (selectedId != null || agentsLoading) return;
+    if (agentsLoading) return;
     const list = Array.isArray(agents) ? agents : [];
+    if (selectedId != null && list.length > 0 && !list.some(a => a.id === selectedId)) {
+      try { localStorage.removeItem(LAST_AGENT_ID_KEY); } catch {}
+      navigate(`/app/agents/${list[0]!.id}`, { replace: true });
+      return;
+    }
+    if (selectedId != null) return;
     if (list.length === 0) return;
     let target: number | null = null;
     try {

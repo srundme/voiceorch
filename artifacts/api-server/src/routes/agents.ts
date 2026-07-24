@@ -490,16 +490,58 @@ router.delete("/agents/:id", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: "Validation failed", issues: params.error.issues });
     return;
   }
-  const [deleted] = await db
-    .delete(agentsTable)
-    .where(and(eq(agentsTable.id, params.data.id), eq(agentsTable.userId, clerkId)))
-    .returning();
-  if (!deleted) {
-    res.status(404).json({ error: "Agent not found" });
-    return;
+
+  const targetId = params.data.id;
+
+  try {
+    // 1. Verify agent ownership
+    const [existing] = await db
+      .select({ id: agentsTable.id, name: agentsTable.name })
+      .from(agentsTable)
+      .where(and(eq(agentsTable.id, targetId), eq(agentsTable.userId, clerkId)));
+
+    if (!existing) {
+      res.status(404).json({ error: "Agent not found" });
+      return;
+    }
+
+    // 2. Unlink assigned phone numbers
+    await db
+      .update(phoneNumbersTable)
+      .set({ agentId: null })
+      .where(eq(phoneNumbersTable.agentId, targetId));
+
+    // 3. Delete agent versions
+    await db
+      .delete(agentVersionsTable)
+      .where(eq(agentVersionsTable.agentId, targetId));
+
+    // 4. Delete agent knowledge sources
+    await db
+      .delete(agentKnowledgeSourcesTable)
+      .where(eq(agentKnowledgeSourcesTable.agentId, targetId));
+
+    // 6. Execute final agent deletion
+    const [deleted] = await db
+      .delete(agentsTable)
+      .where(and(eq(agentsTable.id, targetId), eq(agentsTable.userId, clerkId)))
+      .returning();
+
+    if (deleted) {
+      await logActivity({
+        userId: clerkId,
+        eventType: "agent.deleted",
+        resourceType: "agent",
+        resourceId: String(deleted.id),
+        description: `Agent "${deleted.name}" deleted`,
+      });
+    }
+
+    res.sendStatus(204);
+  } catch (err: any) {
+    req.log.error({ err, targetId, clerkId }, "Failed to delete agent");
+    res.status(500).json({ error: err?.message || "Failed to delete agent" });
   }
-  await logActivity({ userId: clerkId, eventType: "agent.deleted", resourceType: "agent", resourceId: String(deleted.id), description: `Agent "${deleted.name}" deleted` });
-  res.sendStatus(204);
 });
 
 // ── Agent Memory (CRM) endpoints ───────────────────────────────────────────
