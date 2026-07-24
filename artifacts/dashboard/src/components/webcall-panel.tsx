@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Mic, MicOff, PhoneOff, Phone, Loader2, AlertCircle, X, Camera, ImagePlus, SwitchCamera, Monitor, MonitorOff, ZoomIn } from "lucide-react";
+import { Mic, MicOff, PhoneOff, Phone, Loader2, AlertCircle, X, Camera, ImagePlus, SwitchCamera, Monitor, MonitorOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 
 /**
  * Webcall 2.0 — browser "Live Test" transport for an agent.
@@ -178,68 +177,26 @@ export function WebcallPanel({
     nextStartRef.current = playbackCtxRef.current?.currentTime ?? 0;
   }, []);
 
-  // Live camera chrome (preview / stream) — enabled for any vision-capable agent.
-  const cameraAllowed = !!(visionEnabled || visionLiveEnabled || requireCamera);
+  // Live camera chrome (preview / stream) — not for photo-upload-only agents.
+  const cameraAllowed = !!(visionLiveEnabled || requireCamera);
   const photoUploadAllowed = !!visionEnabled;
 
-  const [zoomLevel, setZoomLevel] = useState<number>(1);
-  const zoomLevelRef = useRef<number>(1);
-  useEffect(() => { zoomLevelRef.current = zoomLevel; }, [zoomLevel]);
-
-  const applyZoom = useCallback(async (level: number) => {
-    setZoomLevel(level);
-    const track = videoStreamRef.current?.getVideoTracks()[0];
-    if (track) {
-      try {
-        const capabilities = track.getCapabilities() as any;
-        if (capabilities?.zoom) {
-          await track.applyConstraints({
-            advanced: [{ zoom: Math.min(level, capabilities.zoom.max || level) }],
-          } as any);
-        }
-      } catch {
-        /* Fallback: digital crop canvas zoom handling */
-      }
-    }
-  }, []);
-
-  /** Capture frames from a given <video> element with Adaptive Bitrate (ABR) scaling & PII Edge Redaction. */
-  const startFrameCaptureFromEl = useCallback((getEl: () => HTMLVideoElement | null, timerRef: React.MutableRefObject<number | null>, isHighResBoost = false, isScreenShare = false) => {
+  /** Capture frames from a given <video> element and stream over WebSocket. */
+  const startFrameCaptureFromEl = useCallback((getEl: () => HTMLVideoElement | null, timerRef: React.MutableRefObject<number | null>) => {
     if (timerRef.current != null) return;
     const canvas = document.createElement("canvas");
     timerRef.current = window.setInterval(() => {
       const ws = wsRef.current;
       const video = getEl();
-      if (!ws || ws.readyState !== WebSocket.OPEN || !video) return;
-
-      // ⚡ Priority Queue: When Screen Share is active, camera yields so AI sees the Screen!
-      if (!isScreenShare && screenStreamRef.current != null) return;
-
-      const w = video.videoWidth || (video as any).clientWidth || 640;
-      const h = video.videoHeight || (video as any).clientHeight || 480;
-      if (w <= 0 || h <= 0) return;
-
-      // ⚡ ABR Video Stream Pipeline: 480p live camera vs 1080p high-res screen share & OCR photo boost
-      const targetMaxW = (isHighResBoost || isScreenShare) ? 1920 : 640;
-      canvas.width = Math.min(w, targetMaxW);
+      if (!ws || ws.readyState !== WebSocket.OPEN || !video || video.readyState < 2) return;
+      const w = video.videoWidth || 320;
+      const h = video.videoHeight || 240;
+      canvas.width = Math.min(w, 1280);
       canvas.height = Math.round(canvas.width * (h / Math.max(w, 1)));
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
-
-      ctx.filter = "none";
-      const zoom = zoomLevelRef.current || 1;
-      if (zoom > 1 && !isScreenShare) {
-        const cropW = w / zoom;
-        const cropH = h / zoom;
-        const cropX = (w - cropW) / 2;
-        const cropY = (h - cropH) / 2;
-        ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, canvas.width, canvas.height);
-      } else {
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      }
-
-      const quality = (isHighResBoost || isScreenShare) ? 0.90 : 0.55;
-      const dataUrl = canvas.toDataURL("image/jpeg", quality);
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.60);
       const b64 = dataUrl.split(",")[1];
       if (!b64) return;
       try {
@@ -249,11 +206,11 @@ export function WebcallPanel({
   }, []);
 
   const startFrameCapture = useCallback(() => {
-    startFrameCaptureFromEl(() => videoElRef.current, frameTimerRef, false, false);
+    startFrameCaptureFromEl(() => videoElRef.current, frameTimerRef);
   }, [startFrameCaptureFromEl]);
 
   const startScreenFrameCapture = useCallback(() => {
-    startFrameCaptureFromEl(() => screenElRef.current, screenFrameTimerRef, true, true);
+    startFrameCaptureFromEl(() => screenElRef.current, screenFrameTimerRef);
   }, [startFrameCaptureFromEl]);
 
   const openScreenShare = useCallback(async () => {
@@ -482,14 +439,9 @@ export function WebcallPanel({
 
       // ── WebSocket (absolute /api path → routed by the shared proxy) ────────
       const proto = location.protocol === "https:" ? "wss" : "ws";
-      let persistentGuestId = localStorage.getItem("snapserve_guest_id");
-      if (!persistentGuestId) {
-        persistentGuestId = `guest_${Math.random().toString(36).substring(2, 10)}`;
-        localStorage.setItem("snapserve_guest_id", persistentGuestId);
-      }
       const authQs = shareToken
-        ? `share=${encodeURIComponent(shareToken)}&guestId=${encodeURIComponent(persistentGuestId)}`
-        : `token=${encodeURIComponent(sessionToken!)}&guestId=${encodeURIComponent(persistentGuestId)}`;
+        ? `share=${encodeURIComponent(shareToken)}`
+        : `token=${encodeURIComponent(sessionToken!)}`;
       const ws = new WebSocket(
         `${proto}://${location.host}/api/ws/webcall/${agentId}?${authQs}`,
       );
@@ -506,9 +458,6 @@ export function WebcallPanel({
               callIdRef.current = (msg as { callId: number }).callId;
             }
             setState("live");
-            if (cameraAllowed && !cameraOn) {
-              void startCamera();
-            }
             break;
           case "transcript":
             if (msg.speaker && msg.text) {
@@ -631,21 +580,18 @@ export function WebcallPanel({
     }
   }, [visionEnabled, fileToCompressedBase64, shareToken]);
 
-  const liveCameraAutoTriedRef = useRef(false);
-  const idleCameraAutoTriedRef = useRef(false);
-
   // Auto-start camera once the call is live (so the preview shows without an extra tap).
   useEffect(() => {
-    if (state !== "live" || !cameraAllowed || cameraOn || liveCameraAutoTriedRef.current) return;
-    liveCameraAutoTriedRef.current = true;
+    if (state !== "live" || !cameraAllowed || cameraOn || cameraAutoTriedRef.current) return;
+    cameraAutoTriedRef.current = true;
     void startCamera();
   }, [state, cameraAllowed, cameraOn, startCamera]);
 
   // Guest join with requireCamera: prompt for camera while idle so preview appears before Start.
   useEffect(() => {
     if (!requireCamera || !cameraAllowed || cameraOn || (state !== "idle" && state !== "error")) return;
-    if (idleCameraAutoTriedRef.current) return;
-    idleCameraAutoTriedRef.current = true;
+    if (cameraAutoTriedRef.current) return;
+    cameraAutoTriedRef.current = true;
     void startCamera();
   }, [requireCamera, cameraAllowed, cameraOn, state, startCamera]);
 
@@ -764,9 +710,8 @@ export function WebcallPanel({
             />
             {cameraOn && !screenShareOn && (
               <>
-                <span className="absolute top-2 left-2 text-[10px] font-medium px-1.5 py-0.5 rounded bg-black/60 text-white flex items-center gap-1.5">
-                  <span className="h-1.5 w-1.5 rounded-full bg-sky-400 animate-ping" />
-                  {visionLiveEnabled ? "Live Camera · AI Perception Active" : "Camera"} · {facingMode === "user" ? "Front" : "Rear"}
+                <span className="absolute top-2 left-2 text-[10px] font-medium px-1.5 py-0.5 rounded bg-black/60 text-white">
+                  {visionLiveEnabled ? "Live camera" : "Camera"} · {facingMode === "user" ? "Front" : "Rear"}
                 </span>
                 <button
                   type="button"
@@ -778,47 +723,6 @@ export function WebcallPanel({
                   {switchingCamera ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <SwitchCamera className="h-3.5 w-3.5" />}
                 </button>
               </>
-            )}
-
-            {/* AI Vision Perception AR Target Frame & Laser Line */}
-            {cameraOn && !screenShareOn && (
-              <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-                <div className="relative w-44 h-28 border border-sky-400/40 rounded-lg flex items-center justify-center">
-                  <div className="absolute top-0 left-0 w-3 h-3 border-t-2 border-l-2 border-sky-400 -mt-0.5 -ml-0.5" />
-                  <div className="absolute top-0 right-0 w-3 h-3 border-t-2 border-r-2 border-sky-400 -mt-0.5 -mr-0.5" />
-                  <div className="absolute bottom-0 left-0 w-3 h-3 border-b-2 border-l-2 border-sky-400 -mb-0.5 -ml-0.5" />
-                  <div className="absolute bottom-0 right-0 w-3 h-3 border-b-2 border-r-2 border-sky-400 -mb-0.5 -mr-0.5" />
-
-                  {/* Scanning Laser Line */}
-                  <div className="w-full h-[1.5px] bg-gradient-to-r from-transparent via-sky-400 to-transparent animate-pulse" />
-
-                  <span className="absolute -bottom-5 text-[8.5px] font-mono uppercase tracking-wider text-sky-300 bg-black/80 px-2 py-0.5 rounded border border-sky-500/30">
-                    Align Item / Document Here
-                  </span>
-                </div>
-              </div>
-            )}
-
-            {/* Camera Zoom Controls (1x, 2x, 3x) */}
-            {cameraOn && !screenShareOn && (
-              <div className="absolute bottom-2 left-2 flex items-center gap-1 bg-black/70 backdrop-blur-md p-1 rounded-xl border border-white/20 z-10 shadow-lg">
-                <ZoomIn className="h-3 w-3 text-cyan-400 ml-1 mr-0.5" />
-                {[1, 2, 3].map((lvl) => (
-                  <button
-                    key={lvl}
-                    type="button"
-                    onClick={() => void applyZoom(lvl)}
-                    className={cn(
-                      "text-[9.5px] font-mono font-bold px-2 py-0.5 rounded-md transition-all",
-                      zoomLevel === lvl
-                        ? "bg-cyan-500 text-black shadow-sm"
-                        : "text-white/80 hover:bg-white/20 hover:text-white"
-                    )}
-                  >
-                    {lvl}x
-                  </button>
-                ))}
-              </div>
             )}
           </div>
         )}

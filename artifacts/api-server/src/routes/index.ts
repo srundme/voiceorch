@@ -84,7 +84,6 @@ import sheetAutoCallsRouter from "./sheet-auto-calls.js";
 import squadsRouter from "./squads.js";
 import whatsappRouter from "./whatsapp.js";
 import webcallLinksRouter from "./webcall-links.js";
-import visionKycRouter from "./vision-kyc.js";
 import { provisionUser } from "../middlewares/userProvisioning.js";
 
 const router: IRouter = Router();
@@ -116,8 +115,6 @@ router.use(campaignWebhookRouter);
 router.use(whatsappRouter);
 // Public webcall join metadata + authenticated link CRUD
 router.use(webcallLinksRouter);
-// Vision KYC identity DB, session audit logs, PDF certificate & customer self-onboarding portal
-router.use(visionKycRouter);
 
 
 // Public docs routes — changelog API (no session required)
@@ -201,8 +198,6 @@ router.use(workflowsRouter);
 router.use(sheetsRouter);
 router.use(sheetAutoCallsRouter);
 router.use(squadsRouter);
-import customDatabasesRouter from "./custom-databases.js";
-
-router.use(customDatabasesRouter);
+router.use(voiceathonEventsRouter);
 
 export default router;

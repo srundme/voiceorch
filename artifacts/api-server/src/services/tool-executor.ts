@@ -12,8 +12,6 @@ import {
   leadTransfersTable,
   leadTimelineTable,
   callExecutionsTable,
-  customDatabasesTable,
-  customDatabaseRowsTable,
   type AgentConfig,
 } from "@workspace/db";
 import { eq, and, or, sql } from "drizzle-orm";
@@ -30,7 +28,6 @@ import {
   updateCalendarEvent,
   getFirstConnectionForUser,
 } from "./scheduling/google-calendar.js";
-import { sendBrevoEmail } from "./brevo.js";
 import { dispatchSchedulingWebhooks } from "../routes/scheduling/webhooks.js";
 import type { AgentTool, ToolDefinition } from "../orchestration/types.js";
 import { logger } from "../lib/logger.js";
@@ -352,24 +349,6 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
           },
         };
       }
-      if (t.type === "query_custom_database") {
-        return {
-          name: t.name?.trim() || "query_custom_database",
-          description:
-            t.description ||
-            "Query the dynamic custom database to look up records, invoice details, product images, or customer data by invoice number, phone, barcode, or SKU.",
-          parameters: {
-            type: "object",
-            properties: {
-              searchKey: {
-                type: "string",
-                description: "The search query (e.g. Invoice Number #INV-9841, Phone, Product SKU, or Barcode)",
-              },
-            },
-            required: ["searchKey"],
-          },
-        };
-      }
       if (t.type === "extract_document_fields") {
         return {
           name: t.name?.trim() || "extract_document_fields",
@@ -506,33 +485,6 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
               },
             },
             required: ["message"],
-          },
-        };
-      }
-      if (t.type === "send_vision_email" || t.type === "send_email") {
-        return {
-          name: t.name?.trim() || "send_vision_email",
-          description:
-            (t.description?.trim() ||
-              "Send a Vision AI Webcall Meeting Link via Email to the caller using Brevo SMTP.") +
-            " Use this when qualifying a customer issue and inviting them to a live vision camera inspection session.",
-          parameters: {
-            type: "object",
-            properties: {
-              to_email: {
-                type: "string",
-                description: "The recipient customer's email address.",
-              },
-              subject: {
-                type: "string",
-                description: "Optional email subject line.",
-              },
-              meeting_link: {
-                type: "string",
-                description: "Optional Vision Webcall join link.",
-              },
-            },
-            required: ["to_email"],
           },
         };
       }
@@ -2041,98 +1993,5 @@ export async function writeTransferLeadDb(
     });
   } catch (err) {
     logger.warn({ callId, campaignLeadId, err }, "Transfer DB: lead_timeline insert failed");
-  }
-}
-
-export async function executeNativeCustomDatabaseQuery(
-  agentId: number,
-  searchKey: string,
-): Promise<string> {
-  try {
-    const [database] = await db
-      .select()
-      .from(customDatabasesTable)
-      .where(eq(customDatabasesTable.agentId, agentId));
-
-    const targetDb = database || (await db.select().from(customDatabasesTable).limit(1))[0];
-    if (!targetDb) return JSON.stringify({ error: "No custom database configured." });
-
-    const rows = await db
-      .select()
-      .from(customDatabaseRowsTable)
-      .where(eq(customDatabaseRowsTable.databaseId, targetDb.id));
-
-    const matches = rows.filter((r) => JSON.stringify(r.data).toLowerCase().includes(searchKey.toLowerCase()));
-
-    return JSON.stringify({
-      databaseName: targetDb.name,
-      query: searchKey,
-      matchCount: matches.length,
-      results: matches.map((m) => ({
-        id: m.id,
-        record: m.data,
-        referencePhotos: m.referenceImageUrls,
-      })),
-    });
-  } catch (err) {
-    logger.error({ err, agentId, searchKey }, "Failed to query custom database tool");
-    return JSON.stringify({ error: "Database search failed" });
-  }
-}
-
-export async function executeNativeSendVisionEmail(
-  opts: {
-    agentId: number;
-    toEmail: string;
-    customerName?: string;
-    subject?: string;
-    bodyTemplate?: string;
-    meetingLink?: string;
-    invoiceNo?: string;
-  }
-): Promise<string> {
-  const { agentId, toEmail, customerName = "Valued Customer", subject, bodyTemplate, meetingLink, invoiceNo = "" } = opts;
-  if (!toEmail || !toEmail.includes("@")) {
-    return "Error: Invalid or missing email address.";
-  }
-  const link = meetingLink || `https://app.snapserve.ai/join/test-${agentId}`;
-
-  let mailSubject = subject || "Action Required: Your Vision AI Inspection Link";
-  mailSubject = mailSubject
-    .replace(/\{customer_name\}/gi, customerName)
-    .replace(/\{vision_link\}/gi, link)
-    .replace(/\{invoice_no\}/gi, invoiceNo);
-
-  let rawBody = bodyTemplate || "Hi {customer_name}, please click the link below to verify your item live on camera with our AI Inspector: {vision_link}";
-  rawBody = rawBody
-    .replace(/\{customer_name\}/gi, customerName)
-    .replace(/\{vision_link\}/gi, link)
-    .replace(/\{invoice_no\}/gi, invoiceNo);
-
-  const htmlContent = `
-    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; color: #1e293b; background-color: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0;">
-      <div style="margin-bottom: 20px;">
-        <h2 style="font-size: 18px; font-weight: 700; color: #0f172a; margin: 0 0 8px 0;">Vision AI Verification Link</h2>
-        <p style="font-size: 14px; color: #475569; line-height: 1.6; margin: 0;">${rawBody.replace(/\n/g, "<br/>")}</p>
-      </div>
-
-      <div style="margin: 24px 0;">
-        <a href="${link}" target="_blank" style="display: inline-block; background-color: #0284c7; color: #ffffff; font-size: 14px; font-weight: 600; padding: 12px 24px; text-decoration: none; border-radius: 8px; box-shadow: 0 2px 4px rgba(2, 132, 199, 0.2);">
-          Join Vision Camera Inspection →
-        </a>
-      </div>
-
-      <div style="border-top: 1px solid #f1f5f9; padding-top: 16px; margin-top: 24px; font-size: 12px; color: #94a3b8;">
-        <p style="margin: 0;">Direct Link: <a href="${link}" style="color: #0284c7;">${link}</a></p>
-      </div>
-    </div>
-  `;
-
-  try {
-    await sendBrevoEmail(toEmail, mailSubject, htmlContent);
-    return `Email sent successfully to ${toEmail} with Vision AI Webcall link: ${link}`;
-  } catch (err) {
-    logger.error({ err, toEmail, agentId }, "Failed to send Brevo vision meeting email");
-    return `Error dispatching vision email to ${toEmail}.`;
   }
 }

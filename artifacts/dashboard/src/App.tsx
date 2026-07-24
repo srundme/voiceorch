@@ -69,8 +69,6 @@ import AutomaticCallDetailPage from "@/pages/automatic-calls/[id]";
 import TransfersPage from "@/pages/transfers";
 import VoicesPage from "@/pages/voices";
 import TestSimulatorPage from "@/pages/test-simulator";
-import VisionKycPage from "@/pages/vision-kyc/index";
-import VisionOnboardingPage from "@/pages/vision-kyc/onboarding";
 import VibePage from "@/pages/vibe";
 import HomePage from "@/pages/home/index";
 import CommandCenterRedirect from "@/pages/command-center/index";
@@ -286,6 +284,8 @@ function AppRoutes() {
         <Route path="/app/agents/:id" component={AgentBuilder} />
         <Route path="/app/squads" component={SquadsPage} />
         <Route path="/app/squads/:id" component={SquadsPage} />
+        <Route path="/app/events/:id/team" component={EventTeamPortalPage} />
+        <Route path="/app/events" component={EventsPage} />
         <Route path="/app/calls" component={CallsList} />
         <Route path="/app/calls/:id" component={CallDetail} />
         <Route path="/app/knowledge-bases" component={KnowledgeBasePage} />
@@ -392,7 +392,6 @@ function Router() {
           <Route path="/events/judge/:token" component={JudgePortalPage} />
           <Route path="/events/certificates/:code/verify" component={CertificateVerifyPage} />
           <Route path="/events/:slug" component={PublicEventPage} />
-          <Route path="/voiceathon" component={PublicEventPage} />
           <Route path="/docs" component={DocsPage} />
           <Route path="/docs/api-reference/:op" component={DocsPage} />
           <Route path="/docs/:section" component={DocsPage} />

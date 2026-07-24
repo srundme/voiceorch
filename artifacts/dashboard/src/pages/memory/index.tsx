@@ -6,9 +6,8 @@ import {
   Loader2, ChevronRight, Pencil,
   ArrowDownLeft, ArrowUpRight, Globe, ArrowRight, ExternalLink,
   MapPin, DollarSign, Bell, HelpCircle, User, Tag, BarChart3, Hash, MessageSquare,
-  Trash2, CalendarClock, RotateCcw, Database,
+  Trash2, CalendarClock, RotateCcw,
 } from "lucide-react";
-import { CustomDatabaseBuilder } from "./custom-database-builder";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { DetailNav } from "@/components/detail-nav";
@@ -1206,47 +1205,18 @@ export default function MemoryPage() {
   }, [selected?.agentId, selectedPhone, navigate]);
 
   const noteAgent = noteAgentId != null ? summaries.find(s => s.agentId === noteAgentId) : undefined;
-  const [activeTab, setActiveTab] = useState<"callers" | "synthetic_db">("callers");
 
   return (
-    <div className="flex flex-col h-full bg-background min-h-0">
+    <div className="flex-1 flex flex-col h-full overflow-hidden animate-fade-in">
       <AppPageHeader
-        title="Memory & Database"
-        description="View caller memory profiles or build dynamic synthetic databases linked to Vision AI."
-        actions={
-          <div className="flex items-center gap-1 bg-muted/30 p-1 rounded-xl border border-border/50">
-            <button
-              onClick={() => setActiveTab("callers")}
-              className={cn(
-                "px-3 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5",
-                activeTab === "callers"
-                  ? "bg-card text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <Brain className="h-3.5 w-3.5" /> Caller Memory
-            </button>
-            <button
-              onClick={() => setActiveTab("synthetic_db")}
-              className={cn(
-                "px-3 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5",
-                activeTab === "synthetic_db"
-                  ? "bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <Database className="h-3.5 w-3.5 text-sky-400" /> Synthetic Databases
-            </button>
-          </div>
-        }
+        eyebrow="Memory / CRM"
+        title="Customer Intelligence"
+        description="Facts, episodes, and call history your agents remember about each caller."
+        compact
       />
 
-      <div className="flex-1 min-h-0 overflow-hidden">
-        {activeTab === "synthetic_db" ? (
-          <div className="p-6 h-full overflow-y-auto">
-            <CustomDatabaseBuilder />
-          </div>
-        ) : isLoading ? (
+      <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+        {isLoading ? (
           <div className="flex-1 min-h-0 flex overflow-hidden">
             <div className="w-[180px] xl:w-[210px] shrink-0 border-r border-border/40 p-3 space-y-2">
               {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-12 w-full rounded-lg" />)}

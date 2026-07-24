@@ -36,40 +36,7 @@ export async function resolveShareTokenForWebcall(
   | { ok: true; link: WebcallLink; ownerUserId: string }
   | { ok: false; status: number; error: string }
 > {
-  const cleaned = token.trim();
-  if (/^test-\d+$/i.test(cleaned)) {
-    const parsedId = parseInt(cleaned.replace(/^test-/i, ""), 10);
-    if (parsedId === agentId) {
-      const [agent] = await db
-        .select({ userId: agentsTable.userId })
-        .from(agentsTable)
-        .where(eq(agentsTable.id, agentId))
-        .limit(1);
-      if (agent?.userId) {
-        return {
-          ok: true,
-          link: {
-            id: 0,
-            token: cleaned,
-            agentId,
-            userId: agent.userId,
-            label: "Test Session",
-            purpose: "Agent test link",
-            active: true,
-            requireCamera: false,
-            useCount: 0,
-            maxUses: null,
-            expiresAt: null,
-            lastUsedAt: null,
-            createdAt: new Date(),
-          },
-          ownerUserId: agent.userId,
-        };
-      }
-    }
-  }
-
-  const link = await getWebcallLinkByToken(cleaned);
+  const link = await getWebcallLinkByToken(token);
   if (!link) return { ok: false, status: 401, error: "Invalid share link" };
   if (link.agentId !== agentId) {
     return { ok: false, status: 403, error: "Share link does not match this agent" };

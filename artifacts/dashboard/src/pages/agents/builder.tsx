@@ -10,7 +10,7 @@ import {
   Play, Pause,
   Timer, ShieldCheck, Layers, Gauge, MicOff, HelpCircle, PhoneOff,
   History, GitBranch, Eye, Camera, Link2, Copy, RotateCcw, ChevronUp, AlertTriangle, ArrowLeftRight,
-  Upload, Archive, Info, AlertCircle, Calendar, Star, Code,
+  Upload, Archive, Info, AlertCircle, Calendar, Star,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { motion } from "framer-motion";
@@ -19,7 +19,6 @@ import { WebcallPanel } from "@/components/webcall-panel";
 import { AgentConfigCard, EditConfigDialog } from "@/components/agent-config-card";
 import { GeminiLiveVoicePicker } from "@/components/gemini-live-voice-picker";
 import { CloneVoiceDialog, type ClonedVoiceResult } from "@/components/clone-voice-dialog";
-import { CustomDatabaseBuilder } from "../memory/custom-database-builder";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
@@ -117,7 +116,7 @@ const TABS: TabDef[] = [
 ];
 
 function tabsForAgentKind(kind: "voice" | "vision"): TabDef[] {
-  if (kind === "vision") return TABS.filter((t) => t.id !== "voicemail");
+  if (kind === "vision") return TABS;
   return TABS.filter((t) => t.id !== "vision");
 }
 
@@ -1406,10 +1405,6 @@ function VoiceTab({ form }: { form: any }) {
   const ttsProvider   = form.watch("ttsProvider");
   const ttsVoice      = form.watch("ttsVoice");
   const ttsModel      = form.watch("ttsModel");
-  const llmModel      = form.watch("llmModel");
-  const voiceStack    = form.watch("voiceStack");
-  const agentKind     = form.watch("agentKind");
-  const isGeminiLive  = isGeminiLiveAgent({ llmModel, voiceStack }) || agentKind === "vision";
   const agentLanguage = (form.watch("language") as string) ?? "en-US";
   const [cloneOpenV, setCloneOpenV] = useState(false);
   const queryClient = useQueryClient();
@@ -1680,96 +1675,10 @@ function VoiceTab({ form }: { form: any }) {
     </div>
   );
 
-  if (isGeminiLive) {
-    return (
-      <div className="relative p-6 space-y-8 max-w-3xl">
-        {/* Banner */}
-        <div className="rounded-xl border border-sky-500/30 bg-sky-500/10 p-4 flex items-start gap-3">
-          <div className="h-8 w-8 rounded-lg bg-sky-500/20 text-sky-400 flex items-center justify-center shrink-0 mt-0.5 font-bold">
-            <Sparkles className="h-4 w-4" />
-          </div>
-          <div>
-            <h4 className="text-xs font-bold text-sky-300">Gemini Live Realtime Audio Engine</h4>
-            <p className="text-[11px] text-sky-200/80 leading-relaxed mt-0.5">
-              This agent uses native bidirectional audio streaming. Gemini Live generates speech directly with zero-latency voice synthesis. Classic STT/TTS providers (Cartesia, ElevenLabs, Deepgram) and telephony noise filters are automatically bypassed.
-            </p>
-          </div>
-        </div>
-
-        {/* Gemini Live Voice Selection */}
-        <section className="space-y-4">
-          <div>
-            <h3 className="text-[13px] font-semibold text-foreground tracking-tight">Realtime Preset Voice</h3>
-            <p className="text-[11px] text-muted-foreground mt-0.5">
-              Choose the natural voice tone and personality for your agent during live video/audio calls.
-            </p>
-          </div>
-          <div className="rounded-xl border border-border/50 bg-card/40 p-4 space-y-4">
-            <FormField control={form.control} name="geminiLiveVoiceName" render={({ field }) => (
-              <FormItem className="space-y-2">
-                <FormLabel className="text-xs text-muted-foreground">Preset Voice</FormLabel>
-                <FormControl>
-                  <GeminiLiveVoicePicker value={field.value ?? "Kore"} onChange={field.onChange} />
-                </FormControl>
-              </FormItem>
-            )} />
-          </div>
-        </section>
-
-        {/* Gemini Live Reasoning & Thinking Level */}
-        <section className="space-y-4">
-          <div>
-            <h3 className="text-[13px] font-semibold text-foreground tracking-tight">Reasoning &amp; Thinking Level</h3>
-            <p className="text-[11px] text-muted-foreground mt-0.5">
-              Control how much internal deliberation Gemini Live performs before speaking. Minimal delivers the lowest latency for fluid conversation.
-            </p>
-          </div>
-          <div className="rounded-xl border border-border/50 bg-card/40 p-4 space-y-3">
-            <FormField control={form.control} name="geminiLiveThinkingLevel" render={({ field }) => (
-              <FormItem className="space-y-1 max-w-sm">
-                <FormLabel className="text-xs text-muted-foreground">Thinking Level</FormLabel>
-                <SmallSelect
-                  value={field.value ?? "minimal"}
-                  onChange={field.onChange}
-                  options={GEMINI_LIVE_THINKING_LEVELS.map(p => ({ value: p.value, label: p.label }))}
-                />
-              </FormItem>
-            )} />
-          </div>
-        </section>
-
-        {/* Primary Language */}
-        <section className="space-y-4">
-          <div>
-            <h3 className="text-[13px] font-semibold text-foreground tracking-tight">Primary Language</h3>
-            <p className="text-[11px] text-muted-foreground mt-0.5">
-              Primary spoken dialect used for voice synthesis and vision understanding.
-            </p>
-          </div>
-          <div className="rounded-xl border border-border/50 bg-card/40 p-4 space-y-3">
-            <FormField control={form.control} name="language" render={({ field }) => (
-              <FormItem className="space-y-1 max-w-sm">
-                <FormLabel className="text-xs text-muted-foreground">Language</FormLabel>
-                <SmallSelect
-                  value={field.value ?? "en-IN"}
-                  onChange={field.onChange}
-                  options={[
-                    { value: "en-IN", label: "English (India)" },
-                    { value: "hi-IN", label: "Hindi (India)" },
-                    { value: "en-US", label: "English (US)" },
-                    { value: "en-GB", label: "English (UK)" },
-                  ]}
-                />
-              </FormItem>
-            )} />
-          </div>
-        </section>
-      </div>
-    );
-  }
-
   return (
     <div className="relative p-6 space-y-8 max-w-3xl">
+
+      {/* ── SPEAK ── */}
       <section className="space-y-4">
         <div>
           <h3 className="text-[13px] font-semibold text-foreground tracking-tight">Speak</h3>
@@ -2102,7 +2011,6 @@ function VoiceCallFeelPresets({ form }: { form: any }) {
 /* ── Tab: Vision ────────────────────────────────────────────────────────────── */
 
 function VisionTab({ form, agentId }: { form: any; agentId: number | undefined }) {
-  const { toast } = useToast();
   const visionEnabled = form.watch("visionEnabled") ?? false;
   const visionLiveEnabled = form.watch("visionLiveEnabled") ?? false;
   const llmModel = form.watch("llmModel");
@@ -2122,95 +2030,161 @@ function VisionTab({ form, agentId }: { form: any; agentId: number | undefined }
     }
   };
 
-  const isVisionActive = visionEnabled || captureMode === "both" || captureMode === "live" || captureMode === "photo";
-
-  const toggleVisionAI = () => {
-    if (isVisionActive) {
-      form.setValue("visionEnabled", false, { shouldDirty: true });
-      form.setValue("visionLiveEnabled", false, { shouldDirty: true });
-      form.setValue("agentKind", "voice", { shouldDirty: true });
-    } else {
-      applyCaptureMode("both");
-    }
-  };
+  const modes: { id: VisionCaptureMode; label: string; badge: string; desc: string; icon: React.ReactNode }[] = [
+    {
+      id: "photo",
+      label: "Document & Image OCR",
+      badge: "Sarvam Vision",
+      desc: "Guest uploads/photos documents, Aadhaar IDs, invoices, or receipts mid-call. Analyzed using Sarvam Vision OCR & document extraction.",
+      icon: <Upload className="h-4 w-4 text-emerald-400" />,
+    },
+    {
+      id: "live",
+      label: "Live Camera Inspection",
+      badge: "Gemini Live WebRTC",
+      desc: "Real-time webcam stream during a webcall. The agent continuously sees what is in frame for live physical inspections.",
+      icon: <Camera className="h-4 w-4 text-sky-400" />,
+    },
+    {
+      id: "both",
+      label: "Full Multimodal Vision",
+      badge: "Sarvam + Gemini",
+      desc: "Real-time camera feed during calls AND mid-call document/receipt file uploads.",
+      icon: <Eye className="h-4 w-4 text-purple-400" />,
+    },
+  ];
 
   return (
     <div className="p-5 sm:p-6 space-y-8 max-w-3xl">
       <div>
-        <div className="mb-4">
-          <h3 className="text-sm font-semibold mb-0.5">Vision AI Intelligence</h3>
+        <div className="mb-3">
+          <h3 className="text-sm font-semibold mb-0.5">Visual Capabilities & Vision Mode</h3>
           <p className="text-xs text-muted-foreground">
-            Enable multimodal vision perception for your agent. When active, your AI agent sees live webcam video, desktop screen share, and analyzes uploaded photos or documents in real-time.
+            Choose whether your agent reads uploaded documents/invoices (Sarvam Vision OCR) or inspects real-time camera video (Gemini Live).
           </p>
         </div>
-
-        {/* Master Vision AI Card */}
-        <div
-          onClick={toggleVisionAI}
-          className={cn(
-            "rounded-2xl border p-5 transition-all cursor-pointer flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4",
-            isVisionActive
-              ? "border-border/80 bg-card/60 shadow-sm ring-1 ring-border/40"
-              : "border-border/40 bg-card/20 hover:border-border/60 hover:bg-card/30"
-          )}
-        >
-          <div className="flex items-start gap-4">
-            <div className={cn("h-11 w-11 rounded-xl flex items-center justify-center shrink-0 border transition-all", isVisionActive ? "bg-primary/10 text-primary border-primary/20" : "bg-muted/30 text-muted-foreground border-border/40")}>
-              <Eye className="h-5 w-5" />
-            </div>
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold text-foreground">Vision AI Engine</span>
-                <Badge variant="outline" className={cn("text-[10px] px-2 py-0.5 font-medium rounded-full", isVisionActive ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" : "bg-muted/30 text-muted-foreground")}>
-                  {isVisionActive ? "Active" : "Disabled"}
-                </Badge>
-              </div>
-              <p className="text-xs text-muted-foreground leading-relaxed max-w-xl">
-                Equips your agent with live camera video streaming, 1x/2x/3x zoom, desktop screen share, and document photo uploads.
-              </p>
-            </div>
-          </div>
-
-          <Switch
-            checked={isVisionActive}
-            onCheckedChange={toggleVisionAI}
-            className="shrink-0"
-          />
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {modes.map((m) => {
+            const active = captureMode === m.id;
+            return (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => applyCaptureMode(m.id)}
+                className={cn(
+                  "text-left rounded-xl border p-3.5 transition-colors relative flex flex-col justify-between",
+                  active
+                    ? "border-foreground/40 bg-card shadow-sm ring-1 ring-foreground/20"
+                    : "border-border/50 bg-card/20 hover:border-border hover:bg-card/40",
+                )}
+              >
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className={cn("h-8 w-8 rounded-lg flex items-center justify-center", active ? "bg-foreground/10 text-foreground" : "bg-muted/40 text-muted-foreground")}>
+                      {m.icon}
+                    </div>
+                    <span className="text-[9px] font-mono font-medium px-1.5 py-0.5 rounded border border-white/10 bg-white/5 text-muted-foreground">
+                      {m.badge}
+                    </span>
+                  </div>
+                  <p className="text-xs font-semibold text-foreground/90">{m.label}</p>
+                  <p className="text-[10px] text-muted-foreground/70 leading-relaxed mt-1">{m.desc}</p>
+                </div>
+              </button>
+            );
+          })}
         </div>
-
-        {/* Unified Capabilities Overview */}
-        {isVisionActive && (
-          <div className="mt-3.5 rounded-xl border border-border/40 bg-card/20 p-3.5 space-y-2.5">
-            <div className="text-[11px] font-medium text-muted-foreground">
-              Active Visual Perception Inputs:
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
-              <div className="flex items-center gap-2 p-2 rounded-lg border border-border/30 bg-background/40">
-                <Camera className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                <span className="text-[11px] text-foreground/90 font-medium">Live Webcam Stream</span>
-              </div>
-              <div className="flex items-center gap-2 p-2 rounded-lg border border-border/30 bg-background/40">
-                <Eye className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                <span className="text-[11px] text-foreground/90 font-medium">Desktop Screen Share</span>
-              </div>
-              <div className="flex items-center gap-2 p-2 rounded-lg border border-border/30 bg-background/40">
-                <Upload className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                <span className="text-[11px] text-foreground/90 font-medium">Document &amp; Photo Snaps</span>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {isVisionActive && !isGeminiLive && (
-          <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-3 flex items-center gap-1.5">
-            <span>⚠️</span> Vision AI uses Gemini Live for real-time video stream processing — voice stack automatically set to Gemini Live. Save to apply.
+        {(captureMode === "live" || captureMode === "both") && !isGeminiLive && (
+          <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-2 flex items-center gap-1.5">
+            <span>⚠️</span> Live camera inspection requires Gemini Live — selecting this mode switches the voice stack automatically. Save to apply.
           </p>
         )}
       </div>
 
-      {/* Synthetic Product & Invoice Database Section */}
-      <div className="rounded-xl border border-border/60 bg-card/30 p-4 space-y-3">
-        <CustomDatabaseBuilder defaultAgentId={agentId} />
+      <div className="rounded-xl border border-border/60 bg-card/30 p-4 space-y-2">
+        <p className="text-xs font-semibold text-foreground/80">Guest Experience Breakdown</p>
+        <p className="text-[11px] text-muted-foreground leading-relaxed">
+          {captureMode === "photo"
+            ? "📄 Document Reader Mode (Sarvam Vision): Guest joins a voice call, then taps Upload Document or takes a photo of an invoice/ID when requested. Camera permission is NOT forced upfront."
+            : captureMode === "live"
+            ? "📹 Live Camera Mode (Gemini Live): Guest turns on their camera, then starts the webcall. The agent sees a 2 FPS video stream of whatever is in front of the lens in real-time."
+            : "Full Hybrid Mode: Guest streams live camera video AND can upload high-resolution document/receipt files during the call."}
+        </p>
+        <p className="text-[11px] text-muted-foreground leading-relaxed">
+          Prompt tip: Tell the agent what documents to ask for (Aadhaar, Invoice, Bill, ID) and when to invoke{" "}
+          <code className="text-[10px] font-mono text-sky-400 bg-sky-950/40 px-1 py-0.5 rounded">analyze_image</code> or{" "}
+          <code className="text-[10px] font-mono text-sky-400 bg-sky-950/40 px-1 py-0.5 rounded">verify_visual_identity</code>.
+        </p>
+        <div className="pt-1 flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs"
+            onClick={() => {
+              const kycPrompt =
+                "\n\n[VIDEO KYC & VISUAL VERIFICATION]\n" +
+                "You are an AI Video KYC Agent. Inspect the caller's face and video feed. " +
+                "Ask the caller to present an official ID card (Aadhaar, Passport, or License) to the camera. " +
+                "Run `verify_visual_identity` to confirm their face and ID card match saved records, then greet them by name.";
+              const cur = form.getValues("systemPrompt") ?? "";
+              form.setValue("systemPrompt", `${cur}${kycPrompt}`, { shouldDirty: true });
+            }}
+          >
+            + Video KYC & Verification
+          </Button>
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs"
+            onClick={() => {
+              const ocrPrompt =
+                "\n\n[DOCUMENT OCR & FIELD EXTRACTION]\n" +
+                "You are an AI Document Reader Agent. When the caller holds up an ID card, invoice, receipt, or agreement, " +
+                "invoke `extract_document_fields` to pull name, ID number, and dates, then confirm the extracted details aloud.";
+              const cur = form.getValues("systemPrompt") ?? "";
+              form.setValue("systemPrompt", `${cur}${ocrPrompt}`, { shouldDirty: true });
+            }}
+          >
+            + Document OCR & Field Extractor
+          </Button>
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs"
+            onClick={() => {
+              const assetPrompt =
+                "\n\n[PHYSICAL ASSET & DAMAGE INSPECTION]\n" +
+                "You are an AI Visual Inspection Agent. Ask the user to point their phone camera at the damaged vehicle, property, or hardware component. " +
+                "Invoke `inspect_physical_asset` to evaluate damage severity and broken parts, then summarize the repair findings.";
+              const cur = form.getValues("systemPrompt") ?? "";
+              form.setValue("systemPrompt", `${cur}${assetPrompt}`, { shouldDirty: true });
+            }}
+          >
+            + Insurance & Damage Inspection
+          </Button>
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs"
+            onClick={() => {
+              const screenPrompt =
+                "\n\n[IT HELPDESK & SCREEN TROUBLESHOOTING]\n" +
+                "You are an AI Screen Troubleshooting Agent. Ask the user to show their computer or TV screen to the camera. " +
+                "Invoke `inspect_screen` to read on-screen error codes and dialogs, then guide the user step-by-step.";
+              const cur = form.getValues("systemPrompt") ?? "";
+              form.setValue("systemPrompt", `${cur}${screenPrompt}`, { shouldDirty: true });
+            }}
+          >
+            + IT Screen Troubleshooter
+          </Button>
+        </div>
       </div>
 
       <WebcallShareLinksSection
@@ -3768,11 +3742,7 @@ function AgentListPanel({ selectedId, onSelect, rateMap, className }: {
                 )}>
                   {kind === "vision" ? "Vision" : "Voice"}
                 </span>
-                <span className="text-[10px] text-muted-foreground/75 truncate">
-                  {kind === "vision" || isGeminiLiveAgent({ llmModel: agent.llmModel, voiceStack: (agent as any).agentConfig?.voiceStack })
-                    ? "Gemini Live"
-                    : `${agent.asrProvider} · ${agent.ttsProvider}`}
-                </span>
+                <span className="text-[10px] text-muted-foreground/75 truncate">{agent.asrProvider} · {agent.ttsProvider}</span>
                 {costCents ? <span className="text-[10px] text-muted-foreground/55 ml-auto shrink-0">₹{(costCents / 100).toFixed(2)}</span> : null}
               </div>
             </button>
@@ -6198,84 +6168,36 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
                   Unsaved changes — save before testing so the call uses the latest config.
                 </p>
               )}
-              {agentKind === "vision" ? (
-                <div className="space-y-2">
-                  <Button
-                    type="button"
-                    variant={showWebcall ? "default" : "outline"}
-                    className={cn(
-                      "w-full h-11 text-xs font-bold gap-2 rounded-xl bg-sky-500 hover:bg-sky-400 text-black shadow-md shadow-sky-950/20",
-                      showWebcall && "bg-destructive hover:bg-destructive/90 text-white"
-                    )}
-                    onClick={() => setShowWebcall((v) => !v)}
-                  >
-                    <Camera className="h-4 w-4 shrink-0" />
-                    {showWebcall ? "Close Vision Test" : "Test Live Vision Webcall"}
-                  </Button>
-
-                  <div className="grid grid-cols-2 gap-1.5 pt-1">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-8 text-[11px] font-medium gap-1 rounded-lg border-border/50 bg-card/30"
-                      onClick={() => {
-                        const url = `${window.location.origin}/join/test-${agentId}`;
-                        navigator.clipboard.writeText(url);
-                        toast({ title: "Copied Webcall URL", description: url });
-                      }}
-                    >
-                      <Link2 className="h-3 w-3 text-sky-400" /> Copy Link
-                    </Button>
-
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-8 text-[11px] font-medium gap-1 rounded-lg border-border/50 bg-card/30"
-                      onClick={() => {
-                        const embed = `<iframe src="${window.location.origin}/join/test-${agentId}" width="100%" height="600" allow="camera; microphone; display-capture"></iframe>`;
-                        navigator.clipboard.writeText(embed);
-                        toast({ title: "Copied Embed Code", description: "HTML iframe code snippet copied." });
-                      }}
-                    >
-                      <Code className="h-3 w-3 text-purple-400" /> Embed Code
-                    </Button>
-                  </div>
-                  <p className="text-[10px] text-muted-foreground/70 leading-snug px-0.5 pt-0.5">
-                    Vision agents test over webcall with live camera, screen share, and photo uploads.
-                  </p>
-                </div>
-              ) : (
-                <>
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="h-10 text-[12px] font-medium gap-1.5 rounded-xl border-border/60 bg-card/40 hover:bg-card/70"
-                      onClick={() => setCallDialog(true)}
-                    >
-                      <Phone className="h-3.5 w-3.5 shrink-0" />
-                      Phone
-                    </Button>
-                    <Button
-                      type="button"
-                      variant={showWebcall ? "default" : "outline"}
-                      className={cn(
-                        "h-10 text-[12px] font-medium gap-1.5 rounded-xl",
-                        !showWebcall && "border-border/60 bg-card/40 hover:bg-card/70",
-                      )}
-                      onClick={() => setShowWebcall((v) => !v)}
-                    >
-                      <Mic className="h-3.5 w-3.5 shrink-0" />
-                      {showWebcall ? "Close" : webTestLabel}
-                    </Button>
-                  </div>
-                  <p className="text-[10px] text-muted-foreground/65 leading-snug px-0.5">
-                    Phone = free outbound test (platform number) · Live Test = in-browser
-                  </p>
-                </>
-              )}
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-10 text-[12px] font-medium gap-1.5 rounded-xl border-border/60 bg-card/40 hover:bg-card/70"
+                  onClick={() => setCallDialog(true)}
+                >
+                  <Phone className="h-3.5 w-3.5 shrink-0" />
+                  Phone
+                </Button>
+                <Button
+                  type="button"
+                  variant={showWebcall ? "default" : "outline"}
+                  className={cn(
+                    "h-10 text-[12px] font-medium gap-1.5 rounded-xl",
+                    !showWebcall && "border-border/60 bg-card/40 hover:bg-card/70",
+                  )}
+                  onClick={() => setShowWebcall(v => !v)}
+                >
+                  {agentKind === "vision" ? <Camera className="h-3.5 w-3.5 shrink-0" /> : <Mic className="h-3.5 w-3.5 shrink-0" />}
+                  {showWebcall ? "Close" : webTestLabel}
+                </Button>
+              </div>
+              <p className="text-[10px] text-muted-foreground/65 leading-snug px-0.5">
+                {agentKind === "vision"
+                  ? visionCaptureMode === "photo"
+                    ? "Phone = outbound test · Photo test = upload stills mid-call"
+                    : "Phone = outbound test · Camera test = live video webcall"
+                  : "Phone = free outbound test (platform number) · Live Test = in-browser"}
+              </p>
             </div>
 
             {/* Inbound assign — same APIs as Phone Numbers */}
