@@ -661,32 +661,9 @@ export function WebcallPanel({
         {/* Controls */}
         <div className="shrink-0 border-t border-border p-3 flex items-center justify-center gap-2.5">
           {state === "idle" || state === "error" ? (
-            <>
-              {cameraAllowed && (
-                <Button
-                  onClick={() => { if (cameraOn) stopCamera(); else void startCamera(); }}
-                  variant="outline"
-                  className={"h-10 w-10 p-0 rounded-full border-border " + (cameraOn ? "bg-sky-500/10 text-sky-400" : "text-muted-foreground")}
-                  title={cameraOn ? "Stop camera" : "Turn on camera"}
-                >
-                  <Camera className="h-4 w-4" />
-                </Button>
-              )}
-              {cameraAllowed && cameraOn && (
-                <Button
-                  onClick={() => void switchCamera()}
-                  variant="outline"
-                  disabled={switchingCamera}
-                  className="h-10 w-10 p-0 rounded-full border-border text-muted-foreground"
-                  title={facingMode === "user" ? "Switch to rear camera" : "Switch to front camera"}
-                >
-                  {switchingCamera ? <Loader2 className="h-4 w-4 animate-spin" /> : <SwitchCamera className="h-4 w-4" />}
-                </Button>
-              )}
-              <Button onClick={() => void start()} className="h-10 px-5 gap-2 rounded-full text-[13px]">
-                <Phone className="h-4 w-4" /> Start call
-              </Button>
-            </>
+            <Button onClick={() => void start()} className="h-10 px-5 gap-2 rounded-full text-[13px]">
+              <Phone className="h-4 w-4" /> Start call
+            </Button>
           ) : (
             <>
               <Button
@@ -698,53 +675,6 @@ export function WebcallPanel({
               >
                 {muted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
               </Button>
-              {cameraAllowed && (
-                <>
-                  <Button
-                    onClick={() => { if (cameraOn) stopCamera(); else void startCamera(); }}
-                    variant="outline"
-                    disabled={state !== "live"}
-                    className={"h-10 w-10 p-0 rounded-full border-border " + (cameraOn ? "bg-sky-500/10 text-sky-400" : "text-muted-foreground")}
-                    title={cameraOn ? "Stop camera" : "Start camera"}
-                  >
-                    <Camera className="h-4 w-4" />
-                  </Button>
-                  {cameraOn && (
-                    <Button
-                      onClick={() => void switchCamera()}
-                      variant="outline"
-                      disabled={state !== "live" || switchingCamera}
-                      className="h-10 w-10 p-0 rounded-full border-border text-muted-foreground"
-                      title={facingMode === "user" ? "Switch to rear camera" : "Switch to front camera"}
-                    >
-                      {switchingCamera ? <Loader2 className="h-4 w-4 animate-spin" /> : <SwitchCamera className="h-4 w-4" />}
-                    </Button>
-                  )}
-                </>
-              )}
-              {visionEnabled && (
-                <label className={
-                  "h-10 inline-flex items-center justify-center gap-1.5 rounded-full border border-border cursor-pointer px-3 " +
-                  (state !== "live" || uploading
-                    ? "opacity-40 pointer-events-none"
-                    : "text-muted-foreground hover:text-foreground bg-sky-500/10 text-sky-400 border-sky-500/30")
-                }>
-                  {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
-                  <span className="text-[11px] font-medium hidden sm:inline">Upload photo</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    className="hidden"
-                    disabled={state !== "live" || uploading}
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (f) void uploadPhoto(f);
-                      e.target.value = "";
-                    }}
-                  />
-                </label>
-              )}
               <Button
                 onClick={end}
                 disabled={state === "ending"}

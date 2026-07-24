@@ -176,19 +176,6 @@ async function executeLiveAgentTool(
       return executeNativeReschedule(callId, agentId, tool, args);
     case "native_cancel":
       return executeNativeCancel(callId, agentId, tool, args);
-    case "analyze_image": {
-      const out = await executeAnalyzeImage({
-        callId,
-        agentId,
-        userId: null,
-        phone: config.callerPhone ?? null,
-        args,
-      });
-      if (out && !out.startsWith("analyze_image_error")) {
-        deps.onAnalyzeImageResult?.(out);
-      }
-      return out;
-    }
     case "send_sms":
       return undefined;
     default:

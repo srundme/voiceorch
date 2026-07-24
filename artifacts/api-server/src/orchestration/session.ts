@@ -308,21 +308,6 @@ export async function createSession(params: {
   // Read agentConfig JSONB for advanced settings
   const agentCfg = (agent.agentConfig ?? {}) as Record<string, unknown>;
 
-  // Vision: auto-attach analyze_image when enabled (unless already present).
-  if (agentCfg["visionEnabled"] === true && !tools.some((t) => t.type === "analyze_image")) {
-    tools = [
-      ...tools,
-      {
-        type: "analyze_image",
-        name: "analyze_image",
-        description:
-          "Analyze a photo or document the caller sent (WhatsApp, upload, or URL). " +
-          "Use for damage assessment, IDs, invoices, forms, or any visual evidence. " +
-          "When an image just arrived, call with media_id or use_latest=true.",
-      },
-    ];
-  }
-
   // AMD (voicemail) config — read once, used by both the voicemail-delivery config
   // and the acoustic-confirmation config below. Default action is "hangup" (never
   // leave a message unless explicitly configured).
@@ -475,19 +460,6 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
   // Conversation discipline — force one-step-at-a-time delivery, turn yielding
   // on "wait for response" markers, and resume-after-objection place-keeping.
   effectiveSystemPrompt += `\n\n${CONVERSATION_DISCIPLINE_BLOCK}`;
-
-  // Vision / claim-flow guidance — ask for photo → analyze_image → confirm aloud.
-  if (agentCfg["visionEnabled"] === true) {
-    effectiveSystemPrompt +=
-      `\n\n[VISION] You can see photos the caller sends (WhatsApp or mid-call upload) via the analyze_image tool. ` +
-      `When you need visual evidence (vehicle damage, ID, invoice, form, or any claim document): ` +
-      `(1) ask them to send a clear photo on WhatsApp or upload it, ` +
-      `(2) when an image arrives or they confirm they sent it, call analyze_image with media_id or use_latest=true, ` +
-      `(3) confirm concrete findings aloud in plain spoken language — never invent details you have not seen.`;
-  }
-  if (agentCfg["visionEnabled"] === true || agentCfg["visionLiveEnabled"] === true) {
-    effectiveSystemPrompt = appendVisionCommonSense(effectiveSystemPrompt);
-  }
 
   // P1-K: Inject regulatory compliance disclosures into the system prompt
   const complianceCfg = agentCfg["compliance"] as { irdai?: boolean; dpdp?: boolean; trai?: boolean } | undefined;

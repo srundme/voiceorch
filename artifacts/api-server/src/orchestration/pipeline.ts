@@ -4880,8 +4880,6 @@ export class OrchestrationPipeline implements VoiceSession {
         logger.info({ callId: this.config.callId, count: this.pendingListedBookings.length }, "Multiple bookings listed — activeRescheduleBooking deferred until booking_id is known");
       }
       return result;
-    } else if (tool.type === "analyze_image") {
-      return await this.executeAnalyzeImage(args);
     }
     return undefined;
   }
