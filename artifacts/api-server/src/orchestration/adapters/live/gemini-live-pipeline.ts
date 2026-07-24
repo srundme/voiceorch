@@ -212,42 +212,21 @@ export class GeminiLivePipeline implements VoiceSession {
     if (!data || data.length < 100) return;
     void this.ensureConnected().then(() => {
       if (this.closed || !this.session) return;
-      if (this.agent.visionLiveEnabled) {
-        this.session.sendRealtimeInput({
-          video: {
-            data,
-            mimeType: mimeType.includes("png") ? "image/png" : "image/jpeg",
-          },
-        });
-        if (!this.videoVisionAnnounced) {
-          this.videoVisionAnnounced = true;
-          this.session.sendRealtimeInput({
-            text: "The caller's webcam just turned on. Briefly describe what you see in the video.",
-          });
-          this.config.onTranscript("user", "[Camera on — watching live]");
-          logger.info({ callId: this.config.callId }, "Live: first video frame + see-me nudge");
-        }
-        return;
-      }
-      // visionEnabled only (no continuous stream): send periodic stills every ~8s so
-      // the LLM stays aware of screen/camera changes rather than seeing only one frame.
-      if (this.videoVisionAnnounced && now - (this as any)._lastStillAt < 8000) return;
-      (this as any)._lastStillAt = now;
-      const isFirst = !this.videoVisionAnnounced;
-      this.videoVisionAnnounced = true;
-      this.session.sendClientContent({
-        turns: [{
-          role: "user",
-          parts: [
-            { inlineData: { mimeType: mimeType.includes("png") ? "image/png" : "image/jpeg", data } },
-            { text: isFirst
-              ? "The caller's webcam / screen share just turned on. Briefly describe what you see."
-              : "Updated frame from the caller's camera or screen share. Note any changes." },
-          ],
-        }],
-        turnComplete: true,
+      // Stream realtime video / screen share frame into Gemini Live session
+      this.session.sendRealtimeInput({
+        video: {
+          data,
+          mimeType: mimeType.includes("png") ? "image/png" : "image/jpeg",
+        },
       });
-      if (isFirst) this.config.onTranscript("user", "[Camera / screen share active]");
+      if (!this.videoVisionAnnounced) {
+        this.videoVisionAnnounced = true;
+        this.session.sendRealtimeInput({
+          text: "The caller's live video camera / desktop screen share is now active. You have full vision perception of their screen and camera.",
+        });
+        this.config.onTranscript("user", "[Camera / Screen share live]");
+        logger.info({ callId: this.config.callId }, "Live: first video frame + vision active nudge");
+      }
     }).catch((err) => logger.debug({ callId: this.config.callId, err }, "Live: video frame send failed"));
   }
 
@@ -308,8 +287,11 @@ export class GeminiLivePipeline implements VoiceSession {
       model,
       config: {
         responseModalities: [Modality.AUDIO],
-        systemInstruction: this.agent.visionLiveEnabled
-          ? `${this.agent.systemPrompt}\n\n[LIVE CAMERA] The caller may stream webcam frames. When video is present, describe what you see when asked or when it becomes relevant — do not invent visual details. Remember VISION COMMON SENSE and VISION / PEOPLE MEMORY: the person on camera may not be the primary caller.`
+        systemInstruction: (this.agent.visionLiveEnabled || this.agent.visionEnabled)
+          ? `${this.agent.systemPrompt}\n\n=== LIVE VISION & SCREEN SHARE CAPABILITY ===\n` +
+            `[LIVE CAMERA & SCREEN SHARE] The caller may stream live video camera frames or share their desktop screen / dashboard.\n` +
+            `You receive real-time video input frames showing their live camera or shared desktop screen / dashboard.\n` +
+            `IMPORTANT: You DO have full visual perception of their shared screen and camera feed. When the caller asks "can you see my screen", "can you see the dashboard", or asks what is visible, describe what you see on their shared screen immediately. NEVER state that you cannot see their screen or dashboard.`
           : this.agent.systemPrompt,
         speechConfig: {
           voiceConfig: {
