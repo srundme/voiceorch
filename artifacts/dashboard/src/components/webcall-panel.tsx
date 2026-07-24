@@ -204,19 +204,23 @@ export function WebcallPanel({
   }, []);
 
   /** Capture frames from a given <video> element with Adaptive Bitrate (ABR) scaling & PII Edge Redaction. */
-  const startFrameCaptureFromEl = useCallback((getEl: () => HTMLVideoElement | null, timerRef: React.MutableRefObject<number | null>, isHighResBoost = false) => {
+  const startFrameCaptureFromEl = useCallback((getEl: () => HTMLVideoElement | null, timerRef: React.MutableRefObject<number | null>, isHighResBoost = false, isScreenShare = false) => {
     if (timerRef.current != null) return;
     const canvas = document.createElement("canvas");
     timerRef.current = window.setInterval(() => {
       const ws = wsRef.current;
       const video = getEl();
       if (!ws || ws.readyState !== WebSocket.OPEN || !video) return;
+
+      // ⚡ Priority Queue: When Screen Share is active, camera yields so AI sees the Screen!
+      if (!isScreenShare && screenStreamRef.current != null) return;
+
       const w = video.videoWidth || (video as any).clientWidth || 640;
       const h = video.videoHeight || (video as any).clientHeight || 480;
       if (w <= 0 || h <= 0) return;
 
-      // ⚡ ABR Video Stream Pipeline: 480p live stream vs 1080p OCR photo boost
-      const targetMaxW = isHighResBoost ? 1920 : 640;
+      // ⚡ ABR Video Stream Pipeline: 480p live camera vs 1080p high-res screen share & OCR photo boost
+      const targetMaxW = (isHighResBoost || isScreenShare) ? 1920 : 640;
       canvas.width = Math.min(w, targetMaxW);
       canvas.height = Math.round(canvas.width * (h / Math.max(w, 1)));
       const ctx = canvas.getContext("2d");
@@ -224,7 +228,7 @@ export function WebcallPanel({
 
       ctx.filter = "none";
       const zoom = zoomLevelRef.current || 1;
-      if (zoom > 1) {
+      if (zoom > 1 && !isScreenShare) {
         const cropW = w / zoom;
         const cropH = h / zoom;
         const cropX = (w - cropW) / 2;
@@ -234,7 +238,7 @@ export function WebcallPanel({
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       }
 
-      const quality = isHighResBoost ? 0.90 : 0.55;
+      const quality = (isHighResBoost || isScreenShare) ? 0.90 : 0.55;
       const dataUrl = canvas.toDataURL("image/jpeg", quality);
       const b64 = dataUrl.split(",")[1];
       if (!b64) return;
@@ -245,11 +249,11 @@ export function WebcallPanel({
   }, []);
 
   const startFrameCapture = useCallback(() => {
-    startFrameCaptureFromEl(() => videoElRef.current, frameTimerRef);
+    startFrameCaptureFromEl(() => videoElRef.current, frameTimerRef, false, false);
   }, [startFrameCaptureFromEl]);
 
   const startScreenFrameCapture = useCallback(() => {
-    startFrameCaptureFromEl(() => screenElRef.current, screenFrameTimerRef);
+    startFrameCaptureFromEl(() => screenElRef.current, screenFrameTimerRef, true, true);
   }, [startFrameCaptureFromEl]);
 
   const openScreenShare = useCallback(async () => {
