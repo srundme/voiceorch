@@ -129,54 +129,13 @@ class SarvamDispositionLLM implements DispositionLLM {
   }
 }
 
-class GeminiDispositionLLM implements DispositionLLM {
-  private client: OpenAI;
-  private model: string;
-
-  constructor(apiKey: string, model = "gemini-2.5-flash") {
-    this.client = new OpenAI({
-      apiKey,
-      baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
-    });
-    this.model = model;
-  }
-
-  async extract(
-    systemPrompt: string,
-    schema: Record<string, unknown>,
-    transcript: string,
-  ): Promise<Record<string, unknown>> {
-    const response = await this.client.chat.completions.create({
-      model: this.model,
-      temperature: 0,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: withSchemaInstruction(systemPrompt, schema) },
-        { role: "user", content: `TRANSCRIPT:\n${transcript}` },
-      ],
-    });
-    const rawContent = response.choices[0]?.message?.content ?? "{}";
-    // Strip codeblock markdown if present
-    const cleaned = rawContent.replace(/^```(?:json)?\n?/i, "").replace(/\n?```$/i, "").trim();
-    return JSON.parse(cleaned) as Record<string, unknown>;
-  }
-}
-
 /** Resolve a managed key for a provider, falling back to env where applicable. */
 async function resolveManagedKey(provider: string): Promise<string | null> {
-  if (provider === "gemini" || provider === "google") {
-    return (
-      (await getSetting("managed_gemini_key"))?.trim() ||
-      (process.env["GEMINI_API_KEY"] ?? "").trim() ||
-      (process.env["GOOGLE_API_KEY"] ?? "").trim() ||
-      null
-    );
-  }
   if (provider === "openai") {
-    return (await getSetting("managed_openai_key"))?.trim() || (process.env["OPENAI_API_KEY"] ?? "").trim() || null;
+    return (await getSetting("managed_openai_key"))?.trim() || null;
   }
   if (provider === "sarvam") {
-    return (await getSetting("managed_sarvam_key"))?.trim() || (process.env["SARVAM_API_KEY"] ?? "").trim() || null;
+    return (await getSetting("managed_sarvam_key"))?.trim() || null;
   }
   // qwen / groq — both share managed_qwen_key (Groq-hosted Qwen), with the
   // GROQ_API_KEY env as a runtime fallback (matches wizard.ts behaviour).
@@ -188,7 +147,6 @@ async function resolveManagedKey(provider: string): Promise<string | null> {
 }
 
 function buildClient(provider: string, key: string): DispositionLLM {
-  if (provider === "gemini" || provider === "google") return new GeminiDispositionLLM(key);
   if (provider === "openai") return new OpenAIDispositionLLM(key);
   if (provider === "sarvam") return new SarvamDispositionLLM(key);
   return new QwenDispositionLLM(key);
@@ -196,7 +154,7 @@ function buildClient(provider: string, key: string): DispositionLLM {
 
 /**
  * Returns the appropriate DispositionLLM instance.
- * Provider selection: agentCfgOverride > DISPOSITION_LLM env > "gemini" default.
+ * Provider selection: agentCfgOverride > DISPOSITION_LLM env > "qwen" default.
  * Falls back to any other provider whose managed key is configured, so
  * classification still runs as long as ONE managed key exists.
  * Returns null only if no managed key is available (never crashes the caller).
@@ -207,13 +165,14 @@ export async function getDispositionLLM(
   const preferred = (
     agentCfgOverride ??
     process.env["DISPOSITION_LLM"] ??
-    "gemini"
+    "qwen"
   ).toLowerCase();
 
-  const normalized = (preferred === "groq" || preferred === "qwen") ? "qwen" : (preferred === "google" ? "gemini" : preferred);
+  const normalized = preferred === "groq" ? "qwen" : preferred;
 
-  // Try the preferred provider first (defaulting to Gemini 2.5 Flash), then fall back
-  const order = [normalized, ...["gemini", "openai", "qwen", "sarvam"].filter((p) => p !== normalized)];
+  // Try the preferred provider first, then fall back to the others so a
+  // single configured managed key is enough to run classification.
+  const order = [normalized, ...["qwen", "openai", "sarvam"].filter((p) => p !== normalized)];
 
   for (const provider of order) {
     const key = await resolveManagedKey(provider);
@@ -225,6 +184,6 @@ export async function getDispositionLLM(
     }
   }
 
-  logger.warn("disposition: no managed LLM key configured (gemini/openai/qwen/sarvam), skipping LLM pass");
+  logger.warn("disposition: no managed LLM key configured (qwen/openai/sarvam), skipping LLM pass");
   return null;
 }

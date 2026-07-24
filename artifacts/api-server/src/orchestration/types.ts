@@ -54,48 +54,6 @@ export interface AnalyzeImageTool {
   description: string;
 }
 
-/** Perform Video KYC & live visual identity verification (face match / document match). */
-export interface VerifyVisualIdentityTool {
-  type: "verify_visual_identity";
-  name: string;
-  description: string;
-}
-
-/** Live OCR & document field extraction (ID cards, receipts, invoices, agreements). */
-export interface ExtractDocumentFieldsTool {
-  type: "extract_document_fields";
-  name: string;
-  description: string;
-}
-
-/** Visual asset & physical damage inspection (insurance claims, repairs, plumbing). */
-export interface InspectPhysicalAssetTool {
-  type: "inspect_physical_asset";
-  name: string;
-  description: string;
-}
-
-/** Screen reader & UI inspector for technical support and error message resolution. */
-export interface InspectScreenTool {
-  type: "inspect_screen";
-  name: string;
-  description: string;
-}
-
-/** Detect caller gestures, head nods, thumbs up, and non-verbal signals. */
-export interface ReadCallerGestureTool {
-  type: "read_caller_gesture";
-  name: string;
-  description: string;
-}
-
-/** Scan product barcodes and QR codes live from video feed. */
-export interface ScanBarcodeQrTool {
-  type: "scan_barcode_qr";
-  name: string;
-  description: string;
-}
-
 /**
  * Sensible default farewell spoken when a call is ended by the AI (built-in
  * end_call tool or an end-call phrase) and the agent has no custom
@@ -225,14 +183,7 @@ export interface SquadFollowupTool {
   description: string;
 }
 
-export interface SendWhatsappTool {
-  type: "send_whatsapp";
-  name: string;
-  description: string;
-  messageTemplate?: string;
-}
-
-export type AgentTool = CallTransferTool | WebhookTool | SendSmsTool | SendWhatsappTool | EndCallTool | AnalyzeImageTool | VerifyVisualIdentityTool | ExtractDocumentFieldsTool | InspectPhysicalAssetTool | InspectScreenTool | ReadCallerGestureTool | ScanBarcodeQrTool | CalComTool | NativeBookingTool | NativeRescheduleTool | NativeCancelTool | NativeCheckAvailabilityTool | NativeListBookingsTool | TransferColdTool | TransferWarmTool | TransferAgentTool | SquadFollowupTool;
+export type AgentTool = CallTransferTool | WebhookTool | SendSmsTool | EndCallTool | AnalyzeImageTool | CalComTool | NativeBookingTool | NativeRescheduleTool | NativeCancelTool | NativeCheckAvailabilityTool | NativeListBookingsTool | TransferColdTool | TransferWarmTool | TransferAgentTool | SquadFollowupTool;
 
 /** JSON Schema-compatible tool definition passed to LLM providers */
 export interface ToolDefinition {
@@ -305,7 +256,6 @@ export interface LLMGenerationParams {
 
 export interface AgentConfig {
   id: number;
-  userId?: string;
   name: string;
   systemPrompt: string;
   temperature: number;

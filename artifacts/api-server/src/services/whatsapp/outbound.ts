@@ -52,8 +52,6 @@ async function postOutbound(
   }
 }
 
-import { sendVobizWhatsappMessage } from "../vobiz-whatsapp-service.js";
-
 /**
  * Fire-and-forget: notify all active WhatsApp connections for this agent
  * that have post-call outbound enabled.
@@ -78,7 +76,8 @@ export async function dispatchWhatsappCallEnded(
       eq(whatsappConnectionsTable.postCallEnabled, true),
     ));
 
-  if (connections.length === 0) return;
+  const withUrl = connections.filter((c) => (c.outboundWebhookUrl ?? "").trim());
+  if (withUrl.length === 0) return;
 
   let direction = "inbound";
   try {
@@ -125,56 +124,14 @@ export async function dispatchWhatsappCallEnded(
     meetLink,
   });
 
-  for (const conn of connections) {
+  for (const conn of withUrl) {
     try {
-      if (conn.provider === "vobiz") {
-        let textMsg = `Call Summary from ${agent?.name || "AI Agent"}:\n${opts?.callSummary || "Call completed."}`;
-        if (meetLink) {
-          textMsg += `\n\nBooking confirmed! Meeting link: ${meetLink}`;
-        }
-        let chosenTemplate = conn.postCallTemplate || undefined;
-
-        // Evaluate post-call rules (disposition and transcript AI rules)
-        const postRules = (conn.rules ?? []).filter((r) => r.enabled && (r.triggerType === "post_call_disposition" || r.triggerType === "post_call_transcript_ai"));
-        const dispositionStr = JSON.stringify(opts?.dispositionResult ?? call.dispositionResult ?? "").toLowerCase();
-        const summaryStr = (opts?.callSummary ?? "").toLowerCase();
-
-        const matchedRule = postRules.find((r) => {
-          const cond = (r.condition || "").toLowerCase();
-          return (cond && (dispositionStr.includes(cond) || summaryStr.includes(cond)));
-        }) || postRules[0];
-
-        if (matchedRule) {
-          if (matchedRule.templateName) chosenTemplate = matchedRule.templateName;
-          if (matchedRule.staticVars && Object.keys(matchedRule.staticVars).length > 0) {
-            const extra = Object.entries(matchedRule.staticVars).map(([k, v]) => `${k}: ${v}`).join("\n");
-            textMsg += `\n\n${extra}`;
-          }
-        }
-
-        const res = await sendVobizWhatsappMessage({
-          userId: call.userId,
-          toPhone: phone,
-          channelId: conn.vobizChannelId,
-          wabaId: conn.vobizWabaId,
-          text: textMsg,
-          templateName: chosenTemplate,
-        });
-
-        if (!res.success) {
-          throw new Error(res.error || "Vobiz WhatsApp send failed");
-        }
-      } else if (conn.outboundWebhookUrl?.trim()) {
-        await postOutbound(conn.outboundWebhookUrl.trim(), conn.outboundSecret, payload);
-      } else {
-        continue;
-      }
-
+      await postOutbound(conn.outboundWebhookUrl!.trim(), conn.outboundSecret, payload);
       await db.update(whatsappConnectionsTable)
         .set({ lastOutboundAt: new Date(), lastError: null, updatedAt: new Date() })
         .where(eq(whatsappConnectionsTable.id, conn.id));
       logger.info(
-        { callId, connectionId: conn.id, phone, provider: conn.provider },
+        { callId, connectionId: conn.id, phone },
         "whatsapp: post-call outbound ok",
       );
     } catch (err) {
@@ -184,7 +141,7 @@ export async function dispatchWhatsappCallEnded(
         .where(eq(whatsappConnectionsTable.id, conn.id))
         .catch(() => {});
       logger.warn(
-        { err, callId, connectionId: conn.id, provider: conn.provider },
+        { err, callId, connectionId: conn.id },
         "whatsapp: post-call outbound failed",
       );
     }

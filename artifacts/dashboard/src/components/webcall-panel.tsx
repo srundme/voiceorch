@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Mic, MicOff, PhoneOff, Phone, Loader2, AlertCircle, X, Camera, ImagePlus, SwitchCamera, Monitor, MonitorOff } from "lucide-react";
+import { Mic, MicOff, PhoneOff, Phone, Loader2, AlertCircle, X, Camera, ImagePlus, SwitchCamera } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 /**
@@ -72,7 +72,6 @@ export function WebcallPanel({
   const [muted, setMuted]   = useState(false);
   const [lines, setLines]   = useState<Line[]>([]);
   const [cameraOn, setCameraOn] = useState(false);
-  const [screenShareOn, setScreenShareOn] = useState(false);
   const [facingMode, setFacingMode] = useState<FacingMode>("user");
   const [switchingCamera, setSwitchingCamera] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -81,13 +80,9 @@ export function WebcallPanel({
   const captureCtxRef  = useRef<AudioContext | null>(null);
   const playbackCtxRef = useRef<AudioContext | null>(null);
   const streamRef      = useRef<MediaStream | null>(null);
-  const videoStreamRef   = useRef<MediaStream | null>(null);
-  const videoElRef       = useRef<HTMLVideoElement | null>(null);
-  const pipCameraElRef   = useRef<HTMLVideoElement | null>(null);
-  const screenStreamRef  = useRef<MediaStream | null>(null);
-  const screenElRef      = useRef<HTMLVideoElement | null>(null);
-  const screenFrameTimerRef = useRef<number | null>(null);
-  const frameTimerRef    = useRef<number | null>(null);
+  const videoStreamRef = useRef<MediaStream | null>(null);
+  const videoElRef     = useRef<HTMLVideoElement | null>(null);
+  const frameTimerRef  = useRef<number | null>(null);
   const workletRef     = useRef<AudioWorkletNode | null>(null);
   const sourceNodeRef  = useRef<MediaStreamAudioSourceNode | null>(null);
   const activeSources  = useRef<AudioBufferSourceNode[]>([]);
@@ -114,22 +109,8 @@ export function WebcallPanel({
     setCameraOn(false);
   }, []);
 
-  const stopScreenShare = useCallback(() => {
-    if (screenFrameTimerRef.current != null) {
-      window.clearInterval(screenFrameTimerRef.current);
-      screenFrameTimerRef.current = null;
-    }
-    screenStreamRef.current?.getTracks().forEach((t) => t.stop());
-    screenStreamRef.current = null;
-    if (screenElRef.current) {
-      screenElRef.current.srcObject = null;
-    }
-    setScreenShareOn(false);
-  }, []);
-
   const teardown = useCallback(() => {
     stopCamera();
-    stopScreenShare();
     try { wsRef.current?.close(); } catch { /* noop */ }
     wsRef.current = null;
     for (const s of activeSources.current) { try { s.stop(); } catch { /* noop */ } }
@@ -147,7 +128,7 @@ export function WebcallPanel({
     nextStartRef.current = 0;
     callIdRef.current = null;
     cameraAutoTriedRef.current = false;
-  }, [stopCamera, stopScreenShare]);
+  }, [stopCamera]);
 
   // Schedule one incoming 8 kHz PCM16 buffer onto the playback timeline.
   const enqueueAudio = useCallback((buf: ArrayBuffer) => {
@@ -177,26 +158,25 @@ export function WebcallPanel({
     nextStartRef.current = playbackCtxRef.current?.currentTime ?? 0;
   }, []);
 
-  // Live camera chrome (preview / stream) — enabled for any vision-capable agent.
-  const cameraAllowed = !!(visionEnabled || visionLiveEnabled || requireCamera);
+  // Live camera chrome (preview / stream) — not for photo-upload-only agents.
+  const cameraAllowed = !!(visionLiveEnabled || requireCamera);
   const photoUploadAllowed = !!visionEnabled;
 
-  /** Capture frames from a given <video> element and stream over WebSocket. */
-  const startFrameCaptureFromEl = useCallback((getEl: () => HTMLVideoElement | null, timerRef: React.MutableRefObject<number | null>) => {
-    if (timerRef.current != null) return;
+  const startFrameCapture = useCallback(() => {
+    if (frameTimerRef.current != null) return;
     const canvas = document.createElement("canvas");
-    timerRef.current = window.setInterval(() => {
+    frameTimerRef.current = window.setInterval(() => {
       const ws = wsRef.current;
-      const video = getEl();
+      const video = videoElRef.current;
       if (!ws || ws.readyState !== WebSocket.OPEN || !video || video.readyState < 2) return;
       const w = video.videoWidth || 320;
       const h = video.videoHeight || 240;
-      canvas.width = Math.min(w, 1280);
+      canvas.width = Math.min(w, 640);
       canvas.height = Math.round(canvas.width * (h / Math.max(w, 1)));
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const dataUrl = canvas.toDataURL("image/jpeg", 0.60);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.55);
       const b64 = dataUrl.split(",")[1];
       if (!b64) return;
       try {
@@ -204,41 +184,6 @@ export function WebcallPanel({
       } catch { /* noop */ }
     }, 500);
   }, []);
-
-  const startFrameCapture = useCallback(() => {
-    startFrameCaptureFromEl(() => videoElRef.current, frameTimerRef);
-  }, [startFrameCaptureFromEl]);
-
-  const startScreenFrameCapture = useCallback(() => {
-    startFrameCaptureFromEl(() => screenElRef.current, screenFrameTimerRef);
-  }, [startFrameCaptureFromEl]);
-
-  const openScreenShare = useCallback(async () => {
-    // Stop any existing screen share first
-    stopScreenShare();
-    try {
-      const displayStream = await navigator.mediaDevices.getDisplayMedia({
-        video: { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 2, max: 5 } },
-        audio: false,
-      });
-      screenStreamRef.current = displayStream;
-      if (screenElRef.current) {
-        screenElRef.current.srcObject = displayStream;
-        void screenElRef.current.play().catch(() => {});
-      }
-      setScreenShareOn(true);
-      startScreenFrameCapture();
-      // When user stops sharing via browser's native stop button, clean up
-      displayStream.getVideoTracks()[0]?.addEventListener("ended", () => {
-        stopScreenShare();
-      });
-    } catch (err) {
-      // User cancelled or permission denied — silently ignore
-      if (err instanceof Error && err.name !== "NotAllowedError") {
-        throw err;
-      }
-    }
-  }, [stopScreenShare, startScreenFrameCapture]);
 
   const openCameraStream = useCallback(async (facing: FacingMode) => {
     const vstream = await navigator.mediaDevices.getUserMedia({
@@ -254,11 +199,6 @@ export function WebcallPanel({
     if (videoElRef.current) {
       videoElRef.current.srcObject = vstream;
       void videoElRef.current.play().catch(() => {});
-    }
-    // Also wire the PiP overlay element (used when screen share is active)
-    if (pipCameraElRef.current) {
-      pipCameraElRef.current.srcObject = vstream;
-      void pipCameraElRef.current.play().catch(() => {});
     }
     setFacingMode(facing);
     setCameraOn(true);
@@ -280,14 +220,6 @@ export function WebcallPanel({
       }
     }
   }, [cameraAllowed, cameraOn, facingMode, openCameraStream]);
-
-  const toggleScreenShare = useCallback(async () => {
-    if (screenShareOn) {
-      stopScreenShare();
-    } else {
-      await openScreenShare();
-    }
-  }, [screenShareOn, stopScreenShare, openScreenShare]);
 
   const switchCamera = useCallback(async () => {
     if (!cameraOn || switchingCamera) return;
@@ -458,9 +390,6 @@ export function WebcallPanel({
               callIdRef.current = (msg as { callId: number }).callId;
             }
             setState("live");
-            if (cameraAllowed && !cameraOn) {
-              void startCamera();
-            }
             break;
           case "transcript":
             if (msg.speaker && msg.text) {
@@ -638,13 +567,11 @@ export function WebcallPanel({
               )}
               {state === "connecting" && "Connecting…"}
               {state === "live"       && (
-                screenShareOn
-                  ? "Connected — sharing screen"
-                  : cameraOn
-                    ? "Connected — camera on"
-                    : photoUploadAllowed
-                      ? "Connected — upload a photo when asked"
-                      : "Connected — start speaking"
+                cameraOn
+                  ? "Connected — camera on"
+                  : photoUploadAllowed
+                    ? "Connected — upload a photo when asked"
+                    : "Connected — start speaking"
               )}
               {state === "ending"     && "Ending call…"}
               {state === "error"      && "Call ended with an error"}
@@ -657,50 +584,8 @@ export function WebcallPanel({
           )}
         </div>
 
-        {/* ── Screen share preview: always mounted so screenElRef is stable ── */}
-        <div className={screenShareOn
-          ? "relative shrink-0 border-b border-border bg-black"
-          : "absolute w-px h-px overflow-hidden opacity-0 pointer-events-none"}
-        >
-          <video
-            ref={screenElRef}
-            muted
-            playsInline
-            autoPlay
-            className="w-full max-h-64 object-contain bg-black"
-          />
-          {screenShareOn && (
-            <>
-              <span className="absolute top-2 left-2 text-[10px] font-medium px-1.5 py-0.5 rounded bg-indigo-600/80 text-white">
-                Screen share — AI sees this
-              </span>
-              <button
-                type="button"
-                onClick={stopScreenShare}
-                className="absolute top-2 right-2 h-7 w-7 inline-flex items-center justify-center rounded-full bg-black/70 text-white hover:bg-black/90"
-                title="Stop screen share"
-              >
-                <MonitorOff className="h-3.5 w-3.5" />
-              </button>
-              {/* PiP camera overlay when both screen + camera are active */}
-              {cameraOn && (
-                <div className="absolute bottom-2 right-2 w-24 rounded-lg overflow-hidden border-2 border-white/30 shadow-lg">
-                  <video
-                    ref={pipCameraElRef}
-                    muted
-                    playsInline
-                    autoPlay
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-              )}
-            </>
-          )}
-        </div>
-
-        {/* \u2500\u2500 Camera preview: always mounted so videoElRef is stable \u2500\u2500 */}
         {cameraAllowed && (
-          <div className={cameraOn && !screenShareOn
+          <div className={cameraOn
             ? "relative shrink-0 border-b border-border bg-black"
             : "absolute w-px h-px overflow-hidden opacity-0 pointer-events-none"}
           >
@@ -711,7 +596,7 @@ export function WebcallPanel({
               autoPlay
               className="w-full max-h-44 object-cover"
             />
-            {cameraOn && !screenShareOn && (
+            {cameraOn && (
               <>
                 <span className="absolute top-2 left-2 text-[10px] font-medium px-1.5 py-0.5 rounded bg-black/60 text-white">
                   {visionLiveEnabled ? "Live camera" : "Camera"} · {facingMode === "user" ? "Front" : "Rear"}
@@ -774,7 +659,7 @@ export function WebcallPanel({
         )}
 
         {/* Controls */}
-        <div className="shrink-0 border-t border-border p-3 flex items-center justify-center gap-2.5 flex-wrap">
+        <div className="shrink-0 border-t border-border p-3 flex items-center justify-center gap-2.5">
           {state === "idle" || state === "error" ? (
             <>
               {cameraAllowed && (
@@ -837,16 +722,6 @@ export function WebcallPanel({
                   )}
                 </>
               )}
-              {/* Screen share button — always available during a live call */}
-              <Button
-                onClick={() => void toggleScreenShare()}
-                variant="outline"
-                disabled={state !== "live"}
-                className={"h-10 w-10 p-0 rounded-full border-border " + (screenShareOn ? "bg-indigo-500/10 text-indigo-400" : "text-muted-foreground")}
-                title={screenShareOn ? "Stop screen share" : "Share your screen"}
-              >
-                {screenShareOn ? <MonitorOff className="h-4 w-4" /> : <Monitor className="h-4 w-4" />}
-              </Button>
               {visionEnabled && (
                 <label className={
                   "h-10 inline-flex items-center justify-center gap-1.5 rounded-full border border-border cursor-pointer px-3 " +

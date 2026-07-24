@@ -57,8 +57,7 @@ import { FILLER_SEQUENCE_ID, InterruptionManager } from "./interruption-manager.
 import { logger } from "../lib/logger.js";
 import { format, addMinutes } from "date-fns";
 import { toZonedTime, formatInTimeZone } from "date-fns-tz";
-import { db, bookingsTable, eventTypesTable, schedulingCalendarsTable, agentsTable, platformSettingsTable, whatsappConnectionsTable } from "@workspace/db";
-import { sendVobizWhatsappMessage } from "../services/vobiz-whatsapp-service.js";
+import { db, bookingsTable, eventTypesTable, schedulingCalendarsTable, agentsTable, platformSettingsTable } from "@workspace/db";
 import { scheduleCallbackRequested } from "../services/autoRedial.js";
 import { resolveCallbackTime } from "../lib/tz-datetime.js";
 import { executeAnalyzeImage } from "../services/vision-analyze.js";
@@ -4823,20 +4822,6 @@ export class OrchestrationPipeline implements VoiceSession {
       await this.executeWebhookTool(tool, args);
     } else if (tool.type === "send_sms") {
       await this.executeSendSms(tool, args);
-    } else if (tool.type === "send_whatsapp") {
-      return await this.executeSendWhatsapp(tool, args);
-    } else if (tool.type === "verify_visual_identity") {
-      return await this.executeVerifyVisualIdentity(tool, args);
-    } else if (tool.type === "extract_document_fields") {
-      return await this.executeExtractDocumentFields(tool, args);
-    } else if (tool.type === "inspect_physical_asset") {
-      return await this.executeInspectPhysicalAsset(tool, args);
-    } else if (tool.type === "inspect_screen") {
-      return await this.executeInspectScreen(tool, args);
-    } else if (tool.type === "read_caller_gesture") {
-      return await this.executeReadCallerGesture(tool, args);
-    } else if (tool.type === "scan_barcode_qr") {
-      return await this.executeScanBarcodeQr(tool, args);
     } else if (tool.type === "end_call") {
       await this.executeEndCall(tool);
     } else if (tool.type === "cal_com") {
@@ -4934,164 +4919,6 @@ export class OrchestrationPipeline implements VoiceSession {
 
   private async executeWebhookTool(tool: AgentTool & { type: "webhook" }, args: Record<string, unknown>): Promise<void> {
     await sharedExecuteWebhookTool(this.config.callId, tool, args);
-  }
-
-  private async executeSendWhatsapp(
-    tool: AgentTool,
-    args: Record<string, unknown>,
-  ): Promise<string> {
-    const callerPhone = this.config.callerPhone;
-    if (!callerPhone) {
-      logger.warn({ callId: this.config.callId }, "Send WhatsApp: no caller phone available");
-      return "error: recipient phone number is missing";
-    }
-
-    const agentId = this.config.agentConfig.id;
-    const userId = this.config.agentConfig.userId;
-    const message = (args["message"] as string) || (tool as any).messageTemplate || "";
-    const templateName = (args["template_name"] as string) || undefined;
-
-    logger.info(
-      { callId: this.config.callId, agentId, to: callerPhone, templateName },
-      "Executing Send WhatsApp tool",
-    );
-
-    // Look up active WhatsApp connection for this agent
-    const [conn] = await db
-      .select()
-      .from(whatsappConnectionsTable)
-      .where(
-        and(
-          eq(whatsappConnectionsTable.agentId, agentId),
-          eq(whatsappConnectionsTable.active, true),
-        ),
-      );
-
-    if (!conn) {
-      logger.warn({ callId: this.config.callId, agentId }, "Send WhatsApp: no active connection found for agent");
-      return "error: WhatsApp integration is not enabled for this agent";
-    }
-
-    let effectiveMessage = message;
-    let effectiveTemplate = templateName;
-
-    // Check if any configured mid-call rule matches
-    const midCallRules = (conn.rules ?? []).filter((r) => r.enabled && r.triggerType === "mid_call_intent");
-    const matchedRule = midCallRules.find(
-      (r) =>
-        (templateName && r.templateName.toLowerCase() === templateName.toLowerCase()) ||
-        (message && r.name.toLowerCase().includes(message.toLowerCase())),
-    ) || midCallRules[0];
-
-    if (matchedRule) {
-      if (matchedRule.templateName) effectiveTemplate = matchedRule.templateName;
-      if (matchedRule.staticVars && Object.keys(matchedRule.staticVars).length > 0) {
-        const extraVars = Object.entries(matchedRule.staticVars)
-          .map(([k, v]) => `${k}: ${v}`)
-          .join("\n");
-        if (effectiveMessage) {
-          effectiveMessage += `\n\n${extraVars}`;
-        } else {
-          effectiveMessage = extraVars;
-        }
-      }
-    }
-
-    if (conn.provider === "vobiz") {
-      const res = await sendVobizWhatsappMessage({
-        userId,
-        toPhone: callerPhone,
-        channelId: conn.vobizChannelId ?? undefined,
-        wabaId: conn.vobizWabaId ?? undefined,
-        text: effectiveMessage,
-        templateName: effectiveTemplate,
-      });
-
-      if (res.success) {
-        return `WhatsApp message sent successfully to ${callerPhone}. Tell the caller you have sent it.`;
-      }
-      return `error: failed to send WhatsApp message (${res.error})`;
-    }
-
-    // Fallback: Custom Webhook
-    if (conn.outboundWebhookUrl) {
-      const result = await sharedExecuteWebhookTool(
-        this.config.callId,
-        {
-          name: "send_whatsapp",
-          description: "Send WhatsApp message via webhook",
-          type: "webhook",
-          url: conn.outboundWebhookUrl,
-          method: "POST",
-          secret: conn.outboundSecret ?? undefined,
-        },
-        { callId: this.config.callId, toPhone: callerPhone, message, templateName, args },
-      );
-      return result;
-    }
-
-    return "error: no outbound WhatsApp destination configured";
-  }
-
-  private async executeVerifyVisualIdentity(
-    _tool: AgentTool & { type: "verify_visual_identity" },
-    args: Record<string, unknown>,
-  ): Promise<string> {
-    const targetName = (args["target_name"] as string) || "Caller";
-    const verificationType = (args["verification_type"] as string) || "face_match";
-
-    logger.info(
-      { callId: this.config.callId, targetName, verificationType },
-      "Executing Verify Visual Identity tool",
-    );
-
-    const callerName = this.getVisionPrimaryName?.() || targetName;
-    return `Visual identity verification completed. Camera video feed & live observations match profile for ${callerName} (Confidence: 96%). Tell the caller their visual identity has been verified.`;
-  }
-
-  private async executeExtractDocumentFields(
-    _tool: AgentTool & { type: "extract_document_fields" },
-    args: Record<string, unknown>,
-  ): Promise<string> {
-    const docType = (args["document_type"] as string) || "document";
-    const targetFields = (args["target_fields"] as string) || "all fields";
-    logger.info({ callId: this.config.callId, docType, targetFields }, "Executing Extract Document Fields tool");
-    return `Document OCR extraction completed for ${docType}. Extracted fields: [Name: Verified, ID Number: Document verified, Issue Date: Active]. Tell the caller you have read their document details.`;
-  }
-
-  private async executeInspectPhysicalAsset(
-    _tool: AgentTool & { type: "inspect_physical_asset" },
-    args: Record<string, unknown>,
-  ): Promise<string> {
-    const category = (args["asset_category"] as string) || "physical asset";
-    const goal = (args["inspection_goal"] as string) || "damage assessment";
-    logger.info({ callId: this.config.callId, category, goal }, "Executing Inspect Physical Asset tool");
-    return `Physical asset inspection completed for ${category} (${goal}). Inspection finding: Component visible on camera feed, minor surface impact detected. Estimated resolution: Standard maintenance/repair. Tell the caller your inspection findings.`;
-  }
-
-  private async executeInspectScreen(
-    _tool: AgentTool & { type: "inspect_screen" },
-    args: Record<string, unknown>,
-  ): Promise<string> {
-    const screenType = (args["screen_type"] as string) || "screen";
-    logger.info({ callId: this.config.callId, screenType }, "Executing Inspect Screen tool");
-    return `Screen inspection completed for ${screenType}. Detected on screen: Active error dialog / configuration menu. Next step: Guide the user to select the primary action button.`;
-  }
-
-  private async executeReadCallerGesture(
-    _tool: AgentTool & { type: "read_caller_gesture" },
-    _args: Record<string, unknown>,
-  ): Promise<string> {
-    logger.info({ callId: this.config.callId }, "Executing Read Caller Gesture tool");
-    return `Gesture detection result: Positive confirmation detected (Thumbs Up / Head Nod). Proceed with current step.`;
-  }
-
-  private async executeScanBarcodeQr(
-    _tool: AgentTool & { type: "scan_barcode_qr" },
-    _args: Record<string, unknown>,
-  ): Promise<string> {
-    logger.info({ callId: this.config.callId }, "Executing Scan Barcode QR tool");
-    return `Barcode/QR Code scanned successfully from video stream. Payload: ITEM-8921-VERIFIED (Status: Genuine / Active). Speak the scanned item details to the caller.`;
   }
 
   private async executeSendSms(tool: AgentTool & { type: "send_sms" }, _args: Record<string, unknown>): Promise<void> {
@@ -7472,12 +7299,6 @@ export class OrchestrationPipeline implements VoiceSession {
 
   setVisionPrimaryName(name: string): void {
     this.visionMemory?.setPrimaryName(name);
-  }
-
-  getVisionPrimaryName(): string | null {
-    const snap = this.visionMemory?.snapshot();
-    const primary = snap?.people.find((p) => p.role === "primary_caller");
-    return primary?.label ?? null;
   }
 
   /** BCP-47 code of the language the caller EXPLICITLY requested mid-call

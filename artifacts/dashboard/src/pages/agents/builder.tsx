@@ -2108,83 +2108,12 @@ function VisionTab({ form, agentId }: { form: any; agentId: number | undefined }
             ? "📄 Document Reader Mode (Sarvam Vision): Guest joins a voice call, then taps Upload Document or takes a photo of an invoice/ID when requested. Camera permission is NOT forced upfront."
             : captureMode === "live"
             ? "📹 Live Camera Mode (Gemini Live): Guest turns on their camera, then starts the webcall. The agent sees a 2 FPS video stream of whatever is in front of the lens in real-time."
-            : "Full Hybrid Mode: Guest streams live camera video AND can upload high-resolution document/receipt files during the call."}
+            : "⚡ Full Hybrid Mode: Guest streams live camera video AND can upload high-resolution document/receipt files during the call."}
         </p>
         <p className="text-[11px] text-muted-foreground leading-relaxed">
           Prompt tip: Tell the agent what documents to ask for (Aadhaar, Invoice, Bill, ID) and when to invoke{" "}
-          <code className="text-[10px] font-mono text-sky-400 bg-sky-950/40 px-1 py-0.5 rounded">analyze_image</code> or{" "}
-          <code className="text-[10px] font-mono text-sky-400 bg-sky-950/40 px-1 py-0.5 rounded">verify_visual_identity</code>.
+          <code className="text-[10px] font-mono text-sky-400 bg-sky-950/40 px-1 py-0.5 rounded">analyze_image</code>.
         </p>
-        <div className="pt-1 flex flex-wrap gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-7 text-xs"
-            onClick={() => {
-              const kycPrompt =
-                "\n\n[VIDEO KYC & VISUAL VERIFICATION]\n" +
-                "You are an AI Video KYC Agent. Inspect the caller's face and video feed. " +
-                "Ask the caller to present an official ID card (Aadhaar, Passport, or License) to the camera. " +
-                "Run `verify_visual_identity` to confirm their face and ID card match saved records, then greet them by name.";
-              const cur = form.getValues("systemPrompt") ?? "";
-              form.setValue("systemPrompt", `${cur}${kycPrompt}`, { shouldDirty: true });
-            }}
-          >
-            + Video KYC & Verification
-          </Button>
-
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-7 text-xs"
-            onClick={() => {
-              const ocrPrompt =
-                "\n\n[DOCUMENT OCR & FIELD EXTRACTION]\n" +
-                "You are an AI Document Reader Agent. When the caller holds up an ID card, invoice, receipt, or agreement, " +
-                "invoke `extract_document_fields` to pull name, ID number, and dates, then confirm the extracted details aloud.";
-              const cur = form.getValues("systemPrompt") ?? "";
-              form.setValue("systemPrompt", `${cur}${ocrPrompt}`, { shouldDirty: true });
-            }}
-          >
-            + Document OCR & Field Extractor
-          </Button>
-
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-7 text-xs"
-            onClick={() => {
-              const assetPrompt =
-                "\n\n[PHYSICAL ASSET & DAMAGE INSPECTION]\n" +
-                "You are an AI Visual Inspection Agent. Ask the user to point their phone camera at the damaged vehicle, property, or hardware component. " +
-                "Invoke `inspect_physical_asset` to evaluate damage severity and broken parts, then summarize the repair findings.";
-              const cur = form.getValues("systemPrompt") ?? "";
-              form.setValue("systemPrompt", `${cur}${assetPrompt}`, { shouldDirty: true });
-            }}
-          >
-            + Insurance & Damage Inspection
-          </Button>
-
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-7 text-xs"
-            onClick={() => {
-              const screenPrompt =
-                "\n\n[IT HELPDESK & SCREEN TROUBLESHOOTING]\n" +
-                "You are an AI Screen Troubleshooting Agent. Ask the user to show their computer or TV screen to the camera. " +
-                "Invoke `inspect_screen` to read on-screen error codes and dialogs, then guide the user step-by-step.";
-              const cur = form.getValues("systemPrompt") ?? "";
-              form.setValue("systemPrompt", `${cur}${screenPrompt}`, { shouldDirty: true });
-            }}
-          >
-            + IT Screen Troubleshooter
-          </Button>
-        </div>
       </div>
 
       <WebcallShareLinksSection

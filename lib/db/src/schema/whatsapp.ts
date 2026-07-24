@@ -4,17 +4,6 @@ import {
 import { agentsTable } from "./agents";
 import { campaignsTable } from "./campaigns";
 
-export interface WhatsappRule {
-  id: string;
-  name: string;
-  triggerType: "mid_call_intent" | "post_call_disposition" | "post_call_transcript_ai";
-  condition: string;
-  templateName: string;
-  templateLanguage?: string;
-  staticVars?: Record<string, string>;
-  enabled: boolean;
-}
-
 /**
  * WhatsApp webhook connection (provider-agnostic).
  * - Inbound: BSP / Zapier POSTs button clicks → SnapServe dials the AI agent.
@@ -51,20 +40,6 @@ export const whatsappConnectionsTable = pgTable("whatsapp_connections", {
   lastInboundAt: timestamp("last_inbound_at", { withTimezone: true }),
   lastOutboundAt: timestamp("last_outbound_at", { withTimezone: true }),
   lastError: text("last_error"),
-  /** Provider type: "vobiz" (native Vobiz WhatsApp API) or "webhook" (custom Zapier/n8n) */
-  provider: text("provider").notNull().default("webhook"),
-  /** Vobiz WhatsApp WABA ID */
-  vobizWabaId: text("vobiz_waba_id"),
-  /** Vobiz WhatsApp Channel ID */
-  vobizChannelId: text("vobiz_channel_id"),
-  /** Sender WhatsApp phone number for Vobiz */
-  vobizPhone: text("vobiz_phone"),
-  /** Optional Meta template name for post-call summaries (e.g. call_summary_v1) */
-  postCallTemplate: text("post_call_template"),
-  /** Enable mid-call agent tool execution (`send_whatsapp`) */
-  midCallEnabled: boolean("mid_call_enabled").notNull().default(true),
-  /** Dynamic WhatsApp rules (mid-call intent triggers + post-call AI disposition/transcript rules) */
-  rules: jsonb("rules").$type<WhatsappRule[]>().notNull().default([]),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 }, (t) => [
