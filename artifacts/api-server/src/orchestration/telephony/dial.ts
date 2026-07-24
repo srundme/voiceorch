@@ -161,20 +161,10 @@ export async function dialVobiz(opts: {
     // Vobiz max is 86400 s (24 h); cap to avoid 400 on large wallet balances
     body["time_limit"] = Math.min(Math.floor(opts.maxDurationSeconds), 86400);
   }
-  if (opts.machineDetectionEnabled) {
-    body["machine_detection"] = "true";
-    // Analysis window (ms). VoBiz default is 5000, valid range 2000–10000. We
-    // default lower (3000) so the async verdict lands INSIDE the pipeline's
-    // acoustic confirmation window instead of after it has already resolved.
-    const rawTime = Number(process.env["AMD_VOBIZ_DETECTION_TIME_MS"]) || 3000;
-    body["machine_detection_time"] = Math.min(10000, Math.max(2000, Math.floor(rawTime)));
-    if (opts.machineDetectionUrl) {
-      // Async verdict delivery per VoBiz docs — the documented (and only
-      // reliable) channel for the AMD result.
-      body["machine_detection_url"] = opts.machineDetectionUrl;
-      body["machine_detection_method"] = "POST";
-    }
-  }
+  // NOTE: We do NOT send body["machine_detection"] = "true" to VoBiz because VoBiz's
+  // carrier-side AMD pauses the call for 5,000–10,000 ms before sending the answer webhook.
+  // SnapServe's in-pipeline acoustic Silero VAD handles AMD in real-time (<250ms)
+  // without any carrier connect delay.
   const resp = await fetch(url, {
     method: "POST",
     headers: {
