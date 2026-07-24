@@ -113,7 +113,7 @@ export default function Slide7() {
         </div>
       </div>
 
-      <SSWatermark />
+
     </div>
   );
 }
