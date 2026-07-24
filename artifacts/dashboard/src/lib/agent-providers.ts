@@ -3,8 +3,9 @@ export const ASR_PROVIDERS = [
 ];
 
 export const LLM_PROVIDERS = [
-  { value: "google",    label: "Google Gemini" },
-  { value: "groq",      label: "Groq" },
+  { value: "openai",   label: "OpenAI" },
+  { value: "google",   label: "Google Gemini" },
+  { value: "groq",     label: "Groq" },
 ];
 
 export const TTS_PROVIDERS = [
@@ -30,15 +31,11 @@ export const ASR_MODELS: Record<string, { value: string; label: string }[]> = {
 export const GEMINI_LIVE_LLM_MODEL = "gemini-3.1-flash-live-preview" as const;
 
 export const LLM_MODELS: Record<string, { value: string; label: string }[]> = {
-  openai:    [
-    { value: "gpt-4.1-nano",  label: "GPT-4.1 Nano — ultra-fast, lowest cost" },
-    { value: "gpt-4.1-mini",  label: "GPT-4.1 Mini — fast, low cost" },
-    { value: "gpt-4.1",       label: "GPT-4.1 — flagship, best quality" },
-    { value: "gpt-4o-mini",   label: "GPT-4o Mini" },
-    { value: "gpt-4o",        label: "GPT-4o" },
-    { value: "o4-mini",       label: "o4-mini — fast reasoning" },
-    { value: "gpt-4-turbo",   label: "GPT-4 Turbo (legacy)" },
-    { value: "gpt-3.5-turbo", label: "GPT-3.5 Turbo (legacy)" },
+  openai: [
+    { value: "gpt-5.1-mini", label: "GPT-5.1 Mini (Fastest — ~140ms Voice Latency)" },
+    { value: "gpt-5.1",      label: "GPT-5.1 (Flagship — Advanced Reasoning & Tools)" },
+    { value: "gpt-4.1-mini", label: "GPT-4.1 Mini (Low Cost — Fast Voice)" },
+    { value: "gpt-4o-mini",  label: "GPT-4o Mini" },
   ],
   google: [
     { value: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite (Fastest — Lowest Latency)" },
