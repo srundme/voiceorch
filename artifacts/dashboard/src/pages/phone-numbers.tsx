@@ -528,7 +528,7 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
             )}
             <div className="flex justify-between px-4 py-2.5">
               <span className="text-muted-foreground">Provider</span>
-              <span className="text-foreground font-medium">Aitel</span>
+              <span className="text-foreground font-medium">VoBiz</span>
             </div>
             <div className="flex justify-between px-4 py-2.5">
               <span className="text-muted-foreground">Number fee</span>
@@ -906,7 +906,7 @@ export default function PhoneNumbersPage() {
       <div className="border-b border-border px-4 sm:px-6 py-4 flex flex-wrap items-center gap-3 shrink-0">
         <Phone className="w-5 h-5 text-foreground shrink-0" />
         <h1 className="font-semibold text-foreground text-lg">Phone Numbers</h1>
-        <span className="text-xs text-muted-foreground w-full sm:w-auto sm:ml-auto order-last sm:order-none">Powered by Aitel</span>
+        <span className="text-xs text-muted-foreground w-full sm:w-auto sm:ml-auto order-last sm:order-none">Powered by VoBiz</span>
         {numbers && numbers.length > 0 && (
           <Button
             size="sm"
@@ -927,7 +927,7 @@ export default function PhoneNumbersPage() {
           <Globe className="h-5 w-5 text-foreground mt-0.5 shrink-0" />
           <div className="text-sm text-muted-foreground space-y-0.5">
             <p className="text-foreground font-medium">Self-serve number provisioning</p>
-            <p>Search live inventory across 130+ countries via Aitel. Purchase a number and it's immediately active — assign it to any agent and inbound calls route straight to its pipeline. <span className="text-muted-foreground">Releasing returns the number to inventory.</span></p>
+            <p>Search live inventory across 130+ countries via VoBiz. Purchase a number and it's immediately active — assign it to any agent and inbound calls route straight to its pipeline. <span className="text-muted-foreground">Releasing returns the number to inventory.</span></p>
           </div>
         </div>
 
