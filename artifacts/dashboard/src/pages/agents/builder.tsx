@@ -6193,22 +6193,6 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
                 <Star className="h-3 w-3 shrink-0 opacity-70" />
                 <span>Add your own API keys</span>
               </button>
-              <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground/65">
-                <span className="truncate">
-                  {(agent as any).updatedAt
-                    ? `Updated ${formatDistanceToNow(new Date((agent as any).updatedAt), { addSuffix: true })}`
-                    : `${(agent as any).totalCalls ?? 0} calls`}
-                </span>
-                <button
-                  type="button"
-                  onClick={handleDelete}
-                  className="p-1.5 rounded-md text-muted-foreground/45 hover:text-destructive hover:bg-destructive/10 transition-colors"
-                  title="Delete agent"
-                  aria-label="Delete agent"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </div>
             </div>
           </div>
         </aside>
@@ -6265,84 +6249,52 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
 /* ── Empty state ────────────────────────────────────────────────────────────── */
 
 function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const [, navigate]  = useLocation();
-  const queryClient   = useQueryClient();
-  const [step,        setStep]        = useState<"pick" | "scratch" | "kind" | "vision-mode">("pick");
-  const [agentName,   setAgentName]   = useState("");
-  const [agentKind,   setAgentKind]   = useState<"voice" | "vision">("voice");
-  const [captureMode, setCaptureMode] = useState<VisionCaptureMode>("photo");
-  const [creating,    setCreating]    = useState(false);
+  const [, navigate] = useLocation();
+  const queryClient = useQueryClient();
+  const [step, setStep] = useState<"pick" | "scratch">("pick");
+  const [agentName, setAgentName] = useState("");
+  const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
-  const reset = () => {
+  const handleClose = () => {
+    if (creating) return;
     setStep("pick");
     setAgentName("");
-    setAgentKind("voice");
-    setCaptureMode("photo");
     setCreateError(null);
+    onClose();
   };
-  const handleClose = () => { onClose(); setTimeout(reset, 200); };
 
-  const handleVibe = () => { handleClose(); navigate("/app/vibe"); };
+  const handleVibe = () => {
+    handleClose();
+    navigate("/app/vibe-build");
+  };
 
-  const handleScratch = async (
-    kind: "voice" | "vision" = agentKind,
-    mode: VisionCaptureMode = captureMode,
-  ) => {
+  const handleScratch = async () => {
     setCreating(true);
     setCreateError(null);
     try {
-      const name = agentName.trim() || (kind === "vision" ? "New Vision Agent" : "New Agent");
-      const flags = kind === "vision"
-        ? visionFlagsForCaptureMode(mode)
-        : { visionEnabled: false, visionLiveEnabled: false };
-      const useLive = kind === "vision" && (mode === "live" || mode === "both");
-
+      const name = agentName.trim() || "New Agent";
       const body: Record<string, unknown> = {
         name,
-        asrProvider: "sarvam",
-        asrModel: "saaras:v3",
+        asrProvider: "gemini_audio",
+        asrModel: "gemini-2.5-flash",
         asrLanguage: "",
         language: "en-IN",
         telephonyProvider: "vobiz",
-        systemPrompt: kind === "vision"
-          ? "You are a helpful AI voice assistant that can see photos and camera when the caller shares them. Ask clearly for what you need to see, then describe or verify it."
-          : "You are a helpful AI voice assistant.",
-        greetingMessage: kind === "vision"
-          ? "Hello! I can help over voice, and I can look at photos or your camera when needed. How can I help?"
-          : "Hello! How can I help you today?",
+        systemPrompt: "You are a helpful AI voice assistant.",
+        greetingMessage: "Hello! How can I help you today?",
         tools: [
           { type: "end_call", name: "end_call", description: "End the call when the conversation is complete." },
-          ...(flags.visionEnabled
-            ? [{ type: "analyze_image", name: "analyze_image", description: "Analyze the latest photo the caller shared." }]
-            : []),
         ],
         agentConfig: {
-          agentKind: kind,
-          visionEnabled: flags.visionEnabled,
-          visionLiveEnabled: flags.visionLiveEnabled,
-          ...(useLive
-            ? {
-                voiceStack: "gemini_live",
-                geminiLive: { voiceName: "Kore", thinkingLevel: "minimal" },
-              }
-            : {}),
+          agentKind: "voice",
         },
+        llmProvider: "google",
+        llmModel: "gemini-2.5-flash",
+        ttsProvider: "cartesia",
+        ttsModel: "sonic-3.5",
+        ttsVoice: "a8adc74b-c9c1-45e0-aae7-9a60ba64bbee",
       };
-
-      if (useLive) {
-        body.llmProvider = "google";
-        body.llmModel = GEMINI_LIVE_LLM_MODEL;
-        body.ttsProvider = "cartesia";
-        body.ttsModel = "sonic-3.5";
-        body.ttsVoice = "a8adc74b-c9c1-45e0-aae7-9a60ba64bbee";
-      } else {
-        body.llmProvider = "groq";
-        body.llmModel = "llama-3.3-70b-versatile";
-        body.ttsProvider = "cartesia";
-        body.ttsModel = "sonic-3.5";
-        body.ttsVoice = "a8adc74b-c9c1-45e0-aae7-9a60ba64bbee";
-      }
 
       const result = await customFetch<{ id: number }>(`${DASH_API}/agents`, {
         method: "POST",
@@ -6366,14 +6318,10 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
           <DialogTitle>
             {step === "pick" && "Create a new agent"}
             {step === "scratch" && "Name your agent"}
-            {step === "kind" && "Choose agent type"}
-            {step === "vision-mode" && "How should it see?"}
           </DialogTitle>
           <DialogDescription>
             {step === "pick" && "Build with AI for a guided setup, or configure manually from scratch."}
             {step === "scratch" && "You can change this anytime in the builder."}
-            {step === "kind" && "Voice agents talk on phone and web. Vision agents can also see photos or live camera."}
-            {step === "vision-mode" && "This sets defaults — you can change it later in the Vision tab."}
           </DialogDescription>
         </DialogHeader>
 
@@ -6407,90 +6355,24 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
               </div>
             </button>
           </div>
-        ) : step === "scratch" ? (
+        ) : (
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
               <Label htmlFor="scratch-name">Agent name</Label>
               <Input
                 id="scratch-name"
-                placeholder="e.g. Sales Agent, KYC Verifier"
+                placeholder="e.g. Sales Agent, Support Assistant"
                 value={agentName}
                 onChange={e => setAgentName(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && setStep("kind")}
+                onKeyDown={e => e.key === "Enter" && void handleScratch()}
                 autoFocus
               />
             </div>
-            <DialogFooter>
-              <Button variant="ghost" onClick={() => setStep("pick")}>Back</Button>
-              <Button onClick={() => setStep("kind")}>Continue</Button>
-            </DialogFooter>
-          </div>
-        ) : step === "kind" ? (
-          <div className="space-y-3 py-2">
-            <button
-              type="button"
-              onClick={() => { setAgentKind("voice"); void handleScratch("voice"); }}
-              disabled={creating}
-              className="w-full text-left rounded-xl border border-border/60 bg-card p-4 hover:border-primary/50 hover:bg-primary/5 transition-colors disabled:opacity-50"
-            >
-              <div className="flex items-start gap-3">
-                <div className="h-9 w-9 rounded-lg bg-muted flex items-center justify-center shrink-0">
-                  <Mic className="h-4 w-4 text-muted-foreground" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold">Voice agent</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Phone and web voice calls — mic only.</p>
-                </div>
-              </div>
-            </button>
-            <button
-              type="button"
-              onClick={() => { setAgentKind("vision"); setStep("vision-mode"); }}
-              disabled={creating}
-              className="w-full text-left rounded-xl border border-border/60 bg-card p-4 hover:border-primary/50 hover:bg-primary/5 transition-colors disabled:opacity-50"
-            >
-              <div className="flex items-start gap-3">
-                <div className="h-9 w-9 rounded-lg bg-sky-500/10 flex items-center justify-center shrink-0">
-                  <Eye className="h-4 w-4 text-sky-400" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold">Voice + Vision agent</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Voice plus camera or photo verification.</p>
-                </div>
-              </div>
-            </button>
             {createError && <p className="text-xs text-destructive">{createError}</p>}
             <DialogFooter>
-              <Button variant="ghost" onClick={() => setStep("scratch")} disabled={creating}>Back</Button>
-            </DialogFooter>
-          </div>
-        ) : (
-          <div className="space-y-3 py-2">
-            {([
-              ["photo", "Photo upload", "Guest uploads stills mid-call / WhatsApp"],
-              ["live", "Live camera", "Realtime webcam for verification calls"],
-              ["both", "Photo + live", "Both upload and live camera"],
-            ] as const).map(([id, title, desc]) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setCaptureMode(id)}
-                className={cn(
-                  "w-full text-left rounded-xl border p-3.5 transition-colors",
-                  captureMode === id
-                    ? "border-foreground/40 bg-card shadow-sm"
-                    : "border-border/60 bg-card/40 hover:border-border",
-                )}
-              >
-                <p className="text-sm font-semibold">{title}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>
-              </button>
-            ))}
-            {createError && <p className="text-xs text-destructive">{createError}</p>}
-            <DialogFooter>
-              <Button variant="ghost" onClick={() => setStep("kind")} disabled={creating}>Back</Button>
-              <Button onClick={() => void handleScratch("vision", captureMode)} disabled={creating}>
-                {creating ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Creating…</> : "Create vision agent"}
+              <Button variant="ghost" onClick={() => setStep("pick")} disabled={creating}>Back</Button>
+              <Button onClick={() => void handleScratch()} disabled={creating}>
+                {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create agent"}
               </Button>
             </DialogFooter>
           </div>
@@ -6631,4 +6513,3 @@ export default function AgentBuilder() {
     </div>
   );
 }
-
