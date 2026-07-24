@@ -99,9 +99,38 @@ export function TeamPage() {
     },
     onError: (err: Error) => {
       toast({
-        variant: "destructive",
-        title: "Invite Failed",
+        title: "Remove Failed",
         description: err.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const resendMutation = useMutation({
+    mutationFn: async (memberId: number) => {
+      const token = await getToken();
+      const res = await fetch(`/api/team/members/${memberId}/resend`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to resend invitation");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Invitation Email Re-sent ✉️",
+        description: `Invitation email sent to ${data.email}`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["team-members"] });
+    },
+    onError: (err: Error) => {
+      toast({
+        title: "Failed to Send Email",
+        description: err.message,
+        variant: "destructive",
       });
     },
   });
@@ -254,29 +283,41 @@ export function TeamPage() {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-4 shrink-0">
-                    {member.status === "active" ? (
-                      <Badge className="bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/15 border-emerald-500/20 text-[10px] gap-1">
-                        <CheckCircle2 className="h-3 w-3" />
-                        Active
-                      </Badge>
-                    ) : (
-                      <Badge className="bg-amber-500/10 text-amber-400 hover:bg-amber-500/15 border-amber-500/20 text-[10px] gap-1">
-                        <Clock className="h-3 w-3" />
-                        Pending Invite
-                      </Badge>
-                    )}
+                    <div className="flex items-center gap-2 shrink-0">
+                      {member.status === "active" ? (
+                        <Badge className="bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/15 border-emerald-500/20 text-[10px] gap-1">
+                          <CheckCircle2 className="h-3 w-3" />
+                          Active
+                        </Badge>
+                      ) : (
+                        <>
+                          <Badge className="bg-amber-500/10 text-amber-400 hover:bg-amber-500/15 border-amber-500/20 text-[10px] gap-1">
+                            <Clock className="h-3 w-3" />
+                            Pending Invite
+                          </Badge>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-[11px] gap-1 px-2 border-amber-500/30 text-amber-400 hover:bg-amber-500/10"
+                            onClick={() => resendMutation.mutate(member.id)}
+                            disabled={resendMutation.isPending}
+                          >
+                            <Mail className="h-3 w-3" />
+                            Resend Email
+                          </Button>
+                        </>
+                      )}
 
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                      onClick={() => removeMutation.mutate(member.id)}
-                      disabled={removeMutation.isPending}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                        onClick={() => removeMutation.mutate(member.id)}
+                        disabled={removeMutation.isPending}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
                 </div>
               ))}
             </div>
