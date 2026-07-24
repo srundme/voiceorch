@@ -17,9 +17,9 @@ const MAX_BYTES = 8 * 1024 * 1024;
 const TIMEOUT_MS = Number(process.env["VISION_ANALYZE_TIMEOUT_MS"] ?? 45_000);
 
 const DEFAULT_QUESTION =
-  "Describe what you see in detail. If this looks like vehicle/property damage, insurance evidence, " +
-  "an ID, invoice, or form, extract the key facts (damage location/severity, names, numbers, dates). " +
-  "Be concrete and useful for a voice agent speaking to the caller. Keep the answer under 250 words.";
+  "Describe what you see in detail. If the caller is holding an ID card, PAN card, Aadhaar, Passport, Driver License, badge, or document up to the camera, extract all readable names, document numbers, dates of birth, and key text. " +
+  "If this is a desktop screen share, describe the visible dashboard, numbers, metrics, or window content. " +
+  "Be concrete and concise for a voice agent speaking to the caller. Keep the answer under 200 words.";
 
 export async function analyzeImageBuffer(
   buffer: Buffer,
@@ -132,9 +132,7 @@ export async function executeAnalyzeImage(opts: {
     if (!row) {
       return "analyze_image_error: no images available for this call yet. Ask the caller to send a photo on WhatsApp or upload one, then call analyze_image again.";
     }
-    if (row.analysisText?.trim()) {
-      return `Vision analysis (cached, media_id=${row.id}):\n${row.analysisText.trim()}`;
-    }
+    // Live camera & screen share frames: bypass stale cache so fresh frame is analyzed!
     buffer = row.imageData;
     mimeType = row.mimeType;
     mediaId = row.id;
