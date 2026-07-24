@@ -176,7 +176,7 @@ export default function Slide15() {
         </div>
       </div>
 
-      <SSWatermark />
+
     </div>
   );
 }
