@@ -7,7 +7,7 @@ import {
   Settings, Key, Webhook, Wallet, TrendingUp, ShieldCheck,
   Mic2, Menu, ChevronDown, ChevronLeft, ChevronRight,
   LogOut, Bell, Search, SlidersHorizontal, BookOpen, PhoneMissed, PlugZap, Sun, Moon, Sparkles,
-  ArrowRightLeft, Instagram, FileSpreadsheet, MessageCircle, Trophy,
+  ArrowRightLeft, Instagram, FileSpreadsheet, MessageCircle, Trophy, X,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useAuth } from "@/lib/auth";
@@ -518,6 +518,70 @@ function MobileBottomNav() {
   );
 }
 
+/* ─── Voice-a-thon Top Notification Banner ───────────────────────────────── */
+function VoiceathonTopBanner() {
+  const [dismissed, setDismissed] = useState(() => {
+    try {
+      return localStorage.getItem("voiceathon_banner_dismissed") === "true";
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    // Load Luma checkout script dynamically
+    const scriptId = "luma-checkout";
+    if (!document.getElementById(scriptId)) {
+      const script = document.createElement("script");
+      script.id = scriptId;
+      script.src = "https://embed.lu.ma/checkout-button.js";
+      script.async = true;
+      document.body.appendChild(script);
+    }
+  }, []);
+
+  if (dismissed) return null;
+
+  const handleDismiss = () => {
+    setDismissed(true);
+    try {
+      localStorage.setItem("voiceathon_banner_dismissed", "true");
+    } catch {}
+  };
+
+  return (
+    <div className="relative z-40 bg-gradient-to-r from-amber-500/20 via-purple-600/20 to-blue-600/20 border-b border-amber-500/30 px-3 py-2 text-xs md:text-sm text-foreground flex items-center justify-between gap-3 backdrop-blur-md shadow-sm shrink-0">
+      <div className="flex items-center gap-2 min-w-0 flex-1 flex-wrap">
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 font-semibold text-[11px] uppercase tracking-wider shrink-0 border border-amber-500/30">
+          🎙️ Live Event
+        </span>
+        <span className="truncate font-medium text-foreground/90">
+          India's biggest Voice-a-thon powered by <strong className="text-amber-400 font-semibold">VoBiz</strong> & organized by <strong className="text-purple-400 font-semibold">SnapServe</strong> — Please register now!
+        </span>
+      </div>
+
+      <div className="flex items-center gap-2 shrink-0">
+        <a
+          href="https://luma.com/event/evt-rA5tJIW6SmKBcGQ"
+          className="luma-checkout--button inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-amber-500 hover:bg-amber-400 text-black font-semibold text-xs transition-colors shadow-sm cursor-pointer"
+          data-luma-action="checkout"
+          data-luma-event-id="evt-rA5tJIW6SmKBcGQ"
+        >
+          Register for Event
+        </a>
+        <button
+          onClick={handleDismiss}
+          className="p-1 rounded-md hover:bg-white/10 text-muted-foreground hover:text-foreground transition-colors"
+          title="Dismiss notification"
+          aria-label="Dismiss notification"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /* ─── Layout ─────────────────────────────────────────────────────────────── */
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location]  = useLocation();
@@ -588,6 +652,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
       {/* Main */}
       <main className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden bg-background pt-[calc(50px+env(safe-area-inset-top,0px))] md:pt-0 pb-[calc(3.5rem+env(safe-area-inset-bottom,0px))] md:pb-0">
+        {/* Voice-a-thon top notification */}
+        <VoiceathonTopBanner />
+
         {/* Topbar — desktop only */}
         <div className="hidden md:block">
           <Topbar location={location} />
