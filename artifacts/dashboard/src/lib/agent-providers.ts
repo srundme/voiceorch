@@ -1,8 +1,5 @@
 export const ASR_PROVIDERS = [
-  { value: "google_speech", label: "Google Cloud Speech-to-Text v2" },
-  { value: "sarvam",        label: "Sarvam" },
-  { value: "azure",         label: "Azure Speech" },
-  { value: "deepgram",      label: "Deepgram" },
+  { value: "sarvam", label: "Sarvam AI (Real-time Streaming)" },
 ];
 
 export const LLM_PROVIDERS = [
@@ -23,12 +20,6 @@ export const TELEPHONY_PROVIDERS = [
 ];
 
 export const ASR_MODELS: Record<string, { value: string; label: string }[]> = {
-  google_speech: [
-    { value: "telephony",   label: "Telephony — Enhanced for Phone & Voice (Recommended)" },
-    { value: "chirp_2",     label: "Chirp 2 — Multilingual Universal Speech Model" },
-    { value: "latest_long", label: "Latest Long — Conversational Speech" },
-  ],
-  azure:  [{ value: "en-US-standard", label: "Auto (base model from language)" }, { value: "en-US-enhanced", label: "Auto — enhanced (base model from language)" }, { value: "en-IN-standard", label: "Auto — Indic (base model from language)" }],
   sarvam: [
     { value: "saaras:v3",    label: "Saaras v3 — real-time streaming (recommended)" },
     { value: "saarika:v2.5", label: "Saarika v2.5 — real-time streaming (legacy)" },

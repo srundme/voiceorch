@@ -6276,8 +6276,8 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
       const name = agentName.trim() || "New Agent";
       const body: Record<string, unknown> = {
         name,
-        asrProvider: "google_speech",
-        asrModel: "telephony",
+        asrProvider: "sarvam",
+        asrModel: "saaras:v3",
         asrLanguage: "",
         language: "en-IN",
         telephonyProvider: "vobiz",
