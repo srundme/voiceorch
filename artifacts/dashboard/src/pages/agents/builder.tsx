@@ -3554,8 +3554,33 @@ function AgentListPanel({ selectedId, onSelect, rateMap, className }: {
   const [search, setSearch] = useState("");
   const [kindFilter, setKindFilter] = useState<"all" | "voice" | "vision">("all");
   const [, navigate] = useLocation();
+  const { toast } = useToast();
   const { data: agents, isLoading } = useListAgents({ query: { queryKey: getListAgentsQueryKey() } });
+  const deleteAgent = useDeleteAgent();
   const userProviderNames = useUserProviderNames();
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+
+  const handleDeleteItem = async (e: React.MouseEvent, agentId: number, name: string) => {
+    e.stopPropagation();
+    if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
+    try {
+      setDeletingId(agentId);
+      await deleteAgent.mutateAsync({ id: agentId });
+      toast({ title: "Deleted", description: `Agent "${name}" deleted.` });
+      if (selectedId === agentId) {
+        const remaining = (agents ?? []).filter(a => a.id !== agentId);
+        if (remaining.length > 0) {
+          onSelect(remaining[0]!.id);
+        } else {
+          navigate("/app/agents");
+        }
+      }
+    } catch (err: any) {
+      toast({ title: "Delete failed", description: err?.message ?? "Unknown error", variant: "destructive" });
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   const [showCreate, setShowCreate] = useState(false);
   const handleCreate = () => setShowCreate(true);
@@ -3641,26 +3666,41 @@ function AgentListPanel({ selectedId, onSelect, rateMap, className }: {
           const kind = resolveAgentKind((agent as any).agentConfig);
           const costCents = computeAgentRateCents(rateMap, agent as any, userProviderNames);
           return (
-            <button key={agent.id} onClick={() => onSelect(agent.id)}
+            <div
+              key={agent.id}
+              onClick={() => onSelect(agent.id)}
               className={cn(
-                "w-full text-left rounded-xl px-3 py-2.5 transition-all border",
+                "group relative w-full text-left rounded-xl px-3 py-2.5 transition-all border cursor-pointer",
                 isSelected
                   ? "bg-card/80 border-border/60 shadow-sm"
                   : "border-transparent hover:bg-muted/30 hover:border-border/30",
-              )}>
+              )}
+            >
               <div className="flex items-center justify-between gap-1.5">
-                <span className="text-[13px] font-medium truncate flex items-center gap-1.5 min-w-0">
+                <span className="text-[13px] font-medium truncate flex items-center gap-1.5 min-w-0 flex-1">
                   {kind === "vision" && <Camera className="h-3 w-3 text-sky-400 shrink-0" />}
                   <span className="truncate">{agent.name}</span>
                 </span>
-                <span className={cn(
-                  "shrink-0 rounded-md px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide border",
-                  isLive
-                    ? "bg-emerald-500/12 text-emerald-400 border-emerald-500/25"
-                    : "bg-muted/40 text-muted-foreground border-border/50",
-                )}>
-                  {isLive ? "Live" : "Draft"}
-                </span>
+                <div className="flex items-center gap-1 shrink-0">
+                  <span className={cn(
+                    "rounded-md px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide border",
+                    isLive
+                      ? "bg-emerald-500/12 text-emerald-400 border-emerald-500/25"
+                      : "bg-muted/40 text-muted-foreground border-border/50",
+                  )}>
+                    {isLive ? "Live" : "Draft"}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={(e) => handleDeleteItem(e, agent.id, agent.name)}
+                    disabled={deletingId === agent.id}
+                    className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-destructive/15 text-muted-foreground hover:text-destructive transition-all"
+                    title={`Delete ${agent.name}`}
+                    aria-label={`Delete ${agent.name}`}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                </div>
               </div>
               <div className="flex items-center gap-1.5 mt-1">
                 <span className={cn(
@@ -3674,7 +3714,7 @@ function AgentListPanel({ selectedId, onSelect, rateMap, className }: {
                 <span className="text-[10px] text-muted-foreground/75 truncate">{agent.asrProvider} · {agent.ttsProvider}</span>
                 {costCents ? <span className="text-[10px] text-muted-foreground/55 ml-auto shrink-0">₹{(costCents / 100).toFixed(2)}</span> : null}
               </div>
-            </button>
+            </div>
           );
         })}
       </div>
@@ -6185,6 +6225,15 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
                 <Upload className="h-3 w-3" />
                 Publish version
               </button>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full h-9 text-[12px] font-medium gap-2 rounded-xl border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive transition-colors mt-1"
+                onClick={handleDelete}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Delete Agent
+              </Button>
             </div>
 
             <div className="mt-auto space-y-2.5 pt-2">
