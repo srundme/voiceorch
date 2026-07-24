@@ -74,6 +74,7 @@ import HomePage from "@/pages/home/index";
 import CommandCenterRedirect from "@/pages/command-center/index";
 import MemoryPage from "@/pages/memory/index";
 import DocsPage from "@/pages/docs/index";
+import TeamPage from "@/pages/team";
 
 import ImpersonatePage from "@/pages/impersonate";
 import { ImpersonationBanner } from "@/components/ImpersonationBanner";
@@ -323,6 +324,7 @@ function AppRoutes() {
         <Route path="/app/transfers" component={TransfersPage} />
         <Route path="/app/voices" component={VoicesPage} />
         <Route path="/app/test-simulator" component={TestSimulatorPage} />
+        <Route path="/app/team" component={TeamPage} />
         <Route component={NotFound} />
       </Switch>
     </Layout>
