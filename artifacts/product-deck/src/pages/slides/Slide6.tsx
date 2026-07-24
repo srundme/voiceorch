@@ -41,7 +41,7 @@ export default function Slide6() {
           <div style={{ ...marketBlock, borderColor: "#C5CAE9", background: "#F0F3FF" }}>
             <div style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "#7986CB", marginBottom: "1vh" }}>SAM</div>
             <div style={{ fontFamily: "var(--font-display-family)", fontSize: "3.2vw", fontWeight: 800, color: "#1A237E" }}>₹600 Cr/yr</div>
-            <div style={{ fontSize: "0.98vw", color: "#5B5470", lineHeight: 1.5, marginTop: "1vh" }}>~2,000 Indian companies running 500+ outbound calls/day at ₹3L/month average</div>
+            <div style={{ fontSize: "0.98vw", color: "#5B5470", lineHeight: 1.5, marginTop: "1vh" }}>~2,000 Indian companies running 500+ outbound calls/day — ₹3L/month average (estimated, NASSCOM 2024)</div>
           </div>
           <div style={{ ...marketBlock, background: "#1A237E", borderColor: "#1A237E" }}>
             <div style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "#FF6F00", marginBottom: "1vh" }}>Beachhead</div>
