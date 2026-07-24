@@ -150,7 +150,7 @@ export default function Slide4() {
         </div>
       </div>
 
-      <SSWatermark />
+
     </div>
   );
 }
