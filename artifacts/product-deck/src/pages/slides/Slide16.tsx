@@ -18,10 +18,10 @@ export default function Slide16() {
       <div style={{ background: "#1A237E", padding: "3.2vh 6vw 2.8vh 6vw", display: "flex", alignItems: "flex-end", justifyContent: "space-between" }}>
         <div>
           <div style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#FF6F00", marginBottom: "0.8vh" }}>
-            Distribution Moat
+            The Core Differentiator
           </div>
-          <h1 style={{ fontFamily: "var(--font-display-family)", fontSize: "2.6vw", fontWeight: 700, color: "#FFFFFF", margin: 0, lineHeight: 1.15 }}>
-            The Memory Proxy — our distribution lives inside competitors' stacks.
+          <h1 style={{ fontFamily: "var(--font-display-family)", fontSize: "2.4vw", fontWeight: 700, color: "#FFFFFF", margin: 0, lineHeight: 1.15 }}>
+            The Core Memory Engine — Persistent episodic memory, native by design.
           </h1>
         </div>
         <span style={{ fontSize: "0.85vw", fontWeight: 600, color: "#4B6CB7", letterSpacing: "0.06em", paddingBottom: "0.3vh" }}>05 / 16</span>
@@ -34,87 +34,89 @@ export default function Slide16() {
           <div style={{
             flex: 1, background: "#FFFFFF", border: "0.06vh solid #E8EAF0",
             borderRadius: "1.2vw", padding: "3vh 2.8vw",
-            boxShadow: "0 0.8vh 2.2vh rgba(26,35,126,0.09)", display: "flex", flexDirection: "column", gap: "2vh",
+            boxShadow: "0 0.8vh 2.2vh rgba(26,35,126,0.09)", display: "flex", flexDirection: "column", gap: "1.8vh",
           }}>
             <div style={{ fontSize: "0.78vw", fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "#FF6F00" }}>
               The Insight
             </div>
-            <div style={{ fontSize: "1.32vw", fontWeight: 700, color: "#1A237E", lineHeight: 1.35 }}>
-              Every voice AI platform today — Vapi, Retell, Bolna — is stateless by design.
+            <div style={{ fontSize: "1.28vw", fontWeight: 700, color: "#1A237E", lineHeight: 1.3 }}>
+              Every voice agent built on SnapServe is stateful by default.
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: "1.4vh" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "1.2vh" }}>
               {[
-                "Adding memory requires 3 tools and custom engineering. Most teams never get there.",
-                "When a caller rings back, they start from zero — every time. This is accepted as normal.",
-                "We built the memory layer they are all missing. And we made it plug-in compatible.",
-              ].map((text, i) => (
-                <div key={i} style={{ display: "flex", gap: "1vw", alignItems: "flex-start", fontSize: "1.08vw", color: "#3A3A5C", lineHeight: 1.58 }}>
-                  <div style={{
-                    width: "1.8vw", height: "1.8vw", borderRadius: "50%",
-                    background: i === 2 ? "#FFF3E0" : "#F0F3FF",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    flexShrink: 0, marginTop: "0.15vh",
-                  }}>
-                    <span style={{ fontSize: "0.8vw", fontWeight: 800, color: i === 2 ? "#FF6F00" : "#7986CB" }}>
-                      {i === 2 ? "✓" : String(i + 1)}
-                    </span>
-                  </div>
-                  <span style={{ fontWeight: i === 2 ? 600 : 400, color: i === 2 ? "#1A237E" : "#3A3A5C" }}>{text}</span>
+                {
+                  label: "The Problem",
+                  color: "#B71C1C",
+                  bg: "#FFF5F5",
+                  border: "#FFCDD2",
+                  text: "Traditional voice AI suffers from \"context amnesia.\" When a call drops or a follow-up is scheduled, the caller starts from zero — every time.",
+                },
+                {
+                  label: "The SnapServe Standard",
+                  color: "#1A237E",
+                  bg: "#F0F3FF",
+                  border: "#C5CAE9",
+                  text: "We built episodic memory directly into the core architecture. Zero external databases. Zero integrations. Zero custom configurations.",
+                },
+                {
+                  label: "The Result",
+                  color: "#1B5E20",
+                  bg: "#F1F8F1",
+                  border: "#A5D6A7",
+                  text: "Every fact, commitment, and conversation history is retained natively. SnapServe does not just handle the voice — it handles the relationship.",
+                },
+              ].map(({ label, color, bg, border, text }) => (
+                <div key={label} style={{
+                  background: bg, borderRadius: "0.8vw", padding: "1.4vh 1.4vw",
+                  borderLeft: `0.28vw solid ${color}`, border: `0.06vh solid ${border}`,
+                  borderLeftWidth: "0.28vw", borderLeftColor: color,
+                }}>
+                  <div style={{ fontSize: "0.78vw", fontWeight: 800, color, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: "0.5vh" }}>{label}</div>
+                  <div style={{ fontSize: "0.97vw", color: "#3A3A5C", lineHeight: 1.58 }}>{text}</div>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Right — How It Works */}
+          {/* Right — Insurance Use Case */}
           <div style={{
             flex: 1, background: "#1A237E", borderRadius: "1.2vw", padding: "3vh 2.8vw",
-            display: "flex", flexDirection: "column", gap: "2vh",
+            display: "flex", flexDirection: "column", gap: "0",
           }}>
-            <div style={{ fontSize: "0.78vw", fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "#FF6F00" }}>
-              How It Works — 3 Steps
+            <div style={{ fontSize: "0.78vw", fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "#FF6F00", marginBottom: "2vh" }}>
+              How It Works — Insurance Use Case
             </div>
             {[
               {
                 n: "01",
-                title: "Teams add SnapServe without changing their product",
-                body: "Teams already using Vapi or Bolna add SnapServe to their existing setup and gain full caller memory instantly. No rebuild. No migration.",
-                code: null,
+                title: "The Initial Conversation",
+                body: "An AI agent calls a prospect about a term life insurance policy. They spend 5 minutes on pre-existing conditions and premium budget — until the prospect says, \"I'm driving, call me back tomorrow at 10 AM.\"",
               },
               {
                 n: "02",
-                title: "Every call auto-extracts to the memory graph",
-                body: "Caller facts, commitments, and history are extracted after every call — regardless of which platform ran it.",
-                code: null,
+                title: "Auto-Extraction to the Memory Graph",
+                body: "Without any manual trigger, SnapServe immediately extracts the exact budget, medical facts, and callback time — stored securely in the agent's persistent memory.",
               },
               {
                 n: "03",
-                title: "Next call starts with full context",
-                body: "The competitor's platform handles the voice. Our memory handles the relationship. Both get better.",
-                code: null,
+                title: "The Seamless Callback",
+                body: "The agent dials back at exactly 10 AM: \"Hi, picking up from yesterday — you mentioned your budget was ₹15,000 for the term plan. Should we proceed with those details?\"",
               },
-            ].map(({ n, title, body, code }, i) => (
-              <div key={n} style={{ display: "flex", gap: "1.4vw", alignItems: "flex-start" }}>
+            ].map(({ n, title, body }, i) => (
+              <div key={n} style={{ display: "flex", gap: "1.4vw", alignItems: "flex-start", paddingBottom: i < 2 ? "2.2vh" : "0" }}>
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
                   <div style={{
                     width: "2.4vw", height: "2.4vw", borderRadius: "50%",
-                    background: i === 0 ? "#FF6F00" : "rgba(255,111,0,0.2)",
+                    background: i === 0 ? "#FF6F00" : "rgba(255,111,0,0.22)",
                     display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
                   }}>
                     <span style={{ fontSize: "0.84vw", fontWeight: 800, color: "#FFFFFF" }}>{n}</span>
                   </div>
-                  {i < 2 && <div style={{ width: "0.06vw", height: "2.6vh", background: "rgba(255,111,0,0.25)", marginTop: "0.4vh" }} />}
+                  {i < 2 && <div style={{ width: "0.06vw", height: "2.8vh", background: "rgba(255,111,0,0.28)", marginTop: "0.4vh" }} />}
                 </div>
-                <div style={{ paddingTop: "0.2vh" }}>
-                  <div style={{ fontSize: "1.08vw", fontWeight: 700, color: "#FFFFFF", marginBottom: "0.5vh", lineHeight: 1.3 }}>{title}</div>
-                  <div style={{ fontSize: "0.95vw", color: "#9FA8DA", lineHeight: 1.55, marginBottom: code ? "0.8vh" : "0" }}>{body}</div>
-                  {code && (
-                    <div style={{
-                      background: "rgba(0,0,0,0.3)", borderRadius: "0.5vw", padding: "0.6vh 1vw",
-                      fontFamily: "monospace", fontSize: "0.88vw", color: "#A5D6A7",
-                    }}>
-                      {code}
-                    </div>
-                  )}
+                <div style={{ paddingTop: "0.3vh" }}>
+                  <div style={{ fontSize: "1.05vw", fontWeight: 700, color: "#FFFFFF", marginBottom: "0.6vh", lineHeight: 1.25 }}>{title}</div>
+                  <div style={{ fontSize: "0.93vw", color: "#9FA8DA", lineHeight: 1.58 }}>{body}</div>
                 </div>
               </div>
             ))}
@@ -128,7 +130,7 @@ export default function Slide16() {
         }}>
           <div style={{ width: "0.35vw", height: "4.5vh", background: "#FF6F00", borderRadius: "2px", flexShrink: 0 }} />
           <div style={{ fontSize: "1.18vw", fontWeight: 700, color: "#FF6F00", lineHeight: 1.45 }}>
-            This is not a feature. It is how our distribution compounds inside competitors' ecosystems.
+            This is not a plugin or an add-on. It is a foundational architecture that treats every customer journey as one continuous conversation.
           </div>
         </div>
       </div>
