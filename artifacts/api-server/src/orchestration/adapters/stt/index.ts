@@ -5,6 +5,7 @@ import { AssemblyAISTT } from "./assemblyai.js";
 import { SarvamSTT } from "./sarvam.js";
 import { CartesiaSTT } from "./cartesia.js";
 import { DeepgramSTT } from "./deepgram.js";
+import { GeminiSTT } from "./gemini.js";
 import { STUB_PROVIDERS_ENABLED, createStubSTT } from "../stubs.js";
 
 export function createSTTAdapter(
@@ -26,6 +27,10 @@ export function createSTTAdapter(
       return new CartesiaSTT(apiKey, model, cfg);
     case "deepgram":
       return new DeepgramSTT(apiKey, model, cfg);
+    case "gemini":
+    case "gemini_audio":
+    case "google":
+      return new GeminiSTT(apiKey, model, cfg);
     default:
       throw new Error(`Unknown STT provider: ${provider}`);
   }

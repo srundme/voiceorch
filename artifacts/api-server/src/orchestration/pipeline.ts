@@ -1650,7 +1650,11 @@ export class OrchestrationPipeline implements VoiceSession {
 
     const keys = config.providerKeys;
 
-    const sttKey = keys.get(this.agent.asrProvider);
+    const sttKey =
+      keys.get(this.agent.asrProvider) ||
+      (["gemini_audio", "google", "gemini"].includes(this.agent.asrProvider.toLowerCase())
+        ? keys.get("google") || process.env["GEMINI_API_KEY"] || process.env["GOOGLE_API_KEY"]
+        : undefined);
     if (!sttKey) throw new Error(`No API key found for STT provider: ${this.agent.asrProvider}`);
 
     const llmKey = keys.get(this.agent.llmProvider);
