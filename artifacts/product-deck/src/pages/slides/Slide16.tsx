@@ -76,9 +76,9 @@ export default function Slide16() {
             {[
               {
                 n: "01",
-                title: "One config line — zero code change",
-                body: "Team on Vapi, Bolna, or Retell points their api_base at SnapServe. No SDK, no migration, no rebuild.",
-                code: 'api_base = "https://api.snapserve.ai/proxy"',
+                title: "Teams add SnapServe without changing their product",
+                body: "Teams already using Vapi or Bolna add SnapServe to their existing setup and gain full caller memory instantly. No rebuild. No migration.",
+                code: null,
               },
               {
                 n: "02",
