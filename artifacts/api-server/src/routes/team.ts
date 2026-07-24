@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { db, teamMembersTable, usersTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { getAuth } from "../lib/auth-compat.js";
@@ -7,12 +7,37 @@ import { logger } from "../lib/logger.js";
 
 const router: IRouter = Router();
 
+let tableEnsured = false;
+
+async function ensureTeamMembersTable(): Promise<void> {
+  if (tableEnsured) return;
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS team_members (
+        id SERIAL PRIMARY KEY,
+        owner_user_id TEXT NOT NULL,
+        member_user_id TEXT,
+        email TEXT NOT NULL,
+        name TEXT,
+        role TEXT NOT NULL DEFAULT 'member',
+        status TEXT NOT NULL DEFAULT 'pending',
+        invited_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        joined_at TIMESTAMPTZ
+      );
+    `);
+    tableEnsured = true;
+  } catch (err) {
+    logger.warn({ err }, "Failed to ensure team_members table");
+  }
+}
+
 /**
  * GET /api/team/members
  * List team members and invitations for the current user's workspace.
  */
 router.get("/team/members", requireAuth, async (req, res): Promise<void> => {
   try {
+    await ensureTeamMembersTable();
     const auth = getAuth(req);
     const userId = auth.userId;
     if (!userId) {
@@ -38,6 +63,7 @@ router.get("/team/members", requireAuth, async (req, res): Promise<void> => {
  */
 router.post("/team/invite", requireAuth, async (req, res): Promise<void> => {
   try {
+    await ensureTeamMembersTable();
     const auth = getAuth(req);
     const ownerUserId = auth.userId;
     if (!ownerUserId) {
@@ -103,6 +129,7 @@ router.post("/team/invite", requireAuth, async (req, res): Promise<void> => {
  */
 router.delete("/team/members/:id", requireAuth, async (req, res): Promise<void> => {
   try {
+    await ensureTeamMembersTable();
     const auth = getAuth(req);
     const userId = auth.userId;
     if (!userId) {
