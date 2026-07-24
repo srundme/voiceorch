@@ -29,7 +29,7 @@ export default function Slide4() {
     {
       color: "#FFF3E0", iconColor: "#FF6F00",
       title: "Contextual Auto-Redial",
-      body: "Call drops mid-sentence? The agent dials back within seconds and resumes exactly where it left off — no re-introduction, no lost context.",
+      body: "A caller is mid-sentence explaining a claim. The call drops. In 8 seconds, SnapServe calls back and says 'You were telling me about the water damage' — the caller never has to repeat themselves.",
       icon: (
         <svg width="1.3vw" height="1.3vw" viewBox="0 0 24 24" fill="none" stroke="#FF6F00" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
@@ -59,8 +59,8 @@ export default function Slide4() {
     },
     {
       color: "#F3E5F5", iconColor: "#6A1B9A",
-      title: "Memory-Backed Human Handoff",
-      body: "When the AI transfers to a human agent, it pushes the caller's complete cross-call history, facts, and commitments — not just the current transcript. True empathy, not a cold transfer.",
+      title: "When the AI Hands Off to a Human",
+      body: "The human agent instantly sees every past call, every commitment made, and every document already submitted — not just today's transcript. No cold transfer. No repeating.",
       icon: (
         <svg width="1.3vw" height="1.3vw" viewBox="0 0 24 24" fill="none" stroke="#6A1B9A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" />
@@ -89,7 +89,7 @@ export default function Slide4() {
       <div style={{ flex: 1, padding: "2vh 6vw 5.5vh 6vw", display: "flex", gap: "2vw" }}>
         <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "1.4vh" }}>
           <p style={{ fontSize: "1.05vw", color: "#3A3A5C", lineHeight: 1.6, margin: 0 }}>
-            Describe your agent in plain language. SnapServe auto-configures STT, LLM, and TTS — and every caller is remembered across every call, forever.
+            Describe your agent in plain language. SnapServe auto-configures the speech recognition, AI brain, and voice — and every caller is remembered across every call, forever.
           </p>
 
           <div style={{ display: "flex", gap: "1.4vw", flex: 1 }}>
