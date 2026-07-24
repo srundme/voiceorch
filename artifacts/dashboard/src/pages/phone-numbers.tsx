@@ -531,15 +531,19 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
               <span className="text-foreground font-medium">VoBiz</span>
             </div>
             <div className="flex justify-between px-4 py-2.5">
-              <span className="text-muted-foreground">Number fee</span>
-              <span className="text-foreground">₹{PHONE_BASE_INR}.00</span>
+              <span className="text-muted-foreground">Telephony rental</span>
+              <span className="text-foreground">₹700.00</span>
+            </div>
+            <div className="flex justify-between px-4 py-2.5">
+              <span className="text-muted-foreground">One-time setup cost</span>
+              <span className="text-foreground">₹100.00</span>
             </div>
             <div className="flex justify-between px-4 py-2.5">
               <span className="text-muted-foreground">GST (18%)</span>
               <span className="text-foreground">₹{PHONE_GST_INR}.00</span>
             </div>
-            <div className="flex justify-between px-4 py-2.5">
-              <span className="text-muted-foreground">Pay now (card)</span>
+            <div className="flex justify-between px-4 py-2.5 border-t border-border mt-1 pt-2.5">
+              <span className="text-muted-foreground font-medium">Pay now (card)</span>
               <span className="font-semibold text-foreground">₹{PHONE_TOTAL_INR}.00</span>
             </div>
             <div className="flex justify-between px-4 py-2.5">
