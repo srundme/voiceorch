@@ -112,7 +112,7 @@ export default function Slide8() {
         ))}
       </div>
 
-      <SSWatermark />
+
     </div>
   );
 }
