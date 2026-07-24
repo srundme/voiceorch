@@ -200,7 +200,7 @@ export class OpenAILLM implements LLMAdapter {
       // This is the common case and delivers the full latency/cost benefit.
       input = [{ role: lastMsg.role, content: lastMsg.content }];
     } else {
-      input = [];
+      input = [{ role: "user", content: "Hello" }];
     }
 
     const createParams: any = {
@@ -230,9 +230,10 @@ export class OpenAILLM implements LLMAdapter {
       stream = (await this.client.responses.create(createParams, {
         signal: abort.signal,
       })) as unknown as AsyncIterable<any>;
-    } catch (err) {
+    } catch (err: any) {
       this._inFlightAbort = null;
-      throw err;
+      logger.warn({ model: this.model, err: err?.message }, "OpenAI responses.create failed, falling back to chat.completions");
+      return this.chatCompletions(messages, systemPrompt, onToken, onDone, options);
     }
 
     let full = "";
