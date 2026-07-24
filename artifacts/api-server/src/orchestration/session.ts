@@ -1268,6 +1268,19 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     }
   }
 
+  // Provider key alias normalization (e.g. "google" key serves "gemini_audio" and "gemini")
+  const googleKey =
+    providerKeys.get("google") ||
+    providerKeys.get("gemini") ||
+    providerKeys.get("gemini_audio") ||
+    process.env["GEMINI_API_KEY"] ||
+    process.env["GOOGLE_API_KEY"];
+  if (googleKey) {
+    if (!providerKeys.has("google")) providerKeys.set("google", googleKey);
+    if (!providerKeys.has("gemini")) providerKeys.set("gemini", googleKey);
+    if (!providerKeys.has("gemini_audio")) providerKeys.set("gemini_audio", googleKey);
+  }
+
   // For outbound VoBiz calls the HTTP route (calls.ts) already created an "exec_*"
   // record at dial time. Reuse it here so there is exactly one DB row per call
   // rather than two orphan in_progress records.
