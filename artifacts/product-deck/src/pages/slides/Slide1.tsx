@@ -93,7 +93,7 @@ export default function Slide1() {
         01 / 16
       </div>
 
-      <SSWatermark />
+
     </div>
   );
 }
