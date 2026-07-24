@@ -88,7 +88,7 @@ export default function Slide2() {
               Enterprise engineer from CGI — large-scale infrastructure and system design.
             </div>
             <div style={bullet}><span style={{ position: "absolute", left: 0, top: "0.7vh", width: "0.5vw", height: "0.5vw", borderRadius: "50%", background: "#FF6F00" }} />
-              Owns the entire TypeScript orchestration stack — took SnapServe from prototype to live production calls.
+              Built the entire technical platform — took SnapServe from prototype to live production calls.
             </div>
             <div style={{ ...bullet, marginBottom: 0 }}><span style={{ position: "absolute", left: 0, top: "0.7vh", width: "0.5vw", height: "0.5vw", borderRadius: "50%", background: "#FF6F00" }} />
               Responsible for sub-second latency, multi-provider failover, and real-world telephony integrations.
