@@ -50,7 +50,7 @@ async function apiFetch<T>(url: string, init?: RequestInit): Promise<T> {
 
 /* ── Types ─────────────────────────────────────────────────────────────────── */
 
-type VisionMode = "photo_upload" | "live_snapshot" | "live_stream";
+type VisionMode = "photo_upload" | "live_stream";
 type ConnectionType = "rest_api" | "webhook" | "database";
 type AuthType = "none" | "bearer" | "api_key" | "basic";
 type FieldType = "text" | "number" | "boolean" | "date";
@@ -413,7 +413,6 @@ function OverviewTab({ agent, onSave, saving }: {
 
 const VISION_MODES: { id: VisionMode; label: string; description: string; icon: React.ReactNode }[] = [
   { id: "photo_upload",   label: "Photo Upload",   description: "Accept uploaded images from users or API",    icon: <Upload className="h-4 w-4" /> },
-  { id: "live_snapshot",  label: "Live Snapshot",  description: "Capture a single frame from a live feed",     icon: <Camera className="h-4 w-4" /> },
   { id: "live_stream",    label: "Live Stream",    description: "Analyze a continuous real-time video stream",  icon: <Play className="h-4 w-4" /> },
 ];
 

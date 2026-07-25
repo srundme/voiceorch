@@ -686,18 +686,6 @@ export function WebcallPanel({
                 </Button>
               )}
 
-              {/* Snapshot button — visible for live_snapshot vision mode */}
-              {visionMode === "live_snapshot" && state === "live" && cameraOn && (
-                <Button
-                  variant="outline"
-                  onClick={captureSnapshot}
-                  className="h-10 w-10 p-0 rounded-full border-border text-violet-400 hover:bg-violet-500/10"
-                  title="Send snapshot to agent"
-                >
-                  <Camera className="h-4 w-4" />
-                </Button>
-              )}
-
               <Button
                 onClick={end}
                 disabled={state === "ending"}
