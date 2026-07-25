@@ -1859,12 +1859,28 @@ async function loadMedia(
   return forCall[0] ?? rows[0] ?? null;
 }
 
+/** Resolve vision API key from session providerKeys (admin panel) first, env fallback second */
+function resolveVisionApiKey(providerName: string, providerKeys: Map<string, string>): string {
+  // Gemini provider maps to "google" key in the managed-key system
+  if (providerName === "gemini" || providerName === "google") {
+    return providerKeys.get("google") ?? providerKeys.get("gemini") ?? process.env["GOOGLE_API_KEY"] ?? "";
+  }
+  if (providerName === "openai") {
+    return providerKeys.get("openai") ?? process.env["OPENAI_API_KEY"] ?? "";
+  }
+  if (providerName === "sarvam") {
+    return providerKeys.get("sarvam") ?? process.env["SARVAM_API_KEY"] ?? "";
+  }
+  return providerKeys.get(providerName) ?? process.env[`${providerName.toUpperCase()}_API_KEY`] ?? "";
+}
+
 export async function executeVisionDescribe(
   callId: number,
   agentId: number,
   tool: VisionDescribeTool,
   args: Record<string, unknown>,
   visionConfig: VisionConfig,
+  providerKeys: Map<string, string> = new Map(),
 ): Promise<string> {
   const media = await loadMedia(callId, agentId, args["media_id"] as string | undefined);
   if (!media) return "vision_error: No image available for this call. Please share an image first.";
@@ -1881,7 +1897,7 @@ export async function executeVisionDescribe(
   const cached = await getCachedAnalysis(media.id, cacheKey);
   if (cached) return cached;
 
-  const apiKey = process.env[`${providerName.toUpperCase()}_API_KEY`] ?? process.env["GOOGLE_API_KEY"] ?? "";
+  const apiKey = resolveVisionApiKey(providerName, providerKeys);
   const provider = resolveVisionProvider(providerName, apiKey);
 
   let imageData: Buffer | null = media.imageData ? Buffer.from(media.imageData) : null;
@@ -1901,6 +1917,7 @@ export async function executeVisionExtract(
   tool: VisionExtractTool,
   args: Record<string, unknown>,
   visionConfig: VisionConfig,
+  providerKeys: Map<string, string> = new Map(),
 ): Promise<string> {
   const media = await loadMedia(callId, agentId, args["media_id"] as string | undefined);
   if (!media) return "vision_error: No image available for this call. Please share an image first.";
@@ -1918,7 +1935,7 @@ export async function executeVisionExtract(
     return `vision_extract_result: ${cached}`;
   }
 
-  const apiKey = process.env[`${providerName.toUpperCase()}_API_KEY`] ?? process.env["GOOGLE_API_KEY"] ?? "";
+  const apiKey = resolveVisionApiKey(providerName, providerKeys);
   const provider = resolveVisionProvider(providerName, apiKey);
 
   let imageData: Buffer | null = media.imageData ? Buffer.from(media.imageData) : null;
@@ -1956,6 +1973,7 @@ export async function executeVisionVerify(
   tool: VisionVerifyTool,
   args: Record<string, unknown>,
   visionConfig: VisionConfig,
+  providerKeys: Map<string, string> = new Map(),
 ): Promise<string> {
   const media = await loadMedia(callId, agentId, args["media_id"] as string | undefined);
   if (!media) return "vision_error: No image available for this call. Please share an image first.";
@@ -1970,7 +1988,7 @@ export async function executeVisionVerify(
   const cached = await getCachedAnalysis(media.id, cacheKey);
   if (cached) return `vision_verify_result: ${cached}`;
 
-  const apiKey = process.env[`${providerName.toUpperCase()}_API_KEY`] ?? process.env["GOOGLE_API_KEY"] ?? "";
+  const apiKey = resolveVisionApiKey(providerName, providerKeys);
   const provider = resolveVisionProvider(providerName, apiKey);
 
   let imageData: Buffer | null = media.imageData ? Buffer.from(media.imageData) : null;
@@ -1990,6 +2008,7 @@ export async function executeVisionCompare(
   tool: VisionCompareTool,
   args: Record<string, unknown>,
   visionConfig: VisionConfig,
+  providerKeys: Map<string, string> = new Map(),
 ): Promise<string> {
   const mediaA = await loadMedia(callId, agentId, args["media_id_a"] as string | undefined);
   if (!mediaA) return "vision_error: No primary image available for comparison. Please share an image first.";
@@ -2017,10 +2036,10 @@ export async function executeVisionCompare(
       description: tool.description,
       provider: tool.provider,
       promptTemplate: prompt,
-    }, args, visionConfig);
+    }, args, visionConfig, providerKeys);
   }
 
-  const apiKey = process.env[`${providerName.toUpperCase()}_API_KEY`] ?? process.env["GOOGLE_API_KEY"] ?? "";
+  const apiKey = resolveVisionApiKey(providerName, providerKeys);
   const provider = resolveVisionProvider(providerName, apiKey);
 
   // For compare, build a combined prompt with both images

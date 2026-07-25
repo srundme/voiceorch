@@ -182,22 +182,22 @@ async function executeLiveAgentTool(
     case "vision_describe": {
       const visionConfig = agent.visionConfig;
       if (!visionConfig) return "vision_error: Vision is not configured for this agent.";
-      return executeVisionDescribe(callId, agentId, tool, args, visionConfig);
+      return executeVisionDescribe(callId, agentId, tool, args, visionConfig, config.providerKeys);
     }
     case "vision_extract": {
       const visionConfig = agent.visionConfig;
       if (!visionConfig) return "vision_error: Vision is not configured for this agent.";
-      return executeVisionExtract(callId, agentId, tool, args, visionConfig);
+      return executeVisionExtract(callId, agentId, tool, args, visionConfig, config.providerKeys);
     }
     case "vision_verify": {
       const visionConfig = agent.visionConfig;
       if (!visionConfig) return "vision_error: Vision is not configured for this agent.";
-      return executeVisionVerify(callId, agentId, tool, args, visionConfig);
+      return executeVisionVerify(callId, agentId, tool, args, visionConfig, config.providerKeys);
     }
     case "vision_compare": {
       const visionConfig = agent.visionConfig;
       if (!visionConfig) return "vision_error: Vision is not configured for this agent.";
-      return executeVisionCompare(callId, agentId, tool, args, visionConfig);
+      return executeVisionCompare(callId, agentId, tool, args, visionConfig, config.providerKeys);
     }
     default:
       return `Tool type ${(tool as AgentTool).type} is not supported on the Live stack yet.`;

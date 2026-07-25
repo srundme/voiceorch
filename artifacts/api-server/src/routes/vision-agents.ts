@@ -6,6 +6,28 @@ import { logger } from "../lib/logger.js";
 
 const router = Router();
 
+// ── Serializer: shape raw DB row → VisionAgent frontend contract ─────────────
+function serializeVisionAgent(agent: typeof agentsTable.$inferSelect) {
+  const cfg = (agent.agentConfig ?? {}) as Record<string, unknown>;
+  const vc  = (cfg["visionConfig"] as Record<string, unknown> | undefined) ?? {};
+  return {
+    ...agent,
+    // agentConfig scalars surfaced at top level for the builder
+    voiceName:       (cfg["voiceName"] as string | null | undefined) ?? agent.ttsVoiceName ?? null,
+    thinkingLevel:   (cfg["thinkingLevel"] as string | undefined)    ?? "minimal",
+    multilingual:    (cfg["multilingual"] as boolean | undefined)    ?? false,
+    // visionConfig fields
+    defaultProvider: (vc["defaultProvider"] as string | null | undefined) ?? null,
+    visionMode:      (vc["mode"] as string | undefined)                   ?? "photo_upload",
+    retentionDays:   (vc["retentionDays"] as number | undefined)          ?? 30,
+    allowWhatsApp:   (vc["allowWhatsapp"] as boolean | undefined)         ?? false,
+    allowApiStaging: (vc["allowApiStaging"] as boolean | undefined)       ?? true,
+    notifyOnMedia:   (vc["notifyOnMedia"] as boolean | undefined)         ?? true,
+    // tools
+    tools:           (cfg["tools"] as unknown) ?? {},
+  };
+}
+
 // ── Helper: verify agent belongs to user ─────────────────────────────────────
 async function getVisionAgent(agentId: number, clerkId: string) {
   const [agent] = await db
@@ -32,7 +54,7 @@ router.get("/vision-agents", requireAuth, async (req, res): Promise<void> => {
       return cfg["agentKind"] === "vision";
     });
 
-    res.json(visionAgents);
+    res.json(visionAgents.map(serializeVisionAgent));
   } catch (err) {
     logger.error({ err, clerkId }, "Failed to list vision agents");
     res.status(500).json({ error: "Failed to list vision agents" });
@@ -103,7 +125,7 @@ router.get("/vision-agents/:id", requireAuth, async (req, res): Promise<void> =>
     return;
   }
 
-  res.json(agent);
+  res.json(serializeVisionAgent(agent));
 });
 
 // ── Update vision agent ───────────────────────────────────────────────────────
@@ -125,18 +147,37 @@ router.patch("/vision-agents/:id", requireAuth, async (req, res): Promise<void> 
   const body = (req.body ?? {}) as Record<string, unknown>;
   const patch: Partial<typeof agentsTable.$inferInsert> = {};
 
+  // Direct DB columns
   if (typeof body["name"] === "string") patch.name = body["name"].trim();
+  if (typeof body["description"] === "string" || body["description"] === null)
+    patch.description = (body["description"] as string | null);
   if (typeof body["systemPrompt"] === "string") patch.systemPrompt = body["systemPrompt"];
+  if (typeof body["language"] === "string") patch.language = body["language"];
+  if (typeof body["status"] === "string") patch.status = body["status"];
 
-  if (body["agentConfig"] != null) {
-    const existing = (agent.agentConfig ?? {}) as Record<string, unknown>;
-    const incoming = body["agentConfig"] as Record<string, unknown>;
-    patch.agentConfig = { ...existing, ...incoming } as typeof agentsTable.$inferInsert["agentConfig"];
+  // agentConfig merge — overview tab fields (voiceName, thinkingLevel, multilingual) + visionConfig, tools
+  const agentCfgMerge: Record<string, unknown> = {};
+  if (typeof body["voiceName"] === "string" || body["voiceName"] === null)
+    agentCfgMerge["voiceName"] = body["voiceName"];
+  if (typeof body["thinkingLevel"] === "string") agentCfgMerge["thinkingLevel"] = body["thinkingLevel"];
+  if (typeof body["multilingual"] === "boolean") agentCfgMerge["multilingual"] = body["multilingual"];
+
+  if (body["visionConfig"] != null) {
+    const existingVC = ((agent.agentConfig ?? {}) as Record<string, unknown>)["visionConfig"] as Record<string, unknown> | undefined ?? {};
+    agentCfgMerge["visionConfig"] = { ...existingVC, ...(body["visionConfig"] as Record<string, unknown>) };
   }
 
-  if (Array.isArray(body["tools"])) {
-    // Store tools inside agentConfig (if not already patched there)
-    const currentCfg = (patch.agentConfig ?? (agent.agentConfig ?? {})) as Record<string, unknown>;
+  if (body["agentConfig"] != null) {
+    Object.assign(agentCfgMerge, body["agentConfig"] as Record<string, unknown>);
+  }
+
+  if (Object.keys(agentCfgMerge).length > 0 || Array.isArray(body["tools"])) {
+    const existing = (agent.agentConfig ?? {}) as Record<string, unknown>;
+    const merged = { ...existing, ...agentCfgMerge };
+    if (Array.isArray(body["tools"])) merged["tools"] = body["tools"];
+    patch.agentConfig = merged as typeof agentsTable.$inferInsert["agentConfig"];
+  } else if (Array.isArray(body["tools"])) {
+    const currentCfg = (agent.agentConfig ?? {}) as Record<string, unknown>;
     patch.agentConfig = { ...currentCfg, tools: body["tools"] } as typeof agentsTable.$inferInsert["agentConfig"];
   }
 
@@ -146,7 +187,7 @@ router.patch("/vision-agents/:id", requireAuth, async (req, res): Promise<void> 
       .set(patch)
       .where(and(eq(agentsTable.id, agentId), eq(agentsTable.userId, clerkId)))
       .returning();
-    res.json(updated);
+    res.json(serializeVisionAgent(updated));
   } catch (err) {
     logger.error({ err, agentId }, "Failed to update vision agent");
     res.status(500).json({ error: "Failed to update vision agent" });

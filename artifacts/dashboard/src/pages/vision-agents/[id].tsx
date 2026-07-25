@@ -3,7 +3,7 @@ import { useParams, useLocation } from "wouter";
 import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
 import {
   Eye, Camera, Database, Link2, Code2, Zap, Settings, Plus, Trash2,
-  Copy, Check, Play, Wrench, Upload, Save, Loader2, ChevronDown,
+  Copy, Check, Play, Square, Wrench, Upload, Save, Loader2, ChevronDown,
   ChevronRight, X, ExternalLink, AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -29,7 +29,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { GEMINI_LIVE_VOICES } from "@/lib/agent-providers";
+import { GEMINI_LIVE_VOICES, GEMINI_LIVE_LANGUAGES } from "@/lib/agent-providers";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const TOKEN_KEY = "voiceorch:session";
@@ -64,6 +64,7 @@ interface VisionAgent {
   voiceName: string | null;
   thinkingLevel: "minimal" | "low" | "medium" | "high";
   language: string;
+  multilingual: boolean;
   defaultProvider: string | null;
   retentionDays: number;
   visionMode: VisionMode;
@@ -214,6 +215,7 @@ function OverviewTab({ agent, onSave, saving }: {
   onSave: (patch: Partial<VisionAgent>) => void;
   saving: boolean;
 }) {
+  const { toast } = useToast();
   const [form, setForm] = useState({
     name: agent.name,
     description: agent.description ?? "",
@@ -221,9 +223,50 @@ function OverviewTab({ agent, onSave, saving }: {
     voiceName: agent.voiceName ?? "",
     thinkingLevel: agent.thinkingLevel,
     language: agent.language,
+    multilingual: agent.multilingual ?? false,
   });
 
-  const set = (key: string, val: string) => setForm(f => ({ ...f, [key]: val }));
+  const set = <K extends keyof typeof form>(key: K, val: (typeof form)[K]) =>
+    setForm(f => ({ ...f, [key]: val }));
+
+  /* ── Voice preview ─────────────────────────────────────────────── */
+  type PreviewState = "idle" | "loading" | "playing";
+  const [previewState, setPreviewState] = useState<PreviewState>("idle");
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
+  const previewUrlRef  = useRef<string | null>(null);
+
+  const stopPreview = () => {
+    previewAudioRef.current?.pause();
+    previewAudioRef.current = null;
+    if (previewUrlRef.current) { URL.revokeObjectURL(previewUrlRef.current); previewUrlRef.current = null; }
+  };
+
+  const handlePreviewVoice = async () => {
+    if (previewState === "playing") { stopPreview(); setPreviewState("idle"); return; }
+    stopPreview();
+    setPreviewState("loading");
+    try {
+      const res = await fetch(`${BASE}/api/voices/preview`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+        body: JSON.stringify({ provider: "google", voice: form.voiceName, language: form.language }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      previewUrlRef.current = url;
+      const audio = new Audio(url);
+      previewAudioRef.current = audio;
+      audio.onended = () => { stopPreview(); setPreviewState("idle"); };
+      audio.onerror = () => { stopPreview(); setPreviewState("idle"); };
+      await audio.play();
+      setPreviewState("playing");
+    } catch (err) {
+      stopPreview();
+      setPreviewState("idle");
+      toast({ title: "Preview failed", description: String(err), variant: "destructive" });
+    }
+  };
 
   return (
     <div className="space-y-6 max-w-2xl">
@@ -250,11 +293,13 @@ function OverviewTab({ agent, onSave, saving }: {
           className="font-mono text-xs"
         />
       </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-1.5">
-          <Label>Voice (Gemini Live)</Label>
+
+      {/* ── Voice + preview ── */}
+      <div className="space-y-1.5">
+        <Label>Voice (Gemini Live)</Label>
+        <div className="flex items-center gap-2">
           <Select value={form.voiceName} onValueChange={v => set("voiceName", v)}>
-            <SelectTrigger><SelectValue placeholder="Select voice…" /></SelectTrigger>
+            <SelectTrigger className="flex-1"><SelectValue placeholder="Select voice…" /></SelectTrigger>
             <SelectContent className="max-h-64">
               {GEMINI_LIVE_VOICES.map(v => (
                 <SelectItem key={v.name} value={v.name}>
@@ -263,21 +308,65 @@ function OverviewTab({ agent, onSave, saving }: {
               ))}
             </SelectContent>
           </Select>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={handlePreviewVoice}
+            disabled={!form.voiceName || previewState === "loading"}
+            className="h-9 gap-1.5 shrink-0 text-xs"
+          >
+            {previewState === "loading" ? (
+              <><Loader2 className="h-3.5 w-3.5 animate-spin" />Generating…</>
+            ) : previewState === "playing" ? (
+              <><Square className="h-3.5 w-3.5" />Stop</>
+            ) : (
+              <><Play className="h-3.5 w-3.5 fill-current" />Preview</>
+            )}
+          </Button>
         </div>
-        <div className="space-y-1.5">
-          <Label>Language</Label>
-          <Select value={form.language} onValueChange={v => set("language", v)}>
-            <SelectTrigger><SelectValue placeholder="Select language…" /></SelectTrigger>
-            <SelectContent>
-              {LANGUAGES.map(l => (
-                <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        {!form.voiceName && (
+          <p className="text-[11px] text-muted-foreground">Select a voice to enable preview</p>
+        )}
       </div>
+
+      {/* ── Language + multilingual ── */}
+      <div className="space-y-1.5">
+        <Label>Primary Language</Label>
+        <Select value={form.language} onValueChange={v => set("language", v)}>
+          <SelectTrigger><SelectValue placeholder="Select language…" /></SelectTrigger>
+          <SelectContent className="max-h-64">
+            {GEMINI_LIVE_LANGUAGES.map(l => (
+              <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="flex items-start justify-between gap-4 rounded-xl border border-border/60 p-4">
+        <div>
+          <p className="text-sm font-medium">Multilingual</p>
+          <p className="text-[11px] text-muted-foreground mt-0.5">
+            Allow Gemini Live to follow the caller when they switch languages mid-call.
+            The agent automatically detects and responds in Hindi, Tamil, Telugu, and other
+            supported Indian languages without losing context.
+          </p>
+        </div>
+        <Switch
+          checked={form.multilingual}
+          onCheckedChange={v => set("multilingual", v)}
+          className="shrink-0 mt-0.5"
+        />
+      </div>
+
+      {/* ── Thinking level ── */}
       <div className="space-y-2">
-        <Label>Thinking Level</Label>
+        <div>
+          <Label>Thinking Level</Label>
+          <p className="text-[11px] text-muted-foreground mt-0.5">
+            Higher thinking = deeper reasoning but slower responses. Use Minimal for fast visual tasks.
+          </p>
+        </div>
         <div className="flex gap-2 flex-wrap">
           {(["minimal", "low", "medium", "high"] as const).map(level => (
             <button
@@ -295,6 +384,7 @@ function OverviewTab({ agent, onSave, saving }: {
           ))}
         </div>
       </div>
+
       <Button
         onClick={() => onSave({
           name: form.name,
@@ -303,6 +393,7 @@ function OverviewTab({ agent, onSave, saving }: {
           voiceName: form.voiceName || null,
           thinkingLevel: form.thinkingLevel,
           language: form.language,
+          multilingual: form.multilingual,
         })}
         disabled={saving}
         className="gap-1.5"
