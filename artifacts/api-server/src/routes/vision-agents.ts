@@ -94,6 +94,7 @@ router.post("/vision-agents", requireAuth, async (req, res): Promise<void> => {
         userId: clerkId,
         name,
         systemPrompt,
+        status: "active",
         asrProvider: "google",
         llmProvider: "google",
         ttsProvider: "google",
