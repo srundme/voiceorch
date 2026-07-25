@@ -667,12 +667,12 @@ function ToolCard({
           <div className="space-y-1.5">
             <Label className="text-xs">Provider Override</Label>
             <Select
-              value={config.providerOverride ?? ""}
-              onValueChange={v => onChange({ providerOverride: v || null })}
+              value={config.providerOverride ?? "__none__"}
+              onValueChange={v => onChange({ providerOverride: v === "__none__" ? null : v })}
             >
               <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Use default provider" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="" className="text-xs">Use default provider</SelectItem>
+                <SelectItem value="__none__" className="text-xs">Use default provider</SelectItem>
                 {PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-xs">{p.label}</SelectItem>)}
               </SelectContent>
             </Select>
