@@ -38,4 +38,9 @@ export interface VoiceSession {
   noteMediaDropIfWaitingForReply(): void;
   onExternalAmdSignal(verdict: "machine" | "human", source: string): void;
 
+  /**
+   * Optional: deliver a video frame from the webcall client to the pipeline.
+   * Only implemented by GeminiLivePipeline; classic pipeline ignores it.
+   */
+  onVideoFrame?(jpegBase64: string, mimeType?: string): void;
 }

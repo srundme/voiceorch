@@ -29,7 +29,8 @@ import {
   getFirstConnectionForUser,
 } from "./scheduling/google-calendar.js";
 import { dispatchSchedulingWebhooks } from "../routes/scheduling/webhooks.js";
-import type { AgentTool, ToolDefinition } from "../orchestration/types.js";
+import type { AgentConfig as _AgentConfig } from "../orchestration/types.js";
+import type { AgentTool, ToolDefinition, VisionDescribeTool, VisionExtractTool, VisionVerifyTool, VisionCompareTool } from "../orchestration/types.js";
 import { logger } from "../lib/logger.js";
 import { writeExecutionLog } from "./execution-log.js";
 import type { TimeSlot } from "./scheduling/slot-engine.js";
@@ -326,6 +327,63 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
       // dropped, leaving the LLM with no way to hang up.
       if (t.type === "end_call") {
         return { ...END_CALL_TOOL_DEF };
+      }
+      // Vision tools
+      if (t.type === "vision_describe") {
+        return {
+          name: t.name,
+          description: t.description,
+          parameters: {
+            type: "object",
+            properties: {
+              media_id: { type: "string", description: "Optional: the media ID to analyze. Omit to use the latest image for this call." },
+              query:    { type: "string", description: "Optional: specific question to ask about the image, e.g. 'What is the person holding?'" },
+            },
+            required: [],
+          },
+        };
+      }
+      if (t.type === "vision_extract") {
+        return {
+          name: t.name,
+          description: t.description,
+          parameters: {
+            type: "object",
+            properties: {
+              media_id: { type: "string", description: "Optional: the media ID to extract from. Omit to use the latest image for this call." },
+              fields:   { type: "string", description: "Optional: comma-separated field names to focus on, e.g. 'name,date,amount'" },
+            },
+            required: [],
+          },
+        };
+      }
+      if (t.type === "vision_verify") {
+        return {
+          name: t.name,
+          description: t.description,
+          parameters: {
+            type: "object",
+            properties: {
+              media_id: { type: "string", description: "Optional: the media ID to verify. Omit to use the latest image for this call." },
+              check:    { type: "string", description: "What to verify in the image, e.g. 'Is this a valid government-issued ID?'" },
+            },
+            required: ["check"],
+          },
+        };
+      }
+      if (t.type === "vision_compare") {
+        return {
+          name: t.name,
+          description: t.description,
+          parameters: {
+            type: "object",
+            properties: {
+              media_id_a: { type: "string", description: "Optional: first media ID to compare. Omit to use the latest image." },
+              media_id_b: { type: "string", description: "Optional: second media ID to compare against. If only one provided, compares to the staged image." },
+            },
+            required: [],
+          },
+        };
       }
       // Webhook: use caller-defined parameters if provided
       if (t.type === "webhook" && t.parameters) {
@@ -1769,6 +1827,255 @@ async function isSlotWithinAvailabilityWindow(
 }
 
 // ── Transfer lead DB helper ───────────────────────────────────────────────────
+// ── Vision tool executors ─────────────────────────────────────────────────────
+
+import {
+  getCallMediaById,
+  listRecentCallMedia,
+  getCachedAnalysis,
+  setCachedAnalysis,
+  buildAnalysisCacheKey,
+  fetchImageFromUrl,
+} from "./call-media.js";
+import { resolveVisionProvider } from "./vision/index.js";
+import { insertRecord } from "./vision-agent-db.js";
+
+type VisionConfig = NonNullable<_AgentConfig["visionConfig"]>;
+
+async function loadMedia(
+  callId: number,
+  agentId: number,
+  mediaIdStr: string | undefined,
+) {
+  if (mediaIdStr) {
+    const id = parseInt(mediaIdStr, 10);
+    if (Number.isFinite(id)) {
+      return getCallMediaById(id);
+    }
+  }
+  // Fall back to latest for this call/agent
+  const rows = await listRecentCallMedia(agentId, null, 10);
+  const forCall = rows.filter((r) => r.callId === callId);
+  return forCall[0] ?? rows[0] ?? null;
+}
+
+export async function executeVisionDescribe(
+  callId: number,
+  agentId: number,
+  tool: VisionDescribeTool,
+  args: Record<string, unknown>,
+  visionConfig: VisionConfig,
+): Promise<string> {
+  const media = await loadMedia(callId, agentId, args["media_id"] as string | undefined);
+  if (!media) return "vision_error: No image available for this call. Please share an image first.";
+
+  const query = (args["query"] as string | undefined) ?? "";
+  const prompt = tool.promptTemplate
+    ? tool.promptTemplate.replace("{{query}}", query)
+    : query
+      ? `Describe this image. Also answer: ${query}`
+      : "Describe this image in detail.";
+
+  const providerName = tool.provider ?? visionConfig.defaultProvider;
+  const cacheKey = buildAnalysisCacheKey(providerName, prompt);
+  const cached = await getCachedAnalysis(media.id, cacheKey);
+  if (cached) return cached;
+
+  const apiKey = process.env[`${providerName.toUpperCase()}_API_KEY`] ?? process.env["GOOGLE_API_KEY"] ?? "";
+  const provider = resolveVisionProvider(providerName, apiKey);
+
+  let imageData: Buffer | null = media.imageData ? Buffer.from(media.imageData) : null;
+  if (!imageData && media.urlRef) {
+    const fetched = await fetchImageFromUrl(media.urlRef);
+    imageData = fetched.buffer;
+  }
+
+  const result = await provider.analyze({ imageData, urlRef: media.urlRef ?? undefined, mimeType: media.mimeType, prompt });
+  await setCachedAnalysis(media.id, cacheKey, result.text);
+  return result.text;
+}
+
+export async function executeVisionExtract(
+  callId: number,
+  agentId: number,
+  tool: VisionExtractTool,
+  args: Record<string, unknown>,
+  visionConfig: VisionConfig,
+): Promise<string> {
+  const media = await loadMedia(callId, agentId, args["media_id"] as string | undefined);
+  if (!media) return "vision_error: No image available for this call. Please share an image first.";
+
+  const fields = (args["fields"] as string | undefined) ?? "";
+  const fieldNote = fields ? ` Focus on these fields: ${fields}.` : "";
+  const prompt = tool.promptTemplate
+    ? tool.promptTemplate.replace("{{fields}}", fields)
+    : `Extract structured data from this image.${fieldNote} Return a JSON object.`;
+
+  const providerName = tool.provider ?? visionConfig.defaultProvider;
+  const cacheKey = buildAnalysisCacheKey(providerName, prompt + JSON.stringify(tool.outputSchema ?? {}));
+  const cached = await getCachedAnalysis(media.id, cacheKey);
+  if (cached) {
+    return `vision_extract_result: ${cached}`;
+  }
+
+  const apiKey = process.env[`${providerName.toUpperCase()}_API_KEY`] ?? process.env["GOOGLE_API_KEY"] ?? "";
+  const provider = resolveVisionProvider(providerName, apiKey);
+
+  let imageData: Buffer | null = media.imageData ? Buffer.from(media.imageData) : null;
+  if (!imageData && media.urlRef) {
+    const fetched = await fetchImageFromUrl(media.urlRef);
+    imageData = fetched.buffer;
+  }
+
+  const result = await provider.analyze({
+    imageData,
+    urlRef: media.urlRef ?? undefined,
+    mimeType: media.mimeType,
+    prompt,
+    outputSchema: tool.outputSchema,
+  });
+
+  const resultStr = result.parsed ? JSON.stringify(result.parsed) : result.text;
+  await setCachedAnalysis(media.id, cacheKey, resultStr);
+
+  // Save to DB schema if configured
+  if (tool.saveToDbSchemaId && result.parsed) {
+    try {
+      await insertRecord(tool.saveToDbSchemaId, agentId, result.parsed, callId, null);
+    } catch (err) {
+      logger.warn({ err, schemaId: tool.saveToDbSchemaId, callId }, "vision_extract: failed to save to DB schema");
+    }
+  }
+
+  return `vision_extract_result: ${resultStr}`;
+}
+
+export async function executeVisionVerify(
+  callId: number,
+  agentId: number,
+  tool: VisionVerifyTool,
+  args: Record<string, unknown>,
+  visionConfig: VisionConfig,
+): Promise<string> {
+  const media = await loadMedia(callId, agentId, args["media_id"] as string | undefined);
+  if (!media) return "vision_error: No image available for this call. Please share an image first.";
+
+  const check = (args["check"] as string) ?? "Verify this image.";
+  const prompt = tool.promptTemplate
+    ? tool.promptTemplate.replace("{{check}}", check)
+    : `${check}\n\nRespond with a JSON object: { "valid": boolean, "confidence": "low"|"medium"|"high", "reason": string }`;
+
+  const providerName = tool.provider ?? visionConfig.defaultProvider;
+  const cacheKey = buildAnalysisCacheKey(providerName, prompt);
+  const cached = await getCachedAnalysis(media.id, cacheKey);
+  if (cached) return `vision_verify_result: ${cached}`;
+
+  const apiKey = process.env[`${providerName.toUpperCase()}_API_KEY`] ?? process.env["GOOGLE_API_KEY"] ?? "";
+  const provider = resolveVisionProvider(providerName, apiKey);
+
+  let imageData: Buffer | null = media.imageData ? Buffer.from(media.imageData) : null;
+  if (!imageData && media.urlRef) {
+    const fetched = await fetchImageFromUrl(media.urlRef);
+    imageData = fetched.buffer;
+  }
+
+  const result = await provider.analyze({ imageData, urlRef: media.urlRef ?? undefined, mimeType: media.mimeType, prompt });
+  await setCachedAnalysis(media.id, cacheKey, result.text);
+  return `vision_verify_result: ${result.text}`;
+}
+
+export async function executeVisionCompare(
+  callId: number,
+  agentId: number,
+  tool: VisionCompareTool,
+  args: Record<string, unknown>,
+  visionConfig: VisionConfig,
+): Promise<string> {
+  const mediaA = await loadMedia(callId, agentId, args["media_id_a"] as string | undefined);
+  if (!mediaA) return "vision_error: No primary image available for comparison. Please share an image first.";
+
+  const prompt = tool.promptTemplate
+    ? tool.promptTemplate
+    : "Compare these two images. Describe the similarities and differences. If they show the same person or object, say so clearly.";
+
+  const providerName = tool.provider ?? visionConfig.defaultProvider;
+
+  // If media_id_b provided, load second image — otherwise use the media before mediaA
+  let mediaB = await loadMedia(callId, agentId, args["media_id_b"] as string | undefined);
+  if (!mediaB || mediaB.id === mediaA.id) {
+    // Try to get the previous image for this call
+    const rows = await listRecentCallMedia(agentId, null, 10);
+    const forCall = rows.filter((r) => r.callId === callId && r.id !== mediaA.id);
+    mediaB = forCall[0] ?? null;
+  }
+
+  if (!mediaB) {
+    // Single image comparison — just describe
+    return executeVisionDescribe(callId, agentId, {
+      type: "vision_describe",
+      name: tool.name,
+      description: tool.description,
+      provider: tool.provider,
+      promptTemplate: prompt,
+    }, args, visionConfig);
+  }
+
+  const apiKey = process.env[`${providerName.toUpperCase()}_API_KEY`] ?? process.env["GOOGLE_API_KEY"] ?? "";
+  const provider = resolveVisionProvider(providerName, apiKey);
+
+  // For compare, build a combined prompt with both images
+  let imageDataA: Buffer | null = mediaA.imageData ? Buffer.from(mediaA.imageData) : null;
+  if (!imageDataA && mediaA.urlRef) {
+    const fetched = await fetchImageFromUrl(mediaA.urlRef);
+    imageDataA = fetched.buffer;
+  }
+  let imageDataB: Buffer | null = mediaB.imageData ? Buffer.from(mediaB.imageData) : null;
+  if (!imageDataB && mediaB.urlRef) {
+    const fetched = await fetchImageFromUrl(mediaB.urlRef);
+    imageDataB = fetched.buffer;
+  }
+
+  // Gemini supports multiple images in a single request natively
+  // For OpenAI/others, we do sequential analysis and synthesize
+  try {
+    const { GeminiVisionProvider } = await import("./vision/index.js");
+    if (provider instanceof GeminiVisionProvider && imageDataA && imageDataB) {
+      const { GoogleGenAI } = await import("@google/genai");
+      const ai = new GoogleGenAI({ apiKey });
+      const model = process.env["VISION_GEMINI_MODEL"] ?? "gemini-2.5-flash";
+      const response = await ai.models.generateContent({
+        model,
+        contents: [{
+          role: "user",
+          parts: [
+            { inlineData: { mimeType: mediaA.mimeType, data: imageDataA.toString("base64") } },
+            { inlineData: { mimeType: mediaB.mimeType, data: imageDataB.toString("base64") } },
+            { text: prompt },
+          ],
+        }],
+      });
+      const text = response.text ?? "";
+      return `vision_compare_result: ${text}`;
+    }
+  } catch (err) {
+    logger.warn({ err }, "vision_compare: Gemini multi-image failed, falling back to sequential");
+  }
+
+  // Fallback: analyze each image and compare
+  const [descA, descB] = await Promise.all([
+    provider.analyze({ imageData: imageDataA, urlRef: mediaA.urlRef ?? undefined, mimeType: mediaA.mimeType, prompt: "Describe this image in detail." }),
+    provider.analyze({ imageData: imageDataB, urlRef: mediaB.urlRef ?? undefined, mimeType: mediaB.mimeType, prompt: "Describe this image in detail." }),
+  ]);
+
+  const synthesisResult = await provider.analyze({
+    imageData: null,
+    mimeType: "text/plain",
+    prompt: `Image A description: ${descA.text}\n\nImage B description: ${descB.text}\n\n${prompt}`,
+  });
+
+  return `vision_compare_result: ${synthesisResult.text}`;
+}
+
 // Not a scheduling function — re-exported here so pipeline.ts can import it
 // from one place without circular dependencies.
 

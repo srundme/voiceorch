@@ -64,6 +64,8 @@ export class GeminiLivePipeline implements VoiceSession {
   private greetingSent = false;
   private pendingOut24k = Buffer.alloc(0);
   private isPlayingOut = false;
+  /** Latest video frame (base64 JPEG) captured in live_snapshot mode */
+  public latestVideoFrame: string | null = null;
   constructor(config: SessionConfig) {
     this.config = config;
     this.agent = config.agentConfig;
@@ -79,6 +81,27 @@ export class GeminiLivePipeline implements VoiceSession {
 
   onAudioIn(mulawChunk: Buffer): void {
     this.onRawPcm8kIn(decodeMulaw(mulawChunk));
+  }
+
+  /**
+   * Handle an incoming video frame from the webcall client.
+   * - live_stream mode: forward directly to Gemini's realtimeInput
+   * - live_snapshot mode: store as latestVideoFrame for vision tools to use
+   */
+  onVideoFrame(jpegBase64: string, mimeType = "image/jpeg"): void {
+    if (this.closed) return;
+    const visionCfg = this.config.agentConfig.visionConfig;
+    if (visionCfg?.mode === "live_stream") {
+      void this.ensureConnected().then(() => {
+        if (this.closed || !this.session) return;
+        this.session.sendRealtimeInput({
+          media: { mimeType, data: jpegBase64 },
+        });
+      }).catch((err) => this.handleFatal(err));
+    } else {
+      // live_snapshot or photo_upload: store latest frame
+      this.latestVideoFrame = jpegBase64;
+    }
   }
 
   onRawPcm8kIn(pcm8k: Buffer, _noiseCancel?: boolean, nativePcm16k?: Buffer): void {

@@ -85,6 +85,10 @@ import sheetAutoCallsRouter from "./sheet-auto-calls.js";
 import squadsRouter from "./squads.js";
 import whatsappRouter from "./whatsapp.js";
 import webcallLinksRouter from "./webcall-links.js";
+import visionAgentsRouter from "./vision-agents.js";
+import visionMediaRouter from "./vision-media.js";
+import visionAgentDbRouter from "./vision-agent-db.js";
+import visionConnectionsRouter from "./vision-connections.js";
 import { provisionUser } from "../middlewares/userProvisioning.js";
 
 const router: IRouter = Router();
@@ -201,5 +205,9 @@ router.use(sheetsRouter);
 router.use(sheetAutoCallsRouter);
 router.use(squadsRouter);
 router.use(voiceathonEventsRouter);
+router.use(visionAgentsRouter);
+router.use(visionMediaRouter);
+router.use(visionAgentDbRouter);
+router.use(visionConnectionsRouter);
 
 export default router;

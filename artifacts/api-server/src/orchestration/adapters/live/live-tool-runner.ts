@@ -8,6 +8,10 @@ import {
   executeNativeReschedule,
   executeNativeCancel,
   executeWebhookTool,
+  executeVisionDescribe,
+  executeVisionExtract,
+  executeVisionVerify,
+  executeVisionCompare,
 } from "../../../services/tool-executor.js";
 import { scheduleCallbackRequested } from "../../../services/autoRedial.js";
 import { resolveCallbackTime } from "../../../lib/tz-datetime.js";
@@ -175,7 +179,27 @@ async function executeLiveAgentTool(
       return executeNativeCancel(callId, agentId, tool, args);
     case "send_sms":
       return undefined;
+    case "vision_describe": {
+      const visionConfig = agent.visionConfig;
+      if (!visionConfig) return "vision_error: Vision is not configured for this agent.";
+      return executeVisionDescribe(callId, agentId, tool, args, visionConfig);
+    }
+    case "vision_extract": {
+      const visionConfig = agent.visionConfig;
+      if (!visionConfig) return "vision_error: Vision is not configured for this agent.";
+      return executeVisionExtract(callId, agentId, tool, args, visionConfig);
+    }
+    case "vision_verify": {
+      const visionConfig = agent.visionConfig;
+      if (!visionConfig) return "vision_error: Vision is not configured for this agent.";
+      return executeVisionVerify(callId, agentId, tool, args, visionConfig);
+    }
+    case "vision_compare": {
+      const visionConfig = agent.visionConfig;
+      if (!visionConfig) return "vision_error: Vision is not configured for this agent.";
+      return executeVisionCompare(callId, agentId, tool, args, visionConfig);
+    }
     default:
-      return `Tool type ${tool.type} is not supported on the Live stack yet.`;
+      return `Tool type ${(tool as AgentTool).type} is not supported on the Live stack yet.`;
   }
 }

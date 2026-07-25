@@ -7,7 +7,7 @@ import {
   Settings, Key, Webhook, Wallet, TrendingUp, ShieldCheck,
   Mic2, Menu, ChevronDown, ChevronLeft, ChevronRight,
   LogOut, Bell, Search, SlidersHorizontal, BookOpen, PhoneMissed, PlugZap, Sun, Moon, Sparkles,
-  ArrowRightLeft, Instagram, FileSpreadsheet, MessageCircle, Trophy, X,
+  ArrowRightLeft, Instagram, FileSpreadsheet, MessageCircle, Trophy, X, Eye,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useAuth } from "@/lib/auth";
@@ -78,6 +78,7 @@ const LS_SETTINGS     = "snapserve:settings-open";
 const NAV_PRIMARY = [
   { name: "Home",            href: "/app/home",            icon: Home },
   { name: "Agents",          href: "/app/agents",          icon: Users },
+  { name: "Vision Agents",   href: "/app/vision-agents",   icon: Eye },
   { name: "Squads",          href: "/app/squads",          icon: UsersRound },
   { name: "Team Members",    href: "/app/team",            icon: Users },
   { name: "Vibe Build",      href: "/app/vibe",            icon: Sparkles },
@@ -111,6 +112,7 @@ const ROUTE_TITLES: [string, string][] = [
   ["/app/command-center",  "Home"],
   ["/app/vibe",            "Vibe Build"],
   ["/app/agents",          "Agents"],
+  ["/app/vision-agents",   "Vision Agents"],
   ["/app/squads",          "Squads"],
   ["/app/knowledge-bases", "Agent Knowledge"],
   ["/app/campaigns",       "Campaigns"],
