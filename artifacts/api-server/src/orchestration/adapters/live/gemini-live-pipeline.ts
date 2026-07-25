@@ -94,8 +94,10 @@ export class GeminiLivePipeline implements VoiceSession {
     if (visionCfg?.mode === "live_stream") {
       void this.ensureConnected().then(() => {
         if (this.closed || !this.session) return;
+        // Use `video` field (not `media`) for live stream frames — `media` is
+        // for still image snapshots; `video` signals continuous video input.
         this.session.sendRealtimeInput({
-          media: { mimeType, data: jpegBase64 },
+          video: { mimeType, data: jpegBase64 },
         });
       }).catch((err) => this.handleFatal(err));
     } else {
@@ -243,6 +245,8 @@ export class GeminiLivePipeline implements VoiceSession {
       high: ThinkingLevel.HIGH,
     };
 
+    const isLiveStream = this.config.agentConfig.visionConfig?.mode === "live_stream";
+
     this.session = await ai.live.connect({
       model,
       config: {
@@ -258,6 +262,9 @@ export class GeminiLivePipeline implements VoiceSession {
         },
         inputAudioTranscription: {},
         outputAudioTranscription: {},
+        // Enable video input for live_stream vision agents. Without mediaResolution,
+        // Gemini rejects incoming video frames and closes the socket immediately.
+        ...(isLiveStream ? { mediaResolution: MediaResolution.MEDIA_RESOLUTION_MEDIUM } : {}),
         tools,
         temperature: this.agent.temperature,
       },
