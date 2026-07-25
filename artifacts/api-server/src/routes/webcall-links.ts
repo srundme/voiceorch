@@ -53,8 +53,6 @@ router.get("/webcall-links/join/:token", async (req, res): Promise<void> => {
     return;
   }
 
-  const cfg = (agent.agentConfig ?? {}) as Record<string, unknown>;
-  const visionMode = (cfg["visionConfig"] as Record<string, unknown> | undefined)?.["mode"] ?? null;
   res.json({
     token: link.token,
     agentId: agent.id,
@@ -62,7 +60,6 @@ router.get("/webcall-links/join/:token", async (req, res): Promise<void> => {
     label: link.label,
     purpose: link.purpose,
     requireCamera: link.requireCamera,
-    visionMode,
   });
 });
 

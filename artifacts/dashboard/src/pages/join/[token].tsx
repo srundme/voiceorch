@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams } from "wouter";
-import { AlertCircle, Camera, ImagePlus, Loader2, Mic, Shield } from "lucide-react";
+import { AlertCircle, Loader2, Mic, Shield } from "lucide-react";
 import { WebcallPanel } from "@/components/webcall-panel";
 import { Button } from "@/components/ui/button";
 
@@ -11,7 +11,6 @@ type JoinMeta = {
   label: string | null;
   purpose: string | null;
   requireCamera: boolean;
-  visionMode: string | null;
 };
 
 export default function WebcallJoinPage() {
@@ -106,8 +105,6 @@ export default function WebcallJoinPage() {
             agentName={meta.agentName}
             compact
             shareToken={meta.token}
-            requireCamera={meta.requireCamera}
-            visionMode={meta.visionMode ?? undefined}
           />
         </div>
       </div>

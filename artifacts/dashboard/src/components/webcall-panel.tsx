@@ -1,27 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Mic, MicOff, PhoneOff, Phone, Loader2, AlertCircle, X, SwitchCamera, ImagePlus, Camera } from "lucide-react";
+import { Mic, MicOff, PhoneOff, Phone, Loader2, AlertCircle, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 /**
  * Webcall 2.0 — browser "Live Test" transport for an agent.
  *
- * Mirrors what the phone does, but in the browser: it captures mic audio as
- * PCM16 16 kHz and streams it to /api/ws/webcall/:agentId, and plays back the
- * agent's PCM16 8 kHz audio. ALL conversation logic (barge-in, endpointing,
- * flush, tail-drain) lives in the shared server pipeline — this component is a
- * pure transport + UI shell. Browser echo cancellation (getUserMedia
- * echoCancellation) keeps the agent's own voice out of the mic.
+ * Captures mic audio as PCM16 16 kHz, streams it to /api/ws/webcall/:agentId,
+ * and plays back the agent's PCM16 8 kHz audio. ALL conversation logic lives
+ * in the shared server pipeline — this component is a pure transport + UI shell.
  */
 
 type CallState = "idle" | "connecting" | "live" | "ending" | "error";
 type Line = { id: number; speaker: "user" | "agent"; text: string };
-type FacingMode = "user" | "environment";
 
-// Inlined AudioWorklet processor: posts a COPY of each Float32 frame to the main
-// thread (transferred, zero-copy). Resampling to 16 kHz + Int16 conversion is
-// done on the main thread because the AudioContext may ignore the requested
-// sampleRate (notably Safari), so the real rate is only known there. Loaded via
-// a Blob URL so there is no separate asset path to resolve under the proxy base.
+// Inlined AudioWorklet processor.
 const CAPTURE_WORKLET = `
 class PcmCaptureProcessor extends AudioWorkletProcessor {
   process(inputs) {
@@ -36,7 +28,6 @@ class PcmCaptureProcessor extends AudioWorkletProcessor {
 registerProcessor('pcm-capture', PcmCaptureProcessor);
 `;
 
-// Target wire rate for mic audio. The server downsamples this 2:1 to 8 kHz.
 const TARGET_RATE = 16000;
 
 export function WebcallPanel({
@@ -45,9 +36,7 @@ export function WebcallPanel({
   compact,
   onClose,
   shareToken,
-  requireCamera,
   autoStart,
-  visionMode,
 }: {
   agentId: number;
   agentName: string;
@@ -55,27 +44,18 @@ export function WebcallPanel({
   onClose?: () => void;
   /** Guest join link token — connects via ?share= instead of session JWT. */
   shareToken?: string;
-  /** Guest must enable camera before connecting. */
-  requireCamera?: boolean;
   /** Start the call automatically after mount (join page). */
   autoStart?: boolean;
-  /** Vision mode from the agent config — drives upload/snapshot UI. */
-  visionMode?: string;
 }) {
-  const [state, setState]   = useState<CallState>("idle");
-  const [error, setError]   = useState<string | null>(null);
+  const [state, setState] = useState<CallState>("idle");
+  const [error, setError] = useState<string | null>(null);
   const [muted, setMuted]   = useState(false);
   const [lines, setLines]   = useState<Line[]>([]);
-  const [cameraOn, setCameraOn] = useState(false);
-  const [facingMode, setFacingMode] = useState<FacingMode>("user");
-  const [switchingCamera, setSwitchingCamera] = useState(false);
 
   const wsRef          = useRef<WebSocket | null>(null);
   const captureCtxRef  = useRef<AudioContext | null>(null);
   const playbackCtxRef = useRef<AudioContext | null>(null);
   const streamRef      = useRef<MediaStream | null>(null);
-  const videoStreamRef = useRef<MediaStream | null>(null);
-  const videoElRef     = useRef<HTMLVideoElement | null>(null);
   const workletRef     = useRef<AudioWorkletNode | null>(null);
   const sourceNodeRef  = useRef<MediaStreamAudioSourceNode | null>(null);
   const activeSources  = useRef<AudioBufferSourceNode[]>([]);
@@ -83,30 +63,10 @@ export function WebcallPanel({
   const lineIdRef      = useRef(0);
   const mutedRef       = useRef(false);
   const callIdRef      = useRef<number | null>(null);
-  // True once the call is intentionally finished or errored, so the ws.onclose
-  // handler doesn't clobber the final UI state with an "idle" reset.
   const doneRef        = useRef(false);
-  const cameraAutoTriedRef = useRef(false);
   const scrollEndRef   = useRef<HTMLDivElement | null>(null);
-  const frameIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const uploadInputRef = useRef<HTMLInputElement | null>(null);
-  const [uploadPreview, setUploadPreview] = useState<string | null>(null);
-
-  const stopCamera = useCallback(() => {
-    if (frameIntervalRef.current) {
-      clearInterval(frameIntervalRef.current);
-      frameIntervalRef.current = null;
-    }
-    videoStreamRef.current?.getTracks().forEach((t) => t.stop());
-    videoStreamRef.current = null;
-    if (videoElRef.current) {
-      videoElRef.current.srcObject = null;
-    }
-    setCameraOn(false);
-  }, []);
 
   const teardown = useCallback(() => {
-    stopCamera();
     try { wsRef.current?.close(); } catch { /* noop */ }
     wsRef.current = null;
     for (const s of activeSources.current) { try { s.stop(); } catch { /* noop */ } }
@@ -123,10 +83,8 @@ export function WebcallPanel({
     playbackCtxRef.current = null;
     nextStartRef.current = 0;
     callIdRef.current = null;
-    cameraAutoTriedRef.current = false;
-  }, [stopCamera]);
+  }, []);
 
-  // Schedule one incoming 8 kHz PCM16 buffer onto the playback timeline.
   const enqueueAudio = useCallback((buf: ArrayBuffer) => {
     const ctx = playbackCtxRef.current;
     if (!ctx) return;
@@ -147,64 +105,11 @@ export function WebcallPanel({
     };
   }, []);
 
-  // Barge-in: drop everything still queued so the agent goes silent instantly.
   const clearPlayback = useCallback(() => {
     for (const s of activeSources.current) { try { s.stop(); } catch { /* noop */ } }
     activeSources.current = [];
     nextStartRef.current = playbackCtxRef.current?.currentTime ?? 0;
   }, []);
-
-  // Live camera chrome (preview / stream) — gated on requireCamera share links.
-  const cameraAllowed = !!requireCamera;
-
-  const openCameraStream = useCallback(async (facing: FacingMode) => {
-    const vstream = await navigator.mediaDevices.getUserMedia({
-      video: {
-        facingMode: { ideal: facing },
-        width: { ideal: 640 },
-        height: { ideal: 480 },
-      },
-      audio: false,
-    });
-    videoStreamRef.current?.getTracks().forEach((t) => t.stop());
-    videoStreamRef.current = vstream;
-    if (videoElRef.current) {
-      videoElRef.current.srcObject = vstream;
-      void videoElRef.current.play().catch(() => {});
-    }
-    setFacingMode(facing);
-    setCameraOn(true);
-  }, []);
-
-  const startCamera = useCallback(async () => {
-    if (!cameraAllowed || cameraOn) return;
-    setError(null);
-    try {
-      await openCameraStream(facingMode);
-    } catch {
-      // Fallback: try the other lens if the preferred one isn't available (common on desktops).
-      const fallback: FacingMode = facingMode === "user" ? "environment" : "user";
-      try {
-        await openCameraStream(fallback);
-      } catch (err2) {
-        setError(err2 instanceof Error ? err2.message : "Camera permission denied");
-      }
-    }
-  }, [cameraAllowed, cameraOn, facingMode, openCameraStream]);
-
-  const switchCamera = useCallback(async () => {
-    if (!cameraOn || switchingCamera) return;
-    const next: FacingMode = facingMode === "user" ? "environment" : "user";
-    setSwitchingCamera(true);
-    setError(null);
-    try {
-      await openCameraStream(next);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not switch camera");
-    } finally {
-      setSwitchingCamera(false);
-    }
-  }, [cameraOn, switchingCamera, facingMode, openCameraStream]);
 
   const start = useCallback(async () => {
     setError(null);
@@ -217,7 +122,6 @@ export function WebcallPanel({
       const sessionToken = localStorage.getItem("voiceorch:session");
       if (!shareToken) {
         if (!sessionToken) throw new Error("You need to be signed in to start a test call.");
-        // Preflight: check wallet balance before acquiring mic / opening the socket.
         const walletResp = await fetch("/api/wallet/me", {
           headers: { Authorization: `Bearer ${sessionToken}` },
         });
@@ -229,29 +133,11 @@ export function WebcallPanel({
         }
       }
 
-      // If camera is required, turn it on before connecting (don't leave users stuck).
-      if (requireCamera && !cameraOn) {
-        try {
-          await openCameraStream(facingMode);
-        } catch {
-          try {
-            await openCameraStream(facingMode === "user" ? "environment" : "user");
-          } catch (camErr) {
-            throw new Error(
-              camErr instanceof Error
-                ? `Camera required: ${camErr.message}`
-                : "This link requires camera permission. Allow camera access and try again.",
-            );
-          }
-        }
-      }
-
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 },
       });
       streamRef.current = stream;
 
-      // ── Capture graph @ 16 kHz ────────────────────────────────────────────
       const capture = new AudioContext({ sampleRate: 16000 });
       captureCtxRef.current = capture;
       await capture.resume();
@@ -263,19 +149,13 @@ export function WebcallPanel({
       const worklet = new AudioWorkletNode(capture, "pcm-capture");
       workletRef.current = worklet;
 
-      // The browser may ignore the requested 16 kHz and run at the hardware rate
-      // (e.g. 48 kHz on Safari). Linear-resample the actual rate → 16 kHz on the
-      // main thread, carrying a fractional cursor + leftover tail across frames so
-      // there are no clicks at frame boundaries. A no-op fast path when rates match.
       const captureRate = capture.sampleRate;
-      const ratio = captureRate / TARGET_RATE; // input samples per output sample
+      const ratio = captureRate / TARGET_RATE;
       let resampleCursor = 0;
       let tail = new Float32Array(0);
       worklet.port.onmessage = (e: MessageEvent<ArrayBuffer>) => {
         const ws = wsRef.current;
         if (!ws || ws.readyState !== WebSocket.OPEN) return;
-        // While muted, drop frames AND reset the resampler carry so unmuting
-        // resumes cleanly instead of prepending a stale pre-mute tail.
         if (mutedRef.current) { tail = new Float32Array(0); resampleCursor = 0; return; }
         const input = new Float32Array(e.data);
         const buf = new Float32Array(tail.length + input.length);
@@ -291,14 +171,9 @@ export function WebcallPanel({
         }
         const floorPos = Math.floor(pos);
         if (floorPos >= buf.length) {
-          // Cursor advanced past the whole buffer (e.g. the integer 48k→16k
-          // ratio lands here every frame): keep nothing, but carry the overshoot
-          // so the next frame resumes at the correct sub-sample offset instead of
-          // snapping back to 0 and dropping a sample every frame.
           tail = new Float32Array(0);
           resampleCursor = pos - buf.length;
         } else {
-          // Keep buf[floorPos] — the next interpolation needs it as its left sample.
           tail = buf.slice(floorPos);
           resampleCursor = pos - floorPos;
         }
@@ -311,11 +186,7 @@ export function WebcallPanel({
         ws.send(pcm.buffer);
       };
 
-      // Anti-aliasing: if the browser ignored 16 kHz and runs higher (commonly
-      // 44.1/48 kHz), band-limit to ~7 kHz BEFORE the decimation above, or loud
-      // sibilant speech folds back into full-scale broadband buzz on the wire
-      // (a documented prior webcall regression). 3 cascaded lowpass biquads
-      // ≈ 36 dB/oct. Skipped entirely when the context is genuinely 16 kHz.
+      // Anti-aliasing biquad filters when not at 16 kHz natively.
       let head: AudioNode = srcNode;
       if (captureRate !== TARGET_RATE) {
         for (let i = 0; i < 3; i++) {
@@ -327,20 +198,16 @@ export function WebcallPanel({
         }
       }
       head.connect(worklet);
-      // Worklet must reach the destination to be pulled — route it through a
-      // muted gain so it processes without being audible.
       const sink = capture.createGain();
       sink.gain.value = 0;
       worklet.connect(sink);
       sink.connect(capture.destination);
 
-      // ── Playback graph @ 8 kHz ────────────────────────────────────────────
       const playback = new AudioContext({ sampleRate: 8000 });
       playbackCtxRef.current = playback;
       await playback.resume();
       nextStartRef.current = playback.currentTime;
 
-      // ── WebSocket (absolute /api path → routed by the shared proxy) ────────
       const proto = location.protocol === "https:" ? "wss" : "ws";
       const authQs = shareToken
         ? `share=${encodeURIComponent(shareToken)}`
@@ -406,7 +273,7 @@ export function WebcallPanel({
       setState("error");
       teardown();
     }
-  }, [agentId, enqueueAudio, clearPlayback, teardown, shareToken, requireCamera, cameraOn, facingMode, openCameraStream]);
+  }, [agentId, enqueueAudio, clearPlayback, teardown, shareToken]);
 
   const end = useCallback(() => {
     doneRef.current = true;
@@ -427,99 +294,16 @@ export function WebcallPanel({
     });
   }, []);
 
-  // Auto-start camera once the call is live (so the preview shows without an extra tap).
-  useEffect(() => {
-    if (state !== "live" || !cameraAllowed || cameraOn || cameraAutoTriedRef.current) return;
-    cameraAutoTriedRef.current = true;
-    void startCamera();
-  }, [state, cameraAllowed, cameraOn, startCamera]);
-
-  // Guest join with requireCamera: prompt for camera while idle so preview appears before Start.
-  useEffect(() => {
-    if (!requireCamera || !cameraAllowed || cameraOn || (state !== "idle" && state !== "error")) return;
-    if (cameraAutoTriedRef.current) return;
-    cameraAutoTriedRef.current = true;
-    void startCamera();
-  }, [requireCamera, cameraAllowed, cameraOn, state, startCamera]);
-
-  // Guest join page: optionally auto-start the call after mount.
+  // Auto-start for guest join page.
   const autoStartTriedRef = useRef(false);
   useEffect(() => {
     if (!autoStart || autoStartTriedRef.current || state !== "idle") return;
-    if (requireCamera && !cameraOn) return; // wait for camera
     autoStartTriedRef.current = true;
     void start();
-  }, [autoStart, state, requireCamera, cameraOn, start]);
+  }, [autoStart, state, start]);
 
   useEffect(() => () => { doneRef.current = true; teardown(); }, [teardown]);
   useEffect(() => { scrollEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [lines]);
-
-  // ── Video frame streaming (live_stream only) ─────────────────────────────
-  // For live_stream vision agents: capture a JPEG from the camera every second
-  // and push it to the server so Gemini receives continuous visual context.
-  // For live_snapshot / photo_upload, frames are sent on-demand instead.
-  useEffect(() => {
-    if (state !== "live" || !cameraOn || visionMode !== "live_stream") return;
-    const canvas = document.createElement("canvas");
-    const interval = setInterval(() => {
-      const ws = wsRef.current;
-      const video = videoElRef.current;
-      if (!ws || ws.readyState !== WebSocket.OPEN || !video || video.readyState < 2) return;
-      const w = video.videoWidth;
-      const h = video.videoHeight;
-      if (!w || !h) return;
-      canvas.width = w;
-      canvas.height = h;
-      const ctx2d = canvas.getContext("2d");
-      if (!ctx2d) return;
-      ctx2d.drawImage(video, 0, 0, w, h);
-      const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
-      const base64 = dataUrl.split(",")[1];
-      if (!base64) return;
-      ws.send(JSON.stringify({ type: "video_frame", data: base64, mimeType: "image/jpeg" }));
-    }, 1000);
-    frameIntervalRef.current = interval;
-    return () => {
-      clearInterval(interval);
-      frameIntervalRef.current = null;
-    };
-  }, [state, cameraOn, visionMode]);
-
-  // ── On-demand image sending ────────────────────────────────────────────────
-  // Shared helper: encode a File (photo upload) or data-URL string (snapshot)
-  // and push it as a video_frame message.
-  const sendFrameBase64 = useCallback((base64: string, mimeType: string, previewDataUrl: string) => {
-    const ws = wsRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    ws.send(JSON.stringify({ type: "video_frame", data: base64, mimeType }));
-    setUploadPreview(previewDataUrl);
-  }, []);
-
-  const sendImageFile = useCallback((file: File) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = reader.result as string;
-      const base64 = dataUrl.split(",")[1];
-      if (!base64) return;
-      sendFrameBase64(base64, file.type || "image/jpeg", dataUrl);
-    };
-    reader.readAsDataURL(file);
-  }, [sendFrameBase64]);
-
-  const captureSnapshot = useCallback(() => {
-    const video = videoElRef.current;
-    if (!video || video.readyState < 2) return;
-    const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth || 640;
-    canvas.height = video.videoHeight || 480;
-    const ctx2d = canvas.getContext("2d");
-    if (!ctx2d) return;
-    ctx2d.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
-    const base64 = dataUrl.split(",")[1];
-    if (!base64) return;
-    sendFrameBase64(base64, "image/jpeg", dataUrl);
-  }, [sendFrameBase64]);
 
   const active = state === "live" || state === "connecting" || state === "ending";
 
@@ -540,17 +324,9 @@ export function WebcallPanel({
               {shareToken ? agentName : `Live Test — ${agentName}`}
             </p>
             <p className="text-[10.5px] text-muted-foreground/60">
-              {state === "idle"       && (
-                requireCamera && !cameraOn
-                  ? "Turn on your camera, then start the call"
-                  : "Talk to your agent right in the browser"
-              )}
+              {state === "idle"       && "Talk to your agent right in the browser"}
               {state === "connecting" && "Connecting…"}
-              {state === "live"       && (
-                cameraOn
-                  ? "Connected — camera on"
-                  : "Connected — start speaking"
-              )}
+              {state === "live"       && "Connected — start speaking"}
               {state === "ending"     && "Ending call…"}
               {state === "error"      && "Call ended with an error"}
             </p>
@@ -562,48 +338,13 @@ export function WebcallPanel({
           )}
         </div>
 
-        {cameraAllowed && (
-          <div className={cameraOn
-            ? "relative shrink-0 border-b border-border bg-black"
-            : "absolute w-px h-px overflow-hidden opacity-0 pointer-events-none"}
-          >
-            <video
-              ref={videoElRef}
-              muted
-              playsInline
-              autoPlay
-              className="w-full max-h-44 object-cover"
-            />
-            {cameraOn && (
-              <>
-                <span className="absolute top-2 left-2 text-[10px] font-medium px-1.5 py-0.5 rounded bg-black/60 text-white">
-                  Camera · {facingMode === "user" ? "Front" : "Rear"}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => void switchCamera()}
-                  disabled={switchingCamera}
-                  className="absolute top-2 right-2 h-8 w-8 inline-flex items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80 disabled:opacity-50"
-                  title={facingMode === "user" ? "Switch to rear camera" : "Switch to front camera"}
-                >
-                  {switchingCamera ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <SwitchCamera className="h-3.5 w-3.5" />}
-                </button>
-              </>
-            )}
-          </div>
-        )}
-
         {/* Transcript */}
         <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-2.5">
           {lines.length === 0 && (
             <div className="h-full flex flex-col items-center justify-center text-center gap-2 text-muted-foreground/50">
               <Phone className="h-7 w-7 opacity-40" />
               <p className="text-[12px]">
-                {active
-                  ? "Listening… say hello to your agent."
-                  : requireCamera && !cameraOn
-                    ? "Allow camera access, then press Start call."
-                    : "Press Start call to begin a live voice test."}
+                {active ? "Listening… say hello to your agent." : "Press Start call to begin a live voice test."}
               </p>
             </div>
           )}
@@ -622,17 +363,6 @@ export function WebcallPanel({
               </div>
             </div>
           ))}
-          {/* Image preview bubble — shown after upload / snapshot */}
-          {uploadPreview && (
-            <div className="flex justify-end">
-              <div className="max-w-[70%] rounded-2xl overflow-hidden border border-border/60 rounded-br-sm">
-                <span className="block text-[9px] uppercase tracking-wide opacity-50 px-3 pt-2">
-                  You · image sent
-                </span>
-                <img src={uploadPreview} alt="Sent to agent" className="w-full object-cover max-h-40" />
-              </div>
-            </div>
-          )}
           <div ref={scrollEndRef} />
         </div>
 
@@ -642,19 +372,6 @@ export function WebcallPanel({
             <AlertCircle className="h-3.5 w-3.5 shrink-0" /> {error}
           </div>
         )}
-
-        {/* Hidden file input for photo_upload mode */}
-        <input
-          ref={uploadInputRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) sendImageFile(file);
-            e.target.value = "";
-          }}
-        />
 
         {/* Controls */}
         <div className="shrink-0 border-t border-border p-3 flex items-center justify-center gap-2.5">
@@ -673,19 +390,6 @@ export function WebcallPanel({
               >
                 {muted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
               </Button>
-
-              {/* Photo upload button — photo_upload mode OR live_stream (both modes allow uploading) */}
-              {(visionMode === "photo_upload" || visionMode === "live_stream") && state === "live" && (
-                <Button
-                  variant="outline"
-                  onClick={() => uploadInputRef.current?.click()}
-                  className="h-10 w-10 p-0 rounded-full border-border text-violet-400 hover:bg-violet-500/10"
-                  title="Upload image for agent to analyse"
-                >
-                  <ImagePlus className="h-4 w-4" />
-                </Button>
-              )}
-
               <Button
                 onClick={end}
                 disabled={state === "ending"}

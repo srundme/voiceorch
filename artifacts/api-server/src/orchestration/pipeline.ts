@@ -4867,26 +4867,6 @@ export class OrchestrationPipeline implements VoiceSession {
         logger.info({ callId: this.config.callId, count: this.pendingListedBookings.length }, "Multiple bookings listed — activeRescheduleBooking deferred until booking_id is known");
       }
       return result;
-    } else if (tool.type === "vision_describe") {
-      const visionConfig = this.agent.visionConfig;
-      if (!visionConfig) return "vision_error: Vision is not configured for this agent.";
-      const { executeVisionDescribe } = await import("../services/tool-executor.js");
-      return executeVisionDescribe(this.config.callId, this.agent.id, tool, args, visionConfig, this.config.providerKeys);
-    } else if (tool.type === "vision_extract") {
-      const visionConfig = this.agent.visionConfig;
-      if (!visionConfig) return "vision_error: Vision is not configured for this agent.";
-      const { executeVisionExtract } = await import("../services/tool-executor.js");
-      return executeVisionExtract(this.config.callId, this.agent.id, tool, args, visionConfig, this.config.providerKeys);
-    } else if (tool.type === "vision_verify") {
-      const visionConfig = this.agent.visionConfig;
-      if (!visionConfig) return "vision_error: Vision is not configured for this agent.";
-      const { executeVisionVerify } = await import("../services/tool-executor.js");
-      return executeVisionVerify(this.config.callId, this.agent.id, tool, args, visionConfig, this.config.providerKeys);
-    } else if (tool.type === "vision_compare") {
-      const visionConfig = this.agent.visionConfig;
-      if (!visionConfig) return "vision_error: Vision is not configured for this agent.";
-      const { executeVisionCompare } = await import("../services/tool-executor.js");
-      return executeVisionCompare(this.config.callId, this.agent.id, tool, args, visionConfig, this.config.providerKeys);
     }
     return undefined;
   }

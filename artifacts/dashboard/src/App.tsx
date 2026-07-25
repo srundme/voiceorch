@@ -17,8 +17,6 @@ import { SnapServeLoader } from "@/components/logo";
 import { VoiceAssistant } from "@/components/VoiceAssistant";
 import AgentBuilder from "@/pages/agents/builder";
 import SquadsPage from "@/pages/squads/index";
-import VisionAgentsPage from "@/pages/vision-agents";
-import VisionAgentBuilder from "@/pages/vision-agents/[id]";
 
 import CallsList from "@/pages/calls/index";
 import CallDetail from "@/pages/calls/[id]";
@@ -287,8 +285,7 @@ function AppRoutes() {
         <Route path="/app/agents/:id" component={AgentBuilder} />
         <Route path="/app/squads" component={SquadsPage} />
         <Route path="/app/squads/:id" component={SquadsPage} />
-        <Route path="/app/vision-agents" component={VisionAgentsPage} />
-        <Route path="/app/vision-agents/:id" component={VisionAgentBuilder} />
+
         <Route path="/app/events*" component={() => { useLocation()[1]("/app/home", { replace: true }); return null; }} />
         <Route path="/app/calls" component={CallsList} />
         <Route path="/app/calls/:id" component={CallDetail} />
