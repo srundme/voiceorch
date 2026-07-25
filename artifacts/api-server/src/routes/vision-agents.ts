@@ -71,7 +71,7 @@ router.post("/vision-agents", requireAuth, async (req, res): Promise<void> => {
   const visionConfig = (body["visionConfig"] as Record<string, unknown> | undefined) ?? {
     enabled: true,
     defaultProvider: "gemini",
-    mode: "photo_upload",
+    mode: "live_stream",
     allowWhatsapp: false,
     allowApiStaging: true,
     retentionDays: 30,
@@ -102,7 +102,7 @@ router.post("/vision-agents", requireAuth, async (req, res): Promise<void> => {
       } as typeof agentsTable.$inferInsert)
       .returning();
 
-    res.status(201).json(agent);
+    res.status(201).json(serializeVisionAgent(agent));
   } catch (err) {
     logger.error({ err, clerkId }, "Failed to create vision agent");
     res.status(500).json({ error: "Failed to create vision agent" });

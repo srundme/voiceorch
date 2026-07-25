@@ -154,18 +154,16 @@ const vaCodeKey = (id: string) => ["vision-agents", id, "code-snippets"] as cons
 const vaWebcallKey = (id: string) => ["agents", id, "webcall-links"] as const;
 
 /* ── Tab definitions ───────────────────────────────────────────────────────── */
-type TabId = "overview" | "vision" | "tools" | "database" | "connections" | "code" | "advanced";
+type TabId = "overview" | "vision" | "tools" | "code" | "advanced";
 
 interface TabDef { id: TabId; label: string; icon: React.ReactNode }
 
 const TABS: TabDef[] = [
-  { id: "overview",     label: "Overview",     icon: <Eye className="h-3.5 w-3.5" /> },
-  { id: "vision",       label: "Vision",       icon: <Camera className="h-3.5 w-3.5" /> },
-  { id: "tools",        label: "Tools",        icon: <Wrench className="h-3.5 w-3.5" /> },
-  { id: "database",     label: "Database",     icon: <Database className="h-3.5 w-3.5" /> },
-  { id: "connections",  label: "Connections",  icon: <Link2 className="h-3.5 w-3.5" /> },
-  { id: "code",         label: "Code & Share", icon: <Code2 className="h-3.5 w-3.5" /> },
-  { id: "advanced",     label: "Advanced",     icon: <Settings className="h-3.5 w-3.5" /> },
+  { id: "overview", label: "Overview",     icon: <Eye className="h-3.5 w-3.5" /> },
+  { id: "vision",   label: "Vision",       icon: <Camera className="h-3.5 w-3.5" /> },
+  { id: "tools",    label: "Tools",        icon: <Wrench className="h-3.5 w-3.5" /> },
+  { id: "code",     label: "Code & Share", icon: <Code2 className="h-3.5 w-3.5" /> },
+  { id: "advanced", label: "Advanced",     icon: <Settings className="h-3.5 w-3.5" /> },
 ];
 
 const LANGUAGES = [
@@ -412,8 +410,7 @@ function OverviewTab({ agent, onSave, saving }: {
 /* ─────────────────────────────────────────────────────────────────────────── */
 
 const VISION_MODES: { id: VisionMode; label: string; description: string; icon: React.ReactNode }[] = [
-  { id: "photo_upload",   label: "Photo Upload",   description: "Accept uploaded images from users or API",    icon: <Upload className="h-4 w-4" /> },
-  { id: "live_stream",    label: "Live Stream",    description: "Analyze a continuous real-time video stream",  icon: <Play className="h-4 w-4" /> },
+  { id: "live_stream", label: "Live Stream", description: "Analyze a continuous real-time video stream", icon: <Play className="h-4 w-4" /> },
 ];
 
 function VisionTab({ agent, onSave, saving }: {
@@ -1425,7 +1422,8 @@ function CodeShareTab({ agentId }: { agentId: string }) {
 
   const { data: snippets, isLoading: snippetsLoading } = useQuery({
     queryKey: vaCodeKey(agentId),
-    queryFn: () => apiFetch<CodeSnippets>(`${BASE}/api/vision-agents/${agentId}/code-snippets`),
+    queryFn: () => apiFetch<{ snippets: CodeSnippets }>(`${BASE}/api/vision-agents/${agentId}/code-snippets`)
+      .then(r => r.snippets),
   });
 
   const { data: links = [], isLoading: linksLoading } = useQuery({
@@ -1809,12 +1807,6 @@ export default function VisionAgentBuilder() {
         )}
         {activeTab === "tools" && (
           <ToolsTab agent={agent} onSave={handleSave} saving={updateMutation.isPending} />
-        )}
-        {activeTab === "database" && (
-          <DatabaseTab agentId={agentId} />
-        )}
-        {activeTab === "connections" && (
-          <ConnectionsTab agentId={agentId} />
         )}
         {activeTab === "code" && (
           <CodeShareTab agentId={agentId} />
