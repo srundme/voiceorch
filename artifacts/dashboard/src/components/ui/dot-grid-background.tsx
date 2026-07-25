@@ -104,7 +104,12 @@ export function DotGridBackground({
     let active = true;
     let animationId = 0;
 
-    const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: false });
+    let renderer: THREE.WebGLRenderer;
+    try {
+      renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: false });
+    } catch {
+      return; // No WebGL support — render nothing, no error thrown
+    }
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight);
 
