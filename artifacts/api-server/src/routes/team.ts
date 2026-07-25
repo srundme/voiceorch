@@ -69,7 +69,7 @@ async function dispatchInviteEmail(
       <div class="container">
         <div class="badge">Team Invitation</div>
         <h1>You're invited to join ${inviterName}'s team on SnapServe AI</h1>
-        <p>You have been invited to collaborate on <strong>SnapServe Voice & Vision AI</strong> with the <strong>${roleLabel}</strong> role.</p>
+        <p>You have been invited to collaborate on <strong>SnapServe Voice AI</strong> with the <strong>${roleLabel}</strong> role.</p>
         
         <div class="role-card">
           <strong>Assigned Role:</strong> ${roleLabel}

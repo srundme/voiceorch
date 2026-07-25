@@ -11,8 +11,6 @@ type JoinMeta = {
   label: string | null;
   purpose: string | null;
   requireCamera: boolean;
-  visionEnabled: boolean;
-  visionLiveEnabled: boolean;
 };
 
 export default function WebcallJoinPage() {
@@ -108,8 +106,6 @@ export default function WebcallJoinPage() {
             compact
             shareToken={meta.token}
             requireCamera={meta.requireCamera}
-            visionEnabled={meta.visionEnabled}
-            visionLiveEnabled={meta.visionLiveEnabled}
           />
         </div>
       </div>

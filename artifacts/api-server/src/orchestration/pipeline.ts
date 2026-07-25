@@ -28,7 +28,6 @@ import type { AgentConfig, AgentTool, ConversationTurn, LLMAdapter, LLMUsage, Se
 import { resolveGoodbyeMessage } from "./types.js";
 import type { VoiceSession } from "./voice-session.js";
 import { retrieveKbContext, retrieveKbContextMultiEx, resolveKbTurnBudgetMs, type KbRetrievalResult } from "./kb-retrieval.js";
-import { storeCallMedia } from "../services/call-media.js";
 import { KRUTRIM_AUTO_SUMMARY_TITLE } from "../services/kb-source-summary.js";
 import { getBackchannelFillers, pickBackchannelFiller, type BackchannelFillerOptions } from "./backchannel.js";
 import { ConversationHistory } from "./conversation-history.js";

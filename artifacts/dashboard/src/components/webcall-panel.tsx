@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Mic, MicOff, PhoneOff, Phone, Loader2, AlertCircle, X, Camera, ImagePlus, SwitchCamera } from "lucide-react";
+import { Mic, MicOff, PhoneOff, Phone, Loader2, AlertCircle, X, SwitchCamera } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 /**
@@ -11,10 +11,6 @@ import { Button } from "@/components/ui/button";
  * flush, tail-drain) lives in the shared server pipeline — this component is a
  * pure transport + UI shell. Browser echo cancellation (getUserMedia
  * echoCancellation) keeps the agent's own voice out of the mic.
- *
- * Optional vision:
- *   • visionLiveEnabled — stream ~2 fps JPEG frames for Gemini Live
- *   • visionEnabled — upload a still photo mid-call for analyze_image
  */
 
 type CallState = "idle" | "connecting" | "live" | "ending" | "error";
@@ -48,8 +44,6 @@ export function WebcallPanel({
   agentName,
   compact,
   onClose,
-  visionLiveEnabled,
-  visionEnabled,
   shareToken,
   requireCamera,
   autoStart,
@@ -58,8 +52,6 @@ export function WebcallPanel({
   agentName: string;
   compact?: boolean;
   onClose?: () => void;
-  visionLiveEnabled?: boolean;
-  visionEnabled?: boolean;
   /** Guest join link token — connects via ?share= instead of session JWT. */
   shareToken?: string;
   /** Guest must enable camera before connecting. */
@@ -74,7 +66,6 @@ export function WebcallPanel({
   const [cameraOn, setCameraOn] = useState(false);
   const [facingMode, setFacingMode] = useState<FacingMode>("user");
   const [switchingCamera, setSwitchingCamera] = useState(false);
-  const [uploading, setUploading] = useState(false);
 
   const wsRef          = useRef<WebSocket | null>(null);
   const captureCtxRef  = useRef<AudioContext | null>(null);
@@ -82,7 +73,6 @@ export function WebcallPanel({
   const streamRef      = useRef<MediaStream | null>(null);
   const videoStreamRef = useRef<MediaStream | null>(null);
   const videoElRef     = useRef<HTMLVideoElement | null>(null);
-  const frameTimerRef  = useRef<number | null>(null);
   const workletRef     = useRef<AudioWorkletNode | null>(null);
   const sourceNodeRef  = useRef<MediaStreamAudioSourceNode | null>(null);
   const activeSources  = useRef<AudioBufferSourceNode[]>([]);
@@ -97,10 +87,6 @@ export function WebcallPanel({
   const scrollEndRef   = useRef<HTMLDivElement | null>(null);
 
   const stopCamera = useCallback(() => {
-    if (frameTimerRef.current != null) {
-      window.clearInterval(frameTimerRef.current);
-      frameTimerRef.current = null;
-    }
     videoStreamRef.current?.getTracks().forEach((t) => t.stop());
     videoStreamRef.current = null;
     if (videoElRef.current) {
@@ -158,32 +144,8 @@ export function WebcallPanel({
     nextStartRef.current = playbackCtxRef.current?.currentTime ?? 0;
   }, []);
 
-  // Live camera chrome (preview / stream) — not for photo-upload-only agents.
-  const cameraAllowed = !!(visionLiveEnabled || requireCamera);
-  const photoUploadAllowed = false;
-
-  const startFrameCapture = useCallback(() => {
-    if (frameTimerRef.current != null) return;
-    const canvas = document.createElement("canvas");
-    frameTimerRef.current = window.setInterval(() => {
-      const ws = wsRef.current;
-      const video = videoElRef.current;
-      if (!ws || ws.readyState !== WebSocket.OPEN || !video || video.readyState < 2) return;
-      const w = video.videoWidth || 320;
-      const h = video.videoHeight || 240;
-      canvas.width = Math.min(w, 640);
-      canvas.height = Math.round(canvas.width * (h / Math.max(w, 1)));
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const dataUrl = canvas.toDataURL("image/jpeg", 0.55);
-      const b64 = dataUrl.split(",")[1];
-      if (!b64) return;
-      try {
-        ws.send(JSON.stringify({ type: "video_frame", data: b64, mimeType: "image/jpeg" }));
-      } catch { /* noop */ }
-    }, 500);
-  }, []);
+  // Live camera chrome (preview / stream) — gated on requireCamera share links.
+  const cameraAllowed = !!requireCamera;
 
   const openCameraStream = useCallback(async (facing: FacingMode) => {
     const vstream = await navigator.mediaDevices.getUserMedia({
@@ -202,8 +164,7 @@ export function WebcallPanel({
     }
     setFacingMode(facing);
     setCameraOn(true);
-    startFrameCapture();
-  }, [startFrameCapture]);
+  }, []);
 
   const startCamera = useCallback(async () => {
     if (!cameraAllowed || cameraOn) return;
@@ -456,62 +417,6 @@ export function WebcallPanel({
     });
   }, []);
 
-  /** Resize phone photos so base64 JSON stays under the API body limit. */
-  const fileToCompressedBase64 = useCallback(async (file: File): Promise<{ data: string; mimeType: string }> => {
-    const bitmap = await createImageBitmap(file);
-    const maxEdge = 1280;
-    const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
-    const w = Math.max(1, Math.round(bitmap.width * scale));
-    const h = Math.max(1, Math.round(bitmap.height * scale));
-    const canvas = document.createElement("canvas");
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) throw new Error("Could not process image");
-    ctx.drawImage(bitmap, 0, 0, w, h);
-    bitmap.close();
-    const dataUrl = canvas.toDataURL("image/jpeg", 0.72);
-    const data = dataUrl.split(",")[1];
-    if (!data) throw new Error("Could not encode image");
-    return { data, mimeType: "image/jpeg" };
-  }, []);
-
-  const uploadPhoto = useCallback(async (file: File) => {
-    const callId = callIdRef.current;
-    if (!callId || !visionEnabled) return;
-    const sessionToken = localStorage.getItem("voiceorch:session");
-    if (!shareToken && !sessionToken) return;
-    setUploading(true);
-    setError(null);
-    try {
-      const { data, mimeType } = await fileToCompressedBase64(file);
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (shareToken) headers["X-Webcall-Share"] = shareToken;
-      else headers["Authorization"] = `Bearer ${sessionToken}`;
-      const resp = await fetch(`/api/calls/${callId}/media`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          mimeType,
-          fileName: file.name.replace(/\.\w+$/, "") + ".jpg",
-          data,
-        }),
-      });
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => ({})) as { error?: string };
-        throw new Error(err.error || `Upload failed (${resp.status})`);
-      }
-      setLines((prev) => [
-        ...prev,
-        { id: lineIdRef.current++, speaker: "user", text: `[Photo uploaded: ${file.name}]` },
-      ]);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Photo upload failed");
-    } finally {
-      setUploading(false);
-    }
-  }, [visionEnabled, fileToCompressedBase64, shareToken]);
-
   // Auto-start camera once the call is live (so the preview shows without an extra tap).
   useEffect(() => {
     if (state !== "live" || !cameraAllowed || cameraOn || cameraAutoTriedRef.current) return;
@@ -561,17 +466,13 @@ export function WebcallPanel({
               {state === "idle"       && (
                 requireCamera && !cameraOn
                   ? "Turn on your camera, then start the call"
-                  : photoUploadAllowed && !cameraAllowed
-                    ? "Start the call, then upload a photo when asked"
-                    : "Talk to your agent right in the browser"
+                  : "Talk to your agent right in the browser"
               )}
               {state === "connecting" && "Connecting…"}
               {state === "live"       && (
                 cameraOn
                   ? "Connected — camera on"
-                  : photoUploadAllowed
-                    ? "Connected — upload a photo when asked"
-                    : "Connected — start speaking"
+                  : "Connected — start speaking"
               )}
               {state === "ending"     && "Ending call…"}
               {state === "error"      && "Call ended with an error"}
@@ -599,7 +500,7 @@ export function WebcallPanel({
             {cameraOn && (
               <>
                 <span className="absolute top-2 left-2 text-[10px] font-medium px-1.5 py-0.5 rounded bg-black/60 text-white">
-                  {visionLiveEnabled ? "Live camera" : "Camera"} · {facingMode === "user" ? "Front" : "Rear"}
+                  Camera · {facingMode === "user" ? "Front" : "Rear"}
                 </span>
                 <button
                   type="button"
@@ -622,14 +523,10 @@ export function WebcallPanel({
               <Phone className="h-7 w-7 opacity-40" />
               <p className="text-[12px]">
                 {active
-                  ? photoUploadAllowed
-                    ? "Listening… use Upload photo when the agent asks."
-                    : "Listening… say hello to your agent."
+                  ? "Listening… say hello to your agent."
                   : requireCamera && !cameraOn
                     ? "Allow camera access, then press Start call."
-                    : photoUploadAllowed && !cameraAllowed
-                      ? "Press Start call, then upload or take a photo mid-call."
-                      : "Press Start call to begin a live voice test."}
+                    : "Press Start call to begin a live voice test."}
               </p>
             </div>
           )}

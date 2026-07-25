@@ -123,38 +123,4 @@ router.get("/storage/recordings/:callId", requireAuth, async (req, res): Promise
   streamRecordingAudio(req, res, rec.audio, rec.contentType);
 });
 
-router.get("/storage/call-media/:id", requireAuth, async (req, res): Promise<void> => {
-  const rawId = (req.params as { id?: string | string[] }).id;
-  const idStr = Array.isArray(rawId) ? rawId[0] ?? "" : rawId ?? "";
-  const mediaId = Number.parseInt(idStr, 10);
-  if (!Number.isFinite(mediaId)) {
-    res.status(400).json({ error: "Invalid media id" });
-    return;
-  }
-
-  const clerkId = (req as unknown as { clerkUserId?: string }).clerkUserId ?? null;
-  const { getCallMediaById } = await import("../services/call-media.js");
-  const row = await getCallMediaById(mediaId);
-  if (!row) {
-    res.status(404).json({ error: "Media not found" });
-    return;
-  }
-  if (row.userId && row.userId !== clerkId) {
-    res.status(404).json({ error: "Media not found" });
-    return;
-  }
-  if (row.callId) {
-    const [call] = await db
-      .select({ userId: callsTable.userId, agentId: callsTable.agentId })
-      .from(callsTable)
-      .where(eq(callsTable.id, row.callId));
-    if (call?.userId && call.userId !== clerkId) {
-      res.status(404).json({ error: "Media not found" });
-      return;
-    }
-  }
-
-  streamRecordingAudio(req, res, row.imageData, row.mimeType || "image/jpeg");
-});
-
 export default router;

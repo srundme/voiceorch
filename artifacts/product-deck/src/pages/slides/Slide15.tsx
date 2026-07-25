@@ -19,7 +19,7 @@ export default function Slide15() {
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: "1.2vw", marginBottom: "0.8vh" }}>
             <div style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#FF6F00" }}>
-              Live Today — Voice + Vision
+              Live Today — Voice AI
             </div>
             <div style={{
               background: "#1B5E20", color: "#A5D6A7",
@@ -157,7 +157,7 @@ export default function Slide15() {
             <div style={{ display: "flex", gap: "1vw", alignItems: "flex-start" }}>
               <span style={{ color: "#FF6F00", fontWeight: 800, fontSize: "1.2vw", flexShrink: 0, marginTop: "0.1vh" }}>✓</span>
               <div>
-                <div style={{ fontSize: "1.02vw", fontWeight: 700, color: "#FF6F00" }}>SnapServe Voice + Vision</div>
+                <div style={{ fontSize: "1.02vw", fontWeight: 700, color: "#FF6F00" }}>SnapServe Voice AI</div>
                 <div style={{ fontSize: "0.94vw", color: "#5B5470", lineHeight: 1.52 }}>
                   Live today. One embedded agent that speaks, sees, verifies, and remembers — compliant by default, no human required, no app download.
                 </div>

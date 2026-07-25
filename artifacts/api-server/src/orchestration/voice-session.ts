@@ -27,12 +27,6 @@ export interface VoiceSession {
   getExplicitLangRequestForMemory(): string | null;
   getRecording(): RecordingBuffer;
 
-  /** Related people learned via vision introductions (for durable family_members). */
-  getVisionFamilyMembersFact?(): string | null;
-
-  /** Update primary caller name on the in-call vision people map. */
-  setVisionPrimaryName?(name: string): void;
-
   /**
    * Epoch ms of the last meaningful media (caller speech or real TTS out).
    * Used for billable duration when the session wall-clock outlives talk time.
@@ -44,9 +38,4 @@ export interface VoiceSession {
   noteMediaDropIfWaitingForReply(): void;
   onExternalAmdSignal(verdict: "machine" | "human", source: string): void;
 
-  /** Optional: still-image arrived mid-call (WhatsApp / upload). */
-  notifyIncomingMedia?(mediaId: number, meta?: { source?: string; mimeType?: string }): void;
-
-  /** Optional: webcall camera JPEG frame for Gemini Live vision. */
-  onVideoFrame?(jpegBase64: string, mimeType?: string): void;
 }

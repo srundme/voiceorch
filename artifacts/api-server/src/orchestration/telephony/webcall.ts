@@ -114,10 +114,6 @@ export async function handleWebcallWebSocket(
       requestEnd();
       return;
     }
-    if (msg.type === "video_frame" && typeof msg.data === "string" && sessionId) {
-      const session = getSession(sessionId);
-      session?.pipeline.onVideoFrame?.(msg.data, msg.mimeType ?? "image/jpeg");
-    }
   });
 
   ws.on("close", () => {

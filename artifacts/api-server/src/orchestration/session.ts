@@ -39,9 +39,6 @@ import { appendDpdpDisclosure, scanAndRedactPII } from "../services/dpdp/index.j
 import { appendIrdaiAiDisclosure } from "../services/irdai/index.js";
 import { appendGuardrails, redactTranscriptPII } from "../services/guardrails.js";
 import { phonesMatch } from "../services/google-sheets-helpers.js";
-import {
-  attachPendingMediaToCall,
-} from "../services/call-media.js";
 import { resolveBillableDurationSeconds } from "./billable-duration.js";
 import { scheduleNetworkDropCallback } from "../services/autoRedial.js";
 import { refillCampaignForLead } from "../services/batchScheduler.js";
@@ -2138,26 +2135,6 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     handoffTranscriptAccum: "",
   });
 
-  // Attach any WhatsApp/upload images staged for this phone before the dial.
-  if (callerPhone && agentCfg["visionEnabled"] === true) {
-    void attachPendingMediaToCall(callRecord.id, params.agentId, callerPhone)
-      .then((attached) => {
-        if (!attached.length) return;
-        const ids = attached.map((m) => m.id).join(", ");
-        const note =
-          `[System] ${attached.length} image(s) were received before this call (media_id=${ids}). ` +
-          `Call analyze_image with media_id or use_latest=true when you need to see them.`;
-        const s = sessions.get(sessionId);
-        s?.pipeline.notifyIncomingMedia?.(attached[0]!.id, { source: attached[0]!.source, mimeType: attached[0]!.mimeType });
-        // Extra ids beyond the first: also notify
-        for (const m of attached.slice(1)) {
-          s?.pipeline.notifyIncomingMedia?.(m.id, { source: m.source, mimeType: m.mimeType });
-        }
-        logger.info({ callId: callRecord.id, mediaIds: ids, note: note.slice(0, 80) }, "Attached pending call media");
-      })
-      .catch((err) => logger.warn({ err, callId: callRecord.id }, "Failed to attach pending call media"));
-  }
-
   // Persist initial session metadata to Redis
   void saveSessionMeta(sessionId, {
     callId: callRecord.id,
@@ -2258,18 +2235,6 @@ export function findActiveSessionByPhone(
     if (session.callerPhone && phonesMatch(session.callerPhone, phone)) return session;
   }
   return undefined;
-}
-
-/** Notify a live session that a still image arrived (WhatsApp / upload). */
-export function notifySessionIncomingMedia(
-  callId: number,
-  mediaId: number,
-  meta?: { source?: string; mimeType?: string },
-): boolean {
-  const session = getSessionByCallId(callId);
-  if (!session?.pipeline.notifyIncomingMedia) return false;
-  session.pipeline.notifyIncomingMedia(mediaId, meta);
-  return true;
 }
 
 /** Find the LIVE session by its provider-side call id (e.g. the VoBiz answer-webhook

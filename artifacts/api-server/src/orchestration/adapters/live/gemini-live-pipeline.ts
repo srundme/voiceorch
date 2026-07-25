@@ -166,7 +166,6 @@ export class GeminiLivePipeline implements VoiceSession {
     return null;
   }
 
-  onVideoFrame(_jpegBase64: string, _mimeType = "image/jpeg"): void {}
 
   getRecording(): RecordingBuffer {
     return this.recording;

@@ -47,13 +47,6 @@ export interface EndCallTool {
   goodbyeMessage?: string;
 }
 
-/** Inspect high-resolution documents (Aadhaar, PAN, GST, Invoices) via Sarvam Vision API. */
-export interface AnalyzeDocumentTool {
-  type: "analyze_document";
-  name: string;
-  description: string;
-}
-
 /**
  * Sensible default farewell spoken when a call is ended by the AI (built-in
  * end_call tool or an end-call phrase) and the agent has no custom
@@ -183,7 +176,7 @@ export interface SquadFollowupTool {
   description: string;
 }
 
-export type AgentTool = CallTransferTool | WebhookTool | SendSmsTool | EndCallTool | AnalyzeDocumentTool | CalComTool | NativeBookingTool | NativeRescheduleTool | NativeCancelTool | NativeCheckAvailabilityTool | NativeListBookingsTool | TransferColdTool | TransferWarmTool | TransferAgentTool | SquadFollowupTool;
+export type AgentTool = CallTransferTool | WebhookTool | SendSmsTool | EndCallTool | CalComTool | NativeBookingTool | NativeRescheduleTool | NativeCancelTool | NativeCheckAvailabilityTool | NativeListBookingsTool | TransferColdTool | TransferWarmTool | TransferAgentTool | SquadFollowupTool;
 
 /** JSON Schema-compatible tool definition passed to LLM providers */
 export interface ToolDefinition {
@@ -422,14 +415,6 @@ export interface AgentConfig {
     voiceName: string;
     thinkingLevel: "minimal" | "low" | "medium" | "high";
   } | null;
-  /** Primary mode: "voice" (telephony/voice) or "vision" (WebCall camera + document OCR). */
-  agentKind?: "voice" | "vision";
-  /** Vision operating mode: "live_video", "photo_upload", or "hybrid". */
-  visionMode?: "live_video" | "photo_upload" | "hybrid";
-  /** High-resolution document analysis tool (Sarvam Vision API). */
-  visionEnabled?: boolean;
-  /** Live WebCam streaming into Gemini 3.1 Flash Live session. */
-  visionLiveEnabled?: boolean;
 }
 
 export interface ProviderKey {

@@ -43,8 +43,8 @@ const TEMPLATES = [
   {
     id: "claims_review",
     name: "Claims review",
-    description: "Intake voice → vision verify → reviewer",
-    roles: ["Intake", "Vision Verifier", "Reviewer"],
+    description: "Intake voice → detail verify → reviewer",
+    roles: ["Intake", "Verifier", "Reviewer"],
   },
   {
     id: "appointment_concierge",
@@ -55,8 +55,8 @@ const TEMPLATES = [
   {
     id: "kyc_verification",
     name: "KYC verification",
-    description: "Voice KYC → vision ID check → compliance",
-    roles: ["Voice KYC", "Vision Verifier", "Compliance"],
+    description: "Voice KYC → ID check → compliance",
+    roles: ["Voice KYC", "ID Verifier", "Compliance"],
   },
 ];
 

@@ -449,6 +449,13 @@
       "when": 1788400000000,
       "tag": "0068_voiceathon_approval",
       "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1788500000000,
+      "tag": "0069_remove_vision",
+      "breakpoints": true
     }
   ]
 }

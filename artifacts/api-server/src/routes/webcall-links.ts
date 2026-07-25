@@ -61,8 +61,6 @@ router.get("/webcall-links/join/:token", async (req, res): Promise<void> => {
     label: link.label,
     purpose: link.purpose,
     requireCamera: link.requireCamera,
-    visionEnabled: cfg["visionEnabled"] === true,
-    visionLiveEnabled: cfg["visionLiveEnabled"] === true,
   });
 });
 

@@ -297,7 +297,7 @@ export interface DispositionField {
 }
 
 /**
- * Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, native_cancel, native_check_availability, native_list_bookings, transfer_cold, transfer_warm, transfer_agent, or analyze_image
+ * Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, native_cancel, native_check_availability, native_list_bookings, transfer_cold, transfer_warm, or transfer_agent
  */
 export type AgentToolType = typeof AgentToolType[keyof typeof AgentToolType];
 
@@ -316,7 +316,6 @@ export const AgentToolType = {
   transfer_cold: 'transfer_cold',
   transfer_warm: 'transfer_warm',
   transfer_agent: 'transfer_agent',
-  analyze_image: 'analyze_image',
 } as const;
 
 /**
@@ -1756,15 +1755,23 @@ export interface KnowledgeSearchResponse {
 }
 
 export interface WalletInfo {
-  /** Current balance in cents */
+  /** Current balance in INR paise (1 INR = 100 paise). Field name is historical. */
   balanceCents: number;
-  /** Current balance in USD */
-  balanceUsd: number;
+  /** Current balance in INR (rupees) */
+  balanceInr?: number;
+  /** Deprecated alias of balanceInr (INR, not USD) */
+  balanceUsd?: number;
+  /** Always INR */
+  currency?: string;
+  /** GST rate applied on card top-ups (e.g. 0.18) */
+  gstRate?: number;
   freeCreditsGranted: boolean;
   autoPayEnabled: boolean;
+  /** Auto-pay threshold in paise */
   autoPayThresholdCents: number;
+  /** Auto-pay credit amount in paise (payable includes GST) */
   autoPayAmountCents: number;
-  /** Whether a Razorpay recurring mandate token is saved for auto-pay */
+  /** Whether a Razorpay recurring card mandate token is saved for auto-pay */
   mandateActive: boolean;
 }
 
@@ -1776,6 +1783,7 @@ export const WalletTransactionType = {
   topup: 'topup',
   call_debit: 'call_debit',
   auto_topup: 'auto_topup',
+  debit: 'debit',
 } as const;
 
 export type WalletTransactionStatus = typeof WalletTransactionStatus[keyof typeof WalletTransactionStatus];
@@ -1790,8 +1798,14 @@ export const WalletTransactionStatus = {
 export interface WalletTransaction {
   id: number;
   type: WalletTransactionType;
+  /** Amount in INR paise (negative for debits) */
   amountCents: number;
-  amountUsd: number;
+  /** Amount in INR (rupees) */
+  amountInr?: number;
+  /** Deprecated alias of amountInr (INR, not USD) */
+  amountUsd?: number;
+  /** Always INR */
+  currency?: string;
   description: string;
   status: WalletTransactionStatus;
   /** @nullable */
@@ -1805,21 +1819,21 @@ export interface WalletTransaction {
 
 export interface TopupInput {
   /**
-     * Amount in cents (minimum 1000 = $10)
-     * @minimum 1000
+     * Wallet credit in paise before GST (minimum 10000 = ₹100). Payable = credit × 1.18.
+     * @minimum 10000
      */
   amountCents: number;
-  /** When true, creates a recurring mandate order (user authorizes auto-pay once) */
+  /** When true, creates a recurring UPI mandate order (user authorizes auto-pay once) */
   setupMandate?: boolean;
 }
 
 export interface TopupOrder {
   orderId: string;
-  /** Amount in USD cents (used for wallet credit) */
+  /** Wallet credit in INR paise (pre-GST) */
   amountCents: number;
-  /** Amount in the Razorpay order's smallest currency unit — USD cents for a regular top-up, INR paise for a UPI autopay-mandate order (UPI has no USD rail, so mandate setup always stays INR). */
+  /** Razorpay charge in INR paise (base credit + 18% GST) */
   amount: number;
-  /** USD for regular top-ups; INR for UPI autopay-mandate setup */
+  /** Always INR */
   currency: string;
   keyId: string;
   /**
@@ -1837,11 +1851,11 @@ export interface VerifyPaymentInput {
 
 export interface AutoPaySettings {
   autoPayEnabled?: boolean;
-  /** Trigger auto-pay when balance drops below this (cents) */
+  /** Trigger auto-pay when balance drops below this (paise) */
   autoPayThresholdCents?: number;
   /**
-     * Amount to auto-charge (cents, minimum 1000 = $10)
-     * @minimum 1000
+     * Auto top-up wallet credit in paise (minimum 10000 = ₹100; payable includes 18% GST)
+     * @minimum 10000
      */
   autoPayAmountCents?: number;
 }
@@ -1881,12 +1895,12 @@ export interface PhoneNumber {
   agentName?: string | null;
   status: PhoneNumberStatus;
   purchasedAt: string;
-  /** Monthly cost in cents (from Vobiz, 0 = no recurring fee) */
+  /** Monthly cost in paise (INR; from Vobiz, 0 = no recurring fee) */
   monthlyRateCents?: number;
-  /** Recurring monthly renewal fee in cents, charged from wallet balance on the purchase-date anniversary (30 days) */
+  /** Recurring monthly renewal fee in paise (INR), charged from wallet balance on the purchase-date anniversary (30 days) */
   renewalRateCents?: number;
   /**
-     * When the next $8 renewal charge is due (30 days after purchasedAt/lastRenewalAt). Null once released.
+     * When the next renewal charge is due (30 days after purchasedAt/lastRenewalAt). Null once released.
      * @nullable
      */
   nextRenewalAt?: string | null;
@@ -1913,7 +1927,7 @@ export interface AvailablePhoneNumber {
   /** @nullable */
   region?: string | null;
   numberType: AvailablePhoneNumberNumberType;
-  /** Monthly cost in cents (0 = one-time purchase only) */
+  /** Monthly cost in paise (INR; 0 = one-time purchase only) */
   monthlyRateCents?: number;
 }
 
@@ -1939,7 +1953,7 @@ export interface InitiatePhoneNumberPurchaseResponse {
   purchaseOrderId: number;
   /** Razorpay order id */
   orderId: string;
-  /** First-purchase fee in cents (currently $10.00 = 1000) */
+  /** Payable amount in INR paise (₹800 + 18% GST = 94400) */
   amountCents: number;
   /** Amount in the smallest currency unit, as required by the Razorpay checkout widget */
   amount: number;
@@ -2033,7 +2047,7 @@ export const WebhookEndpointEventsItem = {
 export interface WebhookEndpoint {
   id: number;
   url: string;
-  /** Event types that trigger this webhook */
+  /** Event types that trigger this webhook. Prefer call.completed (call.ended is a legacy alias). */
   events: WebhookEndpointEventsItem[];
   /**
      * Last 6 chars of the signing secret (masked)
@@ -2063,7 +2077,10 @@ export const WebhookEndpointInputEventsItem = {
 
 export interface WebhookEndpointInput {
   url: string;
-  /** @minItems 1 */
+  /**
+     * Prefer call.completed (and optionally call.failed). call.ended is accepted as an alias of call.completed.
+     * @minItems 1
+     */
   events: WebhookEndpointInputEventsItem[];
   /** HMAC signing secret (auto-generated if omitted) */
   secret?: string;

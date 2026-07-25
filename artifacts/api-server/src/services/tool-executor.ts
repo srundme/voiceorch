@@ -319,20 +319,6 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
           },
         };
       }
-      if (t.type === "analyze_document") {
-        return {
-          name: t.name || "analyze_document",
-          description: t.description || "Inspect a high-resolution uploaded document photo (Aadhaar, PAN, GST, Invoice, Receipt) via Sarvam Vision API.",
-          parameters: {
-            type: "object",
-            properties: {
-              media_id: { type: "string", description: "Optional media_id of the uploaded document photo. Omit to inspect the latest photo uploaded." },
-              prompt:   { type: "string", description: "Optional prompt specifying what fields to extract (e.g. 'Extract name, ID number, and address')." },
-            },
-            required: [],
-          },
-        };
-      }
       // End Call: always emit under the canonical `end_call` function name with
       // the built-in description, regardless of what (possibly blank) name was
       // persisted on the tool. This repairs existing agents whose stored end_call
@@ -1600,20 +1586,6 @@ export async function executeNativeCancel(
     logger.error({ callId, err }, "Native cancel tool execution failed");
     return "error: cancellation failed due to a technical issue";
   }
-}
-
-/**
- * Execute analyze_document tool via Sarvam Vision API.
- */
-export async function executeAnalyzeDocumentTool(
-  callId: number,
-  agentId: number,
-  userId: number | null,
-  phone: string | null,
-  args: Record<string, unknown>,
-): Promise<string> {
-  const { executeSarvamVision } = await import("./sarvam-vision.js");
-  return executeSarvamVision({ callId, agentId, userId, phone, args });
 }
 
 /**

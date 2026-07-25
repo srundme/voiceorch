@@ -4745,7 +4745,7 @@ export const getAddConcurrentSlotUrl = () => {
 }
 
 /**
- * @summary Purchase one additional concurrent call slot ($5 deducted from wallet)
+ * @summary Purchase one additional concurrent call slot (deducted from wallet in INR)
  */
 export const addConcurrentSlot = async ( options?: RequestInit): Promise<AccountInfo> => {
 
@@ -4793,7 +4793,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type AddConcurrentSlotMutationError = ErrorType<void>
 
     /**
- * @summary Purchase one additional concurrent call slot ($5 deducted from wallet)
+ * @summary Purchase one additional concurrent call slot (deducted from wallet in INR)
  */
 export const useAddConcurrentSlot = <TError = ErrorType<void>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addConcurrentSlot>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
@@ -5208,7 +5208,7 @@ export const getInitiatePhoneNumberPurchaseUrl = () => {
 }
 
 /**
- * @summary Start a phone-number purchase — creates a Razorpay order for the $10 first-purchase fee. The number is NOT provisioned until payment is confirmed via purchase/confirm.
+ * @summary Start a phone-number purchase — creates a Razorpay INR order for ₹800 + 18% GST. The number is NOT provisioned until payment is confirmed via purchase/confirm.
  */
 export const initiatePhoneNumberPurchase = async (purchasePhoneNumberInput: PurchasePhoneNumberInput, options?: RequestInit): Promise<InitiatePhoneNumberPurchaseResponse> => {
 
@@ -5257,7 +5257,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type InitiatePhoneNumberPurchaseMutationError = ErrorType<void>
 
     /**
- * @summary Start a phone-number purchase — creates a Razorpay order for the $10 first-purchase fee. The number is NOT provisioned until payment is confirmed via purchase/confirm.
+ * @summary Start a phone-number purchase — creates a Razorpay INR order for ₹800 + 18% GST. The number is NOT provisioned until payment is confirmed via purchase/confirm.
  */
 export const useInitiatePhoneNumberPurchase = <TError = ErrorType<void>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof initiatePhoneNumberPurchase>>, TError,{data: BodyType<PurchasePhoneNumberInput>}, TContext>, request?: SecondParameter<typeof customFetch>}

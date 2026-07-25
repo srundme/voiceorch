@@ -117,3 +117,4 @@
 - [Cartesia emotion voice-control fallback](cartesia-emotion-control-fallback.md) — provider voice-control enum drift (e.g. rejected "medium" level) needs a per-sentence retry-without-controls, AND per-sentence TTS errors must never call onFatalError/end the call
 - [Mic Sensitivity must feed all dependent defaults](mic-sensitivity-barge-in-default.md) — a tiered setting can compile clean yet leave one dependent threshold's old hardcoded fallback active, silently no-op'ing that dimension
 - [Radix Switch BubbleInput synthetic-click loop](radix-switch-bubbleinput-click-loop.md) — Radix Switch dispatches a bubbling synthetic click on programmatic checked changes; a clickable ancestor onClick → infinite React #185 loop; guard ancestor with e.nativeEvent.isTrusted
+- [Vision AI feature fully removed](vision-feature-removed.md) — entire vision stack deleted Jul 2026 (migration 0069); older vision memories are stale; rebuild starts from scratch

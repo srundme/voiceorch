@@ -141,7 +141,7 @@ export const ListAgentsResponseItem = zod.object({
   "knowledgeBaseId": zod.number().nullish().describe('ID of an attached knowledge base for RAG context injection'),
   "knowledgeSourceIds": zod.array(zod.number()).optional().describe('IDs of all attached knowledge sources (many-to-many)'),
   "tools": zod.array(zod.object({
-  "type": zod.enum(['call_transfer', 'webhook', 'send_sms', 'end_call', 'cal_com', 'native_booking', 'native_reschedule', 'native_cancel', 'native_check_availability', 'native_list_bookings', 'transfer_cold', 'transfer_warm', 'transfer_agent', 'analyze_image', 'analyze_document']).describe('Tool type'),
+  "type": zod.enum(['call_transfer', 'webhook', 'send_sms', 'end_call', 'cal_com', 'native_booking', 'native_reschedule', 'native_cancel', 'native_check_availability', 'native_list_bookings', 'transfer_cold', 'transfer_warm', 'transfer_agent']).describe('Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, native_cancel, native_check_availability, native_list_bookings, transfer_cold, transfer_warm, or transfer_agent'),
   "name": zod.string().describe('LLM-facing function name (snake_case, no spaces, e.g. transfer_to_human)'),
   "description": zod.string().describe('Explains to the LLM when and why to invoke this tool'),
   "transferTo": zod.string().optional().describe('(call_transfer) E.164 phone number to transfer the call to (e.g. +12125551234)'),
@@ -257,7 +257,7 @@ export const CreateAgentBody = zod.object({
   "noiseCancellationEnabled": zod.boolean().optional(),
   "inactivityMessage": zod.string().optional(),
   "tools": zod.array(zod.object({
-  "type": zod.enum(['call_transfer', 'webhook', 'send_sms', 'end_call', 'cal_com', 'native_booking', 'native_reschedule', 'native_cancel', 'native_check_availability', 'native_list_bookings', 'transfer_cold', 'transfer_warm', 'transfer_agent', 'analyze_image', 'analyze_document']).describe('Tool type'),
+  "type": zod.enum(['call_transfer', 'webhook', 'send_sms', 'end_call', 'cal_com', 'native_booking', 'native_reschedule', 'native_cancel', 'native_check_availability', 'native_list_bookings', 'transfer_cold', 'transfer_warm', 'transfer_agent']).describe('Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, native_cancel, native_check_availability, native_list_bookings, transfer_cold, transfer_warm, or transfer_agent'),
   "name": zod.string().describe('LLM-facing function name (snake_case, no spaces, e.g. transfer_to_human)'),
   "description": zod.string().describe('Explains to the LLM when and why to invoke this tool'),
   "transferTo": zod.string().optional().describe('(call_transfer) E.164 phone number to transfer the call to (e.g. +12125551234)'),
@@ -368,7 +368,7 @@ export const GetAgentResponse = zod.object({
   "knowledgeBaseId": zod.number().nullish().describe('ID of an attached knowledge base for RAG context injection'),
   "knowledgeSourceIds": zod.array(zod.number()).optional().describe('IDs of all attached knowledge sources (many-to-many)'),
   "tools": zod.array(zod.object({
-  "type": zod.enum(['call_transfer', 'webhook', 'send_sms', 'end_call', 'cal_com', 'native_booking', 'native_reschedule', 'native_cancel', 'native_check_availability', 'native_list_bookings', 'transfer_cold', 'transfer_warm', 'transfer_agent', 'analyze_image', 'analyze_document']).describe('Tool type'),
+  "type": zod.enum(['call_transfer', 'webhook', 'send_sms', 'end_call', 'cal_com', 'native_booking', 'native_reschedule', 'native_cancel', 'native_check_availability', 'native_list_bookings', 'transfer_cold', 'transfer_warm', 'transfer_agent']).describe('Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, native_cancel, native_check_availability, native_list_bookings, transfer_cold, transfer_warm, or transfer_agent'),
   "name": zod.string().describe('LLM-facing function name (snake_case, no spaces, e.g. transfer_to_human)'),
   "description": zod.string().describe('Explains to the LLM when and why to invoke this tool'),
   "transferTo": zod.string().optional().describe('(call_transfer) E.164 phone number to transfer the call to (e.g. +12125551234)'),
@@ -489,7 +489,7 @@ export const UpdateAgentBody = zod.object({
   "knowledgeBaseId": zod.number().optional().describe('ID of an attached knowledge base for RAG context injection'),
   "knowledgeSourceIds": zod.array(zod.number()).optional().describe('IDs of all attached knowledge sources (many-to-many)'),
   "tools": zod.array(zod.object({
-  "type": zod.enum(['call_transfer', 'webhook', 'send_sms', 'end_call', 'cal_com', 'native_booking', 'native_reschedule', 'native_cancel', 'native_check_availability', 'native_list_bookings', 'transfer_cold', 'transfer_warm', 'transfer_agent', 'analyze_image', 'analyze_document']).describe('Tool type'),
+  "type": zod.enum(['call_transfer', 'webhook', 'send_sms', 'end_call', 'cal_com', 'native_booking', 'native_reschedule', 'native_cancel', 'native_check_availability', 'native_list_bookings', 'transfer_cold', 'transfer_warm', 'transfer_agent']).describe('Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, native_cancel, native_check_availability, native_list_bookings, transfer_cold, transfer_warm, or transfer_agent'),
   "name": zod.string().describe('LLM-facing function name (snake_case, no spaces, e.g. transfer_to_human)'),
   "description": zod.string().describe('Explains to the LLM when and why to invoke this tool'),
   "transferTo": zod.string().optional().describe('(call_transfer) E.164 phone number to transfer the call to (e.g. +12125551234)'),
@@ -603,7 +603,7 @@ export const UpdateAgentResponse = zod.object({
   "knowledgeBaseId": zod.number().nullish().describe('ID of an attached knowledge base for RAG context injection'),
   "knowledgeSourceIds": zod.array(zod.number()).optional().describe('IDs of all attached knowledge sources (many-to-many)'),
   "tools": zod.array(zod.object({
-  "type": zod.enum(['call_transfer', 'webhook', 'send_sms', 'end_call', 'cal_com', 'native_booking', 'native_reschedule', 'native_cancel', 'native_check_availability', 'native_list_bookings', 'transfer_cold', 'transfer_warm', 'transfer_agent', 'analyze_image', 'analyze_document']).describe('Tool type'),
+  "type": zod.enum(['call_transfer', 'webhook', 'send_sms', 'end_call', 'cal_com', 'native_booking', 'native_reschedule', 'native_cancel', 'native_check_availability', 'native_list_bookings', 'transfer_cold', 'transfer_warm', 'transfer_agent']).describe('Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, native_cancel, native_check_availability, native_list_bookings, transfer_cold, transfer_warm, or transfer_agent'),
   "name": zod.string().describe('LLM-facing function name (snake_case, no spaces, e.g. transfer_to_human)'),
   "description": zod.string().describe('Explains to the LLM when and why to invoke this tool'),
   "transferTo": zod.string().optional().describe('(call_transfer) E.164 phone number to transfer the call to (e.g. +12125551234)'),
@@ -729,7 +729,7 @@ export const ToggleAgentResponse = zod.object({
   "knowledgeBaseId": zod.number().nullish().describe('ID of an attached knowledge base for RAG context injection'),
   "knowledgeSourceIds": zod.array(zod.number()).optional().describe('IDs of all attached knowledge sources (many-to-many)'),
   "tools": zod.array(zod.object({
-  "type": zod.enum(['call_transfer', 'webhook', 'send_sms', 'end_call', 'cal_com', 'native_booking', 'native_reschedule', 'native_cancel', 'native_check_availability', 'native_list_bookings', 'transfer_cold', 'transfer_warm', 'transfer_agent', 'analyze_image', 'analyze_document']).describe('Tool type'),
+  "type": zod.enum(['call_transfer', 'webhook', 'send_sms', 'end_call', 'cal_com', 'native_booking', 'native_reschedule', 'native_cancel', 'native_check_availability', 'native_list_bookings', 'transfer_cold', 'transfer_warm', 'transfer_agent']).describe('Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, native_cancel, native_check_availability, native_list_bookings, transfer_cold, transfer_warm, or transfer_agent'),
   "name": zod.string().describe('LLM-facing function name (snake_case, no spaces, e.g. transfer_to_human)'),
   "description": zod.string().describe('Explains to the LLM when and why to invoke this tool'),
   "transferTo": zod.string().optional().describe('(call_transfer) E.164 phone number to transfer the call to (e.g. +12125551234)'),
@@ -1762,33 +1762,36 @@ export const SearchKnowledgeResponse = zod.object({
  * @summary Get current user wallet balance and settings
  */
 export const GetWalletResponse = zod.object({
-  "balanceCents": zod.number().describe('Current balance in cents'),
-  "balanceUsd": zod.number().describe('Current balance in USD'),
+  "balanceCents": zod.number().describe('Current balance in INR paise (1 INR = 100 paise). Field name is historical.'),
+  "balanceInr": zod.number().optional().describe('Current balance in INR (rupees)'),
+  "balanceUsd": zod.number().optional().describe('Deprecated alias of balanceInr (INR, not USD)'),
+  "currency": zod.string().optional().describe('Always INR'),
+  "gstRate": zod.number().optional().describe('GST rate applied on card top-ups (e.g. 0.18)'),
   "freeCreditsGranted": zod.boolean(),
   "autoPayEnabled": zod.boolean(),
-  "autoPayThresholdCents": zod.number(),
-  "autoPayAmountCents": zod.number(),
-  "mandateActive": zod.boolean().describe('Whether a Razorpay recurring mandate token is saved for auto-pay')
+  "autoPayThresholdCents": zod.number().describe('Auto-pay threshold in paise'),
+  "autoPayAmountCents": zod.number().describe('Auto-pay credit amount in paise (payable includes GST)'),
+  "mandateActive": zod.boolean().describe('Whether a Razorpay recurring card mandate token is saved for auto-pay')
 })
 
 
 /**
  * @summary Create a Razorpay order for wallet top-up
  */
-export const createTopupBodyAmountCentsMin = 1000;
+export const createTopupBodyAmountCentsMin = 10000;
 
 
 
 export const CreateTopupBody = zod.object({
-  "amountCents": zod.number().min(createTopupBodyAmountCentsMin).describe('Amount in cents (minimum 1000 = $10)'),
-  "setupMandate": zod.boolean().optional().describe('When true, creates a recurring mandate order (user authorizes auto-pay once)')
+  "amountCents": zod.number().min(createTopupBodyAmountCentsMin).describe('Wallet credit in paise before GST (minimum 10000 = ₹100). Payable = credit × 1.18.'),
+  "setupMandate": zod.boolean().optional().describe('When true, creates a recurring UPI mandate order (user authorizes auto-pay once)')
 })
 
 export const CreateTopupResponse = zod.object({
   "orderId": zod.string(),
-  "amountCents": zod.number().describe('Amount in USD cents (used for wallet credit)'),
-  "amount": zod.number().describe('Amount in the Razorpay order\'s smallest currency unit — USD cents for a regular top-up, INR paise for a UPI autopay-mandate order (UPI has no USD rail, so mandate setup always stays INR).'),
-  "currency": zod.string().describe('USD for regular top-ups; INR for UPI autopay-mandate setup'),
+  "amountCents": zod.number().describe('Wallet credit in INR paise (pre-GST)'),
+  "amount": zod.number().describe('Razorpay charge in INR paise (base credit + 18% GST)'),
+  "currency": zod.string().describe('Always INR'),
   "keyId": zod.string(),
   "customerId": zod.string().nullish().describe('Razorpay customer ID (present when setupMandate=true)')
 })
@@ -1804,13 +1807,16 @@ export const VerifyPaymentBody = zod.object({
 })
 
 export const VerifyPaymentResponse = zod.object({
-  "balanceCents": zod.number().describe('Current balance in cents'),
-  "balanceUsd": zod.number().describe('Current balance in USD'),
+  "balanceCents": zod.number().describe('Current balance in INR paise (1 INR = 100 paise). Field name is historical.'),
+  "balanceInr": zod.number().optional().describe('Current balance in INR (rupees)'),
+  "balanceUsd": zod.number().optional().describe('Deprecated alias of balanceInr (INR, not USD)'),
+  "currency": zod.string().optional().describe('Always INR'),
+  "gstRate": zod.number().optional().describe('GST rate applied on card top-ups (e.g. 0.18)'),
   "freeCreditsGranted": zod.boolean(),
   "autoPayEnabled": zod.boolean(),
-  "autoPayThresholdCents": zod.number(),
-  "autoPayAmountCents": zod.number(),
-  "mandateActive": zod.boolean().describe('Whether a Razorpay recurring mandate token is saved for auto-pay')
+  "autoPayThresholdCents": zod.number().describe('Auto-pay threshold in paise'),
+  "autoPayAmountCents": zod.number().describe('Auto-pay credit amount in paise (payable includes GST)'),
+  "mandateActive": zod.boolean().describe('Whether a Razorpay recurring card mandate token is saved for auto-pay')
 })
 
 
@@ -1827,9 +1833,11 @@ export const ListTransactionsQueryParams = zod.object({
 
 export const ListTransactionsResponseItem = zod.object({
   "id": zod.number(),
-  "type": zod.enum(['free_credit', 'topup', 'call_debit', 'auto_topup']),
-  "amountCents": zod.number(),
-  "amountUsd": zod.number(),
+  "type": zod.enum(['free_credit', 'topup', 'call_debit', 'auto_topup', 'debit']),
+  "amountCents": zod.number().describe('Amount in INR paise (negative for debits)'),
+  "amountInr": zod.number().optional().describe('Amount in INR (rupees)'),
+  "amountUsd": zod.number().optional().describe('Deprecated alias of amountInr (INR, not USD)'),
+  "currency": zod.string().optional().describe('Always INR'),
   "description": zod.string(),
   "status": zod.enum(['pending', 'completed', 'failed']),
   "razorpayOrderId": zod.string().nullish(),
@@ -1843,24 +1851,27 @@ export const ListTransactionsResponse = zod.array(ListTransactionsResponseItem)
 /**
  * @summary Update auto-pay settings
  */
-export const updateAutopayBodyAutoPayAmountCentsMin = 1000;
+export const updateAutopayBodyAutoPayAmountCentsMin = 10000;
 
 
 
 export const UpdateAutopayBody = zod.object({
   "autoPayEnabled": zod.boolean().optional(),
-  "autoPayThresholdCents": zod.number().optional().describe('Trigger auto-pay when balance drops below this (cents)'),
-  "autoPayAmountCents": zod.number().min(updateAutopayBodyAutoPayAmountCentsMin).optional().describe('Amount to auto-charge (cents, minimum 1000 = $10)')
+  "autoPayThresholdCents": zod.number().optional().describe('Trigger auto-pay when balance drops below this (paise)'),
+  "autoPayAmountCents": zod.number().min(updateAutopayBodyAutoPayAmountCentsMin).optional().describe('Auto top-up wallet credit in paise (minimum 10000 = ₹100; payable includes 18% GST)')
 })
 
 export const UpdateAutopayResponse = zod.object({
-  "balanceCents": zod.number().describe('Current balance in cents'),
-  "balanceUsd": zod.number().describe('Current balance in USD'),
+  "balanceCents": zod.number().describe('Current balance in INR paise (1 INR = 100 paise). Field name is historical.'),
+  "balanceInr": zod.number().optional().describe('Current balance in INR (rupees)'),
+  "balanceUsd": zod.number().optional().describe('Deprecated alias of balanceInr (INR, not USD)'),
+  "currency": zod.string().optional().describe('Always INR'),
+  "gstRate": zod.number().optional().describe('GST rate applied on card top-ups (e.g. 0.18)'),
   "freeCreditsGranted": zod.boolean(),
   "autoPayEnabled": zod.boolean(),
-  "autoPayThresholdCents": zod.number(),
-  "autoPayAmountCents": zod.number(),
-  "mandateActive": zod.boolean().describe('Whether a Razorpay recurring mandate token is saved for auto-pay')
+  "autoPayThresholdCents": zod.number().describe('Auto-pay threshold in paise'),
+  "autoPayAmountCents": zod.number().describe('Auto-pay credit amount in paise (payable includes GST)'),
+  "mandateActive": zod.boolean().describe('Whether a Razorpay recurring card mandate token is saved for auto-pay')
 })
 
 
@@ -1905,7 +1916,7 @@ export const RegenerateApiKeyResponse = zod.object({
 
 
 /**
- * @summary Purchase one additional concurrent call slot ($5 deducted from wallet)
+ * @summary Purchase one additional concurrent call slot (deducted from wallet in INR)
  */
 export const AddConcurrentSlotResponse = zod.object({
   "apiKey": zod.string().nullable().describe('Secret API key for programmatic platform access (vok_ prefix)'),
@@ -1971,9 +1982,9 @@ export const ListPhoneNumbersResponseItem = zod.object({
   "agentName": zod.string().nullish(),
   "status": zod.enum(['active', 'released']),
   "purchasedAt": zod.coerce.date(),
-  "monthlyRateCents": zod.number().optional().describe('Monthly cost in cents (from Vobiz, 0 = no recurring fee)'),
-  "renewalRateCents": zod.number().optional().describe('Recurring monthly renewal fee in cents, charged from wallet balance on the purchase-date anniversary (30 days)'),
-  "nextRenewalAt": zod.coerce.date().nullish().describe('When the next $8 renewal charge is due (30 days after purchasedAt\/lastRenewalAt). Null once released.'),
+  "monthlyRateCents": zod.number().optional().describe('Monthly cost in paise (INR; from Vobiz, 0 = no recurring fee)'),
+  "renewalRateCents": zod.number().optional().describe('Recurring monthly renewal fee in paise (INR), charged from wallet balance on the purchase-date anniversary (30 days)'),
+  "nextRenewalAt": zod.coerce.date().nullish().describe('When the next renewal charge is due (30 days after purchasedAt\/lastRenewalAt). Null once released.'),
   "lastRenewalAt": zod.coerce.date().nullish(),
   "releasedAt": zod.coerce.date().nullish(),
   "createdAt": zod.coerce.date()
@@ -1997,13 +2008,13 @@ export const ListAvailablePhoneNumbersResponseItem = zod.object({
   "countryCode": zod.string(),
   "region": zod.string().nullish(),
   "numberType": zod.enum(['local', 'toll_free', 'mobile']),
-  "monthlyRateCents": zod.number().optional().describe('Monthly cost in cents (0 = one-time purchase only)')
+  "monthlyRateCents": zod.number().optional().describe('Monthly cost in paise (INR; 0 = one-time purchase only)')
 })
 export const ListAvailablePhoneNumbersResponse = zod.array(ListAvailablePhoneNumbersResponseItem)
 
 
 /**
- * @summary Start a phone-number purchase — creates a Razorpay order for the $10 first-purchase fee. The number is NOT provisioned until payment is confirmed via purchase/confirm.
+ * @summary Start a phone-number purchase — creates a Razorpay INR order for ₹800 + 18% GST. The number is NOT provisioned until payment is confirmed via purchase/confirm.
  */
 export const initiatePhoneNumberPurchaseBodyNumberTypeDefault = `local`;
 
@@ -2017,7 +2028,7 @@ export const InitiatePhoneNumberPurchaseBody = zod.object({
 export const InitiatePhoneNumberPurchaseResponse = zod.object({
   "purchaseOrderId": zod.number().describe('Internal order id — pass back in ConfirmPhoneNumberPurchaseInput'),
   "orderId": zod.string().describe('Razorpay order id'),
-  "amountCents": zod.number().describe('First-purchase fee in cents (currently $10.00 = 1000)'),
+  "amountCents": zod.number().describe('Payable amount in INR paise (₹800 + 18% GST = 94400)'),
   "amount": zod.number().describe('Amount in the smallest currency unit, as required by the Razorpay checkout widget'),
   "currency": zod.string(),
   "keyId": zod.string().describe('Razorpay publishable key id for the checkout widget')
@@ -2058,9 +2069,9 @@ export const AssignPhoneNumberResponse = zod.object({
   "agentName": zod.string().nullish(),
   "status": zod.enum(['active', 'released']),
   "purchasedAt": zod.coerce.date(),
-  "monthlyRateCents": zod.number().optional().describe('Monthly cost in cents (from Vobiz, 0 = no recurring fee)'),
-  "renewalRateCents": zod.number().optional().describe('Recurring monthly renewal fee in cents, charged from wallet balance on the purchase-date anniversary (30 days)'),
-  "nextRenewalAt": zod.coerce.date().nullish().describe('When the next $8 renewal charge is due (30 days after purchasedAt\/lastRenewalAt). Null once released.'),
+  "monthlyRateCents": zod.number().optional().describe('Monthly cost in paise (INR; from Vobiz, 0 = no recurring fee)'),
+  "renewalRateCents": zod.number().optional().describe('Recurring monthly renewal fee in paise (INR), charged from wallet balance on the purchase-date anniversary (30 days)'),
+  "nextRenewalAt": zod.coerce.date().nullish().describe('When the next renewal charge is due (30 days after purchasedAt\/lastRenewalAt). Null once released.'),
   "lastRenewalAt": zod.coerce.date().nullish(),
   "releasedAt": zod.coerce.date().nullish(),
   "createdAt": zod.coerce.date()
@@ -2146,6 +2157,7 @@ export const ListWebhookEndpointsResponseItem = zod.object({
   "url": zod.string().url(),
   "events": zod.array(zod.enum(['call.started', 'call.completed', 'call.failed', 'call.ended'])).describe('Event types that trigger this webhook. Prefer call.completed (call.ended is a legacy alias).'),
   "secretHint": zod.string().nullish().describe('Last 6 chars of the signing secret (masked)'),
+  "secret": zod.string().nullish().describe('Full signing secret — only present on create responses'),
   "enabled": zod.boolean(),
   "description": zod.string().nullish(),
   "createdAt": zod.coerce.date()
@@ -2161,7 +2173,7 @@ export const createWebhookEndpointBodyEnabledDefault = true;
 
 export const CreateWebhookEndpointBody = zod.object({
   "url": zod.string().url(),
-  "events": zod.array(zod.enum(['call.started', 'call.completed', 'call.failed', 'call.ended'])).min(1),
+  "events": zod.array(zod.enum(['call.started', 'call.completed', 'call.failed', 'call.ended'])).min(1).describe('Prefer call.completed (and optionally call.failed). call.ended is accepted as an alias of call.completed.'),
   "secret": zod.string().optional().describe('HMAC signing secret (auto-generated if omitted)'),
   "description": zod.string().optional(),
   "enabled": zod.boolean().default(createWebhookEndpointBodyEnabledDefault)
@@ -2188,6 +2200,7 @@ export const UpdateWebhookEndpointResponse = zod.object({
   "url": zod.string().url(),
   "events": zod.array(zod.enum(['call.started', 'call.completed', 'call.failed', 'call.ended'])).describe('Event types that trigger this webhook. Prefer call.completed (call.ended is a legacy alias).'),
   "secretHint": zod.string().nullish().describe('Last 6 chars of the signing secret (masked)'),
+  "secret": zod.string().nullish().describe('Full signing secret — only present on create responses'),
   "enabled": zod.boolean(),
   "description": zod.string().nullish(),
   "createdAt": zod.coerce.date()
