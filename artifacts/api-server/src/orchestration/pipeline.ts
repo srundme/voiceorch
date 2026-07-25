@@ -60,11 +60,6 @@ import { toZonedTime, formatInTimeZone } from "date-fns-tz";
 import { db, bookingsTable, eventTypesTable, schedulingCalendarsTable, agentsTable, platformSettingsTable } from "@workspace/db";
 import { scheduleCallbackRequested } from "../services/autoRedial.js";
 import { resolveCallbackTime } from "../lib/tz-datetime.js";
-import { executeAnalyzeImage } from "../services/vision-analyze.js";
-import {
-  CallVisionMemory,
-  extractKnownCallerNameFromPrompt,
-} from "./vision-memory.js";
 import { eq, and, or, sql } from "drizzle-orm";
 import { getAvailableSlots } from "../services/scheduling/slot-engine.js";
 import type { TimeSlot } from "../services/scheduling/slot-engine.js";
@@ -624,10 +619,6 @@ export class OrchestrationPipeline implements VoiceSession {
    */
   public endReasonHint: string | null = null;
   private isProcessing = false;
-  /** Throttle webcall camera frames stored for analyze_image. */
-  private lastCameraFrameAt = 0;
-  private cameraVisionKickScheduled = false;
-  private mediaVisionKickTimer: ReturnType<typeof setTimeout> | null = null;
   /**
    * Set to true the moment executeCallTransfer begins (before the provider API
    * call). Prevents any queued STT transcript — caller speech during the transfer
@@ -932,8 +923,6 @@ export class OrchestrationPipeline implements VoiceSession {
   private voiceHandoffActive = false;
   private voiceLinkedFromPhone: string | null = null;
   private pendingVoiceLinkNote = false;
-  /** In-call people map + visual notes for vision agents. */
-  private visionMemory: CallVisionMemory | null = null;
   /** Caller said they cannot hear the agent — next LLM turn must resume, not ask கேக்குதா. */
   private pendingAudioDifficultyNote = false;
   /** Caller asked to clarify the last topic (often mid-cut STT like "about the Kala Fit"). */
@@ -1548,11 +1537,6 @@ export class OrchestrationPipeline implements VoiceSession {
     this.callDirection = config.callDirection ?? "inbound";
     this.isResumeDroppedCall = config.isResumeDroppedCall === true;
     this.agent = config.agentConfig;
-    if (this.agent.visionEnabled || this.agent.visionLiveEnabled) {
-      this.visionMemory = new CallVisionMemory(
-        extractKnownCallerNameFromPrompt(this.agent.systemPrompt),
-      );
-    }
     // Anchor the recording clock to the carrier answer time (when known) so the
     // gap between carrier answer and the first media frame is padded as leading
     // silence — the recording then lines up with what the caller heard live.
@@ -4991,95 +4975,6 @@ export class OrchestrationPipeline implements VoiceSession {
     this.config.onCallEnd();
   }
 
-  private async executeAnalyzeImage(args: Record<string, unknown>): Promise<string> {
-    const result = await executeAnalyzeImage({
-      callId: this.config.callId,
-      agentId: this.agent.id,
-      userId: null,
-      phone: this.config.callerPhone ?? null,
-      args,
-    });
-    if (this.visionMemory && result && !result.startsWith("analyze_image_error")) {
-      this.visionMemory.noteVisualFinding(result);
-    }
-    return result;
-  }
-
-  /** WhatsApp / upload / webcall camera delivered an image — nudge the LLM and kick a turn. */
-  notifyIncomingMedia(mediaId: number, meta?: { source?: string; mimeType?: string }): void {
-    const src = meta?.source ?? "upload";
-    const note =
-      `[System] The caller just sent an image via ${src} (media_id=${mediaId}` +
-      `${meta?.mimeType ? `, ${meta.mimeType}` : ""}). ` +
-      `Call the analyze_image tool with media_id=${mediaId} (or use_latest=true) to see it, then describe findings to the caller.`;
-    this.conversationHistory.appendUser(note);
-    this.config.onTranscript("user", `[Image received: media_id=${mediaId}]`);
-    logger.info({ callId: this.config.callId, mediaId, source: src }, "Pipeline: incoming media notified");
-    this.scheduleVisionKickTurn(src);
-  }
-
-  /**
-   * Webcall camera JPEG frames. Classic stack cannot stream video into the LLM,
-   * so we store stills and kick analyze_image (same path as photo upload).
-   */
-  onVideoFrame(jpegBase64: string, mimeType = "image/jpeg"): void {
-    if (this.closed) return;
-    if (!this.agent.visionEnabled && !this.agent.visionLiveEnabled) return;
-    const now = Date.now();
-    if (now - this.lastCameraFrameAt < 2500) return;
-    this.lastCameraFrameAt = now;
-    const data = jpegBase64.replace(/^data:[^;]+;base64,/, "");
-    if (!data || data.length < 200) return;
-    void this.ingestCameraFrame(data, mimeType);
-  }
-
-  private async ingestCameraFrame(base64: string, mimeType: string): Promise<void> {
-    try {
-      const buffer = Buffer.from(base64, "base64");
-      if (buffer.length < 500 || buffer.length > 8 * 1024 * 1024) return;
-      const row = await storeCallMedia({
-        callId: this.config.callId,
-        agentId: this.agent.id,
-        userId: null,
-        phone: this.config.callerPhone ?? null,
-        source: "webcall",
-        mimeType: mimeType.includes("png") ? "image/png" : "image/jpeg",
-        fileName: `camera-${Date.now()}.jpg`,
-        buffer,
-      });
-      // First camera still of the call: ask the agent to look. Later frames just refresh latest media.
-      if (!this.cameraVisionKickScheduled) {
-        this.cameraVisionKickScheduled = true;
-        this.notifyIncomingMedia(row.id, { source: "webcall", mimeType: row.mimeType });
-      }
-    } catch (err) {
-      logger.warn({ callId: this.config.callId, err }, "Pipeline: camera frame ingest failed");
-    }
-  }
-
-  /** After an image arrives, run a turn once the pipeline is idle so the agent speaks findings. */
-  private scheduleVisionKickTurn(source: string): void {
-    if (this.mediaVisionKickTimer) return;
-    let tries = 0;
-    const attempt = () => {
-      this.mediaVisionKickTimer = null;
-      if (this.closed) return;
-      if (this.isProcessing || this.isPlaying || this.isSendingTtsAudio) {
-        if (++tries > 40) return;
-        this.mediaVisionKickTimer = setTimeout(attempt, 400);
-        return;
-      }
-      const prompt =
-        source === "webcall"
-          ? "My webcam is on. Call analyze_image with use_latest=true and briefly tell me what you see."
-          : "I just shared a photo. Call analyze_image with use_latest=true and briefly tell me what you see.";
-      void this.processTurn(prompt, 0).catch((err) =>
-        logger.warn({ callId: this.config.callId, err }, "Pipeline: vision kick turn failed"),
-      );
-    };
-    this.mediaVisionKickTimer = setTimeout(attempt, 250);
-  }
-
   private async executeCalCom(tool: AgentTool & { type: "cal_com" }, args: Record<string, unknown>): Promise<void> {
     logger.info({ callId: this.config.callId, eventTypeId: tool.eventTypeId }, "Cal.com booking tool invoked");
     const attendeeName  = String(args["attendee_name"]  ?? args["name"]  ?? "Guest");
@@ -5519,7 +5414,6 @@ export class OrchestrationPipeline implements VoiceSession {
     }
 
     this.config.onTranscript("user", transcript);
-    this.visionMemory?.observeUserSpeech(transcript);
     // If the caller just switched language, annotate the history entry so the
     // LLM knows the transcript may be partially inaccurate (it was captured while
     // ASR was still locked to the old language) and should respond in the new one.
@@ -6368,10 +6262,7 @@ export class OrchestrationPipeline implements VoiceSession {
       this.pendingVoiceLinkNote = false;
     }
 
-    const visionBlock = this.visionMemory?.formatPromptBlock();
-    if (visionBlock) {
-      systemPromptForTurn += `\n\n${visionBlock}`;
-    }
+
 
     // ── [CURRENT DATE & TIME] — appended LAST for prompt-cache stability ──────
     // This is the only element that changes on every single turn (down to the
@@ -7295,13 +7186,7 @@ export class OrchestrationPipeline implements VoiceSession {
   }
 
   /** Related people learned on this call (for durable family_members fact). */
-  getVisionFamilyMembersFact(): string | null {
-    return this.visionMemory?.toFamilyMembersFact() ?? null;
-  }
 
-  setVisionPrimaryName(name: string): void {
-    this.visionMemory?.setPrimaryName(name);
-  }
 
   /** BCP-47 code of the language the caller EXPLICITLY requested mid-call
    *  ("Speak in Tamil"), for persisting back to caller memory at call end so

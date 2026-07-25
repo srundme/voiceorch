@@ -38,7 +38,6 @@ import { appendTraiDisclosure, scanForOptOut } from "../services/trai/index.js";
 import { appendDpdpDisclosure, scanAndRedactPII } from "../services/dpdp/index.js";
 import { appendIrdaiAiDisclosure } from "../services/irdai/index.js";
 import { appendGuardrails, redactTranscriptPII } from "../services/guardrails.js";
-import { appendVisionCommonSense } from "./vision-memory.js";
 import { phonesMatch } from "../services/google-sheets-helpers.js";
 import {
   attachPendingMediaToCall,
@@ -662,8 +661,6 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
           ),
         }
       : null,
-    visionEnabled: agentCfg["visionEnabled"] === true,
-    visionLiveEnabled: agentCfg["visionLiveEnabled"] === true,
   };
   // Propagate endpointing silence into STTConfig so Azure adapter picks it up
   agentConfig.sttConfig.endpointingSilenceMs = agentConfig.asrEndpointingSilenceMs;
@@ -2067,7 +2064,6 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
           if (latched) {
             callerNameLatchedThisCall = latched.name;
             callerNameLatchTier = latched.tier;
-            pipeline.setVisionPrimaryName?.(latched.name);
           }
         });
         // Real-time structured fact latch — pattern-based detection, fire-and-forget
@@ -3417,12 +3413,6 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
                   // truth for the language_pref fact so the NEXT call greets the
                   // caller in the requested language. Null for strict-mode agents.
                   explicitLanguageRequest: session.pipeline.getExplicitLangRequestForMemory(),
-                  extraDurableFacts: (() => {
-                    const household = session.pipeline.getVisionFamilyMembersFact?.() ?? null;
-                    return household
-                      ? [{ key: "family_members", value: household, confidence: 0.9 }]
-                      : undefined;
-                  })(),
                 });
                 createExecutionLogger(session.callId, memoryAgentId)("Memory", "response", {
                   status: "success",

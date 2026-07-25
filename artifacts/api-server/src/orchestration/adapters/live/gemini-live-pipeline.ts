@@ -25,10 +25,6 @@ import {
 } from "./gemini-live-voices.js";
 import { toGeminiLiveTools } from "./gemini-tools.js";
 import { runLiveToolCall } from "./live-tool-runner.js";
-import {
-  CallVisionMemory,
-  extractKnownCallerNameFromPrompt,
-} from "../../vision-memory.js";
 
 const SCHEDULE_CALLBACK_TOOL = {
   name: "schedule_callback",
@@ -68,18 +64,9 @@ export class GeminiLivePipeline implements VoiceSession {
   private greetingSent = false;
   private pendingOut24k = Buffer.alloc(0);
   private isPlayingOut = false;
-  private lastVideoFrameAt = 0;
-  private videoVisionAnnounced = false;
-  private visionMemory: CallVisionMemory | null = null;
-
   constructor(config: SessionConfig) {
     this.config = config;
     this.agent = config.agentConfig;
-    if (this.agent.visionEnabled || this.agent.visionLiveEnabled) {
-      this.visionMemory = new CallVisionMemory(
-        extractKnownCallerNameFromPrompt(this.agent.systemPrompt),
-      );
-    }
     const key = config.providerKeys.get("google") ?? config.providerKeys.get("gemini");
     if (!key) {
       throw new Error("Gemini Live requires a Google API key (managed or BYOP)");
@@ -179,72 +166,7 @@ export class GeminiLivePipeline implements VoiceSession {
     return null;
   }
 
-  getVisionFamilyMembersFact(): string | null {
-    return this.visionMemory?.toFamilyMembersFact() ?? null;
-  }
-
-  setVisionPrimaryName(name: string): void {
-    this.visionMemory?.setPrimaryName(name);
-  }
-
-  notifyIncomingMedia(mediaId: number, meta?: { source?: string; mimeType?: string }): void {
-    const src = meta?.source ?? "upload";
-    const note =
-      `The caller just sent an image via ${src} (media_id=${mediaId}). ` +
-      `Call the analyze_image tool with media_id=${mediaId} or use_latest=true to see it, then describe findings aloud.`;
-    void this.ensureConnected().then(() => {
-      if (this.closed || !this.session) return;
-      this.session.sendClientContent({
-        turns: [{ role: "user", parts: [{ text: note }] }],
-        turnComplete: true,
-      });
-    }).catch((err) => logger.warn({ callId: this.config.callId, err }, "Live: notifyIncomingMedia failed"));
-    this.config.onTranscript("user", `[Image received: media_id=${mediaId}]`);
-  }
-
-  onVideoFrame(jpegBase64: string, mimeType = "image/jpeg"): void {
-    if (this.closed) return;
-    if (!this.agent.visionLiveEnabled && !this.agent.visionEnabled) return;
-    const now = Date.now();
-    if (now - this.lastVideoFrameAt < 500) return;
-    this.lastVideoFrameAt = now;
-    const data = jpegBase64.replace(/^data:[^;]+;base64,/, "");
-    if (!data || data.length < 100) return;
-    void this.ensureConnected().then(() => {
-      if (this.closed || !this.session) return;
-      if (this.agent.visionLiveEnabled) {
-        this.session.sendRealtimeInput({
-          video: {
-            data,
-            mimeType: mimeType.includes("png") ? "image/png" : "image/jpeg",
-          },
-        });
-        if (!this.videoVisionAnnounced) {
-          this.videoVisionAnnounced = true;
-          this.session.sendRealtimeInput({
-            text: "The caller's webcam just turned on. Briefly describe what you see in the video.",
-          });
-          this.config.onTranscript("user", "[Camera on — watching live]");
-          logger.info({ callId: this.config.callId }, "Live: first video frame + see-me nudge");
-        }
-        return;
-      }
-      // visionEnabled only: one still into the Live turn (no continuous video stream).
-      if (this.videoVisionAnnounced) return;
-      this.videoVisionAnnounced = true;
-      this.session.sendClientContent({
-        turns: [{
-          role: "user",
-          parts: [
-            { inlineData: { mimeType: mimeType.includes("png") ? "image/png" : "image/jpeg", data } },
-            { text: "This is a webcam still. Briefly describe what you see." },
-          ],
-        }],
-        turnComplete: true,
-      });
-      this.config.onTranscript("user", "[Camera still shared]");
-    }).catch((err) => logger.debug({ callId: this.config.callId, err }, "Live: video frame send failed"));
-  }
+  onVideoFrame(_jpegBase64: string, _mimeType = "image/jpeg"): void {}
 
   getRecording(): RecordingBuffer {
     return this.recording;
@@ -303,17 +225,12 @@ export class GeminiLivePipeline implements VoiceSession {
       model,
       config: {
         responseModalities: [Modality.AUDIO],
-        systemInstruction: this.agent.visionLiveEnabled
-          ? `${this.agent.systemPrompt}\n\n[LIVE CAMERA] The caller may stream webcam frames. When video is present, describe what you see when asked or when it becomes relevant — do not invent visual details. Remember VISION COMMON SENSE and VISION / PEOPLE MEMORY: the person on camera may not be the primary caller.`
-          : this.agent.systemPrompt,
+        systemInstruction: this.agent.systemPrompt,
         speechConfig: {
           voiceConfig: {
             prebuiltVoiceConfig: { voiceName },
           },
         },
-        ...(this.agent.visionLiveEnabled || this.agent.visionEnabled
-          ? { mediaResolution: MediaResolution.MEDIA_RESOLUTION_LOW }
-          : {}),
         thinkingConfig: {
           thinkingLevel: thinkingMap[thinkingLevel] ?? ThinkingLevel.MINIMAL,
         },
@@ -412,10 +329,6 @@ export class GeminiLivePipeline implements VoiceSession {
             this.endReasonHint = "Tool ended call";
             this.config.onCallEnd();
           },
-          onAnalyzeImageResult: (text) => {
-            this.visionMemory?.noteVisualFinding(text);
-            this.pushVisionMemoryUpdate();
-          },
         },
         name,
         args,
@@ -437,22 +350,6 @@ export class GeminiLivePipeline implements VoiceSession {
       last.content = `${last.content} ${text}`.trim();
     } else {
       this.history.push({ role: "user", content: text });
-    }
-    if (this.visionMemory?.observeUserSpeech(text)) {
-      this.pushVisionMemoryUpdate();
-    }
-  }
-
-  private pushVisionMemoryUpdate(): void {
-    const block = this.visionMemory?.formatPromptBlock();
-    if (!block || !this.session || this.closed) return;
-    this.visionMemory?.consumeDirty();
-    try {
-      this.session.sendRealtimeInput({
-        text: `${block}\nAcknowledge silently and keep using this people map for the rest of the call.`,
-      });
-    } catch (err) {
-      logger.debug({ callId: this.config.callId, err }, "Live: vision memory update failed");
     }
   }
 

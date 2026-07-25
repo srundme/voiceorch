@@ -244,8 +244,6 @@ async function buildTargetAgentConfig(
           ),
         }
       : null,
-    visionEnabled: agentCfg["visionEnabled"] === true,
-    visionLiveEnabled: agentCfg["visionLiveEnabled"] === true,
   };
   agentConfig.sttConfig.endpointingSilenceMs = agentConfig.asrEndpointingSilenceMs;
 

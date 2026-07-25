@@ -2113,10 +2113,6 @@ function VisionTab({ form, agentId }: { form: any; agentId: number | undefined }
             ? "📹 Live Camera Mode (Gemini Live): Guest turns on their camera, then starts the webcall. The agent sees a 2 FPS video stream of whatever is in front of the lens in real-time."
             : "⚡ Full Hybrid Mode: Guest streams live camera video AND can upload high-resolution document/receipt files during the call."}
         </p>
-        <p className="text-[11px] text-muted-foreground leading-relaxed">
-          Prompt tip: Tell the agent what documents to ask for (Aadhaar, Invoice, Bill, ID) and when to invoke{" "}
-          <code className="text-[10px] font-mono text-sky-400 bg-sky-950/40 px-1 py-0.5 rounded">analyze_image</code>.
-        </p>
       </div>
 
       <WebcallShareLinksSection

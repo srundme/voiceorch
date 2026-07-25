@@ -9,7 +9,6 @@ import {
   executeNativeCancel,
   executeWebhookTool,
 } from "../../../services/tool-executor.js";
-import { executeAnalyzeImage } from "../../../services/vision-analyze.js";
 import { scheduleCallbackRequested } from "../../../services/autoRedial.js";
 import { resolveCallbackTime } from "../../../lib/tz-datetime.js";
 import { logger } from "../../../lib/logger.js";
@@ -20,8 +19,6 @@ export interface LiveToolRunnerDeps {
   onAgentText: (text: string) => void;
   speakText: (text: string) => Promise<void>;
   endCall: () => void;
-  /** Fired when analyze_image returns a successful description. */
-  onAnalyzeImageResult?: (text: string) => void;
 }
 
 /**

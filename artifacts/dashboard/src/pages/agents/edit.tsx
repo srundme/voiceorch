@@ -1792,21 +1792,6 @@ export default function AgentEdit() {
                   >
                     <Webhook className="h-4 w-4 mr-1" /> Custom Function
                   </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      appendTool({
-                        type: "analyze_image",
-                        name: "analyze_image",
-                        description: "Analyze a photo the caller sent (damage, ID, invoice, form). Use media_id or use_latest=true.",
-                      });
-                      form.setValue("visionEnabled", true);
-                    }}
-                  >
-                    <Eye className="h-4 w-4 mr-1" /> Vision
-                  </Button>
                 </div>
               </div>
             </CardHeader>
@@ -1939,10 +1924,6 @@ export default function AgentEdit() {
                           <span className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                             <Webhook className="h-3 w-3" /> Custom Function
                           </span>
-                        ) : toolType === "analyze_image" ? (
-                          <span className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                            <Eye className="h-3 w-3" /> Vision
-                          </span>
                         ) : (
                           <span className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                             <PhoneForwarded className="h-3 w-3" /> Call Transfer
@@ -1953,28 +1934,7 @@ export default function AgentEdit() {
                         </Button>
                       </div>
 
-                      {toolType === "analyze_image" ? (
-                        <>
-                          <FormField control={form.control} name={`tools.${index}.name`} render={({ field: f }) => (
-                            <FormItem>
-                              <FormLabel className="text-xs">Function Name</FormLabel>
-                              <FormControl><Input placeholder="analyze_image" {...f} /></FormControl>
-                              <FormDescription className="text-[10px]">Usually leave as analyze_image</FormDescription>
-                              <FormMessage />
-                            </FormItem>
-                          )} />
-                          <FormField control={form.control} name={`tools.${index}.description`} render={({ field: f }) => (
-                            <FormItem>
-                              <FormLabel className="text-xs">Description (shown to LLM)</FormLabel>
-                              <FormControl><Textarea className="min-h-[60px] text-sm" placeholder="Analyze a photo the caller sent…" {...f} /></FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )} />
-                          <p className="text-[11px] text-muted-foreground">
-                            Uses Gemini multimodal vision. Enable the Vision toggle in Language &amp; behaviour so photos from WhatsApp / upload are attached automatically.
-                          </p>
-                        </>
-                      ) : toolType === "webhook" ? (
+                      {toolType === "webhook" ? (
                         /* ── Webhook / Custom Function fields ── */
                         <>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">

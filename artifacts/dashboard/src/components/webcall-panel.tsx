@@ -160,7 +160,7 @@ export function WebcallPanel({
 
   // Live camera chrome (preview / stream) — not for photo-upload-only agents.
   const cameraAllowed = !!(visionLiveEnabled || requireCamera);
-  const photoUploadAllowed = !!visionEnabled;
+  const photoUploadAllowed = false;
 
   const startFrameCapture = useCallback(() => {
     if (frameTimerRef.current != null) return;
