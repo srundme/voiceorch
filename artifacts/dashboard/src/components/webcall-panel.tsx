@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Mic, MicOff, PhoneOff, Phone, Loader2, AlertCircle, X, SwitchCamera } from "lucide-react";
+import { Mic, MicOff, PhoneOff, Phone, Loader2, AlertCircle, X, SwitchCamera, ImagePlus, Camera } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 /**
@@ -47,6 +47,7 @@ export function WebcallPanel({
   shareToken,
   requireCamera,
   autoStart,
+  visionMode,
 }: {
   agentId: number;
   agentName: string;
@@ -58,6 +59,8 @@ export function WebcallPanel({
   requireCamera?: boolean;
   /** Start the call automatically after mount (join page). */
   autoStart?: boolean;
+  /** Vision mode from the agent config — drives upload/snapshot UI. */
+  visionMode?: string;
 }) {
   const [state, setState]   = useState<CallState>("idle");
   const [error, setError]   = useState<string | null>(null);
@@ -86,6 +89,8 @@ export function WebcallPanel({
   const cameraAutoTriedRef = useRef(false);
   const scrollEndRef   = useRef<HTMLDivElement | null>(null);
   const frameIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const uploadInputRef = useRef<HTMLInputElement | null>(null);
+  const [uploadPreview, setUploadPreview] = useState<string | null>(null);
 
   const stopCamera = useCallback(() => {
     if (frameIntervalRef.current) {
@@ -449,12 +454,12 @@ export function WebcallPanel({
   useEffect(() => () => { doneRef.current = true; teardown(); }, [teardown]);
   useEffect(() => { scrollEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [lines]);
 
-  // ── Video frame streaming ─────────────────────────────────────────────────
-  // When the call is live and the camera is on, capture a JPEG frame every
-  // second and send it to the server as a video_frame WebSocket message.
-  // Gemini Live receives these as real-time visual input.
+  // ── Video frame streaming (live_stream only) ─────────────────────────────
+  // For live_stream vision agents: capture a JPEG from the camera every second
+  // and push it to the server so Gemini receives continuous visual context.
+  // For live_snapshot / photo_upload, frames are sent on-demand instead.
   useEffect(() => {
-    if (state !== "live" || !cameraOn) return;
+    if (state !== "live" || !cameraOn || visionMode !== "live_stream") return;
     const canvas = document.createElement("canvas");
     const interval = setInterval(() => {
       const ws = wsRef.current;
@@ -478,7 +483,43 @@ export function WebcallPanel({
       clearInterval(interval);
       frameIntervalRef.current = null;
     };
-  }, [state, cameraOn]);
+  }, [state, cameraOn, visionMode]);
+
+  // ── On-demand image sending ────────────────────────────────────────────────
+  // Shared helper: encode a File (photo upload) or data-URL string (snapshot)
+  // and push it as a video_frame message.
+  const sendFrameBase64 = useCallback((base64: string, mimeType: string, previewDataUrl: string) => {
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ type: "video_frame", data: base64, mimeType }));
+    setUploadPreview(previewDataUrl);
+  }, []);
+
+  const sendImageFile = useCallback((file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      const base64 = dataUrl.split(",")[1];
+      if (!base64) return;
+      sendFrameBase64(base64, file.type || "image/jpeg", dataUrl);
+    };
+    reader.readAsDataURL(file);
+  }, [sendFrameBase64]);
+
+  const captureSnapshot = useCallback(() => {
+    const video = videoElRef.current;
+    if (!video || video.readyState < 2) return;
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
+    const ctx2d = canvas.getContext("2d");
+    if (!ctx2d) return;
+    ctx2d.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+    const base64 = dataUrl.split(",")[1];
+    if (!base64) return;
+    sendFrameBase64(base64, "image/jpeg", dataUrl);
+  }, [sendFrameBase64]);
 
   const active = state === "live" || state === "connecting" || state === "ending";
 
@@ -581,6 +622,17 @@ export function WebcallPanel({
               </div>
             </div>
           ))}
+          {/* Image preview bubble — shown after upload / snapshot */}
+          {uploadPreview && (
+            <div className="flex justify-end">
+              <div className="max-w-[70%] rounded-2xl overflow-hidden border border-border/60 rounded-br-sm">
+                <span className="block text-[9px] uppercase tracking-wide opacity-50 px-3 pt-2">
+                  You · image sent
+                </span>
+                <img src={uploadPreview} alt="Sent to agent" className="w-full object-cover max-h-40" />
+              </div>
+            </div>
+          )}
           <div ref={scrollEndRef} />
         </div>
 
@@ -590,6 +642,19 @@ export function WebcallPanel({
             <AlertCircle className="h-3.5 w-3.5 shrink-0" /> {error}
           </div>
         )}
+
+        {/* Hidden file input for photo_upload mode */}
+        <input
+          ref={uploadInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) sendImageFile(file);
+            e.target.value = "";
+          }}
+        />
 
         {/* Controls */}
         <div className="shrink-0 border-t border-border p-3 flex items-center justify-center gap-2.5">
@@ -608,6 +673,31 @@ export function WebcallPanel({
               >
                 {muted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
               </Button>
+
+              {/* Photo upload button — visible for photo_upload vision mode */}
+              {visionMode === "photo_upload" && state === "live" && (
+                <Button
+                  variant="outline"
+                  onClick={() => uploadInputRef.current?.click()}
+                  className="h-10 w-10 p-0 rounded-full border-border text-violet-400 hover:bg-violet-500/10"
+                  title="Upload image for agent to analyse"
+                >
+                  <ImagePlus className="h-4 w-4" />
+                </Button>
+              )}
+
+              {/* Snapshot button — visible for live_snapshot vision mode */}
+              {visionMode === "live_snapshot" && state === "live" && cameraOn && (
+                <Button
+                  variant="outline"
+                  onClick={captureSnapshot}
+                  className="h-10 w-10 p-0 rounded-full border-border text-violet-400 hover:bg-violet-500/10"
+                  title="Send snapshot to agent"
+                >
+                  <Camera className="h-4 w-4" />
+                </Button>
+              )}
+
               <Button
                 onClick={end}
                 disabled={state === "ending"}
