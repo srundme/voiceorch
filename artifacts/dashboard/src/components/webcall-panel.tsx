@@ -85,8 +85,13 @@ export function WebcallPanel({
   const doneRef        = useRef(false);
   const cameraAutoTriedRef = useRef(false);
   const scrollEndRef   = useRef<HTMLDivElement | null>(null);
+  const frameIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const stopCamera = useCallback(() => {
+    if (frameIntervalRef.current) {
+      clearInterval(frameIntervalRef.current);
+      frameIntervalRef.current = null;
+    }
     videoStreamRef.current?.getTracks().forEach((t) => t.stop());
     videoStreamRef.current = null;
     if (videoElRef.current) {
@@ -443,6 +448,37 @@ export function WebcallPanel({
 
   useEffect(() => () => { doneRef.current = true; teardown(); }, [teardown]);
   useEffect(() => { scrollEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [lines]);
+
+  // ── Video frame streaming ─────────────────────────────────────────────────
+  // When the call is live and the camera is on, capture a JPEG frame every
+  // second and send it to the server as a video_frame WebSocket message.
+  // Gemini Live receives these as real-time visual input.
+  useEffect(() => {
+    if (state !== "live" || !cameraOn) return;
+    const canvas = document.createElement("canvas");
+    const interval = setInterval(() => {
+      const ws = wsRef.current;
+      const video = videoElRef.current;
+      if (!ws || ws.readyState !== WebSocket.OPEN || !video || video.readyState < 2) return;
+      const w = video.videoWidth;
+      const h = video.videoHeight;
+      if (!w || !h) return;
+      canvas.width = w;
+      canvas.height = h;
+      const ctx2d = canvas.getContext("2d");
+      if (!ctx2d) return;
+      ctx2d.drawImage(video, 0, 0, w, h);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
+      const base64 = dataUrl.split(",")[1];
+      if (!base64) return;
+      ws.send(JSON.stringify({ type: "video_frame", data: base64, mimeType: "image/jpeg" }));
+    }, 1000);
+    frameIntervalRef.current = interval;
+    return () => {
+      clearInterval(interval);
+      frameIntervalRef.current = null;
+    };
+  }, [state, cameraOn]);
 
   const active = state === "live" || state === "connecting" || state === "ending";
 
