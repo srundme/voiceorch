@@ -139,10 +139,11 @@ interface CodeSnippets {
 interface WebcallLink {
   id: string;
   token: string;
-  url: string;
   requireCamera: boolean;
   createdAt: string;
 }
+
+const joinUrl = (token: string) => `${window.location.origin}/join/${token}`;
 
 /* ── Query keys ────────────────────────────────────────────────────────────── */
 const vaKey = (id: string) => ["vision-agents", id] as const;
@@ -1463,7 +1464,7 @@ function CodeShareTab({ agentId }: { agentId: string }) {
             {links.map(link => (
               <div key={link.id} className="flex items-center gap-2 p-3 rounded-lg border border-border/60 bg-card/30">
                 <div className="flex-1 min-w-0">
-                  <code className="text-xs font-mono text-muted-foreground truncate block">{link.url}</code>
+                  <code className="text-xs font-mono text-muted-foreground truncate block">{joinUrl(link.token)}</code>
                   <div className="flex items-center gap-2 mt-0.5">
                     {link.requireCamera && (
                       <Badge variant="outline" className="text-[9px] h-4 px-1.5 gap-0.5 border-violet-500/30 text-violet-400">
@@ -1472,8 +1473,8 @@ function CodeShareTab({ agentId }: { agentId: string }) {
                     )}
                   </div>
                 </div>
-                <CopyButton text={link.url} />
-                <a href={link.url} target="_blank" rel="noreferrer" className="text-muted-foreground hover:text-foreground">
+                <CopyButton text={joinUrl(link.token)} />
+                <a href={joinUrl(link.token)} target="_blank" rel="noreferrer" className="text-muted-foreground hover:text-foreground">
                   <ExternalLink className="h-3.5 w-3.5" />
                 </a>
               </div>
