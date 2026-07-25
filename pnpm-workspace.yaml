@@ -72,7 +72,7 @@ overrides:
   '@tailwindcss/oxide>@tailwindcss/oxide-linux-x64-musl': '-'
   '@tailwindcss/oxide>@tailwindcss/oxide-win32-arm64-msvc': '-'
   '@tailwindcss/oxide>@tailwindcss/oxide-win32-x64-msvc': '-'
-  undici: ^8.5.0
+  undici: ^7.8.0
   ws: ^8.21.0
   form-data: ^4.0.6
   uuid: ^11.0.0
