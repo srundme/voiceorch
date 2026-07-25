@@ -604,12 +604,14 @@ function SchemaFieldEditor({
 function ToolCard({
   toolId,
   config,
+  visionMode,
   extractExtras,
   onChange,
   onExtractExtrasChange,
 }: {
   toolId: ToolId;
   config: ToolConfig;
+  visionMode: VisionMode;
   extractExtras?: { outputSchema: SchemaField[]; saveToDatabase: boolean; databaseSchemaId: string | null };
   onChange: (patch: Partial<ToolConfig>) => void;
   onExtractExtrasChange?: (patch: { outputSchema?: SchemaField[]; saveToDatabase?: boolean; databaseSchemaId?: string | null }) => void;
@@ -664,19 +666,26 @@ function ToolCard({
               placeholder="Analyze this image and {{instruction}}…"
             />
           </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Provider Override</Label>
-            <Select
-              value={config.providerOverride ?? "__none__"}
-              onValueChange={v => onChange({ providerOverride: v === "__none__" ? null : v })}
-            >
-              <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Use default provider" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__none__" className="text-xs">Use default provider</SelectItem>
-                {PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-xs">{p.label}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
+          {visionMode !== "live_stream" && (
+            <div className="space-y-1.5">
+              <Label className="text-xs">Provider Override</Label>
+              <Select
+                value={config.providerOverride ?? "__none__"}
+                onValueChange={v => onChange({ providerOverride: v === "__none__" ? null : v })}
+              >
+                <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Use default provider" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__" className="text-xs">Use default provider</SelectItem>
+                  {PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-xs">{p.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          {visionMode === "live_stream" && (
+            <p className="text-[11px] text-muted-foreground bg-muted/40 rounded-lg px-3 py-2">
+              Provider is locked to Gemini Live — vision runs natively in the live session.
+            </p>
+          )}
 
           {/* Extract-specific extras */}
           {toolId === "vision_extract" && extractExtras && onExtractExtrasChange && (
@@ -751,6 +760,7 @@ function ToolsTab({ agent, onSave, saving }: {
           key={toolId}
           toolId={toolId}
           config={tools[toolId]}
+          visionMode={agent.visionMode}
           extractExtras={toolId === "vision_extract" ? tools.vision_extract : undefined}
           onChange={patch => updateTool(toolId, patch)}
           onExtractExtrasChange={toolId === "vision_extract" ? updateExtractExtras : undefined}
