@@ -702,12 +702,37 @@ function ToolCard({
   );
 }
 
+const DEFAULT_TOOL_CONFIG: ToolConfig = {
+  enabled: false,
+  name: "",
+  description: "",
+  promptTemplate: "",
+  providerOverride: null,
+};
+
+const DEFAULT_TOOLS: VisionTools = {
+  vision_describe: { ...DEFAULT_TOOL_CONFIG },
+  vision_extract:  { ...DEFAULT_TOOL_CONFIG, outputSchema: [], saveToDatabase: false, databaseSchemaId: null },
+  vision_verify:   { ...DEFAULT_TOOL_CONFIG },
+  vision_compare:  { ...DEFAULT_TOOL_CONFIG },
+};
+
+function mergeTools(raw: unknown): VisionTools {
+  const src = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  return {
+    vision_describe: { ...DEFAULT_TOOLS.vision_describe, ...(src["vision_describe"] as object | undefined ?? {}) },
+    vision_extract:  { ...DEFAULT_TOOLS.vision_extract,  ...(src["vision_extract"]  as object | undefined ?? {}) },
+    vision_verify:   { ...DEFAULT_TOOLS.vision_verify,   ...(src["vision_verify"]   as object | undefined ?? {}) },
+    vision_compare:  { ...DEFAULT_TOOLS.vision_compare,  ...(src["vision_compare"]  as object | undefined ?? {}) },
+  };
+}
+
 function ToolsTab({ agent, onSave, saving }: {
   agent: VisionAgent;
   onSave: (patch: Partial<VisionAgent>) => void;
   saving: boolean;
 }) {
-  const [tools, setTools] = useState<VisionTools>(agent.tools);
+  const [tools, setTools] = useState<VisionTools>(() => mergeTools(agent.tools));
 
   const updateTool = (toolId: ToolId, patch: Partial<ToolConfig>) =>
     setTools(t => ({ ...t, [toolId]: { ...t[toolId], ...patch } }));
