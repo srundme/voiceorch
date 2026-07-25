@@ -257,7 +257,7 @@ export const CreateAgentBody = zod.object({
   "noiseCancellationEnabled": zod.boolean().optional(),
   "inactivityMessage": zod.string().optional(),
   "tools": zod.array(zod.object({
-  "type": zod.enum(['call_transfer', 'webhook', 'send_sms', 'end_call', 'cal_com', 'native_booking', 'native_reschedule', 'native_cancel', 'native_check_availability', 'native_list_bookings', 'transfer_cold', 'transfer_warm', 'transfer_agent', 'analyze_image']).describe('Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, native_cancel, native_check_availability, native_list_bookings, transfer_cold, transfer_warm, transfer_agent, or analyze_image'),
+  "type": zod.enum(['call_transfer', 'webhook', 'send_sms', 'end_call', 'cal_com', 'native_booking', 'native_reschedule', 'native_cancel', 'native_check_availability', 'native_list_bookings', 'transfer_cold', 'transfer_warm', 'transfer_agent', 'analyze_image', 'analyze_document']).describe('Tool type'),
   "name": zod.string().describe('LLM-facing function name (snake_case, no spaces, e.g. transfer_to_human)'),
   "description": zod.string().describe('Explains to the LLM when and why to invoke this tool'),
   "transferTo": zod.string().optional().describe('(call_transfer) E.164 phone number to transfer the call to (e.g. +12125551234)'),

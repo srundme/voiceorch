@@ -6338,7 +6338,8 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
       handleClose();
       navigate(`/app/agents/${result.id}`);
     } catch (err: any) {
-      setCreateError(err?.message ?? "Failed to create agent. Please try again.");
+      const issueMsg = Array.isArray(err?.issues) ? err.issues.map((i: any) => `${i.path.join(".")}: ${i.message}`).join(", ") : "";
+      setCreateError(issueMsg ? `Validation failed: ${issueMsg}` : (err?.message ?? "Failed to create agent. Please try again."));
     } finally {
       setCreating(false);
     }
