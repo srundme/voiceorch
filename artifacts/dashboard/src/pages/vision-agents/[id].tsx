@@ -1475,14 +1475,10 @@ function CodeShareTab({ agentId }: { agentId: string }) {
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <p className="text-sm font-medium">Shareable Webcall Links</p>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => createLink.mutate(false)} disabled={createLink.isPending}>
-              <Plus className="h-3 w-3" /> Link
-            </Button>
-            <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => createLink.mutate(true)} disabled={createLink.isPending}>
-              <Camera className="h-3 w-3" /> + Camera
-            </Button>
-          </div>
+          <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => createLink.mutate(true)} disabled={createLink.isPending}>
+            {createLink.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+            New Link
+          </Button>
         </div>
         {linksLoading ? (
           <Skeleton className="h-16 w-full rounded-xl" />
