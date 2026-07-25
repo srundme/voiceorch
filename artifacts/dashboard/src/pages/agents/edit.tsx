@@ -398,8 +398,8 @@ export default function AgentEdit() {
 
   const updateAgent = useUpdateAgent();
 
-  const form = useForm<AgentFormValues>({
-    resolver: zodResolver(agentFormSchema),
+  const form = useForm<any>({
+    resolver: zodResolver(agentFormSchema) as any,
     defaultValues: {
       name: "", description: "", asrProvider: "azure", asrModel: "",
       llmProvider: "openai", llmModel: "", ttsProvider: "elevenlabs",

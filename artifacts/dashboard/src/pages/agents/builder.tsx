@@ -3619,6 +3619,7 @@ function AgentListPanel({ selectedId, onSelect, rateMap, className }: {
           {([
             ["all", "All"],
             ["voice", "Voice"],
+            ["vision", "Vision"],
           ] as const).map(([id, label]) => (
             <button
               key={id}
@@ -6254,6 +6255,7 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
   const queryClient = useQueryClient();
   const [step, setStep] = useState<"pick" | "scratch">("pick");
   const [agentName, setAgentName] = useState("");
+  const [selectedKind, setSelectedKind] = useState<"voice" | "vision">("voice");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
@@ -6261,6 +6263,7 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
     if (creating) return;
     setStep("pick");
     setAgentName("");
+    setSelectedKind("voice");
     setCreateError(null);
     onClose();
   };
@@ -6274,28 +6277,57 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
     setCreating(true);
     setCreateError(null);
     try {
-      const name = agentName.trim() || "New Agent";
-      const body: Record<string, unknown> = {
-        name,
-        asrProvider: "sarvam",
-        asrModel: "saaras:v3",
-        asrLanguage: "",
-        language: "en-IN",
-        telephonyProvider: "vobiz",
-        systemPrompt: "You are a helpful AI voice assistant.",
-        greetingMessage: "Hello! How can I help you today?",
-        tools: [
-          { type: "end_call", name: "end_call", description: "End the call when the conversation is complete." },
-        ],
-        agentConfig: {
-          agentKind: "voice",
-        },
-        llmProvider: "google",
-        llmModel: "gemini-2.5-flash",
-        ttsProvider: "cartesia",
-        ttsModel: "sonic-3.5",
-        ttsVoice: "a8adc74b-c9c1-45e0-aae7-9a60ba64bbee",
-      };
+      const isVision = selectedKind === "vision";
+      const name = agentName.trim() || (isVision ? "New Vision Agent" : "New Voice Agent");
+      const body: Record<string, unknown> = isVision
+        ? {
+            name,
+            telephonyProvider: "vobiz",
+            systemPrompt: "You are a helpful AI Vision Assistant. Inspect documents and verify caller requests over a live video WebCall.",
+            greetingMessage: "Hello! I can see your video and inspect any documents you share. How can I help you today?",
+            tools: [
+              { type: "analyze_document", name: "analyze_document", description: "Inspect a high-resolution document photo (Aadhaar, PAN, GST, Invoice, Receipt) via Sarvam Vision API." },
+              { type: "end_call", name: "end_call", description: "End the call when the conversation is complete." },
+            ],
+            agentConfig: {
+              agentKind: "vision",
+              visionMode: "hybrid",
+              visionEnabled: true,
+              visionLiveEnabled: true,
+              voiceStack: "gemini_live",
+              geminiLive: {
+                model: "gemini-3.1-flash-live",
+                voiceName: "Aoede",
+                thinkingLevel: "minimal",
+              },
+            },
+            asrProvider: "sarvam",
+            llmProvider: "google",
+            llmModel: "gemini-3.1-flash-live",
+            ttsProvider: "cartesia",
+            ttsVoice: "a8adc74b-c9c1-45e0-aae7-9a60ba64bbee",
+          }
+        : {
+            name,
+            asrProvider: "sarvam",
+            asrModel: "saaras:v3",
+            asrLanguage: "",
+            language: "en-IN",
+            telephonyProvider: "vobiz",
+            systemPrompt: "You are a helpful AI voice assistant.",
+            greetingMessage: "Hello! How can I help you today?",
+            tools: [
+              { type: "end_call", name: "end_call", description: "End the call when the conversation is complete." },
+            ],
+            agentConfig: {
+              agentKind: "voice",
+            },
+            llmProvider: "google",
+            llmModel: "gemini-2.5-flash",
+            ttsProvider: "cartesia",
+            ttsModel: "sonic-3.5",
+            ttsVoice: "a8adc74b-c9c1-45e0-aae7-9a60ba64bbee",
+          };
 
       const result = await customFetch<{ id: number }>(`${DASH_API}/agents`, {
         method: "POST",
@@ -6318,11 +6350,11 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
         <DialogHeader>
           <DialogTitle>
             {step === "pick" && "Create a new agent"}
-            {step === "scratch" && "Name your agent"}
+            {step === "scratch" && "Configure new agent"}
           </DialogTitle>
           <DialogDescription>
             {step === "pick" && "Build with AI for a guided setup, or configure manually from scratch."}
-            {step === "scratch" && "You can change this anytime in the builder."}
+            {step === "scratch" && "Choose agent mode and name. You can edit settings anytime."}
           </DialogDescription>
         </DialogHeader>
 
@@ -6362,13 +6394,49 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
               <Label htmlFor="scratch-name">Agent name</Label>
               <Input
                 id="scratch-name"
-                placeholder="e.g. Sales Agent, Support Assistant"
+                placeholder="e.g. Support Representative"
                 value={agentName}
                 onChange={e => setAgentName(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && void handleScratch()}
                 autoFocus
               />
             </div>
+
+            <div className="space-y-1.5">
+              <Label>Agent Mode</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedKind("voice")}
+                  className={`p-3 rounded-lg border text-left flex flex-col gap-1 transition-colors ${
+                    selectedKind === "voice"
+                      ? "border-primary bg-primary/10 text-foreground"
+                      : "border-border/60 bg-muted/20 text-muted-foreground hover:bg-muted/40"
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 font-semibold text-xs text-foreground">
+                    <Phone className="h-3.5 w-3.5 text-primary" /> Voice Agent
+                  </div>
+                  <p className="text-[10px] text-muted-foreground leading-tight">Telephony PSTN &amp; WebCall Voice</p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedKind("vision")}
+                  className={`p-3 rounded-lg border text-left flex flex-col gap-1 transition-colors ${
+                    selectedKind === "vision"
+                      ? "border-primary bg-primary/10 text-foreground"
+                      : "border-border/60 bg-muted/20 text-muted-foreground hover:bg-muted/40"
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 font-semibold text-xs text-foreground">
+                    <Eye className="h-3.5 w-3.5 text-primary" /> Vision Agent
+                  </div>
+                  <p className="text-[10px] text-muted-foreground leading-tight">WebCam Video &amp; Sarvam OCR</p>
+                </button>
+              </div>
+            </div>
+
             {createError && <p className="text-xs text-destructive">{createError}</p>}
             <DialogFooter>
               <Button variant="ghost" onClick={() => setStep("pick")} disabled={creating}>Back</Button>

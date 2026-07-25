@@ -8,6 +8,7 @@ import {
   executeNativeReschedule,
   executeNativeCancel,
   executeWebhookTool,
+  executeAnalyzeDocumentTool,
 } from "../../../services/tool-executor.js";
 import { scheduleCallbackRequested } from "../../../services/autoRedial.js";
 import { resolveCallbackTime } from "../../../lib/tz-datetime.js";
@@ -173,6 +174,8 @@ async function executeLiveAgentTool(
       return executeNativeReschedule(callId, agentId, tool, args);
     case "native_cancel":
       return executeNativeCancel(callId, agentId, tool, args);
+    case "analyze_document":
+      return executeAnalyzeDocumentTool(callId, agentId, null, config.callerPhone ?? null, args);
     case "send_sms":
       return undefined;
     default:

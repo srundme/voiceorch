@@ -54,6 +54,7 @@ export const agentFormSchema = z.object({
   autoSwitchToEnglish:    z.boolean().optional(),
   languageAutoDetect:     z.boolean().optional(),
   agentKind:              z.enum(["voice", "vision"]).optional(),
+  visionMode:             z.enum(["live_video", "photo_upload", "hybrid"]).optional(),
   visionEnabled:          z.boolean().optional(),
   visionLiveEnabled:      z.boolean().optional(),
   machineDetectionMode:   z.enum(["disabled", "enable", "detect_message_end"]).optional(),
@@ -61,7 +62,7 @@ export const agentFormSchema = z.object({
   voicemailMessage:       z.string().optional(),
   voicemailLeadInSeconds: z.number().min(0).max(15).optional(),
   tools: z.array(z.object({
-    type: z.enum(["call_transfer", "webhook", "send_sms", "end_call", "cal_com", "native_booking", "native_check_availability", "native_list_bookings", "native_reschedule", "native_cancel", "transfer_cold", "transfer_warm", "transfer_agent"]),
+    type: z.enum(["call_transfer", "webhook", "send_sms", "end_call", "cal_com", "native_booking", "native_check_availability", "native_list_bookings", "native_reschedule", "native_cancel", "transfer_cold", "transfer_warm", "transfer_agent", "analyze_document"]),
     name: z.string().optional(),
     description: z.string().optional(),
     transferTo: z.string().optional(),
