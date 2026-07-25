@@ -162,9 +162,20 @@ router.patch("/vision-agents/:id", requireAuth, async (req, res): Promise<void> 
   if (typeof body["thinkingLevel"] === "string") agentCfgMerge["thinkingLevel"] = body["thinkingLevel"];
   if (typeof body["multilingual"] === "boolean") agentCfgMerge["multilingual"] = body["multilingual"];
 
-  if (body["visionConfig"] != null) {
+  // Vision tab sends flat fields — map them into agentConfig.visionConfig
+  const vcPatch: Record<string, unknown> = {};
+  if (typeof body["visionMode"] === "string")       vcPatch["mode"]             = body["visionMode"];
+  if (typeof body["defaultProvider"] === "string" || body["defaultProvider"] === null)
+                                                    vcPatch["defaultProvider"]  = body["defaultProvider"];
+  if (typeof body["retentionDays"] === "number")    vcPatch["retentionDays"]    = body["retentionDays"];
+  if (typeof body["allowWhatsApp"] === "boolean")   vcPatch["allowWhatsapp"]    = body["allowWhatsApp"];
+  if (typeof body["allowApiStaging"] === "boolean") vcPatch["allowApiStaging"]  = body["allowApiStaging"];
+  if (typeof body["notifyOnMedia"] === "boolean")   vcPatch["notifyOnMedia"]    = body["notifyOnMedia"];
+
+  if (Object.keys(vcPatch).length > 0 || body["visionConfig"] != null) {
     const existingVC = ((agent.agentConfig ?? {}) as Record<string, unknown>)["visionConfig"] as Record<string, unknown> | undefined ?? {};
-    agentCfgMerge["visionConfig"] = { ...existingVC, ...(body["visionConfig"] as Record<string, unknown>) };
+    const incomingVC = (body["visionConfig"] as Record<string, unknown> | undefined) ?? {};
+    agentCfgMerge["visionConfig"] = { ...existingVC, ...incomingVC, ...vcPatch };
   }
 
   if (body["agentConfig"] != null) {
@@ -179,6 +190,12 @@ router.patch("/vision-agents/:id", requireAuth, async (req, res): Promise<void> 
   } else if (Array.isArray(body["tools"])) {
     const currentCfg = (agent.agentConfig ?? {}) as Record<string, unknown>;
     patch.agentConfig = { ...currentCfg, tools: body["tools"] } as typeof agentsTable.$inferInsert["agentConfig"];
+  }
+
+  // Guard: if nothing changed, return current agent without hitting DB
+  if (Object.keys(patch).length === 0) {
+    res.json(serializeVisionAgent(agent));
+    return;
   }
 
   try {
