@@ -435,50 +435,73 @@ function VisionTab({ agent, onSave, saving }: {
 
   return (
     <div className="space-y-6 max-w-2xl">
-      <div className="space-y-3">
-        <Label>Vision Mode</Label>
-        <div className="grid grid-cols-1 gap-3">
+
+      {/* ── Vision Mode ─────────────────────────────────────────────── */}
+      <div className="space-y-2">
+        <div>
+          <Label>Vision Mode</Label>
+          <p className="text-[11px] text-muted-foreground mt-0.5">How does this agent receive images?</p>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
           {VISION_MODES.map(m => (
             <button
               key={m.id}
               onClick={() => set("visionMode", m.id)}
               className={cn(
-                "flex items-center gap-3 p-4 rounded-xl border text-left transition-colors",
+                "flex flex-col gap-2 p-4 rounded-xl border text-left transition-all",
                 form.visionMode === m.id
-                  ? "border-violet-500/50 bg-violet-500/10"
-                  : "border-border hover:border-border/80 hover:bg-muted/30",
+                  ? "border-violet-500/60 bg-violet-500/10 shadow-[0_0_0_1px_rgba(139,92,246,0.2)]"
+                  : "border-border/60 hover:border-border hover:bg-muted/20",
               )}
             >
               <div className={cn(
-                "h-8 w-8 rounded-lg flex items-center justify-center shrink-0",
-                form.visionMode === m.id ? "bg-violet-500/20 text-violet-400" : "bg-muted/50 text-muted-foreground",
+                "h-9 w-9 rounded-lg flex items-center justify-center",
+                form.visionMode === m.id ? "bg-violet-500/20 text-violet-400" : "bg-muted/60 text-muted-foreground",
               )}>
                 {m.icon}
               </div>
               <div>
-                <p className={cn("text-sm font-medium", form.visionMode === m.id ? "text-foreground" : "text-foreground/80")}>{m.label}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">{m.description}</p>
+                <p className={cn("text-sm font-semibold leading-tight", form.visionMode === m.id ? "text-foreground" : "text-foreground/75")}>{m.label}</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">{m.description}</p>
               </div>
-              {form.visionMode === m.id && <Check className="h-4 w-4 text-violet-400 ml-auto" />}
             </button>
           ))}
         </div>
       </div>
 
-      <div className="space-y-1.5">
-        <Label>Default Provider</Label>
-        <Select value={form.defaultProvider} onValueChange={v => set("defaultProvider", v)}>
-          <SelectTrigger><SelectValue placeholder="Select provider…" /></SelectTrigger>
-          <SelectContent>
-            {PROVIDERS.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
-          </SelectContent>
-        </Select>
-      </div>
+      {/* ── Provider ────────────────────────────────────────────────── */}
+      {form.visionMode === "live_stream" ? (
+        <div className="flex items-center gap-3 rounded-xl border border-border/50 bg-muted/20 px-4 py-3">
+          <div className="h-7 w-7 rounded-md bg-blue-500/15 flex items-center justify-center shrink-0">
+            <Eye className="h-3.5 w-3.5 text-blue-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-medium text-foreground">Powered by Gemini Live</p>
+            <p className="text-[10.5px] text-muted-foreground">Provider is fixed — vision runs inside the live audio session.</p>
+          </div>
+          <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-400 shrink-0">Locked</span>
+        </div>
+      ) : (
+        <div className="space-y-1.5">
+          <Label>Vision Provider</Label>
+          <p className="text-[11px] text-muted-foreground">Which AI analyses the uploaded images.</p>
+          <Select value={form.defaultProvider} onValueChange={v => set("defaultProvider", v)}>
+            <SelectTrigger><SelectValue placeholder="Select provider…" /></SelectTrigger>
+            <SelectContent>
+              {PROVIDERS.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
 
+      {/* ── Media Retention ─────────────────────────────────────────── */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <Label>Media Retention</Label>
-          <span className="text-sm font-medium tabular-nums">{form.retentionDays} days</span>
+          <div>
+            <Label>Media Retention</Label>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Uploaded images are auto-deleted after this period.</p>
+          </div>
+          <span className="text-sm font-semibold tabular-nums text-foreground">{form.retentionDays}d</span>
         </div>
         <Slider
           value={[form.retentionDays]}
@@ -488,27 +511,26 @@ function VisionTab({ agent, onSave, saving }: {
           step={1}
           className="w-full"
         />
-        <p className="text-xs text-muted-foreground">Uploaded media is deleted after this period.</p>
+        <div className="flex justify-between text-[10px] text-muted-foreground/60">
+          <span>1 day</span><span>90 days</span>
+        </div>
       </div>
 
-      <div className="rounded-xl border border-border/60 p-4 space-y-4">
-        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Permissions</p>
+      {/* ── Permissions ─────────────────────────────────────────────── */}
+      <div className="rounded-xl border border-border/50 divide-y divide-border/40">
         {(
           [
-            { key: "allowWhatsApp" as const,   label: "Allow WhatsApp",    description: "Accept images sent via WhatsApp" },
-            { key: "allowApiStaging" as const,  label: "Allow API Staging", description: "Enable staging environment for API testing" },
-            { key: "notifyOnMedia" as const,    label: "Notify on Media",   description: "Send notifications when media is received" },
+            { key: "allowWhatsApp" as const,   label: "WhatsApp",     description: "Accept images via WhatsApp" },
+            { key: "allowApiStaging" as const,  label: "API Staging",  description: "Enable staging for API testing" },
+            { key: "notifyOnMedia" as const,    label: "Notifications", description: "Alert when media is received" },
           ] as const
         ).map(({ key, label, description }) => (
-          <div key={key} className="flex items-center justify-between gap-4">
+          <div key={key} className="flex items-center justify-between gap-4 px-4 py-3">
             <div>
               <p className="text-sm font-medium">{label}</p>
-              <p className="text-xs text-muted-foreground">{description}</p>
+              <p className="text-[11px] text-muted-foreground">{description}</p>
             </div>
-            <Switch
-              checked={form[key]}
-              onCheckedChange={v => set(key, v)}
-            />
+            <Switch checked={form[key]} onCheckedChange={v => set(key, v)} />
           </div>
         ))}
       </div>
@@ -516,7 +538,7 @@ function VisionTab({ agent, onSave, saving }: {
       <Button
         onClick={() => onSave({
           visionMode: form.visionMode,
-          defaultProvider: form.defaultProvider || null,
+          defaultProvider: form.visionMode === "live_stream" ? null : (form.defaultProvider || null),
           retentionDays: form.retentionDays,
           allowWhatsApp: form.allowWhatsApp,
           allowApiStaging: form.allowApiStaging,
