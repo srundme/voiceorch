@@ -674,8 +674,8 @@ export function WebcallPanel({
                 {muted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
               </Button>
 
-              {/* Photo upload button — visible for photo_upload vision mode */}
-              {visionMode === "photo_upload" && state === "live" && (
+              {/* Photo upload button — photo_upload mode OR live_stream (both modes allow uploading) */}
+              {(visionMode === "photo_upload" || visionMode === "live_stream") && state === "live" && (
                 <Button
                   variant="outline"
                   onClick={() => uploadInputRef.current?.click()}
