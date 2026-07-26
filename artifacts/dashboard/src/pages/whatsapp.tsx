@@ -138,24 +138,32 @@ function SetupGuide({ hasConnection }: { hasConnection: boolean }) {
             <div className="min-w-0 space-y-1.5">
               <p className="text-sm font-medium flex items-center gap-1.5">
                 <Send className="w-3.5 h-3.5 text-muted-foreground" />
-                After the AI call → send WhatsApp (outbound)
+                After the AI call → send a WhatsApp template (outbound)
               </p>
               <p className="text-xs text-muted-foreground">
-                Create a Zap / automation that starts when SnapServe POSTs to your outbound URL.
-                Map fields to your approved WhatsApp template and send to{" "}
+                WhatsApp only allows sending <strong>pre-approved templates</strong> — you create and get
+                those approved on your BSP (Interakt / Wati / AiSensy). SnapServe does not send messages itself.
+              </p>
+              <p className="text-xs text-muted-foreground">
+                After every call, SnapServe POSTs to your outbound URL. Your Zap / Make / BSP automation
+                reads <code className="text-[10px] bg-muted/50 px-1 rounded">template_hint</code> to know{" "}
+                <em>which</em> of your pre-approved templates to fire, then sends it to{" "}
                 <code className="text-[10px] bg-muted/50 px-1 rounded">phone</code>.
               </p>
-              <ul className="text-xs text-muted-foreground list-disc pl-4 space-y-1">
+              <ul className="text-xs text-muted-foreground list-disc pl-4 space-y-1.5">
                 <li>
-                  Use <code className="text-[10px] bg-muted/50 px-1 rounded">template_hint</code> to pick the template:
-                  <code className="text-[10px] bg-muted/50 px-1 rounded ml-1">call_summary</code>,{" "}
-                  <code className="text-[10px] bg-muted/50 px-1 rounded">booking_confirmed</code>, or{" "}
-                  <code className="text-[10px] bg-muted/50 px-1 rounded">callback_scheduled</code>.
+                  <code className="text-[10px] bg-muted/50 px-1 rounded">booking_confirmed</code> —
+                  call ended with a meeting booked. Fill your booking template's variables using{" "}
+                  <code className="text-[10px] bg-muted/50 px-1 rounded">meeting_time</code> and{" "}
+                  <code className="text-[10px] bg-muted/50 px-1 rounded">meet_link</code>.
                 </li>
                 <li>
-                  For bookings, fill template variables from{" "}
-                  <code className="text-[10px] bg-muted/50 px-1 rounded">meeting_time</code> /{" "}
-                  <code className="text-[10px] bg-muted/50 px-1 rounded">meet_link</code>.
+                  <code className="text-[10px] bg-muted/50 px-1 rounded">callback_scheduled</code> —
+                  caller asked to be called back at a specific time.
+                </li>
+                <li>
+                  <code className="text-[10px] bg-muted/50 px-1 rounded">call_summary</code> —
+                  call ended without a booking (general follow-up template).
                 </li>
                 <li>
                   Optional: verify <code className="text-[10px] bg-muted/50 px-1 rounded">X-SnapServe-Signature</code>{" "}
