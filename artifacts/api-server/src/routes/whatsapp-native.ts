@@ -6,7 +6,7 @@
 import { Router, type IRouter } from "express";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import Razorpay from "razorpay";
-import { and, desc, eq, gt, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, ne, sql } from "drizzle-orm";
 import {
   db,
   agentsTable,
@@ -18,6 +18,7 @@ import {
   whatsappChannelsTable,
   whatsappMessagesTable,
   whatsappEventsTable,
+  whatsappAssetsTable,
   type WhatsappChannel,
 } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
@@ -45,7 +46,11 @@ import {
   sendWhatsappTemplate,
   countRecentOutbound,
   toPlusE164,
+  getOwnCredsForUser,
+  getStrictSubAccountCredsForUser,
+  sanitizeVobizError,
 } from "../services/whatsapp/vobiz.js";
+import { maybeSendBrochure, maybeChatbotReply } from "../services/whatsapp/auto-reply.js";
 
 const router: IRouter = Router();
 
@@ -64,6 +69,10 @@ function formatChannel(row: WhatsappChannel) {
     notifyCallbackScheduled: row.notifyCallbackScheduled,
     inboundAgentId: row.inboundAgentId,
     dailyCap: row.dailyCap,
+    chatbotEnabled: row.chatbotEnabled,
+    chatbotAgentId: row.chatbotAgentId,
+    brochureAssetId: row.brochureAssetId,
+    brochureAutoSend: row.brochureAutoSend,
     wabaId: row.wabaId,
     phoneNumberId: row.phoneNumberId,
     phoneE164: row.phoneE164,
@@ -86,16 +95,7 @@ async function validateAgentOwnership(userId: string, agentId: number): Promise<
   return !!agent;
 }
 
-async function getOwnCredsFor(userId: string): Promise<{ authId: string; authToken: string } | null> {
-  try {
-    const { ensureVobizSubAccount } = await import("./kyc.js");
-    const creds = await ensureVobizSubAccount(userId);
-    if (creds.authId && creds.authToken) return creds;
-  } catch (err) {
-    logger.warn({ err, userId }, "whatsapp-native: sub-account creds unavailable — falling back to master");
-  }
-  return getMasterVobizCreds();
-}
+const getOwnCredsFor = getOwnCredsForUser;
 
 /**
  * Own-channel / own-number operations must run under the user's OWN VoBiz
@@ -103,19 +103,7 @@ async function getOwnCredsFor(userId: string): Promise<{ authId: string; authTok
  * provisioning fails — reject that here, or the channel/number would land in
  * the platform account instead of the user's.
  */
-async function getStrictSubAccountCreds(userId: string): Promise<{ authId: string; authToken: string } | null> {
-  try {
-    const { ensureVobizSubAccount } = await import("./kyc.js");
-    const c = await ensureVobizSubAccount(userId);
-    if (!c.authId || !c.authToken) return null;
-    const master = getMasterVobizCreds();
-    if (master && c.authId === master.authId) return null;
-    return { authId: c.authId, authToken: c.authToken };
-  } catch (err) {
-    logger.warn({ err, userId }, "whatsapp-native: sub-account resolution failed");
-    return null;
-  }
-}
+const getStrictSubAccountCreds = getStrictSubAccountCredsForUser;
 
 /**
  * Carrier error bodies can echo request fields — including the Meta access
@@ -123,14 +111,7 @@ async function getStrictSubAccountCreds(userId: string): Promise<{ authId: strin
  * reasons) or returned to the client must be scrubbed first: exact secret
  * occurrences removed, long token-like sequences redacted, length capped.
  */
-function sanitizeCarrierError(raw: string, secrets: Array<string | undefined> = []): string {
-  let out = raw;
-  for (const s of secrets) {
-    if (s && s.length >= 6) out = out.split(s).join("[redacted]");
-  }
-  out = out.replace(/[A-Za-z0-9_\-.]{24,}/g, "[redacted]");
-  return out.slice(0, 300);
-}
+const sanitizeCarrierError = sanitizeVobizError;
 
 type ChannelCreateResult =
   | { ok: true; channelId: string; status: string; phoneNumberId: string | null }
@@ -309,14 +290,18 @@ router.post("/whatsapp/channel/own", requireAuth, async (req, res): Promise<void
     accessToken?: string;
     vobizChannelId?: string; // already created in VoBiz console — just link it
     inboundAgentId?: number | null;
-    /** 'direct' (default) = Meta-registered number; 'purchased' = bought via SnapServe. */
-    numberSource?: "direct" | "purchased";
+    /** 'direct' (default) = Meta-registered number; 'purchased' = bought via SnapServe; 'voice_number' = WhatsApp-enable an existing voice DID. */
+    numberSource?: "direct" | "purchased" | "voice_number";
+    /** phone_numbers.id of the voice DID (numberSource='voice_number'). */
+    voicePhoneNumberId?: number;
   };
 
-  const numberSource = body.numberSource === "purchased" ? "purchased" as const : "direct" as const;
+  const numberSource = body.numberSource === "purchased" ? "purchased" as const
+    : body.numberSource === "voice_number" ? "voice_number" as const
+    : "direct" as const;
   const wabaId = (body.wabaId ?? "").trim();
   const phoneNumberId = (body.phoneNumberId ?? "").trim();
-  const phoneE164 = (body.phoneE164 ?? "").trim();
+  let phoneE164 = (body.phoneE164 ?? "").trim();
   const accessToken = (body.accessToken ?? "").trim();
   const providedChannelId = (body.vobizChannelId ?? "").trim();
 
@@ -340,6 +325,33 @@ router.post("/whatsapp/channel/own", requireAuth, async (req, res): Promise<void
       .limit(1);
     if (!owned) {
       res.status(400).json({ error: "That number wasn't bought through the SnapServe WhatsApp flow. Use the setup wizard to buy one first." });
+      return;
+    }
+  } else if (numberSource === "voice_number") {
+    // BYON: WhatsApp-enable one of the user's existing voice DIDs (₹0 — the
+    // number is already rented). The number keeps service='voice' for dual use.
+    const vpnId = Number(body.voicePhoneNumberId);
+    if (!Number.isFinite(vpnId)) {
+      res.status(400).json({ error: "voicePhoneNumberId is required to WhatsApp-enable a voice number" });
+      return;
+    }
+    const [vpn] = await db
+      .select({ id: phoneNumbersTable.id, number: phoneNumbersTable.number })
+      .from(phoneNumbersTable)
+      .where(and(
+        eq(phoneNumbersTable.id, vpnId),
+        eq(phoneNumbersTable.userId, userId),
+        ne(phoneNumbersTable.service, "whatsapp"),
+        eq(phoneNumbersTable.status, "active"),
+      ))
+      .limit(1);
+    if (!vpn) {
+      res.status(404).json({ error: "Voice number not found" });
+      return;
+    }
+    phoneE164 = toPlusE164(vpn.number);
+    if (!providedChannelId && (!wabaId || !phoneNumberId || !accessToken)) {
+      res.status(400).json({ error: "wabaId, phoneNumberId and accessToken (from Meta Business Manager) are required to WhatsApp-enable your voice number" });
       return;
     }
   } else if (!providedChannelId && (!wabaId || !phoneNumberId || !accessToken)) {
@@ -376,7 +388,8 @@ router.post("/whatsapp/channel/own", requireAuth, async (req, res): Promise<void
       return;
     }
     const created = await createVobizWhatsappChannel(creds, {
-      numberSource,
+      // voice_number uses the same bring_your_own carrier payload as direct.
+      numberSource: numberSource === "purchased" ? "purchased" : "direct",
       wabaId,
       accessToken,
       phoneNumberId: phoneNumberId || undefined,
@@ -975,6 +988,32 @@ router.patch("/whatsapp/channel", requireAuth, async (req, res): Promise<void> =
     }
     updates.inboundAgentId = body["inboundAgentId"];
   }
+  if (typeof body["chatbotEnabled"] === "boolean") updates.chatbotEnabled = body["chatbotEnabled"];
+  if (body["chatbotAgentId"] === null) updates.chatbotAgentId = null;
+  if (typeof body["chatbotAgentId"] === "number") {
+    if (!(await validateAgentOwnership(userId, body["chatbotAgentId"]))) {
+      res.status(404).json({ error: "Agent not found" });
+      return;
+    }
+    updates.chatbotAgentId = body["chatbotAgentId"];
+  }
+  if (typeof body["brochureAutoSend"] === "boolean") updates.brochureAutoSend = body["brochureAutoSend"];
+  if (body["brochureAssetId"] === null) updates.brochureAssetId = null;
+  if (typeof body["brochureAssetId"] === "string" && body["brochureAssetId"]) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body["brochureAssetId"])) {
+      res.status(400).json({ error: "Invalid asset id" });
+      return;
+    }
+    const [asset] = await db.select({ id: whatsappAssetsTable.id })
+      .from(whatsappAssetsTable)
+      .where(and(eq(whatsappAssetsTable.id, body["brochureAssetId"]), eq(whatsappAssetsTable.userId, userId)))
+      .limit(1);
+    if (!asset) {
+      res.status(404).json({ error: "Asset not found" });
+      return;
+    }
+    updates.brochureAssetId = body["brochureAssetId"];
+  }
 
   const [row] = await db.update(whatsappChannelsTable)
     .set(updates)
@@ -1201,8 +1240,31 @@ async function handleInboundEvent(data: Record<string, any>): Promise<void> {
   // Request-a-call intent → dial the configured agent.
   const wantsCall = (buttonId && REQUEST_CALL_BUTTONS.has(String(buttonId).toLowerCase().trim()))
     || REQUEST_CALL_RE.test(textBody);
-  if (!wantsCall || !channel.inboundAgentId || !channel.active) return;
+  if (wantsCall && channel.inboundAgentId && channel.active) {
+    await dialRequestedCall(channel, phone, buttonId != null ? String(buttonId) : null);
+    return;
+  }
 
+  // Brochure request → auto-send the configured asset (the 24h customer-service
+  // window just opened, so a free-form document send is allowed).
+  try {
+    if (await maybeSendBrochure(channel, phone, textBody, buttonId != null ? String(buttonId) : null)) return;
+  } catch (err) {
+    logger.warn({ err, phone, channelId: channel.id }, "whatsapp-native: brochure auto-send crashed");
+  }
+
+  // AI chatbot → free-form reply in the configured agent's persona.
+  try {
+    await maybeChatbotReply(channel, phone, textBody);
+  } catch (err) {
+    logger.warn({ err, phone, channelId: channel.id }, "whatsapp-native: chatbot reply crashed");
+  }
+}
+
+/** Request-a-call intent → dial the configured inbound agent (5-min dedupe). */
+async function dialRequestedCall(channel: WhatsappChannel, phone: string, buttonId: string | null): Promise<void> {
+  const agentId = channel.inboundAgentId;
+  if (!agentId) return;
   // Dedupe: skip if we dialed this phone for this user in the last 5 minutes.
   const since = new Date(Date.now() - 5 * 60_000);
   const [recentDial] = await db.select({ n: sql<number>`count(*)::int` })
@@ -1221,7 +1283,7 @@ async function handleInboundEvent(data: Record<string, any>): Promise<void> {
   try {
     const result = await dialOutboundAgent({
       userId: channel.userId,
-      agentId: channel.inboundAgentId,
+      agentId,
       toNumber: phone,
       webhookBaseUrl: getSelfBaseUrl(),
       metadata: {

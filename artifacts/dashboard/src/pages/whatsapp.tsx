@@ -12,6 +12,8 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { ByonPanel } from "@/components/whatsapp/byon-flow";
+import { EngageSection } from "@/components/whatsapp/engage-section";
 import {
   Copy, CheckCircle2, MessageCircle, Plus, Trash2, Pencil, ExternalLink,
   ArrowRight, PhoneIncoming, Send, Sparkles, Building2, ChevronDown, ChevronRight,
@@ -51,6 +53,10 @@ type WaChannel = {
   notifyCallbackScheduled: boolean;
   inboundAgentId: number | null;
   dailyCap: number;
+  chatbotEnabled?: boolean;
+  chatbotAgentId?: number | null;
+  brochureAssetId?: string | null;
+  brochureAutoSend?: boolean;
   wabaId: string | null;
   phoneNumberId: string | null;
   phoneE164: string | null;
@@ -174,8 +180,9 @@ function NativeSection({
   const [sharedOpen, setSharedOpen] = useState(false);
   const [bizOpen, setBizOpen] = useState(false);
   const [bizStep, setBizStep] = useState<1 | 2>(1);
-  const [numberChoice, setNumberChoice] = useState<"buy" | "direct">("buy");
+  const [numberChoice, setNumberChoice] = useState<"buy" | "direct" | "voice">("buy");
   const [selectedNumber, setSelectedNumber] = useState<string | null>(null);
+  const [voiceNumberId, setVoiceNumberId] = useState<number | null>(null);
   /** Set when reconnecting an already-purchased WhatsApp number (channel create failed). */
   const [retryNumber, setRetryNumber] = useState<string | null>(null);
   const [buying, setBuying] = useState(false);
@@ -207,15 +214,16 @@ function NativeSection({
   });
 
   const connectOwn = useMutation({
-    mutationFn: (vars: { numberSource: "direct" | "purchased" }) =>
+    mutationFn: (vars: { numberSource: "direct" | "purchased" | "voice_number"; voicePhoneNumberId?: number }) =>
       customFetch<WaChannel>(`${API}/whatsapp/channel/own`, {
         method: "POST",
         body: JSON.stringify({
           businessName,
           numberSource: vars.numberSource,
+          voicePhoneNumberId: vars.voicePhoneNumberId,
           wabaId: wabaId.trim() || undefined,
-          phoneNumberId: vars.numberSource === "direct" ? (phoneNumberId.trim() || undefined) : undefined,
-          phoneE164: phoneE164.trim() || undefined,
+          phoneNumberId: vars.numberSource !== "purchased" ? (phoneNumberId.trim() || undefined) : undefined,
+          phoneE164: vars.numberSource === "voice_number" ? undefined : (phoneE164.trim() || undefined),
           accessToken: accessToken.trim() || undefined,
           vobizChannelId: vars.numberSource === "direct" ? (existingChannelId.trim() || undefined) : undefined,
           inboundAgentId: inboundAgentId === "" ? null : Number(inboundAgentId),
@@ -700,6 +708,16 @@ function NativeSection({
         </div>
       )}
 
+      {/* Engagement tools — chatbot, brochure, templates */}
+      {channel && (
+        <EngageSection
+          channel={channel}
+          agents={agents}
+          onPatch={(body) => patchChannel.mutate(body)}
+          patching={patchChannel.isPending}
+        />
+      )}
+
       {/* Shared enroll / edit dialog */}
       <Dialog open={sharedOpen} onOpenChange={setSharedOpen}>
         <DialogContent className="sm:max-w-md">
@@ -904,6 +922,28 @@ function NativeSection({
                   </div>
                 </div>
               </label>
+
+              {/* Option C — WhatsApp-enable an existing voice number (BYON) */}
+              <label className={`block rounded-lg border p-3 cursor-pointer transition-colors ${numberChoice === "voice" ? "border-sky-500/50 bg-sky-500/[0.04]" : "border-border/60 hover:border-border"}`}>
+                <div className="flex items-start gap-2">
+                  <input type="radio" className="mt-1" checked={numberChoice === "voice"} onChange={() => setNumberChoice("voice")} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium">Use one of my SnapServe voice numbers <span className="text-emerald-400 font-semibold">₹0</span></p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      WhatsApp-enable a number you already rent for calls — it keeps taking voice calls.
+                      Verification calls land on the number itself, so SnapServe captures the code for you.
+                    </p>
+                    {numberChoice === "voice" && (
+                      <ByonPanel
+                        voiceNumberId={voiceNumberId}
+                        onSelectNumber={setVoiceNumberId}
+                        metaPhoneNumberId={phoneNumberId}
+                        onMetaPhoneNumberId={setPhoneNumberId}
+                      />
+                    )}
+                  </div>
+                </div>
+              </label>
             </div>
           )}
 
@@ -938,6 +978,13 @@ function NativeSection({
             ) : numberChoice === "buy" ? (
               <Button disabled={!selectedNumber || buying} onClick={() => void handleBuyAndConnect()}>
                 {buying ? "Processing…" : `Pay ${inr(pricing.totalPaise)} & connect`}
+              </Button>
+            ) : numberChoice === "voice" ? (
+              <Button
+                disabled={voiceNumberId == null || !phoneNumberId.trim() || connectOwn.isPending}
+                onClick={() => connectOwn.mutate({ numberSource: "voice_number", voicePhoneNumberId: voiceNumberId ?? undefined })}
+              >
+                {connectOwn.isPending ? "Connecting…" : "Connect voice number"}
               </Button>
             ) : (
               <Button

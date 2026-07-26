@@ -283,3 +283,187 @@ export function hintEnabled(channel: WhatsappChannel, hint: TemplateHint): boole
   if (hint === "callback_scheduled") return channel.notifyCallbackScheduled;
   return channel.notifyCallSummary;
 }
+
+/* ── Shared helpers for BYON / templates / freeform sends ─────────────────── */
+
+/**
+ * Carrier error bodies can echo request fields — including Meta access
+ * tokens — so anything persisted or returned to the client must be scrubbed:
+ * exact secret occurrences removed, long token-like sequences redacted,
+ * length capped.
+ */
+export function sanitizeVobizError(raw: string, secrets: Array<string | undefined> = []): string {
+  let out = raw;
+  for (const s of secrets) {
+    if (s && s.length >= 6) out = out.split(s).join("[redacted]");
+  }
+  out = out.replace(/[A-Za-z0-9_\-.]{24,}/g, "[redacted]");
+  return out.slice(0, 300);
+}
+
+/** User's sub-account creds with silent master fallback (send/read paths). */
+export async function getOwnCredsForUser(userId: string): Promise<{ authId: string; authToken: string } | null> {
+  try {
+    const { ensureVobizSubAccount } = await import("../../routes/kyc.js");
+    const creds = await ensureVobizSubAccount(userId);
+    if (creds.authId && creds.authToken) return creds;
+  } catch (err) {
+    logger.warn({ err, userId }, "whatsapp: sub-account creds unavailable — falling back to master");
+  }
+  return getMasterVobizCreds();
+}
+
+/**
+ * Own-channel/number MUTATIONS must run under the user's OWN VoBiz
+ * sub-account. ensureVobizSubAccount silently falls back to master when
+ * provisioning fails — reject that here, or the resource would land in the
+ * platform account instead of the user's.
+ */
+export async function getStrictSubAccountCredsForUser(userId: string): Promise<{ authId: string; authToken: string } | null> {
+  try {
+    const { ensureVobizSubAccount } = await import("../../routes/kyc.js");
+    const c = await ensureVobizSubAccount(userId);
+    if (!c.authId || !c.authToken) return null;
+    const master = getMasterVobizCreds();
+    if (master && c.authId === master.authId) return null;
+    return { authId: c.authId, authToken: c.authToken };
+  } catch (err) {
+    logger.warn({ err, userId }, "whatsapp: sub-account resolution failed");
+    return null;
+  }
+}
+
+export interface VobizApiResult {
+  ok: boolean;
+  status: number;
+  json: Record<string, any> | null;
+  rawText: string;
+}
+
+/** Generic VoBiz messaging-API call with defensive JSON parsing. */
+export async function vobizApiCall(
+  creds: { authId: string; authToken: string },
+  method: "GET" | "POST" | "PUT" | "DELETE",
+  path: string,
+  payload?: unknown,
+): Promise<VobizApiResult> {
+  try {
+    const resp = await fetch(`${VOBIZ_API_BASE}${path}`, {
+      method,
+      headers: vobizApiHeaders(creds.authId, creds.authToken),
+      ...(payload !== undefined ? { body: JSON.stringify(payload) } : {}),
+      signal: AbortSignal.timeout(20_000),
+    });
+    const rawText = await resp.text().catch(() => "");
+    let json: Record<string, any> | null = null;
+    try { json = rawText ? (JSON.parse(rawText) as Record<string, any>) : null; } catch { /* non-JSON */ }
+    return { ok: resp.ok, status: resp.status, json, rawText };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { ok: false, status: 0, json: null, rawText: msg };
+  }
+}
+
+export interface SendFreeformArgs {
+  channel: WhatsappChannel;
+  ctx: SendContext;
+  toPhone: string;
+  kind: "text" | "document" | "image";
+  text?: string;
+  media?: { link: string; filename?: string; caption?: string };
+  callId?: number | null;
+  enforceCap?: boolean;
+}
+
+/**
+ * Send one free-form (non-template) message inside the 24h customer-service
+ * window and log it to whatsapp_messages. Meta rejects free-form messages
+ * outside the window — callers should only use this in reply to a fresh
+ * inbound message.
+ */
+export async function sendWhatsappFreeform(args: SendFreeformArgs): Promise<SendResult> {
+  const { channel, ctx } = args;
+  const to = toPlusE164(args.toPhone);
+  if (to.replace(/\D/g, "").length < 8) {
+    return { ok: false, skipped: "invalid_phone", error: `invalid phone: ${args.toPhone}` };
+  }
+  const enforceCap = args.enforceCap ?? (channel.mode === "shared");
+  if (enforceCap) {
+    const used = await countRecentOutbound(channel.id);
+    if (used >= channel.dailyCap) {
+      logger.warn({ channelId: channel.id, used, cap: channel.dailyCap }, "whatsapp: daily cap reached — freeform send skipped");
+      return { ok: false, skipped: "daily_cap", error: `daily cap ${channel.dailyCap} reached` };
+    }
+  }
+
+  const preview = args.kind === "text"
+    ? (args.text ?? "")
+    : `[${args.kind}] ${args.media?.filename ?? args.media?.link ?? ""}`;
+  const [row] = await db.insert(whatsappMessagesTable).values({
+    userId: channel.userId,
+    channelId: channel.id,
+    callId: args.callId ?? null,
+    direction: "outbound",
+    phone: to,
+    msgType: args.kind === "text" ? "text" : "media",
+    bodyPreview: preview.slice(0, 300),
+    status: "pending",
+  }).returning({ id: whatsappMessagesTable.id });
+
+  const body: Record<string, unknown> = {
+    channel_id: ctx.vobizChannelId,
+    waba_id: ctx.wabaId,
+    to,
+    type: args.kind,
+  };
+  if (args.kind === "text") {
+    body["text"] = { body: (args.text ?? "").slice(0, 3900) };
+  } else {
+    body["media"] = {
+      link: args.media?.link,
+      ...(args.kind === "document" && args.media?.filename ? { filename: args.media.filename } : {}),
+      ...(args.media?.caption ? { caption: args.media.caption.slice(0, 900) } : {}),
+    };
+  }
+
+  try {
+    const resp = await fetch(`${VOBIZ_API_BASE}/messaging/messages`, {
+      method: "POST",
+      headers: vobizApiHeaders(ctx.authId, ctx.authToken),
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(15_000),
+    });
+    const text = await resp.text().catch(() => "");
+    if (!resp.ok) {
+      const err = `VoBiz send HTTP ${resp.status}: ${text.slice(0, 300)}`;
+      await db.update(whatsappMessagesTable)
+        .set({ status: "failed", errorMessage: err.slice(0, 500), updatedAt: new Date() })
+        .where(eq(whatsappMessagesTable.id, row!.id));
+      logger.warn({ channelId: channel.id, to, kind: args.kind, status: resp.status }, "whatsapp: freeform send failed");
+      return { ok: false, messageRowId: row!.id, error: err };
+    }
+    let vobizMessageId: string | null = null;
+    let metaMessageId: string | null = null;
+    let status = "pending";
+    try {
+      const j = JSON.parse(text) as Record<string, any>;
+      const msg = j["message"] ?? j["data"] ?? j;
+      vobizMessageId = msg?.["id"] != null ? String(msg["id"]) : null;
+      metaMessageId = msg?.["meta_message_id"] != null ? String(msg["meta_message_id"]) : null;
+      if (typeof msg?.["status"] === "string") status = msg["status"];
+    } catch { /* keep pending */ }
+    await db.update(whatsappMessagesTable)
+      .set({ vobizMessageId, metaMessageId, status, updatedAt: new Date() })
+      .where(eq(whatsappMessagesTable.id, row!.id));
+    logger.info({ channelId: channel.id, to, kind: args.kind, vobizMessageId }, "whatsapp: freeform sent");
+    return { ok: true, messageRowId: row!.id, vobizMessageId };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    await db.update(whatsappMessagesTable)
+      .set({ status: "failed", errorMessage: msg.slice(0, 500), updatedAt: new Date() })
+      .where(eq(whatsappMessagesTable.id, row!.id))
+      .catch(() => {});
+    logger.warn({ err, channelId: channel.id, to, kind: args.kind }, "whatsapp: freeform send error");
+    return { ok: false, messageRowId: row!.id, error: msg };
+  }
+}

@@ -526,6 +526,13 @@
       "when": 1789000000000,
       "tag": "0074_phone_number_service",
       "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1789100000000,
+      "tag": "0075_whatsapp_expansion",
+      "breakpoints": true
     }
   ]
 }

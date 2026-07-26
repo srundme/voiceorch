@@ -1,5 +1,5 @@
 import {
-  pgTable, text, timestamp, integer, boolean, uuid, index, jsonb, uniqueIndex,
+  pgTable, text, timestamp, integer, boolean, uuid, index, jsonb, uniqueIndex, customType,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { agentsTable } from "./agents";
@@ -75,6 +75,12 @@ export const whatsappChannelsTable = pgTable("whatsapp_channels", {
   inboundAgentId: integer("inbound_agent_id").references(() => agentsTable.id, { onDelete: "set null" }),
   /** Shared-tier abuse control: max business-initiated sends per day. */
   dailyCap: integer("daily_cap").notNull().default(50),
+  /** AI chatbot: auto-reply to inbound WhatsApp texts using this agent's persona. */
+  chatbotEnabled: boolean("chatbot_enabled").notNull().default(false),
+  chatbotAgentId: integer("chatbot_agent_id").references(() => agentsTable.id, { onDelete: "set null" }),
+  /** Brochure/catalog asset auto-sent when a customer asks for it (whatsapp_assets.id). */
+  brochureAssetId: uuid("brochure_asset_id"),
+  brochureAutoSend: boolean("brochure_auto_send").notNull().default(true),
   /* own-channel fields (null on shared tier) */
   vobizChannelId: text("vobiz_channel_id"),
   wabaId: text("waba_id"),
@@ -129,3 +135,64 @@ export type WhatsappChannel = typeof whatsappChannelsTable.$inferSelect;
 export type InsertWhatsappChannel = typeof whatsappChannelsTable.$inferInsert;
 export type WhatsappMessage = typeof whatsappMessagesTable.$inferSelect;
 export type InsertWhatsappMessage = typeof whatsappMessagesTable.$inferInsert;
+
+/** Raw binary column (PostgreSQL `bytea`) stored/returned as a Node Buffer. */
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType() {
+    return "bytea";
+  },
+});
+
+/**
+ * User-uploaded WhatsApp media assets (brochures/catalogs). Bytes live in
+ * Postgres (Railway prod has no object storage) and are served publicly via
+ * an unguessable token URL so Meta can fetch them at send time.
+ */
+export const whatsappAssetsTable = pgTable("whatsapp_assets", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: text("user_id").notNull(),
+  kind: text("kind").notNull().default("brochure"),
+  filename: text("filename").notNull(),
+  mime: text("mime").notNull(),
+  sizeBytes: integer("size_bytes").notNull(),
+  data: bytea("data").notNull(),
+  publicToken: text("public_token").notNull().unique("wa_assets_public_token_unique"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+}, (t) => [
+  index("wa_assets_user_id_idx").on(t.userId),
+]);
+
+export type WhatsappAsset = typeof whatsappAssetsTable.$inferSelect;
+export type InsertWhatsappAsset = typeof whatsappAssetsTable.$inferInsert;
+
+/**
+ * BYON (bring-your-own-number) WhatsApp verification state for a user's
+ * existing voice DID. Verification OTPs (from Meta Business Manager or the
+ * VoBiz BYON verify API) arrive as calls/SMS to the DID — which routes to OUR
+ * answer webhook, so the platform auto-captures the spoken code via a
+ * <Record> + transcription flow and surfaces it in the dashboard.
+ * status: armed | code_captured | confirmed | expired | failed
+ */
+export const whatsappByonVerificationsTable = pgTable("whatsapp_byon_verifications", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: text("user_id").notNull(),
+  /** phone_numbers.id of the voice DID being WhatsApp-enabled (no FK: app-enforced). */
+  phoneNumberId: integer("phone_number_id"),
+  phoneE164: text("phone_e164").notNull(),
+  status: text("status").notNull().default("armed"),
+  method: text("method").notNull().default("voice"),
+  vobizVerificationId: text("vobiz_verification_id"),
+  otpCode: text("otp_code"),
+  recordingUrl: text("recording_url"),
+  transcript: text("transcript"),
+  armedUntil: timestamp("armed_until", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+}, (t) => [
+  index("wa_byon_user_id_idx").on(t.userId),
+  index("wa_byon_phone_e164_idx").on(t.phoneE164),
+]);
+
+export type WhatsappByonVerification = typeof whatsappByonVerificationsTable.$inferSelect;
+export type InsertWhatsappByonVerification = typeof whatsappByonVerificationsTable.$inferInsert;

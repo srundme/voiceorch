@@ -1152,18 +1152,23 @@ router.delete("/phone-numbers/:id", requireAuth, async (req, res): Promise<void>
 
   if (!existing) { res.status(404).json({ error: "Phone number not found" }); return; }
 
-  if (existing.service === "whatsapp") {
-    // WhatsApp numbers are not voice DIDs — the Account unrent API doesn't apply.
-    // Mark released locally (stops the 30-day wallet renewals) and deactivate any
-    // WhatsApp channel bound to this number so sends fail loudly, not silently.
-    req.log.warn({ number: existing.number }, "Releasing WhatsApp-service number — voice unrent API skipped");
+  // Any released number may back a WhatsApp channel — BYON lets users
+  // WhatsApp-enable voice DIDs too — so deactivate any channel bound to this
+  // number so sends fail loudly, not silently.
+  {
     const plusForm = existing.number.startsWith("+") ? existing.number : `+${existing.number}`;
     await db.update(whatsappChannelsTable)
-      .set({ active: false, status: "disconnected", lastError: "The WhatsApp number linked to this channel was released", updatedAt: new Date() })
+      .set({ active: false, status: "disconnected", lastError: "The number linked to this WhatsApp channel was released", updatedAt: new Date() })
       .where(and(
         eq(whatsappChannelsTable.userId, clerkId),
         inArray(whatsappChannelsTable.phoneE164, [existing.number, plusForm]),
       ));
+  }
+
+  if (existing.service === "whatsapp") {
+    // WhatsApp numbers are not voice DIDs — the Account unrent API doesn't apply.
+    // Mark released locally (stops the 30-day wallet renewals).
+    req.log.warn({ number: existing.number }, "Releasing WhatsApp-service number — voice unrent API skipped");
   } else {
     const { authId, authToken, configured } = getPlatformVobizCreds();
 

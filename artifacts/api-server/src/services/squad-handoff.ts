@@ -51,7 +51,7 @@ function buildHandoffPromptBlock(packet: HandoffPacket): string {
   ].filter(Boolean).join("\n");
 }
 
-async function loadProviderKeysMap(userId: string | null): Promise<Map<string, string>> {
+export async function loadProviderKeysMap(userId: string | null): Promise<Map<string, string>> {
   const providerKeys = new Map<string, string>();
   if (userId) {
     const rows = await db.select().from(providersTable).where(

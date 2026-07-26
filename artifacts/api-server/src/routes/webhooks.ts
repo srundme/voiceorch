@@ -6,8 +6,8 @@ import { getPlivoAnswerXML } from "../orchestration/telephony/plivo.js";
 import { getVobizAnswerXML } from "../orchestration/telephony/vobiz.js";
 import { resolveAmdConfig } from "../orchestration/telephony/dial.js";
 import { getSessionByCallId, getSessionByExternalCallId } from "../orchestration/session.js";
-import { db, agentsTable, callsTable, phoneNumbersTable, providersTable, scheduledCallbacksTable, campaignLeadsTable, leadTimelineTable, campaignsTable, canonicalizeCallerKey, pool } from "@workspace/db";
-import { eq, sql, and, gte, inArray } from "drizzle-orm";
+import { db, agentsTable, callsTable, phoneNumbersTable, providersTable, scheduledCallbacksTable, campaignLeadsTable, leadTimelineTable, campaignsTable, whatsappByonVerificationsTable, canonicalizeCallerKey, pool } from "@workspace/db";
+import { eq, sql, and, gte, gt, inArray, desc } from "drizzle-orm";
 import { decryptKey } from "../lib/crypto.js";
 import { validateTwilioSignature, validatePlivoSignature } from "../lib/webhook-signature.js";
 import { logger } from "../lib/logger.js";
@@ -695,6 +695,31 @@ router.post("/webhooks/vobiz/voice", async (req, res): Promise<void> => {
         addCandidate(last10);
         addCandidate(`+91${last10}`);
         addCandidate(`91${last10}`);
+      }
+
+      // BYON WhatsApp verification capture: when this DID is armed, answer with
+      // <Record> + transcription instead of the agent — the verification
+      // robocall speaks a code the owner can't otherwise hear (virtual number).
+      const [byonArmed] = await db
+        .select({ id: whatsappByonVerificationsTable.id })
+        .from(whatsappByonVerificationsTable)
+        .where(and(
+          inArray(whatsappByonVerificationsTable.phoneE164, [...candidates]),
+          // Only while still 'armed': once a code is captured the capture is done —
+          // keeping the intercept alive would hijack real inbound calls to this DID.
+          eq(whatsappByonVerificationsTable.status, "armed"),
+          gt(whatsappByonVerificationsTable.armedUntil, new Date()),
+        ))
+        .orderBy(desc(whatsappByonVerificationsTable.createdAt))
+        .limit(1);
+      if (byonArmed) {
+        req.log.info({ to: toRaw, vid: byonArmed.id }, "BYON OTP capture armed — recording verification call");
+        const cb = `${httpBase}/api/webhooks/vobiz/wa-otp-recording?vid=${byonArmed.id}`;
+        const tcb = `${httpBase}/api/webhooks/vobiz/wa-otp-transcription?vid=${byonArmed.id}`;
+        res.set("Content-Type", "text/xml").send(
+          `<Response><Record callbackUrl="${cb}" callbackMethod="POST" transcriptionType="auto" transcriptionUrl="${tcb}" transcriptionMethod="POST" maxLength="55" timeout="12" playBeep="false" fileFormat="mp3"/><Hangup/></Response>`
+        );
+        return;
       }
 
       let [pn] = await db
