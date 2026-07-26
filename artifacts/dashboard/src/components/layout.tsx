@@ -7,9 +7,10 @@ import {
   Settings, Wallet, Mic2, Key,
   Menu, ChevronDown, ChevronLeft, ChevronRight,
   LogOut, Bell, Search, SlidersHorizontal, BookOpen, PlugZap, Sun, Moon, Sparkles,
-  MessageCircle, X,
+  MessageCircle, X, Wand2, Wrench,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useAuth } from "@/lib/auth";
 import { useQuery } from "@tanstack/react-query";
 import { useGetWallet, customFetch } from "@workspace/api-client-react";
@@ -396,11 +397,13 @@ function SidebarContent({
   onToggleCollapse,
   onNavClick,
   onSearchOpen,
+  onNewAgent,
 }: {
   collapsed: boolean;
   onToggleCollapse?: () => void;
   onNavClick?: () => void;
   onSearchOpen?: () => void;
+  onNewAgent?: () => void;
 }) {
   const [location] = useLocation();
   const pendingCallbacks = usePendingCallbackCount();
@@ -468,15 +471,17 @@ function SidebarContent({
 
       {/* + New agent CTA */}
       <div className="px-2 pb-1.5 shrink-0">
-        <Link href="/app/vibe" onClick={onNavClick}>
-          <div className={cn(
-            "flex items-center gap-2 px-2.5 py-2 rounded-lg bg-primary text-primary-foreground text-[13px] font-medium cursor-pointer hover:bg-primary/90 transition-colors select-none",
+        <button
+          type="button"
+          onClick={() => { onNavClick?.(); onNewAgent?.(); }}
+          className={cn(
+            "w-full flex items-center gap-2 px-2.5 py-2 rounded-lg bg-primary text-primary-foreground text-[13px] font-medium cursor-pointer hover:bg-primary/90 transition-colors select-none",
             collapsed ? "justify-center" : ""
-          )}>
-            <Sparkles className="w-[14px] h-[14px] shrink-0" />
-            {!collapsed && <span>+ New agent</span>}
-          </div>
-        </Link>
+          )}
+        >
+          <Sparkles className="w-[14px] h-[14px] shrink-0" />
+          {!collapsed && <span>+ New agent</span>}
+        </button>
       </div>
 
       {/* Primary nav */}
@@ -592,15 +597,15 @@ function SidebarContent({
 }
 
 /* ─── Mobile bottom nav ──────────────────────────────────────────────────── */
-const MOBILE_BOTTOM_NAV = [
+const MOBILE_BOTTOM_NAV_ITEMS = [
   { name: "Home",   href: "/app/home",   icon: Home },
-  { name: "Create", href: "/app/vibe",   icon: Sparkles },
+  { name: "Create", href: null,          icon: Sparkles }, // opens modal
   { name: "Agents", href: "/app/agents", icon: Bot },
   { name: "Calls",  href: "/app/calls",  icon: Phone },
   { name: "Wallet", href: "/app/wallet", icon: Wallet },
 ] as const;
 
-function MobileBottomNav() {
+function MobileBottomNav({ onNewAgent }: { onNewAgent?: () => void }) {
   const [location] = useLocation();
   return (
     <nav
@@ -608,7 +613,20 @@ function MobileBottomNav() {
       aria-label="Primary"
     >
       <div className="grid grid-cols-5 h-14">
-        {MOBILE_BOTTOM_NAV.map((item) => {
+        {MOBILE_BOTTOM_NAV_ITEMS.map((item) => {
+          if (item.href === null) {
+            return (
+              <button
+                key={item.name}
+                type="button"
+                onClick={() => onNewAgent?.()}
+                className="flex flex-col items-center justify-center gap-0.5 min-h-[44px] text-muted-foreground/70"
+              >
+                <item.icon className="h-5 w-5" />
+                <span className="text-[10px] font-medium leading-none">{item.name}</span>
+              </button>
+            );
+          }
           const active = location.startsWith(item.href);
           return (
             <Link key={item.href} href={item.href} className="flex flex-col items-center justify-center gap-0.5 min-h-[44px]">
@@ -621,6 +639,53 @@ function MobileBottomNav() {
         })}
       </div>
     </nav>
+  );
+}
+
+/* ─── New-agent choice modal ─────────────────────────────────────────────── */
+function NewAgentModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [, navigate] = useLocation();
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="text-base">Create a new agent</DialogTitle>
+        </DialogHeader>
+        <p className="text-[13px] text-muted-foreground -mt-1">
+          Choose how you'd like to build your agent.
+        </p>
+        <div className="grid grid-cols-2 gap-3 pt-1">
+          {/* Vibe Build */}
+          <button
+            type="button"
+            onClick={() => { onClose(); navigate("/app/vibe"); }}
+            className="flex flex-col items-start gap-3 p-4 rounded-xl border border-border bg-card hover:border-primary/50 hover:bg-primary/5 transition-colors text-left group"
+          >
+            <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center group-hover:bg-primary/15 transition-colors">
+              <Wand2 className="w-4 h-4 text-primary" />
+            </div>
+            <div>
+              <p className="text-[13px] font-semibold text-foreground">Vibe Build</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">AI builds it for you in minutes</p>
+            </div>
+          </button>
+          {/* Manual Build */}
+          <button
+            type="button"
+            onClick={() => { onClose(); navigate("/app/agents"); window.dispatchEvent(new CustomEvent("snapserve:new-agent")); }}
+            className="flex flex-col items-start gap-3 p-4 rounded-xl border border-border bg-card hover:border-primary/50 hover:bg-primary/5 transition-colors text-left group"
+          >
+            <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center group-hover:bg-muted/80 transition-colors">
+              <Wrench className="w-4 h-4 text-muted-foreground" />
+            </div>
+            <div>
+              <p className="text-[13px] font-semibold text-foreground">Manual Build</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">Configure every detail yourself</p>
+            </div>
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -735,6 +800,7 @@ function MobileTopbarUser() {
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location]  = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [newAgentOpen, setNewAgentOpen] = useState(false);
   const { open: searchOpen, setOpen: setSearchOpen } = useGlobalSearchTrigger();
 
   const [collapsed, setCollapsed] = useState(() => {
@@ -750,6 +816,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   };
 
   const sidebarW = collapsed ? "w-[52px]" : "w-[220px]";
+  const openNewAgent = () => setNewAgentOpen(true);
 
   return (
     <div className="flex h-dvh h-screen w-full overflow-hidden bg-background">
@@ -759,6 +826,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           collapsed={collapsed}
           onToggleCollapse={toggleCollapse}
           onSearchOpen={() => setSearchOpen(true)}
+          onNewAgent={openNewAgent}
         />
       </aside>
 
@@ -795,6 +863,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             collapsed={false}
             onNavClick={() => setMobileOpen(false)}
             onSearchOpen={() => { setMobileOpen(false); setSearchOpen(true); }}
+            onNewAgent={() => { setMobileOpen(false); openNewAgent(); }}
           />
         </SheetContent>
       </Sheet>
@@ -817,7 +886,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </div>
       </main>
 
-      <MobileBottomNav />
+      <MobileBottomNav onNewAgent={openNewAgent} />
+
+      <NewAgentModal open={newAgentOpen} onClose={() => setNewAgentOpen(false)} />
 
       <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
     </div>

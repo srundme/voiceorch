@@ -1,4 +1,4 @@
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { cn } from "@/lib/utils";
 import { ReactNode } from "react";
 
@@ -19,11 +19,12 @@ interface PageTabsProps {
  * Only renders the active tab's content (no data fetched for hidden tabs).
  */
 export function PageTabs({ tabs, defaultTab }: PageTabsProps) {
-  const [location, navigate] = useLocation();
+  const [, navigate] = useLocation();
+  // useSearch() is reactive to query-string changes (unlike window.location.search)
+  const search = useSearch();
 
-  // location is reactive via useLocation; window.location.search gives the ?tab= value
   const activeKey =
-    new URLSearchParams(window.location.search).get("tab") ??
+    new URLSearchParams(search).get("tab") ??
     defaultTab ??
     tabs[0]?.key ??
     "";
@@ -31,7 +32,7 @@ export function PageTabs({ tabs, defaultTab }: PageTabsProps) {
   const activeTab = tabs.find((t) => t.key === activeKey) ?? tabs[0];
 
   const setTab = (key: string) => {
-    const sp = new URLSearchParams(window.location.search);
+    const sp = new URLSearchParams(search);
     sp.set("tab", key);
     navigate(`${window.location.pathname}?${sp.toString()}`);
   };

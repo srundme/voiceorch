@@ -3471,9 +3471,6 @@ function AgentListPanel({ selectedId, onSelect, rateMap, className }: {
               )}
             </p>
           </div>
-          <Button size="sm" className="h-10 min-h-10 md:h-8 rounded-full gap-1 px-3 text-xs shrink-0" onClick={handleCreate}>
-            <Plus className="h-3.5 w-3.5" /> New
-          </Button>
         </div>
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/60" />
