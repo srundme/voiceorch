@@ -2297,14 +2297,6 @@ export default function ConnectionsPage() {
               <RefreshCw className="w-3.5 h-3.5" />
               Refresh
             </Button>
-            <Button
-              size="sm"
-              className="h-8 text-xs gap-1.5 rounded-lg"
-              onClick={() => navigate("/app/campaigns")}
-            >
-              <Zap className="w-3.5 h-3.5" />
-              New campaign
-            </Button>
           </div>
         }
       />
