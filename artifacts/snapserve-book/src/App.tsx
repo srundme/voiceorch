@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Switch, Route, Router as WouterRouter } from "wouter";
+import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -20,43 +20,58 @@ import ArchitectureMap from "@/pages/ArchitectureMap";
 import Certificate from "@/pages/Certificate";
 import Bookmarks from "@/pages/Bookmarks";
 import FileExplorer from "@/pages/FileExplorer";
+import VoiceathonPlaybook from "@/pages/voiceathon-playbook";
 
 const queryClient = new QueryClient();
 
-function Router() {
-  return (
-    <Switch>
-      <Route path="/" component={Home} />
-      <Route path="/module/:slug" component={ModuleOverview} />
-      <Route path="/chapter/:slug" component={ChapterReader} />
-      <Route path="/exam" component={Exam} />
-      <Route path="/search" component={Search} />
-      <Route path="/glossary" component={Glossary} />
-      <Route path="/cheatsheet" component={CheatSheet} />
-      <Route path="/architecture" component={ArchitectureMap} />
-      <Route path="/certificate" component={Certificate} />
-      <Route path="/bookmarks" component={Bookmarks} />
-      <Route path="/files" component={FileExplorer} />
-      <Route component={NotFound} />
-    </Switch>
-  );
-}
+// Public routes that bypass the InternGate registration screen
+const PUBLIC_PATHS = ["/voiceathon"];
 
-function App() {
+function AppContent() {
+  const [location] = useLocation();
+  const isPublic = PUBLIC_PATHS.some(p => location === p || location.startsWith(p + "/"));
   const initializeProgress = useProgressStore((s) => s.initializeProgress);
 
   useEffect(() => {
     void initializeProgress();
   }, [initializeProgress]);
 
+  // Public pages render directly with no gate and no nav
+  if (isPublic) {
+    return (
+      <Switch>
+        <Route path="/voiceathon" component={VoiceathonPlaybook} />
+      </Switch>
+    );
+  }
+
+  return (
+    <InternGate>
+      <GlobalNav />
+      <Switch>
+        <Route path="/" component={Home} />
+        <Route path="/module/:slug" component={ModuleOverview} />
+        <Route path="/chapter/:slug" component={ChapterReader} />
+        <Route path="/exam" component={Exam} />
+        <Route path="/search" component={Search} />
+        <Route path="/glossary" component={Glossary} />
+        <Route path="/cheatsheet" component={CheatSheet} />
+        <Route path="/architecture" component={ArchitectureMap} />
+        <Route path="/certificate" component={Certificate} />
+        <Route path="/bookmarks" component={Bookmarks} />
+        <Route path="/files" component={FileExplorer} />
+        <Route component={NotFound} />
+      </Switch>
+    </InternGate>
+  );
+}
+
+function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <InternGate>
-            <GlobalNav />
-            <Router />
-          </InternGate>
+          <AppContent />
         </WouterRouter>
         <Toaster />
       </TooltipProvider>
