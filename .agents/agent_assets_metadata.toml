@@ -359,3 +359,9 @@ id = "A05c63V7nyv0WtReMOhoT"
 uri = "file://.local/outputs/SnapServe-Investor-Deck-2026.pdf"
 type = "pdf"
 title = "SnapServe — Investor Deck 2026 (PDF)"
+
+[[outputs]]
+id = "XQxPLQyCcgIp_vrAdTc_7"
+uri = "file://voiceathon-playbook.pdf"
+type = "pdf"
+title = "SnapServe Voice-athon Playbook"
