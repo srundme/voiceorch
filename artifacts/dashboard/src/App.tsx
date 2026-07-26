@@ -15,68 +15,79 @@ import { Layout } from "@/components/layout";
 import { recordInAppNavigation } from "@/lib/nav-history";
 import { SnapServeLoader } from "@/components/logo";
 import { VoiceAssistant } from "@/components/VoiceAssistant";
-import AgentBuilder from "@/pages/agents/builder";
-import SquadsPage from "@/pages/squads/index";
 
-import CallsList from "@/pages/calls/index";
-import CallDetail from "@/pages/calls/[id]";
-import ProvidersList from "@/pages/providers/index";
-import Settings from "@/pages/settings/index";
-import ProfilePage from "@/pages/settings/Profile";
-import KnowledgeBasePage from "@/pages/knowledge-base";
-import WalletPage from "@/pages/wallet";
-import ActivityPage from "@/pages/activity";
-import PhoneNumbersPage from "@/pages/phone-numbers";
-import WebhooksPage from "@/pages/webhooks";
-import WhatsAppPage from "@/pages/whatsapp";
-import CallbacksPage from "@/pages/callbacks";
-import AgentAnalyticsPage from "@/pages/agent-analytics";
-import AnalyticsPage from "@/pages/analytics";
-import NotFound from "@/pages/not-found";
-import PrivacyPage from "@/pages/privacy";
-import TermsPage from "@/pages/terms";
-import OnboardingPage from "@/pages/onboarding";
-import CampaignsPage from "@/pages/campaigns/index";
-import CampaignDetailPage from "@/pages/campaigns/[id]";
-import BatchDetailPage from "@/pages/campaigns/[id]/batches/[batchId]";
-import BatchWizardPage from "@/pages/campaigns/batch-wizard";
+// ── Page imports ─────────────────────────────────────────────────────────────
+// Tabbed wrappers (new routes)
+import AgentsTabPage      from "@/pages/agents/index";
+import CampaignsTabPage   from "@/pages/campaigns/tabbed";
+import CallsTabPage       from "@/pages/calls/tabbed";
+import PhoneNumbersTabPage from "@/pages/phone-numbers-tabbed";
+import SettingsTabPage    from "@/pages/settings/tabbed";
+import ProvidersTabPage   from "@/pages/providers/tabbed";
+import ApiKeysTabPage     from "@/pages/api-keys-tabbed";
+import WalletTabPage      from "@/pages/wallet-tabbed";
+
+// Individual / deep-link pages (unchanged)
+import AgentBuilder            from "@/pages/agents/builder";
+import SquadsPage              from "@/pages/squads/index";
+import CallsList               from "@/pages/calls/index";
+import CallDetail              from "@/pages/calls/[id]";
+import ProvidersList           from "@/pages/providers/index";
+import Settings                from "@/pages/settings/index";
+import ProfilePage             from "@/pages/settings/Profile";
+import KnowledgeBasePage       from "@/pages/knowledge-base";
+import WalletPage              from "@/pages/wallet";
+import ActivityPage            from "@/pages/activity";
+import PhoneNumbersPage        from "@/pages/phone-numbers";
+import WebhooksPage            from "@/pages/webhooks";
+import WhatsAppPage            from "@/pages/whatsapp";
+import CallbacksPage           from "@/pages/callbacks";
+import AgentAnalyticsPage      from "@/pages/agent-analytics";
+import AnalyticsPage           from "@/pages/analytics";
+import NotFound                from "@/pages/not-found";
+import PrivacyPage             from "@/pages/privacy";
+import TermsPage               from "@/pages/terms";
+import OnboardingPage          from "@/pages/onboarding";
+import CampaignsPage           from "@/pages/campaigns/index";
+import CampaignDetailPage      from "@/pages/campaigns/[id]";
+import BatchDetailPage         from "@/pages/campaigns/[id]/batches/[batchId]";
+import BatchWizardPage         from "@/pages/campaigns/batch-wizard";
 import CampaignLeadProfilePage from "@/pages/campaigns/[id]/leads/[leadId]";
-import SchedulingPage from "@/pages/scheduling/index";
-import SchedulingCalendarsPage from "@/pages/scheduling/Calendars";
-import SchedulingEventTypesPage from "@/pages/scheduling/EventTypes";
+import SchedulingPage          from "@/pages/scheduling/index";
+import SchedulingCalendarsPage     from "@/pages/scheduling/Calendars";
+import SchedulingEventTypesPage    from "@/pages/scheduling/EventTypes";
 import SchedulingEventTypeDetailPage from "@/pages/scheduling/EventTypeDetail";
-import SchedulingAvailabilityPage from "@/pages/scheduling/Availability";
+import SchedulingAvailabilityPage  from "@/pages/scheduling/Availability";
 import SchedulingBookingDetailPage from "@/pages/scheduling/Bookings";
-import SchedulingConferencingPage from "@/pages/scheduling/Conferencing";
-import PublicBookingPage from "@/pages/book/[slug]";
-import WebcallJoinPage from "@/pages/join/[token]";
-import WorkshopFormPage from "@/pages/workshop/[slug]";
-import EventsPage from "@/pages/events/index";
-import EventTeamPortalPage from "@/pages/events/team";
-import PublicEventPage from "@/pages/events/public";
-import JudgePortalPage from "@/pages/events/judge";
+import SchedulingConferencingPage  from "@/pages/scheduling/Conferencing";
+import PublicBookingPage    from "@/pages/book/[slug]";
+import WebcallJoinPage      from "@/pages/join/[token]";
+import WorkshopFormPage     from "@/pages/workshop/[slug]";
+import EventsPage           from "@/pages/events/index";
+import EventTeamPortalPage  from "@/pages/events/team";
+import PublicEventPage      from "@/pages/events/public";
+import JudgePortalPage      from "@/pages/events/judge";
 import CertificateVerifyPage from "@/pages/events/certificate-verify";
-import CancelBookingPage from "@/pages/book/cancel";
+import CancelBookingPage    from "@/pages/book/cancel";
 import RescheduleBookingPage from "@/pages/book/reschedule";
-import UsagePage from "@/pages/usage";
-import KycPage from "@/pages/kyc";
-import ApiKeysPage from "@/pages/api-keys";
-import MetaLeadsPage from "@/pages/meta-leads";
-import ConnectionsPage from "@/pages/connections/index";
-import AutomaticCallsPage from "@/pages/automatic-calls/index";
+import UsagePage            from "@/pages/usage";
+import KycPage              from "@/pages/kyc";
+import ApiKeysPage          from "@/pages/api-keys";
+import MetaLeadsPage        from "@/pages/meta-leads";
+import ConnectionsPage      from "@/pages/connections/index";
+import AutomaticCallsPage   from "@/pages/automatic-calls/index";
 import AutomaticCallsWizardPage from "@/pages/automatic-calls/wizard";
-import AutomaticCallDetailPage from "@/pages/automatic-calls/[id]";
-import TransfersPage from "@/pages/transfers";
-import VoicesPage from "@/pages/voices";
-import TestSimulatorPage from "@/pages/test-simulator";
-import VibePage from "@/pages/vibe";
-import HomePage from "@/pages/home/index";
+import AutomaticCallDetailPage  from "@/pages/automatic-calls/[id]";
+import TransfersPage        from "@/pages/transfers";
+import VoicesPage           from "@/pages/voices";
+import TestSimulatorPage    from "@/pages/test-simulator";
+import VibePage             from "@/pages/vibe";
+import HomePage             from "@/pages/home/index";
 import CommandCenterRedirect from "@/pages/command-center/index";
-import MemoryPage from "@/pages/memory/index";
-import DocsPage from "@/pages/docs/index";
-import TeamPage from "@/pages/team";
-
-import ImpersonatePage from "@/pages/impersonate";
+import MemoryPage           from "@/pages/memory/index";
+import DocsPage             from "@/pages/docs/index";
+import TeamPage             from "@/pages/team";
+import ImpersonatePage      from "@/pages/impersonate";
 import { ImpersonationBanner } from "@/components/ImpersonationBanner";
 import { initMetaPixel } from "@/lib/meta-pixel";
 
@@ -93,8 +104,6 @@ if (_storedTimeout !== null) {
   setDefaultTimeoutMs(Number(_storedTimeout));
 }
 
-// Initialize the Meta Pixel once at app startup (loads the script, calls
-// fbq('init', ...), then fbq('track', 'PageView')). See lib/meta-pixel.ts.
 void initMetaPixel();
 
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -108,11 +117,6 @@ function AuthTokenSync() {
   return null;
 }
 
-// Forces a client-side sign-out the moment ANY API call comes back 401.
-// A suspended/deleted account keeps a locally valid (unexpired) JWT, so this
-// is the only signal that the server has revoked access for an already
-// "signed in" tab — without this, the app shell keeps rendering as if the
-// user were still authenticated even though every real data call fails.
 function UnauthorizedSignOutSync() {
   const { signOut, isSignedIn } = useAuth();
   useEffect(() => {
@@ -144,9 +148,6 @@ function SignInPage() {
   const [error, setError] = useState<string | null>(null);
   const isSignup = location.startsWith("/sign-up");
 
-  // If a previous tab/session was force-signed-out (e.g. the server started
-  // rejecting requests because the account was suspended/deleted), surface a
-  // one-time explanatory message instead of silently landing back here.
   useEffect(() => {
     const reason = consumeSignOutReason();
     if (reason === "revoked") {
@@ -156,13 +157,10 @@ function SignInPage() {
 
   return (
     <div className="relative min-h-[100dvh] w-full flex items-center justify-center overflow-hidden bg-black text-white">
-      {/* Animated dot-grid background */}
       <DotGridBackground
         className="absolute inset-0 z-0 pointer-events-none"
         style={{ width: "100%", height: "100%" }}
       />
-
-      {/* Vignette */}
       <div
         className="absolute inset-0 z-[1] pointer-events-none"
         style={{
@@ -170,10 +168,7 @@ function SignInPage() {
             "radial-gradient(circle at center, rgba(0,0,0,0.72) 0%, rgba(0,0,0,0) 55%, rgba(0,0,0,0.88) 100%)",
         }}
       />
-
-      {/* Auth card */}
       <div className="relative z-[2] w-full max-w-[400px] mx-4 flex flex-col items-center text-center rounded-2xl border border-white/[0.08] bg-[#0f0f12]/90 backdrop-blur-xl p-8 shadow-[0_24px_80px_rgba(0,0,0,0.8)] animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-500">
-        {/* SnapServe logo — three-bar mark + wordmark */}
         <div className="flex flex-col items-center gap-4 mb-6">
           <div className="flex flex-col gap-[6px] w-[46px]">
             <div className="h-[10px] w-full rounded-full bg-white" />
@@ -203,7 +198,6 @@ function SignInPage() {
           </div>
         )}
 
-        {/* Google is the only supported provider */}
         <a
           href="/api/auth/google/connect"
           className="w-full flex items-center justify-center gap-2.5 rounded-lg bg-white text-black font-semibold text-sm py-3 transition-colors hover:bg-white/90"
@@ -218,7 +212,6 @@ function SignInPage() {
           {isSignup ? "Sign up with Google" : "Continue with Google"}
         </a>
 
-        {/* Sign in / sign up toggle */}
         <div className="mt-6 text-sm text-white/50">
           {isSignup ? "Already have an account? " : "Don't have an account? "}
           <button
@@ -230,7 +223,6 @@ function SignInPage() {
           </button>
         </div>
 
-        {/* Footer */}
         <p className="mt-4 text-[0.72rem] text-white/35 leading-relaxed">
           By continuing, you agree to our{" "}
           <Link href="/terms" className="text-white/55 hover:text-white/80">Terms of Service</Link> and{" "}
@@ -256,18 +248,19 @@ function AppRoot() {
   return <Redirect to="/app/home" />;
 }
 
+/* ─── Client-side redirects for merged / renamed routes ─────────────────── */
+function TabRedirect({ to }: { to: string }) {
+  const [, navigate] = useLocation();
+  useEffect(() => { navigate(to, { replace: true }); }, []);
+  return null;
+}
+
 function AppRoutes() {
   const [location] = useLocation();
   const { data: onboardingStatus, isLoading: onboardingLoading } = useGetOnboardingStatus();
 
-  // Don't gate until we know the status
-  if (onboardingLoading) {
-    return <SnapServeLoader />;
-  }
+  if (onboardingLoading) return <SnapServeLoader />;
 
-  // Redirect new users to onboarding (except if they're already there).
-  // Use === false (not falsy) so a failed/pending query (data=undefined) never
-  // incorrectly triggers the redirect — only an explicit "completed: false" does.
   const onOnboardingPage = location.startsWith("/app/onboarding");
   if (onboardingStatus?.completed === false && !onOnboardingPage) {
     return <Redirect to="/app/onboarding" />;
@@ -281,33 +274,101 @@ function AppRoutes() {
         <Route path="/app/home" component={HomePage} />
         <Route path="/app/command-center" component={CommandCenterRedirect} />
         <Route path="/app/analytics" component={AnalyticsPage} />
-        <Route path="/app/agents" component={AgentBuilder} />
+
+        {/* ── Agents ── */}
+        {/* /app/agents (list, tabbed) — must come BEFORE /app/agents/:id */}
+        <Route path="/app/agents" component={AgentsTabPage} />
         <Route path="/app/agents/:id" component={AgentBuilder} />
-        <Route path="/app/squads" component={SquadsPage} />
-        <Route path="/app/squads/:id" component={SquadsPage} />
+
+        {/* ── Squads → agents?tab=squads redirect ── */}
+        <Route path="/app/squads/:id">
+          <TabRedirect to="/app/agents?tab=squads" />
+        </Route>
+        <Route path="/app/squads">
+          <TabRedirect to="/app/agents?tab=squads" />
+        </Route>
+
+        {/* ── Team → settings?tab=team redirect ── */}
+        <Route path="/app/team">
+          <TabRedirect to="/app/settings?tab=team" />
+        </Route>
 
         <Route path="/app/events*" component={() => { useLocation()[1]("/app/home", { replace: true }); return null; }} />
-        <Route path="/app/calls" component={CallsList} />
+
+        {/* ── Calls (tabbed) ── */}
         <Route path="/app/calls/:id" component={CallDetail} />
+        <Route path="/app/calls" component={CallsTabPage} />
+
+        {/* ── Callbacks → calls?tab=callbacks redirect ── */}
+        <Route path="/app/callbacks">
+          <TabRedirect to="/app/calls?tab=callbacks" />
+        </Route>
+
+        {/* ── Transfers → calls?tab=transfers redirect ── */}
+        <Route path="/app/transfers">
+          <TabRedirect to="/app/calls?tab=transfers" />
+        </Route>
+
         <Route path="/app/knowledge-bases" component={KnowledgeBasePage} />
-        <Route path="/app/providers" component={ProvidersList} />
-        <Route path="/app/wallet" component={WalletPage} />
+
+        {/* ── Providers (tabbed — Voices + Provider keys) ── */}
+        <Route path="/app/providers" component={ProvidersTabPage} />
+
+        {/* ── Voices → providers?tab=voices redirect ── */}
+        <Route path="/app/voices">
+          <TabRedirect to="/app/providers?tab=voices" />
+        </Route>
+
+        {/* ── Wallet (tabbed — Billing) ── */}
+        <Route path="/app/wallet" component={WalletTabPage} />
+
+        {/* ── Usage → wallet?tab=usage redirect ── */}
+        <Route path="/app/usage">
+          <TabRedirect to="/app/wallet?tab=usage" />
+        </Route>
+
         <Route path="/app/memory" component={MemoryPage} />
         <Route path="/app/activity" component={ActivityPage} />
-        <Route path="/app/phone-numbers" component={PhoneNumbersPage} />
+
+        {/* ── Phone Numbers (tabbed) ── */}
+        <Route path="/app/phone-numbers" component={PhoneNumbersTabPage} />
+
+        {/* ── KYC → phone-numbers?tab=verification redirect ── */}
+        <Route path="/app/kyc">
+          <TabRedirect to="/app/phone-numbers?tab=verification" />
+        </Route>
+
         <Route path="/app/connections" component={ConnectionsPage} />
         <Route path="/app/whatsapp" component={WhatsAppPage} />
-        <Route path="/app/webhooks" component={WebhooksPage} />
-        <Route path="/app/callbacks" component={CallbacksPage} />
+
+        {/* ── Webhooks → api-keys?tab=webhooks redirect ── */}
+        <Route path="/app/webhooks">
+          <TabRedirect to="/app/api-keys?tab=webhooks" />
+        </Route>
+
         <Route path="/app/analytics/agents/:id" component={AgentAnalyticsPage} />
+
+        {/* ── Campaigns (tabbed + deep-link sub-routes) ── */}
         <Route path="/app/campaigns/:id/leads/:leadId" component={CampaignLeadProfilePage} />
         <Route path="/app/campaigns/:id/batches/new" component={BatchWizardPage} />
         <Route path="/app/campaigns/:id/batches/:batchId" component={BatchDetailPage} />
         <Route path="/app/campaigns/:id" component={CampaignDetailPage} />
-        <Route path="/app/campaigns" component={CampaignsPage} />
+        <Route path="/app/campaigns" component={CampaignsTabPage} />
+
+        {/* ── Automatic Calls → campaigns?tab=scheduled redirect ── */}
+        {/* Deep-link sub-routes still work directly */}
         <Route path="/app/automatic-calls/new" component={AutomaticCallsWizardPage} />
         <Route path="/app/automatic-calls/:id" component={AutomaticCallDetailPage} />
-        <Route path="/app/automatic-calls" component={AutomaticCallsPage} />
+        <Route path="/app/automatic-calls">
+          <TabRedirect to="/app/campaigns?tab=scheduled" />
+        </Route>
+
+        {/* ── Meta Leads → campaigns?tab=lead-sources redirect ── */}
+        <Route path="/app/meta-leads">
+          <TabRedirect to="/app/campaigns?tab=lead-sources" />
+        </Route>
+
+        {/* ── Scheduling ── */}
         <Route path="/app/scheduling/bookings/:id" component={SchedulingBookingDetailPage} />
         <Route path="/app/scheduling/calendars" component={() => <SchedulingCalendarsPage />} />
         <Route path="/app/scheduling/event-types/:id" component={SchedulingEventTypeDetailPage} />
@@ -315,16 +376,16 @@ function AppRoutes() {
         <Route path="/app/scheduling/availability" component={SchedulingAvailabilityPage} />
         <Route path="/app/scheduling/conferencing" component={SchedulingConferencingPage} />
         <Route path="/app/scheduling" component={SchedulingPage} />
-        <Route path="/app/settings" component={Settings} />
+
+        {/* ── Settings (tabbed — General + Team) ── */}
         <Route path="/app/settings/profile" component={ProfilePage} />
-        <Route path="/app/usage" component={UsagePage} />
-        <Route path="/app/kyc" component={KycPage} />
-        <Route path="/app/api-keys" component={ApiKeysPage} />
-        <Route path="/app/meta-leads" component={MetaLeadsPage} />
-        <Route path="/app/transfers" component={TransfersPage} />
-        <Route path="/app/voices" component={VoicesPage} />
+        <Route path="/app/settings" component={SettingsTabPage} />
+
+        {/* ── API Keys (tabbed — Developers) ── */}
+        <Route path="/app/api-keys" component={ApiKeysTabPage} />
+
         <Route path="/app/test-simulator" component={TestSimulatorPage} />
-        <Route path="/app/team" component={TeamPage} />
+
         <Route component={NotFound} />
       </Switch>
     </Layout>
@@ -357,8 +418,6 @@ function NavHistoryTracker() {
   const [location] = useLocation();
   const firstRender = useRef(true);
   useEffect(() => {
-    // Skip the initial mount (the landing page itself isn't a navigation);
-    // every subsequent location change is an in-app navigation.
     if (firstRender.current) {
       firstRender.current = false;
       return;
@@ -369,9 +428,6 @@ function NavHistoryTracker() {
 }
 
 function Router() {
-  // Google Cloud Console OAuth app settings — enter these exact URLs:
-  //   Homepage URL:       https://<production-domain>/
-  //   Privacy policy URL: https://<production-domain>/privacy
   return (
     <AuthProvider>
       <QueryClientProvider client={queryClient}>

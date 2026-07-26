@@ -3,15 +3,16 @@ import { Link, useLocation } from "wouter";
 import { useTheme } from "@/components/theme-provider";
 import { GlobalSearch, useGlobalSearchTrigger } from "@/components/GlobalSearch";
 import {
-  Home, Users, UsersRound, Zap, CalendarDays, Brain, Phone,
-  Settings, Key, Webhook, Wallet, TrendingUp, ShieldCheck,
-  Mic2, Menu, ChevronDown, ChevronLeft, ChevronRight,
-  LogOut, Bell, Search, SlidersHorizontal, BookOpen, PhoneMissed, PlugZap, Sun, Moon, Sparkles,
-  ArrowRightLeft, Instagram, FileSpreadsheet, MessageCircle, Trophy, X,
+  Home, Bot, Zap, CalendarDays, Brain, Phone, Hash,
+  Settings, Wallet, Mic2, Key,
+  Menu, ChevronDown, ChevronLeft, ChevronRight,
+  LogOut, Bell, Search, SlidersHorizontal, BookOpen, PlugZap, Sun, Moon, Sparkles,
+  MessageCircle, X,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useAuth } from "@/lib/auth";
-import { useGetWallet } from "@workspace/api-client-react";
+import { useQuery } from "@tanstack/react-query";
+import { useGetWallet, customFetch } from "@workspace/api-client-react";
 import { useMinuteRatesMap, useUserProviderNames } from "@/hooks/use-minute-rates";
 import { SnapServeIcon } from "@/components/logo";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -72,68 +73,104 @@ class ErrorBoundary extends Component<
 }
 
 /* ─── Constants ─────────────────────────────────────────────────────────── */
-const LS_COLLAPSED    = "snapserve:sidebar-collapsed";
-const LS_SETTINGS     = "snapserve:settings-open";
+const LS_COLLAPSED = "snapserve:sidebar-collapsed";
+const LS_SETTINGS  = "snapserve:settings-open";
 
-const NAV_PRIMARY = [
-  { name: "Home",            href: "/app/home",            icon: Home },
-  { name: "Agents",          href: "/app/agents",          icon: Users },
-  { name: "Squads",          href: "/app/squads",          icon: UsersRound },
-  { name: "Team Members",    href: "/app/team",            icon: Users },
-  { name: "Vibe Build",      href: "/app/vibe",            icon: Sparkles },
-  { name: "Agent Knowledge", href: "/app/knowledge-bases", icon: BookOpen },
-  { name: "Campaigns",       href: "/app/campaigns",       icon: Zap },
-  { name: "Automatic Calls", href: "/app/automatic-calls", icon: FileSpreadsheet },
-  { name: "Meta Leads",      href: "/app/meta-leads",      icon: Instagram },
-  { name: "Connections",     href: "/app/connections",     icon: PlugZap },
-  { name: "WhatsApp",        href: "/app/whatsapp",        icon: MessageCircle },
-  { name: "Scheduling",      href: "/app/scheduling",      icon: CalendarDays },
-  { name: "Memory / CRM",    href: "/app/memory",          icon: Brain },
-  { name: "Call Logs",       href: "/app/calls",           icon: Phone },
-  { name: "Callbacks",       href: "/app/callbacks",       icon: PhoneMissed },
-  { name: "Transfers",       href: "/app/transfers",       icon: ArrowRightLeft },
+/* ─── Navigation structure ───────────────────────────────────────────────── */
+interface NavItem {
+  name: string;
+  href: string;
+  icon: React.ElementType;
+  /** Set true on the item that should show the pending-callbacks badge */
+  callbackBadge?: boolean;
+}
+
+interface NavGroup {
+  /** Uppercase group label, e.g. "BUILD". Omit for ungrouped items. */
+  group?: string;
+  items: NavItem[];
+}
+
+const NAV_GROUPS: NavGroup[] = [
+  {
+    items: [
+      { name: "Home",   href: "/app/home", icon: Home },
+    ],
+  },
+  {
+    group: "BUILD",
+    items: [
+      { name: "Agents",    href: "/app/agents",          icon: Bot },
+      { name: "Knowledge", href: "/app/knowledge-bases", icon: BookOpen },
+    ],
+  },
+  {
+    group: "REACH OUT",
+    items: [
+      { name: "Campaigns", href: "/app/campaigns", icon: Zap },
+      { name: "WhatsApp",  href: "/app/whatsapp",  icon: MessageCircle },
+    ],
+  },
+  {
+    group: "CALLS",
+    items: [
+      { name: "Call Logs",     href: "/app/calls",         icon: Phone,       callbackBadge: true },
+      { name: "Phone Numbers", href: "/app/phone-numbers", icon: Hash },
+      { name: "Scheduling",    href: "/app/scheduling",    icon: CalendarDays },
+    ],
+  },
+  {
+    group: "CUSTOMERS",
+    items: [
+      { name: "Contacts and Memory", href: "/app/memory", icon: Brain },
+    ],
+  },
+  {
+    items: [
+      { name: "Integrations", href: "/app/connections", icon: PlugZap },
+    ],
+  },
 ];
 
-const NAV_SETTINGS = [
-  { name: "Overview",      href: "/app/settings",      icon: Settings },
-  { name: "Providers",     href: "/app/providers",     icon: Key },
-  { name: "Voices",        href: "/app/voices",        icon: Mic2 },
-  { name: "Phone Numbers", href: "/app/phone-numbers", icon: Phone },
-  { name: "Verification",  href: "/app/kyc",           icon: ShieldCheck },
-  { name: "API Keys",      href: "/app/api-keys",      icon: Key },
-  { name: "Call webhooks", href: "/app/webhooks",      icon: Webhook },
-  { name: "Wallet",        href: "/app/wallet",        icon: Wallet },
-  { name: "Usage",         href: "/app/usage",         icon: TrendingUp },
+const NAV_SETTINGS: NavItem[] = [
+  { name: "General",               href: "/app/settings", icon: Settings },
+  { name: "Voices and Providers",  href: "/app/providers", icon: Mic2 },
+  { name: "Developers",            href: "/app/api-keys",  icon: Key },
+  { name: "Billing",               href: "/app/wallet",    icon: Wallet },
 ];
+
+const SETTINGS_HREFS = NAV_SETTINGS.map(s => s.href);
 
 const ROUTE_TITLES: [string, string][] = [
   ["/app/home",            "Home"],
   ["/app/command-center",  "Home"],
-  ["/app/vibe",            "Vibe Build"],
+  ["/app/vibe",            "New agent"],
   ["/app/agents",          "Agents"],
-  ["/app/squads",          "Squads"],
-  ["/app/knowledge-bases", "Agent Knowledge"],
+  ["/app/knowledge-bases", "Knowledge"],
   ["/app/campaigns",       "Campaigns"],
-  ["/app/automatic-calls", "Automatic Calls"],
-  ["/app/connections",     "Connections"],
+  ["/app/connections",     "Integrations"],
   ["/app/whatsapp",        "WhatsApp"],
   ["/app/scheduling",      "Scheduling"],
-  ["/app/memory",          "Memory / CRM"],
+  ["/app/memory",          "Contacts and Memory"],
   ["/app/calls",           "Call Logs"],
-  ["/app/callbacks",       "Callbacks"],
-  ["/app/providers",       "Providers"],
-  ["/app/voices",          "Voices"],
   ["/app/phone-numbers",   "Phone Numbers"],
-  ["/app/kyc",             "Verification"],
-  ["/app/api-keys",        "API Keys"],
-  ["/app/webhooks",        "Call webhooks"],
-  ["/app/wallet",          "Wallet"],
-  ["/app/usage",           "Usage"],
-  ["/app/settings",        "Settings"],
+  ["/app/providers",       "Voices and Providers"],
+  ["/app/api-keys",        "Developers"],
+  ["/app/wallet",          "Billing"],
+  ["/app/settings",        "General"],
   ["/app/test-simulator",  "Test Simulator"],
-  ["/app/meta-leads",      "Meta Leads"],
-  ["/app/transfers",       "Transfers"],
   ["/app/analytics",       "Analytics"],
+  // Legacy routes (redirect targets still render briefly)
+  ["/app/squads",          "Agents"],
+  ["/app/team",            "General"],
+  ["/app/automatic-calls", "Campaigns"],
+  ["/app/meta-leads",      "Campaigns"],
+  ["/app/callbacks",       "Call Logs"],
+  ["/app/transfers",       "Call Logs"],
+  ["/app/kyc",             "Phone Numbers"],
+  ["/app/voices",          "Voices and Providers"],
+  ["/app/webhooks",        "Developers"],
+  ["/app/usage",           "Billing"],
 ];
 
 function getPageTitle(location: string): string {
@@ -141,53 +178,77 @@ function getPageTitle(location: string): string {
   return match?.[1] ?? "SnapServe";
 }
 
-/* ─── Wallet chip ────────────────────────────────────────────────────────── */
-function WalletChip() {
+/* ─── Pending callbacks count (for sidebar badge) ────────────────────────── */
+const BASE_URL = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+function usePendingCallbackCount(): number {
+  const { data } = useQuery<number>({
+    queryKey: ["callbacks", "pending-count"],
+    queryFn: async () => {
+      try {
+        const res = await customFetch(`${BASE_URL}/api/callbacks?status=pending`);
+        if (Array.isArray(res)) return res.length;
+        const r = res as Record<string, unknown>;
+        if (typeof r.total === "number") return r.total;
+        if (Array.isArray(r.items)) return r.items.length;
+        if (Array.isArray(r.data)) return (r.data as unknown[]).length;
+        return 0;
+      } catch {
+        return 0;
+      }
+    },
+    refetchInterval: 30_000,
+    staleTime: 20_000,
+  });
+  return data ?? 0;
+}
+
+/* ─── Wallet chip (sidebar footer) ──────────────────────────────────────── */
+function WalletChip({ compact = false }: { compact?: boolean }) {
   const { data: wallet } = useGetWallet();
   const cents = wallet?.balanceCents ?? null;
   const rateMap = useMinuteRatesMap();
   const userProviders = useUserProviderNames();
 
-  // balanceCents is INR paise; rate is paise/min (₹5 = 500)
   const rateCentsPerMin = rateMap.get(userProviders.size > 0 ? "byop" : "managed") ?? 500;
-
   const availMins = cents !== null ? Math.floor(cents / rateCentsPerMin) : null;
 
   const { ring, text, bar } =
     cents === null
-      ? { ring: "border-border",          text: "text-muted-foreground", bar: "bg-border" }
-      : cents >= 50_000 // ≥ ₹500
-      ? { ring: "border-emerald-500/30",  text: "text-emerald-400",      bar: "bg-emerald-500" }
-      : cents >= 10_000 // ≥ ₹100
-      ? { ring: "border-amber-500/30",    text: "text-amber-400",        bar: "bg-amber-500" }
-      : { ring: "border-red-500/30",      text: "text-red-400",          bar: "bg-red-500" };
+      ? { ring: "border-border",         text: "text-muted-foreground", bar: "bg-border" }
+      : cents >= 50_000
+      ? { ring: "border-emerald-500/30", text: "text-emerald-400",      bar: "bg-emerald-500" }
+      : cents >= 10_000
+      ? { ring: "border-amber-500/30",   text: "text-amber-400",        bar: "bg-amber-500" }
+      : { ring: "border-red-500/30",     text: "text-red-400",          bar: "bg-red-500" };
 
-  // Progress fills toward ₹1,000 (100_000 paise)
   const pct = cents === null ? 0 : Math.min(100, (cents / 100_000) * 100);
 
   return (
     <Link href="/app/wallet">
-      <div className={`flex items-center gap-1.5 px-2.5 py-[7px] rounded-lg border ${ring} bg-elevated/40 cursor-pointer hover:bg-elevated transition-colors`}>
+      <div className={`flex items-center gap-1.5 px-2.5 py-[7px] rounded-lg border ${ring} bg-elevated/40 cursor-pointer hover:bg-elevated transition-colors w-full`}>
         <Wallet className={`w-3 h-3 shrink-0 ${text}`} />
-        <div className="flex flex-col gap-[3px]">
-          {cents !== null ? (
-            <div className="flex items-baseline gap-1.5">
-              <span className={`text-[11px] font-semibold tabular-nums leading-none ${text}`}>
-                ₹{(cents / 100).toFixed(2)}
-              </span>
-              {availMins !== null && (
-                <span className={`text-[9px] leading-none tabular-nums ${text} opacity-60`}>
-                  ~{availMins}m
+        {!compact && (
+          <div className="flex flex-col gap-[3px] flex-1 min-w-0">
+            {cents !== null ? (
+              <div className="flex items-baseline gap-1.5">
+                <span className={`text-[11px] font-semibold tabular-nums leading-none ${text}`}>
+                  ₹{(cents / 100).toFixed(2)}
                 </span>
-              )}
+                {availMins !== null && (
+                  <span className={`text-[9px] leading-none tabular-nums ${text} opacity-60`}>
+                    ~{availMins}m
+                  </span>
+                )}
+              </div>
+            ) : (
+              <div className="h-2.5 w-10 rounded animate-pulse bg-elevated" />
+            )}
+            <div className="h-[2px] w-full rounded-full bg-border/40 overflow-hidden">
+              <div className={`h-full rounded-full ${bar} transition-all duration-700`} style={{ width: `${pct}%` }} />
             </div>
-          ) : (
-            <div className="h-2.5 w-10 rounded animate-pulse bg-elevated" />
-          )}
-          <div className="h-[2px] w-full rounded-full bg-border/40 overflow-hidden">
-            <div className={`h-full rounded-full ${bar} transition-all duration-700`} style={{ width: `${pct}%` }} />
           </div>
-        </div>
+        )}
       </div>
     </Link>
   );
@@ -202,8 +263,8 @@ function BellButton() {
   );
 }
 
-/* ─── Topbar user menu ───────────────────────────────────────────────────── */
-function TopbarUser() {
+/* ─── Sidebar user profile (footer) ─────────────────────────────────────── */
+function SidebarUser({ collapsed }: { collapsed: boolean }) {
   const { signOut, user } = useAuth();
   const { theme, setTheme } = useTheme();
   const [open, setOpen] = useState(false);
@@ -215,19 +276,23 @@ function TopbarUser() {
     <div className="relative">
       <button
         onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-accent transition-colors"
+        className="flex items-center gap-2 w-full px-2.5 py-2 rounded-lg hover:bg-accent transition-colors"
       >
         <div className="w-6 h-6 rounded-md bg-elevated border border-border flex items-center justify-center shrink-0">
           <span className="text-[10px] font-semibold text-foreground/70">{initials}</span>
         </div>
-        <span className="hidden sm:block text-[12.5px] font-medium text-foreground max-w-[110px] truncate">{name}</span>
-        <ChevronDown className={`w-3 h-3 text-muted-foreground/40 transition-transform duration-150 ${open ? "rotate-180" : ""}`} />
+        {!collapsed && (
+          <>
+            <span className="flex-1 text-left text-[12.5px] font-medium text-foreground max-w-[110px] truncate">{name}</span>
+            <ChevronDown className={`w-3 h-3 text-muted-foreground/40 transition-transform duration-150 shrink-0 ${open ? "rotate-180" : ""}`} />
+          </>
+        )}
       </button>
 
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full mt-1.5 w-[200px] rounded-xl border border-border bg-popover shadow-xl overflow-hidden z-50">
+          <div className="absolute left-0 bottom-full mb-1.5 w-[200px] rounded-xl border border-border bg-popover shadow-xl overflow-hidden z-50">
             <div className="px-3.5 py-2.5 border-b border-border">
               <p className="text-[12.5px] font-semibold text-foreground truncate">{name}</p>
               {email && <p className="text-[10.5px] text-muted-foreground/60 truncate mt-0.5">{email}</p>}
@@ -267,30 +332,28 @@ function TopbarUser() {
   );
 }
 
-/* ─── Topbar ─────────────────────────────────────────────────────────────── */
+/* ─── Topbar (desktop — page title only) ─────────────────────────────────── */
 function Topbar({ location }: { location: string }) {
   return (
     <div className="shrink-0 h-[50px] flex items-center justify-between px-5 border-b border-border bg-background gap-4">
       <span className="text-[13px] font-semibold text-foreground/70 truncate">{getPageTitle(location)}</span>
-
       <div className="flex items-center gap-1">
-        <WalletChip />
         <ThemeToggle />
         <BellButton />
-        <TopbarUser />
       </div>
     </div>
   );
 }
 
 /* ─── Single nav item ────────────────────────────────────────────────────── */
-function NavItem({
-  item, collapsed, indent = false, onClick,
+function NavItemEl({
+  item, collapsed, indent = false, onClick, badge = 0,
 }: {
-  item: { name: string; href: string; icon: React.ElementType };
+  item: NavItem;
   collapsed: boolean;
   indent?: boolean;
   onClick?: () => void;
+  badge?: number;
 }) {
   const [location] = useLocation();
   const isActive = location.startsWith(item.href) && item.href !== "/app";
@@ -309,7 +372,19 @@ function NavItem({
         <item.icon
           className={`w-[14px] h-[14px] shrink-0 ${isActive ? "text-foreground/70" : "text-muted-foreground/70"}`}
         />
-        {!collapsed && <span className="truncate">{item.name}</span>}
+        {!collapsed && (
+          <>
+            <span className="truncate flex-1">{item.name}</span>
+            {badge > 0 && (
+              <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-amber-500/20 text-amber-500 text-[10px] font-semibold leading-none">
+                {badge > 99 ? "99+" : badge}
+              </span>
+            )}
+          </>
+        )}
+        {collapsed && badge > 0 && (
+          <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-amber-500" />
+        )}
       </div>
     </Link>
   );
@@ -328,9 +403,9 @@ function SidebarContent({
   onSearchOpen?: () => void;
 }) {
   const [location] = useLocation();
-  const isInSettings =
-    location.startsWith("/app/settings") ||
-    NAV_SETTINGS.some(s => location.startsWith(s.href));
+  const pendingCallbacks = usePendingCallbackCount();
+
+  const isInSettings = SETTINGS_HREFS.some(href => location.startsWith(href));
 
   const [settingsOpen, setSettingsOpen] = useState(() => {
     try { return localStorage.getItem(LS_SETTINGS) === "true"; } catch { return false; }
@@ -364,16 +439,13 @@ function SidebarContent({
             </span>
           )}
         </Link>
-
         {onToggleCollapse && (
           <button
             onClick={onToggleCollapse}
             className="p-1.5 rounded-md text-muted-foreground/55 hover:text-muted-foreground hover:bg-accent/50 transition-colors shrink-0"
             title={collapsed ? "Expand" : "Collapse"}
           >
-            {collapsed
-              ? <ChevronRight className="w-3.5 h-3.5" />
-              : <ChevronLeft  className="w-3.5 h-3.5" />}
+            {collapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
           </button>
         )}
       </div>
@@ -394,21 +466,49 @@ function SidebarContent({
         </button>
       </div>
 
+      {/* + New agent CTA */}
+      <div className="px-2 pb-1.5 shrink-0">
+        <Link href="/app/vibe" onClick={onNavClick}>
+          <div className={cn(
+            "flex items-center gap-2 px-2.5 py-2 rounded-lg bg-primary text-primary-foreground text-[13px] font-medium cursor-pointer hover:bg-primary/90 transition-colors select-none",
+            collapsed ? "justify-center" : ""
+          )}>
+            <Sparkles className="w-[14px] h-[14px] shrink-0" />
+            {!collapsed && <span>+ New agent</span>}
+          </div>
+        </Link>
+      </div>
+
       {/* Primary nav */}
       <div className="flex-1 overflow-y-auto px-2 py-1 min-h-0">
-        {!collapsed && (
-          <p className="px-2.5 mb-1.5 mt-1 text-[9.5px] font-semibold tracking-[0.1em] uppercase text-muted-foreground/55 select-none">
-            Navigation
-          </p>
-        )}
-        <div className="flex flex-col gap-px">
-          {NAV_PRIMARY.map(item => (
-            <NavItem key={item.href} item={item} collapsed={collapsed} onClick={onNavClick} />
-          ))}
-        </div>
+        {NAV_GROUPS.map((group, gi) => (
+          <div key={gi}>
+            {/* Group separator (thin divider before every group after first) */}
+            {gi > 0 && <div className="my-2 border-t border-sidebar-border mx-1" />}
+
+            {/* Group label */}
+            {group.group && !collapsed && (
+              <p className="px-2.5 mb-1 mt-0.5 text-[9.5px] font-semibold tracking-[0.1em] uppercase text-muted-foreground/45 select-none">
+                {group.group}
+              </p>
+            )}
+
+            <div className="flex flex-col gap-px">
+              {group.items.map(item => (
+                <NavItemEl
+                  key={item.href}
+                  item={item}
+                  collapsed={collapsed}
+                  onClick={onNavClick}
+                  badge={item.callbackBadge ? pendingCallbacks : 0}
+                />
+              ))}
+            </div>
+          </div>
+        ))}
 
         {/* Settings divider */}
-        <div className="my-2.5 border-t border-sidebar-border mx-1" />
+        <div className="my-2 border-t border-sidebar-border mx-1" />
 
         {/* Settings toggle */}
         <button
@@ -424,9 +524,7 @@ function SidebarContent({
           {!collapsed && (
             <>
               <span className="flex-1 text-left">Settings</span>
-              <ChevronDown
-                className={`w-3 h-3 text-muted-foreground/55 transition-transform duration-150 ${settingsOpen ? "rotate-180" : ""}`}
-              />
+              <ChevronDown className={`w-3 h-3 text-muted-foreground/55 transition-transform duration-150 ${settingsOpen ? "rotate-180" : ""}`} />
             </>
           )}
         </button>
@@ -435,46 +533,59 @@ function SidebarContent({
         {settingsOpen && !collapsed && (
           <div className="mt-0.5 ml-2.5 pl-3 border-l border-sidebar-border flex flex-col gap-px">
             {NAV_SETTINGS.map(item => (
-              <NavItem key={item.href} item={item} collapsed={false} indent onClick={onNavClick} />
+              <NavItemEl key={item.href} item={item} collapsed={false} indent onClick={onNavClick} />
             ))}
           </div>
         )}
         {settingsOpen && collapsed && (
           <div className="flex flex-col gap-px mt-0.5">
             {NAV_SETTINGS.map(item => (
-              <NavItem key={item.href} item={item} collapsed onClick={onNavClick} />
+              <NavItemEl key={item.href} item={item} collapsed onClick={onNavClick} />
             ))}
           </div>
         )}
       </div>
 
-      {/* Docs shortcut */}
-      <div className="px-2 pb-1.5 shrink-0">
-        <Link
-          href="/docs"
-          onClick={onNavClick}
-          className="flex items-center gap-2.5 px-2.5 py-[6.5px] rounded-lg text-[13px] text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors duration-100 w-full"
-        >
-          <BookOpen className="w-[14px] h-[14px] shrink-0 text-muted-foreground/70" />
-          {!collapsed && <span>Documentation</span>}
-        </Link>
-      </div>
+      {/* Footer — docs · wallet chip · status · privacy/terms · user */}
+      <div className="px-2 shrink-0 border-t border-sidebar-border">
+        {/* Documentation */}
+        <div className="pt-1.5 pb-0.5">
+          <Link
+            href="/docs"
+            onClick={onNavClick}
+            className="flex items-center gap-2.5 px-2.5 py-[6.5px] rounded-lg text-[13px] text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors duration-100 w-full"
+          >
+            <BookOpen className="w-[14px] h-[14px] shrink-0 text-muted-foreground/70" />
+            {!collapsed && <span>Documentation</span>}
+          </Link>
+        </div>
 
-      {/* Footer */}
-      <div className="px-2 pb-2.5 pt-2 shrink-0 border-t border-sidebar-border">
-        <div className="flex items-center gap-2 px-2.5 py-1.5">
-          <div className="h-1.5 w-1.5 rounded-full bg-emerald-500/50 shrink-0" />
+        {/* Wallet chip */}
+        <div className="pb-1 px-0">
+          <WalletChip compact={collapsed} />
+        </div>
+
+        {/* Status + Privacy/Terms */}
+        <div className="pb-1">
+          <div className="flex items-center gap-2 px-2.5 py-1">
+            <div className="h-1.5 w-1.5 rounded-full bg-emerald-500/50 shrink-0" />
+            {!collapsed && (
+              <span className="text-[10.5px] text-muted-foreground/55">All systems operational</span>
+            )}
+          </div>
           {!collapsed && (
-            <span className="text-[10.5px] text-muted-foreground/55">All systems operational</span>
+            <div className="flex items-center gap-2 px-2.5 py-0.5">
+              <Link href="/privacy" className="text-[10px] text-muted-foreground/30 hover:text-muted-foreground/50 transition-colors">Privacy</Link>
+              <span className="text-muted-foreground/20">·</span>
+              <Link href="/terms"   className="text-[10px] text-muted-foreground/30 hover:text-muted-foreground/50 transition-colors">Terms</Link>
+            </div>
           )}
         </div>
-        {!collapsed && (
-          <div className="flex items-center gap-2 px-2.5 py-0.5">
-            <Link href="/privacy" className="text-[10px] text-muted-foreground/30 hover:text-muted-foreground/50 transition-colors">Privacy</Link>
-            <span className="text-muted-foreground/20">·</span>
-            <Link href="/terms"   className="text-[10px] text-muted-foreground/30 hover:text-muted-foreground/50 transition-colors">Terms</Link>
-          </div>
-        )}
+
+        {/* User profile */}
+        <div className="pb-2">
+          <SidebarUser collapsed={collapsed} />
+        </div>
       </div>
     </div>
   );
@@ -482,11 +593,11 @@ function SidebarContent({
 
 /* ─── Mobile bottom nav ──────────────────────────────────────────────────── */
 const MOBILE_BOTTOM_NAV = [
-  { name: "Home",    href: "/app/home", icon: Home },
-  { name: "Vibe",    href: "/app/vibe",           icon: Sparkles },
-  { name: "Agents",  href: "/app/agents",         icon: Users },
-  { name: "Calls",   href: "/app/calls",          icon: Phone },
-  { name: "Wallet",  href: "/app/wallet",         icon: Wallet },
+  { name: "Home",   href: "/app/home",   icon: Home },
+  { name: "Create", href: "/app/vibe",   icon: Sparkles },
+  { name: "Agents", href: "/app/agents", icon: Bot },
+  { name: "Calls",  href: "/app/calls",  icon: Phone },
+  { name: "Wallet", href: "/app/wallet", icon: Wallet },
 ] as const;
 
 function MobileBottomNav() {
@@ -498,10 +609,7 @@ function MobileBottomNav() {
     >
       <div className="grid grid-cols-5 h-14">
         {MOBILE_BOTTOM_NAV.map((item) => {
-          const active =
-            item.href === "/app/agents"
-              ? location.startsWith("/app/agents")
-              : location.startsWith(item.href);
+          const active = location.startsWith(item.href);
           return (
             <Link key={item.href} href={item.href} className="flex flex-col items-center justify-center gap-0.5 min-h-[44px]">
               <item.icon className={cn("h-5 w-5", active ? "text-foreground" : "text-muted-foreground/70")} />
@@ -527,7 +635,6 @@ function VoiceathonTopBanner() {
   });
 
   useEffect(() => {
-    // Load Luma checkout script dynamically
     const scriptId = "luma-checkout";
     if (!document.getElementById(scriptId)) {
       const script = document.createElement("script");
@@ -542,9 +649,7 @@ function VoiceathonTopBanner() {
 
   const handleDismiss = () => {
     setDismissed(true);
-    try {
-      localStorage.setItem("voiceathon_banner_dismissed", "true");
-    } catch {}
+    try { localStorage.setItem("voiceathon_banner_dismissed", "true"); } catch {}
   };
 
   return (
@@ -557,7 +662,6 @@ function VoiceathonTopBanner() {
           India's biggest Voice-a-thon powered by <strong className="text-amber-400 font-semibold">VoBiz</strong> & organized by <strong className="text-purple-400 font-semibold">SnapServe</strong> — Please register now!
         </span>
       </div>
-
       <div className="flex items-center gap-2 shrink-0">
         <a
           href="https://luma.com/event/evt-rA5tJIW6SmKBcGQ"
@@ -576,6 +680,53 @@ function VoiceathonTopBanner() {
           <X className="w-4 h-4" />
         </button>
       </div>
+    </div>
+  );
+}
+
+/* ─── Mobile topbar user (only for mobile header) ────────────────────────── */
+function MobileTopbarUser() {
+  const { signOut, user } = useAuth();
+  const { theme, setTheme } = useTheme();
+  const [open, setOpen] = useState(false);
+  const email    = user?.email ?? "";
+  const name     = user?.name ?? (email ? email.split("@")[0]! : "Account");
+  const initials = (name?.[0] ?? email[0] ?? "A").toUpperCase();
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-accent transition-colors"
+      >
+        <div className="w-6 h-6 rounded-md bg-elevated border border-border flex items-center justify-center shrink-0">
+          <span className="text-[10px] font-semibold text-foreground/70">{initials}</span>
+        </div>
+        <ChevronDown className={`w-3 h-3 text-muted-foreground/40 transition-transform duration-150 ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 top-full mt-1.5 w-[200px] rounded-xl border border-border bg-popover shadow-xl overflow-hidden z-50">
+            <div className="px-3.5 py-2.5 border-b border-border">
+              <p className="text-[12.5px] font-semibold text-foreground truncate">{name}</p>
+              {email && <p className="text-[10.5px] text-muted-foreground/60 truncate mt-0.5">{email}</p>}
+            </div>
+            <Link href="/app/settings">
+              <button type="button" onClick={() => setOpen(false)} className="flex items-center gap-2.5 px-3.5 py-2.5 w-full text-left text-[13px] text-muted-foreground hover:bg-accent hover:text-foreground transition-colors">
+                <Settings className="w-3.5 h-3.5" />Settings
+              </button>
+            </Link>
+            <button type="button" onClick={() => { setTheme(theme === "dark" ? "light" : "dark"); setOpen(false); }} className="flex items-center gap-2.5 px-3.5 py-2.5 w-full text-left text-[13px] text-muted-foreground hover:bg-accent hover:text-foreground transition-colors">
+              {theme === "dark" ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
+              {theme === "dark" ? "Light appearance" : "Dark appearance"}
+            </button>
+            <button onClick={() => { void signOut(); setOpen(false); }} className="flex items-center gap-2.5 px-3.5 py-2.5 w-full text-left text-[13px] text-muted-foreground hover:bg-accent hover:text-foreground transition-colors">
+              <LogOut className="w-3.5 h-3.5" />Sign out
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -603,9 +754,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-dvh h-screen w-full overflow-hidden bg-background">
       {/* Desktop sidebar */}
-      <aside
-        className={`hidden md:flex flex-col shrink-0 transition-all duration-200 ease-in-out overflow-hidden ${sidebarW}`}
-      >
+      <aside className={`hidden md:flex flex-col shrink-0 transition-all duration-200 ease-in-out overflow-hidden ${sidebarW}`}>
         <SidebarContent
           collapsed={collapsed}
           onToggleCollapse={toggleCollapse}
@@ -615,7 +764,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
       {/* Mobile header + drawer */}
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-        <div className="md:hidden flex items-center h-[50px] px-3 shrink-0 fixed top-0 left-0 right-0 z-30 bg-sidebar/95 backdrop-blur-md border-b border-sidebar-border" style={{ paddingTop: "env(safe-area-inset-top, 0px)", height: "calc(50px + env(safe-area-inset-top, 0px))" }}>
+        <div
+          className="md:hidden flex items-center h-[50px] px-3 shrink-0 fixed top-0 left-0 right-0 z-30 bg-sidebar/95 backdrop-blur-md border-b border-sidebar-border"
+          style={{ paddingTop: "env(safe-area-inset-top, 0px)", height: "calc(50px + env(safe-area-inset-top, 0px))" }}
+        >
           <SheetTrigger asChild>
             <button
               type="button"
@@ -633,9 +785,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
             </span>
           </Link>
           <div className="ml-auto flex items-center gap-0.5">
-            <WalletChip />
             <ThemeToggle />
-            <TopbarUser />
+            <MobileTopbarUser />
           </div>
         </div>
 

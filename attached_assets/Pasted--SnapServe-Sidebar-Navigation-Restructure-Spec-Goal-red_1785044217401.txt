@@ -1,0 +1,136 @@
+# SnapServe — Sidebar & Navigation Restructure Spec
+
+Goal: reduce navigation from 26 destinations (17 primary + 9 settings) to 14 (10 primary + 4 settings) with ZERO features removed. Everything merged survives as a tab inside a parent page. All old routes must redirect. Target audience is non-technical business users, so all renames below are intentional — do not keep old labels.
+
+---
+
+## 1. Sidebar layout (top to bottom)
+
+1. **Header**: SnapServe logo + collapse chevron (unchanged). Global Search input with ⌘K shortcut (unchanged — searches agents, calls, contacts, KBs).
+2. **Primary CTA button**: `+ New agent` — full-width, accent-colored, sits directly below search. On click → opens the Vibe Build wizard (`/app/vibe`). Inside the wizard, add a small secondary link "Start from scratch instead" that creates a blank agent (the current New Agent behavior). Vibe Build is REMOVED as a nav item — this button is its only entry point.
+3. **Primary navigation** (Zone 1): grouped items, see Section 2. Group labels are small uppercase muted text. Groups are NOT collapsible.
+4. **Settings** (Zone 2): a single "Settings" row with a chevron. Clicking expands the settings sub-items in place (no page navigation). Auto-expand when the current route is any settings route. See Section 3.
+5. **Footer** (Zone 3, pinned to bottom): see Section 4.
+
+---
+
+## 2. Zone 1 — Primary navigation (10 items, 5 groups)
+
+| Group | Label | Icon (Lucide) | Route | Notes |
+|---|---|---|---|---|
+| (none) | Home | Home | /app/home | unchanged |
+| BUILD | Agents | Bot | /app/agents | icon changes from Users → Bot. Page gets tabs: **All agents** / **Squads**. Squads tab renders the existing /app/squads page content unchanged. |
+| BUILD | Knowledge | BookOpen | /app/knowledge-bases | renamed from "Agent Knowledge" |
+| REACH OUT | Campaigns | Zap | /app/campaigns | Page gets tabs: **Active** (current campaigns list) / **Scheduled** (renders existing Automatic Calls page content) / **Lead sources** (renders existing Meta Leads page content) |
+| REACH OUT | WhatsApp | MessageCircle | /app/whatsapp | unchanged |
+| CALLS | Call Logs | Phone | /app/calls | Page gets tabs: **All calls** / **Callbacks** (existing Callbacks page) / **Transfers** (existing Transfers page). Callbacks tab shows a pending-count badge in the sidebar item (see Section 6). |
+| CALLS | Phone Numbers | Hash | /app/phone-numbers | PROMOTED out of Settings — this is core inventory, not config. Page gets tabs: **My numbers** / **Buy number** / **Verification** (renders existing KYC page /app/kyc content) |
+| CALLS | Scheduling | CalendarDays | /app/scheduling | unchanged |
+| CUSTOMERS | Contacts and Memory | Brain | /app/memory | renamed from "Memory / CRM" |
+| (none, last item before Settings) | Integrations | PlugZap | /app/connections | renamed from "Connections" |
+
+Removed as top-level items (now tabs): Squads, Team Members (→ Settings), Vibe Build (→ button), Automatic Calls, Meta Leads, Callbacks, Transfers.
+
+---
+
+## 3. Zone 2 — Settings (collapsible, 4 items)
+
+| Label | Icon | Route | Notes |
+|---|---|---|---|
+| General | Settings | /app/settings | renamed from "Overview". Also absorbs **Team** management: add a **Team** tab here rendering existing /app/team content (invite & manage workspace users). Tabs: **Workspace** / **Team** |
+| Voices and Providers | Mic2 | /app/providers | Page gets tabs: **Voices** (renders existing /app/voices — voice library + cloning) / **Provider keys** (existing providers page — LLM/TTS/STT API keys) |
+| Developers | Key | /app/api-keys | Page gets tabs: **API keys** (existing) / **Webhooks** (renders existing /app/webhooks content). All HMAC/signing-secret jargon lives ONLY here. |
+| Billing | Wallet | /app/wallet | Page gets tabs: **Wallet** (balance, top-up) / **Usage** (renders existing /app/usage — minutes, cost breakdown) |
+
+Note: Verification/KYC and Phone Numbers are no longer in Settings (moved to primary nav per Section 2).
+
+---
+
+## 4. Zone 3 — Footer (pinned bottom)
+
+Keep the existing footer exactly, in this order:
+1. Documentation link (BookOpen → /docs)
+2. Wallet chip — live balance. Colors: green ≥ ₹500, amber ≥ ₹100, red < ₹100. Clicking it → /app/wallet.
+3. Status badge — "All systems operational"
+4. Privacy / Terms links
+5. User profile row (name + initials) → popover with Settings shortcut, theme toggle, Sign out
+
+**Header change (top bar, not sidebar):** REMOVE the red balance pill from the top-right header. The footer wallet chip is now the single balance indicator. If keeping a header indicator is required, it must follow the same green/amber/red thresholds — never red by default.
+
+---
+
+## 5. Redirects (must all work — bookmarks and deep links depend on this)
+
+| Old route | New route |
+|---|---|
+| /app/squads | /app/agents?tab=squads |
+| /app/team | /app/settings?tab=team |
+| /app/automatic-calls | /app/campaigns?tab=scheduled |
+| /app/meta-leads | /app/campaigns?tab=lead-sources |
+| /app/callbacks | /app/calls?tab=callbacks |
+| /app/transfers | /app/calls?tab=transfers |
+| /app/kyc | /app/phone-numbers?tab=verification |
+| /app/voices | /app/providers?tab=voices |
+| /app/webhooks | /app/api-keys?tab=webhooks |
+| /app/usage | /app/wallet?tab=usage |
+| /app/vibe | keep alive (target of New agent button) |
+
+Implementation: 301-style client redirects (router-level). Tab state read from `?tab=` query param; default tab is the first one.
+
+---
+
+## 6. Badge rules
+
+- ONE badge in the whole sidebar: pending callbacks count on the **Call Logs** item (amber pill, e.g. "3"). Show only when count > 0.
+- No other sidebar item gets a badge or count. Do not add badges to Campaigns, WhatsApp, etc.
+
+---
+
+## 7. Copy / rename summary (apply everywhere, including page titles, breadcrumbs, empty states)
+
+| Old | New |
+|---|---|
+| Agent Knowledge | Knowledge |
+| Memory / CRM | Contacts and Memory |
+| Connections | Integrations |
+| Team Members | Team |
+| Overview (settings) | General |
+| Vibe Build (nav item) | + New agent (button) |
+| Meta Leads | Lead sources |
+| Automatic Calls | Scheduled (tab inside Campaigns) |
+
+Icon fix: Agents and Team currently share the Users icon. After this change: Agents = Bot, Team = single User icon. No two nav items may share an icon.
+
+---
+
+## 8. Mobile behaviour
+
+- Bottom tab bar (5): **Home, Create** (was "Vibe" — opens Vibe Build wizard), **Agents, Calls, Wallet**.
+- Hamburger opens a drawer with the full Zone 1 + 2 + 3 structure above.
+- Desktop collapsed mode: icon-only, group labels hidden, group separators (thin dividers) retained.
+
+---
+
+## 9. Tab component behaviour (all merged pages)
+
+- Tabs render below the page title, horizontal, underline style consistent with the existing agent-detail tabs.
+- Active tab syncs to `?tab=` in the URL (shareable links).
+- Each tab lazy-loads its content — the merged pages must not fetch data for hidden tabs.
+- Existing page components are reused as-is inside tabs (no rewrite of Callbacks/Transfers/Meta Leads/etc. logic — this is a navigation refactor, not a feature refactor).
+
+---
+
+## 10. Acceptance checklist
+
+- [ ] Sidebar shows exactly: New agent button, Home, BUILD (Agents, Knowledge), REACH OUT (Campaigns, WhatsApp), CALLS (Call Logs, Phone Numbers, Scheduling), CUSTOMERS (Contacts and Memory), Integrations, Settings (collapsible: General, Voices and Providers, Developers, Billing), footer.
+- [ ] Vibe Build no longer appears in the nav list; New agent button opens it.
+- [ ] All 10 redirects in Section 5 land on the correct page AND correct tab.
+- [ ] Settings auto-expands when on any settings route.
+- [ ] Callbacks badge appears only when pending callbacks > 0.
+- [ ] Red balance pill removed from top header; footer chip follows green/amber/red thresholds.
+- [ ] Agents icon = Bot, Team icon = User (no duplicate icons anywhere in nav).
+- [ ] ⌘K search unchanged and reachable from sidebar header.
+- [ ] Mobile bottom bar = Home, Create, Agents, Calls, Wallet.
+- [ ] No feature, page, or data view from the old structure is unreachable.
+
+Out of scope for this task: the agent-detail tab bar (Overview/Prompt/Voice/Tools/...), copy changes inside pages beyond titles/labels listed above, and any backend changes. Navigation refactor only.
