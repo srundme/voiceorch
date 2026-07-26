@@ -1710,7 +1710,17 @@ export class OrchestrationPipeline implements VoiceSession {
     this.tts.warmup?.();
 
     if (this.agent.noiseCancellationEnabled) {
-      logger.info({ callId: config.callId }, "Noise cancellation enabled (audio worker pool)");
+      // VoBiz denoises at the carrier layer (always on, no API knob) and the
+      // browser runs AEC/NS for webcall — on those paths the transport passes
+      // noiseCancel=false to onRawPcm8kIn and our software gate never runs.
+      const upstreamNc = config.telephonyProvider === "vobiz" && process.env["VOBIZ_FORCE_SOFTWARE_NC"] !== "1"
+        ? "vobiz-carrier"
+        : config.telephonyProvider === "webcall" ? "browser-aec" : null;
+      if (upstreamNc) {
+        logger.info({ callId: config.callId, upstreamNc }, "Noise cancellation handled upstream — software gate bypassed");
+      } else {
+        logger.info({ callId: config.callId }, "Noise cancellation enabled (audio worker pool)");
+      }
     }
 
     // Ambient noise — start looping silence-fill interval

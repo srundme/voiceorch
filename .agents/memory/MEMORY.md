@@ -121,3 +121,4 @@
 - [Vision AI feature fully removed](vision-feature-removed.md) — entire vision stack deleted Jul 2026 (migration 0069); older vision memories are stale; rebuild starts from scratch
 - [Native WhatsApp two-tier architecture](whatsapp-native-two-tier.md) — shared master-creds tier + own sub-account tier; edit must PATCH (shared re-enroll wipes own fields); webhook fail-closed in prod; vobiz_channel_id partial unique
 - [Schema column with no migration bricks fresh DBs](drizzle-schema-without-migration.md) — push/raw-SQL columns never got migrations; fresh DBs fail at runtime; repair = idempotent catch-up migration + fresh journal `when`
+- [VoBiz carrier-native noise cancellation](vobiz-carrier-noise-cancellation.md) — no API knob (always on, docs-verified); our software gate bypassed on VoBiz calls; VOBIZ_FORCE_SOFTWARE_NC=1 restores it

@@ -1864,7 +1864,7 @@ function VoiceTab({ form }: { form: any }) {
             <FormItem className="flex items-center justify-between rounded-lg border border-border/40 px-3 py-2.5">
               <div>
                 <FormLabel className="text-sm">Noise Cancellation</FormLabel>
-                <FormDescription className="text-[10px]">Filter background noise from caller audio</FormDescription>
+                <FormDescription className="text-[10px]">Software noise filter — VoBiz &amp; web calls are denoised upstream automatically</FormDescription>
               </div>
               <FormControl><Switch checked={field.value ?? true} onCheckedChange={field.onChange} /></FormControl>
             </FormItem>

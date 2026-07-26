@@ -1021,7 +1021,7 @@ export default function AgentEdit() {
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="text-sm font-medium leading-none">Noise Cancellation</p>
-                          <p className="text-xs text-muted-foreground mt-1">Request noise reduction from the ASR provider</p>
+                          <p className="text-xs text-muted-foreground mt-1">Software noise filtering on caller audio. VoBiz and web calls are already denoised upstream (carrier / browser), so this applies to other carriers.</p>
                         </div>
                         <FormField control={form.control} name="noiseCancellationEnabled" render={({ field }) => (
                           <FormItem>

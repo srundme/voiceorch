@@ -7,6 +7,19 @@ import { eq } from "drizzle-orm";
 import { startEarlyAmbientKeepalive } from "./early-ambient.js";
 
 /**
+ * VoBiz performs noise removal / voice isolation natively in its telecom media
+ * layer — verified against the complete VoBiz docs (Jul 2026): there is NO API
+ * parameter to toggle it; it is always on for every call. Audio arriving on
+ * this WebSocket is therefore already denoised, so our software noise gate is
+ * bypassed for VoBiz-carried calls (same treatment webcall gives browser-AEC
+ * audio). The agent's noiseCancellationEnabled toggle still governs
+ * Twilio/Plivo, which do no carrier-side cleanup. Escape hatch: set
+ * VOBIZ_FORCE_SOFTWARE_NC=1 to re-apply the software gate on VoBiz calls if
+ * carrier-side NC ever proves insufficient in the field.
+ */
+const VOBIZ_FORCE_SOFTWARE_NC = process.env["VOBIZ_FORCE_SOFTWARE_NC"] === "1";
+
+/**
  * Vobiz WebSocket handler
  *
  * Vobiz uses a Twilio-like Media Streams protocol but with LINEAR16 PCM audio,
@@ -308,7 +321,9 @@ export async function handleVobizWebSocket(
         // Vobiz sends inbound audio as little-endian LINEAR16 PCM (same as outbound).
         // Pass directly to pipeline — no byte-swap needed.
         const pcm8k = Buffer.from(msg.media.payload, "base64");
-        session.pipeline.onRawPcm8kIn(pcm8k);
+        // noiseCancel=false: VoBiz already denoised this audio at the carrier
+        // layer (see VOBIZ_FORCE_SOFTWARE_NC above for the escape hatch).
+        session.pipeline.onRawPcm8kIn(pcm8k, VOBIZ_FORCE_SOFTWARE_NC ? undefined : false);
         break;
       }
 
