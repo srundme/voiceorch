@@ -1,27 +1,12 @@
 ---
 name: GitHub push required after every edit
-description: User preference — all code changes must be pushed to GitHub via the API after editing files locally in Replit.
+description: How code reaches srundme/voiceorch main (Railway deploy source) — proven push path
 ---
 
-After making any file edits in this project, always push the changed files to GitHub using the GitHub REST API.
+All file edits must land on GitHub `srundme/voiceorch` **main** — Railway deploys from it. Work is NOT done until pushed and verified.
 
-**Why:** The project is deployed on Railway which pulls from `srundme/voiceorch` on GitHub. Changes only take effect on Railway after they are pushed to the `main` branch.
+**Proven path (Jul 2026):** local git is in sync with origin/main, so use plain git: `git add -A && git commit` in bash, then the `gitPush({ branch: "main" })` callback from the git-remote skill (CodeExecution) — it injects the user's connected-GitHub credentials that plain `git push` lacks. Verify with a follow-up `gitPull({ branch: "main" })` no-op plus `git log -1` unchanged, or a remote SHA check.
 
-**Secret name:** `GITHUB_PERSONAL_ACCESS_TOKEN` — this is the correct, working secret. `GITHUB_PAT` also exists in the env but was stale/expired; always prefer `GITHUB_PERSONAL_ACCESS_TOKEN`.
+**Why:** `GITHUB_TOKEN` is not in the shell env (no repl integration attached), so raw GitHub API pushes have no credential source; the old sync-to-github script also silently failed in the past. The gitPush callback is the only credentialed path that worked.
 
-**How to apply:** The post-merge setup script (`scripts/post-merge.sh`) now runs `pnpm --filter @workspace/scripts run sync-to-github` automatically after every task merge. For ad-hoc pushes:
-```
-pnpm --filter @workspace/scripts run sync-to-github
-```
-
-**Repo / branch:** `srundme/voiceorch`, branch `main`.
-
-**Do NOT use `git push` via HTTPS:** Replit's `GIT_ASKPASS=replit-git-askpass` helper intercepts the credential prompt; even with `unset GIT_ASKPASS` + `GIT_TERMINAL_PROMPT=0 git -c credential.helper=''`, GitHub returns "Invalid username or token". Use the GitHub Git Data API instead.
-
-**Sync script pattern (`scripts/src/sync-to-github.ts`):**
-- Gets GitHub's full recursive tree (blob SHAs) via API
-- Gets local tree via `git ls-tree -r HEAD`
-- Only uploads blobs where SHA differs (fast incremental pushes — typically < 20 files per task)
-- Uses `base_tree` on the tree create so unchanged files are inherited
-- Falls back to full-tree upload if repos have diverged histories (first-time sync)
-- Creates a commit + updates the branch ref atomically
+**How to apply:** at the end of any session that edited files: check local↔origin divergence (`git rev-list --count` both ways) before committing; commit; gitPush; verify. If histories have diverged (past API-based pushes created remote-only commits), reconcile before pushing — never force-push.

@@ -30,7 +30,7 @@
 - [Radix UI Select empty-value constraint](radix-select-empty-value.md) — SelectItem value="" crashes; use __none__ sentinel + bidirectional conversion in onChange/value
 - [Azure STT streaming protocol](azure-stt-protocol.md) — every frame (text + binary) must include X-RequestId header; omitting it causes 1002 close; batch confidence filter is too aggressive for Indic languages — rely on RecognitionStatus=Success instead
 - [Voice Intel audio tap pattern](voice-intel-audio-tap.md) — callerAudioTap on SessionConfig feeds VoiceIntelSession; webcall uses separate downsample16to8 tap at same point as gender detector
-- [GitHub push required after every edit](github-push-required.md) — all file edits must be pushed to srundme/voiceorch main branch via GitHub API; Railway deploys from GitHub
+- [GitHub push required after every edit](github-push-required.md) — commit locally then gitPush callback (git-remote skill); plain git push/API lack creds; verify via no-op gitPull; Railway deploys from GitHub main
 - [Local ECAPA-TDNN speaker recognition](ecapa-tdnn-speaker.md) — Azure Speaker Recognition replaced by SpeechBrain ECAPA-TDNN; runs in gender-service on port 5000; embeddings stored as JSON text in voice_prints.embedding
 - [In-call speaker verifier](in-call-speaker-verifier.md) — opt-in mid-call hand-off detection: logs Compliance warning AND agent verbally asks who's speaking (in-language, via one-shot pendingSpeakerChallenge prompt inject, never interrupts/ends call); ephemeral Node-cached ref (NOT voice_prints); echo-gate feed (!isPlaying); defer runDetection via setImmediate
 - [Radix Select phantom document scroll](radix-select-phantom-scroll.md) — hidden position:absolute <select> bubble escapes overflow clips → phantom scrollbar/whitespace; fix = position:relative on the scroll container
@@ -123,3 +123,8 @@
 - [WhatsApp number purchase flow](whatsapp-number-purchase.md) — separate VoBiz inventory from voice DIDs; buy_from_vobiz still needs WABA+token; refund-on-bookkeeping-failure + advisory-lock initiate + sanitized carrier errors; response shapes never live-tested
 - [Schema column with no migration bricks fresh DBs](drizzle-schema-without-migration.md) — push/raw-SQL columns never got migrations; fresh DBs fail at runtime; repair = idempotent catch-up migration + fresh journal `when`
 - [VoBiz carrier-native noise cancellation](vobiz-carrier-noise-cancellation.md) — no API knob (always on, docs-verified); our software gate bypassed on VoBiz calls; VOBIZ_FORCE_SOFTWARE_NC=1 restores it
+- [Express 5 optional route params](express5-optional-params.md) — ':param?' crashes the server at boot (path-to-regexp 8 PathError); use '{/:param}' brace syntax
+- [Env restart can revert fresh edits](env-restart-edit-rollback.md) — an unexpected environment restart rolled back a just-made edit; re-verify recent edits before debugging "why didn't the fix work"
+- [db schema edits need tsc -b lib/db](db-package-stale-dist.md) — api-server typecheck reads lib/db/dist .d.ts; without a rebuild, new tables/columns "don't exist" (TS2724/TS2339 wall)
+- [WhatsApp BYON OTP capture](whatsapp-byon-otp-capture.md) — armed-only voice-webhook intercept (code_captured must NOT intercept or real calls get hijacked); SSRF-guarded recording URLs; never downgrade confirmed rows
+- [WhatsApp engagement expansion](whatsapp-engagement-expansion.md) — inbound short-circuit order dial>brochure>chatbot with caps; WhatsApp CALLING not feasible via VoBiz (webhook events only, no answer/media API)
