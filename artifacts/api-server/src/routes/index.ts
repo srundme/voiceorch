@@ -23,6 +23,8 @@ import adminSystemPromptTemplatesRouter from "./admin-system-prompt-templates.js
 import adminUserMgmtRouter from "./admin-user-mgmt.js";
 import adminDeploymentsRouter from "./admin-deployments.js";
 import adminGenderServiceRouter from "./admin-gender-service.js";
+import adminWhatsappRouter from "./admin-whatsapp.js";
+import whatsappNativeRouter from "./whatsapp-native.js";
 import adminEmailsRouter from "./admin-emails.js";
 import adminFinanceAnalyticsRouter from "./admin-finance-analytics.js";
 import adminBoardAnalyticsRouter from "./admin-board-analytics.js";
@@ -201,4 +203,6 @@ router.use(sheetsRouter);
 router.use(sheetAutoCallsRouter);
 router.use(squadsRouter);
 router.use(voiceathonEventsRouter);
+router.use(whatsappNativeRouter);
+router.use(adminWhatsappRouter);
 export default router;

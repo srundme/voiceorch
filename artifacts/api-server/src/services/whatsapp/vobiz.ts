@@ -1,0 +1,285 @@
+/**
+ * Native VoBiz WhatsApp sends — first-party template messages, no BYO-BSP.
+ *
+ * Two tiers (whatsapp_channels.mode):
+ *  - 'shared': platform's SnapServe channel (master creds + platform_settings
+ *    config). Zero user setup; per-user rolling daily cap.
+ *  - 'own':    user's own WABA/number connected as a VoBiz channel under their
+ *    sub-account creds (master fallback).
+ *
+ * VoBiz contract (vobiz-whatsapp skill): POST /api/v1/messaging/messages with
+ * channel_id + waba_id + to (+E.164) + type. Template sends carry
+ * template.name, template.language.code, components[] with ordered params.
+ * Params must be single-line (Meta rejects newlines/tabs).
+ */
+
+import { and, eq, gt, ne, sql } from "drizzle-orm";
+import {
+  db,
+  platformSettingsTable,
+  whatsappChannelsTable,
+  whatsappMessagesTable,
+  type WhatsappChannel,
+} from "@workspace/db";
+import { logger } from "../../lib/logger.js";
+
+export const VOBIZ_API_BASE = "https://api.vobiz.ai/api/v1";
+
+/* platform_settings keys for the shared SnapServe channel */
+export const KEY_WA_SHARED_CHANNEL_ID = "vobiz_wa_shared_channel_id";
+export const KEY_WA_SHARED_WABA_ID = "vobiz_wa_shared_waba_id";
+export const KEY_WA_TEMPLATES = "vobiz_wa_templates";
+
+export type TemplateHint = "booking_confirmed" | "call_summary" | "callback_scheduled";
+
+export interface TemplateRef { name: string; lang: string; }
+
+export const DEFAULT_WA_TEMPLATES: Record<TemplateHint, TemplateRef> = {
+  booking_confirmed:  { name: "snapserve_booking_confirmed",  lang: "en" },
+  call_summary:       { name: "snapserve_call_summary",       lang: "en" },
+  callback_scheduled: { name: "snapserve_callback_scheduled", lang: "en" },
+};
+
+export function vobizApiHeaders(authId: string, authToken: string): Record<string, string> {
+  const basic = Buffer.from(`${authId}:${authToken}`).toString("base64");
+  return {
+    "Authorization": `Basic ${basic}`,
+    "X-Auth-ID":     authId,
+    "X-Auth-Token":  authToken,
+    "Accept":        "application/json",
+    "Content-Type":  "application/json",
+  };
+}
+
+export function getMasterVobizCreds(): { authId: string; authToken: string } | null {
+  const authId = process.env["VOBIZ_AUTH_ID"];
+  const authToken = process.env["VOBIZ_AUTH_TOKEN"];
+  return authId && authToken ? { authId, authToken } : null;
+}
+
+async function getSetting(key: string): Promise<string | null> {
+  const [row] = await db
+    .select({ value: platformSettingsTable.value })
+    .from(platformSettingsTable)
+    .where(eq(platformSettingsTable.key, key))
+    .limit(1);
+  const v = row?.value?.trim();
+  return v ? v : null;
+}
+
+export async function getSharedChannelConfig(): Promise<{ channelId: string; wabaId: string } | null> {
+  const [channelId, wabaId] = await Promise.all([
+    getSetting(KEY_WA_SHARED_CHANNEL_ID),
+    getSetting(KEY_WA_SHARED_WABA_ID),
+  ]);
+  return channelId && wabaId ? { channelId, wabaId } : null;
+}
+
+/** Template catalog: code defaults overridden by platform_settings JSON. */
+export async function getTemplateCatalog(): Promise<Record<TemplateHint, TemplateRef>> {
+  const raw = await getSetting(KEY_WA_TEMPLATES);
+  if (!raw) return DEFAULT_WA_TEMPLATES;
+  try {
+    const parsed = JSON.parse(raw) as Partial<Record<TemplateHint, Partial<TemplateRef>>>;
+    const merged = { ...DEFAULT_WA_TEMPLATES };
+    for (const k of Object.keys(merged) as TemplateHint[]) {
+      const o = parsed[k];
+      if (o?.name) merged[k] = { name: String(o.name), lang: String(o.lang || merged[k].lang) };
+    }
+    return merged;
+  } catch {
+    logger.warn({ key: KEY_WA_TEMPLATES }, "whatsapp-native: invalid template catalog JSON — using defaults");
+    return DEFAULT_WA_TEMPLATES;
+  }
+}
+
+/** WhatsApp template params must be single-line and reasonably short. */
+export function sanitizeParam(v: string | null | undefined, max = 550): string {
+  const s = (v ?? "").replace(/\s+/g, " ").trim();
+  if (!s) return "—";
+  return s.length > max ? `${s.slice(0, max - 1)}…` : s;
+}
+
+export function toPlusE164(raw: string): string {
+  const t = (raw ?? "").trim();
+  if (t.startsWith("+")) return `+${t.slice(1).replace(/\D/g, "")}`;
+  const digits = t.replace(/\D/g, "");
+  if (digits.length === 10) return `+91${digits}`;
+  return `+${digits}`;
+}
+
+/** Rolling 24h business-initiated send count for cap enforcement. */
+export async function countRecentOutbound(channelId: string): Promise<number> {
+  const since = new Date(Date.now() - 24 * 3600_000);
+  const [row] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(whatsappMessagesTable)
+    .where(and(
+      eq(whatsappMessagesTable.channelId, channelId),
+      eq(whatsappMessagesTable.direction, "outbound"),
+      gt(whatsappMessagesTable.createdAt, since),
+      ne(whatsappMessagesTable.status, "failed"),
+    ));
+  return row?.n ?? 0;
+}
+
+export interface SendContext {
+  vobizChannelId: string;
+  wabaId: string;
+  authId: string;
+  authToken: string;
+}
+
+/**
+ * Resolve the VoBiz channel + creds used to send for an enrollment.
+ * Own-mode creds resolution is injected by the caller (routes own the
+ * sub-account helper) to keep this service dependency-light.
+ */
+export async function resolveSendContext(
+  channel: WhatsappChannel,
+  getOwnCreds?: () => Promise<{ authId: string; authToken: string } | null>,
+): Promise<SendContext | { error: string }> {
+  if (channel.mode === "own") {
+    if (!channel.vobizChannelId || !channel.wabaId) {
+      return { error: "own channel not fully connected (missing channel/waba id)" };
+    }
+    const creds = (getOwnCreds ? await getOwnCreds() : null) ?? getMasterVobizCreds();
+    if (!creds) return { error: "VoBiz credentials not configured" };
+    return { vobizChannelId: channel.vobizChannelId, wabaId: channel.wabaId, ...creds };
+  }
+  const shared = await getSharedChannelConfig();
+  if (!shared) return { error: "shared WhatsApp channel not configured by platform admin" };
+  const creds = getMasterVobizCreds();
+  if (!creds) return { error: "VoBiz master credentials not configured" };
+  return { vobizChannelId: shared.channelId, wabaId: shared.wabaId, ...creds };
+}
+
+export interface SendTemplateArgs {
+  channel: WhatsappChannel;
+  ctx: SendContext;
+  toPhone: string;               // any format; normalized to +E.164
+  hint: TemplateHint;
+  /** Ordered body parameters (already meaningful for the template). */
+  params: string[];
+  callId?: number | null;
+  enforceCap?: boolean;          // default true for shared tier
+}
+
+export interface SendResult {
+  ok: boolean;
+  messageRowId?: string;
+  vobizMessageId?: string | null;
+  error?: string;
+  skipped?: "daily_cap" | "invalid_phone";
+}
+
+/** Send one template message and log it to whatsapp_messages. */
+export async function sendWhatsappTemplate(args: SendTemplateArgs): Promise<SendResult> {
+  const { channel, ctx, hint } = args;
+  const to = toPlusE164(args.toPhone);
+  if (to.replace(/\D/g, "").length < 8) {
+    return { ok: false, skipped: "invalid_phone", error: `invalid phone: ${args.toPhone}` };
+  }
+
+  const enforceCap = args.enforceCap ?? (channel.mode === "shared");
+  if (enforceCap) {
+    const used = await countRecentOutbound(channel.id);
+    if (used >= channel.dailyCap) {
+      logger.warn({ channelId: channel.id, used, cap: channel.dailyCap }, "whatsapp-native: daily cap reached — send skipped");
+      return { ok: false, skipped: "daily_cap", error: `daily cap ${channel.dailyCap} reached` };
+    }
+  }
+
+  const catalog = await getTemplateCatalog();
+  const tpl = catalog[hint];
+  const params = args.params.map((p) => sanitizeParam(p));
+
+  const [row] = await db.insert(whatsappMessagesTable).values({
+    userId: channel.userId,
+    channelId: channel.id,
+    callId: args.callId ?? null,
+    direction: "outbound",
+    phone: to,
+    msgType: "template",
+    templateName: tpl.name,
+    bodyPreview: params.join(" · ").slice(0, 300),
+    status: "pending",
+  }).returning({ id: whatsappMessagesTable.id });
+
+  const body = {
+    channel_id: ctx.vobizChannelId,
+    waba_id: ctx.wabaId,
+    to,
+    type: "template",
+    template: {
+      name: tpl.name,
+      language: { code: tpl.lang },
+      components: [{
+        type: "body",
+        parameters: params.map((text) => ({ type: "text", text })),
+      }],
+    },
+  };
+
+  try {
+    const resp = await fetch(`${VOBIZ_API_BASE}/messaging/messages`, {
+      method: "POST",
+      headers: vobizApiHeaders(ctx.authId, ctx.authToken),
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(15_000),
+    });
+    const text = await resp.text().catch(() => "");
+    if (!resp.ok) {
+      const err = `VoBiz send HTTP ${resp.status}: ${text.slice(0, 300)}`;
+      await db.update(whatsappMessagesTable)
+        .set({ status: "failed", errorMessage: err.slice(0, 500), updatedAt: new Date() })
+        .where(eq(whatsappMessagesTable.id, row!.id));
+      logger.warn({ channelId: channel.id, to, hint, status: resp.status, body: text.slice(0, 300) }, "whatsapp-native: send failed");
+      return { ok: false, messageRowId: row!.id, error: err };
+    }
+    let vobizMessageId: string | null = null;
+    let metaMessageId: string | null = null;
+    let status = "pending";
+    try {
+      const j = JSON.parse(text) as Record<string, any>;
+      const msg = j["message"] ?? j["data"] ?? j;
+      vobizMessageId = msg?.["id"] != null ? String(msg["id"]) : null;
+      metaMessageId = msg?.["meta_message_id"] != null ? String(msg["meta_message_id"]) : null;
+      if (typeof msg?.["status"] === "string") status = msg["status"];
+    } catch { /* keep pending */ }
+    await db.update(whatsappMessagesTable)
+      .set({ vobizMessageId, metaMessageId, status, updatedAt: new Date() })
+      .where(eq(whatsappMessagesTable.id, row!.id));
+    logger.info({ channelId: channel.id, to, hint, vobizMessageId }, "whatsapp-native: template sent");
+    return { ok: true, messageRowId: row!.id, vobizMessageId };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    await db.update(whatsappMessagesTable)
+      .set({ status: "failed", errorMessage: msg.slice(0, 500), updatedAt: new Date() })
+      .where(eq(whatsappMessagesTable.id, row!.id))
+      .catch(() => {});
+    logger.warn({ err, channelId: channel.id, to, hint }, "whatsapp-native: send error");
+    return { ok: false, messageRowId: row!.id, error: msg };
+  }
+}
+
+/** Load a user's active native enrollment, or null. */
+export async function getActiveChannel(userId: string): Promise<WhatsappChannel | null> {
+  const [row] = await db
+    .select()
+    .from(whatsappChannelsTable)
+    .where(and(
+      eq(whatsappChannelsTable.userId, userId),
+      eq(whatsappChannelsTable.active, true),
+      eq(whatsappChannelsTable.status, "active"),
+    ))
+    .limit(1);
+  return row ?? null;
+}
+
+/** Map a template hint to the per-event notify toggle. */
+export function hintEnabled(channel: WhatsappChannel, hint: TemplateHint): boolean {
+  if (hint === "booking_confirmed") return channel.notifyBookingConfirmed;
+  if (hint === "callback_scheduled") return channel.notifyCallbackScheduled;
+  return channel.notifyCallSummary;
+}

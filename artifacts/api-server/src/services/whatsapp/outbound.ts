@@ -1,6 +1,11 @@
 /**
- * Post-call WhatsApp notify — POSTs call.ended to the customer's outbound webhook
- * so their BSP / Zapier can send a WhatsApp template.
+ * Post-call WhatsApp notify.
+ *
+ * Precedence per call:
+ *  1. BYO-BSP webhook connections (agent-scoped, deliberately configured) —
+ *     POSTs call.ended to the customer's URL so their BSP sends the template.
+ *  2. Native VoBiz enrollment (user-scoped whatsapp_channels) — SnapServe
+ *     sends the WhatsApp template directly via VoBiz (shared or own channel).
  */
 
 import { createHmac } from "crypto";
@@ -17,6 +22,14 @@ import {
   buildWhatsappCallEndedPayload,
   type WhatsappCallEndedPayload,
 } from "./payload.js";
+import {
+  getActiveChannel,
+  hintEnabled,
+  resolveSendContext,
+  sendWhatsappTemplate,
+  getMasterVobizCreds,
+  type TemplateHint,
+} from "./vobiz.js";
 
 export { buildWhatsappCallEndedPayload } from "./payload.js";
 export type { WhatsappCallEndedPayload } from "./payload.js";
@@ -52,9 +65,22 @@ async function postOutbound(
   }
 }
 
+function formatMeetingTimeIST(d: Date): string {
+  try {
+    return new Intl.DateTimeFormat("en-IN", {
+      dateStyle: "medium",
+      timeStyle: "short",
+      timeZone: "Asia/Kolkata",
+    }).format(d) + " IST";
+  } catch {
+    return d.toISOString();
+  }
+}
+
 /**
- * Fire-and-forget: notify all active WhatsApp connections for this agent
- * that have post-call outbound enabled.
+ * Fire-and-forget post-call notification. BYO webhook connections (if any
+ * with a URL) own the notification for this agent; otherwise the user's
+ * native VoBiz enrollment sends the template directly.
  */
 export async function dispatchWhatsappCallEnded(
   callId: number,
@@ -65,6 +91,7 @@ export async function dispatchWhatsappCallEnded(
 ): Promise<void> {
   const [call] = await db.select().from(callsTable).where(eq(callsTable.id, callId)).limit(1);
   if (!call?.userId) return;
+  const userId = call.userId;
 
   const connections = await db
     .select()
@@ -75,9 +102,10 @@ export async function dispatchWhatsappCallEnded(
       eq(whatsappConnectionsTable.active, true),
       eq(whatsappConnectionsTable.postCallEnabled, true),
     ));
-
   const withUrl = connections.filter((c) => (c.outboundWebhookUrl ?? "").trim());
-  if (withUrl.length === 0) return;
+
+  const nativeChannel = withUrl.length === 0 ? await getActiveChannel(call.userId) : null;
+  if (withUrl.length === 0 && !nativeChannel) return;
 
   let direction = "inbound";
   try {
@@ -124,26 +152,82 @@ export async function dispatchWhatsappCallEnded(
     meetLink,
   });
 
-  for (const conn of withUrl) {
-    try {
-      await postOutbound(conn.outboundWebhookUrl!.trim(), conn.outboundSecret, payload);
-      await db.update(whatsappConnectionsTable)
-        .set({ lastOutboundAt: new Date(), lastError: null, updatedAt: new Date() })
-        .where(eq(whatsappConnectionsTable.id, conn.id));
-      logger.info(
-        { callId, connectionId: conn.id, phone },
-        "whatsapp: post-call outbound ok",
-      );
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      await db.update(whatsappConnectionsTable)
-        .set({ lastError: msg.slice(0, 500), updatedAt: new Date() })
-        .where(eq(whatsappConnectionsTable.id, conn.id))
-        .catch(() => {});
-      logger.warn(
-        { err, callId, connectionId: conn.id },
-        "whatsapp: post-call outbound failed",
-      );
+  /* ── Path 1: BYO-BSP webhooks (existing behavior, unchanged) ──────────── */
+  if (withUrl.length > 0) {
+    for (const conn of withUrl) {
+      try {
+        await postOutbound(conn.outboundWebhookUrl!.trim(), conn.outboundSecret, payload);
+        await db.update(whatsappConnectionsTable)
+          .set({ lastOutboundAt: new Date(), lastError: null, updatedAt: new Date() })
+          .where(eq(whatsappConnectionsTable.id, conn.id));
+        logger.info(
+          { callId, connectionId: conn.id, phone },
+          "whatsapp: post-call outbound ok",
+        );
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        await db.update(whatsappConnectionsTable)
+          .set({ lastError: msg.slice(0, 500), updatedAt: new Date() })
+          .where(eq(whatsappConnectionsTable.id, conn.id))
+          .catch(() => {});
+        logger.warn(
+          { err, callId, connectionId: conn.id },
+          "whatsapp: post-call outbound failed",
+        );
+      }
     }
+    return;
   }
+
+  /* ── Path 2: Native VoBiz send ────────────────────────────────────────── */
+  const channel = nativeChannel!;
+  const hint = (payload.template_hint ?? "call_summary") as TemplateHint;
+
+  if (!hintEnabled(channel, hint)) {
+    logger.info({ callId, hint, userId: call.userId }, "whatsapp-native: hint disabled by user — skipped");
+    return;
+  }
+  // Quality gate: don't message customers about no-pickup/failed calls unless
+  // a booking exists (booking events are always worth confirming).
+  if (call.status !== "completed" && !meetingTime) {
+    logger.info({ callId, status: call.status }, "whatsapp-native: non-completed call without booking — skipped");
+    return;
+  }
+
+  const businessName = channel.businessName || agent?.name || "SnapServe";
+  const summary = (opts?.callSummary ?? "").trim();
+  let params: string[];
+  if (hint === "booking_confirmed" && meetingTime) {
+    params = [businessName, formatMeetingTimeIST(meetingTime), meetLink || "—"];
+  } else if (hint === "callback_scheduled") {
+    params = [businessName, summary || "Our team will call you back soon."];
+  } else {
+    params = [businessName, summary || "Thanks for speaking with us — we'll be in touch."];
+  }
+
+  const ctx = await resolveSendContext(channel, async () => {
+    if (channel.mode !== "own") return getMasterVobizCreds();
+    try {
+      const { ensureVobizSubAccount } = await import("../../routes/kyc.js");
+      const creds = await ensureVobizSubAccount(userId);
+      if (creds.authId && creds.authToken) return creds;
+    } catch (err) {
+      logger.warn({ err, userId: call.userId }, "whatsapp-native: sub-account creds unavailable — master fallback");
+    }
+    return getMasterVobizCreds();
+  });
+  if ("error" in ctx) {
+    logger.warn({ callId, userId: call.userId, error: ctx.error }, "whatsapp-native: post-call send skipped — no send context");
+    return;
+  }
+
+  // Failures are recorded on the message row + logged by sendWhatsappTemplate.
+  await sendWhatsappTemplate({
+    channel,
+    ctx,
+    toPhone: phone,
+    hint: hint === "booking_confirmed" && !meetingTime ? "call_summary" : hint,
+    params,
+    callId,
+  });
 }

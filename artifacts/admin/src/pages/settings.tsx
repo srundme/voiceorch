@@ -1,4 +1,6 @@
 import { useState, useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { adminFetch } from "@/lib/api";
 import {
   useSpikeThreshold, useSaveSpikeThreshold, useSpikeAlertEmail, useSaveSpikeAlertEmail,
   useAlertEmail, useSaveAlertEmail,
@@ -28,7 +30,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Settings, Bell, Mail, Check, AlertTriangle, Slack, Send, CheckCircle2, XCircle, Clock, RotateCcw, ShieldCheck, ShieldOff, Sparkles, FlaskConical } from "lucide-react";
+import { MessageCircle, Settings, Bell, Mail, Check, AlertTriangle, Slack, Send, CheckCircle2, XCircle, Clock, RotateCcw, ShieldCheck, ShieldOff, Sparkles, FlaskConical } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError } from "@/lib/format-api-error";
@@ -707,6 +709,8 @@ export default function PlatformSettings() {
         </CardContent>
       </Card>
 
+      <WhatsAppSharedCard />
+
       <AlertDialog open={testDialogOpen} onOpenChange={setTestDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -732,5 +736,168 @@ export default function PlatformSettings() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+
+/* ── Shared SnapServe WhatsApp channel (native VoBiz tier) ──────────────── */
+
+type WaSharedConfig = {
+  channelId: string | null;
+  wabaId: string | null;
+  templates: Record<string, { name: string; lang: string }>;
+  masterCredsConfigured: boolean;
+  webhookSecretConfigured: boolean;
+  enrollments: { shared: number; own: number };
+  messages: { last24h: number; failed24h: number };
+};
+
+function ConfigFlag({ ok, label }: { ok: boolean; label: string }) {
+  return (
+    <span className={"inline-flex items-center gap-1.5 text-xs font-medium " + (ok ? "text-emerald-600 dark:text-emerald-400" : "text-destructive")}>
+      {ok ? <CheckCircle2 className="h-3.5 w-3.5" /> : <XCircle className="h-3.5 w-3.5" />}
+      {label}
+    </span>
+  );
+}
+
+function WhatsAppSharedCard() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const { data, isLoading } = useQuery({
+    queryKey: ["admin", "whatsapp-shared"],
+    queryFn: () => adminFetch<WaSharedConfig>("/whatsapp-shared"),
+  });
+
+  const [channelId, setChannelId] = useState("");
+  const [wabaId, setWabaId] = useState("");
+  const [templatesJson, setTemplatesJson] = useState("");
+  const [testPhone, setTestPhone] = useState("");
+  const [seeded, setSeeded] = useState(false);
+
+  useEffect(() => {
+    if (data && !seeded) {
+      setChannelId(data.channelId ?? "");
+      setWabaId(data.wabaId ?? "");
+      setTemplatesJson(JSON.stringify(data.templates, null, 2));
+      setSeeded(true);
+    }
+  }, [data, seeded]);
+
+  const save = useMutation({
+    mutationFn: () =>
+      adminFetch("/whatsapp-shared", {
+        method: "PUT",
+        body: JSON.stringify({ channelId, wabaId, templates: templatesJson }),
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["admin", "whatsapp-shared"] });
+      toast({ title: "Shared WhatsApp channel saved" });
+    },
+    onError: (err) => toast({ title: "Save failed", description: formatApiError(err), variant: "destructive" }),
+  });
+
+  const test = useMutation({
+    mutationFn: () =>
+      adminFetch<{ ok: boolean; response?: string }>("/whatsapp-shared/test", {
+        method: "POST",
+        body: JSON.stringify({ phone: testPhone }),
+      }),
+    onSuccess: () => toast({ title: "Test sent", description: "Check WhatsApp on that phone." }),
+    onError: (err) => toast({ title: "Test failed", description: formatApiError(err), variant: "destructive" }),
+  });
+
+  const handleSave = () => {
+    try {
+      JSON.parse(templatesJson);
+    } catch {
+      toast({ title: "Templates must be valid JSON", variant: "destructive" });
+      return;
+    }
+    save.mutate();
+  };
+
+  return (
+    <Card className="border-border shadow-sm">
+      <CardHeader className="pb-3 border-b border-border">
+        <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+          <MessageCircle className="h-4 w-4" />
+          Shared WhatsApp Channel (SnapServe tier)
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="pt-6 space-y-5">
+        {isLoading ? (
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        ) : (
+          <>
+            <div className="flex flex-wrap gap-x-5 gap-y-2">
+              <ConfigFlag ok={!!data?.masterCredsConfigured} label="VOBIZ_AUTH_ID / VOBIZ_AUTH_TOKEN" />
+              <ConfigFlag ok={!!data?.webhookSecretConfigured} label="VOBIZ_WA_WEBHOOK_SECRET" />
+              <ConfigFlag ok={!!(data?.channelId && data?.wabaId)} label="Channel + WABA configured" />
+            </div>
+
+            <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted-foreground">
+              <span>Shared enrollments: <strong className="text-foreground">{data?.enrollments.shared ?? 0}</strong></span>
+              <span>Own-number channels: <strong className="text-foreground">{data?.enrollments.own ?? 0}</strong></span>
+              <span>Messages (24h): <strong className="text-foreground">{data?.messages.last24h ?? 0}</strong></span>
+              <span>Failed (24h): <strong className={(data?.messages.failed24h ?? 0) > 0 ? "text-destructive" : "text-foreground"}>{data?.messages.failed24h ?? 0}</strong></span>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2 max-w-2xl">
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium">VoBiz channel ID</Label>
+                <Input value={channelId} onChange={(e) => setChannelId(e.target.value)} placeholder="chn_…" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium">WABA ID</Label>
+                <Input value={wabaId} onChange={(e) => setWabaId(e.target.value)} placeholder="10945…" />
+              </div>
+            </div>
+
+            <div className="space-y-1.5 max-w-2xl">
+              <Label className="text-sm font-medium">Template catalog (JSON)</Label>
+              <p className="text-xs text-muted-foreground">
+                Meta-approved template names on the shared WABA, keyed by hint:{" "}
+                <code className="text-xs bg-muted px-1 rounded">booking_confirmed</code>,{" "}
+                <code className="text-xs bg-muted px-1 rounded">call_summary</code>,{" "}
+                <code className="text-xs bg-muted px-1 rounded">callback_scheduled</code>.
+              </p>
+              <textarea
+                className="w-full h-40 rounded-md border border-input bg-background px-3 py-2 text-xs font-mono"
+                value={templatesJson}
+                onChange={(e) => setTemplatesJson(e.target.value)}
+                spellCheck={false}
+              />
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button size="sm" onClick={handleSave} disabled={save.isPending}>
+                <Check className="h-3.5 w-3.5 mr-1.5" />
+                Save
+              </Button>
+            </div>
+
+            <div className="space-y-1.5 border-t border-border pt-4 max-w-sm">
+              <Label className="text-sm font-medium">Test the shared channel</Label>
+              <p className="text-xs text-muted-foreground">
+                Sends the <code className="text-xs bg-muted px-1 rounded">call_summary</code> template directly via master creds (bypasses user enrollment).
+              </p>
+              <div className="flex items-center gap-2">
+                <Input
+                  placeholder="+91 98765 43210"
+                  value={testPhone}
+                  onChange={(e) => setTestPhone(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && testPhone.trim() && test.mutate()}
+                  className="w-56"
+                />
+                <Button size="sm" onClick={() => test.mutate()} disabled={!testPhone.trim() || test.isPending}>
+                  <Send className="h-3.5 w-3.5 mr-1.5" />
+                  {test.isPending ? "Sending…" : "Send test"}
+                </Button>
+              </div>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }

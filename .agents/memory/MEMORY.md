@@ -119,3 +119,5 @@
 - [Mic Sensitivity must feed all dependent defaults](mic-sensitivity-barge-in-default.md) — a tiered setting can compile clean yet leave one dependent threshold's old hardcoded fallback active, silently no-op'ing that dimension
 - [Radix Switch BubbleInput synthetic-click loop](radix-switch-bubbleinput-click-loop.md) — Radix Switch dispatches a bubbling synthetic click on programmatic checked changes; a clickable ancestor onClick → infinite React #185 loop; guard ancestor with e.nativeEvent.isTrusted
 - [Vision AI feature fully removed](vision-feature-removed.md) — entire vision stack deleted Jul 2026 (migration 0069); older vision memories are stale; rebuild starts from scratch
+- [Native WhatsApp two-tier architecture](whatsapp-native-two-tier.md) — shared master-creds tier + own sub-account tier; edit must PATCH (shared re-enroll wipes own fields); webhook fail-closed in prod; vobiz_channel_id partial unique
+- [Schema column with no migration bricks fresh DBs](drizzle-schema-without-migration.md) — push/raw-SQL columns never got migrations; fresh DBs fail at runtime; repair = idempotent catch-up migration + fresh journal `when`
