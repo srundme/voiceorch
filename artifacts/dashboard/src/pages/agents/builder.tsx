@@ -1395,10 +1395,14 @@ function PromptTab({ form }: { form: any }) {
 /* ── Tab: Voice ─────────────────────────────────────────────────────────────── */
 
 function VoiceTab({ form }: { form: any }) {
-  const ttsProvider   = form.watch("ttsProvider");
-  const ttsVoice      = form.watch("ttsVoice");
-  const ttsModel      = form.watch("ttsModel");
-  const agentLanguage = (form.watch("language") as string) ?? "en-US";
+  const ttsProvider    = form.watch("ttsProvider");
+  const ttsVoice       = form.watch("ttsVoice");
+  const ttsModel       = form.watch("ttsModel");
+  const agentLanguage  = (form.watch("language") as string) ?? "en-US";
+  const llmModel       = (form.watch("llmModel")   as string) ?? "";
+  const voiceStack     = (form.watch("voiceStack") as string) ?? "classic";
+  const geminiLiveVoiceName = (form.watch("geminiLiveVoiceName") as string) ?? "Kore";
+  const isGeminiLive   = isGeminiLiveAgent({ llmModel, voiceStack });
   const [cloneOpenV, setCloneOpenV] = useState(false);
   const queryClient = useQueryClient();
 
@@ -1680,6 +1684,26 @@ function VoiceTab({ form }: { form: any }) {
           </p>
         </div>
         <div className="rounded-xl border border-border/50 bg-card/40 p-4 space-y-3">
+          {isGeminiLive ? (
+            <div className="space-y-3">
+              <FormField control={form.control} name="geminiLiveVoiceName" render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-xs text-muted-foreground">Preset voice</FormLabel>
+                  <FormControl>
+                    <GeminiLiveVoicePicker value={field.value ?? "Kore"} onChange={field.onChange} />
+                  </FormControl>
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="geminiLiveThinkingLevel" render={({ field }) => (
+                <FormItem className="space-y-1">
+                  <FormLabel className="text-xs text-muted-foreground">Thinking level</FormLabel>
+                  <SmallSelect value={field.value ?? "minimal"} onChange={field.onChange}
+                    options={GEMINI_LIVE_THINKING_LEVELS.map(p => ({ value: p.value, label: p.label }))} />
+                </FormItem>
+              )} />
+            </div>
+          ) : (
+          <>
           <div className="grid grid-cols-2 gap-3">
             <FormField control={form.control} name="ttsProvider" render={({ field }) => (
               <FormItem className="space-y-1">
@@ -1821,6 +1845,8 @@ function VoiceTab({ form }: { form: any }) {
                 {ttsVoiceOptsV.length === 0 && previewVoiceControl}
               </FormItem>
             )} />
+          )}
+          </>
           )}
         </div>
       </section>
