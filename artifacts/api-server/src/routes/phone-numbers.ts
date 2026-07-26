@@ -1,8 +1,8 @@
 import { Router, type IRouter } from "express";
 import crypto from "crypto";
 import Razorpay from "razorpay";
-import { eq, and, sql } from "drizzle-orm";
-import { db, usersTable, walletTransactionsTable, phoneNumbersTable, phoneNumberOrdersTable, agentsTable, vobizAccountsTable, platformSettingsTable } from "@workspace/db";
+import { eq, and, ne, inArray, sql } from "drizzle-orm";
+import { db, usersTable, walletTransactionsTable, phoneNumbersTable, phoneNumberOrdersTable, agentsTable, vobizAccountsTable, platformSettingsTable, whatsappChannelsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logActivity } from "../lib/activity.js";
 import { issueInvoice } from "../services/invoice.js";
@@ -588,7 +588,12 @@ router.get("/phone-numbers", requireAuth, async (req, res): Promise<void> => {
   const rows = await db
     .select()
     .from(phoneNumbersTable)
-    .where(and(eq(phoneNumbersTable.userId, clerkId), eq(phoneNumbersTable.status, "active")));
+    .where(and(
+      eq(phoneNumbersTable.userId, clerkId),
+      eq(phoneNumbersTable.status, "active"),
+      // WhatsApp-capable numbers are managed on the WhatsApp page, not here.
+      ne(phoneNumbersTable.service, "whatsapp"),
+    ));
   const enriched = await Promise.all(rows.map(enrichNumber));
   res.json(ListPhoneNumbersResponse.parse(enriched));
 });
@@ -782,6 +787,8 @@ router.post("/phone-numbers/purchase/confirm", requireAuth, async (req, res): Pr
         eq(phoneNumberOrdersTable.razorpayOrderId, razorpayOrderId),
         eq(phoneNumberOrdersTable.userId, clerkId),
         eq(phoneNumberOrdersTable.status, "pending"),
+        // WhatsApp-number orders are confirmed via /whatsapp/numbers/purchase/confirm.
+        ne(phoneNumberOrdersTable.numberType, "whatsapp"),
       ),
     )
     .returning();
@@ -926,6 +933,16 @@ router.patch("/phone-numbers/:id/assign", requireAuth, async (req, res): Promise
   if (!params.success) { res.status(400).json({ error: "Validation failed", issues: params.error.issues }); return; }
   const body = AssignPhoneNumberBody.safeParse(req.body);
   if (!body.success) { res.status(400).json({ error: "Validation failed", issues: body.error.issues }); return; }
+
+  const [target] = await db
+    .select({ service: phoneNumbersTable.service })
+    .from(phoneNumbersTable)
+    .where(and(eq(phoneNumbersTable.id, params.data.id), eq(phoneNumbersTable.userId, clerkId)));
+  if (!target) { res.status(404).json({ error: "Phone number not found" }); return; }
+  if (target.service === "whatsapp") {
+    res.status(400).json({ error: "This is a WhatsApp number — it can't take voice agents. Manage it on the WhatsApp page." });
+    return;
+  }
 
   const [row] = await db
     .update(phoneNumbersTable)
@@ -1135,14 +1152,28 @@ router.delete("/phone-numbers/:id", requireAuth, async (req, res): Promise<void>
 
   if (!existing) { res.status(404).json({ error: "Phone number not found" }); return; }
 
-  const { authId, authToken, configured } = getPlatformVobizCreds();
+  if (existing.service === "whatsapp") {
+    // WhatsApp numbers are not voice DIDs — the Account unrent API doesn't apply.
+    // Mark released locally (stops the 30-day wallet renewals) and deactivate any
+    // WhatsApp channel bound to this number so sends fail loudly, not silently.
+    req.log.warn({ number: existing.number }, "Releasing WhatsApp-service number — voice unrent API skipped");
+    const plusForm = existing.number.startsWith("+") ? existing.number : `+${existing.number}`;
+    await db.update(whatsappChannelsTable)
+      .set({ active: false, status: "disconnected", lastError: "The WhatsApp number linked to this channel was released", updatedAt: new Date() })
+      .where(and(
+        eq(whatsappChannelsTable.userId, clerkId),
+        inArray(whatsappChannelsTable.phoneE164, [existing.number, plusForm]),
+      ));
+  } else {
+    const { authId, authToken, configured } = getPlatformVobizCreds();
 
-  // Release back to Vobiz inventory (live API call)
-  if (configured) {
-    try {
-      await releaseVobizNumber(authId!, authToken!, existing.number);
-    } catch (err) {
-      req.log.error({ err, number: existing.number }, "Vobiz release failed — marking released in DB anyway");
+    // Release back to Vobiz inventory (live API call)
+    if (configured) {
+      try {
+        await releaseVobizNumber(authId!, authToken!, existing.number);
+      } catch (err) {
+        req.log.error({ err, number: existing.number }, "Vobiz release failed — marking released in DB anyway");
+      }
     }
   }
 

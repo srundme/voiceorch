@@ -67,6 +67,13 @@ type WaChannelResponse = {
   channel: WaChannel | null;
   sharedTierAvailable: boolean;
   usage: { used24h: number; cap: number } | null;
+  /** WhatsApp number bought through SnapServe (hidden from the voice numbers page). */
+  purchasedNumber: { id: number; number: string; nextRenewalAt: string | null; renewalPaise: number } | null;
+};
+
+type WaAvailableNumbers = {
+  numbers: { number: string; country: string; region: string | null }[];
+  pricing: { basePaise: number; gstPaise: number; totalPaise: number; renewalPaise: number; currency: string };
 };
 
 type WaMessage = {
@@ -121,6 +128,19 @@ function MsgStatusBadge({ status }: { status: string }) {
   );
 }
 
+/** Razorpay checkout script loader (same pattern as the Phone Numbers page). */
+function loadRazorpayScript(): Promise<void> {
+  return new Promise((resolve) => {
+    if (window.Razorpay) { resolve(); return; }
+    const s = document.createElement("script");
+    s.src = "https://checkout.razorpay.com/v1/checkout.js";
+    s.onload = () => resolve();
+    document.body.appendChild(s);
+  });
+}
+
+const inr = (paise: number) => `₹${(paise / 100).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
+
 /* ── Native tier section ─────────────────────────────────────────────────── */
 
 function NativeSection({
@@ -152,7 +172,13 @@ function NativeSection({
 
   /* dialogs */
   const [sharedOpen, setSharedOpen] = useState(false);
-  const [ownOpen, setOwnOpen] = useState(false);
+  const [bizOpen, setBizOpen] = useState(false);
+  const [bizStep, setBizStep] = useState<1 | 2>(1);
+  const [numberChoice, setNumberChoice] = useState<"buy" | "direct">("buy");
+  const [selectedNumber, setSelectedNumber] = useState<string | null>(null);
+  /** Set when reconnecting an already-purchased WhatsApp number (channel create failed). */
+  const [retryNumber, setRetryNumber] = useState<string | null>(null);
+  const [buying, setBuying] = useState(false);
   const [businessName, setBusinessName] = useState("");
   const [inboundAgentId, setInboundAgentId] = useState<number | "">("");
   const [wabaId, setWabaId] = useState("");
@@ -181,25 +207,28 @@ function NativeSection({
   });
 
   const connectOwn = useMutation({
-    mutationFn: () =>
+    mutationFn: (vars: { numberSource: "direct" | "purchased" }) =>
       customFetch<WaChannel>(`${API}/whatsapp/channel/own`, {
         method: "POST",
         body: JSON.stringify({
           businessName,
+          numberSource: vars.numberSource,
           wabaId: wabaId.trim() || undefined,
-          phoneNumberId: phoneNumberId.trim() || undefined,
+          phoneNumberId: vars.numberSource === "direct" ? (phoneNumberId.trim() || undefined) : undefined,
           phoneE164: phoneE164.trim() || undefined,
           accessToken: accessToken.trim() || undefined,
-          vobizChannelId: existingChannelId.trim() || undefined,
+          vobizChannelId: vars.numberSource === "direct" ? (existingChannelId.trim() || undefined) : undefined,
           inboundAgentId: inboundAgentId === "" ? null : Number(inboundAgentId),
         }),
         headers: { "Content-Type": "application/json" },
       }),
-    onSuccess: () => {
+    onSuccess: (ch) => {
       invalidate();
-      setOwnOpen(false);
+      setBizOpen(false);
       setAccessToken("");
-      toast({ title: "Your WhatsApp channel is connected" });
+      toast(ch.status === "active"
+        ? { title: "Your WhatsApp channel is connected" }
+        : { title: "Channel created — provisioning", description: "VoBiz is finishing the Meta registration. Use “Check status” on the card to refresh." });
     },
     onError: (err: Error) => toast({ title: "Connect failed", description: err.message, variant: "destructive" }),
   });
@@ -237,20 +266,136 @@ function NativeSection({
     onError: (err: Error) => toast({ title: "Test failed", description: err.message, variant: "destructive" }),
   });
 
+  /* Business-tier: live WhatsApp-capable inventory (separate from voice DIDs). */
+  const { data: waNumbers, isFetching: numbersLoading, refetch: refetchNumbers, error: numbersError } = useQuery({
+    queryKey: ["whatsapp-available-numbers"],
+    queryFn: () => customFetch<WaAvailableNumbers>(`${API}/whatsapp/numbers/available?country=IN`),
+    enabled: bizOpen && bizStep === 2 && numberChoice === "buy",
+    staleTime: 60_000,
+    retry: false,
+  });
+  const pricing = waNumbers?.pricing ?? { basePaise: 80000, gstPaise: 14400, totalPaise: 94400, renewalPaise: 82600, currency: "INR" };
+
+  const refreshChannel = useMutation({
+    mutationFn: () => customFetch<WaChannel>(`${API}/whatsapp/channel/refresh`, { method: "POST" }),
+    onSuccess: (ch) => {
+      invalidate();
+      toast(ch.status === "active"
+        ? { title: "Your WhatsApp number is live!", description: "Post-call messages now go out from your own number." }
+        : { title: "Still provisioning", description: "The carrier hasn't finished registering the number with Meta yet — check again in a few minutes." });
+    },
+    onError: (err: Error) => toast({ title: "Refresh failed", description: err.message, variant: "destructive" }),
+  });
+
+  const releaseNumber = useMutation({
+    mutationFn: (id: number) => customFetch(`${API}/phone-numbers/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      invalidate();
+      toast({ title: "WhatsApp number released", description: "The 30-day renewal billing has stopped." });
+    },
+    onError: (err: Error) => toast({ title: "Release failed", description: err.message, variant: "destructive" }),
+  });
+
   const openSharedDialog = () => {
     setBusinessName(channel?.businessName ?? "");
     setInboundAgentId(channel?.inboundAgentId ?? "");
     setSharedOpen(true);
   };
-  const openOwnDialog = () => {
+  const openBizWizard = (reconnectNumber?: string) => {
     setBusinessName(channel?.businessName ?? "");
     setInboundAgentId(channel?.inboundAgentId ?? "");
-    setWabaId("");
+    setWabaId(channel?.wabaId ?? "");
     setPhoneNumberId("");
-    setPhoneE164("");
+    setPhoneE164(reconnectNumber ?? "");
     setAccessToken("");
     setExistingChannelId("");
-    setOwnOpen(true);
+    setRetryNumber(reconnectNumber ?? null);
+    setBizStep(1);
+    setNumberChoice("buy");
+    setSelectedNumber(null);
+    setBizOpen(true);
+  };
+
+  /** Buy flow: Razorpay order → checkout → confirm (number + channel created server-side). */
+  const handleBuyAndConnect = async () => {
+    if (!selectedNumber) return;
+    setBuying(true);
+    try {
+      const init = await customFetch<{ purchaseOrderId: number; orderId: string; amountCents: number; keyId?: string }>(
+        `${API}/whatsapp/numbers/purchase/initiate`,
+        {
+          method: "POST",
+          body: JSON.stringify({ number: selectedNumber, countryCode: "IN" }),
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+      await loadRazorpayScript();
+      await new Promise<void>((resolve, reject) => {
+        let settled = false;
+        const settle = (fn: () => void) => { if (!settled) { settled = true; fn(); } };
+        const opts: Record<string, unknown> = {
+          key: init.keyId,
+          order_id: init.orderId,
+          amount: init.amountCents,
+          currency: "INR",
+          name: "SnapServe",
+          description: `WhatsApp number ${selectedNumber}`,
+          modal: { ondismiss: () => settle(() => reject(new Error("cancelled"))) },
+          handler: async (r: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }) => {
+            try {
+              const result = await customFetch<{ channel: WaChannel | null; channelError: string | null }>(
+                `${API}/whatsapp/numbers/purchase/confirm`,
+                {
+                  method: "POST",
+                  body: JSON.stringify({
+                    purchaseOrderId: init.purchaseOrderId,
+                    razorpayOrderId: r.razorpay_order_id,
+                    razorpayPaymentId: r.razorpay_payment_id,
+                    razorpaySignature: r.razorpay_signature,
+                    wabaId: wabaId.trim(),
+                    accessToken: accessToken.trim(),
+                    businessName: businessName.trim(),
+                    inboundAgentId: inboundAgentId === "" ? null : Number(inboundAgentId),
+                  }),
+                  headers: { "Content-Type": "application/json" },
+                },
+              );
+              if (result.channelError) {
+                toast({
+                  title: "Number purchased — connection needs one more try",
+                  description: `${result.channelError} — use “Retry connection” on the card (your number is safe).`,
+                  variant: "destructive",
+                });
+              } else {
+                toast({ title: "WhatsApp number purchased!", description: "The carrier is registering it with Meta — usually ready in a few minutes." });
+              }
+              settle(() => resolve());
+            } catch (err) {
+              settle(() => reject(err instanceof Error ? err : new Error("Payment verification failed")));
+            }
+          },
+        };
+        new window.Razorpay(opts).open();
+      });
+      invalidate();
+      setBizOpen(false);
+      setAccessToken("");
+    } catch (err) {
+      if (err instanceof Error && err.message === "cancelled") return;
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      const code = (err as { data?: { code?: string } })?.data?.code;
+      if (code === "KYC_REQUIRED" || /identity verification/i.test(msg)) {
+        toast({
+          title: "Identity verification required",
+          description: "Indian numbers need a one-time KYC — complete it on the Phone Numbers page (takes ~2 minutes), then come back.",
+          variant: "destructive",
+        });
+      } else {
+        toast({ title: "Purchase failed", description: msg, variant: "destructive" });
+      }
+    } finally {
+      setBuying(false);
+    }
   };
 
   if (isLoading) {
@@ -260,52 +405,85 @@ function NativeSection({
   return (
     <div className="mx-6 space-y-4">
       {!channel ? (
-        <div className="grid gap-4 md:grid-cols-2">
-          {/* Shared tier */}
-          <div className="rounded-lg border border-emerald-500/25 bg-emerald-500/[0.04] p-5 flex flex-col">
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-emerald-400" />
-              <h3 className="text-sm font-semibold">SnapServe WhatsApp</h3>
-              <Badge className="bg-emerald-500/15 text-emerald-400 border-transparent text-[10px]">Recommended · zero setup</Badge>
-            </div>
-            <ul className="mt-3 space-y-1.5 text-xs text-muted-foreground flex-1">
-              <li>• Booking confirmations, call summaries &amp; callback alerts sent <strong className="text-foreground">automatically after every call</strong></li>
-              <li>• Sent from SnapServe's verified WhatsApp business number — your business name appears in the message</li>
-              <li>• Customers can reply “call me” to get a call from your AI agent</li>
-              <li>• No Meta account, no templates, no approval process</li>
-              <li>• Fair-use limit of 50 messages/day (upgrade to your own number for more)</li>
-            </ul>
-            <Button
-              size="sm"
-              className="mt-4 w-full"
-              disabled={!data?.sharedTierAvailable}
-              onClick={openSharedDialog}
-            >
-              Enable in 10 seconds
-            </Button>
-            {!data?.sharedTierAvailable && (
-              <p className="mt-2 text-[11px] text-amber-400/90">
-                Temporarily unavailable — the platform channel isn't configured yet. Use “your own number” below or check back soon.
+        <div className="space-y-4">
+          {data?.purchasedNumber && (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-500/25 bg-amber-500/5 px-3 py-2">
+              <p className="text-[11px] text-amber-300/90">
+                You own WhatsApp number <strong className="text-foreground">{data.purchasedNumber.number}</strong> but it isn't connected yet.
               </p>
-            )}
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" className="h-7 text-[11px]" onClick={() => openBizWizard(data.purchasedNumber!.number)}>
+                  Finish connecting
+                </Button>
+                <Button
+                  size="sm" variant="ghost" className="h-7 text-[11px] text-red-400"
+                  disabled={releaseNumber.isPending}
+                  onClick={() => {
+                    if (confirm(`Release ${data.purchasedNumber!.number}? The 30-day renewal billing stops and the number is gone for good.`)) {
+                      releaseNumber.mutate(data.purchasedNumber!.id);
+                    }
+                  }}
+                >
+                  Release
+                </Button>
+              </div>
+            </div>
+          )}
+
+          <div>
+            <h3 className="text-sm font-semibold">Which describes you best?</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              WhatsApp for business runs on Meta's platform — the right setup depends on whether you have a Meta Business account (WABA).
+            </p>
           </div>
 
-          {/* Own tier */}
-          <div className="rounded-lg border border-border/60 bg-card/30 p-5 flex flex-col">
-            <div className="flex items-center gap-2">
-              <Building2 className="w-4 h-4 text-muted-foreground" />
-              <h3 className="text-sm font-semibold">Your own WhatsApp number</h3>
-              <Badge variant="outline" className="text-[10px]">Your brand</Badge>
+          <div className="grid gap-4 md:grid-cols-2">
+            {/* Non-business → instant shared tier */}
+            <div className="rounded-lg border border-emerald-500/25 bg-emerald-500/[0.04] p-5 flex flex-col">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-emerald-400" />
+                <h3 className="text-sm font-semibold">I don't have one — just make it work</h3>
+                <Badge className="bg-emerald-500/15 text-emerald-400 border-transparent text-[10px]">Instant · most users</Badge>
+              </div>
+              <ul className="mt-3 space-y-1.5 text-xs text-muted-foreground flex-1">
+                <li>• Live in 30 seconds — <strong className="text-foreground">no Meta account, no number purchase, no documents</strong></li>
+                <li>• Booking confirmations, call summaries &amp; callback alerts sent automatically after every call</li>
+                <li>• Sent from SnapServe's verified WhatsApp number with your business name inside every message</li>
+                <li>• Customers reply “call me” and your AI agent calls them back</li>
+                <li>• Fair-use 50 messages/day — upgrade to Business WhatsApp any time</li>
+              </ul>
+              <Button
+                size="sm"
+                className="mt-4 w-full"
+                disabled={!data?.sharedTierAvailable}
+                onClick={openSharedDialog}
+              >
+                Enable Instant WhatsApp
+              </Button>
+              {!data?.sharedTierAvailable && (
+                <p className="mt-2 text-[11px] text-amber-400/90">
+                  Temporarily unavailable — the platform channel isn't configured yet. Check back soon or use Business WhatsApp.
+                </p>
+              )}
             </div>
-            <ul className="mt-3 space-y-1.5 text-xs text-muted-foreground flex-1">
-              <li>• Messages come from <strong className="text-foreground">your</strong> WhatsApp Business number with your name &amp; logo</li>
-              <li>• Higher limits: 250/day to start, scales to 2,000+ automatically as customers engage</li>
-              <li>• No company registration needed — a Meta Business account is enough</li>
-              <li>• Needs a number not already on personal WhatsApp (a SnapServe number works great)</li>
-            </ul>
-            <Button size="sm" variant="outline" className="mt-4 w-full" onClick={openOwnDialog}>
-              Connect my number
-            </Button>
+
+            {/* Business → own-brand wizard */}
+            <div className="rounded-lg border border-border/60 bg-card/30 p-5 flex flex-col">
+              <div className="flex items-center gap-2">
+                <Building2 className="w-4 h-4 text-sky-400" />
+                <h3 className="text-sm font-semibold">I have a Meta Business account</h3>
+                <Badge variant="outline" className="text-[10px]">Your brand</Badge>
+              </div>
+              <ul className="mt-3 space-y-1.5 text-xs text-muted-foreground flex-1">
+                <li>• Messages come from <strong className="text-foreground">your own WhatsApp number</strong> with your name &amp; logo</li>
+                <li>• Higher limits: 250/day to start, Meta raises it to 2,000+ automatically</li>
+                <li>• Buy a WhatsApp-ready number from SnapServe (Phone Number ID auto-assigned), or connect one already registered in your WABA</li>
+                <li>• Needs your WABA ID + a permanent Meta access token</li>
+              </ul>
+              <Button size="sm" variant="outline" className="mt-4 w-full" onClick={() => openBizWizard()}>
+                Start Business setup
+              </Button>
+            </div>
           </div>
         </div>
       ) : (
@@ -337,8 +515,8 @@ function NativeSection({
             </div>
             <div className="flex gap-1.5">
               {channel.mode === "shared" && (
-                <Button variant="outline" size="sm" className="h-8 text-xs" onClick={openOwnDialog}>
-                  Upgrade to own number
+                <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => openBizWizard()}>
+                  Upgrade to Business WhatsApp
                 </Button>
               )}
               <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={openSharedDialog}>
@@ -358,9 +536,58 @@ function NativeSection({
           </div>
 
           {channel.lastError && (
-            <div className="flex items-start gap-2 rounded-md border border-red-500/25 bg-red-500/5 px-3 py-2 text-[11px] text-red-400">
-              <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-              <span className="break-all">{channel.lastError}</span>
+            <div className="flex items-start justify-between gap-2 rounded-md border border-red-500/25 bg-red-500/5 px-3 py-2 text-[11px] text-red-400">
+              <div className="flex items-start gap-2 min-w-0">
+                <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                <span className="break-all">{channel.lastError}</span>
+              </div>
+              {channel.mode === "own" && !channel.vobizChannelId && data?.purchasedNumber && (
+                <Button
+                  size="sm" variant="outline" className="h-7 text-[11px] shrink-0"
+                  onClick={() => openBizWizard(data.purchasedNumber!.number)}
+                >
+                  Retry connection
+                </Button>
+              )}
+            </div>
+          )}
+
+          {channel.mode === "own" && channel.vobizChannelId && channel.status !== "active" && (
+            <div className="flex items-start justify-between gap-2 rounded-md border border-amber-500/25 bg-amber-500/5 px-3 py-2">
+              <p className="text-[11px] text-amber-300/90">
+                {channel.phoneNumberId
+                  ? "Almost ready — waiting for the carrier to activate the channel."
+                  : "Provisioning — the carrier is registering your WhatsApp number with Meta. Usually ready in a few minutes."}
+              </p>
+              <Button
+                size="sm" variant="outline" className="h-7 text-[11px] shrink-0"
+                disabled={refreshChannel.isPending}
+                onClick={() => refreshChannel.mutate()}
+              >
+                {refreshChannel.isPending ? "Checking…" : "Check status"}
+              </Button>
+            </div>
+          )}
+
+          {channel.mode === "own" && data?.purchasedNumber && (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
+              <span>
+                SnapServe WhatsApp number <strong className="text-foreground">{data.purchasedNumber.number}</strong>
+                {data.purchasedNumber.nextRenewalAt && (
+                  <> · renews {new Date(data.purchasedNumber.nextRenewalAt).toLocaleDateString()} ({inr(data.purchasedNumber.renewalPaise)} from wallet)</>
+                )}
+              </span>
+              <button
+                type="button"
+                className="text-red-400 hover:text-red-300"
+                onClick={() => {
+                  if (confirm(`Release ${data.purchasedNumber!.number}? WhatsApp sends from this number stop and renewal billing ends.`)) {
+                    releaseNumber.mutate(data.purchasedNumber!.id);
+                  }
+                }}
+              >
+                Release
+              </button>
             </div>
           )}
 
@@ -531,88 +758,195 @@ function NativeSection({
         </DialogContent>
       </Dialog>
 
-      {/* Own-channel connect dialog */}
-      <Dialog open={ownOpen} onOpenChange={setOwnOpen}>
+      {/* Business WhatsApp wizard (own channel) */}
+      <Dialog open={bizOpen} onOpenChange={setBizOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Connect your own WhatsApp number</DialogTitle>
+            <DialogTitle>
+              {retryNumber ? "Reconnect your WhatsApp number" : `Business WhatsApp — step ${bizStep} of 2`}
+            </DialogTitle>
             <DialogDescription>
-              From Meta's{" "}
-              <a href="https://business.facebook.com/settings/whatsapp-business-accounts" target="_blank" rel="noreferrer" className="underline">
-                WhatsApp Business settings
-              </a>{" "}
-              copy your WABA ID, Phone Number ID and a System User access token. No company registration is
-              required — you start at 250 conversations/day and Meta raises it automatically.
+              {bizStep === 1 ? (
+                <>
+                  From Meta's{" "}
+                  <a href="https://business.facebook.com/settings/whatsapp-business-accounts" target="_blank" rel="noreferrer" className="underline">
+                    WhatsApp Business settings
+                  </a>{" "}
+                  copy your WABA ID and a permanent (System User) access token. You start at 250
+                  conversations/day and Meta raises it automatically.
+                </>
+              ) : (
+                "Choose the WhatsApp number your customers will see."
+              )}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3">
-            <div className="rounded-md border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-[11px] text-amber-300/90">
-              The number must not be in use on the personal WhatsApp app. Most customers use a SnapServe
-              phone number here — buy one on the Phone Numbers page, then register it with Meta.
-            </div>
-            <div>
-              <Label className="text-xs">Business name (appears in messages) *</Label>
-              <Input className="mt-1 h-9" value={businessName} onChange={(e) => setBusinessName(e.target.value)} />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
+
+          {bizStep === 1 ? (
+            <div className="space-y-3">
+              {retryNumber && (
+                <div className="rounded-md border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-[11px] text-amber-300/90">
+                  Number <strong className="text-foreground">{retryNumber}</strong> is already yours — re-enter
+                  your Meta details to finish connecting it. You won't be charged again.
+                </div>
+              )}
+              <div>
+                <Label className="text-xs">Business name (appears in messages) *</Label>
+                <Input className="mt-1 h-9" placeholder="e.g. Sharma Dental Clinic" value={businessName} onChange={(e) => setBusinessName(e.target.value)} />
+              </div>
               <div>
                 <Label className="text-xs">WABA ID *</Label>
                 <Input className="mt-1 h-9" value={wabaId} onChange={(e) => setWabaId(e.target.value)} />
               </div>
               <div>
-                <Label className="text-xs">Phone Number ID *</Label>
-                <Input className="mt-1 h-9" value={phoneNumberId} onChange={(e) => setPhoneNumberId(e.target.value)} />
+                <Label className="text-xs">Permanent access token *</Label>
+                <Input
+                  className="mt-1 h-9"
+                  type="password"
+                  value={accessToken}
+                  onChange={(e) => setAccessToken(e.target.value)}
+                />
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Passed securely to the messaging carrier — SnapServe never stores it.
+                </p>
               </div>
-            </div>
-            <div>
-              <Label className="text-xs">WhatsApp number (E.164)</Label>
-              <Input className="mt-1 h-9" placeholder="+9198…" value={phoneE164} onChange={(e) => setPhoneE164(e.target.value)} />
-            </div>
-            <div>
-              <Label className="text-xs">Permanent access token *</Label>
-              <Input
-                className="mt-1 h-9"
-                type="password"
-                value={accessToken}
-                onChange={(e) => setAccessToken(e.target.value)}
-              />
-              <p className="text-[11px] text-muted-foreground mt-1">
-                Passed securely to the messaging carrier — SnapServe never stores it.
-              </p>
-            </div>
-            <details className="text-[11px] text-muted-foreground">
-              <summary className="cursor-pointer">Already created a channel on VoBiz? Link it instead</summary>
-              <div className="mt-2">
-                <Label className="text-xs">Existing VoBiz channel ID</Label>
-                <Input className="mt-1 h-9" value={existingChannelId} onChange={(e) => setExistingChannelId(e.target.value)} />
+              <div>
+                <Label className="text-xs">When a customer replies “call me”, dial (optional)</Label>
+                <select
+                  className="mt-1 w-full h-9 rounded-md border border-input bg-background px-2 text-sm"
+                  value={inboundAgentId}
+                  onChange={(e) => setInboundAgentId(e.target.value ? Number(e.target.value) : "")}
+                >
+                  <option value="">Don't dial (log only)</option>
+                  {agents.map((a) => (
+                    <option key={a.id} value={a.id}>{a.name}</option>
+                  ))}
+                </select>
               </div>
-            </details>
-            <div>
-              <Label className="text-xs">When a customer replies “call me”, dial (optional)</Label>
-              <select
-                className="mt-1 w-full h-9 rounded-md border border-input bg-background px-2 text-sm"
-                value={inboundAgentId}
-                onChange={(e) => setInboundAgentId(e.target.value ? Number(e.target.value) : "")}
-              >
-                <option value="">Don't dial (log only)</option>
-                {agents.map((a) => (
-                  <option key={a.id} value={a.id}>{a.name}</option>
-                ))}
-              </select>
+              {!retryNumber && (
+                <details className="text-[11px] text-muted-foreground">
+                  <summary className="cursor-pointer">Advanced: already created a channel in the VoBiz console?</summary>
+                  <div className="mt-2">
+                    <Label className="text-xs">Existing VoBiz channel ID</Label>
+                    <Input className="mt-1 h-9" value={existingChannelId} onChange={(e) => setExistingChannelId(e.target.value)} />
+                    <p className="mt-1">Linking an existing channel skips number selection entirely.</p>
+                  </div>
+                </details>
+              )}
             </div>
-          </div>
+          ) : (
+            <div className="space-y-3">
+              {/* Option A — buy from SnapServe */}
+              <label className={`block rounded-lg border p-3 cursor-pointer transition-colors ${numberChoice === "buy" ? "border-sky-500/50 bg-sky-500/[0.04]" : "border-border/60 hover:border-border"}`}>
+                <div className="flex items-start gap-2">
+                  <input type="radio" className="mt-1" checked={numberChoice === "buy"} onChange={() => setNumberChoice("buy")} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium">Buy a WhatsApp-ready number from SnapServe</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      {inr(pricing.totalPaise)} first month (incl. GST), then {inr(pricing.renewalPaise)}/30 days
+                      from your wallet. The Phone Number ID is assigned automatically — no Meta number registration needed.
+                    </p>
+                    {numberChoice === "buy" && (
+                      <div className="mt-2 space-y-1.5">
+                        {numbersLoading ? (
+                          <p className="text-[11px] text-muted-foreground">Loading available numbers…</p>
+                        ) : numbersError ? (
+                          <div className="text-[11px] text-red-400">
+                            Couldn't load numbers.{" "}
+                            <button type="button" className="underline" onClick={() => refetchNumbers()}>Try again</button>
+                          </div>
+                        ) : (waNumbers?.numbers?.length ?? 0) === 0 ? (
+                          <p className="text-[11px] text-amber-400/90">
+                            No WhatsApp numbers in stock right now — try again shortly, or connect a Meta-registered number below.
+                          </p>
+                        ) : (
+                          <div className="max-h-36 overflow-y-auto rounded-md border border-border/50 divide-y divide-border/40">
+                            {waNumbers!.numbers.slice(0, 20).map((n) => (
+                              <button
+                                key={n.number}
+                                type="button"
+                                className={`w-full flex items-center justify-between px-2.5 py-1.5 text-xs hover:bg-muted/40 ${selectedNumber === n.number ? "bg-sky-500/10 text-foreground" : "text-muted-foreground"}`}
+                                onClick={() => setSelectedNumber(n.number)}
+                              >
+                                <span className="font-mono">{n.number}</span>
+                                {selectedNumber === n.number && <CheckCircle2 className="w-3.5 h-3.5 text-sky-400" />}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </label>
+
+              {/* Option B — Meta-registered number */}
+              <label className={`block rounded-lg border p-3 cursor-pointer transition-colors ${numberChoice === "direct" ? "border-sky-500/50 bg-sky-500/[0.04]" : "border-border/60 hover:border-border"}`}>
+                <div className="flex items-start gap-2">
+                  <input type="radio" className="mt-1" checked={numberChoice === "direct"} onChange={() => setNumberChoice("direct")} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium">My number is already registered in my WABA</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      Direct connection — you already have a Meta Phone Number ID for it. The number must not be
+                      in use on the personal WhatsApp app.
+                    </p>
+                    {numberChoice === "direct" && (
+                      <div className="mt-2 grid grid-cols-2 gap-3">
+                        <div>
+                          <Label className="text-xs">Phone Number ID *</Label>
+                          <Input className="mt-1 h-9" value={phoneNumberId} onChange={(e) => setPhoneNumberId(e.target.value)} />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Number (E.164)</Label>
+                          <Input className="mt-1 h-9" placeholder="+9198…" value={phoneE164} onChange={(e) => setPhoneE164(e.target.value)} />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </label>
+            </div>
+          )}
+
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setOwnOpen(false)}>Cancel</Button>
-            <Button
-              disabled={
-                !businessName.trim()
-                || connectOwn.isPending
-                || (!existingChannelId.trim() && (!wabaId.trim() || !phoneNumberId.trim() || !accessToken.trim()))
-              }
-              onClick={() => connectOwn.mutate()}
-            >
-              Connect
-            </Button>
+            {bizStep === 2 && (
+              <Button variant="ghost" onClick={() => setBizStep(1)}>Back</Button>
+            )}
+            <Button variant="ghost" onClick={() => setBizOpen(false)}>Cancel</Button>
+            {bizStep === 1 ? (
+              retryNumber ? (
+                <Button
+                  disabled={!businessName.trim() || !wabaId.trim() || !accessToken.trim() || connectOwn.isPending}
+                  onClick={() => connectOwn.mutate({ numberSource: "purchased" })}
+                >
+                  {connectOwn.isPending ? "Connecting…" : "Reconnect"}
+                </Button>
+              ) : existingChannelId.trim() ? (
+                <Button
+                  disabled={!businessName.trim() || !wabaId.trim() || connectOwn.isPending}
+                  onClick={() => connectOwn.mutate({ numberSource: "direct" })}
+                >
+                  {connectOwn.isPending ? "Linking…" : "Link channel"}
+                </Button>
+              ) : (
+                <Button
+                  disabled={!businessName.trim() || !wabaId.trim() || !accessToken.trim()}
+                  onClick={() => setBizStep(2)}
+                >
+                  Next
+                </Button>
+              )
+            ) : numberChoice === "buy" ? (
+              <Button disabled={!selectedNumber || buying} onClick={() => void handleBuyAndConnect()}>
+                {buying ? "Processing…" : `Pay ${inr(pricing.totalPaise)} & connect`}
+              </Button>
+            ) : (
+              <Button
+                disabled={!phoneNumberId.trim() || connectOwn.isPending}
+                onClick={() => connectOwn.mutate({ numberSource: "direct" })}
+              >
+                {connectOwn.isPending ? "Connecting…" : "Connect"}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

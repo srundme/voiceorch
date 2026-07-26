@@ -519,6 +519,13 @@
       "when": 1788900000000,
       "tag": "0073_wa_channel_unique_vobiz_id",
       "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1789000000000,
+      "tag": "0074_phone_number_service",
+      "breakpoints": true
     }
   ]
 }

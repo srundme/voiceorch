@@ -5,10 +5,16 @@
 
 import { Router, type IRouter } from "express";
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { and, desc, eq, gt, sql } from "drizzle-orm";
+import Razorpay from "razorpay";
+import { and, desc, eq, gt, inArray, sql } from "drizzle-orm";
 import {
   db,
   agentsTable,
+  usersTable,
+  vobizAccountsTable,
+  phoneNumbersTable,
+  phoneNumberOrdersTable,
+  walletTransactionsTable,
   whatsappChannelsTable,
   whatsappMessagesTable,
   whatsappEventsTable,
@@ -17,6 +23,17 @@ import {
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logger } from "../lib/logger.js";
 import { getSelfBaseUrl } from "../lib/app-domain.js";
+import { logActivity } from "../lib/activity.js";
+import { issueInvoice } from "../services/invoice.js";
+import {
+  CURRENCY_INR,
+  GST_RATE,
+  PHONE_BASE_PAISE,
+  PHONE_TOTAL_PAISE,
+  formatInr,
+  gstPortionPaise,
+} from "../lib/money-inr.js";
+import { RENEWAL_RATE_CENTS, RENEWAL_INTERVAL_DAYS } from "./phone-numbers.js";
 import { dialOutboundAgent, OutboundDialError } from "../services/outbound-agent-dial.js";
 import {
   VOBIZ_API_BASE,
@@ -80,6 +97,107 @@ async function getOwnCredsFor(userId: string): Promise<{ authId: string; authTok
   return getMasterVobizCreds();
 }
 
+/**
+ * Own-channel / own-number operations must run under the user's OWN VoBiz
+ * sub-account. ensureVobizSubAccount silently falls back to master creds when
+ * provisioning fails — reject that here, or the channel/number would land in
+ * the platform account instead of the user's.
+ */
+async function getStrictSubAccountCreds(userId: string): Promise<{ authId: string; authToken: string } | null> {
+  try {
+    const { ensureVobizSubAccount } = await import("./kyc.js");
+    const c = await ensureVobizSubAccount(userId);
+    if (!c.authId || !c.authToken) return null;
+    const master = getMasterVobizCreds();
+    if (master && c.authId === master.authId) return null;
+    return { authId: c.authId, authToken: c.authToken };
+  } catch (err) {
+    logger.warn({ err, userId }, "whatsapp-native: sub-account resolution failed");
+    return null;
+  }
+}
+
+/**
+ * Carrier error bodies can echo request fields — including the Meta access
+ * token — so anything persisted (whatsapp_channels.lastError, order failure
+ * reasons) or returned to the client must be scrubbed first: exact secret
+ * occurrences removed, long token-like sequences redacted, length capped.
+ */
+function sanitizeCarrierError(raw: string, secrets: Array<string | undefined> = []): string {
+  let out = raw;
+  for (const s of secrets) {
+    if (s && s.length >= 6) out = out.split(s).join("[redacted]");
+  }
+  out = out.replace(/[A-Za-z0-9_\-.]{24,}/g, "[redacted]");
+  return out.slice(0, 300);
+}
+
+type ChannelCreateResult =
+  | { ok: true; channelId: string; status: string; phoneNumberId: string | null }
+  | { ok: false; error: string };
+
+/**
+ * Create a WhatsApp channel on VoBiz. Two supported modes (BYON is deliberately
+ * NOT offered — external numbers can't be brought into SnapServe):
+ * - 'direct'    → bring_your_own: number already registered in the user's WABA
+ *                 (requires a Meta Phone Number ID).
+ * - 'purchased' → buy_from_vobiz: WhatsApp number bought through SnapServe;
+ *                 VoBiz auto-assigns the Phone Number ID after provisioning.
+ */
+async function createVobizWhatsappChannel(
+  creds: { authId: string; authToken: string },
+  opts: {
+    numberSource: "direct" | "purchased";
+    wabaId: string;
+    accessToken: string;
+    phoneNumberId?: string;
+    phoneE164?: string;
+  },
+): Promise<ChannelCreateResult> {
+  const payload: Record<string, unknown> = opts.numberSource === "purchased"
+    ? {
+        number_onboarding_mode: "buy_from_vobiz",
+        waba_id: opts.wabaId,
+        access_token: opts.accessToken,
+        ...(opts.phoneE164 ? { phone_number: toPlusE164(opts.phoneE164) } : {}),
+      }
+    : {
+        number_onboarding_mode: "bring_your_own",
+        waba_id: opts.wabaId,
+        phone_number_id: opts.phoneNumberId,
+        access_token: opts.accessToken,
+        ...(opts.phoneE164 ? { phone_number: toPlusE164(opts.phoneE164) } : {}),
+      };
+  try {
+    const resp = await fetch(`${VOBIZ_API_BASE}/messaging/channels/whatsapp`, {
+      method: "POST",
+      headers: vobizApiHeaders(creds.authId, creds.authToken),
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(20_000),
+    });
+    const text = await resp.text().catch(() => "");
+    if (!resp.ok) {
+      return { ok: false, error: `VoBiz channel create failed (HTTP ${resp.status}): ${sanitizeCarrierError(text, [opts.accessToken])}` };
+    }
+    let channelId = "";
+    let status = "active";
+    let phoneNumberId: string | null = null;
+    try {
+      const j = JSON.parse(text) as Record<string, any>;
+      const ch = j["channel"] ?? j["data"] ?? j;
+      channelId = ch?.["id"] != null ? String(ch["id"]) : "";
+      phoneNumberId = ch?.["phone_number_id"] != null ? String(ch["phone_number_id"]) : null;
+      if (typeof ch?.["status"] === "string" && ch["status"] !== "active") status = "pending";
+      // buy_from_vobiz channels stay pending until VoBiz assigns the Phone Number ID.
+      if (opts.numberSource === "purchased" && !phoneNumberId) status = "pending";
+    } catch { /* fallthrough */ }
+    if (!channelId) return { ok: false, error: "VoBiz channel create returned no channel id" };
+    return { ok: true, channelId, status, phoneNumberId };
+  } catch (err) {
+    return { ok: false, error: sanitizeCarrierError(`VoBiz channel create error: ${err instanceof Error ? err.message : String(err)}`, [opts.accessToken]) };
+  }
+}
+
 /* ── Authenticated channel management ───────────────────────────────────── */
 
 router.get("/whatsapp/channel", requireAuth, async (req, res): Promise<void> => {
@@ -92,10 +210,30 @@ router.get("/whatsapp/channel", requireAuth, async (req, res): Promise<void> => 
   const shared = await getSharedChannelConfig();
   let usage: { used24h: number; cap: number } | null = null;
   if (row) usage = { used24h: await countRecentOutbound(row.id), cap: row.dailyCap };
+
+  // WhatsApp number bought through SnapServe (if any) — surfaced here because
+  // it's hidden from the voice numbers page.
+  const [wn] = await db
+    .select()
+    .from(phoneNumbersTable)
+    .where(and(
+      eq(phoneNumbersTable.userId, userId),
+      eq(phoneNumbersTable.service, "whatsapp"),
+      eq(phoneNumbersTable.status, "active"),
+    ))
+    .orderBy(desc(phoneNumbersTable.createdAt))
+    .limit(1);
+
   res.json({
     channel: row ? formatChannel(row) : null,
     sharedTierAvailable: !!shared && !!getMasterVobizCreds(),
     usage,
+    purchasedNumber: wn ? {
+      id: wn.id,
+      number: wn.number,
+      nextRenewalAt: wn.nextRenewalAt?.toISOString() ?? null,
+      renewalPaise: wn.renewalRateCents,
+    } : null,
   });
 });
 
@@ -171,15 +309,40 @@ router.post("/whatsapp/channel/own", requireAuth, async (req, res): Promise<void
     accessToken?: string;
     vobizChannelId?: string; // already created in VoBiz console — just link it
     inboundAgentId?: number | null;
+    /** 'direct' (default) = Meta-registered number; 'purchased' = bought via SnapServe. */
+    numberSource?: "direct" | "purchased";
   };
 
+  const numberSource = body.numberSource === "purchased" ? "purchased" as const : "direct" as const;
   const wabaId = (body.wabaId ?? "").trim();
   const phoneNumberId = (body.phoneNumberId ?? "").trim();
   const phoneE164 = (body.phoneE164 ?? "").trim();
   const accessToken = (body.accessToken ?? "").trim();
   const providedChannelId = (body.vobizChannelId ?? "").trim();
 
-  if (!providedChannelId && (!wabaId || !phoneNumberId || !accessToken)) {
+  if (numberSource === "purchased") {
+    if (!wabaId || !accessToken || !phoneE164) {
+      res.status(400).json({ error: "wabaId, accessToken and phoneE164 are required to connect a purchased WhatsApp number" });
+      return;
+    }
+    // Retry-connect path: the number must have been bought through SnapServe.
+    const plusForm = toPlusE164(phoneE164);
+    const bareForm = plusForm.replace(/^\+/, "");
+    const [owned] = await db
+      .select({ id: phoneNumbersTable.id })
+      .from(phoneNumbersTable)
+      .where(and(
+        eq(phoneNumbersTable.userId, userId),
+        eq(phoneNumbersTable.service, "whatsapp"),
+        eq(phoneNumbersTable.status, "active"),
+        inArray(phoneNumbersTable.number, [plusForm, bareForm]),
+      ))
+      .limit(1);
+    if (!owned) {
+      res.status(400).json({ error: "That number wasn't bought through the SnapServe WhatsApp flow. Use the setup wizard to buy one first." });
+      return;
+    }
+  } else if (!providedChannelId && (!wabaId || !phoneNumberId || !accessToken)) {
     res.status(400).json({ error: "Provide either vobizChannelId (existing VoBiz channel) or wabaId + phoneNumberId + accessToken" });
     return;
   }
@@ -203,54 +366,29 @@ router.post("/whatsapp/channel/own", requireAuth, async (req, res): Promise<void
   let lastError: string | null = null;
   let status = "active";
 
+  let remotePhoneNumberId: string | null = null;
   if (!vobizChannelId) {
     // Strict: own-channel creation must happen under the user's OWN sub-account,
     // never the master account, or the channel lands in the wrong VoBiz account.
-    let creds: { authId: string; authToken: string } | null = null;
-    try {
-      const { ensureVobizSubAccount } = await import("./kyc.js");
-      const c = await ensureVobizSubAccount(userId);
-      if (c.authId && c.authToken) creds = c;
-    } catch (err) {
-      logger.warn({ err, userId }, "whatsapp-native: sub-account resolution failed for own-channel create");
-    }
+    const creds = await getStrictSubAccountCreds(userId);
     if (!creds) {
       res.status(503).json({ error: "Could not prepare your VoBiz sub-account — please try again shortly" });
       return;
     }
-    try {
-      const resp = await fetch(`${VOBIZ_API_BASE}/channels/whatsapp`, {
-        method: "POST",
-        headers: vobizApiHeaders(creds.authId, creds.authToken),
-        body: JSON.stringify({
-          number_onboarding_mode: "bring_your_own",
-          waba_id: wabaId,
-          phone_number_id: phoneNumberId,
-          access_token: accessToken,
-          ...(phoneE164 ? { phone_number: toPlusE164(phoneE164) } : {}),
-        }),
-        signal: AbortSignal.timeout(20_000),
-      });
-      const text = await resp.text().catch(() => "");
-      if (!resp.ok) {
-        res.status(502).json({ error: `VoBiz channel create failed (HTTP ${resp.status}): ${text.slice(0, 300)}` });
-        return;
-      }
-      try {
-        const j = JSON.parse(text) as Record<string, any>;
-        const ch = j["channel"] ?? j["data"] ?? j;
-        vobizChannelId = ch?.["id"] != null ? String(ch["id"]) : "";
-        if (typeof ch?.["status"] === "string" && ch["status"] !== "active") status = "pending";
-      } catch { /* fallthrough */ }
-      if (!vobizChannelId) {
-        res.status(502).json({ error: "VoBiz channel create returned no channel id" });
-        return;
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      res.status(502).json({ error: `VoBiz channel create error: ${msg}` });
+    const created = await createVobizWhatsappChannel(creds, {
+      numberSource,
+      wabaId,
+      accessToken,
+      phoneNumberId: phoneNumberId || undefined,
+      phoneE164: phoneE164 || undefined,
+    });
+    if (!created.ok) {
+      res.status(502).json({ error: created.error });
       return;
     }
+    vobizChannelId = created.channelId;
+    status = created.status;
+    remotePhoneNumberId = created.phoneNumberId;
   }
 
   const values = {
@@ -260,7 +398,7 @@ router.post("/whatsapp/channel/own", requireAuth, async (req, res): Promise<void
     inboundAgentId: body.inboundAgentId ?? null,
     vobizChannelId,
     wabaId: wabaId || null,
-    phoneNumberId: phoneNumberId || null,
+    phoneNumberId: phoneNumberId || remotePhoneNumberId || null,
     phoneE164: phoneE164 ? toPlusE164(phoneE164) : null,
     accessTokenLast4: accessToken ? accessToken.slice(-4) : null,
     status,
@@ -294,6 +432,530 @@ router.post("/whatsapp/channel/own", requireAuth, async (req, res): Promise<void
   }
   logger.info({ userId, vobizChannelId }, "whatsapp-native: own channel connected");
   res.status(201).json(formatChannel(row!));
+});
+
+/* ── WhatsApp-capable number purchase (business tier) ─────────────────────
+ *
+ * WhatsApp numbers are a SEPARATE VoBiz inventory from voice DIDs — a voice
+ * number cannot be used here (and BYON is deliberately not offered). Platform
+ * price mirrors voice numbers: ₹800 + GST first month via Razorpay, then the
+ * standard 30-day wallet renewal (same billing engine — the number lives in
+ * phone_numbers with service='whatsapp').
+ */
+
+function getWaRazorpay() {
+  return new Razorpay({
+    key_id: process.env["RAZORPAY_KEY_ID"]!,
+    key_secret: process.env["RAZORPAY_KEY_SECRET"]!,
+  });
+}
+
+/** Best-effort refund of a failed WhatsApp-number purchase payment. */
+async function refundWhatsappOrder(
+  orderRowId: number,
+  razorpayPaymentId: string,
+  amountCents: number,
+  reason: string,
+): Promise<void> {
+  try {
+    const razorpay = getWaRazorpay();
+    await (razorpay.payments as any).refund(razorpayPaymentId, { amount: amountCents, speed: "optimum" });
+    logger.info({ orderRowId, razorpayPaymentId, reason }, "whatsapp-native: purchase payment refunded");
+  } catch (err) {
+    logger.error({ err, orderRowId, razorpayPaymentId, reason }, "whatsapp-native: refund failed — needs manual review");
+  } finally {
+    await db.update(phoneNumberOrdersTable)
+      .set({ status: "failed", failureReason: reason })
+      .where(eq(phoneNumberOrdersTable.id, orderRowId));
+  }
+}
+
+/** Live WhatsApp-capable inventory (separate from voice DIDs). */
+router.get("/whatsapp/numbers/available", requireAuth, async (req, res): Promise<void> => {
+  const userId = (req as any).clerkUserId as string;
+  const country = String(req.query["country"] ?? "IN").toUpperCase().slice(0, 2);
+
+  const creds = await getStrictSubAccountCreds(userId);
+  if (!creds) {
+    res.status(503).json({ error: "Could not prepare your VoBiz sub-account — please try again shortly" });
+    return;
+  }
+
+  try {
+    const resp = await fetch(
+      `${VOBIZ_API_BASE}/messaging/numbers/whatsapp/availability?country=${encodeURIComponent(country)}`,
+      { headers: vobizApiHeaders(creds.authId, creds.authToken), signal: AbortSignal.timeout(15_000) },
+    );
+    const text = await resp.text().catch(() => "");
+    if (!resp.ok) {
+      logger.warn({ status: resp.status, body: text.slice(0, 300), userId }, "whatsapp-native: availability fetch failed");
+      res.status(502).json({ error: `Could not load WhatsApp numbers from the carrier (HTTP ${resp.status})` });
+      return;
+    }
+    let raw: any = {};
+    try { raw = JSON.parse(text); } catch { /* non-JSON body */ }
+    const list: any[] = Array.isArray(raw)
+      ? raw
+      : raw.numbers ?? raw.available_numbers ?? raw.objects ?? raw.items ?? raw.data ?? [];
+    const numbers = (list as any[])
+      .map((n) => ({
+        number: String(n?.phone_number ?? n?.number ?? n?.e164 ?? "").trim(),
+        country: String(n?.country ?? country).toUpperCase(),
+        region: n?.region != null ? String(n.region) : null,
+      }))
+      .filter((n) => n.number);
+    // Carrier's raw monthly fee is never surfaced — SnapServe charges flat pricing.
+    res.json({
+      numbers,
+      pricing: {
+        basePaise: PHONE_BASE_PAISE,
+        gstPaise: gstPortionPaise(PHONE_BASE_PAISE),
+        totalPaise: PHONE_TOTAL_PAISE,
+        renewalPaise: RENEWAL_RATE_CENTS,
+        currency: CURRENCY_INR,
+      },
+    });
+  } catch (err) {
+    logger.error({ err, userId }, "whatsapp-native: availability error");
+    res.status(502).json({ error: "Could not reach the carrier for WhatsApp number availability" });
+  }
+});
+
+/** Razorpay order for a WhatsApp number — nothing is provisioned until confirm. */
+router.post("/whatsapp/numbers/purchase/initiate", requireAuth, async (req, res): Promise<void> => {
+  const userId = (req as any).clerkUserId as string;
+  const body = req.body as { number?: string; countryCode?: string; region?: string };
+  const rawNumber = String(body.number ?? "").trim();
+  const countryCode = (String(body.countryCode ?? "IN").trim().toUpperCase() || "IN").slice(0, 2);
+  if (!rawNumber) { res.status(400).json({ error: "number is required" }); return; }
+  const number = toPlusE164(rawNumber);
+
+  if (!process.env["RAZORPAY_KEY_ID"] || !process.env["RAZORPAY_KEY_SECRET"]) {
+    res.status(503).json({ error: "Payments are not configured yet" });
+    return;
+  }
+
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, userId));
+  if (!user) { res.status(404).json({ error: "User not found" }); return; }
+
+  // KYC gate — Indian numbers require completed identity verification (same as voice).
+  if (countryCode === "IN") {
+    const [kycAccount] = await db
+      .select({ kycStatus: vobizAccountsTable.kycStatus })
+      .from(vobizAccountsTable)
+      .where(eq(vobizAccountsTable.userId, userId));
+    if (!kycAccount || kycAccount.kycStatus !== "completed") {
+      res.status(403).json({ error: "Identity verification required to purchase Indian numbers.", code: "KYC_REQUIRED" });
+      return;
+    }
+  }
+
+  // Fail early (before payment) if the user's sub-account can't be prepared.
+  const creds = await getStrictSubAccountCreds(userId);
+  if (!creds) {
+    res.status(503).json({ error: "Could not prepare your VoBiz sub-account — please try again shortly" });
+    return;
+  }
+
+  const bareForm = number.replace(/^\+/, "");
+  const numberTakenWhere = and(
+    inArray(phoneNumbersTable.number, [number, bareForm]),
+    eq(phoneNumbersTable.status, "active"),
+  );
+  const openOrderWhere = and(
+    eq(phoneNumberOrdersTable.number, number),
+    inArray(phoneNumberOrdersTable.status, ["pending", "processing"]),
+  );
+
+  // Cheap pre-checks so we can fail before creating a Razorpay order; the
+  // authoritative re-check runs under an advisory lock together with the insert.
+  const [existingNum] = await db.select({ id: phoneNumbersTable.id }).from(phoneNumbersTable).where(numberTakenWhere);
+  if (existingNum) { res.status(409).json({ error: "This number is already taken." }); return; }
+
+  const [pendingOrder] = await db.select({ id: phoneNumberOrdersTable.id }).from(phoneNumberOrdersTable).where(openOrderWhere);
+  if (pendingOrder) { res.status(409).json({ error: "A pending purchase already exists for this number." }); return; }
+
+  const basePaise = PHONE_BASE_PAISE;
+  const gstPaise = gstPortionPaise(basePaise);
+  const payablePaise = PHONE_TOTAL_PAISE;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let order: any;
+  try {
+    order = await getWaRazorpay().orders.create({
+      amount:   payablePaise,
+      currency: CURRENCY_INR,
+      receipt:  `wa_${user.id}_${Date.now()}`,
+      notes: {
+        userId: String(user.id),
+        clerkId: userId,
+        number,
+        service: "whatsapp",
+        basePaise: String(basePaise),
+        gstPaise: String(gstPaise),
+        gstRate: String(GST_RATE),
+      },
+      payment_capture: 1,
+    } as any);
+  } catch (err) {
+    res.status(502).json({ error: `Failed to create payment order: ${err instanceof Error ? err.message : "Razorpay error"}` });
+    return;
+  }
+
+  // Serialize concurrent purchases of the same number: the advisory lock keys
+  // on the number, and the duplicate checks re-run in the same transaction as
+  // the insert. A loser's already-created Razorpay order just expires unpaid.
+  let orderRow: typeof phoneNumberOrdersTable.$inferSelect | undefined;
+  let conflictMsg: string | null = null;
+  await db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`wa-num:${number}`}))`);
+    const [takenNow] = await tx.select({ id: phoneNumbersTable.id }).from(phoneNumbersTable).where(numberTakenWhere);
+    if (takenNow) { conflictMsg = "This number is already taken."; return; }
+    const [openNow] = await tx.select({ id: phoneNumberOrdersTable.id }).from(phoneNumberOrdersTable).where(openOrderWhere);
+    if (openNow) { conflictMsg = "A pending purchase already exists for this number."; return; }
+    [orderRow] = await tx.insert(phoneNumberOrdersTable).values({
+      userId,
+      number,
+      countryCode,
+      region:          body.region ?? null,
+      numberType:      "whatsapp",
+      amountCents:     payablePaise,
+      status:          "pending",
+      razorpayOrderId: order.id,
+    }).returning();
+  });
+  if (conflictMsg || !orderRow) {
+    res.status(409).json({ error: conflictMsg ?? "Could not create the purchase order — please try again." });
+    return;
+  }
+
+  logger.info({ userId, number, orderId: order.id, payablePaise }, "whatsapp-native: WhatsApp number purchase initiated");
+
+  res.json({
+    purchaseOrderId: orderRow.id,
+    orderId:         order.id,
+    amountCents:     payablePaise,
+    basePaise,
+    gstPaise,
+    payablePaise,
+    gstRate:         GST_RATE,
+    currency:        CURRENCY_INR,
+    keyId:           process.env["RAZORPAY_KEY_ID"],
+  });
+});
+
+/**
+ * Confirm payment → order the number from VoBiz → create the buy_from_vobiz
+ * channel. If the VoBiz number order fails the payment is refunded. If only the
+ * channel create fails (usually a bad Meta token), the number is kept — the UI
+ * retries via POST /whatsapp/channel/own with numberSource: 'purchased'.
+ */
+router.post("/whatsapp/numbers/purchase/confirm", requireAuth, async (req, res): Promise<void> => {
+  const userId = (req as any).clerkUserId as string;
+  const body = req.body as {
+    purchaseOrderId?: number;
+    razorpayOrderId?: string;
+    razorpayPaymentId?: string;
+    razorpaySignature?: string;
+    wabaId?: string;
+    accessToken?: string;
+    businessName?: string;
+    inboundAgentId?: number | null;
+  };
+  const purchaseOrderId   = Number(body.purchaseOrderId);
+  const razorpayOrderId   = String(body.razorpayOrderId ?? "");
+  const razorpayPaymentId = String(body.razorpayPaymentId ?? "");
+  const razorpaySignature = String(body.razorpaySignature ?? "");
+  const wabaId       = (body.wabaId ?? "").trim();
+  const accessToken  = (body.accessToken ?? "").trim();
+  const businessName = (body.businessName ?? "").trim();
+
+  if (!purchaseOrderId || !razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
+    res.status(400).json({ error: "purchaseOrderId, razorpayOrderId, razorpayPaymentId and razorpaySignature are required" });
+    return;
+  }
+  // Validate Meta details BEFORE claiming the order — a validation miss must
+  // leave the order pending so the same payment can be re-submitted.
+  if (!wabaId || !accessToken) {
+    res.status(400).json({ error: "wabaId and accessToken are required — the WhatsApp channel is created right after payment" });
+    return;
+  }
+  if (body.inboundAgentId != null && !(await validateAgentOwnership(userId, Number(body.inboundAgentId)))) {
+    res.status(404).json({ error: "Agent not found" });
+    return;
+  }
+
+  const secret = process.env["RAZORPAY_KEY_SECRET"];
+  if (!secret) { res.status(503).json({ error: "Payments are not configured yet" }); return; }
+  const expectedSig = createHmac("sha256", secret).update(`${razorpayOrderId}|${razorpayPaymentId}`).digest("hex");
+  if (expectedSig !== razorpaySignature) {
+    res.status(400).json({ error: "Invalid payment signature" });
+    return;
+  }
+
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, userId));
+  if (!user) { res.status(404).json({ error: "User not found" }); return; }
+
+  // Atomic claim — only one concurrent confirm wins.
+  const [claimed] = await db
+    .update(phoneNumberOrdersTable)
+    .set({ status: "processing", razorpayPaymentId })
+    .where(and(
+      eq(phoneNumberOrdersTable.id, purchaseOrderId),
+      eq(phoneNumberOrdersTable.razorpayOrderId, razorpayOrderId),
+      eq(phoneNumberOrdersTable.userId, userId),
+      eq(phoneNumberOrdersTable.status, "pending"),
+      eq(phoneNumberOrdersTable.numberType, "whatsapp"),
+    ))
+    .returning();
+  if (!claimed) { res.status(400).json({ error: "Order not found or already processed" }); return; }
+
+  const number = claimed.number;
+  const amountCents = claimed.amountCents;
+
+  const creds = await getStrictSubAccountCreds(userId);
+  if (!creds) {
+    await refundWhatsappOrder(claimed.id, razorpayPaymentId, amountCents, "Sub-account unavailable at confirm");
+    res.status(503).json({ error: "Could not prepare your VoBiz sub-account. Your payment has been refunded." });
+    return;
+  }
+
+  // 1) Order the WhatsApp-capable number (separate inventory from voice DIDs).
+  let vobizNumberId: string | null = null;
+  try {
+    const resp = await fetch(`${VOBIZ_API_BASE}/messaging/numbers/whatsapp/orders`, {
+      method: "POST",
+      headers: vobizApiHeaders(creds.authId, creds.authToken),
+      body: JSON.stringify({
+        country_code: claimed.countryCode || "IN",
+        selected_phone_number: toPlusE164(number),
+      }),
+      signal: AbortSignal.timeout(30_000),
+    });
+    const text = await resp.text().catch(() => "");
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${text.slice(0, 300)}`);
+    try {
+      const j = JSON.parse(text) as Record<string, any>;
+      const o = j["order"] ?? j["data"] ?? j;
+      vobizNumberId = o?.["id"] != null ? String(o["id"]) : null;
+    } catch { /* non-JSON success body */ }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.error({ err, number, userId }, "whatsapp-native: number order failed after payment — refunding");
+    await refundWhatsappOrder(claimed.id, razorpayPaymentId, amountCents, `VoBiz WhatsApp number order failed: ${msg.slice(0, 200)}`);
+    res.status(502).json({
+      error: msg.toLowerCase().includes("not found") || msg.toLowerCase().includes("unavailable")
+        ? "This number is no longer available. Your payment has been refunded."
+        : "Failed to provision the WhatsApp number. Your payment has been refunded.",
+    });
+    return;
+  }
+
+  // 2) Record ownership + 30-day renewal (same billing engine as voice numbers).
+  // Payment is captured and the carrier order succeeded — from here on, any
+  // bookkeeping failure must refund and mark the order failed, never leave it
+  // stuck in 'processing' with the user silently charged.
+  const now = new Date();
+  const nextRenewalAt = new Date(now.getTime() + RENEWAL_INTERVAL_DAYS * 24 * 60 * 60 * 1000);
+  const bareForm = number.replace(/^\+/, "");
+  let numberRow: typeof phoneNumbersTable.$inferSelect | undefined;
+  try {
+    const ownershipFields = {
+      userId,
+      number,
+      countryCode:      (claimed.countryCode || "IN").toUpperCase(),
+      region:           claimed.region ?? null,
+      numberType:       "local",
+      service:          "whatsapp",
+      vobizNumberId,
+      agentId:          null,
+      squadId:          null,
+      status:           "active",
+      monthlyRateCents: PHONE_BASE_PAISE,
+      renewalRateCents: RENEWAL_RATE_CENTS,
+      purchasedAt:      now,
+      nextRenewalAt,
+      lastRenewalAt:    now,
+      releasedAt:       null,
+      routingRules:     null,
+    };
+    // phone_numbers.number is globally unique and released rows are kept, so a
+    // previously released row for this number is reused instead of colliding.
+    const [existingRow] = await db.select().from(phoneNumbersTable)
+      .where(inArray(phoneNumbersTable.number, [number, bareForm]))
+      .limit(1);
+    if (existingRow && existingRow.status === "active") {
+      throw new Error(`phone_numbers row ${existingRow.id} for this number is still active — refusing to overwrite`);
+    }
+    if (existingRow) {
+      [numberRow] = await db.update(phoneNumbersTable)
+        .set(ownershipFields)
+        .where(eq(phoneNumbersTable.id, existingRow.id))
+        .returning();
+    } else {
+      [numberRow] = await db.insert(phoneNumbersTable).values(ownershipFields).returning();
+    }
+    if (!numberRow) throw new Error("phone_numbers write returned no row");
+
+    await db.update(phoneNumberOrdersTable)
+      .set({ status: "completed", phoneNumberId: numberRow.id })
+      .where(eq(phoneNumberOrdersTable.id, claimed.id));
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    // The carrier-side number may now be orphaned on the user's sub-account —
+    // log everything needed for manual reconciliation before refunding.
+    logger.error(
+      { err, userId, number, vobizNumberId, subAccountAuthId: creds.authId },
+      "whatsapp-native: bookkeeping failed AFTER carrier number order — refunding; carrier number may need manual release",
+    );
+    await refundWhatsappOrder(claimed.id, razorpayPaymentId, amountCents, `Bookkeeping failed after provisioning: ${msg.slice(0, 200)}`);
+    res.status(500).json({ error: "Something went wrong while recording your number. Your payment has been refunded." });
+    return;
+  }
+
+  // Audit-trail records only — direct card payment, wallet balance untouched.
+  // Best-effort: never fail a completed purchase over audit bookkeeping.
+  try {
+    await db.insert(walletTransactionsTable).values({
+      userId:            user.id,
+      type:              "debit",
+      amountCents:       -amountCents,
+      description:       `WhatsApp number ${number} purchased (${formatInr(PHONE_BASE_PAISE)} + GST ${formatInr(gstPortionPaise(PHONE_BASE_PAISE))} = ${formatInr(amountCents)}, paid by card)`,
+      status:            "completed",
+      razorpayOrderId,
+      razorpayPaymentId,
+    });
+    await logActivity({
+      userId,
+      eventType:    "phone_number.purchased",
+      resourceType: "phone_number",
+      resourceId:   String(numberRow.id),
+      description:  `WhatsApp number ${number} purchased (₹${(amountCents / 100).toFixed(2)}, paid via Razorpay)`,
+    });
+  } catch (auditErr) {
+    logger.error({ err: auditErr, userId, number }, "whatsapp-native: audit records failed (purchase itself is complete)");
+  }
+
+  void issueInvoice({
+    user: { id: user.id, name: user.name, email: user.email },
+    type: "phone_number",
+    description: `WhatsApp business number ${number} — provisioning & 1 month rental`,
+    hsnSac: "998411",
+    amountCents: PHONE_BASE_PAISE,
+    gstInclusive: false,
+    razorpayOrderId,
+    razorpayPaymentId,
+    metadata: { number, phoneNumberId: numberRow!.id, service: "whatsapp" },
+  });
+
+  // 3) Create the buy_from_vobiz channel (Phone Number ID auto-assigned by VoBiz).
+  const created = await createVobizWhatsappChannel(creds, {
+    numberSource: "purchased",
+    wabaId,
+    accessToken,
+    phoneE164: number,
+  });
+
+  const channelValues = {
+    userId,
+    mode: "own" as const,
+    businessName: businessName.slice(0, 120),
+    inboundAgentId: body.inboundAgentId ?? null,
+    vobizChannelId: created.ok ? created.channelId : null,
+    wabaId,
+    phoneNumberId: created.ok ? created.phoneNumberId : null,
+    phoneE164: toPlusE164(number),
+    accessTokenLast4: accessToken.slice(-4),
+    status: created.ok ? created.status : "error",
+    lastError: created.ok ? null : created.error,
+    active: true,
+    updatedAt: new Date(),
+  };
+  let channelRow: WhatsappChannel | undefined;
+  try {
+    [channelRow] = await db.insert(whatsappChannelsTable)
+      .values(channelValues)
+      .onConflictDoUpdate({ target: whatsappChannelsTable.userId, set: channelValues })
+      .returning();
+  } catch (err) {
+    const code = (err as any)?.cause?.code ?? (err as any)?.code;
+    if (code === "23505") {
+      // The purchase itself is complete — surface the attach failure as
+      // channelError; the dashboard shows the "finish connecting" banner via
+      // purchasedNumber, so the paid number is never invisible to the user.
+      res.status(201).json({
+        purchased: true,
+        number,
+        channel: null,
+        channelError: "That VoBiz channel is already connected to another account",
+      });
+      return;
+    }
+    throw err;
+  }
+
+  logger.info({ userId, number, channelOk: created.ok, vobizNumberId }, "whatsapp-native: WhatsApp number purchased");
+
+  res.status(201).json({
+    purchased: true,
+    number,
+    channel: formatChannel(channelRow!),
+    channelError: created.ok ? null : created.error,
+  });
+});
+
+/** Re-pull a pending own channel from VoBiz (buy_from_vobiz provisioning). */
+router.post("/whatsapp/channel/refresh", requireAuth, async (req, res): Promise<void> => {
+  const userId = (req as any).clerkUserId as string;
+  const [row] = await db.select().from(whatsappChannelsTable)
+    .where(eq(whatsappChannelsTable.userId, userId)).limit(1);
+  if (!row || row.mode !== "own" || !row.vobizChannelId) {
+    res.status(404).json({ error: "No own WhatsApp channel to refresh" });
+    return;
+  }
+
+  const creds = await getStrictSubAccountCreds(userId);
+  if (!creds) {
+    res.status(503).json({ error: "Could not prepare your VoBiz sub-account — please try again shortly" });
+    return;
+  }
+
+  try {
+    const resp = await fetch(`${VOBIZ_API_BASE}/messaging/channels/whatsapp`, {
+      headers: vobizApiHeaders(creds.authId, creds.authToken),
+      signal: AbortSignal.timeout(15_000),
+    });
+    const text = await resp.text().catch(() => "");
+    if (!resp.ok) {
+      res.status(502).json({ error: `Carrier refresh failed (HTTP ${resp.status})` });
+      return;
+    }
+    let raw: any = {};
+    try { raw = JSON.parse(text); } catch { /* non-JSON body */ }
+    const list: any[] = Array.isArray(raw) ? raw : raw.channels ?? raw.objects ?? raw.items ?? raw.data ?? [];
+    const remote = (list as any[]).find((c) => String(c?.id ?? "") === row.vobizChannelId);
+    if (!remote) {
+      res.status(404).json({ error: "Channel not found on the carrier — it may have been deleted in the VoBiz console" });
+      return;
+    }
+    const remoteStatus = typeof remote.status === "string" ? remote.status : "";
+    const remotePnid   = remote.phone_number_id != null ? String(remote.phone_number_id) : null;
+    const remotePhone  = remote.phone_number != null ? String(remote.phone_number) : null;
+    const newStatus = remoteStatus
+      ? (remoteStatus === "active" ? "active" : remoteStatus)
+      : (remotePnid ? "active" : row.status);
+    const [updated] = await db.update(whatsappChannelsTable).set({
+      phoneNumberId: remotePnid ?? row.phoneNumberId,
+      phoneE164: remotePhone ? toPlusE164(remotePhone) : row.phoneE164,
+      status: newStatus,
+      lastError: null,
+      updatedAt: new Date(),
+    }).where(eq(whatsappChannelsTable.id, row.id)).returning();
+    logger.info({ userId, status: newStatus, phoneNumberId: remotePnid }, "whatsapp-native: channel refreshed from carrier");
+    res.json(formatChannel(updated!));
+  } catch (err) {
+    res.status(502).json({ error: `Carrier refresh error: ${err instanceof Error ? err.message : String(err)}` });
+  }
 });
 
 router.patch("/whatsapp/channel", requireAuth, async (req, res): Promise<void> => {

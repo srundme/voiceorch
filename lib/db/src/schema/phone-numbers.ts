@@ -9,6 +9,13 @@ export const phoneNumbersTable = pgTable("phone_numbers", {
   countryCode:   text("country_code").notNull(),
   region:        text("region"),
   numberType:    text("number_type").notNull().default("local"),
+  /**
+   * 'voice' (default) — regular DID that can take voice agents.
+   * 'whatsapp' — WhatsApp-capable number bought via the WhatsApp Business flow;
+   * billed the same 30-day renewal, but hidden from the voice numbers page and
+   * never assignable to a voice agent.
+   */
+  service:       text("service").notNull().default("voice"),
   vobizNumberId: text("vobiz_number_id"),
   agentId:       integer("agent_id").references(() => agentsTable.id, { onDelete: "set null" }),
   /** When set, inbound calls create/join a Squad live run (entry member answers). */
