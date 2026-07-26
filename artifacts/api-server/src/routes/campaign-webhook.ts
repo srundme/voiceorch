@@ -336,10 +336,14 @@ export function isWithinBusinessHours(
   const end   = campaign.businessHoursEnd;
   if (start == null || end == null) return true; // no restriction — dial any time
   const tz = campaign.timezone ?? fallbackTz;
-  // Convert "now" to a wall-clock Date in the target timezone, then read .getHours().
+  // Convert "now" to a wall-clock Date in the target timezone.
   const nowLocal = new Date(new Date().toLocaleString("en-US", { timeZone: tz }));
-  const hour = nowLocal.getHours();
-  return start <= hour && hour < end;
+  // Backward-compat: legacy values were stored as whole hours (0–23).
+  // New values are stored as minutes-since-midnight (≥ 24, e.g. 570 = 9:30 AM).
+  const nowMinutes   = nowLocal.getHours() * 60 + nowLocal.getMinutes();
+  const startMinutes = start < 24 ? start * 60 : start;
+  const endMinutes   = end   < 24 ? end   * 60 : end;
+  return startMinutes <= nowMinutes && nowMinutes < endMinutes;
 }
 
 /** Mark last webhook event on the campaign row (fire-and-forget, best-effort). */
