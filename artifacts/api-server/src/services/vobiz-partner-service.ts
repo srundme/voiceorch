@@ -86,8 +86,16 @@ export async function assignNumberToCustomer(
   if (!authId || !authToken || !customerAuthId || !e164Number) return false;
 
   const digits = e164Number.replace(/\D/g, "");
+  const plusE164 = e164Number.startsWith("+") ? e164Number : `+${digits}`;
 
   const targets = [
+    // DOCUMENTED endpoint (vobiz-phone-numbers skill): lowercase /account/,
+    // %2B-encoded E.164 in path, body {sub_account_id}. The partner/* number
+    // routes below are legacy guesses (VoBiz partner numbers API is read-only).
+    {
+      url: `https://api.vobiz.ai/api/v1/account/${authId}/numbers/${encodeURIComponent(plusE164)}/assign-subaccount`,
+      body: JSON.stringify({ sub_account_id: customerAuthId }),
+    },
     {
       url: `${VOBIZ_PARTNER_BASE}/numbers/assign`,
       body: JSON.stringify({ customer_auth_id: customerAuthId, number: digits }),

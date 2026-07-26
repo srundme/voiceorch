@@ -298,6 +298,9 @@ async function configureVobizNumberWebhook(
           hangup_url:     hangupUrl,
           hangup_method:  "POST",
           default_app:    true,
+          // Per VoBiz docs this is the flag that auto-routes NEW numbers created
+          // without an app_id (default_app alone does NOT route numbers).
+          default_number_app: true,
         }),
       });
       if (!createResp.ok) {
@@ -331,6 +334,7 @@ async function configureVobizNumberWebhook(
         hangup_method: "POST",
         default_app:          true,
         default_endpoint_app: true,
+        default_number_app:   true,
       }),
     });
     if (!updateResp.ok) {
@@ -399,7 +403,32 @@ async function configureVobizNumberWebhook(
     ];
 
     let linked = false;
-    // Try AttachNumber endpoints first with form and JSON payloads
+    let documentedAttachOk = false;
+
+    // 0. DOCUMENTED VoBiz attach endpoint (vobiz-applications-endpoints skill):
+    //    POST /Account/{auth_id}/numbers/{number}/application  body {application_id}
+    //    where {number} is the %2B-encoded E.164. This is the real API — the
+    //    fallback spray below is legacy guesswork kept only as insurance.
+    const plusE164 = e164.startsWith("+") ? e164 : `+${digits}`;
+    try {
+      const attachResp = await fetch(
+        `${VOBIZ_ACCOUNT_BASE}/${authId}/numbers/${encodeURIComponent(plusE164)}/application`,
+        { method: "POST", headers: h, body: JSON.stringify({ application_id: appId }) },
+      );
+      const attachText = await attachResp.text().catch(() => "");
+      if (attachResp.ok || attachResp.status === 204) {
+        documentedAttachOk = true;
+        linked = true;
+        console.info(`configureVobizNumberWebhook: documented attach SUCCESS ${attachResp.status} ${plusE164} -> app ${appId}`);
+      } else {
+        console.info(`configureVobizNumberWebhook: documented attach ${attachResp.status} ${plusE164} -> ${attachText.slice(0, 150)}`);
+      }
+    } catch (e) {
+      console.warn("configureVobizNumberWebhook: documented attach error:", e);
+    }
+
+    // Try AttachNumber endpoints with form and JSON payloads (legacy fallback)
+    if (!linked)
     for (const targetUrl of [
       `${VOBIZ_ACCOUNT_BASE}/${authId}/Application/${appId}/AttachNumber/`,
       `${VOBIZ_ACCOUNT_BASE}/${authId}/Application/${appId}/attach_number/`,
@@ -450,26 +479,38 @@ async function configureVobizNumberWebhook(
     await new Promise((r) => setTimeout(r, 400));
     items = await listVobizNumbers(authId, h);
     match = findVobizNumber(items, e164);
-    const verified = isVobizNumberLinked(match, appId);
+    let listVerified = isVobizNumberLinked(match, appId);
 
-    // If POST/PATCH succeeded (linked === true) OR if found in list as linked, mark verified!
-    const verifiedFinal = linked || verified || isVobizNumberLinked(match, appId);
+    // List can lag a beat behind a successful attach — re-check once.
+    if (!listVerified && linked) {
+      await new Promise((r) => setTimeout(r, 800));
+      items = await listVobizNumbers(authId, h);
+      match = findVobizNumber(items, e164);
+      listVerified = isVobizNumberLinked(match, appId);
+    }
 
-    const detail = verifiedFinal
+    // HONEST result. The documented attach endpoint is account-scoped, so its
+    // 2xx is trustworthy even if the list lags; legacy-spray 2xx is NOT (VoBiz
+    // has returned 2xx without persisting on those paths before).
+    const verifiedFinal = listVerified || documentedAttachOk;
+
+    const detail = listVerified
       ? "linked and verified"
-      : match
-        ? "LINK failed"
-        : "number assigned (configured default_app handles incoming calls)";
+      : documentedAttachOk
+        ? "attach accepted by VoBiz (list not yet reflecting)"
+        : match
+          ? "number found under account but NOT linked to SnapServe app"
+          : "number not found under this VoBiz account";
 
     console.info(
-      { e164, appId, linked: linked || verifiedFinal, verified: verifiedFinal, detail },
+      { e164, appId, linked, verified: verifiedFinal, detail },
       "configureVobizNumberWebhook: result",
     );
 
     return {
       appId,
-      linked: true,
-      verified: true,
+      linked,
+      verified: verifiedFinal,
       detail,
     };
   } catch (err) {
@@ -484,13 +525,21 @@ async function releaseVobizNumber(
   authToken: string,
   e164: string
 ): Promise<void> {
-  // Path parameter is the raw number without "+" per Vobiz docs
-  const e164Path = e164.startsWith("+") ? e164.slice(1) : e164;
-  const url = `${VOBIZ_ACCOUNT_BASE}/${authId}/numbers/${encodeURIComponent(e164Path)}`;
-  const resp = await fetch(url, {
+  // VoBiz paths carry the %2B-encoded E.164; older builds used bare digits.
+  // Try documented form first, fall back to digits-only on 404.
+  const plusForm = e164.startsWith("+") ? e164 : `+${e164.replace(/\D/g, "")}`;
+  let url = `${VOBIZ_ACCOUNT_BASE}/${authId}/numbers/${encodeURIComponent(plusForm)}`;
+  let resp = await fetch(url, {
     method:  "DELETE",
     headers: vobizHeaders(authId, authToken),
   });
+  if (resp.status === 404) {
+    url = `${VOBIZ_ACCOUNT_BASE}/${authId}/numbers/${encodeURIComponent(plusForm.slice(1))}`;
+    resp = await fetch(url, {
+      method:  "DELETE",
+      headers: vobizHeaders(authId, authToken),
+    });
+  }
   // 204 or 200 both indicate success; 404 means already released — treat as success
   if (!resp.ok && resp.status !== 404) {
     const err = await resp.text();
