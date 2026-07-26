@@ -128,11 +128,14 @@ function EmbedSnippet({
     <div className="space-y-3 text-[11px]">
       <div>
         <div className="flex items-center justify-between mb-1.5">
-          <span className="font-semibold uppercase tracking-wide text-muted-foreground/50">1. Script tag — add once to your page</span>
+          <span className="font-semibold uppercase tracking-wide text-muted-foreground/50">1. Script tag</span>
           <button onClick={() => copy(scriptTag)} className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors">
             <Copy className="w-3 h-3" />Copy
           </button>
         </div>
+        <p className="text-muted-foreground/60 mb-1.5">
+          Paste once in your website's <code className="text-[10px] bg-muted/60 border border-border/50 rounded px-1 py-0.5">&lt;head&gt;</code> (or just before <code className="text-[10px] bg-muted/60 border border-border/50 rounded px-1 py-0.5">&lt;/body&gt;</code>) — on any page that has your lead form.
+        </p>
         <pre className="font-mono bg-muted/40 border border-border/60 rounded-lg px-3 py-2.5 overflow-x-auto leading-relaxed whitespace-pre">{scriptTag}</pre>
       </div>
       <div>
