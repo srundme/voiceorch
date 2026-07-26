@@ -3450,10 +3450,12 @@ function AgentListPanel({ selectedId, onSelect, rateMap, className }: {
   const [showCreate, setShowCreate] = useState(false);
   const handleCreate = () => setShowCreate(true);
 
-  const filtered = (agents ?? []).filter(a => {
-    if (search && !a.name.toLowerCase().includes(search.toLowerCase())) return false;
-    return true;
-  });
+  const filtered = (agents ?? [])
+    .filter(a => {
+      if (search && !a.name.toLowerCase().includes(search.toLowerCase())) return false;
+      return true;
+    })
+    .sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime());
   const liveCount = (agents ?? []).filter(a => a.status === "active").length;
   const totalCount = agents?.length ?? 0;
 
