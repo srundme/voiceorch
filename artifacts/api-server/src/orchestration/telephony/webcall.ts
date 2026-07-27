@@ -155,6 +155,9 @@ export async function handleWebcallWebSocket(
       onCallEnd: () => { ending = true; sendJson({ type: "call_end" }); ws.close(); },
       onBargeIn: () => sendJson({ type: "clear" }),
       onTranscript: (speaker, text) => sendJson({ type: "transcript", speaker, text }),
+      // Non-fatal provider failure (e.g. TTS rejecting every sentence): the call
+      // stays up, but the panel shows WHY there is no audio instead of silence.
+      onProviderIssue: (_component, message) => sendJson({ type: "notice", message }),
     });
     sessionId = sid;
     if (endedBeforeReady) {

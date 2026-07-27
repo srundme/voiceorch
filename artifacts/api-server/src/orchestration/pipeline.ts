@@ -3691,10 +3691,12 @@ export class OrchestrationPipeline implements VoiceSession {
       // human-readable reason so the failing dependency is identifiable, but do
       // NOT fail the session — the call stays up and listening so the caller can
       // speak (and the agent can respond via the normal turn path).
+      const greetReason = toReadableError(err, "Greeting playback/TTS error");
       logger.error(
         { callId: this.config.callId, agentId: this.agent.id, ttsProvider: this.agent.ttsProvider, err },
-        toReadableError(err, "Greeting playback/TTS error"),
+        greetReason,
       );
+      this.reportTtsFailure(greetReason, { where: "greeting" });
       if (!this.closed) this.safetyNet.beginListening();
     } finally {
       this.isProcessing = false;
@@ -4157,6 +4159,31 @@ export class OrchestrationPipeline implements VoiceSession {
    *  the telephony path identically to the web-call path. */
   private readonly logFn: ExecLogFn = (component, direction, opts = {}): void =>
     writeExecutionLog(this.config.callId, this.agent.id, component, direction, opts);
+
+  /** True once onProviderIssue has fired for TTS — the notice is one-shot per call. */
+  private ttsIssueNotified = false;
+
+  /**
+   * Non-fatal TTS failure reporting. Every failure writes an exec-log warning row
+   * (so the call's Logs tab names the reason), and the FIRST failure notifies the
+   * transport via onProviderIssue (so the browser Live Test panel shows WHY the
+   * call is mute instead of silently dropping audio). Never ends the call —
+   * per-sentence TTS errors must stay non-fatal (see the catch sites).
+   */
+  private reportTtsFailure(reason: string, detail: Record<string, unknown> = {}): void {
+    logWarningEvent(this.logFn, EXEC_COMPONENTS.TTS, "Provider Failed", ["provider_error"], {
+      provider: this.agent.ttsProvider,
+      errorMessage: reason,
+      detail,
+    });
+    if (!this.ttsIssueNotified) {
+      this.ttsIssueNotified = true;
+      this.config.onProviderIssue?.(
+        "tts",
+        `Voice synthesis is failing (${this.agent.ttsProvider}) — the call is continuing without audio. ${reason}`,
+      );
+    }
+  }
 
   /** Final user + agent utterances, for the Call-Ended summary card. */
   getLastTurnTexts(): { lastUser: string | null; lastAgent: string | null } {
@@ -5647,6 +5674,7 @@ export class OrchestrationPipeline implements VoiceSession {
             // listening/responding instead of hanging up on the caller.
             const reason = toReadableError(err, "TTS error");
             logger.error({ callId: this.config.callId, err, text: job.text.slice(0, 40) }, reason);
+            this.reportTtsFailure(reason, { where: "sentence", text: job.text.slice(0, 40) });
           }
           if (this.bargeInRequested) break;
           // Max-duration graceful stop: the current sentence has finished playing,

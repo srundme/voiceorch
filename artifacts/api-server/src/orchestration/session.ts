@@ -216,6 +216,9 @@ export async function createSession(params: {
   /** Forwards every finalized transcript line (user + agent) to the transport so a
    *  browser webcall can render a live transcript. Telephony callers omit it. */
   onTranscript?: (speaker: "user" | "agent", text: string) => void;
+  /** Non-fatal provider failure (e.g. TTS rejecting every sentence) — the call
+   *  stays up; the transport can surface the reason to the tester. */
+  onProviderIssue?: (component: "tts", message: string) => void;
   /** Overrides the default audio-format derivation. When omitted, PCM output is
    *  used for Vobiz only. The browser webcall transport sets this true. */
   rawPcmOutput?: boolean;
@@ -2120,6 +2123,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     onFatalError: (reason) => {
       void failSession(sessionId, reason);
     },
+    onProviderIssue: params.onProviderIssue,
   });
 
   sessions.set(sessionId, {

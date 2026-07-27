@@ -696,6 +696,11 @@ export interface SessionConfig {
   onConversationUpdate?: (history: ConversationTurn[]) => void;
   /** Called when a fatal pipeline error occurs (STT/LLM/TTS failure) so the caller can fail the session with a human-readable reason */
   onFatalError?: (reason: string) => void;
+  /** Called when a pipeline stage fails NON-fatally (e.g. TTS rejecting sentences
+   *  while the call stays up). Lets the transport surface the reason — the browser
+   *  Live Test panel shows a banner instead of a silently mute call. Fired at most
+   *  once per call. Telephony transports simply omit it. */
+  onProviderIssue?: (component: "tts", message: string) => void;
   /** When true, onAudioOut receives raw 8 kHz LINEAR16 PCM instead of G.711 μ-law.
    *  Used for telephony providers (e.g. Vobiz) that natively accept PCM, avoiding a
    *  lossy mulaw encode→decode round-trip. */

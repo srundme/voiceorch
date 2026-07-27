@@ -49,6 +49,8 @@ export function WebcallPanel({
 }) {
   const [state, setState] = useState<CallState>("idle");
   const [error, setError] = useState<string | null>(null);
+  /** Non-fatal server notice (e.g. TTS failing while the call stays up). */
+  const [notice, setNotice] = useState<string | null>(null);
   const [muted, setMuted]   = useState(false);
   const [lines, setLines]   = useState<Line[]>([]);
 
@@ -113,6 +115,7 @@ export function WebcallPanel({
 
   const start = useCallback(async () => {
     setError(null);
+    setNotice(null);
     setLines([]);
     doneRef.current = false;
     mutedRef.current = false;
@@ -246,6 +249,10 @@ export function WebcallPanel({
             window.setTimeout(() => { teardown(); setState("idle"); }, drainMs);
             break;
           }
+          case "notice":
+            // Non-fatal: the call is still live — show why audio may be missing.
+            setNotice(msg.message ?? null);
+            break;
           case "error":
             doneRef.current = true;
             setError(msg.message ?? "The call failed.");
@@ -365,6 +372,13 @@ export function WebcallPanel({
           ))}
           <div ref={scrollEndRef} />
         </div>
+
+        {/* Non-fatal notice banner (call still live, e.g. voice synthesis failing) */}
+        {notice && !error && (
+          <div className="px-4 py-2 border-t border-border flex items-center gap-2 text-[11.5px] text-amber-400 bg-amber-500/5">
+            <AlertCircle className="h-3.5 w-3.5 shrink-0" /> {notice}
+          </div>
+        )}
 
         {/* Error banner */}
         {error && (
