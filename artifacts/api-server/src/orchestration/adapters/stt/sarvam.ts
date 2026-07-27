@@ -114,7 +114,9 @@ function normaliseLang(code: string | null | undefined, model: string): string {
 
 interface SarvamMsg {
   type: string;
-  data?: { transcript?: string; signal_type?: string; message?: string; language_code?: string };
+  /** Sarvam attaches a request_id to responses — quoting it is the fastest path for support escalations. */
+  request_id?: string;
+  data?: { transcript?: string; signal_type?: string; message?: string; language_code?: string; request_id?: string };
 }
 
 export class SarvamSTT implements STTAdapter {
@@ -248,6 +250,7 @@ export class SarvamSTT implements STTAdapter {
     let queueTrimLogged   = false;  // throttle: log queue trim at most once per reconnect episode
     let speechEndAt       = 0;     // timestamp of last END_SPEECH event for latency tracking
     let speechEndReceived = false; // true once speech_end fires; reset on speech_start
+    let lastRequestId: string | undefined; // latest request_id seen — attached to transcript/error logs for Sarvam support
 
     // Closure variables for the onSpeechStart / onSpeechEnd callbacks. Declared here
     // (before openSocket) so the WS message handler — an async callback inside openSocket —
@@ -456,8 +459,10 @@ export class SarvamSTT implements STTAdapter {
     // If >3 s pass with no inbound message WHILE we are actively streaming caller
     // audio inside a speech segment, treat it as dead and terminate the socket so the
     // ws.on("close") handler reconnects. The lastAudioSentAt guard prevents false
-    // positives during agent playback (caller frames are gated → silence is expected,
-    // not death). deadFired latches so we act once per episode, not on every tick.
+    // positives during send gaps — the pipeline feeds caller frames CONTINUOUSLY,
+    // even during agent playback (input gating was removed after calls 772→1320);
+    // real gaps come from the AMD confirmation phase, the pre-greeting window, or
+    // carrier DTX/stream pauses. deadFired latches so we act once per episode.
     let lastMsgAt        = Date.now();
     let lastAudioSentAt  = 0;
     let inSpeechSegment  = false;
@@ -468,7 +473,8 @@ export class SarvamSTT implements STTAdapter {
     const sendChunk = (chunk: Buffer) => {
       if (!wsReady || ws.readyState !== WebSocket.OPEN) return;
       const now = Date.now();
-      // Resuming after a send gap (caller frames were gated during agent playback):
+      // Resuming after a send gap (AMD confirmation, pre-greeting, carrier DTX/stream
+      // pause — the feed itself is NOT gated during agent playback):
       // grant Sarvam a fresh WS_DEAD_MS window before the zombie check can fire. Without
       // this, a stale lastMsgAt from before the gap would trip a false positive on the
       // very first chunk after playback and terminate a perfectly healthy socket.
@@ -523,6 +529,11 @@ export class SarvamSTT implements STTAdapter {
         // (legacy guessed values "events" + signal_type also handled for safety)
         lastMsgAt = Date.now();
         deadFired = false; // any inbound frame proves the socket is alive — re-arm the detector
+
+        // Keep the latest request_id (Sarvam docs: support/debugging requests are
+        // resolved fastest when the affected call's request_id can be quoted).
+        const _reqId = msg.request_id ?? msg.data?.request_id;
+        if (_reqId) lastRequestId = _reqId;
         if (msg.type === "speech_start" || (msg.type === "events" && msg.data?.signal_type === "START_SPEECH")) {
           inSpeechSegment    = true;
           speechEndReceived  = false; // caller is speaking again; clear the speech_end flag
@@ -604,9 +615,10 @@ export class SarvamSTT implements STTAdapter {
           if (!text) return;
           const meta: SttFinalMetadata = {
             endDetectToFinalMs: speechEndAt > 0 ? Date.now() - speechEndAt : undefined,
+            requestId: lastRequestId,
           };
           logger.info(
-            { text: text.slice(0, 80), model, mode, endDetectToFinalMs: meta.endDetectToFinalMs },
+            { text: text.slice(0, 80), model, mode, endDetectToFinalMs: meta.endDetectToFinalMs, requestId: lastRequestId },
             "Sarvam STT: final transcript (buffering for adaptive coalesce)",
           );
           speechEndAt = 0;
@@ -640,7 +652,10 @@ export class SarvamSTT implements STTAdapter {
         }
 
         if (msg.type === "error") {
-          logger.error({ msg: msg.data?.message, langCode }, "Sarvam STT: server error");
+          logger.error(
+            { msg: msg.data?.message, requestId: msg.request_id ?? msg.data?.request_id ?? lastRequestId, langCode },
+            "Sarvam STT: server error",
+          );
         }
       });
 
@@ -842,9 +857,9 @@ export class SarvamSTT implements STTAdapter {
       if (deadFired) return;                               // zombie already handled this episode
       if (!inSpeechSegment) return;                        // zombie check only meaningful mid-utterance
       if (ws.readyState !== WebSocket.OPEN) return;        // CONNECTING/CLOSING handled elsewhere
-      // Suppress false positives: during agent playback the pipeline gates caller frames,
-      // so we are NOT sending audio and Sarvam is legitimately silent. Only suspect death
-      // when we have recently been actively streaming audio to the socket.
+      // Suppress false positives: during genuine send gaps (AMD confirmation phase,
+      // pre-greeting window, carrier DTX/stream pauses) we are NOT sending audio and
+      // Sarvam is legitimately silent. Only suspect death while actively streaming.
       if (Date.now() - lastAudioSentAt > WS_DEAD_MS) return;
       const silenceMs = Date.now() - lastMsgAt;
       if (silenceMs > WS_DEAD_MS) {
