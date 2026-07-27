@@ -19,6 +19,12 @@ Strip 44-byte WAV header to get raw PCM s16le @ 16kHz.
 
 **Auth header:** `api-subscription-key: <key>` (NOT Authorization Bearer).
 
+**Odia is `od-IN`** (same as STT) — the BCP-47 `or-IN` is rejected with 400.
+
+**Speed control:** only `pace` (0.5–2.0) is accepted; `pitch`/`loudness` are rejected by v3 with 400. Omit `pace` at 1.0 for byte-identical default requests.
+
+**Input cap:** REST `/text-to-speech` rejects >2,500 chars per input — split at whitespace and concat the raw PCM parts (all parts are s16le@16k after header strip).
+
 **Why:** Confirmed by direct API testing. Original code had wrong voice names (meera, pavithra etc.) causing 400s and tried the non-existent streaming endpoint causing 404s → "TTS synthesis failed during greeting".
 
 **How to apply:** Use `bulbul:v3` as default model. Only use v2 speakers with v2 model; v3 speakers with v3/v3-beta. Never implement `synthesizeStream` for Sarvam until the endpoint is confirmed live.
