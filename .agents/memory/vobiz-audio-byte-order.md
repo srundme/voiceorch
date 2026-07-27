@@ -12,3 +12,9 @@ Vobiz sends and receives audio in **little-endian** LINEAR16 PCM 8 kHz on both s
 **Why:** Byte-swapping outbound caused complete silence; byte-swapping inbound caused STT to receive garbled audio and never transcribe. Removing both swaps fixed audio end-to-end.
 
 **How to apply:** Any future change to `vobiz.ts` audio handling — do NOT add byte-swap loops. The `contentType: "audio/x-l16"` header is still correct and required (without it, Vobiz mis-decodes as µ-law → tractor noise).
+
+## Wire-format decision (audited Jul 2026 vs vobiz-audio-streams skill)
+**Rule:** stay on `audio/x-l16;rate=8000` for the VoBiz `<Stream>`. Do NOT "upgrade" to 16k/24k contentType and do NOT "simplify" to µ-law.
+**Why:** VoBiz accepts `audio/x-l16;rate=16000/24000`, but the carrier leg (PSTN/mobile) is 8k narrowband — a 16k stream doubles bandwidth and forces a full pipeline refactor (frame sizes, VAD calibration, recording tracks) for zero audible gain on real phone calls. µ-law is 8-bit companded = strictly worse than 16-bit L16. Docs themselves recommend µ-law only for bandwidth, not quality.
+**Also:** the official skill/docs claim inbound `media.payload` L16 is big-endian; production-validated reality on our account is LE both directions (see above). Trust production, not the doc.
+**Quality note:** aliasing from our own 16k→8k TTS downsample is baked in-band and survives the carrier — fixed Jul 2026 with windowed-sinc kernels in orchestration/audio.ts (passband/stopband tests pin it). checkpoint/playedStream + maxRetries remain unused (optional refinements, tail-drain sleep works).

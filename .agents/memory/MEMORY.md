@@ -60,7 +60,7 @@
 - [APP_DOMAIN replaces REPLIT_DOMAINS](app-domain-utility.md) — all public-URL derivation now goes through lib/app-domain.ts; set APP_DOMAIN in .env (local) or Railway; REPLIT_DOMAINS kept as backward-compat fallback
 - [Agent language vs ASR language conflict](agent-language-asr-conflict.md) — session.ts must use asrLanguage??language for the language rule; using language alone injects "English only" when asrLanguage=ta-IN but language=en-US (default)
 - [VoBiz session race condition](vobiz-session-race.md) — sessionEndedBeforeReady flag: if stop/close fires while createSession is awaiting, call endSession after createSession returns
-- [Vobiz audio byte order](vobiz-audio-byte-order.md) — Vobiz uses LE PCM both ways; no byte-swap in either direction; contentType header still required or µ-law tractor noise
+- [Vobiz audio byte order & wire format](vobiz-audio-byte-order.md) — LE PCM both ways (docs claim BE — wrong for us); stay L16-8k: carrier leg is narrowband, 16k stream = refactor for nothing
 - [Managed plan post-call memory](managed-plan-memory.md) — managed fallback must switch provider to "groq"+llama model; using agent's provider (e.g. "openai") with a Groq key causes 401; call summary always runs (no summarizationEnabled gate)
 - [Orval codegen pitfalls](orval-codegen-pitfalls.md) — duplicate YAML schema key silently breaks codegen; TS config fails jiti; use orval.config.mjs; existing campaign schemas named CallbackItem/CallbacksPage etc.
 - [Pre-greeting drop resilience](pre-greeting-drop-resilience.md) — setup DB reads need withDbRetry; greeting-LLM failure must fall back not fatal; every pre-greeting teardown must log provider+readable reason
