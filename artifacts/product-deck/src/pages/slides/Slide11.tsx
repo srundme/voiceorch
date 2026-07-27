@@ -9,8 +9,8 @@ const SSWatermark = () => (
 
 export default function Slide11() {
   const years = [
-    { label: "Year 1", milestone: "1,000+ active users · 10 paid enterprise clients · ₹50L ARR" },
-    { label: "Year 2", milestone: "50+ clients · Memory Proxy API live · ₹3 Cr ARR" },
+    { label: "Year 1", milestone: "10 paid BFSI clients · ₹10L MRR · Memory Proxy API in beta" },
+    { label: "Year 2", milestone: "₹50L–₹3 Cr ARR · 50+ clients · Memory Proxy API live with Vapi/Bolna integrations" },
     { label: "Year 3", milestone: "UAE & Southeast Asia expansion · ₹10 Cr ARR" },
   ];
 
