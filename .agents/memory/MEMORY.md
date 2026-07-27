@@ -133,3 +133,4 @@
 - [Signup-time grants must prove email ownership](signup-grant-email-ownership.md) — email-keyed auto-grants apply only on verified (Google) signup; password signups hold for admin approval; 3 user-creation sites; atomic DELETE..RETURNING claim; lower(email) lookups
 - [Partner number provisioning + self-partner billing](partner-number-provisioning.md) — resolvePartnerBilling has 3 cases (client/self-partner/none); number↔agent changes must revoke BOTH inbound+outbound refs on old holders or caller-ID rights leak cross-account
 - [Managed client mode enforcement](managed-client-mode.md) — acting-as needs clientContext per-route; deny-writes are opt-in (audit coverage); self-partners must never count as managed clients
+- [Mute call with live transcript = TTS rejection](tts-mute-transcript-diagnosis.md) — missing key fails setup; running-but-mute = per-sentence provider rejection; surfaced via exec rows + webcall notice banner
