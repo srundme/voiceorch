@@ -101,12 +101,10 @@ export default function PartnersPage() {
   const [email, setEmail] = useState("");
   const [company, setCompany] = useState("");
   const [baseRateText, setBaseRateText] = useState("5.00");
-  const [defaultRateText, setDefaultRateText] = useState("6.00");
 
   // Edit form state
   const [editCompany, setEditCompany] = useState("");
   const [editBaseText, setEditBaseText] = useState("");
-  const [editDefaultText, setEditDefaultText] = useState("");
   const [editStatus, setEditStatus] = useState("active");
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["admin", "partners"] });
@@ -119,7 +117,8 @@ export default function PartnersPage() {
           email: email.trim(),
           companyName: company.trim(),
           baseRateCentsPerMin: rupeesToPaise(baseRateText),
-          defaultClientRateCentsPerMin: rupeesToPaise(defaultRateText),
+          // Client pricing is the partner's own setting (their panel);
+          // the server starts it at max(base, ₹5) until they change it.
         }),
       }),
     onSuccess: (resp: { partner?: unknown; pending?: unknown }) => {
@@ -163,7 +162,8 @@ export default function PartnersPage() {
         body: JSON.stringify({
           companyName: editCompany.trim(),
           baseRateCentsPerMin: rupeesToPaise(editBaseText),
-          defaultClientRateCentsPerMin: rupeesToPaise(editDefaultText),
+          // Default client rate is partner-managed; server auto-raises it
+          // only if a base-rate increase would otherwise exceed it.
           status: editStatus,
         }),
       }),
@@ -179,7 +179,6 @@ export default function PartnersPage() {
     setEditTarget(p);
     setEditCompany(p.companyName);
     setEditBaseText(paiseToRupeesText(p.baseRateCentsPerMin));
-    setEditDefaultText(paiseToRupeesText(p.defaultClientRateCentsPerMin));
     setEditStatus(p.status);
   };
 
@@ -214,7 +213,7 @@ export default function PartnersPage() {
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
                   <span className="text-xs tabular-nums text-muted-foreground hidden sm:inline">
-                    base {formatCentsToDollars(p.baseRateCentsPerMin)}/min · client {formatCentsToDollars(p.defaultClientRateCentsPerMin)}/min
+                    base {formatCentsToDollars(p.baseRateCentsPerMin)}/min
                   </span>
                   <span className="text-xs text-muted-foreground hidden md:inline">{fmtDate(p.createdAt)}</span>
                   {p.hasAccount ? (
@@ -318,22 +317,18 @@ export default function PartnersPage() {
               <Label>Company name</Label>
               <Input value={company} onChange={e => setCompany(e.target.value)} placeholder="Acme Communications" />
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>Base rate (₹/min)</Label>
-                <Input inputMode="decimal" value={baseRateText} onChange={e => setBaseRateText(e.target.value)} />
-                <p className="text-[11px] text-muted-foreground">Platform's share per client-minute.</p>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Default client rate (₹/min)</Label>
-                <Input inputMode="decimal" value={defaultRateText} onChange={e => setDefaultRateText(e.target.value)} />
-              </div>
+            <div className="space-y-1.5">
+              <Label>Base rate (₹/min)</Label>
+              <Input inputMode="decimal" value={baseRateText} onChange={e => setBaseRateText(e.target.value)} />
+              <p className="text-[11px] text-muted-foreground">
+                Platform's share per client-minute. What the partner charges their clients is set by the partner in their own panel.
+              </p>
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
             <Button
-              disabled={createMutation.isPending || !email.includes("@") || company.trim().length < 2 || rupeesToPaise(baseRateText) === null || rupeesToPaise(defaultRateText) === null}
+              disabled={createMutation.isPending || !email.includes("@") || company.trim().length < 2 || rupeesToPaise(baseRateText) === null}
               onClick={() => createMutation.mutate()}>
               {createMutation.isPending ? "Creating…" : "Create partner"}
             </Button>
@@ -353,15 +348,12 @@ export default function PartnersPage() {
               <Label>Company name</Label>
               <Input value={editCompany} onChange={e => setEditCompany(e.target.value)} />
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>Base rate (₹/min)</Label>
-                <Input inputMode="decimal" value={editBaseText} onChange={e => setEditBaseText(e.target.value)} />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Default client rate (₹/min)</Label>
-                <Input inputMode="decimal" value={editDefaultText} onChange={e => setEditDefaultText(e.target.value)} />
-              </div>
+            <div className="space-y-1.5">
+              <Label>Base rate (₹/min)</Label>
+              <Input inputMode="decimal" value={editBaseText} onChange={e => setEditBaseText(e.target.value)} />
+              <p className="text-[11px] text-muted-foreground">
+                Client pricing is managed by the partner. Raising the base rate above their current client rate lifts that rate to match.
+              </p>
             </div>
             <div className="space-y-1.5">
               <Label>Status</Label>
@@ -380,7 +372,7 @@ export default function PartnersPage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditTarget(null)}>Cancel</Button>
             <Button
-              disabled={editMutation.isPending || editCompany.trim().length < 2 || rupeesToPaise(editBaseText) === null || rupeesToPaise(editDefaultText) === null}
+              disabled={editMutation.isPending || editCompany.trim().length < 2 || rupeesToPaise(editBaseText) === null}
               onClick={() => editMutation.mutate()}>
               {editMutation.isPending ? "Saving…" : "Save changes"}
             </Button>

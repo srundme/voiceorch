@@ -101,7 +101,6 @@ export default function UserDetail() {
   const [partnerModal, setPartnerModal] = useState(false);
   const [partnerCompany, setPartnerCompany] = useState("");
   const [partnerBaseText, setPartnerBaseText] = useState("5.00");
-  const [partnerDefaultText, setPartnerDefaultText] = useState("6.00");
   const toPaise = (t: string): number | null => {
     const v = Number.parseFloat(t);
     return Number.isFinite(v) && v >= 0 ? Math.round(v * 100) : null;
@@ -114,7 +113,7 @@ export default function UserDetail() {
           email: data?.user?.email ?? "",
           companyName: partnerCompany.trim(),
           baseRateCentsPerMin: toPaise(partnerBaseText),
-          defaultClientRateCentsPerMin: toPaise(partnerDefaultText),
+          // Client pricing is the partner's own setting (their panel).
         }),
       }),
     onSuccess: (resp: { partner?: unknown; pending?: unknown }) => {
@@ -334,16 +333,12 @@ export default function UserDetail() {
               <Label>Company name</Label>
               <Input value={partnerCompany} onChange={(e) => setPartnerCompany(e.target.value)} placeholder="Acme Communications" />
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>Base rate (₹/min)</Label>
-                <Input inputMode="decimal" value={partnerBaseText} onChange={(e) => setPartnerBaseText(e.target.value)} />
-                <p className="text-[11px] text-muted-foreground">Platform's share per client-minute.</p>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Default client rate (₹/min)</Label>
-                <Input inputMode="decimal" value={partnerDefaultText} onChange={(e) => setPartnerDefaultText(e.target.value)} />
-              </div>
+            <div className="space-y-1.5">
+              <Label>Base rate (₹/min)</Label>
+              <Input inputMode="decimal" value={partnerBaseText} onChange={(e) => setPartnerBaseText(e.target.value)} />
+              <p className="text-[11px] text-muted-foreground">
+                Platform's share per client-minute. What they charge their clients is up to them — set in their own panel.
+              </p>
             </div>
           </div>
           <DialogFooter>
@@ -352,9 +347,7 @@ export default function UserDetail() {
               disabled={
                 makePartner.isPending ||
                 partnerCompany.trim().length < 2 ||
-                toPaise(partnerBaseText) === null ||
-                toPaise(partnerDefaultText) === null ||
-                (toPaise(partnerDefaultText) ?? 0) < (toPaise(partnerBaseText) ?? 0)
+                toPaise(partnerBaseText) === null
               }
               onClick={() => makePartner.mutate()}
             >
