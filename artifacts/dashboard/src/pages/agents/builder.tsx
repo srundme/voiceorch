@@ -1957,6 +1957,7 @@ function VoiceTab({ form }: { form: any }) {
 
 /** Voice-tab Call Engine presets — writes the same form keys as Advanced → Engine. */
 function VoiceCallFeelPresets({ form }: { form: any }) {
+  const asrProviderVal = form.watch("asrProvider") as string | undefined;
   const endpointMs = form.watch("asrEndpointingSilenceMs") ?? 300;
   const linearMs = form.watch("linearDelayMs") ?? 350;
   const interruptWords = form.watch("stopSpeakingNumWords") ?? 3;
@@ -1988,6 +1989,12 @@ function VoiceCallFeelPresets({ form }: { form: any }) {
         <p className="text-[11px] text-muted-foreground mt-0.5">
           How quickly the agent takes the turn — same Call Engine knobs as Advanced → Engine.
         </p>
+        {asrProviderVal === "sarvam" && (
+          <p className="text-[11px] text-muted-foreground mt-1">
+            Note: the silence-window part of these presets applies to Azure STT only — Sarvam&apos;s
+            server-side VAD is fixed at ~0.5s. Pacing delay and interruption sensitivity still apply.
+          </p>
+        )}
       </div>
       <div className="rounded-xl border border-border/50 bg-card/40 p-4 space-y-3">
         <div className="flex flex-wrap gap-2">
@@ -2939,17 +2946,18 @@ function VoicemailTab({ form }: { form: any }) {
 
 type AdvSection = "engine" | "limits" | "compliance";
 
-function AdvSlider({ form, name, label, hint, min, max, step, fmt, onValueChange }: {
+function AdvSlider({ form, name, label, hint, min, max, step, fmt, onValueChange, disabled }: {
   form: any; name: string; label: string; hint?: string;
   min: number; max: number; step: number; fmt: (v: number) => string;
   onValueChange?: (v: number) => void;
+  disabled?: boolean;
 }) {
   return (
     <FormField control={form.control} name={name} render={({ field }) => {
       const val = field.value ?? min;
       const pct = ((val - min) / (max - min)) * 100;
       return (
-        <FormItem className="space-y-0">
+        <FormItem className={disabled ? "space-y-0 opacity-50 pointer-events-none" : "space-y-0"}>
           <div className="flex items-center justify-between mb-1.5">
             <FormLabel className="text-[12px] font-medium text-foreground/90">{label}</FormLabel>
             <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20">
@@ -2962,12 +2970,13 @@ function AdvSlider({ form, name, label, hint, min, max, step, fmt, onValueChange
               <div className="absolute left-0 h-1.5 rounded-full bg-primary/70 pointer-events-none" style={{ width: `${pct}%` }} />
               <input
                 type="range" min={min} max={max} step={step} value={val}
+                disabled={disabled}
                 onChange={e => {
                   const next = step % 1 !== 0 ? parseFloat(e.target.value) : parseInt(e.target.value);
                   field.onChange(next);
                   onValueChange?.(next);
                 }}
-                className="absolute inset-x-0 w-full opacity-0 h-5 cursor-pointer"
+                className={disabled ? "absolute inset-x-0 w-full opacity-0 h-5 cursor-not-allowed" : "absolute inset-x-0 w-full opacity-0 h-5 cursor-pointer"}
               />
             </div>
           </FormControl>
@@ -3010,6 +3019,7 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
   const [dpdpConfirmOpen, setDpdpConfirmOpen] = useState(false);
   const [irdaiConfirmOpen, setIrdaiConfirmOpen] = useState(false);
   const bargeIn = form.watch("bargeInEnabled");
+  const asrProviderVal = form.watch("asrProvider") as string | undefined;
   const endpointMs = form.watch("asrEndpointingSilenceMs") ?? 300;
   const linearMs = form.watch("linearDelayMs") ?? 350;
   const interruptWords = form.watch("stopSpeakingNumWords") ?? 3;
@@ -3131,11 +3141,14 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                 form={form}
                 name="asrEndpointingSilenceMs"
                 label="Endpointing"
-                hint="Milliseconds of silence after the caller stops before we finalize the turn. Fast 150 · Balanced 250 · Patient 500."
+                hint={asrProviderVal === "sarvam"
+                  ? "Not used with Sarvam STT — its server-side VAD ends the turn at a fixed ~0.5s. Azure only; the value is kept."
+                  : "Milliseconds of silence after the caller stops before we finalize the turn. Fast 150 · Balanced 250 · Patient 500. Azure STT only."}
                 min={100}
                 max={800}
                 step={25}
                 fmt={(v) => `${v}ms`}
+                disabled={asrProviderVal === "sarvam"}
               />
 
               <AdvSlider

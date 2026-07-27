@@ -2977,6 +2977,15 @@ export class OrchestrationPipeline implements VoiceSession {
       if (hasSpeech && this.systemPlaybackActive && this.isPlaying) {
         this.cancelSystemPlaybackForCallerSpeech();
       }
+      // ── INVARIANT — DO NOT GATE OR FLUSH THIS FEED (calls 772→1320) ─────────
+      // Every caller frame reaches the streaming-STT socket unconditionally. The
+      // local energy VAD above is advisory-only (barge-in / silence watchdog /
+      // safety net) — it must never gate this send and never call
+      // streamSTT.flush(). Gating the feed during agent playback once starved
+      // Sarvam's server VAD (no partials during talk-over → barge-in impossible):
+      // the calls-772→1320 regression. The STT provider owns end-of-speech;
+      // client code never finalizes turns.
+      //
       // Send native 8kHz telephony audio directly when the adapter is configured
       // for it (Sarvam) instead of the linear-interpolation upsample to 16k —
       // avoids manufacturing samples on already-lossy phone audio (see sttSampleRate).

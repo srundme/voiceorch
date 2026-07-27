@@ -1329,10 +1329,15 @@ export default function AdminAgentEdit() {
                         <FormLabel>STT Endpointing Silence (ms)</FormLabel>
                         <FormControl>
                           <Input type="number" min={100} max={2000} step={50}
+                            disabled={asrProvider === "sarvam"}
                             value={field.value ?? 400}
                             onChange={e => field.onChange(parseInt(e.target.value, 10))} />
                         </FormControl>
-                        <FormDescription className="text-[11px]">Default: 400ms. Lower = faster response.</FormDescription>
+                        <FormDescription className="text-[11px]">
+                          {asrProvider === "sarvam"
+                            ? "Not used with Sarvam STT — its server-side VAD ends the turn at a fixed ~0.5s. Applies to Azure only; the stored value is kept."
+                            : "Default: 400ms. Lower = faster response. Azure STT only."}
+                        </FormDescription>
                         <FormMessage />
                       </FormItem>
                     )} />

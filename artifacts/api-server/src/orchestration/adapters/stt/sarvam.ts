@@ -266,9 +266,10 @@ export class SarvamSTT implements STTAdapter {
     const COALESCE_MIN_MS        = 120;
     const COALESCE_DEFAULT_MS    = 220;
     const COALESCE_MAX_MS        = 500;  // raised from 350 — covers ~400ms thinking pauses
-    // Extra hold for obviously-incomplete fragments. Lowered from 1200 → 800 ms
-    // (800 ms is enough for a caller to continue a mid-sentence pause; 1200 ms
-    // added dead air on multilingual calls where Sarvam's speech_end fires late).
+    // Extra hold for obviously-incomplete fragments (final arrived, speech_end
+    // not yet seen, text looks mid-thought). Lowered over time 1200 → 800 → 220 ms:
+    // long holds added dead air on multilingual calls where Sarvam's speech_end
+    // fires late, and 220 ms still lets a caller resume a genuine mid-word pause.
     // Override per-deployment with env SARVAM_COALESCE_INCOMPLETE_MS.
     const COALESCE_INCOMPLETE_MS = envInt("SARVAM_COALESCE_INCOMPLETE_MS", 220);
     const PAUSE_HISTORY_MAX      = 5;
@@ -631,10 +632,10 @@ export class SarvamSTT implements STTAdapter {
           // Timer selection after each transcript segment:
           // • speech_end already received + complete → 30 ms (fast-path, normal Sarvam flow).
           // • speech_end already received + incomplete → adaptiveHoldMs (120–500 ms).
-          //   The caller has stopped talking — NEVER use the 1200 ms incomplete hold
+          //   The caller has stopped talking — NEVER use the COALESCE_INCOMPLETE_MS hold
           //   after speech_end; that would just be dead air while we wait for speech
           //   that isn't coming.
-          // • speech_end NOT yet received + incomplete → COALESCE_INCOMPLETE_MS (1200 ms)
+          // • speech_end NOT yet received + incomplete → COALESCE_INCOMPLETE_MS (default 220 ms)
           //   so the caller can finish their thought before we dispatch to the LLM.
           // • speech_end NOT yet received + complete → adaptive window.
           if (coalesceTimer) clearTimeout(coalesceTimer);
@@ -739,6 +740,10 @@ export class SarvamSTT implements STTAdapter {
           sendChunk(chunk);
         }
       },
+      // INVARIANT: the live pipeline never calls flush() — Sarvam's server VAD owns
+      // end-of-speech (see the DO-NOT-GATE feed comment in pipeline.ts). Adding a
+      // pipeline call site would reintroduce client-side endpointing racing Sarvam
+      // (the calls-772→1320 regression class). flush() exists for teardown/tooling.
       flush(): void {
         // Emit any held coalesced transcript immediately (don't wait for the timer).
         // emitCoalesced() is a no-op on an empty buffer, so always call it — this

@@ -1493,17 +1493,25 @@ export default function AgentEdit() {
                     <FormLabel>STT Endpointing Silence (ms)</FormLabel>
                     <FormControl>
                       <Input type="number" min={50} max={2000} step={25}
+                        disabled={asrProvider === "sarvam"}
                         value={field.value ?? 100}
                         onChange={e => field.onChange(parseInt(e.target.value, 10))} />
                     </FormControl>
-                    <FormDescription className="text-[11px]">
-                      Silence after caller's last word before transcript fires. <strong>Lower = faster.</strong> Presets: 50ms ultra-fast · 100ms fast · 200ms normal · 400ms slow.
-                    </FormDescription>
+                    {asrProvider === "sarvam" ? (
+                      <FormDescription className="text-[11px]">
+                        <strong>Not used with Sarvam STT.</strong> Sarvam's server-side VAD ends the turn at a fixed ~0.5s silence boundary — this knob applies to Azure only. Your value is kept and takes effect again if you switch the transcriber back to Azure.
+                      </FormDescription>
+                    ) : (
+                      <FormDescription className="text-[11px]">
+                        Silence after caller's last word before transcript fires (Azure STT). <strong>Lower = faster.</strong> Presets: 50ms ultra-fast · 100ms fast · 200ms normal · 400ms slow.
+                      </FormDescription>
+                    )}
                     <div className="flex gap-1.5 mt-1.5 flex-wrap">
                       {([50, 100, 200, 400] as const).map(v => (
                         <button key={v} type="button"
+                          disabled={asrProvider === "sarvam"}
                           onClick={() => field.onChange(v)}
-                          className={`px-2 py-0.5 rounded text-[10px] font-medium border transition-colors ${field.value === v ? "bg-primary text-primary-foreground border-primary" : "bg-muted text-muted-foreground border-border hover:border-primary/50"}`}>
+                          className={`px-2 py-0.5 rounded text-[10px] font-medium border transition-colors ${asrProvider === "sarvam" ? "opacity-40 cursor-not-allowed bg-muted text-muted-foreground border-border" : field.value === v ? "bg-primary text-primary-foreground border-primary" : "bg-muted text-muted-foreground border-border hover:border-primary/50"}`}>
                           {v === 50 ? "Ultra" : v === 100 ? "Fast" : v === 200 ? "Normal" : "Slow"} {v}ms
                         </button>
                       ))}
