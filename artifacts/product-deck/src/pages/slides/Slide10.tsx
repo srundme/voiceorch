@@ -87,14 +87,23 @@ export default function Slide10() {
               The Moat
             </div>
             <div style={{ fontSize: "1.28vw", fontWeight: 700, color: "#FFFFFF", lineHeight: 1.25, maxWidth: "18vw" }}>
-              Data that compounds.<br />History that can't be copied.
+              Three advantages that compound together.
             </div>
           </div>
           <div style={{ width: "0.06vw", background: "rgba(255,111,0,0.35)", alignSelf: "stretch" }} />
-          <div style={{ fontSize: "1.05vw", color: "#C9D5F5", lineHeight: 1.65, flex: 1 }}>
-            Every call enriches SnapServe's caller knowledge graph. Competitors who copy our pipeline still start from zero caller history — you can't replicate three years of relationship data overnight.
-            SnapServe is fully self-hostable: deploy the complete end-to-end call cycle on your own infrastructure, with on-premise data residency, end-to-end encryption, and zero dependency on any third-party cloud.
-            This isn't a feature advantage. It's a structural moat that strengthens with every call.
+          <div style={{ fontSize: "0.95vw", color: "#C9D5F5", lineHeight: 1.55, flex: 1, display: "flex", flexDirection: "column", gap: "0.9vh" }}>
+            <div>
+              <span style={{ color: "#FF6F00", fontWeight: 700 }}>Compliance depth — </span>
+              TRAI, DPDP, and IRDAI compliance is 12+ months of regulatory implementation baked into the call pipeline. Competitors can copy the UI. They cannot shortcut the compliance depth.
+            </div>
+            <div>
+              <span style={{ color: "#FF6F00", fontWeight: 700 }}>India-native infrastructure — </span>
+              Real Indian mobile number provisioning via built-in KYC. No Twilio, no US routing, no SIM card. Infrastructure competitors have not prioritised because they are not India-first.
+            </div>
+            <div>
+              <span style={{ color: "#FF6F00", fontWeight: 700 }}>Memory Proxy lock-in — </span>
+              When a Vapi or Bolna customer plugs into our Memory Proxy API, their caller history compounds inside our graph. Switching away means losing every memory their callers built. That is a structural switching cost — not a feature.
+            </div>
           </div>
         </div>
       </div>

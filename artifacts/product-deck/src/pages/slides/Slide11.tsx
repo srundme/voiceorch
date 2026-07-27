@@ -9,8 +9,8 @@ const SSWatermark = () => (
 
 export default function Slide11() {
   const years = [
-    { label: "Year 1", milestone: "1,000+ active users & reseller network established · ₹50L ARR" },
-    { label: "Year 2", milestone: "50+ clients · Memory Proxy API live · ₹3 Cr ARR" },
+    { label: "Year 1", milestone: "10 paid BFSI clients · ₹10L MRR · Memory Proxy API in beta" },
+    { label: "Year 2", milestone: "₹50L–₹3 Cr ARR · 50+ clients · Memory Proxy API live with Vapi/Bolna integrations" },
     { label: "Year 3", milestone: "UAE & Southeast Asia expansion · ₹10 Cr ARR" },
   ];
 
@@ -24,7 +24,7 @@ export default function Slide11() {
         <div>
           <div style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#FF6F00", marginBottom: "0.8vh" }}>Financials &amp; The Ask</div>
           <h1 style={{ fontFamily: "var(--font-display-family)", fontSize: "2.6vw", fontWeight: 700, color: "#FFFFFF", margin: 0, lineHeight: 1.15 }}>
-            Raising ₹3 Crore — Pre-Seed
+            Raising ₹6 Crore — Pre-Seed
           </h1>
         </div>
         <span style={{ fontSize: "0.85vw", fontWeight: 600, color: "#4B6CB7", letterSpacing: "0.06em", paddingBottom: "0.3vh" }}>13 / 16</span>
@@ -41,11 +41,12 @@ export default function Slide11() {
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: "1.2vh" }}>
               {[
-                { pct: "45%", label: "Technology & Infrastructure", w: "45%", color: "#1A237E" },
-                { pct: "30%", label: "GTM & Sales", w: "30%", color: "#FF6F00" },
-                { pct: "15%", label: "Team", w: "15%", color: "#3949AB" },
-                { pct: "10%", label: "Operations & Legal", w: "10%", color: "#7986CB" },
-              ].map(({ pct, label, w, color }) => (
+                { pct: "20%", label: "Technology & Infrastructure", w: "20%", color: "#1A237E", desc: "Server scale, Memory Proxy API build, provider redundancy" },
+                { pct: "35%", label: "GTM & Sales", w: "35%", color: "#FF6F00", desc: "Enterprise sales hire, BFSI BD, reseller network, conference presence" },
+                { pct: "25%", label: "Team", w: "25%", color: "#3949AB", desc: "1 engineer (Memory Proxy), 1 customer success, 1 sales hire" },
+                { pct: "10%", label: "Operations & Legal", w: "10%", color: "#7986CB", desc: "Enterprise contracts, IRDAI certification, DPDP compliance" },
+                { pct: "10%", label: "Buffer & Working Capital", w: "10%", color: "#9FA8DA", desc: "18-month runway safety for enterprise sales cycles" },
+              ].map(({ pct, label, w, color, desc }) => (
                 <div key={label}>
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.4vh" }}>
                     <span style={{ fontSize: "1.02vw", color: "#3A3A5C" }}>{label}</span>
@@ -54,6 +55,7 @@ export default function Slide11() {
                   <div style={{ height: "0.9vh", background: "#EEF0FB", borderRadius: "0.5vw", overflow: "hidden" }}>
                     <div style={{ width: w, height: "100%", background: color, borderRadius: "0.5vw" }} />
                   </div>
+                  <div style={{ fontSize: "0.82vw", color: "#7986CB", lineHeight: 1.4, marginTop: "0.3vh" }}>{desc}</div>
                 </div>
               ))}
             </div>
@@ -67,6 +69,10 @@ export default function Slide11() {
               What We're Looking For
             </div>
             <div style={{ fontSize: "1.05vw", color: "#C9D5F5", lineHeight: 1.62 }}>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: "0.7vw", marginBottom: "0.8vh" }}>
+                <span style={{ color: "#FF6F00", flexShrink: 0, marginTop: "0.1vh" }}>→</span>
+                <span>Investors who recognise proprietary IP in voice AI infrastructure — our Memory Proxy API and compliance architecture are defensible assets competitors must rebuild from scratch.</span>
+              </div>
               <div style={{ display: "flex", alignItems: "flex-start", gap: "0.7vw", marginBottom: "0.8vh" }}>
                 <span style={{ color: "#FF6F00", flexShrink: 0, marginTop: "0.1vh" }}>→</span>
                 <span>Strategic mentorship from India's B2B SaaS leaders to accelerate our Enterprise Proxy API go-to-market.</span>
@@ -114,9 +120,9 @@ export default function Slide11() {
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: "0.9vh" }}>
               {[
-                { q: "Q1–Q2", text: "1,000+ active users and 2+ paid enterprise clients onboarded" },
-                { q: "Q3",    text: "Memory Proxy API in public beta" },
-                { q: "Q4",    text: "₹50L ARR · Unit economics validated" },
+                { q: "Q1–Q2", text: "10 paying BFSI clients onboarded · ₹10L MRR" },
+                { q: "Q3",    text: "Memory Proxy API public beta · first 3 Vapi/Bolna integrations live" },
+                { q: "Q4",    text: "₹50L ARR · Series A preparation begins" },
                 { q: "+18M",  text: "₹3 Cr ARR · Series A ready" },
               ].map(({ q, text }) => (
                 <div key={q} style={{ display: "flex", alignItems: "center", gap: "1vw", fontSize: "1.02vw" }}>

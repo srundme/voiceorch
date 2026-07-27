@@ -56,9 +56,9 @@ export default function Slide2() {
                 <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />
               </svg>
             </div>
-            <div style={{ fontSize: "1.55vw", fontWeight: 700, color: "#1A237E", marginBottom: "0.4vh" }}>Karthikeyan</div>
+            <div style={{ fontSize: "1.55vw", fontWeight: 700, color: "#1A237E", marginBottom: "0.4vh" }}>Karthikeyan Loganathan</div>
             <div style={{ fontSize: "0.88vw", fontWeight: 700, color: "#FF6F00", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "2vh" }}>
-              Founder &amp; CEO
+              Co-Founder &amp; CEO
             </div>
             <div style={bullet}><span style={{ position: "absolute", left: 0, top: "0.7vh", width: "0.5vw", height: "0.5vw", borderRadius: "50%", background: "#1A237E" }} />
               CMA (US) — deep expertise in unit economics, financial modelling, and compliance frameworks.

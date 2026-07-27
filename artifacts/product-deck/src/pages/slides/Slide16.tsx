@@ -27,14 +27,14 @@ export default function Slide16() {
         <span style={{ fontSize: "0.85vw", fontWeight: 600, color: "#4B6CB7", letterSpacing: "0.06em", paddingBottom: "0.3vh" }}>05 / 16</span>
       </div>
 
-      <div style={{ flex: 1, padding: "2.8vh 6vw 2.4vh 6vw", display: "flex", flexDirection: "column", gap: "2.2vh" }}>
+      <div style={{ flex: 1, padding: "1.8vh 6vw 1.6vh 6vw", display: "flex", flexDirection: "column", gap: "1.3vh", minHeight: 0 }}>
         <div style={{ display: "flex", gap: "2.4vw", flex: 1 }}>
 
           {/* Left — The Insight */}
           <div style={{
             flex: 1, background: "#FFFFFF", border: "0.06vh solid #E8EAF0",
-            borderRadius: "1.2vw", padding: "3vh 2.8vw",
-            boxShadow: "0 0.8vh 2.2vh rgba(26,35,126,0.09)", display: "flex", flexDirection: "column", gap: "1.8vh",
+            borderRadius: "1.2vw", padding: "2vh 2.4vw",
+            boxShadow: "0 0.8vh 2.2vh rgba(26,35,126,0.09)", display: "flex", flexDirection: "column", gap: "1.2vh",
           }}>
             <div style={{ fontSize: "0.78vw", fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "#FF6F00" }}>
               The Insight
@@ -80,7 +80,7 @@ export default function Slide16() {
 
           {/* Right — Insurance Use Case */}
           <div style={{
-            flex: 1, background: "#1A237E", borderRadius: "1.2vw", padding: "3vh 2.8vw",
+            flex: 1, background: "#1A237E", borderRadius: "1.2vw", padding: "2vh 2.4vw",
             display: "flex", flexDirection: "column", gap: "0",
           }}>
             <div style={{ fontSize: "0.78vw", fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "#FF6F00", marginBottom: "2vh" }}>
@@ -125,12 +125,30 @@ export default function Slide16() {
 
         {/* Bottom banner */}
         <div style={{
-          background: "#0D1B4B", borderRadius: "1vw", padding: "2vh 2.8vw",
+          background: "#0D1B4B", borderRadius: "1vw", padding: "1.3vh 2.8vw",
           display: "flex", alignItems: "center", gap: "2vw",
         }}>
-          <div style={{ width: "0.35vw", height: "4.5vh", background: "#FF6F00", borderRadius: "2px", flexShrink: 0 }} />
-          <div style={{ fontSize: "1.18vw", fontWeight: 700, color: "#FF6F00", lineHeight: 1.45 }}>
+          <div style={{ width: "0.35vw", height: "3.5vh", background: "#FF6F00", borderRadius: "2px", flexShrink: 0 }} />
+          <div style={{ fontSize: "1.05vw", fontWeight: 700, color: "#FF6F00", lineHeight: 1.4 }}>
             This is not a plugin or an add-on. It is a foundational architecture that treats every customer journey as one continuous conversation.
+          </div>
+        </div>
+
+        {/* The Infrastructure Play */}
+        <div style={{
+          background: "#0D1B4B", borderRadius: "1vw", padding: "1.3vh 2.8vw",
+          display: "flex", alignItems: "flex-start", gap: "2vw",
+        }}>
+          <div style={{ width: "0.35vw", alignSelf: "stretch", background: "#FF6F00", borderRadius: "2px", flexShrink: 0 }} />
+          <div>
+            <div style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "#FF6F00", marginBottom: "0.5vh" }}>
+              The Infrastructure Play
+            </div>
+            <div style={{ fontSize: "0.88vw", color: "#C9D5F5", lineHeight: 1.5 }}>
+              Any team on Vapi, Bolna, or Retell can point their api_base at SnapServe and gain persistent caller memory with zero code change. One config line. No rebuild. No migration.
+              {" "}This is not a feature. It is how our distribution grows inside competitors' ecosystems — they send us usage, we grow the moat.
+              {" "}<span style={{ color: "#FFFFFF", fontWeight: 700 }}>Core IP: OpenAI-compatible Memory Proxy API — the only voice-native memory layer built for Indian compliance requirements.</span>
+            </div>
           </div>
         </div>
       </div>
