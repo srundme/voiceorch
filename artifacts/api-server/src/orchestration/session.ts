@@ -3,10 +3,11 @@ import { getSelfBaseUrl } from "../lib/app-domain.js";
 import { db, agentsTable, callsTable, providersTable, platformSettingsTable, campaignLeadsTable, knowledgeEntriesTable, callTransfersTable, usersTable, walletTransactionsTable, bookingsTable, eventTypesTable, scheduledCallbacksTable, campaignsTable, executionLogsTable, squadsTable, squadRunsTable, phoneNumbersTable } from "@workspace/db";
 import { createExecutionLogger, writeCallEndedLog, writeCallStartedLog, logRecordingEvent, EXEC_COMPONENTS } from "../services/execution-log.js";
 import { getFlatRateCentsPerMin, resolveAgentBillingMode } from "../services/minute-rates.js";
+import { resolvePartnerBilling, creditPartnerSpreadOnCall } from "../services/partner-billing.js";
 import { getAttachedSourceIds, buildKnowledgeBaseBlockEx } from "./kb-retrieval.js";
 import { KRUTRIM_AUTO_SUMMARY_TITLE } from "../services/kb-source-summary.js";
 import { decryptKey } from "../lib/crypto.js";
-import { eq, and, sql, inArray, or, gt, ne } from "drizzle-orm";
+import { eq, and, sql, inArray, or, gt, ne, lte, isNull } from "drizzle-orm";
 import { OrchestrationPipeline } from "./pipeline.js";
 import type { VoiceSession } from "./voice-session.js";
 import { GeminiLivePipeline } from "./adapters/live/gemini-live-pipeline.js";
@@ -2979,13 +2980,31 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
         if (sessionCallUserId && durationSeconds > 0 && !(call.costCents != null && call.costCents > 0)) {
           try {
             const billingMode     = await resolveAgentBillingMode(sessionCallUserId, ag);
-            const rateCentsPerMin = getFlatRateCentsPerMin(billingMode);
-            const modeLabel       = billingMode === "managed" ? "managed" : "BYOP";
+            // Partner-managed clients bill at their partner-set rate; spread is
+            // credited to the partner after the debit below.
+            const partnerBilling  = await resolvePartnerBilling(sessionCallUserId);
+            const rateCentsPerMin = partnerBilling?.clientRateCentsPerMin ?? getFlatRateCentsPerMin(billingMode);
+            const modeLabel       = partnerBilling ? "partner" : billingMode === "managed" ? "managed" : "BYOP";
             const rateLabel       = `₹${(rateCentsPerMin / 100).toFixed(2)}/min (${modeLabel})`;
             const debitCents      = Math.max(1, Math.round((durationSeconds / 60) * rateCentsPerMin));
             if (debitCents > 0) {
-              await db.update(callsTable).set({ costCents: debitCents }).where(eq(callsTable.id, session.callId));
-              const [billingUser] = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.clerkId, sessionCallUserId));
+              // Atomic billing claim: flip costCents from unset→set in ONE
+              // conditional UPDATE — only the winner debits + credits (the
+              // HTTP PATCH /calls/:id/end route can race this WS-close path;
+              // the pre-read costCents check alone lets both paths bill).
+              const claimed = await db.update(callsTable)
+                .set({ costCents: debitCents })
+                .where(and(
+                  eq(callsTable.id, session.callId),
+                  or(isNull(callsTable.costCents), lte(callsTable.costCents, 0)),
+                ))
+                .returning({ id: callsTable.id });
+              if (claimed.length === 0) {
+                logger.info({ sessionId, callId: session.callId }, "Billing already claimed by another end path — skipping debit");
+              }
+              const [billingUser] = claimed.length > 0
+                ? await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.clerkId, sessionCallUserId))
+                : [];
               if (billingUser) {
                 // Atomic in-DB decrement (GREATEST clamps at 0) so two calls debiting the
                 // same wallet concurrently never overwrite each other's write (lost update).
@@ -3001,6 +3020,23 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
                   callId:      session.callId,
                 });
                 logger.info({ sessionId, callId: session.callId, debitCents, billingMode }, "Call billed in endSession");
+
+                // Partner spread — credit the client's partner with (client rate − base rate).
+                if (partnerBilling) {
+                  try {
+                    const spreadCents = await creditPartnerSpreadOnCall({
+                      partner: partnerBilling,
+                      callId: session.callId,
+                      durationSeconds,
+                      debitCents,
+                    });
+                    if (spreadCents > 0) {
+                      logger.info({ sessionId, callId: session.callId, partnerId: partnerBilling.partnerId, spreadCents }, "Partner spread credited in endSession");
+                    }
+                  } catch (spreadErr) {
+                    logger.error({ sessionId, spreadErr, callId: session.callId, partnerId: partnerBilling.partnerId }, "Partner spread credit failed in endSession");
+                  }
+                }
               }
             }
           } catch (billingErr) {

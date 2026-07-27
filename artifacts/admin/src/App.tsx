@@ -10,6 +10,7 @@ import Login from "@/pages/login";
 import Overview from "@/pages/overview";
 import CallAnalyticsPage from "@/pages/call-analytics";
 import UsersList from "@/pages/users";
+import PartnersPage from "@/pages/partners";
 import UserDetail from "@/pages/user-detail";
 import Finance from "@/pages/finance";
 import Recharges from "@/pages/recharges";
@@ -90,6 +91,7 @@ function Router() {
       <ProtectedRoute path="/" component={Overview} />
       <ProtectedRoute path="/call-analytics" component={CallAnalyticsPage} />
       <ProtectedRoute path="/users" component={UsersList} />
+      <ProtectedRoute path="/partners" component={PartnersPage} />
       <ProtectedRoute path="/users/:clerkId" component={UserDetail} />
       <ProtectedRoute path="/users/:clerkId/agents/:agentId" component={AdminAgentEdit} />
       <ProtectedRoute path="/finance" component={Finance} />

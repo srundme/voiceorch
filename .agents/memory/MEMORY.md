@@ -101,6 +101,7 @@
 - [Soft-deleted account re-signup reactivation](soft-delete-resignup-reactivation.md) — signup (not login) with a deleted account's email must reactivate the row, not block it; suspended stays blocked
 - [Meta Pixel CompleteRegistration new-account signal](meta-pixel-new-account-signal.md) — "token just arrived" ≠ "new account"; server must thread an explicit new-account flag (e.g. redirect flag), client gates the conversion event on it
 - [Wallet debit atomic update](wallet-debit-atomic-update.md) — call-end debits must use atomic GREATEST(0, balance-amount) SQL + RETURNING, never read-then-write, to avoid lost-update races
+- [Call-billing atomic claim](call-billing-atomic-claim.md) — HTTP end-route and WS endSession race the same call; bill only after a conditional cost_cents claim UPDATE; partner_earning has a per-call partial-unique DB backstop
 - [Transcript tool-plumbing leak](transcript-tool-plumbing-leak.md) — readable transcript mislabeled role:"tool" results + empty placeholder turns as "Agent:" lines; filter role!=="tool", "[Tool result for" prefix, and empty content
 - [Sarvam telephony native sample rate](sarvam-telephony-native-samplerate.md) — telephony now sends native 8kHz to Sarvam STT (was lossy-upsampled to 16k); noise-gate hard-zeroing is next suspect only if noiseCancellationEnabled is on
 - [Pre-dial skip vs duplicate detection](predial-skip-vs-duplicate.md) — a lead skipped for a transient reason (no agent/DNC/TRAI) before any dial attempt must not permanently block re-import as a "duplicate"

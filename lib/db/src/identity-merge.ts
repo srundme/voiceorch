@@ -81,6 +81,8 @@ export const IDENTITY_RELINK_TARGETS: RelinkTarget[] = [
   { table: "phone_numbers", column: "user_id" },
   { table: "user_api_keys", column: "user_id" },
   { table: "vobiz_accounts", column: "user_id", unique: true },
+  { table: "partners", column: "user_id", unique: true },
+  { table: "partner_invites", column: "accepted_user_id" },
   { table: "vobiz_kyc_sessions", column: "user_id" },
   { table: "kyc_audit_logs", column: "user_id" },
   { table: "meta_integrations", column: "user_id" },

@@ -1,6 +1,8 @@
-import { pgTable, text, serial, timestamp, integer, boolean, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, boolean, jsonb, index, uniqueIndex } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import { partnersTable } from "./partners";
 
 export const usersTable = pgTable("users", {
   id: serial("id").primaryKey(),
@@ -28,9 +30,15 @@ export const usersTable = pgTable("users", {
   isTest: boolean("is_test").notNull().default(false),
   suspendedAt: timestamp("suspended_at", { withTimezone: true }),
   suspendedReason: text("suspended_reason"),
+  // Partner (reseller) linkage — set when this user is a client onboarded by a partner.
+  partnerId: integer("partner_id").references(() => partnersTable.id, { onDelete: "set null" }),
+  /** Per-minute rate (paise) this client is billed at, set by their partner; null → partner default. */
+  partnerRateCentsPerMin: integer("partner_rate_cents_per_min"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
-});
+}, (t) => [
+  index("users_partner_id_idx").on(t.partnerId),
+]);
 
 export const walletTransactionsTable = pgTable("wallet_transactions", {
   id: serial("id").primaryKey(),
@@ -43,7 +51,13 @@ export const walletTransactionsTable = pgTable("wallet_transactions", {
   razorpayPaymentId: text("razorpay_payment_id").unique(),
   callId: integer("call_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => [
+  // Idempotency backstop (migration 0077): at most ONE partner_earning ledger
+  // row per call, so racing end-of-call paths can never double-credit a partner.
+  uniqueIndex("wallet_tx_partner_earning_call_uniq")
+    .on(t.callId)
+    .where(sql`type = 'partner_earning' and call_id is not null`),
+]);
 
 export const insertUserSchema = createInsertSchema(usersTable).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertUser = z.infer<typeof insertUserSchema>;

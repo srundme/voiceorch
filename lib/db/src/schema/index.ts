@@ -63,6 +63,7 @@ export * from "./workflows";
 export * from "./google-sheets";
 export * from "./sheet-auto-calls";
 export * from "./team-members";
+export * from "./partners";
 export * from "./whatsapp";
 export * from "./webcall-links";
 export * from "./squads";

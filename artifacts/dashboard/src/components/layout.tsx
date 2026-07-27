@@ -16,6 +16,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useGetWallet, customFetch } from "@workspace/api-client-react";
 import { useMinuteRatesMap, useUserProviderNames } from "@/hooks/use-minute-rates";
 import { SnapServeIcon } from "@/components/logo";
+import { Handshake } from "lucide-react";
+import { usePartnerContext } from "@/hooks/use-partner";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 
@@ -155,6 +157,8 @@ const ROUTE_TITLES: [string, string][] = [
   ["/app/memory",          "Contacts and Memory"],
   ["/app/calls",           "Call Logs"],
   ["/app/phone-numbers",   "Phone Numbers"],
+  ["/app/partner-join",    "Accept invitation"],
+  ["/app/partner",         "Partner Hub"],
   ["/app/providers",       "Voices and Providers"],
   ["/app/api-keys",        "Developers"],
   ["/app/wallet",          "Billing"],
@@ -426,6 +430,16 @@ function SidebarContent({
     });
   };
 
+  // Partner hub nav (gated) + white-label branding for partner-managed clients.
+  const { data: partnerCtx } = usePartnerContext();
+  const navGroups: NavGroup[] = partnerCtx?.isPartner
+    ? [
+        ...NAV_GROUPS.slice(0, -1),
+        { group: "PARTNER", items: [{ name: "Partner Hub", href: "/app/partner", icon: Handshake }] },
+        NAV_GROUPS[NAV_GROUPS.length - 1]!,
+      ]
+    : NAV_GROUPS;
+
   return (
     <div className="flex flex-col h-full bg-sidebar border-r border-sidebar-border">
       {/* Logo row */}
@@ -486,7 +500,7 @@ function SidebarContent({
 
       {/* Primary nav */}
       <div className="flex-1 overflow-y-auto px-2 py-1 min-h-0">
-        {NAV_GROUPS.map((group, gi) => (
+        {navGroups.map((group, gi) => (
           <div key={gi}>
             {/* Group separator (thin divider before every group after first) */}
             {gi > 0 && <div className="my-2 border-t border-sidebar-border mx-1" />}
@@ -553,6 +567,19 @@ function SidebarContent({
 
       {/* Footer — docs · wallet chip · status · privacy/terms · user */}
       <div className="px-2 shrink-0 border-t border-sidebar-border">
+        {/* Partner white-label branding (clients of a partner) */}
+        {partnerCtx?.branding && (
+          <div className="pt-1.5 flex items-center gap-2 px-2.5">
+            {partnerCtx.branding.logoUrl && (
+              <img src={partnerCtx.branding.logoUrl} alt="" className="h-4 w-4 rounded object-contain shrink-0" />
+            )}
+            {!collapsed && (
+              <span className="text-[10px] text-muted-foreground/55 truncate">
+                Powered by {partnerCtx.branding.companyName}
+              </span>
+            )}
+          </div>
+        )}
         {/* Documentation */}
         <div className="pt-1.5 pb-0.5">
           <Link

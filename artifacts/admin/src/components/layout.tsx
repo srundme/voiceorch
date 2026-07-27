@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
+import { Handshake } from "lucide-react";
 import { 
   Activity, 
   BarChart3,
@@ -92,6 +93,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/",               label: "Overview",         icon: Activity },
     { href: "/call-analytics", label: "Call Analytics",   icon: PhoneCall },
     { href: "/users",          label: "Users",            icon: Users },
+    { href: "/partners",       label: "Partners",         icon: Handshake },
     { href: "/finance",        label: "Finance",          icon: Wallet },
     { href: "/recharges",      label: "Recharges",        icon: IndianRupee },
     { href: "/audit-logs",     label: "Audit Logs",       icon: ClipboardList },

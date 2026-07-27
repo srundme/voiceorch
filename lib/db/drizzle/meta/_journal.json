@@ -533,6 +533,20 @@
       "when": 1789100000000,
       "tag": "0075_whatsapp_expansion",
       "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1789200000000,
+      "tag": "0076_partner_panel",
+      "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1789300000000,
+      "tag": "0077_partner_billing_hardening",
+      "breakpoints": true
     }
   ]
 }

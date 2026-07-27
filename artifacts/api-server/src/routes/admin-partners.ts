@@ -1,0 +1,315 @@
+/**
+ * admin-partners.ts — Admin management of partner (reseller) accounts.
+ *
+ * Admin creates partners by upgrading an existing user (by email), controls
+ * the base rate the platform charges the partner per client-minute, and can
+ * suspend a partner (suspended → clients bill at the standard flat rate and
+ * no spread accrues; see services/partner-billing.ts).
+ */
+
+import { Router, type Request } from "express";
+import {
+  db,
+  usersTable,
+  partnersTable,
+  partnerInvitesTable,
+  walletTransactionsTable,
+  adminAuditLogsTable,
+} from "@workspace/db";
+import { and, desc, eq, gte, sql, count } from "drizzle-orm";
+import { requireAdmin } from "../middlewares/requireAdmin.js";
+
+const router: Router = Router();
+router.use("/admin/partners", requireAdmin);
+
+const MAX_RATE_CENTS_PER_MIN = 100_000;
+
+async function logAdminAction(
+  req: Request,
+  opts: {
+    targetUserId?: string | null;
+    action: string;
+    beforeValue?: unknown;
+    afterValue?: unknown;
+  },
+) {
+  try {
+    await db.insert(adminAuditLogsTable).values({
+      adminId: "admin",
+      targetUserId: opts.targetUserId ?? null,
+      targetResourceType: "partner",
+      action: opts.action,
+      beforeValue: opts.beforeValue !== undefined ? (opts.beforeValue as any) : null,
+      afterValue: opts.afterValue !== undefined ? (opts.afterValue as any) : null,
+      ipAddress: ((req.headers["x-forwarded-for"] as string) ?? req.ip ?? null),
+      userAgent: req.headers["user-agent"] ?? null,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Failed to write admin audit log (partners)");
+  }
+}
+
+router.get("/admin/partners", async (req, res): Promise<void> => {
+  try {
+    const partners = await db
+      .select({
+        id: partnersTable.id,
+        userId: partnersTable.userId,
+        companyName: partnersTable.companyName,
+        status: partnersTable.status,
+        baseRateCentsPerMin: partnersTable.baseRateCentsPerMin,
+        defaultClientRateCentsPerMin: partnersTable.defaultClientRateCentsPerMin,
+        createdAt: partnersTable.createdAt,
+        userName: usersTable.name,
+        userEmail: usersTable.email,
+        walletBalanceCents: usersTable.walletBalanceCents,
+      })
+      .from(partnersTable)
+      .leftJoin(usersTable, eq(partnersTable.userId, usersTable.clerkId))
+      .orderBy(desc(partnersTable.createdAt));
+
+    // Client counts per partner (single grouped query).
+    const counts = await db
+      .select({ partnerId: usersTable.partnerId, n: count() })
+      .from(usersTable)
+      .where(sql`${usersTable.partnerId} is not null`)
+      .groupBy(usersTable.partnerId);
+    const countMap = new Map<number, number>();
+    for (const c of counts) {
+      if (c.partnerId != null) countMap.set(c.partnerId, Number(c.n));
+    }
+
+    res.json({
+      partners: partners.map(p => ({ ...p, clientCount: countMap.get(p.id) ?? 0 })),
+    });
+  } catch (err) {
+    req.log.error({ err }, "admin/partners GET failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/admin/partners", async (req, res): Promise<void> => {
+  try {
+    const { email, companyName, baseRateCentsPerMin, defaultClientRateCentsPerMin } = (req.body ?? {}) as {
+      email?: string;
+      companyName?: string;
+      baseRateCentsPerMin?: number;
+      defaultClientRateCentsPerMin?: number;
+    };
+
+    const cleanEmail = String(email ?? "").trim().toLowerCase();
+    const cleanCompany = String(companyName ?? "").trim().slice(0, 80);
+    if (!cleanEmail || !cleanEmail.includes("@")) {
+      res.status(400).json({ error: "Valid user email is required" });
+      return;
+    }
+    if (cleanCompany.length < 2) {
+      res.status(400).json({ error: "Company name must be at least 2 characters" });
+      return;
+    }
+    const baseRate = baseRateCentsPerMin === undefined ? 500 : Number(baseRateCentsPerMin);
+    if (!Number.isInteger(baseRate) || baseRate < 0 || baseRate > MAX_RATE_CENTS_PER_MIN) {
+      res.status(400).json({ error: "baseRateCentsPerMin must be an integer between 0 and 100000" });
+      return;
+    }
+    const defaultRate = defaultClientRateCentsPerMin === undefined ? Math.max(baseRate, 500) : Number(defaultClientRateCentsPerMin);
+    if (!Number.isInteger(defaultRate) || defaultRate < baseRate || defaultRate > MAX_RATE_CENTS_PER_MIN) {
+      res.status(400).json({ error: "defaultClientRateCentsPerMin must be an integer >= baseRateCentsPerMin" });
+      return;
+    }
+
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.email, cleanEmail));
+    if (!user) {
+      res.status(404).json({ error: "No user found with that email — the partner must sign up first" });
+      return;
+    }
+    if (user.status !== "active") {
+      res.status(400).json({ error: `User account is ${user.status} — reactivate it first` });
+      return;
+    }
+    if (user.partnerId) {
+      res.status(409).json({ error: "This user is a client of another partner and cannot become a partner" });
+      return;
+    }
+    const [existing] = await db.select({ id: partnersTable.id }).from(partnersTable).where(eq(partnersTable.userId, user.clerkId));
+    if (existing) {
+      res.status(409).json({ error: "This user is already a partner" });
+      return;
+    }
+
+    const [partner] = await db
+      .insert(partnersTable)
+      .values({
+        userId: user.clerkId,
+        companyName: cleanCompany,
+        baseRateCentsPerMin: baseRate,
+        defaultClientRateCentsPerMin: defaultRate,
+      })
+      .returning();
+
+    await logAdminAction(req, {
+      targetUserId: user.clerkId,
+      action: "partner_create",
+      afterValue: { partnerId: partner!.id, companyName: cleanCompany, baseRate, defaultRate },
+    });
+    res.status(201).json({ partner });
+  } catch (err) {
+    req.log.error({ err }, "admin/partners POST failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.patch("/admin/partners/:id", async (req, res): Promise<void> => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: "Invalid partner id" });
+      return;
+    }
+    const [partner] = await db.select().from(partnersTable).where(eq(partnersTable.id, id));
+    if (!partner) {
+      res.status(404).json({ error: "Partner not found" });
+      return;
+    }
+
+    const { companyName, baseRateCentsPerMin, defaultClientRateCentsPerMin, status } = (req.body ?? {}) as {
+      companyName?: string;
+      baseRateCentsPerMin?: number;
+      defaultClientRateCentsPerMin?: number;
+      status?: string;
+    };
+
+    const set: Record<string, unknown> = {};
+    if (companyName !== undefined) {
+      const clean = String(companyName).trim().slice(0, 80);
+      if (clean.length < 2) {
+        res.status(400).json({ error: "Company name must be at least 2 characters" });
+        return;
+      }
+      set["companyName"] = clean;
+    }
+    let nextBase = partner.baseRateCentsPerMin;
+    if (baseRateCentsPerMin !== undefined) {
+      nextBase = Number(baseRateCentsPerMin);
+      if (!Number.isInteger(nextBase) || nextBase < 0 || nextBase > MAX_RATE_CENTS_PER_MIN) {
+        res.status(400).json({ error: "baseRateCentsPerMin must be an integer between 0 and 100000" });
+        return;
+      }
+      set["baseRateCentsPerMin"] = nextBase;
+    }
+    if (defaultClientRateCentsPerMin !== undefined) {
+      const rate = Number(defaultClientRateCentsPerMin);
+      if (!Number.isInteger(rate) || rate < nextBase || rate > MAX_RATE_CENTS_PER_MIN) {
+        res.status(400).json({ error: "defaultClientRateCentsPerMin must be an integer >= baseRateCentsPerMin" });
+        return;
+      }
+      set["defaultClientRateCentsPerMin"] = rate;
+    } else if (baseRateCentsPerMin !== undefined && partner.defaultClientRateCentsPerMin < nextBase) {
+      // Keep the invariant default >= base when the base is raised.
+      set["defaultClientRateCentsPerMin"] = nextBase;
+    }
+    if (status !== undefined) {
+      if (!["active", "suspended"].includes(status)) {
+        res.status(400).json({ error: "status must be 'active' or 'suspended'" });
+        return;
+      }
+      set["status"] = status;
+    }
+    if (Object.keys(set).length === 0) {
+      res.status(400).json({ error: "Nothing to update" });
+      return;
+    }
+
+    const [updated] = await db.update(partnersTable).set(set).where(eq(partnersTable.id, id)).returning();
+    await logAdminAction(req, {
+      targetUserId: partner.userId,
+      action: "partner_update",
+      beforeValue: {
+        companyName: partner.companyName,
+        baseRateCentsPerMin: partner.baseRateCentsPerMin,
+        defaultClientRateCentsPerMin: partner.defaultClientRateCentsPerMin,
+        status: partner.status,
+      },
+      afterValue: set,
+    });
+    res.json({ partner: updated });
+  } catch (err) {
+    req.log.error({ err }, "admin/partners PATCH failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/admin/partners/:id/clients", async (req, res): Promise<void> => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: "Invalid partner id" });
+      return;
+    }
+    const [partner] = await db.select().from(partnersTable).where(eq(partnersTable.id, id));
+    if (!partner) {
+      res.status(404).json({ error: "Partner not found" });
+      return;
+    }
+
+    const clients = await db
+      .select({
+        clerkId: usersTable.clerkId,
+        name: usersTable.name,
+        email: usersTable.email,
+        status: usersTable.status,
+        walletBalanceCents: usersTable.walletBalanceCents,
+        rateCentsPerMin: usersTable.partnerRateCentsPerMin,
+        createdAt: usersTable.createdAt,
+      })
+      .from(usersTable)
+      .where(eq(usersTable.partnerId, id))
+      .orderBy(desc(usersTable.createdAt));
+
+    // Lifetime spread earned from this partner's user row this month.
+    const [partnerUser] = await db
+      .select({ id: usersTable.id })
+      .from(usersTable)
+      .where(eq(usersTable.clerkId, partner.userId));
+    let monthEarningsCents = 0;
+    if (partnerUser) {
+      const now = new Date();
+      const start = new Date(now.getFullYear(), now.getMonth(), 1);
+      const [earn] = await db
+        .select({ total: sql<number>`coalesce(sum(${walletTransactionsTable.amountCents}), 0)` })
+        .from(walletTransactionsTable)
+        .where(and(
+          eq(walletTransactionsTable.userId, partnerUser.id),
+          eq(walletTransactionsTable.type, "partner_earning"),
+          gte(walletTransactionsTable.createdAt, start),
+        ));
+      monthEarningsCents = Number(earn?.total ?? 0);
+    }
+
+    const invites = await db
+      .select({
+        id: partnerInvitesTable.id,
+        email: partnerInvitesTable.email,
+        status: partnerInvitesTable.status,
+        invitedAt: partnerInvitesTable.invitedAt,
+      })
+      .from(partnerInvitesTable)
+      .where(eq(partnerInvitesTable.partnerId, id))
+      .orderBy(desc(partnerInvitesTable.invitedAt))
+      .limit(100);
+
+    res.json({
+      clients: clients.map(c => ({
+        ...c,
+        rateCentsPerMin: c.rateCentsPerMin ?? partner.defaultClientRateCentsPerMin,
+      })),
+      invites,
+      monthEarningsCents,
+    });
+  } catch (err) {
+    req.log.error({ err }, "admin/partners clients GET failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+export default router;

@@ -62,6 +62,8 @@ import SchedulingBookingDetailPage from "@/pages/scheduling/Bookings";
 import SchedulingConferencingPage  from "@/pages/scheduling/Conferencing";
 import PublicBookingPage    from "@/pages/book/[slug]";
 import WebcallJoinPage      from "@/pages/join/[token]";
+import PartnerPage          from "@/pages/partner";
+import PartnerJoinPage      from "@/pages/partner-join";
 import WorkshopFormPage     from "@/pages/workshop/[slug]";
 import EventsPage           from "@/pages/events/index";
 import EventTeamPortalPage  from "@/pages/events/team";
@@ -259,10 +261,26 @@ function AppRoutes() {
   const [location] = useLocation();
   const { data: onboardingStatus, isLoading: onboardingLoading } = useGetOnboardingStatus();
 
+  // Restore a partner invite link stashed while the visitor was signed out.
+  useEffect(() => {
+    try {
+      const stored = sessionStorage.getItem(POST_LOGIN_REDIRECT_KEY);
+      if (stored) {
+        sessionStorage.removeItem(POST_LOGIN_REDIRECT_KEY);
+        if (stored.includes("/app/partner-join") && !window.location.pathname.includes("/app/partner-join")) {
+          window.location.replace(stored);
+        }
+      }
+    } catch { /* sessionStorage unavailable */ }
+  }, []);
+
   if (onboardingLoading) return <SnapServeLoader />;
 
   const onOnboardingPage = location.startsWith("/app/onboarding");
-  if (onboardingStatus?.completed === false && !onOnboardingPage) {
+  // Partner invite acceptance must survive the onboarding gate — a fresh
+  // signup can accept the invite first, then complete onboarding.
+  const onPartnerJoinPage = location.startsWith("/app/partner-join");
+  if (onboardingStatus?.completed === false && !onOnboardingPage && !onPartnerJoinPage) {
     return <Redirect to="/app/onboarding" />;
   }
 
@@ -274,6 +292,10 @@ function AppRoutes() {
         <Route path="/app/home" component={HomePage} />
         <Route path="/app/command-center" component={CommandCenterRedirect} />
         <Route path="/app/analytics" component={AnalyticsPage} />
+
+        {/* ── Partner (reseller) hub ── */}
+        <Route path="/app/partner-join" component={PartnerJoinPage} />
+        <Route path="/app/partner" component={PartnerPage} />
 
         {/* ── Agents ── */}
         {/* /app/agents (list, tabbed) — must come BEFORE /app/agents/:id */}
@@ -392,6 +414,18 @@ function AppRoutes() {
   );
 }
 
+const POST_LOGIN_REDIRECT_KEY = "snapserve:post-login-redirect";
+
+/** Preserve partner invite links across the sign-in flow, then bounce home. */
+function SignedOutRedirect() {
+  try {
+    if (window.location.pathname.includes("/app/partner-join")) {
+      sessionStorage.setItem(POST_LOGIN_REDIRECT_KEY, window.location.pathname + window.location.search);
+    }
+  } catch { /* sessionStorage unavailable */ }
+  return <Redirect to="/" />;
+}
+
 function ProtectedApp() {
   const { isLoaded } = useAuth();
   if (!isLoaded) return <SnapServeLoader />;
@@ -408,7 +442,7 @@ function ProtectedApp() {
         </Switch>
       </SignedIn>
       <SignedOut>
-        <Redirect to="/" />
+        <SignedOutRedirect />
       </SignedOut>
     </>
   );

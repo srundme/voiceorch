@@ -1,9 +1,10 @@
 import { Router, type IRouter } from "express";
 import { getSelfBaseUrl } from "../lib/app-domain.js";
 import { randomBytes } from "crypto";
-import { eq, desc, and, or, sql, gte, gt, isNull, inArray } from "drizzle-orm";
+import { eq, desc, and, or, sql, gte, gt, lte, isNull, inArray } from "drizzle-orm";
 import { db, callsTable, callEventsTable, executionLogsTable, agentsTable, providersTable, usersTable, walletTransactionsTable, activityLogsTable, callTransfersTable, vobizAccountsTable, verifiedPhoneDestinationsTable, platformSettingsTable, phoneNumbersTable, callerProfilesTable, callerFactsTable, callerCallArchiveTable, callExecutionsTable, canonicalizeCallerKey, humanPhone, resolveCallerKey } from "@workspace/db";
 import { getFlatRateCentsPerMin, resolveAgentBillingMode } from "../services/minute-rates.js";
+import { resolvePartnerBilling, creditPartnerSpreadOnCall } from "../services/partner-billing.js";
 import {
   InitiateCallBody,
   InitiateOutboundCallBody,
@@ -206,7 +207,10 @@ router.post("/calls/outbound", requireAuth, async (req, res): Promise<void> => {
     }
     if (user && user.walletBalanceCents > 0) {
       const billingMode = await resolveAgentBillingMode(agent.userId, agent);
-      const agentRate = getFlatRateCentsPerMin(billingMode);
+      // Partner-managed clients are billed at their partner-set rate — the
+      // credit-seconds estimate must use the same rate as the final debit.
+      const agentRate = (await resolvePartnerBilling(agent.userId))?.clientRateCentsPerMin
+        ?? getFlatRateCentsPerMin(billingMode);
       const creditSeconds = agentRate > 0
         ? Math.floor((user.walletBalanceCents / agentRate) * 60)
         : 0;
@@ -945,18 +949,22 @@ router.patch("/calls/:id/end", requireAuth, async (req, res): Promise<void> => {
   const alreadyBilled = existing.costCents != null && existing.costCents > 0;
   const callClerkId = existing.userId ?? agentForBilling?.userId ?? null;
   const billingMode = alreadyBilled ? "managed" : await resolveAgentBillingMode(callClerkId, agentForBilling ?? {});
-  const rateCentsPerMin = getFlatRateCentsPerMin(billingMode);
-  const modeLabel = billingMode === "managed" ? "managed" : "BYOP";
+  // Partner-managed clients bill at their partner-set rate; the spread over the
+  // partner's base rate is credited to the partner after the debit below.
+  const partnerBilling = alreadyBilled ? null : await resolvePartnerBilling(callClerkId);
+  const rateCentsPerMin = partnerBilling?.clientRateCentsPerMin ?? getFlatRateCentsPerMin(billingMode);
+  const modeLabel = partnerBilling ? "partner" : billingMode === "managed" ? "managed" : "BYOP";
   const rateLabel = `₹${(rateCentsPerMin / 100).toFixed(2)}/min (${modeLabel})`;
   const debitCents = alreadyBilled || durationSeconds <= 0
     ? 0
     : Math.max(1, Math.round((durationSeconds / 60) * rateCentsPerMin));
 
+  // NOTE: costCents is deliberately NOT set here — it is written by the
+  // atomic billing claim below so racing end paths can't both bill.
   const callUpdateSet: Partial<typeof callsTable.$inferInsert> = {
     status: "completed",
     endedAt,
     durationSeconds,
-    ...(debitCents > 0 ? { costCents: debitCents } : {}),
   };
   if (latency.sttLatencyMs != null) callUpdateSet.sttLatencyMs = latency.sttLatencyMs;
   if (latency.llmLatencyMs != null) callUpdateSet.llmLatencyMs = latency.llmLatencyMs;
@@ -998,9 +1006,27 @@ router.patch("/calls/:id/end", requireAuth, async (req, res): Promise<void> => {
     }).where(eq(agentsTable.id, agent.id));
   }
 
-  // Deduct platform fee and check autopay trigger
+  // Deduct platform fee and check autopay trigger.
+  // Atomic billing claim: flip costCents from unset→set in ONE conditional
+  // UPDATE — only the winner debits the wallet and credits partner spread
+  // (the WS endSession path in orchestration/session.ts can race this route
+  // on the same call; a pre-read check alone lets both paths bill).
   const callUserId = call.userId ?? agent?.userId ?? null;
+  let billingClaimed = false;
   if (callUserId && debitCents > 0) {
+    const claimed = await db.update(callsTable)
+      .set({ costCents: debitCents })
+      .where(and(
+        eq(callsTable.id, call.id),
+        or(isNull(callsTable.costCents), lte(callsTable.costCents, 0)),
+      ))
+      .returning({ id: callsTable.id });
+    billingClaimed = claimed.length > 0;
+    if (!billingClaimed) {
+      req.log.info({ callId: call.id }, "Billing already claimed by another end path — skipping debit");
+    }
+  }
+  if (callUserId && debitCents > 0 && billingClaimed) {
     const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, callUserId));
     if (user) {
       // Atomic in-DB decrement (GREATEST clamps at 0) so two calls debiting the
@@ -1018,6 +1044,23 @@ router.patch("/calls/:id/end", requireAuth, async (req, res): Promise<void> => {
         status:      "completed",
         callId:      call.id,
       });
+
+      // Partner spread — credit the client's partner with (client rate − base rate).
+      if (partnerBilling) {
+        try {
+          const spreadCents = await creditPartnerSpreadOnCall({
+            partner: partnerBilling,
+            callId: call.id,
+            durationSeconds,
+            debitCents,
+          });
+          if (spreadCents > 0) {
+            req.log.info({ callId: call.id, partnerId: partnerBilling.partnerId, spreadCents }, "Partner spread credited");
+          }
+        } catch (spreadErr) {
+          req.log.error({ spreadErr, callId: call.id, partnerId: partnerBilling.partnerId }, "Partner spread credit failed");
+        }
+      }
 
       // Autopay trigger: balance dropped below threshold — fire real debit
       if (user.autoPayEnabled && newBalance < user.autoPayThresholdCents) {
