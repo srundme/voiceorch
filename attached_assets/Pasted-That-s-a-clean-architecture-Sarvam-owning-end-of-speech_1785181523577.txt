@@ -1,0 +1,22 @@
+That's a clean architecture — Sarvam owning end-of-speech authority while local VAD stays out of the audio-gating path is exactly the right separation, and the fact that you already hit and fixed the actual failure mode (gating during playback starving Sarvam, calls 772→1320) is good evidence it's not just theoretical.
+
+A few things worth flagging:
+
+The silently-broken "Endpointing silence" setting is the real issue here. A UI control that does nothing on Sarvam agents but doesn't tell anyone is worse than no control at all — someone (you, Gopi, or a future team member) will tune that slider during a bad call, see no effect, and either waste time debugging the wrong layer or conclude the whole endpointing system is flaky. Two options: gray it out / hide it for Sarvam-backed agents, or make it actually route into Sarvam's vad_signals params. Given you already have high_vad_sensitivity and the fast-flush wired up, exposing the real knobs (silence floor, hold-on-mid-thought threshold) under that same UI slot for Sarvam agents seems more useful than a no-op holdover from Azure.
+
+The ~0.6s turn-taking floor is worth knowing exactly where it comes from, since you've broken it into three stacked pieces (0.5s Sarvam silence floor, up to 1.2s mid-thought hold, up to 300ms start-speaking delay). The 1.2s hold is your biggest lever if you ever need to shave latency — that's the Tamil half-sentence protection, so it's presumably tuned deliberately, but worth knowing if a customer ever complains about lag whether that's the first thing to revisit or whether it's already as tight as it can go without breaking the language-quality trade-off.
+
+request_id logging closing the loop is the right call — that's the one item that had no workaround, so good that it's now wired into all three surfaces (transcript logs, error logs, dashboard exec log) rather than just one.
+
+One thing I'd sanity check rather than take on faith: confirm the "never flushes Sarvam" claim under a real barge-in test, not just code review — i.e. actually interrupt an agent mid-sentence a few times and watch whether the local VAD's barge-in detection stays purely on the TTS-cutoff side and never touches the Sarvam socket. That's the kind of invariant that's easy to accidentally violate in a later edit (someone adds "just one line" for an edge case) without a comment or a test guarding it.
+
+Edited 2 memories
+Edited 2 memories
+
+Solid design overall. A few things worth acting on:
+
+The "Endpointing silence" no-op setting is a real bug, not just a doc gap. A UI control that silently does nothing on Sarvam agents is worse than not having it — someone will tune it during a bad call, see no effect, and either waste time debugging the wrong layer or lose trust in the whole endpointing system. I'd either hide/gray it out for Sarvam-backed agents or repoint it at the real levers you already have (silence floor, mid-thought hold) so it isn't dead weight in the UI.
+
+The 0.6s latency floor is broken into three pieces, and the 1.2s mid-thought hold is your biggest lever if latency ever becomes a customer complaint — worth knowing whether that's already tuned as tight as it can go without breaking Tamil sentence handling, or whether there's room to shave it.
+
+One thing I wouldn't just take on faith: the "local VAD never touches the Sarvam socket" invariant is exactly the kind of thing that gets quietly violated later by a "just one line" edge-case fix. Worth an actual barge-in test (interrupt mid-sentence a few times) rather than relying on the code-comment cleanup alone, and maybe a comment/guard at the call site making it obvious that touching the feed here is forbidden — so the next person doesn't reintroduce the calls-772 bug.
