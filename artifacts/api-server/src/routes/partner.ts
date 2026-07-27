@@ -31,6 +31,7 @@ import {
   partnerInvitesTable,
   walletTransactionsTable,
   callsTable,
+  agentsTable,
 } from "@workspace/db";
 import { and, desc, eq, gte, inArray, isNull, sql, count } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
@@ -84,6 +85,47 @@ async function requireActivePartner(req: any, res: any) {
   }
   return partner;
 }
+
+/* ─── Client agents: targets for assigning partner-owned numbers ───────────── */
+
+router.get("/partner/client-agents", requireAuth, async (req, res): Promise<void> => {
+  try {
+    const partner = await requireActivePartner(req, res);
+    if (!partner) return;
+
+    const clients = await db
+      .select({ clerkId: usersTable.clerkId, name: usersTable.name, email: usersTable.email })
+      .from(usersTable)
+      .where(eq(usersTable.partnerId, partner.id));
+    if (clients.length === 0) { res.json({ clients: [] }); return; }
+
+    const agents = await db
+      .select({ id: agentsTable.id, name: agentsTable.name, userId: agentsTable.userId })
+      .from(agentsTable)
+      .where(inArray(agentsTable.userId, clients.map(c => c.clerkId)));
+
+    const byUser = new Map<string, { id: number; name: string }[]>();
+    for (const a of agents) {
+      if (!a.userId) continue;
+      const list = byUser.get(a.userId) ?? [];
+      list.push({ id: a.id, name: a.name });
+      byUser.set(a.userId, list);
+    }
+
+    res.json({
+      clients: clients
+        .map(c => ({
+          clerkId: c.clerkId,
+          name: c.name || c.email || "Client",
+          agents: byUser.get(c.clerkId) ?? [],
+        }))
+        .filter(c => c.agents.length > 0),
+    });
+  } catch (err) {
+    req.log.error({ err }, "partner/client-agents GET failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
 
 /* ─── Context: cheap flags for the dashboard shell ─────────────────────────── */
 

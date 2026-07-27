@@ -83,7 +83,8 @@ export default function HomePage() {
   const { data: wallet } = useGetWallet();
   const rateMap = useMinuteRatesMap();
   const userProviders = useUserProviderNames();
-  const rateCentsPerMin = rateMap.get(userProviders.size > 0 ? "byop" : "managed") ?? 500;
+  const rateCentsPerMin = wallet?.effectiveRateCentsPerMin
+    ?? rateMap.get(userProviders.size > 0 ? "byop" : "managed") ?? 500;
   const balanceCents = wallet?.balanceCents ?? null;
   const availMins = balanceCents != null ? Math.floor(balanceCents / rateCentsPerMin) : null;
 

@@ -282,7 +282,9 @@ export default function WalletPage() {
 
   const balanceLow    = wallet && wallet.balanceCents < 10_000; // < ₹100
   const mandateActive = wallet?.mandateActive ?? false;
-  const minsRemaining = Math.floor((wallet?.balanceCents ?? 0) / 500); // ₹5/min
+  const minsRemaining = Math.floor(
+    (wallet?.balanceCents ?? 0) / (wallet?.effectiveRateCentsPerMin ?? 500),
+  );
 
   return (
     <div className="flex flex-col h-full overflow-auto">

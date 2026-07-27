@@ -1771,7 +1771,8 @@ export const GetWalletResponse = zod.object({
   "autoPayEnabled": zod.boolean(),
   "autoPayThresholdCents": zod.number().describe('Auto-pay threshold in paise'),
   "autoPayAmountCents": zod.number().describe('Auto-pay credit amount in paise (payable includes GST)'),
-  "mandateActive": zod.boolean().describe('Whether a Razorpay recurring card mandate token is saved for auto-pay')
+  "mandateActive": zod.boolean().describe('Whether a Razorpay recurring card mandate token is saved for auto-pay'),
+  "effectiveRateCentsPerMin": zod.number().optional().describe('Per-minute rate (paise) this account is billed at — the partner-set rate for partner-managed clients, the base rate for a partner\'s own usage, and the flat platform rate otherwise. Drives \"minutes left\" estimates in the UI.')
 })
 
 
@@ -1816,7 +1817,8 @@ export const VerifyPaymentResponse = zod.object({
   "autoPayEnabled": zod.boolean(),
   "autoPayThresholdCents": zod.number().describe('Auto-pay threshold in paise'),
   "autoPayAmountCents": zod.number().describe('Auto-pay credit amount in paise (payable includes GST)'),
-  "mandateActive": zod.boolean().describe('Whether a Razorpay recurring card mandate token is saved for auto-pay')
+  "mandateActive": zod.boolean().describe('Whether a Razorpay recurring card mandate token is saved for auto-pay'),
+  "effectiveRateCentsPerMin": zod.number().optional().describe('Per-minute rate (paise) this account is billed at — the partner-set rate for partner-managed clients, the base rate for a partner\'s own usage, and the flat platform rate otherwise. Drives \"minutes left\" estimates in the UI.')
 })
 
 
@@ -1871,7 +1873,8 @@ export const UpdateAutopayResponse = zod.object({
   "autoPayEnabled": zod.boolean(),
   "autoPayThresholdCents": zod.number().describe('Auto-pay threshold in paise'),
   "autoPayAmountCents": zod.number().describe('Auto-pay credit amount in paise (payable includes GST)'),
-  "mandateActive": zod.boolean().describe('Whether a Razorpay recurring card mandate token is saved for auto-pay')
+  "mandateActive": zod.boolean().describe('Whether a Razorpay recurring card mandate token is saved for auto-pay'),
+  "effectiveRateCentsPerMin": zod.number().optional().describe('Per-minute rate (paise) this account is billed at — the partner-set rate for partner-managed clients, the base rate for a partner\'s own usage, and the flat platform rate otherwise. Drives \"minutes left\" estimates in the UI.')
 })
 
 

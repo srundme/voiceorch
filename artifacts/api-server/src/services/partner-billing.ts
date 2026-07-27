@@ -27,6 +27,11 @@ export interface PartnerBillingInfo {
   baseRateCentsPerMin: number;
   /** Effective per-minute rate the client is billed at (>= base). */
   clientRateCentsPerMin: number;
+  /**
+   * True when the billed user IS the partner: their own usage bills at the
+   * base rate (clientRate === baseRate) and no spread is ever credited.
+   */
+  isSelfPartner?: boolean;
 }
 
 /**
@@ -54,7 +59,10 @@ export async function resolvePartnerBilling(
       .from(usersTable)
       .innerJoin(partnersTable, eq(usersTable.partnerId, partnersTable.id))
       .where(eq(usersTable.clerkId, clerkId));
-    if (!row || row.partnerStatus !== "active") return null;
+    // Not a partner's client — but the user may BE a partner themselves, in
+    // which case their own usage bills at their base rate (not the flat rate).
+    if (!row) return await resolveSelfPartnerBilling(clerkId);
+    if (row.partnerStatus !== "active") return null;
 
     const [partnerUser] = await db
       .select({ id: usersTable.id })
@@ -84,6 +92,35 @@ export async function resolvePartnerBilling(
 }
 
 /**
+ * A partner's OWN account bills at their base rate — the platform's wholesale
+ * price to them — instead of the flat retail rate. No spread applies (they
+ * can't earn a margin on themselves).
+ */
+async function resolveSelfPartnerBilling(clerkId: string): Promise<PartnerBillingInfo | null> {
+  const [row] = await db
+    .select({
+      partnerId: partnersTable.id,
+      companyName: partnersTable.companyName,
+      status: partnersTable.status,
+      baseRate: partnersTable.baseRateCentsPerMin,
+      usersRowId: usersTable.id,
+    })
+    .from(partnersTable)
+    .innerJoin(usersTable, eq(usersTable.clerkId, partnersTable.userId))
+    .where(eq(partnersTable.userId, clerkId));
+  if (!row || row.status !== "active") return null;
+  return {
+    partnerId: row.partnerId,
+    partnerClerkId: clerkId,
+    partnerUsersRowId: row.usersRowId,
+    companyName: row.companyName,
+    baseRateCentsPerMin: row.baseRate,
+    clientRateCentsPerMin: row.baseRate,
+    isSelfPartner: true,
+  };
+}
+
+/**
  * Credit the partner's wallet with the spread for one billed call.
  *
  * `debitCents` is what the client was actually debited. The platform's share
@@ -100,6 +137,7 @@ export async function creditPartnerSpreadOnCall(opts: {
   debitCents: number;
 }): Promise<number> {
   const { partner, callId, durationSeconds, debitCents } = opts;
+  if (partner.isSelfPartner) return 0; // own usage at base rate — no spread
   if (debitCents <= 0 || durationSeconds <= 0) return 0;
 
   const platformCents = Math.max(1, Math.round((durationSeconds / 60) * partner.baseRateCentsPerMin));

@@ -215,7 +215,10 @@ function WalletChip({ compact = false }: { compact?: boolean }) {
   const rateMap = useMinuteRatesMap();
   const userProviders = useUserProviderNames();
 
-  const rateCentsPerMin = rateMap.get(userProviders.size > 0 ? "byop" : "managed") ?? 500;
+  // Prefer the account's effective rate (partner base rate / partner-set
+  // client rate) over the generic flat rate for the minutes estimate.
+  const rateCentsPerMin = wallet?.effectiveRateCentsPerMin
+    ?? rateMap.get(userProviders.size > 0 ? "byop" : "managed") ?? 500;
   const availMins = cents !== null ? Math.floor(cents / rateCentsPerMin) : null;
 
   const { ring, text, bar } =

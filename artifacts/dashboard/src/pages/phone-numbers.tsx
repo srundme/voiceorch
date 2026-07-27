@@ -16,7 +16,7 @@ import {
   getListAgentsQueryKey,
   getGetKycStatusQueryKey,
 } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError } from "@/lib/format-api-error";
 import { Button } from "@/components/ui/button";
@@ -33,10 +33,14 @@ import {
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { usePartnerContext, partnerFetch } from "@/hooks/use-partner";
+import { useAuth } from "@/lib/auth";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { PhoneNumber } from "@workspace/api-client-react";
@@ -233,6 +237,19 @@ function AssignDialog({
     number.agentId ? String(number.agentId) : "none"
   );
 
+  // Partners can also point a number at one of their clients' agents.
+  const { data: partnerCtx } = usePartnerContext();
+  const { getToken } = useAuth();
+  const { data: clientAgents } = useQuery<{
+    clients: { clerkId: string; name: string; agents: { id: number; name: string }[] }[];
+  }>({
+    queryKey: ["partner-client-agents"],
+    enabled: !!partnerCtx?.isPartner,
+    staleTime: 60_000,
+    queryFn: () => partnerFetch(getToken, "/api/partner/client-agents"),
+  });
+  const clientGroups = clientAgents?.clients ?? [];
+
   function handleSave() {
     const newAgentId = selectedAgentId === "none" ? null : parseInt(selectedAgentId, 10);
     assign.mutate(
@@ -284,8 +301,25 @@ function AssignDialog({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="none">— Unassigned —</SelectItem>
-              {agents?.map(a => (
-                <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>
+              {clientGroups.length > 0 ? (
+                <SelectGroup>
+                  <SelectLabel>Your agents</SelectLabel>
+                  {agents?.map(a => (
+                    <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>
+                  ))}
+                </SelectGroup>
+              ) : (
+                agents?.map(a => (
+                  <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>
+                ))
+              )}
+              {clientGroups.map(c => (
+                <SelectGroup key={c.clerkId}>
+                  <SelectLabel>Client — {c.name}</SelectLabel>
+                  {c.agents.map(a => (
+                    <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>
+                  ))}
+                </SelectGroup>
               ))}
             </SelectContent>
           </Select>

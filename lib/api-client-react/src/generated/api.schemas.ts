@@ -1773,6 +1773,8 @@ export interface WalletInfo {
   autoPayAmountCents: number;
   /** Whether a Razorpay recurring card mandate token is saved for auto-pay */
   mandateActive: boolean;
+  /** Per-minute rate (paise) this account is billed at — the partner-set rate for partner-managed clients, the base rate for a partner's own usage, and the flat platform rate otherwise. Drives "minutes left" estimates in the UI. */
+  effectiveRateCentsPerMin?: number;
 }
 
 export type WalletTransactionType = typeof WalletTransactionType[keyof typeof WalletTransactionType];

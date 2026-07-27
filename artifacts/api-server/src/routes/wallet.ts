@@ -6,6 +6,8 @@ import { usersTable, walletTransactionsTable, invoicesTable } from "@workspace/d
 import { eq, desc, sql, and } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logger } from "../lib/logger.js";
+import { resolvePartnerBilling } from "../services/partner-billing.js";
+import { getFlatRateCentsPerMin } from "../services/minute-rates.js";
 import { getAppOrigins } from "../lib/app-domain.js";
 import { issueInvoice, renderInvoiceHtml, renderInvoicePdf } from "../services/invoice.js";
 import {
@@ -55,7 +57,13 @@ router.get("/wallet", requireAuth, async (req, res) => {
     res.status(404).json({ error: "User not found" });
     return;
   }
-  res.json(walletInfoPayload(user));
+  // Effective per-minute rate for "minutes left" estimates: partner-managed
+  // clients bill at their partner-set rate, partners' own usage bills at
+  // their base rate, everyone else at the flat platform rate.
+  const partnerBilling = await resolvePartnerBilling(clerkId);
+  const effectiveRateCentsPerMin =
+    partnerBilling?.clientRateCentsPerMin ?? getFlatRateCentsPerMin("managed");
+  res.json({ ...walletInfoPayload(user), effectiveRateCentsPerMin });
 });
 
 // POST /api/wallet/topup — create Razorpay INR order (base credit + 18% GST payable)

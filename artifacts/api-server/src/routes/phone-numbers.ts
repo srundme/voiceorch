@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import crypto from "crypto";
 import Razorpay from "razorpay";
 import { eq, and, ne, inArray, sql } from "drizzle-orm";
-import { db, usersTable, walletTransactionsTable, phoneNumbersTable, phoneNumberOrdersTable, agentsTable, vobizAccountsTable, platformSettingsTable, whatsappChannelsTable } from "@workspace/db";
+import { db, usersTable, walletTransactionsTable, phoneNumbersTable, phoneNumberOrdersTable, agentsTable, partnersTable, vobizAccountsTable, platformSettingsTable, whatsappChannelsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logActivity } from "../lib/activity.js";
 import { issueInvoice } from "../services/invoice.js";
@@ -944,6 +944,34 @@ router.patch("/phone-numbers/:id/assign", requireAuth, async (req, res): Promise
     return;
   }
 
+  // Validate the target agent. Normally it must be the caller's own agent, but
+  // an ACTIVE partner may also point their number at an agent owned by one of
+  // their client accounts (partner buys numbers, provisions them to clients).
+  // Inbound calls on such a number bill the AGENT's owner (the client) at
+  // their partner rate — the number owner only pays the monthly renewal.
+  if (body.data.agentId) {
+    const [agent] = await db
+      .select({ id: agentsTable.id, userId: agentsTable.userId })
+      .from(agentsTable)
+      .where(eq(agentsTable.id, body.data.agentId));
+    if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
+    if (agent.userId !== clerkId) {
+      const [clientLink] = await db
+        .select({ id: usersTable.id })
+        .from(usersTable)
+        .innerJoin(partnersTable, eq(usersTable.partnerId, partnersTable.id))
+        .where(and(
+          eq(usersTable.clerkId, agent.userId ?? ""),
+          eq(partnersTable.userId, clerkId),
+          eq(partnersTable.status, "active"),
+        ));
+      if (!clientLink) {
+        res.status(403).json({ error: "That agent belongs to another account" });
+        return;
+      }
+    }
+  }
+
   const [row] = await db
     .update(phoneNumbersTable)
     .set({ agentId: body.data.agentId ?? null })
@@ -957,14 +985,17 @@ router.patch("/phone-numbers/:id/assign", requireAuth, async (req, res): Promise
   // used for outbound caller ID unless the user overrides it later).
   // When unassigning (agentId === null) clear the previous agent's inbound reference.
   if (body.data.agentId) {
+    // Owner filter deliberately omitted — the agent was validated above
+    // (caller's own, or a client agent of the caller's partner account).
     await db.update(agentsTable)
       .set({ inboundPhoneNumberId: row.id, outboundPhoneNumberId: row.id })
-      .where(and(eq(agentsTable.id, body.data.agentId), eq(agentsTable.userId, clerkId)));
+      .where(eq(agentsTable.id, body.data.agentId));
   } else {
-    // Clear inboundPhoneNumberId on whichever agent previously held this number.
+    // Clear inboundPhoneNumberId on whichever agent previously held this number
+    // (may be a client agent when a partner unassigns their number).
     await db.update(agentsTable)
       .set({ inboundPhoneNumberId: null })
-      .where(and(eq(agentsTable.inboundPhoneNumberId, row.id), eq(agentsTable.userId, clerkId)));
+      .where(eq(agentsTable.inboundPhoneNumberId, row.id));
   }
 
   await logActivity({
