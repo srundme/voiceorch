@@ -5,7 +5,8 @@ import { useAuth } from "@/lib/auth";
 import { partnerFetch } from "@/hooks/use-partner";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Handshake, CheckCircle2, AlertCircle } from "lucide-react";
+import { CheckCircle2, AlertCircle } from "lucide-react";
+import { SnapServeIcon } from "@/components/logo";
 
 interface InvitePreview {
   status: string;
@@ -79,13 +80,9 @@ export default function PartnerJoinPage() {
         ) : (
           <>
             <div className="flex items-center gap-3 mb-5">
-              {preview?.logoUrl ? (
-                <img src={preview.logoUrl} alt="" className="h-10 w-10 rounded-xl object-contain bg-elevated border border-border p-1" />
-              ) : (
-                <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                  <Handshake className="w-5 h-5 text-primary" />
-                </div>
-              )}
+              <div className="h-10 w-10 rounded-xl bg-elevated border border-border flex items-center justify-center">
+                <SnapServeIcon size={22} className="text-foreground" />
+              </div>
               <div>
                 <h1 className="text-lg font-semibold leading-tight">{preview?.companyName} invited you</h1>
                 <p className="text-xs text-muted-foreground">Partner invitation for {preview?.email}</p>
