@@ -1,7 +1,7 @@
 /**
  * Gemini-multimodal PDF ingestion for the Knowledge Base.
  *
- * Sends the raw PDF bytes to gemini-2.5-flash (native PDF understanding:
+ * Sends the raw PDF bytes to gemini-3.6-flash (native PDF understanding:
  * text, tables, charts, images) and asks for semantically-chunked JSON
  * entries. This preserves tabular data (as markdown tables) and describes
  * figures — content pdf-parse loses entirely.
@@ -14,7 +14,7 @@ import { logger } from "../lib/logger.js";
 import { getGeminiKey } from "./kb-embeddings.js";
 import type { KbEntryInput } from "./kb-ingest.js";
 
-const PDF_GEMINI_MODEL = "gemini-2.5-flash";
+const PDF_GEMINI_MODEL = "gemini-3.6-flash";
 /** Inline-data request cap is 20MB total; base64 expands 4/3, so cap raw at 14MB. */
 const PDF_GEMINI_MAX_BYTES = 14 * 1024 * 1024;
 const PDF_GEMINI_TIMEOUT_MS = Number(process.env["KB_PDF_GEMINI_TIMEOUT_MS"] ?? 120_000);

@@ -149,11 +149,26 @@ const CACHE_WARM_WAIT_MS = 1000;
 // is a real, previously-missing bound on worst-case per-turn latency.
 const REQUEST_TIMEOUT_MS = Number(process.env.GEMINI_REQUEST_TIMEOUT_MS) || 20000;
 
+/** Model-aware thinking config — shared by this adapter AND every raw-REST Gemini
+ *  call site (vibe/workflow builders, squad planner, Gemini STT). Gemini 3.x uses
+ *  `thinkingLevel` and CANNOT fully disable thinking ("minimal" is the floor);
+ *  2.x uses numeric `thinkingBudget` (0 = off). The two fields are INCOMPATIBLE —
+ *  sending the wrong one (or both) errors — so never hardcode either at a call site.
+ *  includeThoughts:false guarantees no reasoning ("thought") parts in responses. */
+export function geminiThinkingConfig(model: string): Record<string, unknown> {
+  return /^gemini-3(\.|-)/.test(model)
+    ? { thinkingLevel: "minimal", includeThoughts: false }
+    : { thinkingBudget: 0, includeThoughts: false };
+}
+
 /**
  * Google Gemini — streaming generative AI with function calling
- * Models: gemini-2.5-flash-lite (fastest), gemini-2.5-flash (recommended), gemini-2.5-pro, gemini-1.5-flash
+ * Models (July 2026): gemini-3.6-flash (balanced, default), gemini-3.5-flash-lite
+ * (fastest), gemini-3.5-flash (most capable); gemini-2.5-flash and -flash-lite
+ * remain served as previous-gen options. gemini-2.0-x and gemini-1.5-x are SHUT
+ * DOWN — never offer or default to them.
  *
- * Tool calling: supported on all Gemini 1.5+ and 2.x models.
+ * Tool calling: supported on all current models.
  * Gemini uses its own FunctionDeclaration format (type values are uppercase).
  * Function calls are not streamed token-by-token — they arrive in the final
  * response after the stream completes, so we check response.functionCalls()
@@ -182,7 +197,7 @@ export class GoogleLLM implements LLMAdapter {
   constructor(apiKey: string, model: string | null, genParams?: LLMGenerationParams) {
     this.apiKey = apiKey;
     this.genAI = new GoogleGenerativeAI(apiKey);
-    this.model = model ?? "gemini-2.5-flash";
+    this.model = model ?? "gemini-3.6-flash";
     const t = genParams?.temperature;
     this.temperature = typeof t === "number" && Number.isFinite(t) ? Math.min(2, Math.max(0, t)) : undefined;
     const mt = genParams?.maxTokens;
@@ -216,25 +231,13 @@ export class GoogleLLM implements LLMAdapter {
     }];
   }
 
-  /** Gemini 3.x uses a different (and INCOMPATIBLE — sending both errors) thinking
-   *  knob than 2.x: `thinkingLevel` (minimal/low/medium/high) instead of a numeric
-   *  `thinkingBudget`. Unlike 2.x, 3.x Flash/Flash-Lite CANNOT fully disable
-   *  thinking — "minimal" is the lowest-latency setting available. */
-  private get isGemini3(): boolean {
-    return /^gemini-3(\.|-)/.test(this.model);
-  }
-
   private get generationConfig() {
     // Disable thinking for voice — adds 2–5 s TTFT with no benefit for short
     // conversational turns. On 2.x, thinkingBudget:0 turns thinking off entirely.
     // On 3.x there is no full "off" — thinkingLevel:"minimal" is the closest
-    // equivalent (the model may still think briefly). includeThoughts:false
-    // guarantees the API never returns reasoning ("thought") parts either way.
-    // Both fields are passed through to the REST endpoint by the legacy SDK
-    // (which does not type them).
-    const thinkingConfig = this.isGemini3
-      ? { thinkingLevel: "minimal", includeThoughts: false }
-      : { thinkingBudget: 0, includeThoughts: false };
+    // equivalent (the model may still think briefly). Both fields are passed
+    // through to the REST endpoint by the legacy SDK (which does not type them).
+    const thinkingConfig = geminiThinkingConfig(this.model);
     return {
       thinkingConfig,
       ...(this.temperature !== undefined ? { temperature: this.temperature } : {}),
@@ -353,12 +356,13 @@ export class GoogleLLM implements LLMAdapter {
 
     const meta = response.usageMetadata;
     const metaAny = meta as Record<string, number | undefined> | undefined;
-    // thoughtsTokenCount is non-zero when the model thinks despite thinkingBudget:0 —
+    // On 2.x, thoughtsTokenCount > 0 means the model thought despite thinkingBudget:0 —
     // most commonly seen on Gemini 2.5 Flash-Lite for Tamil/Indic inputs where the model
     // ignores the budget and adds ~5–7 s of silent reasoning to the TTFT. Log it so the
-    // caller can detect and alert on this condition.
+    // caller can detect and alert on this condition. On 3.x, "minimal" cannot fully
+    // disable thinking, so a small non-zero count is EXPECTED — no warn there.
     const thoughtTokens = metaAny?.thoughtsTokenCount ?? 0;
-    if (thoughtTokens > 0) {
+    if (thoughtTokens > 0 && !/^gemini-3(\.|-)/.test(this.model)) {
       logger.warn(
         { model: this.model, thoughtTokens, evt: "gemini_unexpected_thinking" },
         "Gemini returned thought tokens despite thinkingBudget:0 — adds latency for Indic inputs"

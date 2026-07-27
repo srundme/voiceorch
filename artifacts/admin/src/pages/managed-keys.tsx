@@ -81,7 +81,7 @@ const CATEGORIES: Category[] = [
       {
         key: "managed_gemini_key",
         label: "Google / Gemini API Key",
-        description: "Gemini 2.5 Flash, Gemini 2.0 Flash, Gemini 1.5 Pro. Get from Google AI Studio (AIza... format).",
+        description: "Gemini 3.6 Flash, Gemini 3.5 Flash Lite, Gemini 2.5 Flash. Get from Google AI Studio (AIza... format).",
         placeholder: "AIza...",
       },
       {

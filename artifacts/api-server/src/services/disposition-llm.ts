@@ -133,7 +133,7 @@ class GeminiDispositionLLM implements DispositionLLM {
   private client: OpenAI;
   private model: string;
 
-  constructor(apiKey: string, model = "gemini-2.5-flash") {
+  constructor(apiKey: string, model = "gemini-3.6-flash") {
     this.client = new OpenAI({
       apiKey,
       baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
@@ -212,7 +212,7 @@ export async function getDispositionLLM(
 
   const normalized = (preferred === "groq" || preferred === "qwen") ? "qwen" : (preferred === "google" ? "gemini" : preferred);
 
-  // Try the preferred provider first (defaulting to Gemini 2.5 Flash), then fall back to others
+  // Try the preferred provider first (defaulting to Gemini 3.6 Flash), then fall back to others
   const order = [normalized, ...["gemini", "openai", "qwen", "sarvam"].filter((p) => p !== normalized)];
 
   for (const provider of order) {

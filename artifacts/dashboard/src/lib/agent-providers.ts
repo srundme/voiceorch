@@ -38,8 +38,10 @@ export const LLM_MODELS: Record<string, { value: string; label: string }[]> = {
     { value: "gpt-4o-mini",  label: "GPT-4o Mini" },
   ],
   google: [
-    { value: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite (Fastest — Lowest Latency)" },
-    { value: "gemini-2.5-flash",      label: "Gemini 2.5 Flash (Recommended — Complex Reasoning & Tools)" },
+    { value: "gemini-3.5-flash-lite", label: "Gemini 3.5 Flash Lite (Fastest — Lowest Latency)" },
+    { value: "gemini-3.6-flash",      label: "Gemini 3.6 Flash (Recommended — Complex Reasoning & Tools)" },
+    { value: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite (Previous Gen)" },
+    { value: "gemini-2.5-flash",      label: "Gemini 2.5 Flash (Previous Gen)" },
     { value: GEMINI_LIVE_LLM_MODEL,   label: "Gemini 3.1 Flash Live (Native Realtime Bidirectional Voice)" },
   ],
   qwen:      [{ value: "qwen/qwen3-32b", label: "Qwen 3 32B (recommended)" }, { value: "qwen/qwen3-235b-a22b", label: "Qwen 3 235B" }],
@@ -451,18 +453,18 @@ export function isTamilLanguage(language: string | undefined | null): boolean {
 
 /** The default Gemini model — first entry of the `google` LLM list. */
 export function defaultGeminiModel(): string {
-  return LLM_MODELS.google?.[0]?.value ?? "gemini-2.5-flash-lite";
+  return LLM_MODELS.google?.[0]?.value ?? "gemini-3.5-flash-lite";
 }
 
 /** Canonical LLM defaults for the VoiceOrch auto-selection rule. */
 export const DEFAULT_TAMIL_LLM_PROVIDER = "google" as const;
-export const DEFAULT_TAMIL_LLM_MODEL    = "gemini-2.5-flash" as const;
+export const DEFAULT_TAMIL_LLM_MODEL    = "gemini-3.6-flash" as const;
 export const DEFAULT_NONTAMIL_LLM_PROVIDER = "groq" as const;
 export const DEFAULT_NONTAMIL_LLM_MODEL    = "llama-3.3-70b-versatile" as const;
 
 /**
  * Returns the canonical llmProvider + llmModel for the given language selection.
- * Tamil (any `ta-*` variant) → Gemini 2.5 Flash.
+ * Tamil (any `ta-*` variant) → Gemini 3.6 Flash.
  * All other languages → Groq Llama 3.3 70B.
  */
 export function defaultLlmForLanguages(

@@ -1,11 +1,12 @@
 import { pcmToWav } from "../../audio.js";
+import { geminiThinkingConfig } from "../llm/google.js";
 import type { STTAdapter } from "./base.js";
 import type { STTConfig } from "../../types.js";
 import { logger } from "../../../lib/logger.js";
 
 /**
  * Gemini Direct Audio Input STT Adapter
- * Uses gemini-2.5-flash native audio input capabilities to transcribe speech.
+ * Uses gemini-3.6-flash native audio input capabilities to transcribe speech.
  * Operates as a high-precision batch STT adapter driven by pipeline.ts VAD.
  */
 export class GeminiSTT implements STTAdapter {
@@ -15,7 +16,7 @@ export class GeminiSTT implements STTAdapter {
 
   constructor(apiKey: string, model: string | null, cfg: STTConfig) {
     this.key = apiKey;
-    this.model = model || process.env["VISION_GEMINI_MODEL"] || "gemini-2.5-flash";
+    this.model = model || process.env["VISION_GEMINI_MODEL"] || "gemini-3.6-flash";
     this.cfg = cfg;
   }
 
@@ -48,6 +49,8 @@ export class GeminiSTT implements STTAdapter {
         generationConfig: {
           temperature: 0.1,
           maxOutputTokens: 500,
+          // In-call STT fallback is latency-sensitive — force minimal/no thinking.
+          thinkingConfig: geminiThinkingConfig(this.model),
         },
       }),
     });

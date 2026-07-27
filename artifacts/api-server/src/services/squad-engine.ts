@@ -27,6 +27,7 @@ import {
 } from "@workspace/db";
 import { eq, and, asc, desc, inArray } from "drizzle-orm";
 import { randomBytes } from "node:crypto";
+import { geminiThinkingConfig } from "../orchestration/adapters/llm/google.js";
 import { logger } from "../lib/logger.js";
 import { normalizePhone } from "../lib/phone-normalize.js";
 import { fireCampaignCall } from "../orchestration/campaignCaller.js";
@@ -46,7 +47,7 @@ export {
   type PlannedStep,
 } from "./squad-plan.js";
 
-const PLANNER_MODEL = "gemini-2.5-flash-lite";
+const PLANNER_MODEL = "gemini-3.5-flash-lite";
 
 type Ctx = Record<string, unknown>;
 
@@ -109,7 +110,7 @@ Roster: ${JSON.stringify(roster)}`;
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: { responseMimeType: "application/json", temperature: 0.2 },
+        generationConfig: { responseMimeType: "application/json", temperature: 0.2, thinkingConfig: geminiThinkingConfig(PLANNER_MODEL) },
       }),
     });
     if (!res.ok) {
@@ -520,7 +521,7 @@ Return ONLY JSON with keys: summary (string), data (object), nextHint (string).`
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: { responseMimeType: "application/json", temperature: 0.3 },
+        generationConfig: { responseMimeType: "application/json", temperature: 0.3, thinkingConfig: geminiThinkingConfig(PLANNER_MODEL) },
       }),
     });
     if (!res.ok) {

@@ -10,6 +10,7 @@ import {
 import { callEngineInsertDefaults } from "@workspace/db/call-engine-defaults";
 import { eq, and, inArray, sql } from "drizzle-orm";
 import { ingestKbTextEntries } from "../services/kb-ingest.js";
+import { geminiThinkingConfig } from "../orchestration/adapters/llm/google.js";
 import { logger } from "../lib/logger.js";
 import { logActivity } from "../lib/activity.js";
 import { resolveAmdConfig } from "../orchestration/telephony/dial.js";
@@ -443,8 +444,9 @@ class VibeGeminiError extends Error {
 const VIBE_RECOVERY_NOTE =
   "IMPORTANT: Your previous response was cut off or was not valid JSON. Respond again to the conversation above with ONLY the complete, compact, valid JSON object matching the required schema — no markdown fences, no commentary, and keep the \"reply\" text brief.";
 
-/** Flash-Lite defaults to no thinking; budget 0 avoids empty thought-only candidates. */
-const VIBE_GEMINI_MODEL = "gemini-2.5-flash-lite";
+/** Explicit minimal thinking (via geminiThinkingConfig) avoids thought-only candidates
+ *  and keeps builder turns fast. */
+const VIBE_GEMINI_MODEL = "gemini-3.5-flash-lite";
 
 function lastUserContent(msgs: VibeChatMessage[]): string {
   for (let i = msgs.length - 1; i >= 0; i--) {
@@ -471,7 +473,7 @@ function buildGeminiRequestBody(contents: Array<{ role: string; parts: Array<{ t
       // Reply text + config JSON comfortably fit in 8k; the 16k cap only widened
       // the truncation-retry window without helping normal turns.
       maxOutputTokens: 8192,
-      thinkingConfig: { thinkingBudget: 0 },
+      thinkingConfig: geminiThinkingConfig(VIBE_GEMINI_MODEL),
     },
   });
 }
@@ -1096,7 +1098,7 @@ router.post("/agents/vibe-chat", requireAuth, clientContext, denyManagedClient, 
     const isTamil     = cfg.hasTamil || langInfo.gemini ||
                         (cfg.multilingualLanguages ?? []).includes("ta-IN");
     const llmProvider = isTamil ? "google" : "groq";
-    const llmModel    = isTamil ? "gemini-2.5-flash" : "llama-3.3-70b-versatile";
+    const llmModel    = isTamil ? "gemini-3.6-flash" : "llama-3.3-70b-versatile";
     const langCode    = cfg.languageMode === "multi" ? "en-IN" : langInfo.code;
     const langDisplay = cfg.languageMode === "multi" ? "Multi-language" : langInfo.label;
 

@@ -6127,7 +6127,7 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
           { type: "end_call", name: "end_call", description: "End the call when the conversation is complete." },
         ],
         llmProvider: "google",
-        llmModel: "gemini-2.5-flash",
+        llmModel: "gemini-3.6-flash",
         ttsProvider: "cartesia",
         ttsModel: "sonic-3.5",
         ttsVoice: "a8adc74b-c9c1-45e0-aae7-9a60ba64bbee",

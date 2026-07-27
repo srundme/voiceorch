@@ -135,3 +135,4 @@
 - [Managed client mode enforcement](managed-client-mode.md) — acting-as needs clientContext per-route; deny-writes are opt-in (audit coverage); self-partners must never count as managed clients
 - [Mute call with live transcript = TTS rejection](tts-mute-transcript-diagnosis.md) — missing key fails setup; running-but-mute = per-sentence provider rejection; surfaced via exec rows + webcall notice banner
 - [Cartesia API 2026 surface](cartesia-api-2026.md) — STT = POST /stt, ink-whisper, ISO-639-1; TTS speed/emotion → generation_config (0.6–1.5, single enum); __experimental_controls retired; flush ack = flush_done
+- [Gemini model lists drift across 4 UIs](gemini-model-lineup-sync.md) — dashboard agent-providers + admin family pages (×2) + managed-keys copy update independently; admin offered SHUT-DOWN 2.0/1.5 models; thinking config MUST come from geminiThinkingConfig()

@@ -10,6 +10,7 @@
 import { Router, type IRouter } from "express";
 import { randomBytes } from "node:crypto";
 import { eq, and, desc } from "drizzle-orm";
+import { geminiThinkingConfig } from "../orchestration/adapters/llm/google.js";
 import {
   db, workflowsTable, workflowRunsTable, agentsTable, platformSettingsTable,
   type WorkflowTrigger, type WorkflowStep, type Workflow,
@@ -183,7 +184,7 @@ router.get("/workflows/:id/runs", requireAuth, async (req, res): Promise<void> =
 
 interface ChatMessage { role: "user" | "assistant"; content: string; }
 
-const WORKFLOW_GEMINI_MODEL = "gemini-2.5-flash-lite";
+const WORKFLOW_GEMINI_MODEL = "gemini-3.5-flash-lite";
 
 async function getGeminiKey(): Promise<string | null> {
   try {
@@ -269,7 +270,7 @@ async function callGemini(key: string, messages: ChatMessage[], systemPrompt: st
   const body = JSON.stringify({
     system_instruction: { parts: [{ text: systemPrompt }] },
     contents,
-    generationConfig: { responseMimeType: "application/json", temperature: 0.4, maxOutputTokens: 8192, thinkingConfig: { thinkingBudget: 0 } },
+    generationConfig: { responseMimeType: "application/json", temperature: 0.4, maxOutputTokens: 8192, thinkingConfig: geminiThinkingConfig(WORKFLOW_GEMINI_MODEL) },
   });
 
   for (let attempt = 1; attempt <= 3; attempt++) {

@@ -26,3 +26,5 @@ connection pooling" risk did NOT apply here.
 in. Revisit only if Google actually sunsets `generateContent` or the legacy
 SDK (check for an explicit deprecation notice, not just a "recommended for
 new projects" banner).
+
+**Addendum (July 27, 2026):** Official `google-gemini/gemini-skills` repo verified authentic and installed into `.agents/skills/` (gemini-api-dev, gemini-interactions-api, gemini-live-api-dev, gemini-omni-flash-api). Those skills confirm our `@google/generative-ai` SDK is now officially deprecated (successor: `@google/genai`) while classic `generateContent` remains supported — decision to stay on the legacy SDK re-affirmed for voice-pipeline stability, but the SDK swap should be treated as a planned migration next time the adapter surface is broadly reworked, not indefinitely deferred. Model lineup refreshed the same day (see gemini-model-lineup-sync.md).
