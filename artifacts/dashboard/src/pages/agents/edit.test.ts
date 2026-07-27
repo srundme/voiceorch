@@ -268,7 +268,7 @@ describe("agentFormSchema — provider/model cross-field validation", () => {
   it("mismatched ASR provider+model — reports error on asrModel", () => {
     const result = agentFormSchema.safeParse({
       ...VALID_BASE,
-      asrProvider: "azure",
+      asrProvider: "sarvam",
       asrModel: "nova-2-general",
     });
     expect(result.success).toBe(false);
@@ -320,25 +320,34 @@ describe("agentFormSchema — provider/model cross-field validation", () => {
     expect(result.success, JSON.stringify(result)).toBe(true);
   });
 
-  it("assemblyai with valid model — passes", () => {
+  it("sarvam ASR with valid model — passes", () => {
     const result = agentFormSchema.safeParse({
       ...VALID_BASE,
-      asrProvider: "assemblyai",
-      asrModel: "best",
+      asrProvider: "sarvam",
+      asrModel: "saaras:v3",
     });
     expect(result.success, JSON.stringify(result)).toBe(true);
   });
 
-  it("assemblyai with invalid model — fails", () => {
+  it("sarvam ASR with invalid model — fails", () => {
     const result = agentFormSchema.safeParse({
       ...VALID_BASE,
-      asrProvider: "assemblyai",
+      asrProvider: "sarvam",
       asrModel: "en-US-standard",
     });
     expect(result.success).toBe(false);
     if (result.success) return;
     const paths = result.error.issues.map(i => i.path.join("."));
     expect(paths).toContain("asrModel");
+  });
+
+  it("ASR provider with no predefined model list (assemblyai) — any model accepted", () => {
+    const result = agentFormSchema.safeParse({
+      ...VALID_BASE,
+      asrProvider: "assemblyai",
+      asrModel: "en-US-standard",
+    });
+    expect(result.success, JSON.stringify(result)).toBe(true);
   });
 
   it("sarvam LLM with valid model — passes", () => {
@@ -365,7 +374,7 @@ describe("agentFormSchema — provider/model cross-field validation", () => {
   it("multiple mismatches — all three field errors reported at once", () => {
     const result = agentFormSchema.safeParse({
       ...VALID_BASE,
-      asrProvider: "azure",
+      asrProvider: "sarvam",
       asrModel: "nova-2-general",
       llmProvider: "openai",
       llmModel: "qwen/qwen3-32b",

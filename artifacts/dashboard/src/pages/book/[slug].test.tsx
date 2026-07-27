@@ -12,6 +12,7 @@ vi.mock("@workspace/api-client-react", async (importOriginal) => {
     ...actual,
     useGetPublicEventType: vi.fn(),
     useGetPublicSlots: vi.fn(),
+    useGetPublicNow: vi.fn(),
     useCreatePublicBooking: vi.fn(),
   };
 });
@@ -19,6 +20,7 @@ vi.mock("@workspace/api-client-react", async (importOriginal) => {
 import {
   useGetPublicEventType,
   useGetPublicSlots,
+  useGetPublicNow,
   useCreatePublicBooking,
   ApiError,
   RequestTimeoutError,
@@ -46,6 +48,10 @@ afterEach(() => {
 
 beforeEach(() => {
   vi.mocked(useCreatePublicBooking).mockReturnValue(MOCK_MUTATION as any);
+  // Server "now" is before every mocked slot so slots stay bookable.
+  vi.mocked(useGetPublicNow).mockReturnValue({
+    data: { now: "2026-06-01T00:00:00.000Z" },
+  } as any);
 });
 
 // ---------------------------------------------------------------------------
