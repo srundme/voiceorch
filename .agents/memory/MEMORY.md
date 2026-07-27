@@ -136,3 +136,4 @@
 - [Mute call with live transcript = TTS rejection](tts-mute-transcript-diagnosis.md) — missing key fails setup; running-but-mute = per-sentence provider rejection; surfaced via exec rows + webcall notice banner
 - [Cartesia API 2026 surface](cartesia-api-2026.md) — STT = POST /stt, ink-whisper, ISO-639-1; TTS speed/emotion → generation_config (0.6–1.5, single enum); __experimental_controls retired; flush ack = flush_done
 - [Gemini model lists drift across 4 UIs](gemini-model-lineup-sync.md) — dashboard agent-providers + admin family pages (×2) + managed-keys copy update independently; admin offered SHUT-DOWN 2.0/1.5 models; thinking config MUST come from geminiThinkingConfig()
+- [Spec-prefill prompt staleness](spec-prefill-staleness.md) — speculative LLM prefills bake in currentLang; a language switch on the final transcript must invalidate them or the reply is in the OLD language

@@ -35,3 +35,5 @@ feeding the next call.
 `resumeDrop` (gates header/tail/RESUME instruction) and `suppressDomain` (gates all stale
 domain memory) distinct. Fail-safe direction is "not resumable" — a false positive just
 yields the normal scripted opening, which is the desired behaviour anyway.
+
+**Addendum (call 4814):** the permission-loop variant — a previous-call summary like "callback scheduled, conversation hasn't started yet" makes weak models ask "shall we continue from earlier?" repeatedly (4× in one call, even after the caller agreed twice) without ever opening the topic. Fix: the memory block now appends a "HOW TO USE THIS SUMMARY" directive after the summary line — open the pending topic directly with substance; at most ONE shall-we-continue question per call. Summaries need ACT-ON-IT directives, not just narration.
