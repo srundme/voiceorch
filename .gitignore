@@ -59,3 +59,8 @@ backup.sql
 # into the production image and drizzle-orm/migrator reads them at startup.
 # Without them in git, Railway builds fail with "No file *.sql found".
 !lib/db/drizzle/*.sql
+
+# Never push user-attached call logs (contain caller PII/transcripts)
+attached_assets/call-*logs*.json
+# Pasted chat attachments are conversation ephemera, not source
+attached_assets/Pasted-*

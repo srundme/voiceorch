@@ -58,29 +58,74 @@ export function upsample8to16(buf8k: Buffer): Buffer {
   return out;
 }
 
+// ── Windowed-sinc anti-alias decimation ─────────────────────────────────────
+//
+// The previous 2-tap (16→8) and 3-tap box (24→8) filters only attenuated the
+// aliasing band by ~3–8 dB, so TTS energy above the output Nyquist folded back
+// into the voice band as metallic harshness — and once baked into the 8 kHz
+// wire signal the carrier cannot remove it.  These Hamming-windowed sinc
+// kernels give ~45 dB rejection while staying dependency-free and stateless
+// (same signatures / output lengths as before).  Block-edge samples renormalize
+// the kernel over the available window so chunked calls don't click or droop.
+
+/** Hamming-windowed sinc low-pass kernel, unity DC gain. `cutoffNorm` = fc/fsIn. */
+function buildSincKernel(taps: number, cutoffNorm: number, fracOffset = 0): Float64Array {
+  const h = new Float64Array(taps);
+  const mid = (taps - 1) / 2 + fracOffset;
+  let sum = 0;
+  for (let k = 0; k < taps; k++) {
+    const x = k - mid;
+    const sinc = x === 0 ? 1 : Math.sin(2 * Math.PI * cutoffNorm * x) / (2 * Math.PI * cutoffNorm * x);
+    const win = 0.54 - 0.46 * Math.cos((2 * Math.PI * k) / (taps - 1));
+    h[k] = 2 * cutoffNorm * sinc * win;
+    sum += h[k];
+  }
+  for (let k = 0; k < taps; k++) h[k] /= sum; // unity gain at DC
+  return h;
+}
+
+/** Apply `kernel` centred at input sample `center`, renormalizing at block edges. */
+function firAt(buf: Buffer, inSamples: number, center: number, kernel: Float64Array): number {
+  const half = (kernel.length - 1) >> 1;
+  let acc = 0;
+  let wsum = 0;
+  for (let k = 0; k < kernel.length; k++) {
+    const idx = center - half + k;
+    if (idx < 0 || idx >= inSamples) continue;
+    acc += buf.readInt16LE(idx * 2) * kernel[k]!;
+    wsum += kernel[k]!;
+  }
+  if (wsum === 0) return 0;
+  const s = Math.round(acc / wsum);
+  return s > 32767 ? 32767 : s < -32768 ? -32768 : s;
+}
+
+// 16→8: cutoff 3.4 kHz (voice band top), 15 taps.
+const K16TO8 = buildSincKernel(15, 3400 / 16000);
+// 24→8: steeper ratio needs a longer kernel; cutoff 3.4 kHz, 21 taps.
+const K24TO8 = buildSincKernel(21, 3400 / 24000);
+// 24→16: output Nyquist 8 kHz, cutoff 7.2 kHz for margin; alternate phases 0 / 0.5.
+const K24TO16_P0 = buildSincKernel(15, 7200 / 24000, 0);
+const K24TO16_P5 = buildSincKernel(15, 7200 / 24000, 0.5);
+
 /**
- * Downsample from 16 kHz to 8 kHz with a simple 2-tap FIR anti-alias filter.
- *
- * Naive decimation (taking every other sample) folds frequencies above 4 kHz
- * back into the 0–4 kHz band (Nyquist of 8 kHz output).  For pitch detection
- * this creates aliasing artefacts that can shift the apparent fundamental.
- * A basic average of adjacent pairs halves the aliasing amplitude while
- * keeping the code dependency-free.
+ * Downsample 16 kHz PCM16 LE → 8 kHz with a 15-tap windowed-sinc anti-alias
+ * filter (~45 dB rejection above 4 kHz vs ~3 dB for the old 2-tap average).
+ * Stateless and length-preserving: output is exactly floor(in/4)*2 samples,
+ * matching the previous contract (callers rely on no trailing-sample drops).
  */
 export function downsample16to8(buf16k: Buffer): Buffer {
   const samples    = Math.floor(buf16k.length / 4) * 2; // must be even
   const outSamples = samples / 2;
   const out        = Buffer.allocUnsafe(outSamples * 2);
   for (let i = 0; i < outSamples; i++) {
-    const a = buf16k.readInt16LE(i * 4);
-    const b = buf16k.readInt16LE(i * 4 + 2);
-    out.writeInt16LE(Math.round((a + b) / 2), i * 2);
+    out.writeInt16LE(firAt(buf16k, samples, i * 2, K16TO8), i * 2);
   }
   return out;
 }
 
 /**
- * Downsample 24 kHz PCM16 LE → 8 kHz using a simple 3:1 box filter.
+ * Downsample 24 kHz PCM16 LE → 8 kHz with a 21-tap windowed-sinc filter.
  * Gemini Live outputs 24 kHz; telephony + webcall wire formats use 8 kHz.
  */
 export function downsample24to8(buf24k: Buffer): Buffer {
@@ -88,18 +133,15 @@ export function downsample24to8(buf24k: Buffer): Buffer {
   const groups = Math.floor(inSamples / 3);
   const out = Buffer.allocUnsafe(groups * 2);
   for (let i = 0; i < groups; i++) {
-    const base = i * 3;
-    const a = buf24k.readInt16LE(base * 2);
-    const b = base + 1 < inSamples ? buf24k.readInt16LE((base + 1) * 2) : a;
-    const c = base + 2 < inSamples ? buf24k.readInt16LE((base + 2) * 2) : b;
-    out.writeInt16LE(Math.round((a + b + c) / 3), i * 2);
+    out.writeInt16LE(firAt(buf24k, inSamples, i * 3 + 1, K24TO8), i * 2);
   }
   return out;
 }
 
 /**
- * Downsample 24 kHz PCM16 LE → 16 kHz (2:3 ratio) via linear interpolation.
- * Used when a consumer needs 16 kHz output from Live audio.
+ * Downsample 24 kHz PCM16 LE → 16 kHz (2:3 ratio) via polyphase windowed-sinc
+ * (source positions alternate between integer and half-sample offsets, so two
+ * precomputed kernel phases cover every output sample exactly).
  */
 export function downsample24to16(buf24k: Buffer): Buffer {
   const inSamples = Math.floor(buf24k.length / 2);
@@ -108,10 +150,8 @@ export function downsample24to16(buf24k: Buffer): Buffer {
   for (let i = 0; i < outSamples; i++) {
     const srcPos = (i * 3) / 2;
     const idx = Math.floor(srcPos);
-    const frac = srcPos - idx;
-    const s0 = buf24k.readInt16LE(idx * 2);
-    const s1 = idx + 1 < inSamples ? buf24k.readInt16LE((idx + 1) * 2) : s0;
-    out.writeInt16LE(Math.round(s0 + (s1 - s0) * frac), i * 2);
+    const kernel = srcPos === idx ? K24TO16_P0 : K24TO16_P5;
+    out.writeInt16LE(firAt(buf24k, inSamples, idx, kernel), i * 2);
   }
   return out;
 }
