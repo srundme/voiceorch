@@ -1,0 +1,2871 @@
+[
+  {
+    "id": 403448,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:03.622Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "agentId": 401,
+      "agentName": "nwewee'",
+      "asrProvider": "sarvam",
+      "llmProvider": "google",
+      "ttsProvider": "cartesia",
+      "ttsVoice": "a8adc74b-c9c1-45e0-aae7-9a60ba64bbee"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "event": "Call Started",
+      "callId": 4698,
+      "sessionId": "live-4698",
+      "callType": "Live Call",
+      "direction": "Outbound",
+      "recordingEnabled": true,
+      "webrtcConnected": false,
+      "mediaStreamStarted": true,
+      "connectionEstablishedAt": "2026-07-27T04:17:03.620Z",
+      "telephonyProvider": "vobiz"
+    }
+  },
+  {
+    "id": 403446,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:03.622Z",
+    "component": "VariableResolver",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "variables": {
+        "to_number": "916383653279",
+        "from_number": "917971543255",
+        "agent_name": "nwewee'",
+        "caller_number": "917971543255",
+        "date": "Monday, July 27, 2026"
+      }
+    },
+    "responsePayload": {
+      "resolvedPromptPreview": "You are a helpful AI voice assistant.\n\n[DATE/TIME CONTEXT] Today is Monday, 27 July 2026. Current time is 09:47 am (Asia/Kolkata).\n\n[STRICT LANGUAGE RULE] You MUST respond ONLY in English at ALL times. Never switch to any other language under any circumstances, even if the caller speaks a different language. Always reply in English regardless of what language the caller uses. REGISTER — always speak in natural, everyday colloquial spoken English, the way real people talk in casual conversation; NEVER use formal, literary, or bookish register. Mixing commonly-used English loanwords (business, f"
+    },
+    "metadata": null
+  },
+  {
+    "id": 403447,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:03.622Z",
+    "component": "STT",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "sarvam",
+      "language": "en-IN"
+    }
+  },
+  {
+    "id": 403449,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:03.623Z",
+    "component": "LLM",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "google",
+      "model": "gemini-2.5-flash"
+    }
+  },
+  {
+    "id": 403452,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:03.623Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "cartesia"
+    }
+  },
+  {
+    "id": 403450,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:03.623Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Prompt Generated",
+      "promptHash": "5071a584d661",
+      "promptLength": 7906,
+      "preview": "You are a helpful AI voice assistant.\n\n[DATE/TIME CONTEXT] Today is Monday, 27 July 2026. Current time is 09:47 am (Asia/Kolkata).\n\n[STRICT LANGUAGE RULE] You MUST respond ONLY in English at ALL times"
+    }
+  },
+  {
+    "id": 403451,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:03.623Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Voice Loaded",
+      "provider": "cartesia",
+      "voice": "a8adc74b-c9c1-45e0-aae7-9a60ba64bbee"
+    }
+  },
+  {
+    "id": 403454,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:03.643Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 403453,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:03.643Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Hello! How can I help you today?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 403455,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:04.953Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1314,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 66274,
+      "textLength": 32,
+      "firstByteMs": 731
+    },
+    "metadata": {
+      "turnNumber": 0,
+      "durationMs": 1314
+    }
+  },
+  {
+    "id": 403456,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:05.417Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2071,
+      "turnNumber": 0,
+      "durationMs": 1775
+    }
+  },
+  {
+    "id": 403457,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:09.452Z",
+    "component": "LLM",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Eager LLM Launched",
+      "source": "speech_end_partial",
+      "partial": "சொல்லுங்க Madam",
+      "stableMs": 0,
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 403458,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:09.483Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "சொல்லுங்க Madam",
+      "endDetectToFinalMs": 87,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 403459,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:09.590Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash",
+      "systemPromptPreview": "LANGUAGE ABSOLUTE RULE: You MUST respond ONLY in English. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances. REGISTER — speak in natural, everyday colloquial spoken English, the way real people talk in casual conversation; NEVER use formal, literary, or bookish register. Mixing commonly-used English loanwords (business, finance, tech, and everyday terms) into your English speech is normal spoken usage — keep such words in English as people naturally say them; this does NOT count as switching languages, and \"ONLY in English\" does NOT mean avoiding these everyday English loanwords. EXCEPTION — pr",
+      "historyLength": 2,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 403460,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:09.590Z",
+    "component": "LLM",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Speculative LLM Hit",
+      "partial": "சொல்லுங்க Madam",
+      "final": "சொல்லுங்க Madam",
+      "bufferedTokens": 0,
+      "done": false,
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 403461,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:09.940Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Got it."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 403462,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:09.941Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 403463,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:10.411Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 471,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 22754,
+      "textLength": 7,
+      "fillerCacheHit": false
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 471
+    }
+  },
+  {
+    "id": 403464,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:10.412Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 711,
+      "turnNumber": 1,
+      "durationMs": 470
+    }
+  },
+  {
+    "id": 403465,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:10.589Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 1005,
+      "slow": false,
+      "turnNumber": 1,
+      "durationMs": 1005
+    }
+  },
+  {
+    "id": 403466,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:10.592Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Hi, I'm calling from Max Life Insurance."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 403467,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:10.592Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 403469,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:10.600Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1005,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "Hi, I'm calling from Max Life Insurance. Am I speaking with Mr. Anish?"
+    },
+    "metadata": {
+      "inputTokens": 2378,
+      "outputTokens": 20,
+      "cachedTokens": 0,
+      "model": "gemini-2.5-flash",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 403468,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:10.600Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Am I speaking with Mr. Anish?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 403470,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:11.210Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 612,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 61154,
+      "textLength": 29,
+      "firstByteMs": 147
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 612
+    }
+  },
+  {
+    "id": 403471,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:11.499Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 908,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 84194,
+      "textLength": 40,
+      "firstByteMs": 343
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 908
+    }
+  },
+  {
+    "id": 403472,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:13.556Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2631,
+      "turnNumber": 1,
+      "durationMs": 2964
+    }
+  },
+  {
+    "id": 403473,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:13.556Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 403474,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:15.517Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 1911,
+      "turnNumber": 1,
+      "durationMs": 1961
+    }
+  },
+  {
+    "id": 403475,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:16.322Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Turn Metrics",
+      "turnCloseReason": "stt_final",
+      "eagerLlmHit": true,
+      "bargeInFiredTotal": 0,
+      "bargeInRecoveryTotal": 0,
+      "bargeInRecoveryRate": null,
+      "agentSpeakCharsThisTurn": 78,
+      "agentSpeakCharsTotal": 78,
+      "callerSpeakCharsTotal": 15,
+      "talkListenRatio": 5.2,
+      "longestAgentMonologueChars": 78,
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 403476,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:16.322Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "Hello"
+    },
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 403477,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:16.435Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash",
+      "systemPromptPreview": "LANGUAGE ABSOLUTE RULE: You MUST respond ONLY in English. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances. REGISTER — speak in natural, everyday colloquial spoken English, the way real people talk in casual conversation; NEVER use formal, literary, or bookish register. Mixing commonly-used English loanwords (business, finance, tech, and everyday terms) into your English speech is normal spoken usage — keep such words in English as people naturally say them; this does NOT count as switching languages, and \"ONLY in English\" does NOT mean avoiding these everyday English loanwords. EXCEPTION — pr",
+      "historyLength": 4,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 403478,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:16.786Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "I see."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 403479,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:16.787Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 403480,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:17.474Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 688,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 25314,
+      "textLength": 6,
+      "fillerCacheHit": false
+    },
+    "metadata": {
+      "turnNumber": 2,
+      "durationMs": 688
+    }
+  },
+  {
+    "id": 403481,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:17.475Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 791,
+      "turnNumber": 2,
+      "durationMs": 689
+    }
+  },
+  {
+    "id": 403482,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:17.505Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 1072,
+      "slow": false,
+      "turnNumber": 2,
+      "durationMs": 1072
+    }
+  },
+  {
+    "id": 403483,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:17.506Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "I'm calling from Max Life Insurance."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 403484,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:17.506Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 403485,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:17.510Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Are you Mr. Anish?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 403486,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:17.510Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1072,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "Okay. I'm calling from Max Life Insurance. Are you Mr. Anish?"
+    },
+    "metadata": {
+      "inputTokens": 3205,
+      "outputTokens": 18,
+      "cachedTokens": 2790,
+      "model": "gemini-2.5-flash",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 403487,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:18.063Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 553,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 48354,
+      "textLength": 18,
+      "firstByteMs": 141
+    },
+    "metadata": {
+      "turnNumber": 2,
+      "durationMs": 553
+    }
+  },
+  {
+    "id": 403488,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:18.203Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 698,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 73954,
+      "textLength": 36,
+      "firstByteMs": 143
+    },
+    "metadata": {
+      "turnNumber": 2,
+      "durationMs": 698
+    }
+  },
+  {
+    "id": 403489,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:18.629Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2311,
+      "turnNumber": 2,
+      "durationMs": 1122
+    }
+  },
+  {
+    "id": 403490,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:18.629Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 403491,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:19.754Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Barge-in Detected",
+      "trigger": "word_count_interim",
+      "sequenceInvalidated": 3,
+      "heardPreview": "I see. I'm calling from Max Life Insurance. Are you Mr.",
+      "transcriptPreview": "Yes, I am Manish.",
+      "turnNumber": 2,
+      "warningFlags": [
+        "barge_in"
+      ]
+    }
+  },
+  {
+    "id": 403493,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:19.767Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Turn Metrics",
+      "turnCloseReason": "stt_final",
+      "eagerLlmHit": false,
+      "bargeInFiredTotal": 1,
+      "bargeInRecoveryTotal": 1,
+      "bargeInRecoveryRate": 1,
+      "agentSpeakCharsThisTurn": 43,
+      "agentSpeakCharsTotal": 121,
+      "callerSpeakCharsTotal": 20,
+      "talkListenRatio": 6.05,
+      "longestAgentMonologueChars": 78,
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 403492,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:19.767Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Interrupted",
+      "reason": "barge_in",
+      "turnNumber": 2,
+      "durationMs": 1136,
+      "warningFlags": [
+        "playback_interrupted"
+      ]
+    }
+  },
+  {
+    "id": 403494,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:19.784Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "Yes, I am Manish.",
+      "endDetectToFinalMs": 100,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 403496,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:19.889Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash",
+      "systemPromptPreview": "LANGUAGE ABSOLUTE RULE: You MUST respond ONLY in English. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances. REGISTER — speak in natural, everyday colloquial spoken English, the way real people talk in casual conversation; NEVER use formal, literary, or bookish register. Mixing commonly-used English loanwords (business, finance, tech, and everyday terms) into your English speech is normal spoken usage — keep such words in English as people naturally say them; this does NOT count as switching languages, and \"ONLY in English\" does NOT mean avoiding these everyday English loanwords. EXCEPTION — pr",
+      "historyLength": 6,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 403495,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:19.889Z",
+    "component": "LLM",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Speculative LLM Hit",
+      "partial": "Yes, I am Manish.",
+      "final": "Yes, I am Manish.",
+      "bufferedTokens": 0,
+      "done": false,
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 403497,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:20.240Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Mm-hmm."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 403498,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:20.241Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 403499,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:20.594Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 706,
+      "slow": false,
+      "turnNumber": 3,
+      "durationMs": 706
+    }
+  },
+  {
+    "id": 403500,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:20.596Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Anish"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 403501,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:20.666Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "I'm calling about the life insurance policy you looked into on our website a few weeks ago."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 403502,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:20.674Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 706,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "Okay. Anish, I'm calling about the life insurance policy you looked into on our website a few weeks ago. Do you remember that?"
+    },
+    "metadata": {
+      "inputTokens": 2411,
+      "outputTokens": 30,
+      "cachedTokens": 0,
+      "model": "gemini-2.5-flash",
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 403503,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:20.675Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Do you remember that?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 403504,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:21.086Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 491,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 25314,
+      "textLength": 5,
+      "firstByteMs": 156
+    },
+    "metadata": {
+      "turnNumber": 3,
+      "durationMs": 491
+    }
+  },
+  {
+    "id": 403505,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:21.105Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 865,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 68834,
+      "textLength": 7,
+      "fillerCacheHit": false
+    },
+    "metadata": {
+      "turnNumber": 3,
+      "durationMs": 865
+    }
+  },
+  {
+    "id": 403506,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:21.106Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 403507,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:21.106Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2151,
+      "turnNumber": 3,
+      "durationMs": 864
+    }
+  },
+  {
+    "id": 403508,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:21.372Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 699,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 40674,
+      "textLength": 21,
+      "firstByteMs": 322
+    },
+    "metadata": {
+      "turnNumber": 3,
+      "durationMs": 699
+    }
+  },
+  {
+    "id": 403509,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:21.713Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1050,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 155874,
+      "textLength": 91,
+      "firstByteMs": 147
+    },
+    "metadata": {
+      "turnNumber": 3,
+      "durationMs": 1050
+    }
+  },
+  {
+    "id": 403511,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:21.907Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 403510,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:21.907Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 791,
+      "turnNumber": 3,
+      "durationMs": 800
+    }
+  },
+  {
+    "id": 403513,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:26.931Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 403512,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:26.931Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 4871,
+      "turnNumber": 3,
+      "durationMs": 5020
+    }
+  },
+  {
+    "id": 403514,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:28.212Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 1271,
+      "turnNumber": 3,
+      "durationMs": 1280
+    }
+  },
+  {
+    "id": 403515,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:29.014Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Turn Metrics",
+      "turnCloseReason": "stt_final",
+      "eagerLlmHit": true,
+      "bargeInFiredTotal": 1,
+      "bargeInRecoveryTotal": 1,
+      "bargeInRecoveryRate": 1,
+      "agentSpeakCharsThisTurn": 127,
+      "agentSpeakCharsTotal": 248,
+      "callerSpeakCharsTotal": 37,
+      "talkListenRatio": 6.7,
+      "longestAgentMonologueChars": 127,
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 403516,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:30.462Z",
+    "component": "LLM",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Eager LLM Launched",
+      "source": "speech_end_partial",
+      "partial": "I guess",
+      "stableMs": 0,
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 403517,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:30.467Z",
+    "component": "LLM",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Eager LLM Cancelled",
+      "reason": "speech_resumed",
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 403518,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:30.847Z",
+    "component": "LLM",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Eager LLM Launched",
+      "source": "speech_end",
+      "partial": "I guess",
+      "stableMs": 0,
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 403519,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:30.999Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "I guess I remember",
+      "endDetectToFinalMs": 121,
+      "mergedSegments": 2,
+      "pauseCount": 1
+    },
+    "metadata": {
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 403520,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:31.103Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash",
+      "systemPromptPreview": "LANGUAGE ABSOLUTE RULE: You MUST respond ONLY in English. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances. REGISTER — speak in natural, everyday colloquial spoken English, the way real people talk in casual conversation; NEVER use formal, literary, or bookish register. Mixing commonly-used English loanwords (business, finance, tech, and everyday terms) into your English speech is normal spoken usage — keep such words in English as people naturally say them; this does NOT count as switching languages, and \"ONLY in English\" does NOT mean avoiding these everyday English loanwords. EXCEPTION — pr",
+      "historyLength": 8,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 403521,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:31.104Z",
+    "component": "LLM",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Speculative LLM Hit",
+      "partial": "I guess",
+      "final": "I guess I remember",
+      "bufferedTokens": 0,
+      "done": false,
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 403522,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:31.456Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Okay."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 403523,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:31.458Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 403524,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:31.733Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 631,
+      "slow": false,
+      "turnNumber": 4,
+      "durationMs": 631
+    }
+  },
+  {
+    "id": 403525,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:31.898Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "So you were checking out our Max Life Smart Secure Plus Plan."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 403526,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:31.902Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 631,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "Okay. So you were checking out our Max Life Smart Secure Plus Plan. It's a really good one because it gives you lots of coverage options and you can even increase your coverage as your life changes."
+    },
+    "metadata": {
+      "inputTokens": 2459,
+      "outputTokens": 42,
+      "cachedTokens": 0,
+      "model": "gemini-2.5-flash",
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 403527,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:31.902Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "It's a really good one because it gives you lots of coverage options and you can even increase your coverage as your life changes."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 403528,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:32.080Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 627,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 20194,
+      "textLength": 5,
+      "fillerCacheHit": false
+    },
+    "metadata": {
+      "turnNumber": 4,
+      "durationMs": 627
+    }
+  },
+  {
+    "id": 403529,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:32.084Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 403530,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:32.084Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 631,
+      "turnNumber": 4,
+      "durationMs": 627
+    }
+  },
+  {
+    "id": 403531,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:32.692Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 795,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 104674,
+      "textLength": 61,
+      "firstByteMs": 138
+    },
+    "metadata": {
+      "turnNumber": 4,
+      "durationMs": 795
+    }
+  },
+  {
+    "id": 403532,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:33.275Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1372,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 224994,
+      "textLength": 130,
+      "firstByteMs": 126
+    },
+    "metadata": {
+      "turnNumber": 4,
+      "durationMs": 1372
+    }
+  },
+  {
+    "id": 403534,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:35.446Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 3271,
+      "turnNumber": 4,
+      "durationMs": 3361
+    }
+  },
+  {
+    "id": 403533,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:35.446Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 403535,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:42.685Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 7031,
+      "turnNumber": 4,
+      "durationMs": 7240
+    }
+  },
+  {
+    "id": 403536,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:43.487Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Turn Metrics",
+      "turnCloseReason": "stt_final",
+      "eagerLlmHit": true,
+      "bargeInFiredTotal": 1,
+      "bargeInRecoveryTotal": 1,
+      "bargeInRecoveryRate": 1,
+      "agentSpeakCharsThisTurn": 198,
+      "agentSpeakCharsTotal": 446,
+      "callerSpeakCharsTotal": 55,
+      "talkListenRatio": 8.11,
+      "longestAgentMonologueChars": 198,
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 403537,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:45.669Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Transcript Held",
+      "reason": "short fragment held briefly for coalesce (not a drop)",
+      "guard": "fragment_coalesce_hold",
+      "discardedText": "Okay Ma'am",
+      "isPlaying": false,
+      "msLeftInEchoWindow": 0,
+      "turnNumber": 4,
+      "warningFlags": [
+        "transcript_held"
+      ]
+    }
+  },
+  {
+    "id": 403538,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:46.743Z",
+    "component": "LLM",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Eager LLM Launched",
+      "source": "speech_end_partial",
+      "partial": "What are the benefits?",
+      "stableMs": 0,
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 403539,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:46.775Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "Okay Ma'am What are the benefits?",
+      "endDetectToFinalMs": 100,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 403540,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:46.881Z",
+    "component": "LLM",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Speculative LLM Hit",
+      "partial": "What are the benefits?",
+      "final": "Okay Ma'am What are the benefits?",
+      "bufferedTokens": 0,
+      "done": false,
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 403541,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:46.881Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash",
+      "systemPromptPreview": "LANGUAGE ABSOLUTE RULE: You MUST respond ONLY in English. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances. REGISTER — speak in natural, everyday colloquial spoken English, the way real people talk in casual conversation; NEVER use formal, literary, or bookish register. Mixing commonly-used English loanwords (business, finance, tech, and everyday terms) into your English speech is normal spoken usage — keep such words in English as people naturally say them; this does NOT count as switching languages, and \"ONLY in English\" does NOT mean avoiding these everyday English loanwords. EXCEPTION — pr",
+      "historyLength": 10,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 403542,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:47.232Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Got it."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 403543,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:47.232Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 22754,
+      "textLength": 7,
+      "fillerCacheHit": true
+    },
+    "metadata": {
+      "turnNumber": 5,
+      "durationMs": 1
+    }
+  },
+  {
+    "id": 403544,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:47.233Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 403545,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:47.274Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 399,
+      "slow": false,
+      "turnNumber": 5,
+      "durationMs": 399
+    }
+  },
+  {
+    "id": 403546,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:47.407Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Well, it's a non-linked non-participating individual pure risk premium life insurance plan."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 403548,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:47.410Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "It basically means it's a pure term plan that gives your family financial protection if something happens to you."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 403547,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:47.410Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 399,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "Okay. Well, it's a non-linked non-participating individual pure risk premium life insurance plan. It basically means it's a pure term plan that gives your family financial protection if something happens to you."
+    },
+    "metadata": {
+      "inputTokens": 2510,
+      "outputTokens": 45,
+      "cachedTokens": 0,
+      "model": "gemini-2.5-flash",
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 403549,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:47.947Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 403550,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:47.947Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 711,
+      "turnNumber": 5,
+      "durationMs": 713
+    }
+  },
+  {
+    "id": 403551,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:48.600Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1194,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 173794,
+      "textLength": 91,
+      "firstByteMs": 158
+    },
+    "metadata": {
+      "turnNumber": 5,
+      "durationMs": 1194
+    }
+  },
+  {
+    "id": 403552,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:48.924Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1514,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 199394,
+      "textLength": 113,
+      "firstByteMs": 144
+    },
+    "metadata": {
+      "turnNumber": 5,
+      "durationMs": 1514
+    }
+  },
+  {
+    "id": 403554,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:53.488Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 5431,
+      "turnNumber": 5,
+      "durationMs": 5541
+    }
+  },
+  {
+    "id": 403553,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:53.488Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 403555,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:17:59.790Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 6231,
+      "turnNumber": 5,
+      "durationMs": 6302
+    }
+  },
+  {
+    "id": 403556,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:18:00.594Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Turn Metrics",
+      "turnCloseReason": "stt_final",
+      "eagerLlmHit": true,
+      "bargeInFiredTotal": 1,
+      "bargeInRecoveryTotal": 1,
+      "bargeInRecoveryRate": 1,
+      "agentSpeakCharsThisTurn": 213,
+      "agentSpeakCharsTotal": 659,
+      "callerSpeakCharsTotal": 88,
+      "talkListenRatio": 7.49,
+      "longestAgentMonologueChars": 213,
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 403557,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:18:04.689Z",
+    "component": "LLM",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Eager LLM Launched",
+      "source": "speech_end_partial",
+      "partial": "Can you call back me after five minutes?",
+      "stableMs": 0,
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 403558,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:18:04.722Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "Can you call back me after five minutes?",
+      "endDetectToFinalMs": 123,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 403559,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:18:04.824Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash",
+      "systemPromptPreview": "LANGUAGE ABSOLUTE RULE: You MUST respond ONLY in English. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances. REGISTER — speak in natural, everyday colloquial spoken English, the way real people talk in casual conversation; NEVER use formal, literary, or bookish register. Mixing commonly-used English loanwords (business, finance, tech, and everyday terms) into your English speech is normal spoken usage — keep such words in English as people naturally say them; this does NOT count as switching languages, and \"ONLY in English\" does NOT mean avoiding these everyday English loanwords. EXCEPTION — pr",
+      "historyLength": 12,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 403560,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:18:04.824Z",
+    "component": "LLM",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Speculative LLM Hit",
+      "partial": "Can you call back me after five minutes?",
+      "final": "Can you call back me after five minutes?",
+      "bufferedTokens": 0,
+      "done": false,
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 403561,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:18:05.175Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 20194,
+      "textLength": 5,
+      "fillerCacheHit": true
+    },
+    "metadata": {
+      "turnNumber": 6,
+      "durationMs": 1
+    }
+  },
+  {
+    "id": 403562,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:18:05.175Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Okay."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 403563,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:18:05.176Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 403564,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:18:05.773Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 952,
+      "slow": false,
+      "turnNumber": 6,
+      "durationMs": 952
+    }
+  },
+  {
+    "id": 403565,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:18:05.774Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "I can definitely do that."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 403566,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:18:05.776Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 952,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "Okay. I can definitely do that. I'll call you back in five minutes then."
+    },
+    "metadata": {
+      "inputTokens": 2571,
+      "outputTokens": 19,
+      "cachedTokens": 0,
+      "model": "gemini-2.5-flash",
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 403567,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:18:05.776Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "I'll call you back in five minutes then."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 403569,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:18:05.809Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 631,
+      "turnNumber": 6,
+      "durationMs": 632
+    }
+  },
+  {
+    "id": 403568,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:18:05.809Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 403570,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:18:06.440Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 665,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 76514,
+      "textLength": 40,
+      "firstByteMs": 133
+    },
+    "metadata": {
+      "turnNumber": 6,
+      "durationMs": 665
+    }
+  },
+  {
+    "id": 403571,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:18:06.460Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 687,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 63714,
+      "textLength": 25,
+      "firstByteMs": 150
+    },
+    "metadata": {
+      "turnNumber": 6,
+      "durationMs": 687
+    }
+  },
+  {
+    "id": 403572,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:18:07.946Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 1991,
+      "turnNumber": 6,
+      "durationMs": 2134
+    }
+  },
+  {
+    "id": 403573,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:18:07.946Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 403574,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:18:10.407Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2391,
+      "turnNumber": 6,
+      "durationMs": 2462
+    }
+  },
+  {
+    "id": 403575,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:18:11.209Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Turn Metrics",
+      "turnCloseReason": "stt_final",
+      "eagerLlmHit": true,
+      "bargeInFiredTotal": 1,
+      "bargeInRecoveryTotal": 1,
+      "bargeInRecoveryRate": 1,
+      "agentSpeakCharsThisTurn": 72,
+      "agentSpeakCharsTotal": 731,
+      "callerSpeakCharsTotal": 128,
+      "talkListenRatio": 5.71,
+      "longestAgentMonologueChars": 213,
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 403576,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:18:14.200Z",
+    "component": "LLM",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Eager LLM Launched",
+      "source": "speech_end_partial",
+      "partial": "Thank you. Bye.",
+      "stableMs": 0,
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 403577,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:18:14.229Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "Thank you. Bye.",
+      "endDetectToFinalMs": 133,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 403578,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:18:14.331Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Caller Farewell Auto-End",
+      "transcript": "Thank you. Bye.",
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 403580,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:18:14.331Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Thank you for calling. Have a great day. Goodbye!"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 403579,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:18:14.331Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 403581,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:18:15.082Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 751,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 94434,
+      "textLength": 49,
+      "firstByteMs": 137
+    },
+    "metadata": {
+      "turnNumber": 7,
+      "durationMs": 751
+    }
+  },
+  {
+    "id": 403582,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:18:17.606Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2951,
+      "turnNumber": 7,
+      "durationMs": 3274
+    }
+  },
+  {
+    "id": 403583,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:18:18.504Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Started"
+    }
+  },
+  {
+    "id": 403584,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:18:18.659Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Saved",
+      "url": "/api/storage/recordings/4698"
+    }
+  },
+  {
+    "id": 403585,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:18:18.659Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Uploaded",
+      "url": "/api/storage/recordings/4698"
+    }
+  },
+  {
+    "id": 403586,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:18:18.804Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "callEnded": {
+        "reason": "completed",
+        "reasonLabel": "Conversation completed",
+        "component": "Recording",
+        "provider": null,
+        "errorCode": null,
+        "errorMessage": null,
+        "expected": true,
+        "retryAttempted": false,
+        "fallbackAttempted": false,
+        "recoverySucceeded": null,
+        "outcome": "Completed",
+        "durationSeconds": 75,
+        "turns": 6,
+        "lastComponent": "Recording",
+        "lastUserTranscript": "Thank you. Bye.",
+        "lastAgentResponse": "Thank you for calling. Have a great day. Goodbye!",
+        "recordingStatus": "saved",
+        "warningCount": 3,
+        "errorCount": 0,
+        "retryCount": 0,
+        "fallbackCount": 0
+      },
+      "durationSeconds": 75,
+      "turns": 6,
+      "avgSttMs": 0,
+      "avgLlmMs": 794,
+      "avgTtsMs": 914
+    }
+  },
+  {
+    "id": 403587,
+    "callId": 4698,
+    "agentId": 401,
+    "ts": "2026-07-27T04:18:19.455Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "updated": true,
+      "wasDropped": false,
+      "callbackDetectionSkipped": false,
+      "durationSeconds": 75,
+      "memoryAgentId": 401
+    }
+  }
+]
