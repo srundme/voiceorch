@@ -8398,14 +8398,22 @@ function extractEmotionTag(text: string): { emotion: string | null; text: string
  * that sentence instead of ending the call.
  */
 function mapEmotionToCartesia(value: string): string[] {
+  // Current Cartesia API takes the emotion name directly in
+  // generation_config.emotion (single enum string) — the legacy
+  // ["family:level"] pairs are rejected. Every tag the LLM can emit is a
+  // valid enum member, so pass it through; the adapter validates against the
+  // full enum and drops unknowns. ("calm" used to map to [] because the old
+  // scheme had no calm — it is a real enum value now.)
   switch (value) {
-    case "enthusiastic": return ["positivity:high"];
-    case "sympathetic":  return ["sadness:low", "positivity:low"];
-    case "calm":         return [];
-    case "curious":      return ["curiosity:high"];
-    case "content":      return ["positivity:low"];
-    case "sad":          return ["sadness:high"];
-    default:             return [];
+    case "enthusiastic":
+    case "sympathetic":
+    case "calm":
+    case "curious":
+    case "content":
+    case "sad":
+      return [value];
+    default:
+      return [];
   }
 }
 

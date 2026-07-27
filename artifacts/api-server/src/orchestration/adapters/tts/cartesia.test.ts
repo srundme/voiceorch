@@ -23,8 +23,8 @@ describe("CartesiaTTS emotion voice-control fallback", () => {
       "fetch",
       vi.fn(async (_url: string, init: RequestInit) => {
         callCount++;
-        const body = JSON.parse(init.body as string) as { voice?: { __experimental_controls?: { emotion?: string[] } } };
-        const hasEmotion = !!body.voice?.__experimental_controls?.emotion?.length;
+        const body = JSON.parse(init.body as string) as { generation_config?: { emotion?: string } };
+        const hasEmotion = !!body.generation_config?.emotion;
         if (hasEmotion) {
           return {
             ok: false,

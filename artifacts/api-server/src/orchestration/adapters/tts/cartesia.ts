@@ -39,7 +39,45 @@ const CARTESIA_WS_BASE = CARTESIA_BASE_URL.replace(/^https:\/\//, "wss://").repl
  */
 function isInvalidVoiceControlsError(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err);
-  return /invalid voice controls|invalid emotion/i.test(msg);
+  return /invalid voice controls|invalid emotion|generation_config/i.test(msg);
+}
+
+/** Emotion enum accepted by generation_config.emotion (2026-03-01 spec). */
+const CARTESIA_EMOTIONS = new Set([
+  "neutral", "happy", "excited", "enthusiastic", "elated", "euphoric",
+  "triumphant", "amazed", "surprised", "flirtatious", "curious", "content",
+  "peaceful", "serene", "calm", "grateful", "affectionate", "trust",
+  "sympathetic", "anticipation", "mysterious", "angry", "mad", "outraged",
+  "frustrated", "agitated", "threatened", "disgusted", "contempt", "envious",
+  "sarcastic", "ironic", "sad", "dejected", "melancholic", "disappointed",
+  "hurt", "guilty", "bored", "tired", "rejected", "nostalgic", "wistful",
+  "apologetic", "hesitant", "insecure", "confused", "resigned", "anxious",
+  "panicked", "alarmed", "scared", "proud", "confident", "distant",
+  "skeptical", "contemplative", "determined",
+]);
+
+/** Legacy "family:level" bases → nearest current enum value. */
+const LEGACY_EMOTION_MAP: Record<string, string> = {
+  positivity: "happy",
+  sadness: "sad",
+  curiosity: "curious",
+  anger: "angry",
+  surprise: "surprised",
+};
+
+/**
+ * Current Cartesia API takes ONE emotion enum string; the old scheme was an
+ * array of "family:level" tags (now rejected — see the strip-and-retry
+ * fallback). Accept both shapes from callers: plain enum names pass through,
+ * legacy pairs map to the nearest enum value, unknowns are dropped.
+ */
+function normalizeEmotion(emotions?: string[]): string | undefined {
+  const first = emotions?.[0]?.trim().toLowerCase();
+  if (!first) return undefined;
+  const base = first.split(":")[0]!.trim();
+  if (CARTESIA_EMOTIONS.has(base)) return base;
+  const mapped = LEGACY_EMOTION_MAP[base];
+  return mapped && CARTESIA_EMOTIONS.has(mapped) ? mapped : undefined;
 }
 
 async function fetchWithRetry(
@@ -104,8 +142,10 @@ export class CartesiaTTS implements TTSAdapter {
     this.key = apiKey;
     // Treat null, undefined, and empty string the same — fall back to Arushi.
     this.voiceId = (voice && voice.trim()) ? voice : "2ee87190-8f84-4925-97da-e52547f9462c";
+    // generation_config.speed documented range is [0.6, 1.5] — out-of-range
+    // values are rejected, so clamp instead of forwarding raw agent config.
     this.speed = (speed != null && Number.isFinite(speed) && speed !== 1)
-      ? Math.min(2, Math.max(0.5, speed))
+      ? Math.min(1.5, Math.max(0.6, speed))
       : null;
     const VALID = new Set([
       "sonic-3.5", "sonic-3.5-2026-05-04", "sonic-latest",
@@ -152,32 +192,45 @@ export class CartesiaTTS implements TTSAdapter {
     return `${CARTESIA_WS_BASE}/tts/websockets?api_key=${encodeURIComponent(this.key)}&cartesia_version=${encodeURIComponent(CARTESIA_VERSION)}`;
   }
 
-  private buildVoice(emotions?: string[]): Record<string, unknown> {
-    const controls: Record<string, unknown> = {};
-    if (this.speed != null) controls.speed = this.speed;
-    if (emotions && emotions.length > 0) {
-      controls.emotion = emotions;
-      logger.info({ evt: "cartesia_emotion_controls", emotions }, "Injecting emotion controls into Cartesia voice request");
+  private buildVoice(): Record<string, unknown> {
+    return { mode: "id", id: this.voiceId };
+  }
+
+  /**
+   * Current API (2026-03-01): speed/volume/emotion live in a top-level
+   * `generation_config` object — `voice.__experimental_controls` is gone from
+   * the spec (it was silently ignored/rejected). Speed is a double in
+   * [0.6, 1.5]; emotion is a SINGLE enum string, not the legacy array.
+   */
+  private buildGenerationConfig(emotions?: string[]): Record<string, unknown> | undefined {
+    const gc: Record<string, unknown> = {};
+    if (this.speed != null) gc.speed = this.speed;
+    const emotion = normalizeEmotion(emotions);
+    if (emotion) {
+      gc.emotion = emotion;
+      logger.info({ evt: "cartesia_emotion_controls", emotion }, "Injecting emotion into Cartesia generation_config");
     }
-    const hasControls = Object.keys(controls).length > 0;
-    return hasControls
-      ? { mode: "id", id: this.voiceId, __experimental_controls: controls }
-      : { mode: "id", id: this.voiceId };
+    return Object.keys(gc).length > 0 ? gc : undefined;
   }
 
   private buildRestBody(text: string, emotions?: string[]): string {
     const body: Record<string, unknown> = {
       transcript: text,
       model_id: this.modelId,
-      voice: this.buildVoice(emotions),
+      voice: this.buildVoice(),
       output_format: { container: "raw", encoding: "pcm_s16le", sample_rate: 16000 },
     };
+    const gc = this.buildGenerationConfig(emotions);
+    if (gc) body.generation_config = gc;
     if (this.language) body.language = this.language;
     return JSON.stringify(body);
   }
 
   private get restHeaders() {
     return {
+      // Documented auth for 2026-03-01 is Authorization: Bearer; X-API-Key is
+      // the legacy header, kept during the transition for compatibility.
+      "Authorization": `Bearer ${this.key}`,
       "X-API-Key": this.key,
       "Cartesia-Version": CARTESIA_VERSION,
       "Content-Type": "application/json",
@@ -256,7 +309,9 @@ export class CartesiaTTS implements TTSAdapter {
         if (type === "chunk") {
           const b64 = msg["data"] as string | undefined;
           if (b64) flushCtx.onChunk(Buffer.from(b64, "base64"));
-        } else if (type === "done") {
+        } else if (type === "done" || type === "flush_done") {
+          // "flush_done" is the documented per-flush ack; "done" kept for
+          // compatibility with servers that send per-flush dones.
           this.flushPending.delete(key);
           flushCtx.resolve();
         } else if (type === "error") {
@@ -341,11 +396,13 @@ export class CartesiaTTS implements TTSAdapter {
         context_id: turnContextId,
         model_id: this.modelId,
         transcript: safeText,
-        voice: this.buildVoice(emotions),
+        voice: this.buildVoice(),
         output_format: { container: "raw", encoding: "pcm_s16le", sample_rate: 16000 },
         continue: true,
         max_buffer_delay_ms: 0,
       };
+      const gcCtx = this.buildGenerationConfig(emotions);
+      if (gcCtx) transcriptMsg.generation_config = gcCtx;
       if (this.language) transcriptMsg.language = this.language;
 
       // Manual flush: creates a discrete audio boundary for this sentence.
@@ -490,11 +547,13 @@ export class CartesiaTTS implements TTSAdapter {
         context_id: contextId,
         model_id: this.modelId,
         transcript: safeText,
-        voice: this.buildVoice(emotions),
+        voice: this.buildVoice(),
         output_format: { container: "raw", encoding: "pcm_s16le", sample_rate: 16000 },
         continue: false,
         max_buffer_delay_ms: 0,
       };
+      const gcMsg = this.buildGenerationConfig(emotions);
+      if (gcMsg) msg.generation_config = gcMsg;
       if (this.language) msg.language = this.language;
 
       try {

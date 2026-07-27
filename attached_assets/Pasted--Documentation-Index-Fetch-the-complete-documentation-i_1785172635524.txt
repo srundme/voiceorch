@@ -1,0 +1,91 @@
+> ## Documentation Index
+> Fetch the complete documentation index at: https://docs.cartesia.ai/llms.txt
+> Use this file to discover all available pages before exploring further.
+
+# Agent Skills
+
+> Teach your agents how to build with Cartesia
+
+Agent skills are installable [`SKILL.md`](https://agentskills.io/home) guides (plus optional references) for **coding agents** in Cursor, Claude Code, and similar clients. Cartesia's official pack is **[cartesia-ai/skills](https://github.com/cartesia-ai/skills)**, and Claude Code can install the same pack as the **cartesia-skills** plugin.
+
+Not using skills? Paste this prompt into your editor rules instead:
+
+<Prompt description="Cartesia integration rules for coding agents" actions={["copy", "cursor"]} icon="robot">
+  You are helping a developer integrate Cartesia (Sonic TTS, Ink STT, voices, and related APIs).
+
+  Rules (required):
+
+  1. Fetch [https://docs.cartesia.ai/llms.txt](https://docs.cartesia.ai/llms.txt) before guessing endpoints, parameters, or examples. Do not invent API fields or voice IDs.
+  2. Follow [https://docs.cartesia.ai/use-the-api/api-conventions](https://docs.cartesia.ai/use-the-api/api-conventions) — send Cartesia-Version on every request.
+  3. Base URL: [https://api.cartesia.ai](https://api.cartesia.ai) (WebSockets: wss\://). HTTPS only.
+  4. Default Cartesia-Version: 2026-03-01 unless the user specifies another date they tested with. On browser WebSockets, use ?cartesia\_version=... (query wins over header when both are set).
+  5. Server/backend: Authorization: Bearer \<api\_key>. Create keys at [https://play.cartesia.ai/keys](https://play.cartesia.ai/keys)
+  6. Browser/mobile: never embed API keys. Backend mints a short-lived access token (POST /access-token with a JSON body — \{} or \{"grants":\{"tts":true}} — see [https://docs.cartesia.ai/get-started/authenticate-your-client-applications](https://docs.cartesia.ai/get-started/authenticate-your-client-applications)). Client calls Cartesia with Authorization: Bearer \<access\_token> (or ?access\_token= on WebSockets).
+  7. Web “button → hear audio”: backend access-token endpoint → browser POST /tts/bytes with the token → response blob → Audio.play(). Examples: [https://docs.cartesia.ai/examples/tts-play-audio](https://docs.cartesia.ai/examples/tts-play-audio) and [https://docs.cartesia.ai/examples/nextjs](https://docs.cartesia.ai/examples/nextjs)
+  8. Prefer official SDKs for app code: [https://github.com/cartesia-ai/cartesia-python](https://github.com/cartesia-ai/cartesia-python) and [https://github.com/cartesia-ai/cartesia-js](https://github.com/cartesia-ai/cartesia-js)
+  9. Sonic speed, volume, emotion: use generation\_config (e.g. generation\_config.speed), not deprecated top-level speed on REST payloads — [https://docs.cartesia.ai/build-with-cartesia/capability-guides/volume-speed-emotion](https://docs.cartesia.ai/build-with-cartesia/capability-guides/volume-speed-emotion)
+  10. Errors: for Cartesia-Version 2026-03-01 and newer, expect structured JSON — [https://docs.cartesia.ai/use-the-api/api-errors](https://docs.cartesia.ai/use-the-api/api-errors)
+  11. Cartesia Line (deployed voice agents, cartesia deploy, telephony) is a separate product — [https://docs.cartesia.ai/line](https://docs.cartesia.ai/line) — not the same as calling TTS/STT REST APIs from the user's server.
+  12. CORS: browsers can call [https://api.cartesia.ai](https://api.cartesia.ai) directly with an access token in typical setups; proxy TTS through the user's backend if the client cannot reach Cartesia (corporate network, custom security policy, etc.).
+
+  Optional (often works better in the IDE):
+
+  * MCP (Cursor, Claude Desktop, etc.): [https://docs.cartesia.ai/tools/ai/mcp](https://docs.cartesia.ai/tools/ai/mcp) — list voices, TTS/STT, dictionaries without custom scripts.
+  * Agent skills: run `npx skills add cartesia-ai/skills` and choose cartesia-api and/or line-voice-agent — [https://docs.cartesia.ai/tools/ai/agent-skills](https://docs.cartesia.ai/tools/ai/agent-skills)
+</Prompt>
+
+## Before you start
+
+* **API / app work:** A Cartesia API key from [play.cartesia.ai/keys](https://play.cartesia.ai/keys).
+* **Cartesia Line:** Same Cartesia key plus an LLM provider key; the [Line quickstart](/line/start-building/quickstart) walks through setup and `cartesia deploy`.
+
+## Install
+
+<Tabs>
+  <Tab title="Any Agent">
+    Use the Agent Skills installer when your coding agent supports the [`SKILL.md`](https://agentskills.io/home) convention directly.
+
+    <Steps>
+      <Step title="Install the skill pack">
+        ```bash theme={null}
+        npx skills add cartesia-ai/skills
+        ```
+      </Step>
+
+      <Step title="Choose skills">
+        Select **cartesia-api** and/or **line-voice-agent** when prompted. You can add both.
+      </Step>
+    </Steps>
+  </Tab>
+
+  <Tab title="Claude Code">
+    Use the Claude Code plugin when you want the Cartesia skills managed through Claude Code's plugin marketplace.
+
+    <Steps>
+      <Step title="Add the Cartesia marketplace">
+        ```text theme={null}
+        /plugin marketplace add cartesia-ai/skills
+        ```
+      </Step>
+
+      <Step title="Install the plugin">
+        ```text theme={null}
+        /plugin install cartesia-skills@cartesia
+        ```
+      </Step>
+
+      <Step title="Reload plugins">
+        ```text theme={null}
+        /reload-plugins
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>
+
+## Which skill?
+
+| Choose               | When                                                                                                                                                                                                                                      |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **cartesia-api**     | You call **REST or WebSocket** APIs (Sonic, Ink, voices), use the [Python](https://github.com/cartesia-ai/cartesia-python) or [JS/TS](https://github.com/cartesia-ai/cartesia-js) SDKs, or wire optional [MCP](/tools/ai/mcp) in the IDE. |
+| **line-voice-agent** | You build **Cartesia Line** agents: `cartesia` CLI, `VoiceAgentApp`, telephony, tools, and handoffs.                                                                                                                                      |
