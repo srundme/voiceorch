@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import crypto from "crypto";
 import Razorpay from "razorpay";
-import { eq, and, ne, inArray, sql } from "drizzle-orm";
+import { eq, and, ne, or, inArray, sql } from "drizzle-orm";
 import { db, usersTable, walletTransactionsTable, phoneNumbersTable, phoneNumberOrdersTable, agentsTable, partnersTable, vobizAccountsTable, platformSettingsTable, whatsappChannelsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { clientContext, denyManagedClient, getManagingPartner } from "../middlewares/clientContext.js";
@@ -995,6 +995,36 @@ router.patch("/phone-numbers/:id/assign", requireAuth, denyManagedClient, async 
         ));
       if (!clientLink) {
         res.status(403).json({ error: "That agent belongs to another account" });
+        return;
+      }
+    }
+  } else {
+    // Unassigning: revocation clears refs on whichever agents still hold this
+    // number. If any of them belong to ANOTHER account, the caller must be
+    // that account's ACTIVE managing partner — a suspended/removed partner
+    // must not be able to strip a client agent's number (fail closed).
+    const holders = await db
+      .select({ userId: agentsTable.userId })
+      .from(agentsTable)
+      .where(or(
+        eq(agentsTable.inboundPhoneNumberId, params.data.id),
+        eq(agentsTable.outboundPhoneNumberId, params.data.id),
+      ));
+    const otherOwners = [...new Set(
+      holders.map(h => h.userId).filter((u): u is string => !!u && u !== clerkId),
+    )];
+    if (otherOwners.length) {
+      const links = await db
+        .select({ clerkId: usersTable.clerkId })
+        .from(usersTable)
+        .innerJoin(partnersTable, eq(usersTable.partnerId, partnersTable.id))
+        .where(and(
+          inArray(usersTable.clerkId, otherOwners),
+          eq(partnersTable.userId, clerkId),
+          eq(partnersTable.status, "active"),
+        ));
+      if (links.length !== otherOwners.length) {
+        res.status(403).json({ error: "This number is connected to a client agent. Your partner account must be active to change it." });
         return;
       }
     }

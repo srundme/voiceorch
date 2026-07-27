@@ -15,6 +15,7 @@
  *  - PATCH /partner/clients/:clerkId          → set per-client rate
  *  - POST /partner/clients/:clerkId/transfer  → move balance partner → client
  *  - GET  /partner/clients/:clerkId/calls     → recent calls for one client
+ *  - GET  /partner/clients/:clerkId/config    → client agents + partner number provisioning
  *  - GET/POST/DELETE /partner/invites         → invite lifecycle
  *  - GET  /partner/invites/preview?token=     → invite details for the accept page
  *  - POST /partner/invites/accept             → link the signed-in user to the partner
@@ -32,6 +33,7 @@ import {
   walletTransactionsTable,
   callsTable,
   agentsTable,
+  phoneNumbersTable,
 } from "@workspace/db";
 import { and, desc, eq, gte, inArray, isNull, sql, count } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
@@ -581,6 +583,95 @@ router.get("/partner/clients/:clerkId/calls", requireAuth, async (req, res): Pro
     res.json({ calls });
   } catch (err) {
     req.log.error({ err }, "partner client calls failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+/* ─── Client configuration (agents + partner number provisioning) ─────────── */
+
+router.get("/partner/clients/:clerkId/config", requireAuth, async (req, res): Promise<void> => {
+  try {
+    const partner = await requireActivePartner(req, res);
+    if (!partner) return;
+    const client = await getOwnedClient(partner.id, String(req.params.clerkId ?? ""));
+    if (!client) { res.status(404).json({ error: "Client not found" }); return; }
+    const partnerClerkId = clerkIdOf(req as { clerkUserId?: string });
+
+    // The client's agents (built by the partner via acting-as).
+    const agents = await db
+      .select({
+        id: agentsTable.id,
+        name: agentsTable.name,
+        status: agentsTable.status,
+        inboundPhoneNumberId: agentsTable.inboundPhoneNumberId,
+      })
+      .from(agentsTable)
+      .where(eq(agentsTable.userId, client.clerkId))
+      .orderBy(agentsTable.name);
+
+    // Resolve inbound number strings (may be client-owned or partner-owned).
+    const inboundIds = agents.map(a => a.inboundPhoneNumberId).filter((x): x is number => x != null);
+    const inboundRows = inboundIds.length
+      ? await db
+          .select({ id: phoneNumbersTable.id, number: phoneNumbersTable.number, userId: phoneNumbersTable.userId })
+          .from(phoneNumbersTable)
+          .where(inArray(phoneNumbersTable.id, inboundIds))
+      : [];
+    const numById = new Map(inboundRows.map(r => [r.id, r]));
+
+    // The partner's own active voice numbers + who currently holds each one.
+    const pNumbers = await db
+      .select({
+        id: phoneNumbersTable.id,
+        number: phoneNumbersTable.number,
+        agentId: phoneNumbersTable.agentId,
+      })
+      .from(phoneNumbersTable)
+      .where(and(
+        eq(phoneNumbersTable.userId, partnerClerkId),
+        eq(phoneNumbersTable.service, "voice"),
+        eq(phoneNumbersTable.status, "active"),
+      ))
+      .orderBy(phoneNumbersTable.number);
+
+    const holderIds = pNumbers.map(n => n.agentId).filter((x): x is number => x != null);
+    const holders = holderIds.length
+      ? await db
+          .select({ id: agentsTable.id, name: agentsTable.name, userId: agentsTable.userId })
+          .from(agentsTable)
+          .where(inArray(agentsTable.id, holderIds))
+      : [];
+    const holderById = new Map(holders.map(h => [h.id, h]));
+
+    res.json({
+      agents: agents.map(a => {
+        const num = a.inboundPhoneNumberId != null ? numById.get(a.inboundPhoneNumberId) : undefined;
+        return {
+          id: a.id,
+          name: a.name,
+          status: a.status,
+          inboundNumber: num?.number ?? null,
+          inboundNumberOwnedByPartner: num ? num.userId === partnerClerkId : false,
+        };
+      }),
+      partnerNumbers: pNumbers.map(n => {
+        const holder = n.agentId != null ? holderById.get(n.agentId) : undefined;
+        const assignment =
+          !holder ? "unassigned"
+          : holder.userId === client.clerkId ? "this_client"
+          : holder.userId === partnerClerkId ? "own"
+          : "other_client";
+        return {
+          id: n.id,
+          number: n.number,
+          assignedAgentId: n.agentId,
+          assignedAgentName: holder?.name ?? null,
+          assignment,
+        };
+      }),
+    });
+  } catch (err) {
+    req.log.error({ err }, "partner client config failed");
     res.status(500).json({ error: "Internal server error" });
   }
 });
