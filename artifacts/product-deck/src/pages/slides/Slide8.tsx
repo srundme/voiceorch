@@ -23,10 +23,10 @@ export default function Slide8() {
       label: "+12 MONTHS",
       color: "#1A237E",
       items: [
-        "Convert pilot users to paid recurring campaigns",
-        "Expand footprint across India via reseller networks and direct business owners",
-        "Implement SnapServe as the primary L1 Qualifier and customer support engine for 1,000+ businesses",
-        "Memory Proxy API publicly available",
+        "Memory Proxy API publicly available — first 3 integrations live with Vapi/Bolna users",
+        "10 paid enterprise BFSI clients onboarded — ₹10L MRR",
+        "Reseller network active — 5 channel partners in insurance and NBFC verticals",
+        "₹50L ARR — Series A preparation begins",
       ],
     },
     {
