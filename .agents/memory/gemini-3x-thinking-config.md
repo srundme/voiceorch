@@ -23,3 +23,5 @@ in the 3.x family before assuming existing thinking-disable logic still
 applies. `gemini-2.5-flash-lite` remains the only fully-zero-thinking-latency
 Gemini model as of this writing; 3.x models trade a small amount of latency
 for materially better reasoning/instruction-following.
+
+**maxOutputTokens interaction (call: replies cut mid-sentence):** on 3.x, thought tokens COUNT toward maxOutputTokens and thinking can't be fully disabled — so an agent's configured cap silently loses tens of tokens per turn vs 2.x (thinkingBudget:0 = whole cap was text). google.ts pads the wire cap with GEMINI3_THINKING_HEADROOM (256, env-overridable) on `/^gemini-3(\.|-)/` models so configured ≈ spoken budget; finishReason=MAX_TOKENS now logs evt:llm_reply_truncated. Indic scripts (2-4× tokens/word) hit shrunken caps first.
