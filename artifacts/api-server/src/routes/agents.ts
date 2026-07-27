@@ -18,6 +18,7 @@ import {
   ListAgentMemoryEpisodesResponse,
 } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/requireAuth.js";
+import { clientContext, denyManagedClient, getManagingPartner } from "../middlewares/clientContext.js";
 import { logActivity } from "../lib/activity.js";
 import { encryptKey, decryptKey } from "../lib/crypto.js";
 import {
@@ -112,7 +113,7 @@ async function setAgentKnowledgeSources(agentId: number, sourceIds: number[]): P
   }
 }
 
-router.get("/agents", requireAuth, async (req, res): Promise<void> => {
+router.get("/agents", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const agents = await db
     .select()
@@ -123,7 +124,7 @@ router.get("/agents", requireAuth, async (req, res): Promise<void> => {
   res.json(ListAgentsResponse.parse(agents.map((a) => prepareAgentForResponse(a, sourceIdMap.get(a.id) ?? []))));
 });
 
-router.post("/agents", requireAuth, async (req, res): Promise<void> => {
+router.post("/agents", requireAuth, clientContext, denyManagedClient, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const parsed = CreateAgentBody.safeParse(req.body);
   if (!parsed.success) {
@@ -280,7 +281,7 @@ router.post("/agents", requireAuth, async (req, res): Promise<void> => {
   res.status(201).json(GetAgentResponse.parse(prepareAgentForResponse(agent, createdSourceIds)));
 });
 
-router.get("/agents/:id", requireAuth, async (req, res): Promise<void> => {
+router.get("/agents/:id", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const params = GetAgentParams.safeParse(req.params);
   if (!params.success) {
@@ -299,7 +300,7 @@ router.get("/agents/:id", requireAuth, async (req, res): Promise<void> => {
   res.json(GetAgentResponse.parse(prepareAgentForResponse(agent, sourceIdMap.get(agent.id) ?? [])));
 });
 
-router.patch("/agents/:id", requireAuth, async (req, res): Promise<void> => {
+router.patch("/agents/:id", requireAuth, clientContext, denyManagedClient, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const params = UpdateAgentParams.safeParse(req.params);
   if (!params.success) {
@@ -379,11 +380,18 @@ router.patch("/agents/:id", requireAuth, async (req, res): Promise<void> => {
       .set({ agentId: null })
       .where(eq(phoneNumbersTable.agentId, agent.id));
     if (parsed.data.inboundPhoneNumberId && agent.userId) {
+      // Managed clients: the number may be owned by the managing partner
+      // (partner-assigned). Accept the agent owner OR their active partner as
+      // the number's owner — never anyone else's number.
+      const managingPartner = await getManagingPartner(agent.userId);
+      const allowedNumberOwners = managingPartner
+        ? [agent.userId, managingPartner.partnerUserId]
+        : [agent.userId];
       await db.update(phoneNumbersTable)
         .set({ agentId: agent.id })
         .where(and(
           eq(phoneNumbersTable.id, parsed.data.inboundPhoneNumberId as number),
-          eq(phoneNumbersTable.userId, agent.userId),
+          inArray(phoneNumbersTable.userId, allowedNumberOwners),
         ));
       const [updatedAgent] = await db.update(agentsTable)
         .set({ outboundPhoneNumberId: parsed.data.inboundPhoneNumberId as number })
@@ -483,7 +491,7 @@ router.patch("/agents/:id", requireAuth, async (req, res): Promise<void> => {
   })();
 });
 
-router.delete("/agents/:id", requireAuth, async (req, res): Promise<void> => {
+router.delete("/agents/:id", requireAuth, clientContext, denyManagedClient, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const params = DeleteAgentParams.safeParse(req.params);
   if (!params.success) {
@@ -550,7 +558,7 @@ router.delete("/agents/:id", requireAuth, async (req, res): Promise<void> => {
 
 // Per-agent rolled-up memory stats for all of the user's agents (single request,
 // no N+1). Returns one row per agent, zeroed when an agent has no memory yet.
-router.get("/agents/memory/summary", requireAuth, async (req, res): Promise<void> => {
+router.get("/agents/memory/summary", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
 
   const agents = await db
@@ -603,7 +611,7 @@ router.get("/agents/memory/summary", requireAuth, async (req, res): Promise<void
 });
 
 // All current (non-superseded) facts across every conversation an agent handled
-router.get("/agents/:id/memory/facts", requireAuth, async (req, res): Promise<void> => {
+router.get("/agents/:id/memory/facts", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const agentId = parseInt(String(req.params["id"] ?? ""), 10);
   if (isNaN(agentId)) { res.status(400).json({ error: "Invalid agent id" }); return; }
@@ -629,7 +637,7 @@ router.get("/agents/:id/memory/facts", requireAuth, async (req, res): Promise<vo
 });
 
 // All conversation episodes for an agent, newest first (timeline source)
-router.get("/agents/:id/memory/episodes", requireAuth, async (req, res): Promise<void> => {
+router.get("/agents/:id/memory/episodes", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const agentId = parseInt(String(req.params["id"] ?? ""), 10);
   if (isNaN(agentId)) { res.status(400).json({ error: "Invalid agent id" }); return; }
@@ -662,7 +670,7 @@ router.get("/agents/:id/memory/episodes", requireAuth, async (req, res): Promise
 // ── Caller Memory endpoints ────────────────────────────────────────────────
 
 // List all callers tracked for this agent
-router.get("/agents/:id/caller-memory", requireAuth, async (req, res): Promise<void> => {
+router.get("/agents/:id/caller-memory", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const agentId = parseInt(String(req.params["id"] ?? ""), 10);
   if (isNaN(agentId)) { res.status(400).json({ error: "Invalid agent id" }); return; }
@@ -728,7 +736,7 @@ router.get("/agents/:id/caller-memory", requireAuth, async (req, res): Promise<v
 //   L0 facts with supersession chains + fact_sources provenance
 //   L1 episodes with insight_fact_ids
 //   L2 sentences with NEXT-edge ordering
-router.get("/agents/:id/caller-memory/:phone", requireAuth, async (req, res): Promise<void> => {
+router.get("/agents/:id/caller-memory/:phone", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const agentId = parseInt(String(req.params["id"] ?? ""), 10);
   const phoneNumber = decodeURIComponent(String(req.params["phone"] ?? ""));
@@ -844,7 +852,7 @@ router.get("/agents/:id/caller-memory/:phone", requireAuth, async (req, res): Pr
 });
 
 // Delete an entire fact key (current + entire supersession chain) for a caller
-router.delete("/agents/:id/caller-memory/:phone/facts/:factId", requireAuth, async (req, res): Promise<void> => {
+router.delete("/agents/:id/caller-memory/:phone/facts/:factId", requireAuth, clientContext, denyManagedClient, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const agentId = parseInt(String(req.params["id"] ?? ""), 10);
   const factId  = parseInt(String(req.params["factId"] ?? ""), 10);
@@ -883,7 +891,7 @@ router.delete("/agents/:id/caller-memory/:phone/facts/:factId", requireAuth, asy
  *          caller_sentences, caller_facts, caller_call_archive.
  * Keeps: caller_profiles (identity row preserved; next call starts clean).
  */
-router.delete("/agents/:id/caller-memory/:phone", requireAuth, async (req, res): Promise<void> => {
+router.delete("/agents/:id/caller-memory/:phone", requireAuth, clientContext, denyManagedClient, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const agentId = parseInt(String(req.params["id"] ?? ""), 10);
   const phoneNumber = decodeURIComponent(String(req.params["phone"] ?? ""));
@@ -955,7 +963,7 @@ router.delete("/agents/:id/caller-memory/:phone", requireAuth, async (req, res):
 
 // ── SnapServe Executions proxy ─────────────────────────────────────────────
 
-router.get("/agents/:id/snapserve-executions", requireAuth, async (req, res): Promise<void> => {
+router.get("/agents/:id/snapserve-executions", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const agentId = parseInt(String(req.params["id"] ?? ""), 10);
   if (isNaN(agentId)) { res.status(400).json({ error: "Invalid agent id" }); return; }
@@ -1020,7 +1028,7 @@ router.get("/agents/:id/snapserve-executions", requireAuth, async (req, res): Pr
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-router.patch("/agents/:id/toggle", requireAuth, async (req, res): Promise<void> => {
+router.patch("/agents/:id/toggle", requireAuth, clientContext, denyManagedClient, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const params = ToggleAgentParams.safeParse(req.params);
   if (!params.success) {
@@ -1046,7 +1054,7 @@ router.patch("/agents/:id/toggle", requireAuth, async (req, res): Promise<void> 
 });
 
 /* ── GET /agents/:id/latency-stats ─────────────────────────────────────────── */
-router.get("/agents/:id/latency-stats", requireAuth, async (req, res): Promise<void> => {
+router.get("/agents/:id/latency-stats", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const agentId = parseInt(String(req.params["id"] ?? ""), 10);
   if (isNaN(agentId)) { res.status(400).json({ error: "Invalid agent id" }); return; }

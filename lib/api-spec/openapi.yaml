@@ -8522,6 +8522,9 @@ components:
           type: ["integer", "null"]
         agentName:
           type: ["string", "null"]
+        partnerAssigned:
+          type: boolean
+          description: True when the number is owned by the client's managing partner and assigned to one of the client's agents (read-only for the client).
         status:
           type: string
           enum: [active, released]

@@ -13,8 +13,10 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import {
   Handshake, Users, UserPlus, Wallet, TrendingUp, Clock, Mail,
-  Trash2, IndianRupee, ArrowRightLeft, Upload, X,
+  Trash2, IndianRupee, ArrowRightLeft, Upload, X, Bot,
 } from "lucide-react";
+import { useLocation } from "wouter";
+import { startActingAs } from "@/lib/acting-as";
 
 /* ─── Types (mirror routes/partner.ts responses) ─────────────────────────── */
 
@@ -223,6 +225,7 @@ function ClientsTab({ me }: { me: PartnerMe }) {
   const { getToken } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [, navigate] = useLocation();
   const [rateClient, setRateClient] = useState<PartnerClient | null>(null);
   const [transferClient, setTransferClient] = useState<PartnerClient | null>(null);
   const [rateText, setRateText] = useState("");
@@ -308,6 +311,14 @@ function ClientsTab({ me }: { me: PartnerMe }) {
                   </td>
                   <td className="px-3 py-2.5">
                     <div className="flex items-center gap-1.5 justify-end">
+                      <Button size="sm" variant="outline" className="h-7 px-2 text-xs"
+                        onClick={() => {
+                          startActingAs({ clientId: c.clerkId, clientName: c.name || c.email || "Client" });
+                          queryClient.clear();
+                          navigate("/app/agents");
+                        }}>
+                        <Bot className="w-3 h-3 mr-1" /> Agents
+                      </Button>
                       <Button size="sm" variant="outline" className="h-7 px-2 text-xs"
                         onClick={() => { setRateClient(c); setRateText((c.rateCentsPerMin / 100).toFixed(2)); }}>
                         <IndianRupee className="w-3 h-3 mr-1" /> Rate

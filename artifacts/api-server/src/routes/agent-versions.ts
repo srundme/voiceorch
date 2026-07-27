@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { eq, and, count, desc, asc, inArray } from "drizzle-orm";
 import { db, agentsTable, agentVersionsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
+import { clientContext, denyManagedClient } from "../middlewares/clientContext.js";
 
 const router: IRouter = Router();
 
@@ -38,7 +39,7 @@ function detectChanges(
 }
 
 // ── List versions for an agent ───────────────────────────────────────────────
-router.get("/agents/:id/versions", requireAuth, async (req, res): Promise<void> => {
+router.get("/agents/:id/versions", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const agentId = parseInt(String(req.params["id"] ?? ""), 10);
   if (isNaN(agentId)) { res.status(400).json({ error: "Invalid agent id" }); return; }
@@ -65,7 +66,7 @@ router.get("/agents/:id/versions", requireAuth, async (req, res): Promise<void> 
 });
 
 // ── Publish a new version snapshot ───────────────────────────────────────────
-router.post("/agents/:id/versions", requireAuth, async (req, res): Promise<void> => {
+router.post("/agents/:id/versions", requireAuth, clientContext, denyManagedClient, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const agentId = parseInt(String(req.params["id"] ?? ""), 10);
   if (isNaN(agentId)) { res.status(400).json({ error: "Invalid agent id" }); return; }
@@ -164,7 +165,7 @@ router.post("/agents/:id/versions", requireAuth, async (req, res): Promise<void>
 });
 
 // ── Get full version snapshot ─────────────────────────────────────────────────
-router.get("/agents/:id/versions/:versionId", requireAuth, async (req, res): Promise<void> => {
+router.get("/agents/:id/versions/:versionId", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const agentId = parseInt(String(req.params["id"] ?? ""), 10);
   const versionId = parseInt(String(req.params["versionId"] ?? ""), 10);
@@ -186,7 +187,7 @@ router.get("/agents/:id/versions/:versionId", requireAuth, async (req, res): Pro
 });
 
 // ── Restore: create a new draft from a snapshot ───────────────────────────────
-router.post("/agents/:id/versions/:versionId/restore", requireAuth, async (req, res): Promise<void> => {
+router.post("/agents/:id/versions/:versionId/restore", requireAuth, clientContext, denyManagedClient, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const agentId = parseInt(String(req.params["id"] ?? ""), 10);
   const versionId = parseInt(String(req.params["versionId"] ?? ""), 10);
@@ -251,7 +252,7 @@ router.post("/agents/:id/versions/:versionId/restore", requireAuth, async (req, 
 });
 
 // ── Delete a draft version ────────────────────────────────────────────────────
-router.delete("/agents/:id/versions/:versionId", requireAuth, async (req, res): Promise<void> => {
+router.delete("/agents/:id/versions/:versionId", requireAuth, clientContext, denyManagedClient, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const agentId = parseInt(String(req.params["id"] ?? ""), 10);
   const versionId = parseInt(String(req.params["versionId"] ?? ""), 10);
@@ -282,7 +283,7 @@ router.delete("/agents/:id/versions/:versionId", requireAuth, async (req, res): 
 });
 
 // ── Archive a version ─────────────────────────────────────────────────────────
-router.patch("/agents/:id/versions/:versionId/archive", requireAuth, async (req, res): Promise<void> => {
+router.patch("/agents/:id/versions/:versionId/archive", requireAuth, clientContext, denyManagedClient, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const agentId = parseInt(String(req.params["id"] ?? ""), 10);
   const versionId = parseInt(String(req.params["versionId"] ?? ""), 10);

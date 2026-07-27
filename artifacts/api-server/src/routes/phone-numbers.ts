@@ -4,6 +4,7 @@ import Razorpay from "razorpay";
 import { eq, and, ne, inArray, sql } from "drizzle-orm";
 import { db, usersTable, walletTransactionsTable, phoneNumbersTable, phoneNumberOrdersTable, agentsTable, partnersTable, vobizAccountsTable, platformSettingsTable, whatsappChannelsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
+import { clientContext, denyManagedClient, getManagingPartner } from "../middlewares/clientContext.js";
 import { logActivity } from "../lib/activity.js";
 import { issueInvoice } from "../services/invoice.js";
 import {
@@ -583,7 +584,7 @@ router.get("/phone-numbers/managed", requireAuth, async (req, res): Promise<void
 
 // ── GET /phone-numbers ────────────────────────────────────────────────────────
 
-router.get("/phone-numbers", requireAuth, async (req, res): Promise<void> => {
+router.get("/phone-numbers", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const rows = await db
     .select()
@@ -594,7 +595,34 @@ router.get("/phone-numbers", requireAuth, async (req, res): Promise<void> => {
       // WhatsApp-capable numbers are managed on the WhatsApp page, not here.
       ne(phoneNumbersTable.service, "whatsapp"),
     ));
-  const enriched = await Promise.all(rows.map(enrichNumber));
+
+  // Managed clients also see partner-owned numbers that are assigned to one of
+  // THEIR agents (read-only, flagged partnerAssigned). Partner numbers not
+  // assigned to this client's agents stay invisible.
+  const managingPartner = await getManagingPartner(clerkId);
+  let partnerRows: typeof rows = [];
+  if (managingPartner) {
+    const clientAgentIds = db
+      .select({ id: agentsTable.id })
+      .from(agentsTable)
+      .where(eq(agentsTable.userId, clerkId));
+    partnerRows = await db
+      .select()
+      .from(phoneNumbersTable)
+      .where(and(
+        eq(phoneNumbersTable.userId, managingPartner.partnerUserId),
+        eq(phoneNumbersTable.status, "active"),
+        ne(phoneNumbersTable.service, "whatsapp"),
+        inArray(phoneNumbersTable.agentId, clientAgentIds),
+      ));
+  }
+
+  const enrichedOwn = await Promise.all(rows.map(enrichNumber));
+  const enrichedPartner = await Promise.all(partnerRows.map(enrichNumber));
+  const enriched = [
+    ...enrichedOwn.map((r) => ({ ...r, partnerAssigned: false })),
+    ...enrichedPartner.map((r) => ({ ...r, partnerAssigned: true })),
+  ];
   res.json(ListPhoneNumbersResponse.parse(enriched));
 });
 
@@ -650,7 +678,7 @@ router.get("/phone-numbers/available", requireAuth, async (req, res): Promise<vo
 // until the payment is confirmed via /purchase/confirm below. This guarantees
 // a completed payment always precedes granting the number.
 
-router.post("/phone-numbers/purchase/initiate", requireAuth, async (req, res): Promise<void> => {
+router.post("/phone-numbers/purchase/initiate", requireAuth, denyManagedClient, async (req, res): Promise<void> => {
   if (!process.env["RAZORPAY_KEY_ID"] || !process.env["RAZORPAY_KEY_SECRET"]) {
     res.status(503).json({ error: "Payment gateway not configured" });
     return;
@@ -756,7 +784,7 @@ router.post("/phone-numbers/purchase/initiate", requireAuth, async (req, res): P
 // from Vobiz. If provisioning fails after a successful payment, the payment
 // is refunded so the user is never charged for a number they didn't receive.
 
-router.post("/phone-numbers/purchase/confirm", requireAuth, async (req, res): Promise<void> => {
+router.post("/phone-numbers/purchase/confirm", requireAuth, denyManagedClient, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const parsed = ConfirmPhoneNumberPurchaseBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Validation failed", issues: parsed.error.issues }); return; }
@@ -927,7 +955,7 @@ async function refundOrder(
 
 // ── PATCH /phone-numbers/:id/assign ──────────────────────────────────────────
 
-router.patch("/phone-numbers/:id/assign", requireAuth, async (req, res): Promise<void> => {
+router.patch("/phone-numbers/:id/assign", requireAuth, denyManagedClient, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const params  = AssignPhoneNumberParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: "Validation failed", issues: params.error.issues }); return; }
@@ -1067,7 +1095,7 @@ router.patch("/phone-numbers/:id/assign", requireAuth, async (req, res): Promise
 // Idempotent repair: re-pushes the inbound answer URL to VoBiz and verifies
 // the number shows application_id = SnapServe (fixes "Not linked" in VoBiz UI).
 
-router.post("/phone-numbers/:id/configure-webhook", requireAuth, async (req, res): Promise<void> => {
+router.post("/phone-numbers/:id/configure-webhook", requireAuth, clientContext, denyManagedClient, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const id = Number(req.params["id"]);
   if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
@@ -1126,7 +1154,7 @@ router.post("/phone-numbers/:id/configure-webhook", requireAuth, async (req, res
 // Bulk partner sync: assigns all user numbers to their respective VoBiz sub-account,
 // transfers operational credit from master partner wallet, and links voice webhooks.
 
-router.post("/phone-numbers/sync-vobiz-partner", requireAuth, async (req, res): Promise<void> => {
+router.post("/phone-numbers/sync-vobiz-partner", requireAuth, denyManagedClient, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
 
   const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, clerkId));
@@ -1184,7 +1212,7 @@ router.post("/phone-numbers/sync-vobiz-partner", requireAuth, async (req, res): 
 
 // ── DELETE /phone-numbers/:id ─────────────────────────────────────────────────
 
-router.delete("/phone-numbers/:id", requireAuth, async (req, res): Promise<void> => {
+router.delete("/phone-numbers/:id", requireAuth, denyManagedClient, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const params  = ReleasePhoneNumberParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: "Validation failed", issues: params.error.issues }); return; }
@@ -1244,7 +1272,7 @@ router.delete("/phone-numbers/:id", requireAuth, async (req, res): Promise<void>
 
 // ── GET /phone-numbers/:id/routing-rules ─────────────────────────────────────
 
-router.get("/phone-numbers/:id/routing-rules", requireAuth, async (req, res): Promise<void> => {
+router.get("/phone-numbers/:id/routing-rules", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const id = parseInt(String(req.params["id"] ?? "0"), 10);
   if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
@@ -1258,7 +1286,7 @@ router.get("/phone-numbers/:id/routing-rules", requireAuth, async (req, res): Pr
 
 // ── PATCH /phone-numbers/:id/routing-rules ────────────────────────────────────
 
-router.patch("/phone-numbers/:id/routing-rules", requireAuth, async (req, res): Promise<void> => {
+router.patch("/phone-numbers/:id/routing-rules", requireAuth, clientContext, denyManagedClient, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const id = parseInt(String(req.params["id"] ?? "0"), 10);
   if (!id) { res.status(400).json({ error: "Invalid phone number id" }); return; }

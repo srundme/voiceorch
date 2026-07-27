@@ -15,6 +15,7 @@ import {
   getListAvailablePhoneNumbersQueryKey,
   getListAgentsQueryKey,
   getGetKycStatusQueryKey,
+  customFetch,
 } from "@workspace/api-client-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -337,28 +338,19 @@ function AssignDialog({
 }
 
 async function configureInboundWebhook(numberId: number): Promise<{ ok: boolean; error?: string; verified?: boolean }> {
-  const token = localStorage.getItem("voiceorch:session");
-  const resp = await fetch(`/api/phone-numbers/${numberId}/configure-webhook`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-  });
-  const body = await resp.json().catch(() => ({})) as {
-    ok?: boolean;
-    error?: string;
-    verified?: boolean;
-    detail?: string;
-  };
-  if (!resp.ok || body.ok === false || body.verified === false) {
-    return {
-      ok: false,
-      verified: false,
-      error: body.error || body.detail || `HTTP ${resp.status}`,
-    };
+  // Uses the shared client so auth + acting-as (x-client-context) apply.
+  try {
+    const body = await customFetch<{ ok?: boolean; error?: string; verified?: boolean; detail?: string }>(
+      `/api/phone-numbers/${numberId}/configure-webhook`,
+      { method: "POST" },
+    );
+    if (body.ok === false || body.verified === false) {
+      return { ok: false, verified: false, error: body.error || body.detail || "Could not verify inbound link" };
+    }
+    return { ok: true, verified: true };
+  } catch (err) {
+    return { ok: false, verified: false, error: err instanceof Error ? err.message : String(err) };
   }
-  return { ok: true, verified: true };
 }
 
 function FixInboundButton({ number }: { number: PhoneNumber }) {
@@ -737,8 +729,7 @@ function RoutingRulesDialog({ number, onClose }: { number: PhoneNumber; onClose:
   const [saving, setSaving] = useState(false);
 
   React.useEffect(() => {
-    fetch(`/api/phone-numbers/${number.id}/routing-rules`)
-      .then(r => r.json() as Promise<{ routingRules: RoutingRule[] }>)
+    customFetch<{ routingRules: RoutingRule[] }>(`/api/phone-numbers/${number.id}/routing-rules`)
       .then(d => { setRules(d.routingRules ?? []); setLoading(false); })
       .catch(() => setLoading(false));
   }, [number.id]);
@@ -758,12 +749,11 @@ function RoutingRulesDialog({ number, onClose }: { number: PhoneNumber; onClose:
   async function handleSave() {
     setSaving(true);
     try {
-      const resp = await fetch(`/api/phone-numbers/${number.id}/routing-rules`, {
+      await customFetch(`/api/phone-numbers/${number.id}/routing-rules`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ routingRules: rules }),
       });
-      if (!resp.ok) throw new Error("Save failed");
       toast({ title: "Routing rules saved" });
       onClose();
     } catch {
@@ -854,6 +844,10 @@ export default function PhoneNumbersPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
+  // Managed clients see a read-only view: numbers are provisioned/assigned by
+  // their partner (server-side enforced; this hides the dead controls).
+  const { data: partnerCtx } = usePartnerContext();
+  const isManagedClient = partnerCtx?.isManagedClient === true;
   const { data: numbers, isLoading } = useListPhoneNumbers({ query: { queryKey: getListPhoneNumbersQueryKey() } });
   const { data: kycData, isLoading: kycLoading } = useGetKycStatus({ query: { queryKey: getGetKycStatusQueryKey() } });
   const startKyc = useStartKyc();
@@ -945,7 +939,7 @@ export default function PhoneNumbersPage() {
         <Phone className="w-5 h-5 text-foreground shrink-0" />
         <h1 className="font-semibold text-foreground text-lg">Phone Numbers</h1>
         <span className="text-xs text-muted-foreground w-full sm:w-auto sm:ml-auto order-last sm:order-none">Powered by VoBiz</span>
-        {numbers && numbers.length > 0 && (
+        {!isManagedClient && numbers && numbers.length > 0 && (
           <Button
             size="sm"
             className="h-10 min-h-10 gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90 w-full sm:w-auto sm:ml-auto"
@@ -957,17 +951,27 @@ export default function PhoneNumbersPage() {
       </div>
 
       <div className="p-4 sm:p-6 max-w-4xl mx-auto space-y-4">
-        {/* KYC banner */}
-        <KycBanner />
+        {/* KYC banner (purchasing is a partner concern for managed clients) */}
+        {!isManagedClient && <KycBanner />}
 
         {/* Info banner */}
-        <div className="flex items-start gap-3 p-4 rounded-xl border border-border bg-card">
-          <Globe className="h-5 w-5 text-foreground mt-0.5 shrink-0" />
-          <div className="text-sm text-muted-foreground space-y-0.5">
-            <p className="text-foreground font-medium">Self-serve number provisioning</p>
-            <p>Search live inventory across 130+ countries via VoBiz. Purchase a number and it's immediately active — assign it to any agent and inbound calls route straight to its pipeline. <span className="text-muted-foreground">Releasing returns the number to inventory.</span></p>
+        {isManagedClient ? (
+          <div className="flex items-start gap-3 p-4 rounded-xl border border-border bg-card">
+            <Globe className="h-5 w-5 text-foreground mt-0.5 shrink-0" />
+            <div className="text-sm text-muted-foreground space-y-0.5">
+              <p className="text-foreground font-medium">Numbers managed by your provider</p>
+              <p>Phone numbers are provisioned and assigned to your agents by your service provider. Inbound calls route straight to the assigned agent — contact your provider to add or change numbers.</p>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="flex items-start gap-3 p-4 rounded-xl border border-border bg-card">
+            <Globe className="h-5 w-5 text-foreground mt-0.5 shrink-0" />
+            <div className="text-sm text-muted-foreground space-y-0.5">
+              <p className="text-foreground font-medium">Self-serve number provisioning</p>
+              <p>Search live inventory across 130+ countries via VoBiz. Purchase a number and it's immediately active — assign it to any agent and inbound calls route straight to its pipeline. <span className="text-muted-foreground">Releasing returns the number to inventory.</span></p>
+            </div>
+          </div>
+        )}
 
         {/* Numbers list */}
         {isLoading ? (
@@ -984,9 +988,13 @@ export default function PhoneNumbersPage() {
           <div className="flex flex-col items-center justify-center py-24 text-muted-foreground">
             <Phone className="w-12 h-12 mb-4 opacity-30" />
             <p className="text-sm mb-3">No phone numbers yet.</p>
-            <Button size="sm" className="gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90" onClick={handleGetNumber}>
-              <Plus className="h-3.5 w-3.5" /> Get Your First Number
-            </Button>
+            {isManagedClient ? (
+              <p className="text-xs text-muted-foreground/70">Your provider will assign numbers to your agents — they'll show up here.</p>
+            ) : (
+              <Button size="sm" className="gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90" onClick={handleGetNumber}>
+                <Plus className="h-3.5 w-3.5" /> Get Your First Number
+              </Button>
+            )}
           </div>
         ) : (
           <div className="space-y-2">
@@ -1019,6 +1027,10 @@ export default function PhoneNumbersPage() {
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto sm:ml-auto">
+                  {(n as { partnerAssigned?: boolean }).partnerAssigned && (
+                    <Badge variant="secondary" className="text-[10px] shrink-0">Assigned by partner</Badge>
+                  )}
+                  {!isManagedClient && !(n as { partnerAssigned?: boolean }).partnerAssigned && (<>
                   {n.agentId && (
                     <Button
                       variant="ghost"
@@ -1046,6 +1058,7 @@ export default function PhoneNumbersPage() {
                   >
                     <Trash2 className="h-3 w-3" />
                   </Button>
+                  </>)}
                 </div>
               </div>
             ))}

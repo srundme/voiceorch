@@ -37,6 +37,25 @@ let _baseUrl: string | null = null;
 let _authTokenGetter: AuthTokenGetter | null = null;
 let _defaultTimeoutMs: number = DEFAULT_TIMEOUT_MS;
 let _unauthorizedHandler: UnauthorizedHandler | null = null;
+let _clientContext: string | null = null;
+
+/**
+ * Partner "acting as client" mode: when set, every request carries an
+ * `x-client-context: <client user id>` header. The server validates that the
+ * caller is an active partner managing that client and then executes the
+ * request against the client's account.
+ *
+ * IMPORTANT: callers must clear/refetch any client-side query cache when
+ * toggling this — cached responses do not key on the header.
+ * Pass `null` to exit acting-as mode.
+ */
+export function setClientContext(clientUserId: string | null): void {
+  _clientContext = clientUserId;
+}
+
+export function getClientContext(): string | null {
+  return _clientContext;
+}
 
 /**
  * Set a base URL that is prepended to every relative request URL
@@ -427,6 +446,11 @@ export async function customFetch<T = unknown>(
 
   if (responseType === "json" && !headers.has("accept")) {
     headers.set("accept", DEFAULT_JSON_ACCEPT);
+  }
+
+  // Partner acting-as-client header (see setClientContext).
+  if (_clientContext && !headers.has("x-client-context")) {
+    headers.set("x-client-context", _clientContext);
   }
 
   // Attach bearer token when an auth getter is configured and no

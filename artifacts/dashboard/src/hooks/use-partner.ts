@@ -5,6 +5,12 @@ import { useAuth } from "@/lib/auth";
 export interface PartnerContext {
   isPartner: boolean;
   branding: { companyName: string; logoUrl: string | null } | null;
+  /**
+   * True when this account is a client managed by an ACTIVE partner: the
+   * partner builds/manages agents and numbers; the dashboard renders the
+   * restricted read-only client view.
+   */
+  isManagedClient?: boolean;
 }
 
 /**

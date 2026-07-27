@@ -221,20 +221,37 @@ server.on("upgrade", (request, socket, head) => { void (async () => {
         socket.destroy();
         return;
       }
-      if (!agentRow || agentRow.userId !== payload.sub) {
+      // Owner connects directly. A managing partner may also Live-Test a
+      // managed client's agent — the call then runs on the CLIENT's account
+      // (billing + call logs), mirroring the share-link guest path.
+      let effectiveUserId: string | null = null;
+      if (agentRow?.userId === payload.sub) {
+        effectiveUserId = payload.sub;
+      } else if (agentRow?.userId) {
+        try {
+          const { getManagingPartner } = await import("./middlewares/clientContext.js");
+          const mp = await getManagingPartner(agentRow.userId);
+          if (mp && mp.partnerUserId === payload.sub) effectiveUserId = agentRow.userId;
+        } catch (err) {
+          logger.error({ err, agentId }, "Webcall upgrade — managing-partner lookup failed");
+        }
+      }
+      if (!agentRow || !effectiveUserId) {
         logger.warn({ agentId, sub: payload.sub }, "Webcall upgrade rejected — agent ownership mismatch");
         socket.write("HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n");
         socket.destroy();
         return;
       }
       try {
+        // Gate on the BILLED account's wallet (the agent owner when a partner
+        // is testing a managed client's agent).
         const walletRows = await db
           .select({ walletBalanceCents: usersTable.walletBalanceCents })
           .from(usersTable)
-          .where(eq(usersTable.clerkId, payload.sub));
+          .where(eq(usersTable.clerkId, effectiveUserId));
         const walletUser = walletRows[0];
         if (walletUser && walletUser.walletBalanceCents <= 0) {
-          logger.warn({ agentId, sub: payload.sub }, "Webcall upgrade rejected — insufficient balance");
+          logger.warn({ agentId, sub: payload.sub, billed: effectiveUserId }, "Webcall upgrade rejected — insufficient balance");
           socket.write("HTTP/1.1 402 Payment Required\r\nContent-Type: application/json\r\nContent-Length: 63\r\n\r\n{\"error\":\"Insufficient balance. Please top up your wallet.\"}");
           socket.destroy();
           return;
@@ -245,7 +262,7 @@ server.on("upgrade", (request, socket, head) => { void (async () => {
         socket.destroy();
         return;
       }
-      webcallUserId = payload.sub;
+      webcallUserId = effectiveUserId;
     }
   }
 

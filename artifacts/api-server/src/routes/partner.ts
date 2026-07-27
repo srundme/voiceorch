@@ -154,9 +154,14 @@ router.get("/partner/context", requireAuth, async (req, res): Promise<void> => {
       }
     }
 
+    const isPartner = !!ownPartner && ownPartner.status === "active";
     res.json({
-      isPartner: !!ownPartner && ownPartner.status === "active",
+      isPartner,
       branding,
+      // Managed client = linked to an ACTIVE partner. The partner builds and
+      // manages their agents; the dashboard renders the restricted client view.
+      // A partner linked to their own org (self-partner) is never "managed".
+      isManagedClient: branding !== null && !isPartner,
     });
   } catch (err) {
     req.log.error({ err }, "partner/context failed");

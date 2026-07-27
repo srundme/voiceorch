@@ -20,6 +20,7 @@ import {
   EndCallResponse,
 } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/requireAuth.js";
+import { clientContext } from "../middlewares/clientContext.js";
 import { getAuth } from "../lib/auth-compat.js";
 import { dispatchWebhooks } from "./webhook-endpoints.js";
 import { disposeCall } from "../services/disposition.js";
@@ -120,7 +121,7 @@ import { generateAndStoreOtp, verifyDestinationOtp } from "../services/phone-otp
 
 /* ── POST /calls/outbound ─────────────────────────────────────────────────── */
 
-router.post("/calls/outbound", requireAuth, async (req, res): Promise<void> => {
+router.post("/calls/outbound", requireAuth, clientContext, async (req, res): Promise<void> => {
   const { userId } = getAuth(req);
   const parsed = InitiateOutboundCallBody.safeParse(req.body);
   if (!parsed.success) {
@@ -411,7 +412,7 @@ router.post("/calls/outbound", requireAuth, async (req, res): Promise<void> => {
 
 /* ── POST /calls/send-destination-otp ────────────────────────────────────── */
 
-router.post("/calls/send-destination-otp", requireAuth, async (req, res): Promise<void> => {
+router.post("/calls/send-destination-otp", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   if (!clerkId) { res.status(401).json({ error: "Unauthorized" }); return; }
 
@@ -438,7 +439,7 @@ router.post("/calls/send-destination-otp", requireAuth, async (req, res): Promis
 
 /* ── POST /calls/verify-destination-otp ──────────────────────────────────── */
 
-router.post("/calls/verify-destination-otp", requireAuth, async (req, res): Promise<void> => {
+router.post("/calls/verify-destination-otp", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   if (!clerkId) { res.status(401).json({ error: "Unauthorized" }); return; }
 
@@ -473,7 +474,7 @@ router.post("/calls/verify-destination-otp", requireAuth, async (req, res): Prom
 
 /* ── GET /calls/verified-destinations ────────────────────────────────────── */
 
-router.get("/calls/verified-destinations", requireAuth, async (req, res): Promise<void> => {
+router.get("/calls/verified-destinations", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   if (!clerkId) { res.status(401).json({ error: "Unauthorized" }); return; }
 
@@ -494,7 +495,7 @@ router.get("/calls/verified-destinations", requireAuth, async (req, res): Promis
   })));
 });
 
-router.get("/calls", requireAuth, async (req, res): Promise<void> => {
+router.get("/calls", requireAuth, clientContext, async (req, res): Promise<void> => {
   const query = ListCallsQueryParams.safeParse(req.query);
   if (!query.success) {
     res.status(400).json({ error: query.error.message });
@@ -536,7 +537,7 @@ router.get("/calls", requireAuth, async (req, res): Promise<void> => {
   res.json(ListCallsResponse.parse(enriched));
 });
 
-router.post("/calls", requireAuth, async (req, res): Promise<void> => {
+router.post("/calls", requireAuth, clientContext, async (req, res): Promise<void> => {
   const { userId } = getAuth(req);
   const parsed = InitiateCallBody.safeParse(req.body);
   if (!parsed.success) {
@@ -585,7 +586,7 @@ router.post("/calls", requireAuth, async (req, res): Promise<void> => {
   res.status(201).json(GetCallResponse.parse(enriched));
 });
 
-router.get("/calls/:id", requireAuth, async (req, res): Promise<void> => {
+router.get("/calls/:id", requireAuth, clientContext, async (req, res): Promise<void> => {
   const params = GetCallParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: "Validation failed", issues: params.error.issues });
@@ -625,7 +626,7 @@ router.get("/calls/:id", requireAuth, async (req, res): Promise<void> => {
 // Caller-scoped memory context for the caller on a given call. Mirrors the
 // runtime caller-key derivation (orchestration/session.ts) so the Call Log
 // detail page shows the SAME memory the live pipeline reads/writes.
-router.get("/calls/:id/caller-memory", requireAuth, async (req, res): Promise<void> => {
+router.get("/calls/:id/caller-memory", requireAuth, clientContext, async (req, res): Promise<void> => {
   const params = GetCallParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: "Validation failed", issues: params.error.issues });
@@ -742,7 +743,7 @@ router.get("/calls/:id/caller-memory", requireAuth, async (req, res): Promise<vo
   }));
 });
 
-router.patch("/calls/:id", requireAuth, async (req, res): Promise<void> => {
+router.patch("/calls/:id", requireAuth, clientContext, async (req, res): Promise<void> => {
   const params = UpdateCallParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: "Validation failed", issues: params.error.issues });
@@ -797,7 +798,7 @@ router.patch("/calls/:id", requireAuth, async (req, res): Promise<void> => {
 
 /* ── POST /calls/:id/transfer (P2-A) ─────────────────────────────────────── */
 
-router.post("/calls/:id/transfer", requireAuth, async (req, res): Promise<void> => {
+router.post("/calls/:id/transfer", requireAuth, clientContext, async (req, res): Promise<void> => {
   const id = parseInt(String(req.params["id"] ?? ""), 10);
   if (!id || isNaN(id)) { res.status(400).json({ error: "Invalid call id" }); return; }
 
@@ -896,7 +897,7 @@ router.post("/calls/:id/transfer", requireAuth, async (req, res): Promise<void> 
   res.json(await enrichCall(updated ?? call));
 });
 
-router.patch("/calls/:id/end", requireAuth, async (req, res): Promise<void> => {
+router.patch("/calls/:id/end", requireAuth, clientContext, async (req, res): Promise<void> => {
   const params = EndCallParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: "Validation failed", issues: params.error.issues });
@@ -1147,7 +1148,7 @@ router.patch("/calls/:id/end", requireAuth, async (req, res): Promise<void> => {
 });
 
 // ── GET /calls/:id/logs — per-call event log ──────────────────────────────
-router.get("/calls/:id/logs", requireAuth, async (req, res) => {
+router.get("/calls/:id/logs", requireAuth, clientContext, async (req, res) => {
   const callId = parseInt(String(req.params.id), 10);
   if (isNaN(callId)) { res.status(400).json({ error: "Invalid call id" }); return; }
 

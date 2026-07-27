@@ -12,7 +12,7 @@ import {
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useAuth } from "@/lib/auth";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useGetWallet, customFetch } from "@workspace/api-client-react";
 import { useMinuteRatesMap, useUserProviderNames } from "@/hooks/use-minute-rates";
 import { SnapServeIcon } from "@/components/logo";
@@ -20,6 +20,7 @@ import { Handshake } from "lucide-react";
 import { usePartnerContext } from "@/hooks/use-partner";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
+import { loadActingAs, stopActingAs } from "@/lib/acting-as";
 
 /* ─── Error boundary ─────────────────────────────────────────────────────── */
 interface ErrorBoundaryState { hasError: boolean; error: unknown }
@@ -134,6 +135,35 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
 ];
+
+/**
+ * Managed clients (accounts run by a partner) get a trimmed surface: the
+ * partner builds agents and buys numbers on their behalf, so build/outreach
+ * sections disappear. Server-side enforcement backs this up — this is UX,
+ * not the security boundary.
+ */
+const MANAGED_CLIENT_NAV: NavGroup[] = [
+  {
+    items: [
+      { name: "Home", href: "/app/home", icon: Home },
+    ],
+  },
+  {
+    group: "BUILD",
+    items: [
+      { name: "Agents", href: "/app/agents", icon: Bot },
+    ],
+  },
+  {
+    group: "CALLS",
+    items: [
+      { name: "Call Logs",     href: "/app/calls",         icon: Phone,       callbackBadge: true },
+      { name: "Phone Numbers", href: "/app/phone-numbers", icon: Hash },
+    ],
+  },
+];
+
+const MANAGED_CLIENT_SETTINGS_HREFS = ["/app/settings", "/app/wallet"];
 
 const NAV_SETTINGS: NavItem[] = [
   { name: "General",               href: "/app/settings", icon: Settings },
@@ -435,13 +465,19 @@ function SidebarContent({
 
   // Partner hub nav (gated) + white-label branding for partner-managed clients.
   const { data: partnerCtx } = usePartnerContext();
-  const navGroups: NavGroup[] = partnerCtx?.isPartner
-    ? [
-        ...NAV_GROUPS.slice(0, -1),
-        { group: "PARTNER", items: [{ name: "Partner Hub", href: "/app/partner", icon: Handshake }] },
-        NAV_GROUPS[NAV_GROUPS.length - 1]!,
-      ]
-    : NAV_GROUPS;
+  const isManagedClient = partnerCtx?.isManagedClient === true;
+  const navGroups: NavGroup[] = isManagedClient
+    ? MANAGED_CLIENT_NAV
+    : partnerCtx?.isPartner
+      ? [
+          ...NAV_GROUPS.slice(0, -1),
+          { group: "PARTNER", items: [{ name: "Partner Hub", href: "/app/partner", icon: Handshake }] },
+          NAV_GROUPS[NAV_GROUPS.length - 1]!,
+        ]
+      : NAV_GROUPS;
+  const settingsItems: NavItem[] = isManagedClient
+    ? NAV_SETTINGS.filter((s) => MANAGED_CLIENT_SETTINGS_HREFS.includes(s.href))
+    : NAV_SETTINGS;
 
   return (
     <div className="flex flex-col h-full bg-sidebar border-r border-sidebar-border">
@@ -518,7 +554,8 @@ function SidebarContent({
         </button>
       </div>
 
-      {/* + New agent CTA */}
+      {/* + New agent CTA (hidden for managed clients — the partner builds their agents) */}
+      {!isManagedClient && (
       <div className="px-2 pb-1.5 shrink-0">
         <button
           type="button"
@@ -532,6 +569,7 @@ function SidebarContent({
           {!collapsed && <span>+ New agent</span>}
         </button>
       </div>
+      )}
 
       {/* Primary nav */}
       <div className="flex-1 overflow-y-auto px-2 py-1 min-h-0">
@@ -586,14 +624,14 @@ function SidebarContent({
         {/* Settings items */}
         {settingsOpen && !collapsed && (
           <div className="mt-0.5 ml-2.5 pl-3 border-l border-sidebar-border flex flex-col gap-px">
-            {NAV_SETTINGS.map(item => (
+            {settingsItems.map(item => (
               <NavItemEl key={item.href} item={item} collapsed={false} indent onClick={onNavClick} />
             ))}
           </div>
         )}
         {settingsOpen && collapsed && (
           <div className="flex flex-col gap-px mt-0.5">
-            {NAV_SETTINGS.map(item => (
+            {settingsItems.map(item => (
               <NavItemEl key={item.href} item={item} collapsed onClick={onNavClick} />
             ))}
           </div>
@@ -669,13 +707,17 @@ const MOBILE_BOTTOM_NAV_ITEMS = [
 
 function MobileBottomNav({ onNewAgent }: { onNewAgent?: () => void }) {
   const [location] = useLocation();
+  const { data: partnerCtx } = usePartnerContext();
+  const items = partnerCtx?.isManagedClient === true
+    ? MOBILE_BOTTOM_NAV_ITEMS.filter((i) => i.href !== null)
+    : [...MOBILE_BOTTOM_NAV_ITEMS];
   return (
     <nav
       className="md:hidden fixed bottom-0 left-0 right-0 z-30 border-t border-border bg-sidebar/95 backdrop-blur-md pb-safe"
       aria-label="Primary"
     >
-      <div className="grid grid-cols-5 h-14">
-        {MOBILE_BOTTOM_NAV_ITEMS.map((item) => {
+      <div className={cn("grid h-14", items.length === 4 ? "grid-cols-4" : "grid-cols-5")}>
+        {items.map((item) => {
           if (item.href === null) {
             return (
               <button
@@ -860,9 +902,40 @@ function MobileTopbarUser() {
 
 /* ─── Layout ─────────────────────────────────────────────────────────────── */
 export function Layout({ children }: { children: React.ReactNode }) {
-  const [location]  = useLocation();
+  const [location, navigate] = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [newAgentOpen, setNewAgentOpen] = useState(false);
+  const { data: partnerCtx } = usePartnerContext();
+  const queryClient = useQueryClient();
+
+  // Partner acting-as-client mode (sessionStorage-backed; survives reloads
+  // and the builder's /app/agents/:id navigation).
+  const [actingAs, setActingAs] = useState(loadActingAs);
+  useEffect(() => { setActingAs(loadActingAs()); }, [location]);
+  // Safety: only partners may act as a client (e.g. stale sessionStorage).
+  useEffect(() => {
+    if (actingAs && partnerCtx && !partnerCtx.isPartner) {
+      stopActingAs();
+      setActingAs(null);
+      queryClient.clear();
+    }
+  }, [actingAs, partnerCtx, queryClient]);
+  const exitActingAs = () => {
+    stopActingAs();
+    setActingAs(null);
+    queryClient.clear();
+    navigate("/app/partner");
+  };
+
+  // Managed clients: restricted surface — bounce hidden sections to Home.
+  // (UX only; the API rejects managed-client writes server-side.)
+  const isManagedClient = partnerCtx?.isManagedClient === true;
+  useEffect(() => {
+    if (!isManagedClient) return;
+    const allowed = ["/app/home", "/app/agents", "/app/calls", "/app/phone-numbers", "/app/wallet", "/app/settings"];
+    if (location === "/app" || allowed.some((p) => location === p || location.startsWith(p + "/"))) return;
+    navigate("/app/home", { replace: true });
+  }, [isManagedClient, location, navigate]);
   const { open: searchOpen, setOpen: setSearchOpen } = useGlobalSearchTrigger();
 
   const [collapsed, setCollapsed] = useState(() => {
@@ -932,6 +1005,23 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
       {/* Main */}
       <main className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden bg-background pt-[calc(50px+env(safe-area-inset-top,0px))] md:pt-0 pb-[calc(3.5rem+env(safe-area-inset-bottom,0px))] md:pb-0">
+        {/* Partner acting-as-client banner */}
+        {actingAs && (
+          <div className="flex items-center gap-2 px-4 py-2 bg-amber-500/10 border-b border-amber-500/30">
+            <Handshake className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+            <p className="text-[12.5px] text-foreground truncate">
+              Managing <span className="font-semibold">{actingAs.clientName}</span>'s workspace — agents, numbers and calls here belong to their account.
+            </p>
+            <button
+              type="button"
+              onClick={exitActingAs}
+              className="ml-auto shrink-0 text-[12px] font-medium px-2.5 py-1 rounded-md border border-border bg-card hover:bg-accent transition-colors cursor-pointer"
+            >
+              Exit
+            </button>
+          </div>
+        )}
+
         {/* Voice-a-thon top notification */}
         <VoiceathonTopBanner />
 
