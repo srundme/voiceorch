@@ -130,3 +130,4 @@
 - [WhatsApp BYON OTP capture](whatsapp-byon-otp-capture.md) — armed-only voice-webhook intercept (code_captured must NOT intercept or real calls get hijacked); SSRF-guarded recording URLs; never downgrade confirmed rows
 - [WhatsApp engagement expansion](whatsapp-engagement-expansion.md) — inbound short-circuit order dial>brochure>chatbot with caps; WhatsApp CALLING not feasible via VoBiz (webhook events only, no answer/media API)
 - [Query-param UI intents vs auto-redirect](query-param-ui-intent.md) — ?create=1-style signals need lazy initializer + reactive useSearch latch, and auto-redirect effects gated on the latched state
+- [Signup-time grants must prove email ownership](signup-grant-email-ownership.md) — email-keyed auto-grants apply only on verified (Google) signup; password signups hold for admin approval; 3 user-creation sites; atomic DELETE..RETURNING claim; lower(email) lookups
