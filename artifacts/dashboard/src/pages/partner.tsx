@@ -13,7 +13,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import {
   Handshake, Users, UserPlus, Wallet, TrendingUp, Clock, Mail,
-  Trash2, IndianRupee, ArrowRightLeft, Upload, X, Bot, Settings2, ChevronRight,
+  Trash2, IndianRupee, ArrowRightLeft, Upload, X, Bot, Settings2, ChevronRight, Send,
 } from "lucide-react";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -243,13 +243,19 @@ interface ClientConfigNumber {
   assignment: "unassigned" | "this_client" | "own" | "other_client";
 }
 
+interface PartnerOwnAgent {
+  id: number;
+  name: string;
+  status: string;
+}
+
 function ClientConfigDialog({ client, onClose }: { client: PartnerClient; onClose: () => void }) {
   const { getToken } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [, navigate] = useLocation();
 
-  const { data, isLoading, isError } = useQuery<{ agents: ClientConfigAgent[]; partnerNumbers: ClientConfigNumber[] }>({
+  const { data, isLoading, isError } = useQuery<{ agents: ClientConfigAgent[]; partnerNumbers: ClientConfigNumber[]; partnerAgents: PartnerOwnAgent[] }>({
     queryKey: ["partner-client-config", client.clerkId],
     queryFn: () => partnerFetch(getToken, `/api/partner/clients/${encodeURIComponent(client.clerkId)}/config`),
   });
@@ -273,6 +279,22 @@ function ClientConfigDialog({ client, onClose }: { client: PartnerClient; onClos
 
   const agents = data?.agents ?? [];
   const numbers = data?.partnerNumbers ?? [];
+  const partnerAgents = data?.partnerAgents ?? [];
+
+  const sendAgent = useMutation({
+    mutationFn: (sourceAgentId: number): Promise<{ id: number; name: string }> =>
+      partnerFetch(getToken, `/api/partner/clients/${encodeURIComponent(client.clerkId)}/agents`, {
+        method: "POST",
+        body: JSON.stringify({ sourceAgentId }),
+      }),
+    onSuccess: (created) => {
+      void queryClient.invalidateQueries({ queryKey: ["partner-client-config"] });
+      void queryClient.invalidateQueries({ queryKey: getListAgentsQueryKey() });
+      toast({ title: "Agent sent", description: `"${created.name}" is now in their account.` });
+    },
+    onError: (err: Error) =>
+      toast({ title: "Could not send agent", description: err.message, variant: "destructive" }),
+  });
 
   const openBuilder = (agentId?: number) => {
     startActingAs({ clientId: client.clerkId, clientName: client.name || client.email || "Client" });
@@ -302,7 +324,7 @@ function ClientConfigDialog({ client, onClose }: { client: PartnerClient; onClos
             <section>
               <div className="flex items-center justify-between mb-2">
                 <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  Agents ({agents.length})
+                  Client's agents ({agents.length})
                 </h3>
                 <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => openBuilder()}>
                   <Bot className="w-3 h-3 mr-1" /> Open agent builder
@@ -341,6 +363,40 @@ function ClientConfigDialog({ client, onClose }: { client: PartnerClient; onClos
                   ))}
                 </ul>
               )}
+            </section>
+
+            {/* Send one of the partner's own agents */}
+            <section>
+              <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">
+                Your agents — send a copy
+              </h3>
+              {partnerAgents.length === 0 ? (
+                <p className="text-sm text-muted-foreground border border-dashed border-border rounded-lg px-3 py-4 text-center">
+                  You haven't built any agents in your own account yet.
+                </p>
+              ) : (
+                <ul className="divide-y divide-border rounded-lg border border-border">
+                  {partnerAgents.map(a => (
+                    <li key={a.id} className="flex items-center justify-between gap-2 px-3 py-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate">{a.name}</p>
+                        <p className="text-[11px] text-muted-foreground capitalize">{a.status}</p>
+                      </div>
+                      <Button
+                        size="sm" variant="outline" className="h-7 px-2 text-xs shrink-0"
+                        disabled={sendAgent.isPending}
+                        onClick={() => sendAgent.mutate(a.id)}
+                      >
+                        <Send className="w-3 h-3 mr-1" /> Send to client
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p className="text-[11px] text-muted-foreground mt-2">
+                Sends a copy into their account. Knowledge bases, phone numbers, calendars and call history
+                don't transfer — connect a number below and re-link the rest in their workspace.
+              </p>
             </section>
 
             {/* Partner numbers */}

@@ -16,6 +16,7 @@
  *  - POST /partner/clients/:clerkId/transfer  → move balance partner → client
  *  - GET  /partner/clients/:clerkId/calls     → recent calls for one client
  *  - GET  /partner/clients/:clerkId/config    → client agents + partner number provisioning
+ *  - POST /partner/clients/:clerkId/agents    → copy one of the partner's agents into the client account
  *  - GET/POST/DELETE /partner/invites         → invite lifecycle
  *  - GET  /partner/invites/preview?token=     → invite details for the accept page
  *  - POST /partner/invites/accept             → link the signed-in user to the partner
@@ -643,7 +644,15 @@ router.get("/partner/clients/:clerkId/config", requireAuth, async (req, res): Pr
       : [];
     const holderById = new Map(holders.map(h => [h.id, h]));
 
+    // The partner's own agents — templates they can send to this client.
+    const ownAgents = await db
+      .select({ id: agentsTable.id, name: agentsTable.name, status: agentsTable.status })
+      .from(agentsTable)
+      .where(eq(agentsTable.userId, partnerClerkId))
+      .orderBy(agentsTable.name);
+
     res.json({
+      partnerAgents: ownAgents,
       agents: agents.map(a => {
         const num = a.inboundPhoneNumberId != null ? numById.get(a.inboundPhoneNumberId) : undefined;
         return {
@@ -672,6 +681,76 @@ router.get("/partner/clients/:clerkId/config", requireAuth, async (req, res): Pr
     });
   } catch (err) {
     req.log.error({ err }, "partner client config failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+/**
+ * POST /partner/clients/:clerkId/agents — copy one of the partner's own agents
+ * into a managed client's account. The copy is a config snapshot: account-scoped
+ * references (numbers, knowledge base, WhatsApp credentials, calendar/IVR ids,
+ * call stats) are stripped and must be re-linked in the client's workspace.
+ */
+router.post("/partner/clients/:clerkId/agents", requireAuth, async (req, res): Promise<void> => {
+  try {
+    const partner = await requireActivePartner(req, res);
+    if (!partner) return;
+    const client = await getOwnedClient(partner.id, String(req.params.clerkId ?? ""));
+    if (!client) { res.status(404).json({ error: "Client not found" }); return; }
+    const partnerClerkId = clerkIdOf(req as { clerkUserId?: string });
+
+    const sourceAgentId = Number((req.body as { sourceAgentId?: unknown } | undefined)?.sourceAgentId);
+    if (!Number.isInteger(sourceAgentId) || sourceAgentId <= 0) {
+      res.status(400).json({ error: "sourceAgentId is required" });
+      return;
+    }
+
+    const [src] = await db
+      .select()
+      .from(agentsTable)
+      .where(and(eq(agentsTable.id, sourceAgentId), eq(agentsTable.userId, partnerClerkId)));
+    if (!src) { res.status(404).json({ error: "Agent not found in your account" }); return; }
+
+    // Strip account-scoped references — they must not follow the copy across accounts.
+    const copy: Record<string, unknown> = { ...src };
+    for (const k of [
+      "id", "userId", "createdAt", "updatedAt",
+      "inboundPhoneNumberId", "outboundPhoneNumberId",
+      "knowledgeBaseId", "snapserveAgentId",
+      "totalCalls", "successfulCalls", "avgDurationSeconds",
+      "avgSttLatencyMs", "avgLlmLatencyMs", "avgTtsFirstChunkMs",
+    ]) delete copy[k];
+    if (src.agentConfig) {
+      // WhatsApp credentials are secrets; IVR/scheduling/calendar entries embed
+      // ids that only resolve inside the partner's account.
+      const cfg: Record<string, unknown> = { ...(src.agentConfig as Record<string, unknown>) };
+      for (const key of Object.keys(cfg)) {
+        if (/whatsapp|ivr|scheduling|calendar/i.test(key)) delete cfg[key];
+      }
+      copy["agentConfig"] = cfg;
+    }
+
+    // De-duplicate the name inside the client's account.
+    const existing = await db
+      .select({ name: agentsTable.name })
+      .from(agentsTable)
+      .where(eq(agentsTable.userId, client.clerkId));
+    const taken = new Set(existing.map(e => e.name));
+    let name = src.name;
+    for (let n = 2; taken.has(name); n++) name = `${src.name} (${n})`;
+
+    const [created] = await db
+      .insert(agentsTable)
+      .values({ ...(copy as unknown as typeof agentsTable.$inferInsert), userId: client.clerkId, name })
+      .returning({ id: agentsTable.id, name: agentsTable.name });
+
+    req.log.info(
+      { sourceAgentId, createdId: created!.id, clientClerkId: client.clerkId },
+      "partner copied agent into client account",
+    );
+    res.status(201).json(created);
+  } catch (err) {
+    req.log.error({ err }, "partner send agent failed");
     res.status(500).json({ error: "Internal server error" });
   }
 });
