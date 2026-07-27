@@ -458,6 +458,11 @@ function SidebarContent({
               <span style={{ fontWeight: 400, opacity: 0.5 }}>Serve</span>
             </span>
           )}
+          {!collapsed && partnerCtx?.isPartner && (
+            <span className="px-1.5 py-[2px] rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-500 text-[9px] font-semibold uppercase tracking-wider leading-none shrink-0">
+              Partner
+            </span>
+          )}
         </Link>
         {onToggleCollapse && (
           <button

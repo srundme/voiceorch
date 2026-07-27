@@ -285,6 +285,9 @@ export default function WalletPage() {
   const minsRemaining = Math.floor(
     (wallet?.balanceCents ?? 0) / (wallet?.effectiveRateCentsPerMin ?? 500),
   );
+  const rateInr = ((wallet?.effectiveRateCentsPerMin ?? 500) / 100)
+    .toFixed(2)
+    .replace(/\.00$/, "");
 
   return (
     <div className="flex flex-col h-full overflow-auto">
@@ -293,7 +296,7 @@ export default function WalletPage() {
         <Wallet className="w-5 h-5 text-foreground" />
         <h1 className="font-semibold text-foreground text-lg">Wallet & Billing</h1>
         </div>
-        <span className="text-xs text-muted-foreground sm:ml-auto">₹5 / minute · INR · GST on top-ups</span>
+        <span className="text-xs text-muted-foreground sm:ml-auto">₹{rateInr} / minute · INR · GST on top-ups</span>
       </div>
 
       <div className="flex-1 overflow-auto p-4 sm:p-6">
@@ -317,7 +320,7 @@ export default function WalletPage() {
                       ₹500 free credit applied
                     </span>
                   )}
-                  Approx. {minsRemaining} minutes remaining at ₹5/min
+                  Approx. {minsRemaining} minutes remaining at ₹{rateInr}/min
                 </p>
               </div>
               {balanceLow && (
