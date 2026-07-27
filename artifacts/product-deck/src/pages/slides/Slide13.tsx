@@ -74,7 +74,7 @@ export default function Slide13() {
           </div>
           <div style={{ width: "0.06vw", height: "3.2vh", background: "rgba(255,111,0,0.35)" }} />
           <div style={{ fontSize: "1.05vw", color: "#C9D5F5", lineHeight: 1.55 }}>
-            Every call enriches the knowledge graph. Caller data compounds with usage — competitors who copy our pipeline still start from zero caller history. The gap widens with every minute of calls processed.
+            The Memory Layer is provider-independent IP. Three things protect it: compliance depth that takes 12+ months to replicate correctly, India-native telephony infrastructure competitors haven't prioritised, and Memory Proxy lock-in — once a Vapi or Bolna customer's caller history lives in our graph, switching means losing every relationship they built.
           </div>
         </div>
       </div>
