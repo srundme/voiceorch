@@ -13,7 +13,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import {
   Handshake, Users, UserPlus, Wallet, TrendingUp, Clock, Mail,
-  Trash2, IndianRupee, ArrowRightLeft, Upload, X, Bot, Settings2, ChevronRight, Send,
+  Trash2, IndianRupee, ArrowRightLeft, Upload, X, Bot, Settings2, ChevronRight, Send, LogIn,
 } from "lucide-react";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -467,6 +467,7 @@ function ClientsTab({ me }: { me: PartnerMe }) {
   const { getToken } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [, navigate] = useLocation();
   const [configClient, setConfigClient] = useState<PartnerClient | null>(null);
   const [rateClient, setRateClient] = useState<PartnerClient | null>(null);
   const [transferClient, setTransferClient] = useState<PartnerClient | null>(null);
@@ -553,6 +554,15 @@ function ClientsTab({ me }: { me: PartnerMe }) {
                   </td>
                   <td className="px-3 py-2.5">
                     <div className="flex items-center gap-1.5 justify-end">
+                      <Button size="sm" variant="outline" className="h-7 px-2 text-xs"
+                        title="Open the dashboard as this client"
+                        onClick={() => {
+                          startActingAs({ clientId: c.clerkId, clientName: c.name || c.email || "Client" });
+                          queryClient.clear();
+                          navigate("/app/home");
+                        }}>
+                        <LogIn className="w-3 h-3 mr-1" /> Log in
+                      </Button>
                       <Button size="sm" variant="outline" className="h-7 px-2 text-xs"
                         onClick={() => setConfigClient(c)}>
                         <Settings2 className="w-3 h-3 mr-1" /> Configure
