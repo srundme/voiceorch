@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo, useRef } from "react";
 import { diffWords, diffWordsWithSpace } from "diff";
-import { useLocation, useParams } from "wouter";
+import { useLocation, useParams, useSearch } from "wouter";
 import {
   Bot, Plus, Search, Phone, Mic, Brain, Webhook, PhoneForwarded,
   Save, MoreHorizontal, Trash2, Settings, FileText, Wrench,
@@ -3473,9 +3473,6 @@ function AgentListPanel({ selectedId, onSelect, rateMap, className }: {
     }
   };
 
-  const [showCreate, setShowCreate] = useState(false);
-  const handleCreate = () => setShowCreate(true);
-
   const filtered = (agents ?? [])
     .filter(a => {
       if (search && !a.name.toLowerCase().includes(search.toLowerCase())) return false;
@@ -3487,7 +3484,6 @@ function AgentListPanel({ selectedId, onSelect, rateMap, className }: {
 
   return (
     <div className={cn("w-[260px] shrink-0 border-r border-border/40 flex flex-col h-full bg-background/30 backdrop-blur-sm", className)}>
-      <CreateAgentDialog open={showCreate} onClose={() => setShowCreate(false)} />
       <div className="p-4 border-b border-border/40 space-y-3">
         <div className="flex items-center justify-between gap-2">
           <div className="text-left min-w-0">
@@ -6110,7 +6106,7 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
 
   const handleVibe = () => {
     handleClose();
-    navigate("/app/vibe-build");
+    navigate("/app/vibe");
   };
 
   const handleScratch = async () => {
@@ -6277,7 +6273,35 @@ export default function AgentBuilder() {
     try { localStorage.setItem(LAST_AGENT_ID_KEY, String(selectedId)); } catch { /* ignore */ }
   }, [selectedId]);
 
-  // /app/agents opens Studio and lands on last (or first) agent — no gallery hub
+  // Create-agent dialog. Opened by StudioEmptyCanvas, or requested via
+  // ?create=1 (sidebar / mobile bottom-nav "New agent" → Manual Build).
+  const searchString = useSearch();
+  const [showCreate, setShowCreate] = useState(() => {
+    try {
+      return new URLSearchParams(window.location.search).get("create") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const handleCreate = () => setShowCreate(true);
+
+  // Honor ?create=1 that arrives while this instance is already mounted
+  // (e.g. user is already on /app/agents), then strip it from the URL so
+  // refresh / tab switches don't re-open the dialog.
+  useEffect(() => {
+    try {
+      const sp = new URLSearchParams(searchString);
+      if (sp.get("create") !== "1") return;
+      setShowCreate(true);
+      sp.delete("create");
+      const next = sp.toString() ? `?${sp.toString()}` : window.location.pathname;
+      window.history.replaceState(null, "", next);
+    } catch { /* ignore */ }
+  }, [searchString]);
+
+  // /app/agents opens Studio and lands on last (or first) agent — no gallery hub.
+  // Deferred while the create dialog is open: the redirect swaps route
+  // components (/app/agents → /app/agents/:id) and would unmount the dialog.
   useEffect(() => {
     if (agentsLoading) return;
     const list = Array.isArray(agents) ? agents : [];
@@ -6287,6 +6311,7 @@ export default function AgentBuilder() {
       return;
     }
     if (selectedId != null) return;
+    if (showCreate) return;
     if (list.length === 0) return;
     let target: number | null = null;
     try {
@@ -6298,35 +6323,16 @@ export default function AgentBuilder() {
     } catch { /* ignore */ }
     if (target == null) target = list[0]!.id;
     navigate(`/app/agents/${target}`, { replace: true });
-  }, [selectedId, agents, agentsLoading, navigate]);
-
-  const [showCreate, setShowCreate] = useState(() => {
-    try {
-      return new URLSearchParams(window.location.search).get("create") === "1";
-    } catch {
-      return false;
-    }
-  });
-  const handleCreate = () => setShowCreate(true);
-
-  useEffect(() => {
-    try {
-      const sp = new URLSearchParams(window.location.search);
-      if (sp.get("create") === "1") {
-        sp.delete("create");
-        const next = sp.toString() ? `?${sp.toString()}` : window.location.pathname;
-        window.history.replaceState(null, "", next);
-      }
-    } catch { /* ignore */ }
-  }, []);
+  }, [selectedId, agents, agentsLoading, navigate, showCreate]);
 
   // On mobile with no selection yet, open agents sheet so list is reachable
+  // (skipped while the create dialog is open so the sheet doesn't cover it)
   useEffect(() => {
-    if (isMobile && selectedId == null && !agentsLoading) {
+    if (isMobile && selectedId == null && !agentsLoading && !showCreate) {
       const list = Array.isArray(agents) ? agents : [];
       if (list.length === 0) setAgentsSheetOpen(true);
     }
-  }, [isMobile, selectedId, agentsLoading, agents]);
+  }, [isMobile, selectedId, agentsLoading, agents, showCreate]);
 
   return (
     <div className="flex h-full overflow-hidden">

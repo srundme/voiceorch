@@ -672,7 +672,7 @@ function NewAgentModal({ open, onClose }: { open: boolean; onClose: () => void }
           {/* Manual Build */}
           <button
             type="button"
-            onClick={() => { onClose(); navigate("/app/agents"); window.dispatchEvent(new CustomEvent("snapserve:new-agent")); }}
+            onClick={() => { onClose(); navigate("/app/agents?create=1"); }}
             className="flex flex-col items-start gap-3 p-4 rounded-xl border border-border bg-card hover:border-primary/50 hover:bg-primary/5 transition-colors text-left group"
           >
             <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center group-hover:bg-muted/80 transition-colors">

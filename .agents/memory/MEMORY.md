@@ -128,3 +128,4 @@
 - [db schema edits need tsc -b lib/db](db-package-stale-dist.md) — api-server typecheck reads lib/db/dist .d.ts; without a rebuild, new tables/columns "don't exist" (TS2724/TS2339 wall)
 - [WhatsApp BYON OTP capture](whatsapp-byon-otp-capture.md) — armed-only voice-webhook intercept (code_captured must NOT intercept or real calls get hijacked); SSRF-guarded recording URLs; never downgrade confirmed rows
 - [WhatsApp engagement expansion](whatsapp-engagement-expansion.md) — inbound short-circuit order dial>brochure>chatbot with caps; WhatsApp CALLING not feasible via VoBiz (webhook events only, no answer/media API)
+- [Query-param UI intents vs auto-redirect](query-param-ui-intent.md) — ?create=1-style signals need lazy initializer + reactive useSearch latch, and auto-redirect effects gated on the latched state
