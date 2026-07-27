@@ -274,6 +274,9 @@ export class SarvamLLM implements LLMAdapter {
       "sarvam-2b":       "sarvam-30b",
       "sarvam-2b-v0.5":  "sarvam-30b",
       "sarvam-m1":       "sarvam-30b",
+      // Retired fixed-context variants — the base models now serve the full window.
+      "sarvam-30b-16k":  "sarvam-30b",
+      "sarvam-105b-32k": "sarvam-105b",
     };
     const raw = model ?? "sarvam-30b";
     this.model = ALIASES[raw] ?? raw;
@@ -357,6 +360,15 @@ export class SarvamLLM implements LLMAdapter {
     //                 tools correctly without over-reasoning.
     if (hasTools && genBody["reasoning_effort"] === null) {
       genBody["reasoning_effort"] = "low";
+    }
+
+    // Reasoning tokens count toward max_tokens. On tool turns (reasoning active)
+    // a small agent-configured cap can be consumed ENTIRELY by the hidden
+    // reasoning trace, leaving content:null — a silent turn. Enforce the
+    // documented 500-token floor whenever reasoning runs alongside tools.
+    if (hasTools && genBody["reasoning_effort"] != null) {
+      const mt = genBody["max_tokens"];
+      if (typeof mt === "number" && mt < 500) genBody["max_tokens"] = 500;
     }
 
     // Sarvam-specific tool-use injection: placed at the very top of the system

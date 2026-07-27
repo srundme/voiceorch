@@ -14,6 +14,11 @@ describe("resolveSarvamSttMode", () => {
     expect(resolveSarvamSttMode("ta-IN")).toBe("transcribe");
     expect(resolveSarvamSttMode("hi-IN")).toBe("transcribe");
     expect(resolveSarvamSttMode("te-IN")).toBe("transcribe");
+    // Languages that previously fell through to codemix by omission:
+    expect(resolveSarvamSttMode("od-IN")).toBe("transcribe");
+    expect(resolveSarvamSttMode("pa-IN")).toBe("transcribe");
+    expect(resolveSarvamSttMode("ur-IN")).toBe("transcribe");
+    expect(resolveSarvamSttMode("ne-IN")).toBe("transcribe");
     expect(resolveSarvamSttMode(null)).toBe("codemix");
     expect(resolveSarvamSttMode(undefined)).toBe("codemix");
   });

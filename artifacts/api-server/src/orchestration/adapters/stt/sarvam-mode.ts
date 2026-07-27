@@ -1,13 +1,21 @@
 /**
  * Sarvam saaras:v3 STT mode resolution.
  *
- * `codemix` is used for ALL languages including en-IN. Callers from across
- * India speak Tamil, Hindi, Telugu, English, or any mix — the multilingual
- * toggle defaults to en-IN but the caller's actual language is unpredictable.
- * `transcribe` mode force-fits non-English audio into English phonemes,
- * producing garbled output (Hindi → Bengali script, dropped words).
- * `codemix` handles all Indian languages + English mixing natively on saaras:v3
- * and works well for pure English too.
+ * Explicit agent-config mode ALWAYS wins. Defaults otherwise:
+ *   • en-IN (and the multilingual default)  → `codemix` — natural for English
+ *     with surprise Hindi/Tamil mixing: English words stay in English script.
+ *   • EVERY Indic language                  → `transcribe` — clean native-script
+ *     output (e.g. ஃபீச்சர்ஸ் for "features") without phonetic English mangling
+ *     ("Futures-ல"). Per Sarvam's guidance, `transcribe` is the mode for clean
+ *     native-script records; codemix on a known-Indic call can write English
+ *     speech in the Indic script.
+ *
+ * Previously only 8 of the 22 Indic languages were pattern-matched here, so
+ * od-IN, pa-IN and all saaras:v3-only languages (ur-IN, ne-IN, as-IN, …)
+ * silently fell through to codemix. The rule is now uniform: en → codemix,
+ * anything else → transcribe.
+ *
+ * Only saaras:v3 supports `mode` at all — the caller gates on MODE_CAPABLE.
  */
 
 export type SarvamSttMode = "transcribe" | "codemix" | "verbatim" | "translit";
@@ -22,11 +30,5 @@ export function resolveSarvamSttMode(
     return explicitMode as SarvamSttMode;
   }
   const lang = (languageCode ?? "en-IN").toLowerCase();
-  // Indic languages (ta-IN, hi-IN, te-IN etc) use `transcribe` mode (matching Bolna)
-  // to yield clean native script transcripts (e.g. ஃபீச்சர்ஸ் for "features")
-  // without phonetic English mangling (Futures-ல). en-IN / multilingual uses codemix.
-  if (lang.startsWith("ta") || lang.startsWith("hi") || lang.startsWith("te") || lang.startsWith("kn") || lang.startsWith("ml") || lang.startsWith("mr") || lang.startsWith("bn") || lang.startsWith("gu")) {
-    return "transcribe";
-  }
-  return "codemix";
+  return lang.startsWith("en") ? "codemix" : "transcribe";
 }

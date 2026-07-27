@@ -70,28 +70,45 @@ function stripDiarizationLabels(text: string): string {
   return text.replace(/(^|\n)\s*speaker\s*\d*\s*:\s*/gi, "$1").trim();
 }
 
-/** BCP-47 codes accepted by Sarvam (note: Odia uses od-IN, not or-IN). */
-const VALID_LANG = new Set([
+/** BCP-47 codes accepted by EVERY Sarvam STT model (saarika:v2.5's 11-language
+ *  set: 10 Indian + English). Note: Odia uses od-IN, not or-IN. */
+const CORE_LANG = new Set([
   "bn-IN", "en-IN", "gu-IN", "hi-IN", "kn-IN",
   "ml-IN", "mr-IN", "od-IN", "pa-IN", "ta-IN", "te-IN",
 ]);
 
-/** ISO-639-1 bare codes → Sarvam BCP-47. */
+/** Languages supported ONLY by saaras:v3 (the 23-language model — 22 Indian +
+ *  English): Assamese, Bodo, Dogri, Konkani, Kashmiri, Maithili, Manipuri,
+ *  Nepali, Sanskrit, Santali, Sindhi, Urdu. Previously these were rejected and
+ *  silently fell back to en-IN even on saaras:v3. */
+const SAARAS_EXTRA_LANG = new Set([
+  "as-IN", "brx-IN", "doi-IN", "kok-IN", "ks-IN", "mai-IN",
+  "mni-IN", "ne-IN", "sa-IN", "sat-IN", "sd-IN", "ur-IN",
+]);
+
+/** ISO-639 bare codes → Sarvam BCP-47. */
 const LANG_MAP: Record<string, string> = {
   bn: "bn-IN", en: "en-IN", gu: "gu-IN", hi: "hi-IN",
   kn: "kn-IN", ml: "ml-IN", mr: "mr-IN",
   or: "od-IN", od: "od-IN",             // Odia: BCP-47 is or-IN but Sarvam uses od-IN
   pa: "pa-IN", ta: "ta-IN", te: "te-IN",
+  // saaras:v3-only languages
+  as: "as-IN", brx: "brx-IN", doi: "doi-IN", kok: "kok-IN", ks: "ks-IN",
+  mai: "mai-IN", mni: "mni-IN", ne: "ne-IN", sa: "sa-IN", sat: "sat-IN",
+  sd: "sd-IN", ur: "ur-IN",
 };
 
-function normaliseLang(code: string | null | undefined): string {
+function normaliseLang(code: string | null | undefined, model: string): string {
   if (!code) return "en-IN";
+  // saaras models cover the full 23-language set; saarika only the 11-language core.
+  const isValid = (c: string) =>
+    CORE_LANG.has(c) || (model.startsWith("saaras") && SAARAS_EXTRA_LANG.has(c));
   const t = code.trim();
-  if (VALID_LANG.has(t)) return t;
+  if (isValid(t)) return t;
   const bare = t.split("-")[0]?.toLowerCase() ?? "";
   const mapped = LANG_MAP[bare];
-  if (mapped) return mapped;
-  logger.warn({ rawLang: code }, "Sarvam STT: unrecognised language — falling back to en-IN");
+  if (mapped && isValid(mapped)) return mapped;
+  logger.warn({ rawLang: code, model }, "Sarvam STT: unsupported language for this model — falling back to en-IN");
   return "en-IN";
 }
 
@@ -124,13 +141,16 @@ export class SarvamSTT implements STTAdapter {
       ? (JSON.parse(extraConfig) as { mode?: string })
       : {};
 
-    // Model: saaras:v3 is recommended; saarika:v2.5 / saaras:v2.5 are legacy.
+    // Model: saaras:v3 (recommended) or saarika:v2.5 (legacy) — the ONLY two
+    // models the streaming WS endpoint accepts (live-verified). "saaras:v2.5"
+    // was never a valid streaming model; normalise it to saaras:v3 so a stale
+    // stored value can't 400 the socket into a reconnect loop.
     const requested = (model ?? "").trim();
-    this.model = ["saaras:v3", "saarika:v2.5", "saaras:v2.5"].includes(requested)
+    this.model = ["saaras:v3", "saarika:v2.5"].includes(requested)
       ? requested
       : "saaras:v3";
 
-    this.langCode = normaliseLang(cfg.language);
+    this.langCode = normaliseLang(cfg.language, this.model);
     this.explicitMode = extra.mode ?? null;
 
     // Mode: explicit agent config wins; else language-aware default (en-IN →
@@ -726,7 +746,7 @@ export class SarvamSTT implements STTAdapter {
         logger.debug({ langCode }, "Sarvam STT: flush signal sent");
       },
       setLanguage(lang: string): void {
-        const next = normaliseLang(lang);
+        const next = normaliseLang(lang, model);
         if (next === langCode) return;           // already on it — no-op (loop guard)
         if (intentionallyClosed) return;         // stream already torn down
         const prev = langCode;
@@ -786,10 +806,41 @@ export class SarvamSTT implements STTAdapter {
       enumerable: true,
     });
 
+    // Sarvam closes the streaming WS after ~60 s of inactivity (documented
+    // limit). The pipeline gates caller frames during agent playback, so a long
+    // agent monologue / hold can starve the socket into an idle close + a
+    // pointless reconnect cycle. After 15 s with nothing sent, ship a short
+    // near-silent PCM frame as a keep-alive (official guidance). Sent RAW — not
+    // via sendChunk — so it never updates lastAudioSentAt/lastMsgAt: keep-alives
+    // must neither arm the zombie detector nor count as "actively streaming".
+    const KEEPALIVE_IDLE_MS = 15_000;
+    const KEEPALIVE_FRAME   = Buffer.alloc(Math.floor(sampleRate * 0.2) * 2); // 200 ms silence, s16le mono
+    let   lastKeepAliveAt   = 0;
+
     // Start the heartbeat AFTER sttObj is created so the interval can reference it.
     const heartbeatInterval = setInterval(() => {
-      if (intentionallyClosed || deadFired) return;       // torn down, or already handled this episode
-      if (!inSpeechSegment) return;                        // only meaningful mid-utterance
+      if (intentionallyClosed) return;                     // torn down
+      // ── Idle keep-alive (only OUTSIDE speech segments — real audio covers the rest) ──
+      const nowMs = Date.now();
+      if (
+        wsReady && ws.readyState === WebSocket.OPEN && !inSpeechSegment &&
+        nowMs - lastAudioSentAt > KEEPALIVE_IDLE_MS &&
+        nowMs - lastKeepAliveAt > KEEPALIVE_IDLE_MS
+      ) {
+        lastKeepAliveAt = nowMs;
+        try {
+          ws.send(JSON.stringify({
+            audio: {
+              data:        KEEPALIVE_FRAME.toString("base64"),
+              encoding:    "audio/wav",
+              sample_rate: sampleRate,
+            },
+          }));
+          logger.debug({ langCode }, "Sarvam STT: idle keep-alive frame sent (60s inactivity guard)");
+        } catch { /* socket racing closed — the close handler's reconnect path covers it */ }
+      }
+      if (deadFired) return;                               // zombie already handled this episode
+      if (!inSpeechSegment) return;                        // zombie check only meaningful mid-utterance
       if (ws.readyState !== WebSocket.OPEN) return;        // CONNECTING/CLOSING handled elsewhere
       // Suppress false positives: during agent playback the pipeline gates caller frames,
       // so we are NOT sending audio and Sarvam is legitimately silent. Only suspect death

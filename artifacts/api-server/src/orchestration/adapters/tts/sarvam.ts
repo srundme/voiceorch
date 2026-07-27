@@ -15,6 +15,9 @@ import type { TTSAdapter } from "../../types.js";
  *                tanya, tarun, sunny, mani, gokul, vijay, shruti, suhani,
  *                mohit, kavitha, rehan, soham, rupali  (38 voices)
  *
+ * Speed control: only `pace` is supported (0.5–2.0 documented range); pitch and
+ * loudness are REJECTED by bulbul:v3 with a 400 — never send them.
+ *
  * The streaming endpoint /text-to-speech-streaming does NOT yet exist (returns 404).
  * Only the buffered synthesize() path is implemented.
  */
@@ -22,9 +25,13 @@ import type { TTSAdapter } from "../../types.js";
 const BASE = "https://api.sarvam.ai";
 const WAV_HEADER_BYTES = 44;
 
+/** REST /text-to-speech caps input at 2,500 characters — stay under with margin. */
+const MAX_TTS_CHARS = 2400;
+
 const VALID_MODELS = new Set(["bulbul:v3", "bulbul:v3-beta", "bulbul:v2"]);
 
-/** Maps BCP-47 / short codes stored on agents → Sarvam target_language_code */
+/** Maps BCP-47 / short codes stored on agents → Sarvam target_language_code.
+ *  Note: Odia is od-IN on Sarvam (the BCP-47 or-IN is rejected). */
 const SARVAM_LANG: Record<string, string> = {
   "en":    "en-IN", "en-IN": "en-IN", "en-US": "en-IN", "en-GB": "en-IN",
   "ta":    "ta-IN", "ta-IN": "ta-IN",
@@ -36,7 +43,7 @@ const SARVAM_LANG: Record<string, string> = {
   "bn":    "bn-IN", "bn-IN": "bn-IN",
   "ml":    "ml-IN", "ml-IN": "ml-IN",
   "pa":    "pa-IN", "pa-IN": "pa-IN",
-  "or":    "or-IN", "or-IN": "or-IN",
+  "or":    "od-IN", "or-IN": "od-IN", "od": "od-IN", "od-IN": "od-IN",
 };
 
 /** Default speaker per model when none is explicitly set */
@@ -51,6 +58,7 @@ export class SarvamTTS implements TTSAdapter {
   private speaker: string;
   private model: string;
   private langCode: string;
+  private pace: number | null;
 
   constructor(
     apiKey: string,
@@ -58,6 +66,7 @@ export class SarvamTTS implements TTSAdapter {
     extraConfig?: string | null,
     language?: string | null,
     model?: string | null,
+    speed?: number | null,
   ) {
     this.key = apiKey;
 
@@ -78,6 +87,12 @@ export class SarvamTTS implements TTSAdapter {
     }
     this.langCode = (lang && SARVAM_LANG[lang]) ? SARVAM_LANG[lang]! : "en-IN";
     this.speaker = (voice && !voice.includes("-")) ? voice : (DEFAULT_SPEAKER[this.model] ?? "ritu");
+
+    // Agent ttsSpeed → Bulbul `pace`, clamped to the documented 0.5–2.0 range.
+    // Omitted at (near-)1.0 so default-speed agents keep byte-identical requests.
+    this.pace = (typeof speed === "number" && Number.isFinite(speed))
+      ? Math.min(2, Math.max(0.5, speed))
+      : null;
   }
 
   /** Hot-swap the TTS language mid-call (multilingual mode). */
@@ -92,19 +107,39 @@ export class SarvamTTS implements TTSAdapter {
     };
   }
 
-  /** Buffered synthesis — returns full PCM after decoding base64 WAV response. */
-  async synthesize(text: string): Promise<{ audio: Buffer; characters: number }> {
+  /** Split oversized text at whitespace boundaries (hard-cut only if a run has
+   *  no spaces). The pipeline sends sentence-sized jobs, so this is a safety
+   *  net for very long greetings/monologues that would otherwise 400. */
+  private static splitForLimit(text: string): string[] {
+    if (text.length <= MAX_TTS_CHARS) return [text];
+    const parts: string[] = [];
+    let rest = text;
+    while (rest.length > MAX_TTS_CHARS) {
+      let cut = rest.lastIndexOf(" ", MAX_TTS_CHARS);
+      if (cut < MAX_TTS_CHARS / 2) cut = MAX_TTS_CHARS;   // no usable space — hard cut
+      parts.push(rest.slice(0, cut).trim());
+      rest = rest.slice(cut).trimStart();
+    }
+    if (rest) parts.push(rest);
+    return parts.filter((p) => p.length > 0);
+  }
+
+  /** Synthesize one ≤2,400-char part → raw PCM s16le@16kHz (WAV header stripped). */
+  private async synthesizeOne(text: string): Promise<Buffer> {
+    const body: Record<string, unknown> = {
+      inputs: [text],
+      target_language_code: this.langCode,
+      speaker: this.speaker,
+      model: this.model,
+      enable_preprocessing: true,
+      speech_sample_rate: 16000,
+    };
+    if (this.pace !== null && Math.abs(this.pace - 1) > 0.001) body["pace"] = this.pace;
+
     const resp = await fetch(`${BASE}/text-to-speech`, {
       method: "POST",
       headers: this.headers,
-      body: JSON.stringify({
-        inputs: [text],
-        target_language_code: this.langCode,
-        speaker: this.speaker,
-        model: this.model,
-        enable_preprocessing: true,
-        speech_sample_rate: 16000,
-      }),
+      body: JSON.stringify(body),
     });
 
     if (!resp.ok) {
@@ -117,6 +152,17 @@ export class SarvamTTS implements TTSAdapter {
 
     // Response is base64-encoded WAV; strip the 44-byte RIFF/WAV header → raw PCM s16le@16kHz
     const wav = Buffer.from(json.audios[0], "base64");
-    return { audio: wav.slice(WAV_HEADER_BYTES), characters: text.length };
+    return wav.slice(WAV_HEADER_BYTES);
+  }
+
+  /** Buffered synthesis — returns full PCM after decoding base64 WAV response(s). */
+  async synthesize(text: string): Promise<{ audio: Buffer; characters: number }> {
+    const parts = SarvamTTS.splitForLimit(text);
+    const buffers: Buffer[] = [];
+    for (const part of parts) buffers.push(await this.synthesizeOne(part));
+    return {
+      audio: buffers.length === 1 ? buffers[0]! : Buffer.concat(buffers),
+      characters: text.length,
+    };
   }
 }
