@@ -448,20 +448,47 @@ function SidebarContent({
       {/* Logo row */}
       <div className="flex items-center h-[50px] px-3 shrink-0 border-b border-sidebar-border gap-1.5">
         <Link href="/app" onClick={onNavClick} className="flex items-center gap-2 flex-1 min-w-0 overflow-hidden">
-          <SnapServeIcon size={24} className="text-foreground shrink-0" />
-          {!collapsed && (
-            <span
-              className="leading-none text-[14px] text-foreground whitespace-nowrap"
-              style={{ fontFamily: "system-ui, sans-serif", letterSpacing: "-0.02em" }}
-            >
-              <span style={{ fontWeight: 700 }}>Snap</span>
-              <span style={{ fontWeight: 400, opacity: 0.5 }}>Serve</span>
-            </span>
-          )}
-          {!collapsed && partnerCtx?.isPartner && (
-            <span className="px-1.5 py-[2px] rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-500 text-[9px] font-semibold uppercase tracking-wider leading-none shrink-0">
-              Partner
-            </span>
+          {partnerCtx?.branding ? (
+            /* White-label: partner-linked clients see their partner's brand here. */
+            <>
+              {partnerCtx.branding.logoUrl ? (
+                <img
+                  src={partnerCtx.branding.logoUrl}
+                  alt={partnerCtx.branding.companyName}
+                  className="h-6 w-6 rounded-md object-contain shrink-0 bg-elevated"
+                />
+              ) : (
+                <span className="h-6 w-6 rounded-md bg-primary/15 text-primary text-[12px] font-bold flex items-center justify-center shrink-0">
+                  {partnerCtx.branding.companyName.charAt(0).toUpperCase()}
+                </span>
+              )}
+              {!collapsed && (
+                <span
+                  className="leading-none text-[14px] font-semibold text-foreground truncate"
+                  style={{ fontFamily: "system-ui, sans-serif", letterSpacing: "-0.02em" }}
+                >
+                  {partnerCtx.branding.companyName}
+                </span>
+              )}
+            </>
+          ) : (
+            <>
+              <SnapServeIcon size={24} className="text-foreground shrink-0" />
+              {!collapsed && (
+                <span
+                  className="leading-none text-[14px] text-foreground whitespace-nowrap"
+                  style={{ fontFamily: "system-ui, sans-serif", letterSpacing: "-0.02em" }}
+                >
+                  <span style={{ fontWeight: 700 }}>Snap</span>
+                  <span style={{ fontWeight: 400, opacity: 0.5 }}>Serve</span>
+                </span>
+              )}
+              {!collapsed && partnerCtx?.isPartner && (
+                <span className="px-1.5 py-[2px] rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-500 text-[9px] font-semibold uppercase tracking-wider leading-none shrink-0">
+                  Partner
+                </span>
+              )}
+            </>
           )}
         </Link>
         {onToggleCollapse && (
