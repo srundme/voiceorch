@@ -985,17 +985,30 @@ router.patch("/phone-numbers/:id/assign", requireAuth, async (req, res): Promise
   // used for outbound caller ID unless the user overrides it later).
   // When unassigning (agentId === null) clear the previous agent's inbound reference.
   if (body.data.agentId) {
+    // Revoke this number from any OTHER agent that previously held it — a
+    // stale outboundPhoneNumberId would let the old agent keep placing
+    // outbound calls with this caller ID (a real leak once numbers can be
+    // assigned across accounts by partners).
+    await db.update(agentsTable)
+      .set({ inboundPhoneNumberId: null })
+      .where(and(eq(agentsTable.inboundPhoneNumberId, row.id), ne(agentsTable.id, body.data.agentId)));
+    await db.update(agentsTable)
+      .set({ outboundPhoneNumberId: null })
+      .where(and(eq(agentsTable.outboundPhoneNumberId, row.id), ne(agentsTable.id, body.data.agentId)));
     // Owner filter deliberately omitted — the agent was validated above
     // (caller's own, or a client agent of the caller's partner account).
     await db.update(agentsTable)
       .set({ inboundPhoneNumberId: row.id, outboundPhoneNumberId: row.id })
       .where(eq(agentsTable.id, body.data.agentId));
   } else {
-    // Clear inboundPhoneNumberId on whichever agent previously held this number
-    // (may be a client agent when a partner unassigns their number).
+    // Full revocation: clear BOTH directions on whichever agent held this
+    // number (may be a client agent when a partner unassigns their number).
     await db.update(agentsTable)
       .set({ inboundPhoneNumberId: null })
       .where(eq(agentsTable.inboundPhoneNumberId, row.id));
+    await db.update(agentsTable)
+      .set({ outboundPhoneNumberId: null })
+      .where(eq(agentsTable.outboundPhoneNumberId, row.id));
   }
 
   await logActivity({
