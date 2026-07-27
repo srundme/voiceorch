@@ -562,6 +562,17 @@ export function injectEnhancedMemory(
   if (latestSummary) {
     lines.push("");
     lines.push(`Previous call summary: ${latestSummary.trim()}`);
+    // Anti-stall directive (call 4814): summaries describing a scheduled
+    // callback or a topic that never actually started make weak models loop on
+    // "shall we continue from earlier?" — asked 4× in one call, even after the
+    // caller agreed twice. Tell the model how to ACT on the summary, not just
+    // what it says.
+    lines.push(
+      "HOW TO USE THIS SUMMARY: open the pending topic yourself with a concrete question or the " +
+        "next substantive step. Ask at most ONE short \"shall we continue?\"-style question for the " +
+        "whole call — once the caller agrees (any yes/okay), or if you already asked once, go " +
+        "straight into the substance. Never re-ask permission to continue.",
+    );
   }
 
   // Predicted next-call intent (profile only today — now actually used live).

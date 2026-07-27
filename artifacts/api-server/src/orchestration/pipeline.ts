@@ -978,6 +978,11 @@ export class OrchestrationPipeline implements VoiceSession {
   // aborted) in processTurn() before the LLM retry loop runs.
   private _specLlmState: {
     partial: string;
+    /** `this.currentLang` snapshot at launch. If the final transcript triggers
+     *  a language switch, the prefill's langGuard is stale (built for the old
+     *  language) and replaying it answers the caller in the WRONG language
+     *  (call 4814: Tamil caller got an English reply on turn 1). */
+    langAtLaunch: string;
     storedTokens: string[];
     storedFullText: string;
     storedUsage?: LLMUsage;
@@ -1353,6 +1358,7 @@ export class OrchestrationPipeline implements VoiceSession {
 
     const state = {
       partial: partialText,
+      langAtLaunch: this.currentLang,
       storedTokens: [] as string[],
       storedFullText: "",
       storedUsage: undefined as LLMUsage | undefined,
@@ -6442,7 +6448,13 @@ export class OrchestrationPipeline implements VoiceSession {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     let effectiveLlm: typeof this.llm = this.llm;
     if (_spec) {
-      if (!_spec.aborted && !_spec.storedToolCall && isSpeculativeHit(_spec.partial, transcript)) {
+      // A language switch detected on THIS final transcript makes the prefill
+      // stale: its langGuard/system prompt were built for the previous
+      // language, so replaying it answers the caller in the WRONG language
+      // (call 4814: Tamil caller, English turn-1 reply). Treat as a miss so
+      // the real llm.chat below rebuilds the prompt with the new language.
+      const _specLangStale = _spec.langAtLaunch !== this.currentLang;
+      if (!_spec.aborted && !_spec.storedToolCall && !_specLangStale && isSpeculativeHit(_spec.partial, transcript)) {
         this._eagerLlmHitThisTurn = true;
         this.logExec("LLM", "system", {
           status: "info", turnNumber: _currentTurnIndex,
@@ -6483,7 +6495,19 @@ export class OrchestrationPipeline implements VoiceSession {
       } else {
         // Miss (or tool call in speculative): discard speculative tokens.
         _spec.aborted = true;
-        if (!_spec.done) {
+        if (_specLangStale) {
+          // Logged even when the prefill already completed — this is the
+          // wrong-language near-miss trail (see call 4814 turn 1).
+          logger.info(
+            {
+              callId: this.config.callId,
+              langAtLaunch: _spec.langAtLaunch || "(none)",
+              langNow: this.currentLang || "(none)",
+              partial: _spec.partial.slice(0, 60),
+            },
+            "Speculative LLM invalidated — caller language switched after prefill launch",
+          );
+        } else if (!_spec.done) {
           logger.info(
             { callId: this.config.callId, partial: _spec.partial.slice(0, 60), final: transcript.slice(0, 60) },
             "Speculative LLM miss — aborting prefill",
@@ -7089,10 +7113,15 @@ export class OrchestrationPipeline implements VoiceSession {
 
     const llmLatencyMs = llmFirstTokenAt ? llmFirstTokenAt - llmStart : Date.now() - llmStart;
     const ttsFirstChunkMs = this.firstAudioSentAt ? this.firstAudioSentAt - llmStart : 0;
+    // Streaming STT invokes processTurn() with sttLatencyMs=0 (there is no
+    // batch roundtrip to time); the perceived STT cost there is VAD-flush →
+    // final transcript. Hoisted out of the log block so onMetrics reports the
+    // same number — before this, call-end avgSttMs was 0 for every
+    // streaming-STT call (see call 4814: avgSttMs:0 despite 74-253ms finals).
+    const _stt_ms = this._tTurnSttFinal > 0 && this._tTurnVadFlush > 0
+      ? Math.round(this._tTurnSttFinal - this._tTurnVadFlush) : Math.round(sttLatencyMs);
     {
       const _tEnd = performance.now();
-      const _stt_ms = this._tTurnSttFinal > 0 && this._tTurnVadFlush > 0
-        ? Math.round(this._tTurnSttFinal - this._tTurnVadFlush) : Math.round(sttLatencyMs);
       const _llm_ttft_ms = this._tTurnLlmFirstToken !== null && this._tTurnSttFinal > 0
         ? Math.round(this._tTurnLlmFirstToken - this._tTurnSttFinal) : null;
       const _llm_ttft_to_clause_ms = this._tTurnLlmFirstClause !== null && this._tTurnLlmFirstToken !== null
@@ -7122,7 +7151,7 @@ export class OrchestrationPipeline implements VoiceSession {
         turn_close_reason:     this._turnCloseReason,
       }, "turn_latency");
     }
-    this.config.onMetrics?.({ sttLatencyMs, llmLatencyMs, ttsFirstChunkMs });
+    this.config.onMetrics?.({ sttLatencyMs: _stt_ms, llmLatencyMs, ttsFirstChunkMs });
 
     // ── Hangup after LLM call ───────────────────────────────────────────────
     if (this.agent.hangupAfterLlmCall && !this.closed) {
