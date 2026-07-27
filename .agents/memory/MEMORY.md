@@ -134,3 +134,4 @@
 - [Partner number provisioning + self-partner billing](partner-number-provisioning.md) — resolvePartnerBilling has 3 cases (client/self-partner/none); number↔agent changes must revoke BOTH inbound+outbound refs on old holders or caller-ID rights leak cross-account
 - [Managed client mode enforcement](managed-client-mode.md) — acting-as needs clientContext per-route; deny-writes are opt-in (audit coverage); self-partners must never count as managed clients
 - [Mute call with live transcript = TTS rejection](tts-mute-transcript-diagnosis.md) — missing key fails setup; running-but-mute = per-sentence provider rejection; surfaced via exec rows + webcall notice banner
+- [Cartesia API 2026 surface](cartesia-api-2026.md) — STT = POST /stt, ink-whisper, ISO-639-1; TTS speed/emotion → generation_config (0.6–1.5, single enum); __experimental_controls retired; flush ack = flush_done
