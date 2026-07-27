@@ -13,7 +13,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import {
   Handshake, Users, UserPlus, Wallet, TrendingUp, Clock, Mail,
-  Trash2, IndianRupee, ArrowRightLeft, Upload, X, Bot, Settings2,
+  Trash2, IndianRupee, ArrowRightLeft, Upload, X, Bot, Settings2, ChevronRight,
 } from "lucide-react";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -274,10 +274,10 @@ function ClientConfigDialog({ client, onClose }: { client: PartnerClient; onClos
   const agents = data?.agents ?? [];
   const numbers = data?.partnerNumbers ?? [];
 
-  const openBuilder = () => {
+  const openBuilder = (agentId?: number) => {
     startActingAs({ clientId: client.clerkId, clientName: client.name || client.email || "Client" });
     queryClient.clear();
-    navigate("/app/agents");
+    navigate(agentId != null ? `/app/agents/${agentId}` : "/app/agents");
   };
 
   return (
@@ -304,7 +304,7 @@ function ClientConfigDialog({ client, onClose }: { client: PartnerClient; onClos
                 <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   Agents ({agents.length})
                 </h3>
-                <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={openBuilder}>
+                <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => openBuilder()}>
                   <Bot className="w-3 h-3 mr-1" /> Open agent builder
                 </Button>
               </div>
@@ -315,18 +315,28 @@ function ClientConfigDialog({ client, onClose }: { client: PartnerClient; onClos
               ) : (
                 <ul className="divide-y divide-border rounded-lg border border-border">
                   {agents.map(a => (
-                    <li key={a.id} className="flex items-center justify-between gap-2 px-3 py-2">
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">{a.name}</p>
-                        <p className="text-[11px] text-muted-foreground truncate">
-                          {a.inboundNumber ? (
-                            <>Inbound: <span className="font-mono">{a.inboundNumber}</span>{a.inboundNumberOwnedByPartner ? " · your number" : ""}</>
-                          ) : "No inbound number"}
-                        </p>
-                      </div>
-                      <Badge variant={a.status === "active" ? "default" : "secondary"} className="text-[10px] shrink-0">
-                        {a.status}
-                      </Badge>
+                    <li key={a.id}>
+                      <button
+                        type="button"
+                        onClick={() => openBuilder(a.id)}
+                        className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left hover:bg-muted/50 transition-colors first:rounded-t-lg last:rounded-b-lg"
+                        title="Open this agent in their builder"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium truncate">{a.name}</p>
+                          <p className="text-[11px] text-muted-foreground truncate">
+                            {a.inboundNumber ? (
+                              <>Inbound: <span className="font-mono">{a.inboundNumber}</span>{a.inboundNumberOwnedByPartner ? " · your number" : ""}</>
+                            ) : "No inbound number"}
+                          </p>
+                        </div>
+                        <span className="flex items-center gap-1.5 shrink-0">
+                          <Badge variant={a.status === "active" ? "default" : "secondary"} className="text-[10px]">
+                            {a.status}
+                          </Badge>
+                          <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
+                        </span>
+                      </button>
                     </li>
                   ))}
                 </ul>
