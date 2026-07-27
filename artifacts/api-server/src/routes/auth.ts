@@ -20,6 +20,7 @@ import { eq, and, isNull, gt, desc, sql } from "drizzle-orm";
 import { createSessionToken } from "../lib/session.js";
 import { logger } from "../lib/logger.js";
 import { sendBrevoEmail } from "../services/brevo.js";
+import { applyPendingPartnerPromotion } from "../services/partner-promotion.js";
 import {
   welcomeEmail,
   welcomeBackEmail,
@@ -149,6 +150,9 @@ router.post("/auth/register", async (req, res): Promise<void> => {
         .where(eq(usersTable.id, existing.id))
         .returning();
       logger.info({ sub, email: normalizedEmail }, "Previously deleted account reactivated via register");
+      // Password signup can't prove email ownership — any pending partner
+      // promotion stays pending for one-click admin approval.
+      await applyPendingPartnerPromotion(user, { emailVerified: false });
     } else {
       [user] = await db
         .insert(usersTable)
@@ -173,6 +177,11 @@ router.post("/auth/register", async (req, res): Promise<void> => {
       });
 
       logger.info({ sub, email: normalizedEmail }, "User registered");
+
+      // Admin may have pre-created a partner account for this email. A
+      // password signup can't prove email ownership, so the promotion is NOT
+      // auto-applied — it stays pending for one-click admin approval.
+      await applyPendingPartnerPromotion(user, { emailVerified: false });
     }
 
     const token = createSessionToken({ sub, email: normalizedEmail, name: user.name });
@@ -704,6 +713,10 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
 
       logger.info({ sub: googleSub, email: normalizedEmail }, "Google Sign-In: new user registered");
       void trackEvent(googleSub, "signup", { email: normalizedEmail });
+
+      // Admin may have pre-created a partner account for this email — apply
+      // it. Google authenticated this email, so ownership is proven.
+      await applyPendingPartnerPromotion(user, { emailVerified: true });
 
       // Welcome email — fire-and-forget
       if (normalizedEmail) {

@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Pencil, Handshake, Users, Mail } from "lucide-react";
+import { Plus, Pencil, Handshake, Users, Mail, Clock, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatAdminError } from "@/lib/api";
 
@@ -46,6 +46,18 @@ interface PartnerInviteRow {
   invitedAt: string;
 }
 
+/** Admin-created partner setup for an email that hasn't signed up yet. */
+interface PendingPromotion {
+  id: number;
+  email: string;
+  companyName: string;
+  baseRateCentsPerMin: number;
+  defaultClientRateCentsPerMin: number;
+  createdAt: string;
+  /** Email now has an account (password signup) — needs explicit approval. */
+  hasAccount?: boolean;
+}
+
 interface PartnerDetail {
   clients: PartnerClientRow[];
   invites: PartnerInviteRow[];
@@ -74,11 +86,12 @@ export default function PartnersPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data, isLoading } = useQuery<{ partners: AdminPartner[] }>({
+  const { data, isLoading } = useQuery<{ partners: AdminPartner[]; pending?: PendingPromotion[] }>({
     queryKey: ["admin", "partners"],
     queryFn: () => adminFetch("/partners"),
   });
   const partners = data?.partners ?? [];
+  const pendingList = data?.pending ?? [];
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<AdminPartner | null>(null);
@@ -109,13 +122,38 @@ export default function PartnersPage() {
           defaultClientRateCentsPerMin: rupeesToPaise(defaultRateText),
         }),
       }),
-    onSuccess: () => {
-      toast({ title: "Partner created" });
+    onSuccess: (resp: { partner?: unknown; pending?: unknown }) => {
+      if (resp?.pending) {
+        toast({
+          title: "Partner saved — awaiting signup",
+          description: "No account with that email yet. It becomes a partner automatically the moment they sign up.",
+        });
+      } else {
+        toast({ title: "Partner created" });
+      }
       setCreateOpen(false);
       setEmail(""); setCompany("");
       invalidate();
     },
     onError: (err) => toast({ title: "Could not create partner", description: formatAdminError(err), variant: "destructive" }),
+  });
+
+  const applyPendingMutation = useMutation({
+    mutationFn: (id: number) => adminFetch(`/partners/pending/${id}/apply`, { method: "POST" }),
+    onSuccess: () => {
+      toast({ title: "Partner approved", description: "The account is now an active partner." });
+      invalidate();
+    },
+    onError: (err) => toast({ title: "Could not approve", description: formatAdminError(err), variant: "destructive" }),
+  });
+
+  const cancelPendingMutation = useMutation({
+    mutationFn: (id: number) => adminFetch(`/partners/pending/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      toast({ title: "Pending partner cancelled" });
+      invalidate();
+    },
+    onError: (err) => toast({ title: "Could not cancel", description: formatAdminError(err), variant: "destructive" }),
   });
 
   const editMutation = useMutation({
@@ -157,6 +195,53 @@ export default function PartnersPage() {
         <Button onClick={() => setCreateOpen(true)}><Plus className="w-4 h-4 mr-1.5" /> New partner</Button>
       </div>
 
+      {pendingList.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-1.5">
+              <Clock className="w-4 h-4 text-amber-500" /> Awaiting signup ({pendingList.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1.5">
+            <p className="text-xs text-muted-foreground">
+              Google signups become partners automatically. Password signups can't verify email ownership, so once the account appears here, approve it with one click.
+            </p>
+            {pendingList.map(p => (
+              <div key={p.id} className="flex items-center justify-between gap-3 text-sm border border-border rounded-md px-3 py-2">
+                <div className="leading-tight min-w-0">
+                  <p className="font-medium truncate">{p.companyName}</p>
+                  <p className="text-xs text-muted-foreground truncate">{p.email}</p>
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
+                  <span className="text-xs tabular-nums text-muted-foreground hidden sm:inline">
+                    base {formatCentsToDollars(p.baseRateCentsPerMin)}/min · client {formatCentsToDollars(p.defaultClientRateCentsPerMin)}/min
+                  </span>
+                  <span className="text-xs text-muted-foreground hidden md:inline">{fmtDate(p.createdAt)}</span>
+                  {p.hasAccount ? (
+                    <Button
+                      size="sm" className="h-7"
+                      disabled={applyPendingMutation.isPending}
+                      onClick={() => applyPendingMutation.mutate(p.id)}>
+                      Approve
+                    </Button>
+                  ) : (
+                    <span className="text-[11px] rounded-full border border-border px-2 py-0.5 text-muted-foreground whitespace-nowrap">awaiting signup</span>
+                  )}
+                  <Button
+                    size="sm" variant="ghost"
+                    className="h-7 px-2 text-destructive hover:text-destructive"
+                    disabled={cancelPendingMutation.isPending}
+                    onClick={() => cancelPendingMutation.mutate(p.id)}
+                    title="Cancel pending partner">
+                    <X className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm">All partners ({partners.length})</CardTitle>
@@ -166,7 +251,7 @@ export default function PartnersPage() {
             <p className="text-sm text-muted-foreground py-6 text-center">Loading…</p>
           ) : partners.length === 0 ? (
             <p className="text-sm text-muted-foreground py-6 text-center">
-              No partners yet. Create one from an existing user account.
+              No partners yet. "New partner" upgrades an existing user — or pre-creates one for an email that hasn't signed up.
             </p>
           ) : (
             <Table>
@@ -220,7 +305,9 @@ export default function PartnersPage() {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>New partner</DialogTitle>
-            <DialogDescription>Upgrades an existing user account to a partner. The user must have signed up already.</DialogDescription>
+            <DialogDescription>
+              Existing users are upgraded to a partner immediately. If the email has no account yet, the partner is activated automatically when they sign up.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-1.5">

@@ -60,7 +60,23 @@ export const partnerInvitesTable = pgTable("partner_invites", {
   index("partner_invites_partner_id_idx").on(t.partnerId),
 ]);
 
+/**
+ * Admin-created partner setups for emails that have NO account yet.
+ * Applied automatically at signup (services/partner-promotion.ts): the new
+ * user immediately becomes a partner with these settings and the row is
+ * removed. Email is stored lowercased.
+ */
+export const partnerPendingPromotionsTable = pgTable("partner_pending_promotions", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull().unique("partner_pending_promotions_email_unique"),
+  companyName: text("company_name").notNull(),
+  baseRateCentsPerMin: integer("base_rate_cents_per_min").notNull().default(500),
+  defaultClientRateCentsPerMin: integer("default_client_rate_cents_per_min").notNull().default(500),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export type Partner = typeof partnersTable.$inferSelect;
 export type InsertPartner = typeof partnersTable.$inferInsert;
 export type PartnerInvite = typeof partnerInvitesTable.$inferSelect;
 export type InsertPartnerInvite = typeof partnerInvitesTable.$inferInsert;
+export type PartnerPendingPromotion = typeof partnerPendingPromotionsTable.$inferSelect;

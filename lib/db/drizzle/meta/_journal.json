@@ -547,6 +547,13 @@
       "when": 1789300000000,
       "tag": "0077_partner_billing_hardening",
       "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1789400000000,
+      "tag": "0078_partner_pending_promotions",
+      "breakpoints": true
     }
   ]
 }

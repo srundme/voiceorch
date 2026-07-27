@@ -20,7 +20,8 @@ import {
   useSendEmailToUser,
   usePlatformEmails,
 } from "@/hooks/use-admin-api";
-import { formatCentsToDollars, formatDuration } from "@/lib/api";
+import { formatCentsToDollars, formatDuration, adminFetch } from "@/lib/api";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -36,7 +37,7 @@ import {
 import {
   ArrowLeft, Wallet, PhoneCall, Bot, Activity, Zap, ShieldAlert, LogIn,
   ClipboardList, Key, ChevronLeft, ChevronRight, Trash2, AlertTriangle, Pencil, Plus, Mail,
-  CheckCircle2, XCircle,
+  CheckCircle2, XCircle, Handshake,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError } from "@/lib/format-api-error";
@@ -94,6 +95,39 @@ export default function UserDetail() {
   const [walletAmount, setWalletAmount] = useState("");
   const [walletDesc, setWalletDesc] = useState("");
   const [walletCallId, setWalletCallId] = useState("");
+
+  // Make-partner dialog
+  const queryClient = useQueryClient();
+  const [partnerModal, setPartnerModal] = useState(false);
+  const [partnerCompany, setPartnerCompany] = useState("");
+  const [partnerBaseText, setPartnerBaseText] = useState("5.00");
+  const [partnerDefaultText, setPartnerDefaultText] = useState("6.00");
+  const toPaise = (t: string): number | null => {
+    const v = Number.parseFloat(t);
+    return Number.isFinite(v) && v >= 0 ? Math.round(v * 100) : null;
+  };
+  const makePartner = useMutation({
+    mutationFn: () =>
+      adminFetch("/partners", {
+        method: "POST",
+        body: JSON.stringify({
+          email: data?.user?.email ?? "",
+          companyName: partnerCompany.trim(),
+          baseRateCentsPerMin: toPaise(partnerBaseText),
+          defaultClientRateCentsPerMin: toPaise(partnerDefaultText),
+        }),
+      }),
+    onSuccess: (resp: { partner?: unknown; pending?: unknown }) => {
+      if (resp?.pending) {
+        toast({ title: "Partner saved — awaiting signup", description: "It activates when this email signs up." });
+      } else {
+        toast({ title: "Partner created", description: "Manage rates, clients and status on the Partners page." });
+      }
+      setPartnerModal(false);
+      queryClient.invalidateQueries({ queryKey: ["admin", "partners"] });
+    },
+    onError: (e) => toast({ title: "Could not create partner", description: formatApiError(e), variant: "destructive" }),
+  });
 
   // Pagination
   const [callsPage, setCallsPage] = useState(1);
@@ -257,6 +291,17 @@ export default function UserDetail() {
             <Mail className="h-3.5 w-3.5" />
             Send Email
           </Button>
+          {!isDeleted && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => { setPartnerCompany(user.name || ""); setPartnerModal(true); }}
+              disabled={!user.email}
+              className="gap-1.5"
+            >
+              <Handshake className="h-3.5 w-3.5" /> Make Partner
+            </Button>
+          )}
           {!isSuspended && !isDeleted && (
             <Button size="sm" variant="destructive" onClick={() => setSuspendModal(true)} className="gap-1.5">
               <ShieldAlert className="h-3.5 w-3.5" /> Suspend
@@ -274,6 +319,50 @@ export default function UserDetail() {
           )}
         </div>
       </div>
+
+      {/* Make Partner dialog */}
+      <Dialog open={partnerModal} onOpenChange={setPartnerModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Make {user.email} a partner</DialogTitle>
+            <DialogDescription>
+              Partners resell the platform: they onboard clients, set each client's per-minute rate, and earn the spread above your base rate.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label>Company name</Label>
+              <Input value={partnerCompany} onChange={(e) => setPartnerCompany(e.target.value)} placeholder="Acme Communications" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Base rate (₹/min)</Label>
+                <Input inputMode="decimal" value={partnerBaseText} onChange={(e) => setPartnerBaseText(e.target.value)} />
+                <p className="text-[11px] text-muted-foreground">Platform's share per client-minute.</p>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Default client rate (₹/min)</Label>
+                <Input inputMode="decimal" value={partnerDefaultText} onChange={(e) => setPartnerDefaultText(e.target.value)} />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPartnerModal(false)}>Cancel</Button>
+            <Button
+              disabled={
+                makePartner.isPending ||
+                partnerCompany.trim().length < 2 ||
+                toPaise(partnerBaseText) === null ||
+                toPaise(partnerDefaultText) === null ||
+                (toPaise(partnerDefaultText) ?? 0) < (toPaise(partnerBaseText) ?? 0)
+              }
+              onClick={() => makePartner.mutate()}
+            >
+              {makePartner.isPending ? "Creating…" : "Make partner"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Tabs */}
       <div className="flex gap-1 border-b border-border overflow-x-auto">

@@ -13,11 +13,13 @@ import {
   usersTable,
   partnersTable,
   partnerInvitesTable,
+  partnerPendingPromotionsTable,
   walletTransactionsTable,
   adminAuditLogsTable,
 } from "@workspace/db";
-import { and, desc, eq, gte, sql, count } from "drizzle-orm";
+import { and, desc, eq, gte, sql, count, inArray } from "drizzle-orm";
 import { requireAdmin } from "../middlewares/requireAdmin.js";
+import { claimPendingAndPromote } from "../services/partner-promotion.js";
 
 const router: Router = Router();
 router.use("/admin/partners", requireAdmin);
@@ -79,8 +81,26 @@ router.get("/admin/partners", async (req, res): Promise<void> => {
       if (c.partnerId != null) countMap.set(c.partnerId, Number(c.n));
     }
 
+    // Admin-created partner setups still waiting to be applied. Google
+    // signups consume these automatically (verified email); password signups
+    // can't prove email ownership, so they wait for explicit admin approval —
+    // flag rows whose email now has an account so the UI offers "Approve".
+    const pendingRows = await db
+      .select()
+      .from(partnerPendingPromotionsTable)
+      .orderBy(desc(partnerPendingPromotionsTable.createdAt));
+    let accountEmails = new Set<string>();
+    if (pendingRows.length > 0) {
+      const accounts = await db
+        .select({ email: usersTable.email })
+        .from(usersTable)
+        .where(inArray(sql`lower(${usersTable.email})`, pendingRows.map(p => p.email)));
+      accountEmails = new Set(accounts.map(a => (a.email ?? "").toLowerCase()));
+    }
+
     res.json({
       partners: partners.map(p => ({ ...p, clientCount: countMap.get(p.id) ?? 0 })),
+      pending: pendingRows.map(p => ({ ...p, hasAccount: accountEmails.has(p.email) })),
     });
   } catch (err) {
     req.log.error({ err }, "admin/partners GET failed");
@@ -118,9 +138,53 @@ router.post("/admin/partners", async (req, res): Promise<void> => {
       return;
     }
 
-    const [user] = await db.select().from(usersTable).where(eq(usersTable.email, cleanEmail));
+    // Case-insensitive: admin edits can store mixed-case emails, and missing
+    // an existing user here would wrongly create a pending row instead.
+    const [user] = await db.select().from(usersTable).where(sql`lower(${usersTable.email}) = ${cleanEmail}`);
     if (!user) {
-      res.status(404).json({ error: "No user found with that email — the partner must sign up first" });
+      // No account with this email yet — store a pending promotion that is
+      // applied automatically the moment this email signs up (see
+      // services/partner-promotion.ts, called from every signup path).
+      const [alreadyPending] = await db
+        .select({ id: partnerPendingPromotionsTable.id })
+        .from(partnerPendingPromotionsTable)
+        .where(eq(partnerPendingPromotionsTable.email, cleanEmail));
+      if (alreadyPending) {
+        res.status(409).json({ error: "A pending partner setup already exists for this email" });
+        return;
+      }
+      const [pending] = await db
+        .insert(partnerPendingPromotionsTable)
+        .values({
+          email: cleanEmail,
+          companyName: cleanCompany,
+          baseRateCentsPerMin: baseRate,
+          defaultClientRateCentsPerMin: defaultRate,
+        })
+        .returning();
+      await logAdminAction(req, {
+        action: "partner_pending_create",
+        afterValue: { email: cleanEmail, companyName: cleanCompany, baseRate, defaultRate },
+      });
+
+      // Race close: the user may have signed up between the lookup above and
+      // the pending insert — nobody would ever re-check the row. If they
+      // appeared and pass the same guards, apply it right now (admin-initiated
+      // ⇒ admin-approved).
+      const [lateUser] = await db.select().from(usersTable).where(sql`lower(${usersTable.email}) = ${cleanEmail}`);
+      if (lateUser && lateUser.status === "active" && !lateUser.partnerId) {
+        const applied = await claimPendingAndPromote(pending!.id, lateUser);
+        if (applied.status === "promoted") {
+          await logAdminAction(req, {
+            targetUserId: lateUser.clerkId,
+            action: "partner_create",
+            afterValue: { partnerId: applied.partner!.id, companyName: cleanCompany, baseRate, defaultRate, viaPendingRace: true },
+          });
+          res.status(201).json({ partner: applied.partner });
+          return;
+        }
+      }
+      res.status(201).json({ pending });
       return;
     }
     if (user.status !== "active") {
@@ -147,6 +211,9 @@ router.post("/admin/partners", async (req, res): Promise<void> => {
       })
       .returning();
 
+    // Consume any pending setup left over for this email so it doesn't linger.
+    await db.delete(partnerPendingPromotionsTable).where(eq(partnerPendingPromotionsTable.email, cleanEmail));
+
     await logAdminAction(req, {
       targetUserId: user.clerkId,
       action: "partner_create",
@@ -155,6 +222,91 @@ router.post("/admin/partners", async (req, res): Promise<void> => {
     res.status(201).json({ partner });
   } catch (err) {
     req.log.error({ err }, "admin/partners POST failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.delete("/admin/partners/pending/:id", async (req, res): Promise<void> => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: "Invalid id" });
+      return;
+    }
+    const [removed] = await db
+      .delete(partnerPendingPromotionsTable)
+      .where(eq(partnerPendingPromotionsTable.id, id))
+      .returning();
+    if (!removed) {
+      res.status(404).json({ error: "Pending partner not found" });
+      return;
+    }
+    await logAdminAction(req, {
+      action: "partner_pending_cancel",
+      beforeValue: { email: removed.email, companyName: removed.companyName },
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    req.log.error({ err }, "admin/partners pending DELETE failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+/**
+ * Approve a pending promotion whose email signed up via password (unverified
+ * email ⇒ not auto-applied). Admin confirms it's really their person.
+ */
+router.post("/admin/partners/pending/:id/apply", async (req, res): Promise<void> => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: "Invalid id" });
+      return;
+    }
+    const [pending] = await db
+      .select()
+      .from(partnerPendingPromotionsTable)
+      .where(eq(partnerPendingPromotionsTable.id, id));
+    if (!pending) {
+      res.status(404).json({ error: "Pending partner not found" });
+      return;
+    }
+    const [user] = await db.select().from(usersTable).where(sql`lower(${usersTable.email}) = ${pending.email}`);
+    if (!user) {
+      res.status(409).json({ error: "That email hasn't signed up yet" });
+      return;
+    }
+    if (user.status !== "active") {
+      res.status(400).json({ error: `User account is ${user.status} — reactivate it first` });
+      return;
+    }
+    if (user.partnerId) {
+      res.status(409).json({ error: "This user is a client of another partner and cannot become a partner" });
+      return;
+    }
+    const applied = await claimPendingAndPromote(pending.id, user);
+    if (applied.status === "claimed_elsewhere") {
+      res.status(409).json({ error: "This pending partner was just applied or cancelled" });
+      return;
+    }
+    if (applied.status === "already_partner") {
+      res.status(409).json({ error: "This user is already a partner" });
+      return;
+    }
+    await logAdminAction(req, {
+      targetUserId: user.clerkId,
+      action: "partner_create",
+      afterValue: {
+        partnerId: applied.partner!.id,
+        companyName: pending.companyName,
+        baseRate: pending.baseRateCentsPerMin,
+        defaultRate: pending.defaultClientRateCentsPerMin,
+        viaPendingApproval: true,
+      },
+    });
+    res.status(201).json({ partner: applied.partner });
+  } catch (err) {
+    req.log.error({ err }, "admin/partners pending apply failed");
     res.status(500).json({ error: "Internal server error" });
   }
 });

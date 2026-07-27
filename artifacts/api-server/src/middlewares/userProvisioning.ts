@@ -5,6 +5,7 @@ import { usersTable, walletTransactionsTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import type { SessionPayload } from "../lib/session.js";
 import { SIGNUP_CREDIT_PAISE, formatInr } from "../lib/money-inr.js";
+import { applyPendingPartnerPromotion } from "../services/partner-promotion.js";
 
 function generateApiKey() { return `vok_${randomBytes(24).toString("hex")}`; }
 function generateOrgKey() { return `voo_${randomBytes(24).toString("hex")}`; }
@@ -48,6 +49,11 @@ export async function provisionUser(req: Request, _res: Response, next: NextFunc
         description: `Welcome credit — ${formatInr(FREE_CREDIT_CENTS)} free to get started`,
         status: "completed",
       });
+
+      // Admin may have pre-created a partner account for this email — apply
+      // it. Identity here comes from a verified Google session, so the email
+      // is proven to belong to this person.
+      await applyPendingPartnerPromotion(user, { emailVerified: true });
     } else if (user.email === null || user.name === null) {
       if (session.email !== null || session.name !== null) {
         const [healed] = await db
