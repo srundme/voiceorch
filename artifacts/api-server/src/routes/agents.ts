@@ -201,7 +201,7 @@ router.post("/agents", requireAuth, clientContext, denyManagedClient, async (req
   if (insertAgentConfig["incrementalDelay"] == null) {
     insertAgentConfig["incrementalDelay"] = engineDefaults["incrementalDelay"];
   }
-  if (insertAgentConfig["llmMaxTokens"] == null) insertAgentConfig["llmMaxTokens"] = 150;
+  if (insertAgentConfig["llmMaxTokens"] == null) insertAgentConfig["llmMaxTokens"] = 200;
   if (insertAgentConfig["bargeInEnergyThreshold"] == null) {
     insertAgentConfig["bargeInEnergyThreshold"] = engineDefaults["bargeInEnergyThreshold"];
   }

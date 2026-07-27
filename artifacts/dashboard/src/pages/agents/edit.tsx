@@ -147,7 +147,10 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   if (sarvamSttMode) agentConfig["sarvamSttMode"] = sarvamSttMode;
   if (kbBakedOnly) agentConfig["kbBakedOnly"] = true;
   if (ttsSpeed != null && ttsSpeed !== 1) agentConfig["ttsSpeed"] = ttsSpeed;
-  if (llmMaxTokens != null) agentConfig["llmMaxTokens"] = llmMaxTokens;
+  // Always send the key (null clears it): the server MERGES agentConfig on
+  // update, so omitting it when the field is blanked would silently keep the
+  // old cap forever — "leave blank for default" would never actually work.
+  agentConfig["llmMaxTokens"] = llmMaxTokens ?? null;
   if (ttsMinSentenceChars != null && ttsMinSentenceChars !== 18) agentConfig["ttsMinSentenceChars"] = ttsMinSentenceChars;
   {
     const linear = clampLinearDelayMs(linearDelayMs ?? 350);
@@ -1513,7 +1516,7 @@ export default function AgentEdit() {
                     <FormLabel>LLM Max Output Tokens</FormLabel>
                     <FormControl>
                       <Input type="number" min={1} max={16000} step={10}
-                        placeholder="Model default (no cap)"
+                        placeholder="Voice default (200)"
                         value={field.value ?? ""}
                         onChange={e => {
                           const v = e.target.value;
@@ -1521,7 +1524,7 @@ export default function AgentEdit() {
                         }} />
                     </FormControl>
                     <FormDescription className="text-[11px]">
-                      Cap how many tokens the LLM generates per turn. <strong>Lower = faster + shorter replies.</strong> Leave blank for the voice default (160). Use 120–200 for Tamil/Hinglish so sentences are not cut mid-word.
+                      Cap on reply length per turn. <strong>Too low cuts sentences mid-word.</strong> Blank = voice default (200). Tamil/Hindi/Indic scripts use 2–4× more tokens than English — use 200–300 there. Gemini 3.x "thinking" overhead is compensated automatically.
                     </FormDescription>
                     <FormMessage />
                   </FormItem>

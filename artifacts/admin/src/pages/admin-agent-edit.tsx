@@ -171,7 +171,9 @@ function buildUpdateAgentPayload(data: AgentFormValues) {
   agentConfig["ambientNoiseEnabled"] = !!ambientNoiseEnabled;
   if (ambientNoiseTrack) agentConfig["ambientNoiseTrack"] = ambientNoiseTrack;
   if (asrEndpointingSilenceMs != null && asrEndpointingSilenceMs !== 300) agentConfig["asrEndpointingSilenceMs"] = asrEndpointingSilenceMs;
-  if (llmMaxTokens != null) agentConfig["llmMaxTokens"] = llmMaxTokens;
+  // Always send the key (null clears it) — the server merges agentConfig, so an
+  // omitted key would keep the old stored cap even after blanking the field.
+  agentConfig["llmMaxTokens"] = llmMaxTokens ?? null;
   if (ttsMinSentenceChars != null && ttsMinSentenceChars !== 15) agentConfig["ttsMinSentenceChars"] = ttsMinSentenceChars;
   if (linearDelayMs != null && linearDelayMs > 0) agentConfig["incrementalDelay"] = linearDelayMs;
   agentConfig["startSpeakingPlan"] = {
@@ -1339,7 +1341,7 @@ export default function AdminAgentEdit() {
                         <FormLabel>LLM Max Output Tokens</FormLabel>
                         <FormControl>
                           <Input type="number" min={1} max={16000} step={10}
-                            placeholder="Model default"
+                            placeholder="Voice default (200)"
                             value={field.value ?? ""}
                             onChange={e => field.onChange(e.target.value === "" ? null : parseInt(e.target.value, 10))} />
                         </FormControl>

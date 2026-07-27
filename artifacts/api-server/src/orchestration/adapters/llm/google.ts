@@ -149,6 +149,15 @@ const CACHE_WARM_WAIT_MS = 1000;
 // is a real, previously-missing bound on worst-case per-turn latency.
 const REQUEST_TIMEOUT_MS = Number(process.env.GEMINI_REQUEST_TIMEOUT_MS) || 20000;
 
+// On Gemini 3.x, thought tokens COUNT toward maxOutputTokens and thinking cannot
+// be fully disabled (thinkingLevel:"minimal" is the floor). Sending the agent's
+// configured cap as-is silently shrinks the visible-reply budget by whatever the
+// model thinks (tens of tokens per turn) — the cause of replies cut mid-sentence
+// after the 2.x→3.x upgrade (2.x with thinkingBudget:0 spent the whole cap on
+// text). Pad the wire-level cap on 3.x so the configured value approximates the
+// SPOKEN reply budget; 2.x keeps the exact value.
+const GEMINI3_THINKING_HEADROOM = Number(process.env.GEMINI3_THINKING_HEADROOM) || 256;
+
 /** Model-aware thinking config — shared by this adapter AND every raw-REST Gemini
  *  call site (vibe/workflow builders, squad planner, Gemini STT). Gemini 3.x uses
  *  `thinkingLevel` and CANNOT fully disable thinking ("minimal" is the floor);
@@ -245,7 +254,12 @@ export class GoogleLLM implements LLMAdapter {
       // TTFT + output_tokens / generation_speed + network) — same rationale as the
       // Groq/Qwen adapters. Only applied when the agent has one configured; Gemini's
       // own default (up to the model's full output token limit) is otherwise unchanged.
-      ...(this.maxTokens !== undefined ? { maxOutputTokens: this.maxTokens } : {}),
+      // 3.x: thought tokens share this cap and thinking can't be fully disabled,
+      // so pad with GEMINI3_THINKING_HEADROOM to keep the configured value ≈ the
+      // SPOKEN-reply budget (2.x sends the exact value — thinking is off there).
+      ...(this.maxTokens !== undefined
+        ? { maxOutputTokens: this.maxTokens + (/^gemini-3(\.|-)/.test(this.model) ? GEMINI3_THINKING_HEADROOM : 0) }
+        : {}),
     } as Record<string, unknown>;
   }
 
@@ -362,6 +376,22 @@ export class GoogleLLM implements LLMAdapter {
     // caller can detect and alert on this condition. On 3.x, "minimal" cannot fully
     // disable thinking, so a small non-zero count is EXPECTED — no warn there.
     const thoughtTokens = metaAny?.thoughtsTokenCount ?? 0;
+    // Surface cap truncation explicitly — a MAX_TOKENS finish means the caller
+    // heard the reply cut mid-sentence. If this fires regularly, raise the
+    // agent's "LLM Max Output Tokens" (dashboard → Advanced Settings).
+    const finishReason = (response.candidates?.[0] as { finishReason?: string } | undefined)?.finishReason;
+    if (finishReason === "MAX_TOKENS") {
+      logger.warn(
+        {
+          model: this.model,
+          evt: "llm_reply_truncated",
+          configuredCap: this.maxTokens,
+          outputTokens: meta?.candidatesTokenCount ?? 0,
+          thoughtTokens,
+        },
+        "Gemini reply truncated at maxOutputTokens cap — sentence cut mid-word"
+      );
+    }
     if (thoughtTokens > 0 && !/^gemini-3(\.|-)/.test(this.model)) {
       logger.warn(
         { model: this.model, thoughtTokens, evt: "gemini_unexpected_thinking" },

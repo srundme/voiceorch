@@ -1623,7 +1623,7 @@ router.post("/agents/vibe-chat", requireAuth, clientContext, denyManagedClient, 
         const tunedAdvancedDefaults: Record<string, unknown> = {
           ...callEngineInsertDefaults(),
           ttsMinSentenceChars:     18,
-          llmMaxTokens:            150,
+          llmMaxTokens:            200,
           startSpeakingPlan:       { waitSeconds: 0, onPunctuationSeconds: 0.1, onNoPunctuationSeconds: 0.1, onNumberSeconds: 0 },
           autoRedial:              { enabled: true, maxAttempts: 3 },
           // sarvamSttMode omitted — resolved per language at call start (en-IN → transcribe)

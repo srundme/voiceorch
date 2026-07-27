@@ -485,9 +485,19 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
   effectiveSystemPrompt = appendGuardrails(effectiveSystemPrompt, agent.name);
 
   // 80 was too tight for Tamil/Hinglish — call 2643 hit the cap mid-sentence
-  // twice (outputTokens≈91 on "…அதுக்கு ஒரு fifteen" / "…இப்போ demo-க்கு").
-  const VOICE_DEFAULT_MAX_TOKENS = Number(process.env.VOICE_DEFAULT_MAX_TOKENS ?? 160);
-  const configuredLlmMaxTokens = agentCfg["llmMaxTokens"] ?? agentCfg["maxTokens"];
+  // twice (outputTokens≈91 on "…அதுக்கு ஒரு fifteen" / "…இப்போ demo-க்கு");
+  // 160 still clipped occasionally (Indic scripts run 2-4× English tokens/word),
+  // so the voice default is now 200. This is a protective cap, not a target —
+  // typical turns end naturally at 30-80 tokens, so raising it does not slow
+  // normal replies; it only stops long ones being cut mid-sentence.
+  const VOICE_DEFAULT_MAX_TOKENS = Number(process.env.VOICE_DEFAULT_MAX_TOKENS ?? 200);
+  // "llmMaxTokens" present-but-null is an explicit "reset to default" from the
+  // dashboard/admin (the update route MERGES agentConfig, so the key persists
+  // once written). Only consult the legacy "maxTokens" key when the new key is
+  // entirely absent — `null ?? legacy` would silently resurrect a stale cap.
+  const configuredLlmMaxTokens = "llmMaxTokens" in agentCfg
+    ? agentCfg["llmMaxTokens"]
+    : agentCfg["maxTokens"];
 
   const agentConfig: AgentConfig = {
     id: agent.id,

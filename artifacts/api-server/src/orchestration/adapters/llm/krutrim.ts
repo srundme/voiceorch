@@ -23,7 +23,10 @@ import { logger } from "../../../lib/logger.js";
  *   - Qwen3.6-35B-A3B    — Qwen 3.6 35B MoE (thinking disabled via chat_template_kwargs)
  */
 
-const VOICE_DEFAULT_MAX_TOKENS = envInt("VOICE_DEFAULT_MAX_TOKENS", 120);
+// Aligned with session.ts's voice default (200) — 120 clipped Indic-script
+// replies mid-sentence on the non-session paths that construct this adapter
+// without generation params.
+const VOICE_DEFAULT_MAX_TOKENS = envInt("VOICE_DEFAULT_MAX_TOKENS", 200);
 
 const DEFAULT_MODEL = "gpt-oss-20b";
 

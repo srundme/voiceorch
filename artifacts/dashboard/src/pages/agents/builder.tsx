@@ -5437,7 +5437,7 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
       outboundPhoneNumberId: undefined,
       preferredManagedNumber: null,
       asrEndpointingSilenceMs: 300,
-      llmMaxTokens: 160,
+      llmMaxTokens: 200,
       ttsMinSentenceChars: 18,
       ttsSpeed: 1,
       linearDelayMs: 350,

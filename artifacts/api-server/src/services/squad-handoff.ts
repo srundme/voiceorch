@@ -135,7 +135,13 @@ async function buildTargetAgentConfig(
     temperature: agent.temperature ?? 0.5,
     llmGenerationParams: {
       ...(typeof agent.temperature === "number" ? { temperature: agent.temperature } : {}),
-      maxTokens: typeof agentCfg["llmMaxTokens"] === "number" ? (agentCfg["llmMaxTokens"] as number) : 160,
+      // Same resolution semantics as session.ts: explicit null = voice default;
+      // legacy "maxTokens" honored only when the new key is absent — keeps the
+      // cap identical across a mid-call squad handoff for legacy-config agents.
+      maxTokens: (() => {
+        const v = "llmMaxTokens" in agentCfg ? agentCfg["llmMaxTokens"] : agentCfg["maxTokens"];
+        return typeof v === "number" && v > 0 ? v : 200;
+      })(),
       presencePenalty: 0.3,
       frequencyPenalty: 0.3,
     },

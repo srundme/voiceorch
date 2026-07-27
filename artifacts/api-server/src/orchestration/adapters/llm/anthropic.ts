@@ -63,12 +63,17 @@ export class AnthropicLLM implements LLMAdapter {
   // Anthropic's Messages API accepts temperature in the range 0–1 (unlike the
   // shared 0–2 UI slider), so clamp down rather than passing 0–2 through.
   private temperature: number | undefined;
+  private maxTokens: number | undefined;
 
   constructor(apiKey: string, model: string | null, genParams?: LLMGenerationParams) {
     this.key = apiKey;
     this.model = model ?? DEFAULT_MODEL;
     const t = genParams?.temperature;
     this.temperature = typeof t === "number" && Number.isFinite(t) ? Math.min(1, Math.max(0, t)) : undefined;
+    // Honor the agent's configured llmMaxTokens (was hardcoded to 1024 and
+    // silently ignored the setting — the only adapter that did).
+    const mt = genParams?.maxTokens;
+    this.maxTokens = typeof mt === "number" && Number.isFinite(mt) && mt > 0 ? Math.floor(mt) : undefined;
   }
 
   async chat(
@@ -87,7 +92,7 @@ export class AnthropicLLM implements LLMAdapter {
 
     const body: Record<string, unknown> = {
       model: this.model,
-      max_tokens: 1024,
+      max_tokens: this.maxTokens ?? 1024,
       // Use block format to allow cache_control when KV cache is enabled
       system: useKvCache
         ? [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }]
