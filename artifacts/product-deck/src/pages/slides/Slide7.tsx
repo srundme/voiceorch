@@ -58,9 +58,9 @@ export default function Slide7() {
               <div style={{ padding: "1vh 0", borderBottom: "0.06vh solid #C5CAE9" }}>
                 <div style={{ display: "flex", alignItems: "baseline", gap: "0.6vw" }}>
                   <strong style={{ color: "#1A237E" }}>Self-serve plan</strong>
-                  <span style={{ fontWeight: 600, fontSize: "1vw", color: "#5B5470" }}>— subscription only</span>
+                  <span style={{ fontWeight: 600, fontSize: "1vw", color: "#5B5470" }}>— from ₹15,000/month</span>
                 </div>
-                <div style={{ fontSize: "0.92vw", color: "#7986CB", marginTop: "0.3vh" }}>You bring your own AI keys, we handle the orchestration. Pricing flexible — talk to us.</div>
+                <div style={{ fontSize: "0.92vw", color: "#7986CB", marginTop: "0.3vh" }}>You bring your own AI keys, we handle the full orchestration layer. Volume discounts available.</div>
               </div>
               <div style={{ padding: "1vh 0" }}>
                 <div style={{ display: "flex", alignItems: "baseline", gap: "0.6vw" }}>
