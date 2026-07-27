@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { customFetch, useListProviders, getListProvidersQueryKey } from "@workspace/api-client-react";
+import { customFetch, useListProviders, getListProvidersQueryKey, useGetWallet, getGetWalletQueryKey } from "@workspace/api-client-react";
 
 export interface FlatRate {
   mode: string;           // "managed" | "byop"
@@ -23,11 +23,25 @@ export function useMinuteRatesMap(): Map<string, number> {
     queryFn: fetchMinuteRates,
     staleTime: 60_000,
   });
+  // Account-level rate (partner clients bill at their partner-set rate,
+  // partner accounts at their base rate). Deduped with the wallet chip query.
+  const { data: wallet } = useGetWallet({
+    query: { queryKey: getGetWalletQueryKey(), staleTime: 60_000 },
+  });
   const map = new Map<string, number>();
   map.set("managed", 500); // ₹5.00 / min (paise)
   map.set("byop",    500); // ₹5.00 / min (paise) — flat
   for (const r of data ?? []) {
     if (r.mode) map.set(r.mode.toLowerCase(), r.rateCentsPerMin);
+  }
+  // A partner-derived rate overrides BOTH modes — the backend bills the
+  // resolved partner rate regardless of managed/BYOP, so every surface
+  // reading this map must reflect it. For accounts with no special rate,
+  // effectiveRate equals the flat managed rate and this is a no-op.
+  const eff = wallet?.effectiveRateCentsPerMin;
+  if (typeof eff === "number" && eff > 0 && eff !== map.get("managed")) {
+    map.set("managed", eff);
+    map.set("byop", eff);
   }
   return map;
 }

@@ -344,7 +344,7 @@ function AgentCostSummary({ form, rateMap, compact = false }: { form: any; rateM
   const agentProviders = [asrProvider, llmProvider, ttsProvider].filter(Boolean).map((p: string) => p.toLowerCase());
   const isByop = agentProviders.some(p => userProviderNames.has(p));
   const platformCents = rateMap.get(isByop ? "byop" : "managed") ?? 500;
-  const totalPerMin = platformCents / 100; // paise → INR (flat ₹5/min)
+  const totalPerMin = platformCents / 100; // paise → INR (map already reflects account-level partner rates)
 
   const segments = [
     { key: "platform", label: "Platform", provider: "SnapServe", cost: totalPerMin, color: "#6366f1" },
