@@ -38,6 +38,7 @@ export default function Slide9() {
             { number: "1,175", label: "Total Calls", sub: "All time — insurance, NBFC, and collections" },
             { number: "1,496", label: "Total Minutes", sub: "Voice minutes consumed across all agents" },
             { number: "18+", label: "Indian Languages", sub: "Tamil · Hindi · Marathi · Telugu · Kannada + more" },
+            { number: "₹5,100", label: "First MRR", sub: "July 2026 — first month of active sales · 2 paying clients" },
           ].map(({ number, label, sub }) => (
             <div key={label} style={stat}>
               <div style={{ fontFamily: "var(--font-display-family)", fontSize: "3.4vw", fontWeight: 800, color: "#1A237E", lineHeight: 1 }}>{number}</div>
@@ -58,8 +59,8 @@ export default function Slide9() {
             </div>
             {[
               { icon: "✓", text: "Full platform live in production — not a demo, not a prototype" },
-              { icon: "✓", text: "2 paid clients successfully onboarded and active" },
-              { icon: "✓", text: "Aggressively scaling to hit 1,000 users by the end of August" },
+              { icon: "✓", text: "2 paid clients live · ₹5,100 MRR in Month 1 of commercial launch · migrating agency clients to recurring SaaS contracts" },
+              { icon: "✓", text: "Aggressively converting free users to paid — pipeline of enterprise clients in active discussion" },
               { icon: "✓", text: "Caller memory persists across dropped calls, agent switches, and session gaps" },
             ].map(({ icon, text }) => (
               <div key={text} style={{ display: "flex", alignItems: "flex-start", gap: "0.8vw", fontSize: "1.05vw", color: "#3A3A5C", lineHeight: 1.5 }}>
