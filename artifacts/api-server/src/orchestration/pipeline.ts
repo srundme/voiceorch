@@ -7527,7 +7527,9 @@ export class OrchestrationPipeline implements VoiceSession {
           this.bargeInHoldUntil = Date.now() + this.bargeInEchoGraceMs;
           this.isPlaying = true;
           try { await this.playJob(job); } catch (err) {
-            logger.error({ callId: this.config.callId, err, text: job.text.slice(0, 40) }, "continueWithToolResult TTS error");
+            const reason = toReadableError(err, "TTS error");
+            logger.error({ callId: this.config.callId, err, text: job.text.slice(0, 40) }, `continueWithToolResult ${reason}`);
+            this.reportTtsFailure(reason, { where: "tool_followup_sentence", text: job.text.slice(0, 40) });
           }
           if (this.bargeInRequested) break;
           // Max-duration graceful stop (see main playTask): finish the current
