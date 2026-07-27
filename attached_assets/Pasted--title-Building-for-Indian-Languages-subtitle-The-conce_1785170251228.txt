@@ -1,0 +1,178 @@
+---
+title: Building for Indian Languages
+subtitle: >-
+  The concepts that make Indian-language speech and document apps work in
+  production — code-mixing, scripts, telephony audio, voices, and Indic OCR.
+slug: api/getting-started/building-for-india
+description: >-
+  A practical guide to shipping Indian-language AI — speech-to-text modes
+  (code-mix, transliteration), natural Indian voices, 8kHz telephony audio,
+  pronunciation control, and document digitization across 23 languages (22
+  Indian + English).
+---
+
+Indian-language products have to handle realities that English-first stacks ignore: people mix English into every sentence, the same language is written in multiple scripts, a lot of audio arrives over 8kHz phone lines, and documents come as scans in regional scripts. This page maps those realities to the exact Sarvam speech, voice, and vision APIs — with code that's been run against the live API.
+
+## Language coverage at a glance
+
+Coverage differs by capability, so pick the model that matches your language set.
+
+| Capability | Model | Languages |
+|---|---|---|
+| Speech-to-Text | Saarika v2.5 / Saaras v3 | 11 (10 Indian + English) / 23 (22 Indian + English) |
+| Speech-to-Text-Translate | Saaras v3 | 23 (22 Indian + English) → English |
+| Text-to-Speech | Bulbul v3 | 11 (10 Indian + English) |
+| Document Digitization | Sarvam Vision | 23 (22 Indian + English) |
+| Translation | Mayura v1 / Sarvam-Translate v1 | 11 (10 Indian + English) / 23 (22 Indian + English) |
+| Chat / reasoning | Sarvam-30B / 105B | 11 (10 Indian + English) |
+
+## Speech-to-Text: transcribe real Indian audio
+
+`saaras:v3` exposes a `mode` parameter that controls *how* speech is written down — this is where most Indic-specific decisions happen:
+
+| `mode` | What you get |
+|---|---|
+| `transcribe` | Transcription in the native script |
+| `translate` | English translation of the speech |
+| `verbatim` | Word-for-word, including fillers and repetitions |
+| `translit` | Romanized (Latin-script) output |
+| `codemix` | Natural code-mixed text — English words stay in English |
+
+The difference is easiest to see on one clip. For audio of *"मुझे flight book करनी है"* (a typical Hinglish sentence), the **same audio** produces:
+
+| `mode` | Transcript (live output) |
+|---|---|
+| `transcribe` | मुझे फ्लाइट बुक करनी है। |
+| `codemix` | मुझे flight बुक करनी है। |
+| `translit` | Mujhe flight book karni hai. |
+
+```python
+from sarvamai import SarvamAI
+
+client = SarvamAI(api_subscription_key="YOUR_SARVAM_API_KEY")
+
+with open("audio.wav", "rb") as f:
+    response = client.speech_to_text.transcribe(
+        file=f,
+        model="saaras:v3",
+        mode="codemix",          # keep English words in English
+        language_code="hi-IN",
+    )
+print(response.transcript)       # मुझे flight बुक करनी है।
+```
+
+<Tip>
+  Use `codemix` for chat/agent transcripts that feel natural, `transcribe` for clean native-script records, and `translit` when a downstream system only handles Latin script. The REST endpoint handles clips up to 30 seconds — for longer audio use the [Batch API](/api/api-guides-tutorials/speech-to-text/batch-api).
+</Tip>
+
+### Telephony and 8kHz audio
+
+A large share of Indian voice traffic is phone audio: 8kHz, mono, often µ-law/A-law encoded. Two rules keep transcription quality high:
+
+1. **Match the sample rate everywhere.** For 8kHz audio, set `sample_rate=8000` **both** when opening the streaming connection **and** when sending each audio chunk. Mismatched rates cause garbled output.
+2. **Use a supported streaming codec.** Streaming STT accepts WAV and raw PCM (`pcm_s16le`, `pcm_l16`, `pcm_raw`) only.
+3. **Signal end-of-audio.** Call `ws.flush()` after the last chunk so the server knows to emit a transcript instead of waiting indefinitely for more audio.
+
+`saaras:v3` is tuned for telephony, so prefer it for call audio.
+
+```python
+
+from sarvamai import AsyncSarvamAI
+
+# Load 8kHz call audio and base64-encode it
+with open("call_recording_8khz.wav", "rb") as f:
+    audio_chunk = base64.b64encode(f.read()).decode("utf-8")
+
+async def transcribe_call_audio():
+    client = AsyncSarvamAI(api_subscription_key="YOUR_SARVAM_API_KEY")
+    async with client.speech_to_text_streaming.connect(
+        model="saaras:v3",
+        mode="transcribe",
+        language_code="hi-IN",
+        sample_rate=8000,              # match the phone line
+        input_audio_codec="pcm_s16le",
+        flush_signal=True,             # required to enable ws.flush()
+    ) as ws:
+        await ws.transcribe(audio=audio_chunk, encoding="audio/wav", sample_rate=8000)
+        await ws.flush()        # signal end-of-audio so the server emits a transcript
+        print(await ws.recv())
+
+asyncio.run(transcribe_call_audio())
+```
+
+See the [Streaming STT guide](/api/api-guides-tutorials/speech-to-text/streaming-api) for the full WebSocket lifecycle, VAD, reconnection, and voice-agent barge-in.
+
+## Text-to-Speech: natural Indian voices
+
+`bulbul:v3` speaks 11 languages (10 Indian + English) with 30+ voices, and it's built for the way Indians actually write — so you usually don't pre-process anything.
+
+- **Pass code-mixed text directly.** Mixed Hindi-English ("आपका OTP 4321 है। Please use it...") is spoken naturally; no need to romanize or split it.
+- **Normalize English words and numbers** with `enable_preprocessing=true` when your text has lots of abbreviations or digits.
+- **Pick a voice** with `speaker` (e.g. `shubh`, `priya`, `kavya`) — see the [voice list](/api/api-guides-tutorials/text-to-speech/rest-api).
+- **Output to a phone line** by requesting a telephony codec — `output_audio_codec` supports `mulaw` and `alaw` alongside `mp3`, `wav`, `opus`, etc.
+
+```python
+from sarvamai import SarvamAI
+
+client = SarvamAI(api_subscription_key="YOUR_SARVAM_API_KEY")
+
+with open("otp.mp3", "wb") as f:
+    for chunk in client.text_to_speech.convert_stream(
+        text="आपका OTP 4321 है। Please use it within 5 minutes.",
+        target_language_code="hi-IN",
+        speaker="shubh",
+        model="bulbul:v3",
+        output_audio_codec="mp3",
+    ):
+        f.write(chunk)
+```
+
+### Pronunciation control
+
+Brand names, abbreviations, and regional terms ("NEFT", "KYC", a company name) don't always come out right by default. Create a [Pronunciation Dictionary](/api/api-guides-tutorials/text-to-speech/pronunciation-dictionary) with Bulbul v3 to pin how specific words are spoken, then pass its `dict_id` to any TTS call (REST, HTTP stream, or WebSocket):
+
+```python
+for chunk in client.text_to_speech.convert_stream(
+    text="NEFT transfer karein aur KYC complete karein",
+    target_language_code="hi-IN",
+    speaker="shubh",
+    model="bulbul:v3",
+    dict_id="p_5cb7faa6",        # your pronunciation dictionary
+    output_audio_codec="mp3",
+):
+    ...  # write/play chunk
+```
+
+## Document Digitization: Indic OCR with Sarvam Vision
+
+Indian documents arrive as scans, photos, and PDFs in regional scripts — often with tables and mixed languages. **Sarvam Vision** extracts text and structure across **23 languages (22 Indian + English)**, preserving the original script, and returns results as `html`, `md`, or `json`.
+
+It's an asynchronous job API: initialise a job, upload your files to the returned URLs, start it, poll status, then download the extracted output.
+
+```python
+from sarvamai import SarvamAI
+
+client = SarvamAI(api_subscription_key="YOUR_SARVAM_API_KEY")
+
+job = client.document_intelligence.create_job(
+    language="hi-IN",     # primary document language (BCP-47)
+    output_format="md",   # "md", "html", or "json"
+)
+job.upload_file("document.pdf")
+job.start()
+job.wait_until_complete()
+job.download_output("./output.zip")  # ZIP containing the .md output plus page-level JSON
+```
+
+See the [Document Digitization guide](/api/api-guides-tutorials/document-digitization/overview) for the complete upload → start → poll → download flow.
+
+## Translation and transliteration
+
+For **text** (not speech), `mayura:v1` (11 languages — 10 Indian + English, colloquial modes, output-script and native-numeral control) and `sarvam-translate:v1` (23 languages — 22 Indian + English, formal) handle translation, and the [Transliteration API](/api/api-guides-tutorials/text-processing/transliteration) converts between scripts. See the [Translation guide](/api/api-guides-tutorials/text-processing/translation) for `output_script` and `numerals_format` options.
+
+## Where to go next
+
+- [Speech-to-Text overview](/api/api-guides-tutorials/speech-to-text/overview) · [Streaming STT](/api/api-guides-tutorials/speech-to-text/streaming-api) · [Batch STT](/api/api-guides-tutorials/speech-to-text/batch-api)
+- [Text-to-Speech overview](/api/api-guides-tutorials/text-to-speech/overview) · [Pronunciation Dictionary](/api/api-guides-tutorials/text-to-speech/pronunciation-dictionary)
+- [Document Digitization](/api/api-guides-tutorials/document-digitization/overview)
+- [Libraries & SDKs](/api/getting-started/sdks) · [Errors & Troubleshooting](/api/getting-started/errors-troubleshooting)
