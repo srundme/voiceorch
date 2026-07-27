@@ -302,13 +302,11 @@ function AppRoutes() {
         <Route path="/app/agents" component={AgentsTabPage} />
         <Route path="/app/agents/:id" component={AgentBuilder} />
 
-        {/* ── Squads → agents?tab=squads redirect ── */}
+        {/* ── Squads (standalone page; legacy detail links land on the list) ── */}
         <Route path="/app/squads/:id">
-          <TabRedirect to="/app/agents?tab=squads" />
+          <TabRedirect to="/app/squads" />
         </Route>
-        <Route path="/app/squads">
-          <TabRedirect to="/app/agents?tab=squads" />
-        </Route>
+        <Route path="/app/squads" component={SquadsPage} />
 
         {/* ── Team → settings?tab=team redirect ── */}
         <Route path="/app/team">

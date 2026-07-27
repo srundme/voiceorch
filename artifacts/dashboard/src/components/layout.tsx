@@ -3,7 +3,7 @@ import { Link, useLocation } from "wouter";
 import { useTheme } from "@/components/theme-provider";
 import { GlobalSearch, useGlobalSearchTrigger } from "@/components/GlobalSearch";
 import {
-  Home, Bot, Zap, CalendarDays, Brain, Phone, Hash,
+  Home, Bot, Users, Zap, CalendarDays, Brain, Phone, Hash,
   Settings, Wallet, Mic2, Key,
   Menu, ChevronDown, ChevronLeft, ChevronRight,
   LogOut, Bell, Search, SlidersHorizontal, BookOpen, PlugZap, Sun, Moon, Sparkles,
@@ -105,6 +105,7 @@ const NAV_GROUPS: NavGroup[] = [
     group: "BUILD",
     items: [
       { name: "Agents",    href: "/app/agents",          icon: Bot },
+      { name: "Squads",    href: "/app/squads",          icon: Users },
       { name: "Knowledge", href: "/app/knowledge-bases", icon: BookOpen },
     ],
   },
@@ -195,8 +196,8 @@ const ROUTE_TITLES: [string, string][] = [
   ["/app/settings",        "General"],
   ["/app/test-simulator",  "Test Simulator"],
   ["/app/analytics",       "Analytics"],
+  ["/app/squads",          "Squads"],
   // Legacy routes (redirect targets still render briefly)
-  ["/app/squads",          "Agents"],
   ["/app/team",            "General"],
   ["/app/automatic-calls", "Campaigns"],
   ["/app/meta-leads",      "Campaigns"],
