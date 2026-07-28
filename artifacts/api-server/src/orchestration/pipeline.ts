@@ -2260,11 +2260,23 @@ export class OrchestrationPipeline implements VoiceSession {
         const threshold = (planNumWords && planNumWords > 0)
           ? planNumWords
           : this.interruptionMgr.getWordsForInterruption();
-        if (this.streamingBargeInWordCount >= threshold) {
+        // Char floor (parity with the interim path): Indic packs meaning into few
+        // whitespace tokens, so a single short word ("இங்கிலீஷ்ல", call 4834) must
+        // not cut the agent — background speakers routinely produce these.
+        const charCount = [...transcript.trim()].length;
+        const langPrefix = (this.currentLang || this.agent.language || "en").split(/[-_]/)[0]?.toLowerCase();
+        const isIndic = ["ta", "hi", "te", "kn", "ml", "mr", "bn", "gu"].includes(langPrefix ?? "");
+        const minChars = isIndic ? 14 : 8;
+        if (this.streamingBargeInWordCount >= threshold && charCount >= minChars) {
           this.triggerBargeIn("word_count", transcript, { speculative: true });
           logger.info(
-            { callId: this.config.callId, words: this.streamingBargeInWordCount, threshold },
+            { callId: this.config.callId, words: this.streamingBargeInWordCount, threshold, charCount },
             "Barge-in detected (streaming STT)",
+          );
+        } else if (this.streamingBargeInWordCount >= threshold) {
+          logger.info(
+            { callId: this.config.callId, charCount, minChars, transcript: transcript.slice(0, 60) },
+            "Barge-in suppressed — final under char floor (likely background/short ack)",
           );
         }
       }
