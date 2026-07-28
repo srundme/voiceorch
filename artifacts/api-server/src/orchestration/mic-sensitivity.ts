@@ -38,10 +38,13 @@ export interface MicSensitivityThresholds {
 }
 
 const THRESHOLDS: Record<MicSensitivity, MicSensitivityThresholds> = {
-  // 1.5x the normal floors — filters out quieter secondary talkers more aggressively.
+  // Barge-in bar raised 1.5x (background voices can't cut the agent off) but the
+  // speech-detection floor stays near normal so the caller's own soft replies are
+  // still captured. Calls 4842/4843 showed the old uniform-1.5x "low" blocked the
+  // caller's real speech (15s "silence") while normal let a background "hmm" barge.
   low: {
-    gateRatio: 6.0,
-    vadThreshold: 160,
+    gateRatio: 5.0,
+    vadThreshold: 110,
     bargeInEnergyThreshold: 1800,
     webcallAecThreshold: 600,
   },
