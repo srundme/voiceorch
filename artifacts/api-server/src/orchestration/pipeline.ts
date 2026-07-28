@@ -1292,8 +1292,22 @@ export class OrchestrationPipeline implements VoiceSession {
 
   private wireStreamSttCallbacks(): void {
     if (!this.streamSTT) return;
-    this.streamSTT.onSpeechEnd = () => this.handleSttSpeechEnd();
+    this.streamSTT.onSpeechEnd = () => {
+      // Timing instrumentation: records when the STT provider's server-side VAD
+      // declared end-of-speech, so exec logs expose the caller-silence→VAD gap.
+      this.logExec("STT", "system", {
+        status: "info",
+        turnNumber: this._activeTurnIndex,
+        metadata: { event: "VAD Speech End" },
+      });
+      this.handleSttSpeechEnd();
+    };
     this.streamSTT.onSpeechStart = () => {
+      this.logExec("STT", "system", {
+        status: "info",
+        turnNumber: this._activeTurnIndex,
+        metadata: { event: "VAD Speech Start" },
+      });
       this.interruptionMgr.onUserSpeechStart();
       this.handleSttSpeechResumed();
     };
