@@ -122,6 +122,8 @@ const DEAD_AIR_FILLER_CANCEL_MS = 500; // skip dead-air filler playback if LLM f
                                         // arrives within this window after filler was enqueued
 const FRAGMENT_COALESCE_MS    = 2000;   // hold short English fragments / Indic acks for a follow-up STT final (agent speaking)
 const FRAGMENT_COALESCE_LISTENING_MS = 450; // shorter hold when the agent is silent — "Okay." is then likely the caller's real answer
+const VAD_FLUSH_BACKSTOP_MS   = 2000;   // speech_start with no interim/final/speech_end for this long → one-shot STT flush (lost-turn anomaly)
+const VAD_FLUSH_COOLDOWN_MS   = 5000;   // min interval between backstop flushes — keeps the flush strictly anomaly-only
 const LLM_TTFT_FALLBACK_MS    = Number(process.env.LLM_TTFT_FALLBACK_MS ?? 1200); // abort slow primary LLM
 const LLM_SLOW_TTFT_MS        = Number(process.env.LLM_SLOW_TTFT_MS ?? 1200);     // warn in execution logs
 const TTS_STREAM_TIMEOUT_MS   = 8000;   // abort TTS streaming fetch if no data within 8 s —
@@ -632,6 +634,9 @@ export class OrchestrationPipeline implements VoiceSession {
 
   // Barge-in state
   private isPlaying = false;
+  /** Lost-turn backstop: one-shot force-flush timer armed on VAD speech_start (calls 4831/4833). */
+  private _vadFlushTimer: ReturnType<typeof setTimeout> | null = null;
+  private _lastVadFlushAt = 0;
   /**
    * True only while playSentence() is actively sending TTS bytes to the carrier.
    * Distinct from isPlaying (which stays true for the entire turn, including the
@@ -1296,6 +1301,7 @@ export class OrchestrationPipeline implements VoiceSession {
     this.streamSTT.onSpeechEnd = () => {
       // Timing instrumentation: records when the STT provider's server-side VAD
       // declared end-of-speech, so exec logs expose the caller-silence→VAD gap.
+      this.clearVadFlushBackstop();
       this.logExec("STT", "system", {
         status: "info",
         turnNumber: this._activeTurnIndex,
@@ -1309,9 +1315,56 @@ export class OrchestrationPipeline implements VoiceSession {
         turnNumber: this._activeTurnIndex,
         metadata: { event: "VAD Speech Start" },
       });
+      this.armVadFlushBackstop();
       this.interruptionMgr.onUserSpeechStart();
       this.handleSttSpeechResumed();
     };
+  }
+
+  // ── Lost-turn backstop (calls 4831/4833) ────────────────────────────────────
+  // Sarvam occasionally emits VAD speech_start but then NO interim, NO final and
+  // NO speech_end — the caller's utterance is silently lost until the 10s stall
+  // reprompt. Backstop: if nothing arrives within VAD_FLUSH_BACKSTOP_MS of
+  // speech_start, send ONE flush() to force Sarvam to finalize its buffer.
+  //
+  // This deliberately narrows the adapter's "pipeline never calls flush()"
+  // invariant (calls-772→1320 regression class = flush racing Sarvam's VAD on
+  // NORMAL turns). Here flush fires only when Sarvam has been silent for 2s+
+  // after its own speech_start — i.e. only in the anomaly, never racing a live
+  // turn — and is rate-limited to one shot per VAD_FLUSH_COOLDOWN_MS.
+  private clearVadFlushBackstop(): void {
+    if (this._vadFlushTimer) {
+      clearTimeout(this._vadFlushTimer);
+      this._vadFlushTimer = null;
+    }
+  }
+
+  private armVadFlushBackstop(): void {
+    this.clearVadFlushBackstop();
+    if (this.closed) return;
+    this._vadFlushTimer = setTimeout(() => {
+      this._vadFlushTimer = null;
+      if (this.closed || this.isProcessing || this.isPlaying || this.isSendingTtsAudio) return;
+      const now = Date.now();
+      if (now - this._lastVadFlushAt < VAD_FLUSH_COOLDOWN_MS) return;
+      if (!this.streamSTT?.flush) return;
+      this._lastVadFlushAt = now;
+      logger.warn(
+        { callId: this.config.callId },
+        "Lost-turn backstop: VAD speech_start with no interim/final/speech_end — forcing STT flush",
+      );
+      this.logExec("STT", "system", {
+        status: "info",
+        turnNumber: this._activeTurnIndex,
+        warningFlags: ["lost_turn_force_flush"],
+        metadata: { event: "Lost-Turn Force Flush", holdMs: VAD_FLUSH_BACKSTOP_MS },
+      });
+      try {
+        this.streamSTT.flush();
+      } catch (err) {
+        logger.warn({ callId: this.config.callId, err }, "Lost-turn backstop flush failed");
+      }
+    }, VAD_FLUSH_BACKSTOP_MS);
   }
 
   /** Poll until post-utterance WAIT clears or timeout (Bolna incremental_delay grace). */
@@ -1517,7 +1570,8 @@ export class OrchestrationPipeline implements VoiceSession {
       | "ultra_short_fragment"
       | "false_interruption_scrap"
       | "transfer_in_progress"
-      | "fragment_coalesce_hold",
+      | "fragment_coalesce_hold"
+      | "backchannel_during_playback",
   ): void {
     const now = Date.now();
     const reasonByGuard: Record<typeof guard, string> = {
@@ -1527,6 +1581,7 @@ export class OrchestrationPipeline implements VoiceSession {
       false_interruption_scrap: "post-barge scrap under interrupt-word threshold",
       transfer_in_progress: "transfer already in progress",
       fragment_coalesce_hold: "short fragment held briefly for coalesce (not a drop)",
+      backchannel_during_playback: "held ack fragment dropped — agent speaking at coalesce-timer fire (true backchannel)",
     };
     this.logExec(EXEC_COMPONENTS.STT, "system", {
       status: "info",
@@ -1934,6 +1989,9 @@ export class OrchestrationPipeline implements VoiceSession {
       this.streamSTT = this.stt.transcribeStream(
         (text, isFinal, lang, metadata) => {
           if (this.closed) return;
+          // Any transcript activity (interim or final) proves Sarvam is alive —
+          // disarm the lost-turn force-flush backstop.
+          if (text.trim()) this.clearVadFlushBackstop();
           // Non-empty interim → drive the force-finalize timer, but ONLY while we
           // are actually listening (not during agent playback, where partials are
           // barge-in candidates handled separately). Don't process yet.
@@ -2378,9 +2436,24 @@ export class OrchestrationPipeline implements VoiceSession {
           timer: setTimeout(() => {
             const pending = this._fragmentCoalesce?.text;
             this._fragmentCoalesce = null;
-            if (pending && !this.closed) {
-              void this.handleStreamingTranscript(pending, Date.now(), "coalesced_fragment");
+            if (!pending || this.closed) return;
+            // Context re-check at fire time (review finding): the hold was armed
+            // under one playback phase but may fire in another. If the agent is
+            // NOW speaking and the held text is a pure ack ("okay"/"சரி"), it was
+            // a true backchannel — promoting it to a turn would wrongly barge the
+            // agent. Drop it instead of processing with stale context.
+            if (
+              (this.isPlaying || this.isSendingTtsAudio)
+              && isBackchannelOnlyUtterance(pending)
+            ) {
+              this.logDiscardedTranscript(pending, "backchannel_during_playback");
+              logger.info(
+                { callId: this.config.callId, fragment: pending.slice(0, 80) },
+                "Held ack fragment dropped — agent speaking at coalesce-timer fire",
+              );
+              return;
             }
+            void this.handleStreamingTranscript(pending, Date.now(), "coalesced_fragment");
           }, holdMs),
         };
         logger.info(
