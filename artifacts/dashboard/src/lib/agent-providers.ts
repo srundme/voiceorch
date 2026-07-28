@@ -459,14 +459,14 @@ export function defaultGeminiModel(): string {
 
 /** Canonical LLM defaults for the VoiceOrch auto-selection rule. */
 export const DEFAULT_TAMIL_LLM_PROVIDER = "google" as const;
-export const DEFAULT_TAMIL_LLM_MODEL    = "gemini-3.6-flash" as const;
+export const DEFAULT_TAMIL_LLM_MODEL    = GEMINI_LIVE_LLM_MODEL;
 export const DEFAULT_NONTAMIL_LLM_PROVIDER = "groq" as const;
 export const DEFAULT_NONTAMIL_LLM_MODEL    = "llama-3.3-70b-versatile" as const;
 
 /**
  * Returns the canonical llmProvider + llmModel for the given language selection.
- * Tamil (any `ta-*` variant) → Gemini 3.6 Flash.
- * All other languages → Groq Llama 3.3 70B.
+ * Tamil (any `ta-*` variant) → Gemini 3.1 Flash Live (native realtime voice stack).
+ * All other languages → Groq Llama 3.3 70B (classic pipeline).
  */
 export function defaultLlmForLanguages(
   languages: string | string[] | undefined | null,

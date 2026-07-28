@@ -998,6 +998,9 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
                       const { llmProvider, llmModel } = defaultLlmForLanguages(v);
                       form.setValue("llmProvider", llmProvider);
                       form.setValue("llmModel", llmModel);
+                      // Tamil defaults to Gemini Live — keep the voice stack in sync
+                      // so the language pick actually lands on the realtime stack.
+                      form.setValue("voiceStack", voiceStackForLlmModel(llmModel));
                     }
                   }}
                     options={options.map(l => ({ value: l.value, label: l.label }))} placeholder="Select language" />
