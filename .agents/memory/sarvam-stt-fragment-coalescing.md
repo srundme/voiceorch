@@ -36,3 +36,10 @@ set — a Sarvam-side accuracy limitation, not something `langCode`/`mode`
 config in our adapter currently controls per-segment. No fix implemented;
 mode is fixed per-call at WS-open time and changing the default risks
 breaking legitimate Tamil/English code-switching for other agents.
+
+**Listening-state hold (Jul 2026):** the pipeline's 2s fragment-coalesce hold for
+backchannel-only utterances ("Okay", "சரி") applied even when the agent was silent,
+adding 2s dead air to every short ANSWER. Fixed: hold is now context-dependent —
+2000ms while agent audio is playing (true backchannel), 450ms when listening
+(FRAGMENT_COALESCE_LISTENING_MS in pipeline.ts). If short replies feel slow again,
+check this split first.
