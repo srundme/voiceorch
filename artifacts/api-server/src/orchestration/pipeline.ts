@@ -120,7 +120,8 @@ const FILLER_THRESHOLD_MS     = 350;    // play a filler phrase if LLM has not r
                                         // token within this window (and backchannel didn't fire)
 const DEAD_AIR_FILLER_CANCEL_MS = 500; // skip dead-air filler playback if LLM first token
                                         // arrives within this window after filler was enqueued
-const FRAGMENT_COALESCE_MS    = 2000;   // hold short English fragments / Indic acks for a follow-up STT final
+const FRAGMENT_COALESCE_MS    = 2000;   // hold short English fragments / Indic acks for a follow-up STT final (agent speaking)
+const FRAGMENT_COALESCE_LISTENING_MS = 450; // shorter hold when the agent is silent — "Okay." is then likely the caller's real answer
 const LLM_TTFT_FALLBACK_MS    = Number(process.env.LLM_TTFT_FALLBACK_MS ?? 1200); // abort slow primary LLM
 const LLM_SLOW_TTFT_MS        = Number(process.env.LLM_SLOW_TTFT_MS ?? 1200);     // warn in execution logs
 const TTS_STREAM_TIMEOUT_MS   = 8000;   // abort TTS streaming fetch if no data within 8 s —
@@ -2362,6 +2363,16 @@ export class OrchestrationPipeline implements VoiceSession {
           "STT fragment coalesced with follow-up final",
         );
       } else {
+        // Hold duration is context-dependent:
+        //   • Agent currently speaking → the "okay/சரி" is a true backchannel;
+        //     hold the full window so a follow-up final can merge.
+        //   • Agent silent (caller's turn) → "Okay." is very likely the caller's
+        //     actual ANSWER to the agent's question. Holding 2s here reads as
+        //     dead air on every short reply (call-4831 "Okay." turn), so release
+        //     after a short merge window instead.
+        const holdMs = (this.isPlaying || this.isSendingTtsAudio)
+          ? FRAGMENT_COALESCE_MS
+          : FRAGMENT_COALESCE_LISTENING_MS;
         this._fragmentCoalesce = {
           text: transcript,
           timer: setTimeout(() => {
@@ -2370,10 +2381,10 @@ export class OrchestrationPipeline implements VoiceSession {
             if (pending && !this.closed) {
               void this.handleStreamingTranscript(pending, Date.now(), "coalesced_fragment");
             }
-          }, FRAGMENT_COALESCE_MS),
+          }, holdMs),
         };
         logger.info(
-          { callId: this.config.callId, fragment: transcript.slice(0, 80), holdMs: FRAGMENT_COALESCE_MS },
+          { callId: this.config.callId, fragment: transcript.slice(0, 80), holdMs },
           "STT fragment coalesce hold — awaiting follow-up final",
         );
         this.logDiscardedTranscript(transcript, "fragment_coalesce_hold");
