@@ -6,6 +6,7 @@ export const LLM_PROVIDERS = [
   { value: "openai",   label: "OpenAI" },
   { value: "google",   label: "Google Gemini" },
   { value: "groq",     label: "Groq" },
+  { value: "sarvam",   label: "Sarvam AI (India-hosted)" },
 ];
 
 export const TTS_PROVIDERS = [
