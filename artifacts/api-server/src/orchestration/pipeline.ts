@@ -6336,7 +6336,8 @@ export class OrchestrationPipeline implements VoiceSession {
     // the caller hears something rather than dead air.
     let fillerTimer: ReturnType<typeof setTimeout> | null = null;
     if (
-      !backchanneledThisTurn
+      this.agent.backchannelingEnabled
+      && !backchanneledThisTurn
       && !skipFillerForBackchannelAck
       && !this.closed
       && !this.bargeInRequested
