@@ -14,7 +14,9 @@
  *                       (saaras:v3 only; codemix handles Tamil+English mixing)
  *   sample_rate         16000 (default) | 8000
  *   input_audio_codec   "pcm_s16le" | "wav"
- *   high_vad_sensitivity true → 0.5 s silence boundary (snappier for voice agents)
+ *   high_vad_sensitivity true → silence boundary = 2 VAD frames (~64ms @16kHz, ~128ms @8kHz);
+ *                        default (false) is 18-of-24 frames ≈ 1s+. Fine-tune params
+ *                        (negative_frames_count etc.) can override — see Sarvam Fine VAD Tuning docs.
  *   vad_signals         true → emits START_SPEECH / END_SPEECH events
  *
  * ── Auth ─────────────────────────────────────────────────────────────────────
@@ -227,7 +229,7 @@ export class SarvamSTT implements STTAdapter {
         language_code:      langCode,
         sample_rate:        String(sampleRate),
         input_audio_codec:  "pcm_s16le",
-        high_vad_sensitivity: "true",  // 0.5 s silence boundary — snappy for voice agents
+        high_vad_sensitivity: "true",  // ~128ms silence boundary @8kHz (2 VAD frames) — snappy for voice agents
         vad_signals:        "true",    // emit speech_start / speech_end events
         flush_signal:       "true",    // allow manual buffer flush via flush() call
       });
