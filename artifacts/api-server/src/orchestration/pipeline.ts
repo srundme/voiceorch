@@ -637,6 +637,9 @@ export class OrchestrationPipeline implements VoiceSession {
   /** Lost-turn backstop: one-shot force-flush timer armed on VAD speech_start (calls 4831/4833). */
   private _vadFlushTimer: ReturnType<typeof setTimeout> | null = null;
   private _lastVadFlushAt = 0;
+  /** Unheard remainder of a reply cut by barge-in — resumed if the "interruption" turns out to be a scrap (call 4839 dead-air). */
+  private _bargedReplyRemainder: string | null = null;
+  private _bargedReplyAt = 0;
   /**
    * True only while playSentence() is actively sending TTS bytes to the carrier.
    * Distinct from isPlaying (which stays true for the entire turn, including the
@@ -2523,10 +2526,27 @@ export class OrchestrationPipeline implements VoiceSession {
         this.safetyNet.onFinal();
         this.clearEagerPartialTimer();
         this.interruptionMgr.onUserSpeechEnd();
+        // Call 4839: a false (energy/echo) barge cut the reply mid-sentence AND
+        // the caller transcript was a scrap → both sides silent for 17s until
+        // the caller asked "are you there?". Resume the unheard remainder.
+        const remainder = this._bargedReplyRemainder;
+        if (
+          remainder
+          && Date.now() - this._bargedReplyAt < 15_000
+          && !this.isPlaying && !this.isProcessing && !this.closed
+        ) {
+          this._bargedReplyRemainder = null;
+          void this.resumeBargedReply(remainder);
+          return;
+        }
         if (!this.closed) this.safetyNet.beginListening();
         return;
       }
     }
+
+    // A real caller turn is being accepted — any pending barged-reply remainder
+    // is now stale (the caller moved the conversation on); never resume it.
+    this._bargedReplyRemainder = null;
 
     if (isCallerAudioDifficulty(transcript)) {
       this.pendingAudioDifficultyNote = true;
@@ -2574,6 +2594,56 @@ export class OrchestrationPipeline implements VoiceSession {
    * outbound calls a hangup is a lost lead). After STALL_MAX_REPROMPTS the safety
    * net calls onStallGiveUp instead, which ends the call via the inactivity path.
    */
+  /**
+   * Record the unheard tail of a reply that was cut by barge-in, so that if the
+   * "interruption" turns out to be a discarded scrap (false energy/echo barge)
+   * we can resume speaking instead of leaving dead air (call 4839: 17s silence).
+   */
+  private captureBargedRemainder(spokenResponse: string, baseSpokenResponse: string): void {
+    if (!this.bargeInRequested || !baseSpokenResponse) return;
+    let remainder = baseSpokenResponse.startsWith(spokenResponse)
+      ? baseSpokenResponse.slice(spokenResponse.length).trim()
+      : baseSpokenResponse.trim();
+    if (!remainder) return;
+    if (remainder.length > 400) remainder = remainder.slice(0, 400);
+    this._bargedReplyRemainder = remainder;
+    this._bargedReplyAt = Date.now();
+  }
+
+  /** Speak the unheard remainder of a falsely-barged reply (system-playback style). */
+  private async resumeBargedReply(text: string): Promise<void> {
+    if (this.closed || this.isProcessing || this.isPlaying) return;
+    logger.info(
+      { callId: this.config.callId, chars: text.length },
+      "False barge-in — resuming cut-off reply",
+    );
+    this.logExec("Agent", "system", {
+      status: "info",
+      turnNumber: this._activeTurnIndex,
+      metadata: { event: "Barged Reply Resumed", chars: text.length, preview: text.slice(0, 80) },
+    });
+    this.firstAudioSentAt = null;
+    this.bargeInHoldUntil = Date.now() + this.bargeInEchoGraceMs;
+    this.isPlaying = true;
+    try {
+      await this.playSentence(text);
+    } catch (err) {
+      logger.error({ callId: this.config.callId, err }, "Barged-reply resume playback error");
+    } finally {
+      this.isPlaying = false;
+      this.systemPlaybackActive = false;
+      this.armTailEchoGrace();
+    }
+    await this.drainPlaybackTail();
+    if (!this.closed) {
+      this.conversationHistory.appendAssistant(text);
+      this.config.onTranscript("agent", text);
+      this.config.onConversationUpdate?.(this.conversationHistory.messages);
+      this.safetyNet.beginListening();
+      this.resetHangupTimer();
+    }
+  }
+
   private async stallReprompt(): Promise<void> {
     if (this.closed || this.isProcessing || this.isPlaying) {
       // Activity resumed between expiry and handling — just re-arm.
@@ -7136,6 +7206,7 @@ export class OrchestrationPipeline implements VoiceSession {
       heardOnly,
       fullResponse: baseSpokenResponse,
     });
+    this.captureBargedRemainder(spokenResponse, baseSpokenResponse);
     if (spokenResponse) {
       this.conversationHistory.appendAssistant(spokenResponse);
       this.trackRepeat(spokenResponse);
@@ -7969,6 +8040,7 @@ export class OrchestrationPipeline implements VoiceSession {
         heardOnly,
         fullResponse: baseSpokenResponse,
       });
+      this.captureBargedRemainder(spokenResponse, baseSpokenResponse);
       if (spokenResponse) {
         this.conversationHistory.appendAssistant(spokenResponse);
         this.trackRepeat(spokenResponse);
