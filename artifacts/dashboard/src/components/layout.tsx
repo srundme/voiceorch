@@ -15,12 +15,33 @@ import { useAuth } from "@/lib/auth";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useGetWallet, customFetch } from "@workspace/api-client-react";
 import { useMinuteRatesMap, useUserProviderNames } from "@/hooks/use-minute-rates";
-import { SnapServeIcon } from "@/components/logo";
+import { SnapServeIcon, SnapServeSarvamLockup } from "@/components/logo";
 import { Handshake } from "lucide-react";
 import { usePartnerContext } from "@/hooks/use-partner";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 import { loadActingAs, stopActingAs } from "@/lib/acting-as";
+
+/** Lockup PNG is white; invert on light UI. */
+function useSarvamLockupOn(): "dark" | "light" {
+  const { theme } = useTheme();
+  const [on, setOn] = useState<"dark" | "light">("dark");
+  useEffect(() => {
+    const resolve = () => {
+      if (theme === "light") setOn("light");
+      else if (theme === "dark") setOn("dark");
+      else {
+        setOn(window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+      }
+    };
+    resolve();
+    if (theme !== "system") return;
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    mq.addEventListener("change", resolve);
+    return () => mq.removeEventListener("change", resolve);
+  }, [theme]);
+  return on;
+}
 
 /* ─── Error boundary ─────────────────────────────────────────────────────── */
 interface ErrorBoundaryState { hasError: boolean; error: unknown }
@@ -445,6 +466,7 @@ function SidebarContent({
 }) {
   const [location] = useLocation();
   const pendingCallbacks = usePendingCallbackCount();
+  const lockupOn = useSarvamLockupOn();
 
   const isInSettings = SETTINGS_HREFS.some(href => location.startsWith(href));
 
@@ -510,15 +532,10 @@ function SidebarContent({
             </>
           ) : (
             <>
-              <SnapServeIcon size={24} className="text-foreground shrink-0" />
-              {!collapsed && (
-                <span
-                  className="leading-none text-[14px] text-foreground whitespace-nowrap"
-                  style={{ fontFamily: "system-ui, sans-serif", letterSpacing: "-0.02em" }}
-                >
-                  <span style={{ fontWeight: 700 }}>Snap</span>
-                  <span style={{ fontWeight: 400, opacity: 0.5 }}>Serve</span>
-                </span>
+              {collapsed ? (
+                <SnapServeIcon size={24} className="text-foreground shrink-0" />
+              ) : (
+                <SnapServeSarvamLockup height={16} on={lockupOn} className="shrink-0 max-w-[160px]" />
               )}
               {!collapsed && partnerCtx?.isPartner && (
                 <span className="px-1.5 py-[2px] rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-500 text-[9px] font-semibold uppercase tracking-wider leading-none shrink-0">
@@ -909,6 +926,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [newAgentOpen, setNewAgentOpen] = useState(false);
   const { data: partnerCtx } = usePartnerContext();
   const queryClient = useQueryClient();
+  const lockupOn = useSarvamLockupOn();
 
   // Partner acting-as-client mode (sessionStorage-backed; survives reloads
   // and the builder's /app/agents/:id navigation).
@@ -983,11 +1001,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
             </button>
           </SheetTrigger>
           <Link href="/app" className="ml-1 flex items-center gap-1.5 min-w-0">
-            <SnapServeIcon size={20} className="text-foreground shrink-0" />
-            <span className="leading-none text-[13px] text-foreground truncate" style={{ fontFamily: "system-ui, sans-serif", letterSpacing: "-0.02em" }}>
-              <span style={{ fontWeight: 700 }}>Snap</span>
-              <span style={{ fontWeight: 400, opacity: 0.55 }}>Serve</span>
-            </span>
+            {partnerCtx?.branding ? (
+              <span className="leading-none text-[13px] text-foreground truncate font-semibold">
+                {partnerCtx.branding.companyName}
+              </span>
+            ) : (
+              <SnapServeSarvamLockup height={15} on={lockupOn} className="shrink-0 max-w-[170px]" />
+            )}
           </Link>
           <div className="ml-auto flex items-center gap-0.5">
             <ThemeToggle />
