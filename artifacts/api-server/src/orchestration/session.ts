@@ -620,6 +620,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
       return v === 350 ? 0 : Math.max(0, Math.min(1500, Math.round(v)));
     })(),
     ttsSpeed:             (agentCfg["ttsSpeed"]             as number | undefined) ?? 1.0,
+    sarvamIndicNumbers:   agentCfg["sarvamIndicNumbers"] !== false,
     // P1-H: Call lifecycle
     hangupAfterLlmCall: (agentCfg["hangupAfterLlmCall"] as boolean | undefined) ?? false,
     // P1-I: Start Speaking Plan — snappy defaults; rewrite legacy 1.5/0.5 footguns.

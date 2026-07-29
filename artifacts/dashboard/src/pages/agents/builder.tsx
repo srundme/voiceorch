@@ -77,7 +77,7 @@ import { useToast } from "@/hooks/use-toast";
 import { formatApiError, mapApiErrors, isDestinationUnverifiedError } from "@/lib/format-api-error";
 import {
   ASR_PROVIDERS, LLM_PROVIDERS, TTS_PROVIDERS,
-  LANGUAGES, ASR_MODELS, LLM_MODELS, TTS_MODELS, TTS_VOICES, AGENT_TIMEZONES,
+  LANGUAGES, SARVAM_PERSONALISATION_LANGUAGES, ASR_MODELS, LLM_MODELS, TTS_MODELS, TTS_VOICES, AGENT_TIMEZONES,
   filterVoicesForLanguage, isVoiceCompatibleWithLanguage,
   getSarvamTtsVoices, isSarvamVoiceCompatible,
   GEMINI_LIVE_LLM_MODEL, GEMINI_LIVE_THINKING_LEVELS,
@@ -429,9 +429,9 @@ function AgentCostSummary({ form, rateMap, compact = false }: { form: any; rateM
 }
 
 const SECTION_FIELDS: Record<CardSection, string[]> = {
-  transcriber: ["language", "asrProvider", "asrModel", "sarvamSttMode", "languageAutoDetect"],
+  transcriber: ["language", "asrProvider", "asrModel", "sarvamSttMode", "languageAutoDetect", "multilingualLanguages", "sarvamIndicNumbers"],
   model: ["llmProvider", "llmModel", "temperature"],
-  voice: ["voiceStack", "ttsProvider", "ttsModel", "ttsVoice", "geminiLiveVoiceName", "geminiLiveThinkingLevel"],
+  voice: ["voiceStack", "ttsProvider", "ttsModel", "ttsVoice", "ttsSpeed", "geminiLiveVoiceName", "geminiLiveThinkingLevel"],
 };
 
 /* ── Inbound number card (same assign API as Phone Numbers) ─────────────────── */
@@ -1184,8 +1184,6 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
       {/* ── Studio overview: pipeline → welcome → canvas ─────────────────────── */}
       <div className="relative min-w-0">
         <div className="p-5 sm:p-6 space-y-6 max-w-3xl">
-          <JourneyReadinessPanel form={form} agent={agent} />
-
           {/* Pipeline chips — top of Overview */}
           <section className="space-y-2.5">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/55">Pipeline</p>
@@ -1395,21 +1393,81 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
                 }} />
               )}
             </div>
-            <div className="flex items-center justify-between border-t border-border pt-2 mt-1">
-              <div>
-                <p className="text-[10px] font-medium text-foreground/80">Multilingual</p>
-                <p className="text-[9px] text-muted-foreground">
-                  {isGeminiLive
-                    ? "Allow Gemini Live to follow the caller when they switch languages mid-call."
-                    : "Automatically detects and switches between supported languages during the conversation."}
-                </p>
+            <div className="space-y-3 border-t border-border pt-3 mt-1">
+              <p className="text-[11px] font-semibold text-foreground tracking-tight">Language personalisation</p>
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-medium text-foreground/80">Switch language during call</p>
+                  <p className="text-[9px] text-muted-foreground">
+                    {isGeminiLive
+                      ? "Allow Gemini Live to follow the caller when they switch languages mid-call."
+                      : "Follow along when the caller switches languages (Sarvam STT + TTS)."}
+                  </p>
+                </div>
+                <FormField control={form.control} name="languageAutoDetect" render={({ field }) => (
+                  <Switch
+                    checked={field.value ?? false}
+                    onCheckedChange={(v) => {
+                      field.onChange(v);
+                      if (v && !(form.getValues("multilingualLanguages")?.length)) {
+                        const start = form.getValues("language") || "en-IN";
+                        const seed = ["en-IN", "hi-IN", "ta-IN"].includes(start)
+                          ? ["en-IN", "hi-IN", "ta-IN"]
+                          : [start, "en-IN"];
+                        form.setValue("multilingualLanguages", [...new Set(seed)], { shouldDirty: true });
+                      }
+                    }}
+                  />
+                )} />
               </div>
-              <FormField control={form.control} name="languageAutoDetect" render={({ field }) => (
-                <Switch
-                  checked={field.value ?? false}
-                  onCheckedChange={(v) => field.onChange(v)}
-                />
-              )} />
+              {!!form.watch("languageAutoDetect") && (
+                <FormField control={form.control} name="multilingualLanguages" render={({ field }) => {
+                  const selected = new Set(field.value ?? []);
+                  return (
+                    <FormItem className="space-y-1.5">
+                      <FormLabel className="text-[10px] font-medium text-foreground/80">Languages allowed</FormLabel>
+                      <p className="text-[9px] text-muted-foreground">Languages the agent can understand and reply in.</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {SARVAM_PERSONALISATION_LANGUAGES.map((lang) => {
+                          const on = selected.has(lang.value);
+                          return (
+                            <button
+                              key={lang.value}
+                              type="button"
+                              onClick={() => {
+                                const next = new Set(selected);
+                                if (on) next.delete(lang.value);
+                                else next.add(lang.value);
+                                field.onChange([...next]);
+                              }}
+                              className={cn(
+                                "px-2 py-0.5 rounded-full text-[10px] border transition-colors",
+                                on
+                                  ? "bg-primary text-primary-foreground border-primary"
+                                  : "bg-background text-muted-foreground border-border hover:border-foreground/30",
+                              )}
+                            >
+                              {lang.label.replace(" (India)", "")}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </FormItem>
+                  );
+                }} />
+              )}
+              <div className="flex items-center justify-between gap-3 border-t border-border/60 pt-2">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-medium text-foreground/80">Output numbers in Indic</p>
+                  <p className="text-[9px] text-muted-foreground">Converts numbers for speech. E.g. &apos;500&apos; → &apos;paanch sau&apos; (Sarvam TTS).</p>
+                </div>
+                <FormField control={form.control} name="sarvamIndicNumbers" render={({ field }) => (
+                  <Switch
+                    checked={field.value !== false}
+                    onCheckedChange={field.onChange}
+                  />
+                )} />
+              </div>
             </div>
           </EditConfigDialog>
 
@@ -2089,12 +2147,12 @@ function VoiceTab({ form }: { form: any }) {
   return (
     <div className="relative p-6 space-y-8 max-w-3xl">
 
-      {/* ── SPEAK ── */}
+      {/* ── SPEAKING ── */}
       <section className="space-y-4">
         <div>
-          <h3 className="text-[13px] font-semibold text-foreground tracking-tight">Speak</h3>
+          <h3 className="text-[13px] font-semibold text-foreground tracking-tight">Speaking</h3>
           <p className="text-[11px] text-muted-foreground mt-0.5">
-            How the agent sounds on the call — provider, voice, and model.
+            How the agent sounds on the call — provider, voice, speed, and model.
           </p>
         </div>
         <div className="rounded-xl border border-border/50 bg-card/40 p-4 space-y-3">
@@ -2283,6 +2341,57 @@ function VoiceTab({ form }: { form: any }) {
               </FormItem>
             )} />
           )}
+
+          {!isGeminiLive && (ttsProvider === "sarvam" || ttsProvider === "cartesia" || ttsProvider === "elevenlabs") && (
+            <div className="border-t border-border/50 pt-3 mt-1">
+              <FormField control={form.control} name="ttsSpeed" render={({ field }) => {
+                const val = typeof field.value === "number" && Number.isFinite(field.value) ? field.value : 1;
+                const pct = ((val - 0.7) / (1.5 - 0.7)) * 100;
+                return (
+                  <FormItem className="space-y-0">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <FormLabel className="text-sm font-medium text-foreground">Speaking speed</FormLabel>
+                        <FormDescription className="text-[10px] mt-0.5">
+                          {ttsProvider === "sarvam"
+                            ? "How fast the agent talks (Sarvam Bulbul pace). 1.0× is normal."
+                            : "How fast the agent talks. 1.0× is normal."}
+                        </FormDescription>
+                      </div>
+                      <div className="flex items-center gap-3 shrink-0 w-[min(100%,220px)]">
+                        <div className="relative h-5 flex-1 flex items-center">
+                          <div className="absolute inset-x-0 h-1.5 rounded-full bg-border/60" />
+                          <div className="absolute left-0 h-1.5 rounded-full bg-primary/70 pointer-events-none" style={{ width: `${pct}%` }} />
+                          <input
+                            type="range"
+                            min={0.7}
+                            max={1.5}
+                            step={0.05}
+                            value={val}
+                            onChange={(e) => field.onChange(parseFloat(e.target.value))}
+                            className="absolute inset-x-0 w-full opacity-0 h-5 cursor-pointer"
+                          />
+                        </div>
+                        <Input
+                          type="number"
+                          min={0.7}
+                          max={1.5}
+                          step={0.05}
+                          value={val}
+                          onChange={(e) => {
+                            const n = parseFloat(e.target.value);
+                            if (Number.isFinite(n)) field.onChange(Math.min(1.5, Math.max(0.7, n)));
+                          }}
+                          className="h-8 w-[4.25rem] text-xs tabular-nums text-center"
+                        />
+                        <span className="text-[10px] text-muted-foreground shrink-0">×</span>
+                      </div>
+                    </div>
+                  </FormItem>
+                );
+              }} />
+            </div>
+          )}
           </>
           )}
         </div>
@@ -2291,7 +2400,7 @@ function VoiceTab({ form }: { form: any }) {
       {/* ── LISTEN ── */}
       <section className="space-y-4">
         <div>
-          <h3 className="text-[13px] font-semibold text-foreground tracking-tight">Listen</h3>
+          <h3 className="text-[13px] font-semibold text-foreground tracking-tight">Listening</h3>
           <p className="text-[11px] text-muted-foreground mt-0.5">
             How the agent hears the caller — noise cancel, backchannels, and ambient bed.
           </p>
@@ -5784,6 +5893,7 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
       voicemailMessage: "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.",
       voicemailLeadInSeconds: 2,
       tools: [], genderDetectionEnabled: false, voiceMemoryEnabled: false, recordingEnabled: true, languageAutoDetect: false,
+      multilingualLanguages: [], sarvamIndicNumbers: true,
       autoSwitchToEnglish: false,
       startSpeakingWaitSecs: 0, startSpeakingOnPunctuationSecs: 0.1,
       startSpeakingOnNoPunctuationSecs: 0.1, startSpeakingOnNumberSecs: 0.1,
@@ -5884,6 +5994,10 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
       voiceMemoryEnabled:       (agent as any).agentConfig?.voiceMemoryEnabled ?? false,
       recordingEnabled:         (agent as any).agentConfig?.recordingEnabled ?? false,
       languageAutoDetect:       (agent as any).agentConfig?.languageAutoDetect ?? false,
+      multilingualLanguages:    (agent as any).agentConfig?.multilingualLanguages
+        ?? (agent as any).agentConfig?.secondaryLanguages
+        ?? [],
+      sarvamIndicNumbers:       (agent as any).agentConfig?.sarvamIndicNumbers !== false,
       autoSwitchToEnglish:      (agent as any).agentConfig?.autoSwitchToEnglish ?? false,
       startSpeakingWaitSecs:            (agent as any).agentConfig?.startSpeakingPlan?.waitSeconds            ?? 0,
       startSpeakingOnPunctuationSecs:   (agent as any).agentConfig?.startSpeakingPlan?.onPunctuationSeconds   ?? 0.1,
@@ -5955,6 +6069,14 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
         const payload = buildUpdateAgentPayload(data);
         const saved = await updateAgent.mutateAsync({ id: agentId, data: payload as any });
         form.setValue("languageAutoDetect", (saved as any)?.agentConfig?.languageAutoDetect ?? false, { shouldDirty: false });
+        form.setValue(
+          "multilingualLanguages",
+          (saved as any)?.agentConfig?.multilingualLanguages
+            ?? (saved as any)?.agentConfig?.secondaryLanguages
+            ?? [],
+          { shouldDirty: false },
+        );
+        form.setValue("sarvamIndicNumbers", (saved as any)?.agentConfig?.sarvamIndicNumbers !== false, { shouldDirty: false });
         // Sync scheduling fields immediately from the save response so the event-type
         // Select is not shown as "Any event type" while the background refetch is in-flight.
         form.setValue("schedulingCalendarId", (saved as any)?.agentConfig?.calendarCapability?.defaultCalendarId ?? null, { shouldDirty: false });
@@ -5972,10 +6094,10 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
     },
     (errors) => {
       const fieldTabMap: Record<string, TabId> = {
-        webhookUrl:               "analysis",
-        webhookSecret:            "analysis",
-        schedulingCalendarId:     "channels",
-        schedulingEventTypeId:    "channels",
+        webhookUrl:               "advanced",
+        webhookSecret:            "advanced",
+        schedulingCalendarId:     "overview",
+        schedulingEventTypeId:    "overview",
         noiseCancellationEnabled: "voice",
         ambientNoiseEnabled:      "voice",
         ambientNoiseTrack:        "voice",
@@ -6080,8 +6202,13 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
   const [savedFlash, setSavedFlash] = useState(false);
   const isDirty   = form.formState.isDirty;
 
-  const visibleTabs = TABS;
+  const visibleTabs = TABS.filter((t) => t.id !== "channels" && t.id !== "analysis");
+  // Channels + Journey hidden for now — rebuild later with a proper plan.
   const webTestLabel = "Live Test";
+
+  useEffect(() => {
+    if (activeTab === "channels" || activeTab === "analysis") setActiveTab("overview");
+  }, [activeTab]);
 
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
   const [renameValue, setRenameValue] = useState("");

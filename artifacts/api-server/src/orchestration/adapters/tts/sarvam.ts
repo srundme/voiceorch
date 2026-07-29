@@ -119,6 +119,8 @@ export class SarvamTTS implements TTSAdapter {
   private model: string;
   private langCode: string;
   private pace: number | null;
+  /** Expand digits to spoken Indic forms ("500" → "paanch sau"). Default on. */
+  private enablePreprocessing = true;
 
   /** Idle configured socket — reused across utterances until barge-in / idle close. */
   private warmWs: WebSocket | null = null;
@@ -140,11 +142,18 @@ export class SarvamTTS implements TTSAdapter {
     this.model = (model && VALID_MODELS.has(model)) ? model : "bulbul:v3";
 
     let lang = language ?? null;
-    if (!lang && extraConfig) {
+    if (extraConfig) {
       try {
-        const cfg = JSON.parse(extraConfig) as { language?: string; model?: string };
-        lang = cfg.language ?? null;
+        const cfg = JSON.parse(extraConfig) as {
+          language?: string;
+          model?: string;
+          enable_preprocessing?: boolean;
+        };
+        if (!lang) lang = cfg.language ?? null;
         if (cfg.model && VALID_MODELS.has(cfg.model)) this.model = cfg.model;
+        if (typeof cfg.enable_preprocessing === "boolean") {
+          this.enablePreprocessing = cfg.enable_preprocessing;
+        }
       } catch {
         // ignore malformed extraConfig
       }
@@ -371,7 +380,7 @@ export class SarvamTTS implements TTSAdapter {
       target_language_code: this.langCode,
       speaker: this.speaker,
       model: this.model,
-      enable_preprocessing: true,
+      enable_preprocessing: this.enablePreprocessing,
       speech_sample_rate: 16000,
     };
     this.applyPace(body);
@@ -591,7 +600,7 @@ export class SarvamTTS implements TTSAdapter {
       target_language_code: this.langCode,
       speaker: this.speaker,
       model: apiModel(this.model),
-      enable_preprocessing: true,
+      enable_preprocessing: this.enablePreprocessing,
       speech_sample_rate: 16000,
       output_audio_codec: "linear16",
     };

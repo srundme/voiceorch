@@ -265,8 +265,10 @@ export interface AgentConfig {
   ttsProvider: string;
   ttsVoice: string | null;
   ttsModel: string | null;
-  /** Playback speed multiplier passed to providers that support it (Cartesia, ElevenLabs). 1.0 = normal, default. */
+  /** Playback speed multiplier passed to providers that support it (Cartesia, ElevenLabs, Sarvam pace). 1.0 = normal, default. */
   ttsSpeed: number;
+  /** Sarvam Bulbul: expand digits to spoken Indic forms. Default true. */
+  sarvamIndicNumbers: boolean;
   telephonyProvider: string;
 
   // Tier 1 — Conversation Behavior

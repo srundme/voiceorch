@@ -1861,7 +1861,10 @@ export class OrchestrationPipeline implements VoiceSession {
     // unset while STT was en-IN.
     const ttsLanguage = this.currentLang || agentLanguage;
     const ttsExtraConfig = this.agent.ttsProvider === "sarvam"
-      ? JSON.stringify({ language: ttsLanguage ?? "en-IN" })
+      ? JSON.stringify({
+          language: ttsLanguage ?? "en-IN",
+          enable_preprocessing: this.agent.sarvamIndicNumbers !== false,
+        })
       : (keys.get(`${this.agent.ttsProvider}:extraConfig`) ?? null);
     this.tts = createTTSAdapter(
       this.agent.ttsProvider, ttsKey, this.agent.ttsVoice, this.agent.ttsModel,

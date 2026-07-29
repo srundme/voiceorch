@@ -94,7 +94,7 @@ export type { AgentFormValues } from "./edit.schema";
 export function buildUpdateAgentPayload(data: AgentFormValues) {
   const {
     webhookSecret, promptVariables, vadSilenceMs, bargeInEnabled, bargeInEnergyThreshold, bargeInMinFrames, micSensitivity,
-    timezone, autoSwitchToEnglish, languageAutoDetect, machineDetectionMode, voicemailAction, voicemailMessage, voicemailLeadInSeconds, genderDetectionEnabled, voiceMemoryEnabled, recordingEnabled,
+    timezone, autoSwitchToEnglish, languageAutoDetect, multilingualLanguages, sarvamIndicNumbers, machineDetectionMode, voicemailAction, voicemailMessage, voicemailLeadInSeconds, genderDetectionEnabled, voiceMemoryEnabled, recordingEnabled,
     startSpeakingWaitSecs, startSpeakingOnPunctuationSecs, startSpeakingOnNoPunctuationSecs, startSpeakingOnNumberSecs,
     stopSpeakingNumWords, stopSpeakingVoiceSecs, stopSpeakingBackOffSecs,
     complianceIrdai, complianceDpdp, complianceTrai,
@@ -133,6 +133,19 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   if (timezone) agentConfig["timezone"] = timezone;
   agentConfig["autoSwitchToEnglish"] = !!autoSwitchToEnglish;
   agentConfig["languageAutoDetect"] = !!languageAutoDetect;
+  {
+    const langs = (multilingualLanguages ?? []).filter(Boolean);
+    if (langs.length > 0) {
+      agentConfig["multilingualLanguages"] = langs;
+      agentConfig["isMultilingual"] = true;
+      agentConfig["secondaryLanguages"] = langs;
+    } else {
+      agentConfig["isMultilingual"] = !!languageAutoDetect;
+      agentConfig["multilingualLanguages"] = [];
+      agentConfig["secondaryLanguages"] = [];
+    }
+  }
+  agentConfig["sarvamIndicNumbers"] = sarvamIndicNumbers !== false;
   agentConfig["machineDetectionMode"] = machineDetectionMode ?? "disabled";
   agentConfig["voicemailAction"] = voicemailAction ?? "hangup";
   if (voicemailMessage) agentConfig["voicemailMessage"] = voicemailMessage;
@@ -156,7 +169,8 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   agentConfig["sarvamSpeechEndFlushMs"] = clampSarvamSpeechEndFlushMs(sarvamSpeechEndFlushMs);
   agentConfig["sarvamIncompleteHoldMs"] = clampSarvamIncompleteHoldMs(sarvamIncompleteHoldMs);
   if (kbBakedOnly) agentConfig["kbBakedOnly"] = true;
-  if (ttsSpeed != null && ttsSpeed !== 1) agentConfig["ttsSpeed"] = ttsSpeed;
+  // Always persist speed so Sarvam pace / Cartesia speed stay UI-owned (1.0 clears prior boost).
+  agentConfig["ttsSpeed"] = ttsSpeed != null && Number.isFinite(ttsSpeed) ? ttsSpeed : 1;
   // Always send the key (null clears it): the server MERGES agentConfig on
   // update, so omitting it when the field is blanked would silently keep the
   // old cap forever — "leave blank for default" would never actually work.
@@ -409,6 +423,8 @@ export default function AgentEdit() {
       timezone: "",
       autoSwitchToEnglish: false,
       languageAutoDetect: false,
+      multilingualLanguages: [],
+      sarvamIndicNumbers: true,
       machineDetectionMode: "disabled", voicemailAction: "hangup",
       voicemailMessage: "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.",
       voicemailLeadInSeconds: 2,
@@ -647,6 +663,10 @@ export default function AgentEdit() {
       timezone:                 ((agent as any).agentConfig?.timezone as string | undefined) ?? "",
       autoSwitchToEnglish:      ((agent as any).agentConfig?.autoSwitchToEnglish as boolean | undefined) ?? false,
       languageAutoDetect:       ((agent as any).agentConfig?.languageAutoDetect as boolean | undefined) ?? false,
+      multilingualLanguages:    ((agent as any).agentConfig?.multilingualLanguages as string[] | undefined)
+        ?? ((agent as any).agentConfig?.secondaryLanguages as string[] | undefined)
+        ?? [],
+      sarvamIndicNumbers:       ((agent as any).agentConfig?.sarvamIndicNumbers as boolean | undefined) !== false,
       machineDetectionMode:     ((agent as any).agentConfig?.machineDetectionMode as string | undefined) as AgentFormValues["machineDetectionMode"] ?? "disabled",
       voicemailAction:          ((agent as any).agentConfig?.voicemailAction as string | undefined) as AgentFormValues["voicemailAction"] ?? "hangup",
       voicemailMessage:         ((agent as any).agentConfig?.voicemailMessage as string | undefined) ?? "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.",
@@ -1635,7 +1655,8 @@ export default function AgentEdit() {
                         onChange={e => field.onChange(parseFloat(e.target.value))} />
                     </FormControl>
                     <FormDescription className="text-[11px]">
-                      Playback speed multiplier. 1.0 = normal. <strong>1.1–1.2 sounds natural and slightly quicker</strong> — cuts perceived reply latency without sounding rushed. Only applied for Cartesia and ElevenLabs voices.
+                      Playback speed multiplier. 1.0 = normal. <strong>1.05–1.2</strong> sounds slightly quicker without rushing.
+                      Applied for Sarvam (Bulbul pace), Cartesia, and ElevenLabs.
                     </FormDescription>
                     <FormMessage />
                   </FormItem>

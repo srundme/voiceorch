@@ -53,6 +53,10 @@ export const agentFormSchema = z.object({
   timezone:               z.string().optional(),
   autoSwitchToEnglish:    z.boolean().optional(),
   languageAutoDetect:     z.boolean().optional(),
+  /** Languages the agent may follow when Multilingual / auto-detect is on. */
+  multilingualLanguages:  z.array(z.string()).optional(),
+  /** Sarvam TTS: expand digits to spoken Indic forms. Default on. */
+  sarvamIndicNumbers:     z.boolean().optional(),
   machineDetectionMode:   z.enum(["disabled", "enable", "detect_message_end"]).optional(),
   voicemailAction:        z.enum(["hangup", "leave_message", "continue"]).optional(),
   voicemailMessage:       z.string().optional(),

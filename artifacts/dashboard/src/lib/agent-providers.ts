@@ -10,7 +10,7 @@ export const LLM_PROVIDERS = [
 ];
 
 export const TTS_PROVIDERS = [
-  { value: "sarvam",   label: "Sarvam (Bulbul) — Indian languages" },
+  { value: "sarvam",   label: "Sarvam (Bulbul) — recommended" },
   { value: "cartesia", label: "Cartesia (Sonic)" },
 ];
 
@@ -441,6 +441,11 @@ export const LANGUAGES = [
   { value: "gn-PY",  label: "Guaraní (Paraguay)" },
   { value: "ht-HT",  label: "Haitian Creole" },
 ];
+
+/** Languages shown in builder “Languages allowed” when Multilingual is on (Sarvam-oriented). */
+export const SARVAM_PERSONALISATION_LANGUAGES = LANGUAGES.filter((l) =>
+  /^(en-IN|hi-IN|ta-IN|te-IN|kn-IN|ml-IN|bn-IN|mr-IN|gu-IN|pa-IN|or-IN|as-IN|ur-IN)$/.test(l.value),
+);
 
 /** Normalize a BCP-47-ish language tag to its lowercase base language ("ta-IN" → "ta"). */
 export function baseLanguage(language: string | null | undefined): string {
