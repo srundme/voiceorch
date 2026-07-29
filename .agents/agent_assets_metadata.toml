@@ -365,3 +365,9 @@ id = "XQxPLQyCcgIp_vrAdTc_7"
 uri = "file://voiceathon-playbook.pdf"
 type = "pdf"
 title = "SnapServe Voice-athon Playbook"
+
+[[outputs]]
+id = "xhYICXvWMysseQeqHzb1q"
+uri = "file://attached_assets/snapserve-sarvam-poster.jpg"
+type = "image"
+title = "SnapServe × Sarvam Poster"
