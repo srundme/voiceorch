@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>SQ5 — Indigo Wave</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { width:1080px; height:1080px; overflow:hidden; }
+  body { font-family:'Inter',sans-serif; color:#fdfbf7; position:relative;
+    background: linear-gradient(160deg, #2b34a0 0%, #3d47d8 45%, #6a74ff 100%); }
+  .glow { position:absolute; top:-260px; left:-260px; width:900px; height:900px; border-radius:50%;
+    background: radial-gradient(circle, rgba(249,169,74,0.5) 0%, rgba(249,169,74,0) 65%); filter: blur(6px); }
+  .wave { position:absolute; bottom:0; left:0; right:0; z-index:1; }
+  .content { position:relative; z-index:2; height:100%; display:flex; flex-direction:column; align-items:center; padding:78px 80px 64px; }
+  .eyebrow { font-size:22px; font-weight:600; letter-spacing:0.24em; text-transform:uppercase; color:#ffd9a3; margin-bottom:88px; }
+  .lockup { display:flex; align-items:center; gap:42px; margin-bottom:80px; }
+  .snap { display:flex; align-items:center; gap:18px; }
+  .snap .badge { width:88px; height:88px; border-radius:22px; background:#fdfbf7; display:flex; align-items:center; justify-content:center; }
+  .snap .badge img { width:64px; height:64px; }
+  .snap-name { font-size:46px; font-weight:800; color:#fdfbf7; }
+  .times { font-family:'Fraunces',serif; font-size:50px; color:rgba(253,251,247,0.5); }
+  .sarvam-word { font-weight:700; font-size:60px; letter-spacing:-0.03em; color:#fdfbf7; padding-bottom:8px; }
+  h1 { font-family:'Fraunces',serif; font-weight:500; text-align:center; font-size:92px; line-height:1.08; color:#fdfbf7; margin-bottom:34px; }
+  h1 .accent { color:#ffb75e; }
+  .sub { text-align:center; font-size:27px; line-height:1.55; color:rgba(253,251,247,0.85); max-width:740px; margin-bottom:auto; }
+  .footer { width:100%; display:flex; justify-content:space-between; font-size:19px; color:#2b34a0;
+    letter-spacing:0.08em; text-transform:uppercase; font-weight:700; position:relative; z-index:3; }
+</style>
+</head>
+<body>
+  <div class="glow"></div>
+  <svg class="wave" width="1080" height="240" viewBox="0 0 1080 240" fill="none" preserveAspectRatio="none">
+    <path d="M0 120 C 180 40, 360 200, 540 120 S 900 40, 1080 120 L1080 240 L0 240 Z" fill="#fdfbf7" opacity="0.16"/>
+    <path d="M0 160 C 200 90, 380 220, 560 150 S 920 80, 1080 160 L1080 240 L0 240 Z" fill="#fdfbf7" opacity="0.35"/>
+    <path d="M0 200 C 220 140, 420 250, 620 190 S 940 130, 1080 200 L1080 240 L0 240 Z" fill="#fdfbf7"/>
+  </svg>
+  <div class="content">
+    <div class="eyebrow">One team &middot; One mission</div>
+    <div class="lockup">
+      <div class="snap"><div class="badge"><img src="snap-icon.png" alt="" /></div><div class="snap-name">SnapServe</div></div>
+      <div class="times">&times;</div><div class="sarvam-word">sarvam</div>
+    </div>
+    <h1>The voice of India,<br/>now <span class="accent">amplified</span>.</h1>
+    <p class="sub">SnapServe is now a part of the Sarvam startup — AI voice agents on India&rsquo;s Sovereign AI Platform.</p>
+    <div class="footer"><span>SnapServe &middot; AI Voice Platform</span><span>sarvam.ai</span></div>
+  </div>
+</body>
+</html>

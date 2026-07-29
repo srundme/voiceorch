@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>SQ1 — Sarvam Classic</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { width:1080px; height:1080px; overflow:hidden; }
+  body { font-family:'Inter',sans-serif; color:#1e2749; background:#fdfbf7; position:relative; }
+  .glow-orange { position:absolute; top:-430px; left:50%; transform:translateX(-50%); width:1500px; height:880px; border-radius:50%;
+    background: radial-gradient(ellipse at center, #f7941d 0%, #f9a94a 35%, rgba(249,169,74,0.35) 62%, rgba(249,169,74,0) 78%); filter: blur(6px); }
+  .glow-blue { position:absolute; top:250px; left:50%; transform:translateX(-50%); width:1350px; height:800px; border-radius:50%;
+    background: radial-gradient(ellipse at center, rgba(154,163,255,0.55) 0%, rgba(186,192,255,0.35) 45%, rgba(186,192,255,0) 75%); filter: blur(10px); }
+  .fade-bottom { position:absolute; left:0; right:0; bottom:0; height:420px; background:linear-gradient(to bottom, rgba(253,251,247,0) 0%, #fdfbf7 55%); }
+  .content { position:relative; z-index:2; height:100%; display:flex; flex-direction:column; align-items:center; padding:70px 80px 56px; }
+  .eyebrow { color:#3d47d8; font-size:22px; font-weight:600; letter-spacing:0.06em; padding-bottom:20px;
+    border-bottom:1px solid rgba(30,39,73,0.25); width:480px; text-align:center; margin-bottom:64px; }
+  .lockup { display:flex; align-items:center; gap:44px; margin-bottom:60px; }
+  .snap { display:flex; align-items:center; gap:18px; }
+  .snap img { width:88px; height:88px; }
+  .snap-name { font-size:48px; font-weight:800; letter-spacing:-0.02em; color:#14183a; }
+  .times { font-family:'Fraunces',serif; font-size:52px; color:rgba(20,24,58,0.45); }
+  .sarvam-word { font-weight:700; font-size:62px; letter-spacing:-0.03em; color:#14183a; padding-bottom:10px; }
+  h1 { font-family:'Fraunces',serif; font-weight:500; text-align:center; font-size:86px; line-height:1.08; color:#232a52; margin-bottom:32px; }
+  h1 .accent { color:#3d47d8; }
+  .sub { text-align:center; font-size:27px; line-height:1.55; color:#4a527a; max-width:720px; margin-bottom:auto; }
+  .chips { display:flex; gap:16px; margin-bottom:44px; }
+  .chip { padding:14px 30px; border-radius:999px; font-size:21px; font-weight:600; }
+  .chip.dark { background:#262c4f; color:#fdfbf7; }
+  .chip.light { background:#ffffff; color:#262c4f; box-shadow:0 2px 14px rgba(30,39,73,0.10); }
+  .footer { width:100%; display:flex; justify-content:space-between; border-top:1px solid rgba(30,39,73,0.18); padding-top:26px;
+    font-size:19px; color:#6a719a; letter-spacing:0.08em; text-transform:uppercase; font-weight:500; }
+</style>
+</head>
+<body>
+  <div class="glow-orange"></div><div class="glow-blue"></div><div class="fade-bottom"></div>
+  <div class="content">
+    <div class="eyebrow">A new chapter for Indian voice AI</div>
+    <div class="lockup">
+      <div class="snap"><img src="snap-icon.png" alt="" /><div class="snap-name">SnapServe</div></div>
+      <div class="times">&times;</div><div class="sarvam-word">sarvam</div>
+    </div>
+    <h1>SnapServe is now part<br/>of the <span class="accent">Sarvam</span> family</h1>
+    <p class="sub">SnapServe joins Sarvam — India&rsquo;s Sovereign AI Platform — bringing AI voice agents in every Indian language to population scale.</p>
+    <div class="chips"><div class="chip dark">Built on sovereign compute</div><div class="chip light">AI for all, from India</div></div>
+    <div class="footer"><span>SnapServe &middot; AI Voice Platform</span><span>sarvam.ai</span></div>
+  </div>
+</body>
+</html>

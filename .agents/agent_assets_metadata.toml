@@ -389,3 +389,33 @@ id = "b6rzYOw9D0RyGT3nzzf9s"
 uri = "file://attached_assets/snapserve-sarvam-poster-4.jpg"
 type = "image"
 title = "Poster 4 — Editorial"
+
+[[outputs]]
+id = "cdRPGqOUPRIyaUrkxZqoY"
+uri = "file://attached_assets/snapserve-sarvam-sq1.jpg"
+type = "image"
+title = "Square 1 — Sarvam Classic"
+
+[[outputs]]
+id = "qQxhSBLv2E6h-oYRghN9D"
+uri = "file://attached_assets/snapserve-sarvam-sq2.jpg"
+type = "image"
+title = "Square 2 — Midnight"
+
+[[outputs]]
+id = "9t6f-CJ4mZof16kwwvDwA"
+uri = "file://attached_assets/snapserve-sarvam-sq3.jpg"
+type = "image"
+title = "Square 3 — Sunrise"
+
+[[outputs]]
+id = "_YciWuaJ62OHMSrduza2o"
+uri = "file://attached_assets/snapserve-sarvam-sq4.jpg"
+type = "image"
+title = "Square 4 — Editorial"
+
+[[outputs]]
+id = "OPxvy0zw2zu_22vHDqV-y"
+uri = "file://attached_assets/snapserve-sarvam-sq5.jpg"
+type = "image"
+title = "Square 5 — Indigo Wave"

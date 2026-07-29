@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>SQ2 — Midnight</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { width:1080px; height:1080px; overflow:hidden; }
+  body { font-family:'Inter',sans-serif; background:#151a38; color:#fdfbf7; position:relative; }
+  .glow-orange { position:absolute; bottom:-460px; left:50%; transform:translateX(-50%); width:1600px; height:900px; border-radius:50%;
+    background: radial-gradient(ellipse at center, #f7941d 0%, rgba(247,148,29,0.5) 40%, rgba(247,148,29,0) 72%); filter: blur(14px); }
+  .glow-blue { position:absolute; top:-320px; right:-320px; width:900px; height:900px; border-radius:50%;
+    background: radial-gradient(circle, rgba(96,108,255,0.4) 0%, rgba(96,108,255,0) 68%); }
+  .content { position:relative; z-index:2; height:100%; display:flex; flex-direction:column; align-items:center; padding:76px 80px 60px; }
+  .eyebrow { color:#f9a94a; font-size:22px; font-weight:600; letter-spacing:0.22em; text-transform:uppercase; margin-bottom:76px; }
+  .lockup { display:flex; align-items:center; gap:42px; margin-bottom:72px; }
+  .snap { display:flex; align-items:center; gap:18px; }
+  .snap .badge { width:88px; height:88px; border-radius:22px; background:#fdfbf7; display:flex; align-items:center; justify-content:center; }
+  .snap .badge img { width:64px; height:64px; }
+  .snap-name { font-size:46px; font-weight:800; color:#fdfbf7; }
+  .times { font-family:'Fraunces',serif; font-size:50px; color:rgba(253,251,247,0.45); }
+  .sarvam-word { font-weight:700; font-size:60px; letter-spacing:-0.03em; color:#fdfbf7; padding-bottom:8px; }
+  h1 { font-family:'Fraunces',serif; font-weight:500; text-align:center; font-size:88px; line-height:1.1; color:#fdfbf7; margin-bottom:34px; }
+  h1 .accent { color:#f9a94a; }
+  .sub { text-align:center; font-size:27px; line-height:1.55; color:rgba(253,251,247,0.72); max-width:740px; margin-bottom:auto; }
+  .rule { width:480px; border-top:1px solid rgba(253,251,247,0.25); margin-bottom:34px; }
+  .footer { width:100%; display:flex; justify-content:space-between; font-size:19px; color:rgba(253,251,247,0.65);
+    letter-spacing:0.08em; text-transform:uppercase; font-weight:500; }
+</style>
+</head>
+<body>
+  <div class="glow-orange"></div><div class="glow-blue"></div>
+  <div class="content">
+    <div class="eyebrow">Announcement</div>
+    <div class="lockup">
+      <div class="snap"><div class="badge"><img src="snap-icon.png" alt="" /></div><div class="snap-name">SnapServe</div></div>
+      <div class="times">&times;</div><div class="sarvam-word">sarvam</div>
+    </div>
+    <h1>Two voices.<br/>One <span class="accent">sovereign</span> mission.</h1>
+    <p class="sub">SnapServe is now a part of the Sarvam startup — uniting AI voice agents with India&rsquo;s Sovereign AI Platform.</p>
+    <div class="rule"></div>
+    <div class="footer"><span>SnapServe &middot; AI Voice Platform</span><span>AI for all, from India</span></div>
+  </div>
+</body>
+</html>
