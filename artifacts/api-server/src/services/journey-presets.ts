@@ -2,8 +2,8 @@
  * Journey preset builders — compile product presets into executable steps.
  *
  * Steps map onto the workflow engine (make_call / condition / delay /
- * send_webhook) plus Phase-2 cross-channel actions (schedule_callback,
- * send_whatsapp).
+ * send_webhook) plus cross-channel actions (schedule_callback,
+ * send_whatsapp, send_email). SMS is not a journey messaging channel.
  */
 
 import type { WorkflowTrigger } from "@workspace/db";
@@ -32,8 +32,21 @@ const DEFAULT_SETTINGS: JourneySettings = {
   followUpOnNoAnswer: true,
   followUpOnInterested: true,
   sendWhatsappAfterCall: true,
+  sendEmailAfterCall: false,
   webhookUrl: null,
 };
+
+function emailSteps(settings: JourneySettings): JourneyStep[] {
+  if (!settings.sendEmailAfterCall) return [];
+  return [{
+    id: sid("email"),
+    type: "send_email",
+    emailField: "email",
+    emailSubject: settings.emailSubject || undefined,
+    emailBody: settings.emailBody || undefined,
+    label: "Send follow-up email",
+  }];
+}
 
 export const JOURNEY_PRESET_META: Record<
   Exclude<JourneyPresetId, "custom">,
@@ -43,32 +56,32 @@ export const JOURNEY_PRESET_META: Record<
     label: "Event Outreach",
     trigger: "CSV, API, website form, Luma, CRM",
     firstContact: "Call new leads automatically",
-    followups: "WhatsApp after call, callback after X days, optional webhook",
-    channels: "Phone + WhatsApp + optional booking/email",
+    followups: "WhatsApp after call, optional email, callback after X days",
+    channels: "Phone + WhatsApp + Email",
     memory: "Save event context and every lead interaction",
   },
   inbound_booking: {
     label: "Inbound Booking",
     trigger: "Inbound phone, webcall, or callback request",
     firstContact: "Qualify the caller live",
-    followups: "Book meeting, send booking WhatsApp + webhook confirmations",
-    channels: "Phone + booking calendar + WhatsApp/email confirmations",
+    followups: "Book meeting, WhatsApp + email confirmations",
+    channels: "Phone + booking calendar + WhatsApp + Email",
     memory: "Remember caller details and booking history",
   },
   lead_qualification: {
     label: "Lead Qualification",
     trigger: "Webhook, CSV, CRM sync, ad lead",
     firstContact: "Call, qualify, and disposition",
-    followups: "CRM webhook, WhatsApp summary, callback if interested",
-    channels: "Phone + webhook + WhatsApp",
+    followups: "CRM webhook, WhatsApp/email summary, callback if interested",
+    channels: "Phone + WhatsApp + Email + webhook",
     memory: "Store intent, outcome, and next-best action",
   },
   collections_reminder: {
     label: "Collections / Reminder",
     trigger: "Scheduled list or webhook",
     firstContact: "Outbound reminder call",
-    followups: "Reminder WhatsApp, escalate with callback if unanswered",
-    channels: "Phone + WhatsApp",
+    followups: "Reminder WhatsApp/email, escalate with callback if unanswered",
+    channels: "Phone + WhatsApp + Email",
     memory: "Track promise-to-pay and follow-up attempts",
   },
 };
@@ -102,8 +115,9 @@ export function buildJourneyPreset(
                 label: "Send event WhatsApp",
               }]
             : []),
+          ...emailSteps(settings),
           ...(settings.webhookUrl
-            ? [{ id: sid("wh"), type: "send_webhook" as const, url: settings.webhookUrl, label: "Notify CRM / email" }]
+            ? [{ id: sid("wh"), type: "send_webhook" as const, url: settings.webhookUrl, label: "Notify CRM" }]
             : []),
           {
             id: sid("cond_no"),
@@ -146,6 +160,7 @@ export function buildJourneyPreset(
             whatsappHint: "booking_confirmed",
             label: "Send booking WhatsApp",
           },
+          ...emailSteps({ ...settings, sendEmailAfterCall: settings.sendEmailAfterCall ?? true }),
           ...(settings.webhookUrl
             ? [{ id: sid("wh"), type: "send_webhook" as const, url: settings.webhookUrl, label: "Notify booking system" }]
             : []),
@@ -192,6 +207,7 @@ export function buildJourneyPreset(
                 label: "Send WhatsApp summary",
               }]
             : []),
+          ...emailSteps(settings),
           ...(settings.webhookUrl
             ? [{ id: sid("wh"), type: "send_webhook" as const, url: settings.webhookUrl, label: "CRM webhook" }]
             : []),
@@ -234,6 +250,7 @@ export function buildJourneyPreset(
             whatsappHint: "callback_scheduled",
             label: "Send reminder WhatsApp",
           },
+          ...emailSteps(settings),
           {
             id: sid("cond_no"),
             type: "condition",

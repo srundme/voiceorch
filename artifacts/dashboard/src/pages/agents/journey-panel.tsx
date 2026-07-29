@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError } from "@/lib/format-api-error";
@@ -51,6 +52,9 @@ type JourneySettings = {
   followUpOnNoAnswer?: boolean;
   followUpOnInterested?: boolean;
   sendWhatsappAfterCall?: boolean;
+  sendEmailAfterCall?: boolean;
+  emailSubject?: string | null;
+  emailBody?: string | null;
 };
 
 type Journey = {
@@ -114,7 +118,10 @@ export function JourneyPanel({
   const [testPhone, setTestPhone] = useState("");
   const [callbackDays, setCallbackDays] = useState(5);
   const [sendWa, setSendWa] = useState(true);
+  const [sendEmail, setSendEmail] = useState(false);
   const [followNoAnswer, setFollowNoAnswer] = useState(true);
+  const [emailSubject, setEmailSubject] = useState("");
+  const [emailBody, setEmailBody] = useState("");
 
   const { data: presets = [], isLoading: presetsLoading } = useQuery({
     queryKey: ["journey-presets"],
@@ -159,9 +166,12 @@ export function JourneyPanel({
           settings: {
             callbackDelayDays: callbackDays,
             sendWhatsappAfterCall: sendWa,
+            sendEmailAfterCall: sendEmail,
             followUpOnNoAnswer: followNoAnswer,
             followUpOnInterested: true,
             webhookUrl: webhookUrl || null,
+            emailSubject: emailSubject || null,
+            emailBody: emailBody || null,
           },
         }),
       }),
@@ -183,9 +193,12 @@ export function JourneyPanel({
           settings: {
             callbackDelayDays: callbackDays,
             sendWhatsappAfterCall: sendWa,
+            sendEmailAfterCall: sendEmail,
             followUpOnNoAnswer: followNoAnswer,
             followUpOnInterested: true,
             webhookUrl: webhookUrl || null,
+            emailSubject: emailSubject || null,
+            emailBody: emailBody || null,
           },
         }),
       }),
@@ -207,8 +220,11 @@ export function JourneyPanel({
             ...(selected?.settings ?? {}),
             callbackDelayDays: callbackDays,
             sendWhatsappAfterCall: sendWa,
+            sendEmailAfterCall: sendEmail,
             followUpOnNoAnswer: followNoAnswer,
             webhookUrl: webhookUrl || selected?.settings?.webhookUrl || null,
+            emailSubject: emailSubject || null,
+            emailBody: emailBody || null,
           },
         }),
       }),
@@ -248,7 +264,10 @@ export function JourneyPanel({
     if (!selected) return;
     setCallbackDays(selected.settings?.callbackDelayDays ?? 5);
     setSendWa(selected.settings?.sendWhatsappAfterCall ?? true);
+    setSendEmail(selected.settings?.sendEmailAfterCall ?? false);
     setFollowNoAnswer(selected.settings?.followUpOnNoAnswer ?? true);
+    setEmailSubject(selected.settings?.emailSubject ?? "");
+    setEmailBody(selected.settings?.emailBody ?? "");
   }, [selected?.id]);
 
   const fullHookUrl = selected?.hookUrl
@@ -427,12 +446,40 @@ export function JourneyPanel({
               </div>
               <div className="flex items-center justify-between rounded-lg border border-border/40 bg-background/40 px-3 py-2">
                 <div>
+                  <p className="text-xs font-medium">Email after call</p>
+                  <p className="text-[10px] text-muted-foreground">Uses Channels → Email (SnapServe or Brevo)</p>
+                </div>
+                <Switch checked={sendEmail} onCheckedChange={setSendEmail} />
+              </div>
+              <div className="flex items-center justify-between rounded-lg border border-border/40 bg-background/40 px-3 py-2 sm:col-span-3">
+                <div>
                   <p className="text-xs font-medium">Callback on no answer</p>
                   <p className="text-[10px] text-muted-foreground">Schedule auto-dial follow-up</p>
                 </div>
                 <Switch checked={followNoAnswer} onCheckedChange={setFollowNoAnswer} />
               </div>
             </div>
+
+            {sendEmail && (
+              <div className="rounded-lg border border-border/40 bg-background/40 p-3 space-y-2">
+                <p className="text-xs font-medium">Optional journey email override</p>
+                <p className="text-[10px] text-muted-foreground">
+                  Leave blank to use the Email channel default content. Supports {"{{name}}"}, {"{{summary}}"}, {"{{email}}"}, etc.
+                </p>
+                <Input
+                  className="h-8 text-xs"
+                  placeholder="Subject override"
+                  value={emailSubject}
+                  onChange={(e) => setEmailSubject(e.target.value)}
+                />
+                <Textarea
+                  className="min-h-[80px] text-xs font-mono"
+                  placeholder="Body override (HTML or plain text)"
+                  value={emailBody}
+                  onChange={(e) => setEmailBody(e.target.value)}
+                />
+              </div>
+            )}
 
             <div className="flex flex-wrap gap-2">
               <Button type="button" variant="outline" size="sm" className="h-8 text-xs" disabled={saveSettings.isPending} onClick={() => saveSettings.mutate()}>

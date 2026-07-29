@@ -32,6 +32,8 @@ import {
   getOwnCredsForUser,
   type TemplateHint,
 } from "./whatsapp/vobiz.js";
+import { sendChannelEmail } from "./email-channel.js";
+import { interpolateTemplate } from "./template-vars.js";
 
 const CALL_TIMEOUT_MS = 20 * 60 * 1000; // give up waiting on a call after 20 min
 
@@ -199,6 +201,11 @@ export async function advanceRun(runId: number): Promise<void> {
       }
       if (step.type === "send_whatsapp") {
         await doSendWhatsapp(workflow.userId, step, context);
+        idx++;
+        continue;
+      }
+      if (step.type === "send_email") {
+        await doSendEmail(workflow.userId, step, context);
         idx++;
         continue;
       }
@@ -422,7 +429,8 @@ async function doSendWhatsapp(userId: string, step: WorkflowStep, context: Ctx):
       : hint === "callback_scheduled"
         ? [name, "soon"]
         : [name, summary.slice(0, 120)];
-  const params = (step.whatsappParams?.length ? step.whatsappParams : defaultParams).map(String);
+  const rawParams = (step.whatsappParams?.length ? step.whatsappParams : defaultParams).map(String);
+  const params = rawParams.map((p) => interpolateTemplate(p, context));
   const callId = typeof callObj["callId"] === "number" ? callObj["callId"] : null;
 
   const result = await sendWhatsappTemplate({
@@ -437,6 +445,41 @@ async function doSendWhatsapp(userId: string, step: WorkflowStep, context: Ctx):
     throw new Error(result.error ?? "send_whatsapp failed");
   }
   logger.info({ userId, hint, ok: result.ok, skipped: result.skipped }, "workflow: send_whatsapp done");
+}
+
+async function doSendEmail(userId: string, step: WorkflowStep, context: Ctx): Promise<void> {
+  const to = toStr(getPath(context, step.emailField ?? "email") || context["email"]);
+  if (!to.trim()) {
+    logger.warn({ userId }, "workflow: send_email skipped — no email in context");
+    return;
+  }
+  const callObj = (context["call"] && typeof context["call"] === "object")
+    ? (context["call"] as Record<string, unknown>)
+    : {};
+  const callId = typeof callObj["callId"] === "number" ? callObj["callId"] : null;
+
+  const result = await sendChannelEmail({
+    userId,
+    toEmail: to,
+    context: {
+      ...context,
+      summary: toStr(callObj["summary"] || context["summary"] || ""),
+      agent_name: toStr(context["agent_name"] || ""),
+    },
+    template: (step.emailSubject || step.emailBody)
+      ? {
+          subject: step.emailSubject || "Follow-up",
+          body: step.emailBody || "<p>Hi {{name}}</p><p>{{summary}}</p>",
+        }
+      : null,
+    callId,
+    journeyRunHint: "workflow_send_email",
+  });
+
+  if (!result.ok && !result.skipped) {
+    throw new Error(result.error ?? "send_email failed");
+  }
+  logger.info({ userId, ok: result.ok, skipped: result.skipped }, "workflow: send_email done");
 }
 
 // ── atomic claim helpers ─────────────────────────────────────────────────────

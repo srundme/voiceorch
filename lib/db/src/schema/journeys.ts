@@ -40,6 +40,12 @@ export interface JourneySettings {
   followUpOnInterested?: boolean;
   /** Send WhatsApp after a completed call. */
   sendWhatsappAfterCall?: boolean;
+  /** Send email after a completed call (managed SnapServe or BYO Brevo). */
+  sendEmailAfterCall?: boolean;
+  /** Optional subject override for journey email step (supports {{vars}}). */
+  emailSubject?: string | null;
+  /** Optional body override for journey email step (supports {{vars}}). */
+  emailBody?: string | null;
 }
 
 export const journeysTable = pgTable("journeys", {

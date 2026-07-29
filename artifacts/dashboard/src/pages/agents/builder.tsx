@@ -89,6 +89,7 @@ import { RecentNumbersList } from "@/components/recent-numbers-list";
 import { useRecentNumbers } from "@/hooks/use-recent-numbers";
 import { GeneratePromptSheet } from "./generate-prompt-sheet";
 import { JourneyPanel } from "./journey-panel";
+import { EmailChannelCard, useEmailChannelReady } from "./email-channel-card";
 const _DASH_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const DASH_API   = `${_DASH_BASE}/api`;
 
@@ -691,6 +692,7 @@ function JourneyReadinessPanel({ form, agent }: { form: any; agent: any }) {
   const schedulingEventTypeId = form.watch("schedulingEventTypeId");
   const webhookUrl = (form.watch("webhookUrl") ?? "").trim();
   const [hasInboundPhone, setHasInboundPhone] = useState(false);
+  const emailReady = useEmailChannelReady();
 
   const { data: phoneNumbersRaw } = useListPhoneNumbers({
     query: { queryKey: getListPhoneNumbersQueryKey(), staleTime: 60_000 },
@@ -713,8 +715,9 @@ function JourneyReadinessPanel({ form, agent }: { form: any; agent: any }) {
     { label: "Knowledge attached", ready: knowledgeIds.length > 0 },
     { label: "Phone channel", ready: hasInboundPhone },
     { label: "WhatsApp channel", ready: !!waData?.channel?.active },
+    { label: "Email channel", ready: emailReady },
     { label: "Booking channel", ready: !!schedulingCalendarId && !!schedulingEventTypeId },
-    { label: "Follow-up output", ready: !!waData?.channel?.active || !!webhookUrl },
+    { label: "Follow-up output", ready: !!waData?.channel?.active || emailReady || !!webhookUrl },
   ];
 
   const readyCount = checks.filter((c) => c.ready).length;
@@ -737,7 +740,7 @@ function JourneyReadinessPanel({ form, agent }: { form: any; agent: any }) {
         ))}
       </div>
       <p className="text-[11px] text-muted-foreground">
-        The best SnapServe agents usually connect voice, WhatsApp, and at least one follow-up path before they go live.
+        Messaging channels are Email + WhatsApp only (managed SnapServe or your own Brevo / Vobiz-BSP). SMS is not a messaging channel.
       </p>
     </div>
   );
@@ -747,7 +750,6 @@ function ChannelsTab({ form, agent }: { form: any; agent: any }) {
   const [, navigate] = useLocation();
   const schedulingCalendarId = form.watch("schedulingCalendarId");
   const schedulingEventTypeId = form.watch("schedulingEventTypeId");
-  const webhookUrl = (form.watch("webhookUrl") ?? "").trim();
 
   const { data: waData, isLoading: waLoading } = useQuery({
     queryKey: ["builder-whatsapp-channel", agent?.id],
@@ -789,7 +791,9 @@ function ChannelsTab({ form, agent }: { form: any; agent: any }) {
           <div className="flex items-center justify-between gap-3">
             <div>
               <h3 className="text-sm font-semibold">WhatsApp</h3>
-              <p className="text-[11px] text-muted-foreground">Post-call messages, callback nudges, brochure sends, and chatbot replies.</p>
+              <p className="text-[11px] text-muted-foreground">
+                SnapServe managed, your own VoBiz number, or BYO BSP — post-call messages and chatbot replies.
+              </p>
             </div>
             <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={() => navigate("/app/whatsapp")}>
               Configure WhatsApp
@@ -825,6 +829,8 @@ function ChannelsTab({ form, agent }: { form: any; agent: any }) {
           )}
         </div>
 
+        <EmailChannelCard />
+
         <div className="rounded-xl border border-border/60 bg-card/20 p-4 space-y-3">
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -846,31 +852,6 @@ function ChannelsTab({ form, agent }: { form: any; agent: any }) {
                 </p>
               </div>
               <StatusBadge ready={!!schedulingCalendarId && !!schedulingEventTypeId} readyLabel="Linked" emptyLabel="Unlinked" />
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-xl border border-border/60 bg-card/20 p-4 space-y-3">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h3 className="text-sm font-semibold">Email + external systems</h3>
-              <p className="text-[11px] text-muted-foreground">Use booking emails today, or drive custom email/CRM actions through post-call webhooks.</p>
-            </div>
-            <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={() => navigate("/app/connections")}>
-              Open connections
-            </Button>
-          </div>
-          <div className="rounded-lg border border-border/40 bg-background/40 p-3 space-y-2">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-medium">Post-call automation</p>
-                <p className="text-[11px] text-muted-foreground">
-                  {webhookUrl
-                    ? "Webhook is configured for CRM, email, or custom journey actions."
-                    : "No webhook configured yet. Add one if downstream systems should react after calls."}
-                </p>
-              </div>
-              <StatusBadge ready={!!webhookUrl} readyLabel="Connected" emptyLabel="Optional" />
             </div>
           </div>
         </div>

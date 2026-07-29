@@ -61,6 +61,7 @@ export * from "./workshop-events";
 export * from "./invoices";
 export * from "./workflows";
 export * from "./journeys";
+export * from "./email-channels";
 export * from "./google-sheets";
 export * from "./sheet-auto-calls";
 export * from "./team-members";
