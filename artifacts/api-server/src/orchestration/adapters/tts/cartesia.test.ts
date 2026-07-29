@@ -76,4 +76,28 @@ describe("CartesiaTTS emotion voice-control fallback", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(result.audio.length).toBe(2);
   });
+
+  it("setLanguage() updates the language tag on subsequent synthesize() calls", async () => {
+    const audioBytes = new Uint8Array([1]).buffer;
+    const languages: Array<string | undefined> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: RequestInit) => {
+        const body = JSON.parse(init.body as string) as { language?: string };
+        languages.push(body.language);
+        return {
+          ok: true,
+          status: 200,
+          arrayBuffer: async () => audioBytes,
+        } as unknown as Response;
+      }),
+    );
+
+    const tts = new CartesiaTTS("test-key", null, null, "en-IN", null);
+    await tts.synthesize("Hello");
+    tts.setLanguage("ta-IN");
+    await tts.synthesize("வணக்கம்");
+
+    expect(languages).toEqual(["en", "ta"]);
+  });
 });

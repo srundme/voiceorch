@@ -678,6 +678,12 @@ export interface TTSAdapter {
     onDone: (characters: number) => void,
     signal?: AbortSignal
   ): Promise<void>;
+  /**
+   * Hot-swap pronunciation / language tag mid-call (Cartesia, Sarvam).
+   * Called when auto-detect or an explicit language request changes currentLang
+   * so TTS does not keep speaking Tamil text with an English (or null) tag.
+   */
+  setLanguage?(lang: string): void;
   /** Optional teardown — close any persistent connections (e.g. WebSocket).
    *  Called by the pipeline's close() when the call ends. */
   close?(): void;

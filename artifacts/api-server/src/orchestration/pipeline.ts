@@ -962,6 +962,9 @@ export class OrchestrationPipeline implements VoiceSession {
   /** Language the live streaming-STT session was last switched to via an
    *  explicit caller request (loop guard for switchStreamSTTLanguage). */
   private streamSTTLang: string | null = null;
+  /** Language last applied to TTS via setLanguage (Cartesia/Sarvam). Prevents
+   *  reconnect-loop spam and keeps TTS in sync with currentLang mid-call. */
+  private ttsLang: string | null = null;
 
   // Repetition guard (call 548): the last spoken assistant line + how many times
   // in a row the model has repeated itself. Used by the per-turn anti-repeat nudge
@@ -1776,13 +1779,19 @@ export class OrchestrationPipeline implements VoiceSession {
       ? (this.agent.initialLanguage ?? null)   // returning-caller preference only
       : agentLanguage;                          // strict mode: always lock from config
     if (seedLang) this.currentLang = seedLang;
+    // Prefer the live conversation language (seed / auto-detect memory) over a
+    // stale agent.language so Cartesia/Sarvam start with the right tag — call
+    // 4845 logged language:null on every Tamil synth because agentLanguage was
+    // unset while STT was en-IN.
+    const ttsLanguage = this.currentLang || agentLanguage;
     const ttsExtraConfig = this.agent.ttsProvider === "sarvam"
-      ? JSON.stringify({ language: agentLanguage ?? "en-IN" })
+      ? JSON.stringify({ language: ttsLanguage ?? "en-IN" })
       : (keys.get(`${this.agent.ttsProvider}:extraConfig`) ?? null);
     this.tts = createTTSAdapter(
       this.agent.ttsProvider, ttsKey, this.agent.ttsVoice, this.agent.ttsModel,
-      ttsExtraConfig, agentLanguage, this.agent.ttsSpeed
+      ttsExtraConfig, ttsLanguage, this.agent.ttsSpeed
     );
+    if (ttsLanguage) this.ttsLang = ttsLanguage;
     // Pre-warm any persistent TTS connections (e.g. Cartesia WebSocket) so the
     // greeting doesn't pay the TCP+TLS+WS handshake cost on its first synthesis.
     this.tts.warmup?.();
@@ -2378,6 +2387,7 @@ export class OrchestrationPipeline implements VoiceSession {
             }
           }
           this.currentLang = detected;
+          this.syncTtsLanguage(detected);
           if (!detected.startsWith("en-")) {
             this.lastNonEnglishLang = detected;
             // Non-English STT switch (immediate on turn 1 so old script doesn't mangled new language).
@@ -2416,6 +2426,7 @@ export class OrchestrationPipeline implements VoiceSession {
           }
           this.requestedLangLatch = requested;
           this.currentLang = requested;
+          this.syncTtsLanguage(requested);
           this.maybeSwitchStreamingSttLang(requested, true);
         }
       }
@@ -7478,6 +7489,30 @@ export class OrchestrationPipeline implements VoiceSession {
       logger.warn(
         { callId: this.config.callId, lang, err },
         "Streaming STT language switch failed — keeping current stream",
+      );
+    }
+  }
+
+  /**
+   * Keep Cartesia/Sarvam TTS language tags aligned with currentLang. Without
+   * this, auto-detect updates STT+LLM while TTS keeps speaking Tamil text with
+   * language:null or the call-start English tag (call 4845).
+   */
+  private syncTtsLanguage(lang: string): void {
+    if (!lang) return;
+    if (!this.tts.setLanguage) return;
+    if (this.ttsLang === lang) return;
+    try {
+      this.tts.setLanguage(lang);
+      this.ttsLang = lang;
+      logger.info(
+        { callId: this.config.callId, lang, provider: this.agent.ttsProvider },
+        "TTS language switched",
+      );
+    } catch (err) {
+      logger.warn(
+        { callId: this.config.callId, lang, err },
+        "TTS language switch failed — keeping current TTS language",
       );
     }
   }

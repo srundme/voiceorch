@@ -77,7 +77,6 @@ import { formatApiError, mapApiErrors, isDestinationUnverifiedError } from "@/li
 import {
   ASR_PROVIDERS, LLM_PROVIDERS, TTS_PROVIDERS,
   LANGUAGES, ASR_MODELS, LLM_MODELS, TTS_MODELS, TTS_VOICES, AGENT_TIMEZONES,
-  isTamilLanguage, defaultGeminiModel, defaultLlmForLanguages,
   filterVoicesForLanguage, isVoiceCompatibleWithLanguage,
   getSarvamTtsVoices, isSarvamVoiceCompatible,
   GEMINI_LIVE_LLM_MODEL, GEMINI_LIVE_THINKING_LEVELS,
@@ -1006,15 +1005,8 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
                   <FormLabel className="text-[10px] text-muted-foreground">Language</FormLabel>
                   <SmallSelect value={field.value} onChange={(v) => {
                     field.onChange(v);
-                    // Never auto-swap the LLM while on Gemini Live — that would kick the user off realtime.
-                    if (!isGeminiLive) {
-                      const { llmProvider, llmModel } = defaultLlmForLanguages(v);
-                      form.setValue("llmProvider", llmProvider);
-                      form.setValue("llmModel", llmModel);
-                      // Tamil defaults to Gemini Live — keep the voice stack in sync
-                      // so the language pick actually lands on the realtime stack.
-                      form.setValue("voiceStack", voiceStackForLlmModel(llmModel));
-                    }
+                    // Language alone must never force Gemini Live / swap the LLM.
+                    // Users pick model + voice stack explicitly in the Model / Voice cards.
                   }}
                     options={options.map(l => ({ value: l.value, label: l.label }))} placeholder="Select language" />
                 </FormItem>

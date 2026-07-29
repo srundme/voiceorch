@@ -84,8 +84,6 @@ import {
   getModelError,
   isGeminiLiveAgent,
   isGeminiLiveLlmModel,
-  isTamilLanguage,
-  defaultGeminiModel,
   voiceStackForLlmModel,
   languagesForAgent,
   isGeminiLiveLanguage,
@@ -1001,11 +999,8 @@ export default function AgentEdit() {
                           <FormLabel>Language</FormLabel>
                           <Select onValueChange={(v) => {
                             field.onChange(v);
-                            // Don't kick the user off Gemini Live when changing language.
-                            if (!isGeminiLive && isTamilLanguage(v)) {
-                              form.setValue("llmProvider", "google");
-                              form.setValue("llmModel", defaultGeminiModel());
-                            }
+                            // Do not auto-swap LLM/voice stack when language changes —
+                            // Tamil must not force Gemini Live; model is an explicit choice.
                           }} value={field.value ?? ""}>
                             <FormControl><SelectTrigger><SelectValue placeholder="Select language" /></SelectTrigger></FormControl>
                             <SelectContent>
