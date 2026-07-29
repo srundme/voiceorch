@@ -7,6 +7,7 @@ import { SpeakerVerifier, type VoiceMemoryEvent } from "./speakerVerifier.js";
 import { buildDatetimeInjection } from "./datetimeInject.js";
 import { resolveAutoDetectLanguage } from "./language-filler-guard.js";
 import { CONVERSATION_DISCIPLINE_BLOCK, CONVERSATION_DISCIPLINE_TURN_REMINDER, buildAntiRepeatNudge, makeFlowStepGuard, truncateToSingleStep, VOICE_MAX_SENTENCES_PER_TURN } from "./conversationDiscipline.js";
+import { isCallerFarewellUtterance as isCallerFarewellUtteranceShared } from "./callFarewell.js";
 import { shouldSwitchSttLang } from "./stt-language-switch.js";
 import { EAGER_PARTIAL_STABLE_MS, isEagerCommitReady, isSpeculativeHit } from "./eager-stt.js";
 import type { SttFinalMetadata } from "./adapters/stt/base.js";
@@ -29,7 +30,7 @@ import { resolveGoodbyeMessage } from "./types.js";
 import type { VoiceSession } from "./voice-session.js";
 import { retrieveKbContext, retrieveKbContextMultiEx, resolveKbTurnBudgetMs, type KbRetrievalResult } from "./kb-retrieval.js";
 import { KRUTRIM_AUTO_SUMMARY_TITLE } from "../services/kb-source-summary.js";
-import { getBackchannelFillers, pickBackchannelFiller, type BackchannelFillerOptions } from "./backchannel.js";
+import { getBackchannelFillers, pickBackchannelFiller, rememberFillerPhrase, type BackchannelFillerOptions } from "./backchannel.js";
 import { ConversationHistory } from "./conversation-history.js";
 import { performance } from "perf_hooks";
 import {
@@ -791,8 +792,12 @@ export class OrchestrationPipeline implements VoiceSession {
   private answerGapLogged = false;
   // Count of filler phrases played due to slow LLM response (>800 ms to first token)
   private fillerPlayedCount = 0;
-  // Last backchannel/dead-air filler phrase spoken, so we never repeat it back-to-back.
-  private lastFillerPhrase: string | null = null;
+  // Recent backchannel/dead-air fillers — avoid repeating the last few phrases.
+  private recentFillerPhrases: string[] = [];
+  /** @deprecated use recentFillerPhrases — kept for any legacy log readers */
+  private get lastFillerPhrase(): string | null {
+    return this.recentFillerPhrases[this.recentFillerPhrases.length - 1] ?? null;
+  }
 
   // ── Per-turn latency instrumentation (monotonic via performance.now()) ─────
   private turnIndex = 0;
@@ -6075,10 +6080,11 @@ export class OrchestrationPipeline implements VoiceSession {
         const freq = Math.max(0, Math.min(1, baseFreq));
         if (Math.random() < freq) {
           // Strict, language-based fillers only — no cross-language fallback.
-          const pool = getBackchannelFillers(fillerLang, this.backchannelFillerOpts());
+          const fillerOpts = this.backchannelFillerOpts(transcript);
+          const pool = getBackchannelFillers(fillerLang, fillerOpts);
           if (pool.length > 0) {
-            const phrase = pickBackchannelFiller(fillerLang, this.lastFillerPhrase, this.backchannelFillerOpts())!;
-            this.lastFillerPhrase = phrase;
+            const phrase = pickBackchannelFiller(fillerLang, this.recentFillerPhrases, fillerOpts)!;
+            rememberFillerPhrase(this.recentFillerPhrases, phrase);
             logger.info(
               {
                 callId: this.config.callId,
@@ -6549,8 +6555,9 @@ export class OrchestrationPipeline implements VoiceSession {
             );
             return;
           }
-          const pool = getBackchannelFillers(fillerLang, this.backchannelFillerOpts());
-          const phrase = pickBackchannelFiller(fillerLang, this.lastFillerPhrase, this.backchannelFillerOpts());
+          const fillerOpts = this.backchannelFillerOpts(transcript);
+          const pool = getBackchannelFillers(fillerLang, fillerOpts);
+          const phrase = pickBackchannelFiller(fillerLang, this.recentFillerPhrases, fillerOpts);
           if (!phrase) {
             logger.info(
               {
@@ -6564,6 +6571,7 @@ export class OrchestrationPipeline implements VoiceSession {
             );
             return;
           }
+          rememberFillerPhrase(this.recentFillerPhrases, phrase);
           logger.info(
             {
               callId: this.config.callId,
@@ -6577,7 +6585,6 @@ export class OrchestrationPipeline implements VoiceSession {
             "Dead-air filler enqueued (language-aware, LLM > filler threshold)",
           );
           enqueue(phrase, FILLER_SEQUENCE_ID);
-          this.lastFillerPhrase = phrase;
           this._deadAirFillerEnqueuedAt = Date.now();
           this.fillerPlayedCount++;
           this._fillerPlayedThisTurn = true;
@@ -8206,32 +8213,7 @@ export class OrchestrationPipeline implements VoiceSession {
    * call on a mid-conversation polite acknowledgment.
    */
   private isCallerFarewellUtterance(transcript: string): boolean {
-    // Normalise: keep Tamil + lowercase Latin, strip punctuation
-    const t = transcript
-      .toLowerCase()
-      .replace(/[^\u0B80-\u0BFFa-z\s]/g, "")
-      .trim();
-    if (t.length === 0 || t.length > 60) return false;
-
-    // Pure bye/goodbye — unambiguous regardless of surrounding fillers
-    if (/\b(bye|byee|bye\s*bye|goodbye|good\s*bye|cya|tata|tatata)\b/.test(t)) return true;
-
-    // "thank you" / "thanks" — only when the ENTIRE utterance (after stripping
-    // address terms and common intensifiers) IS the thank-you itself.  This
-    // prevents "thank you, now let me ask…" from ending the call mid-sentence.
-    const stripped = t
-      .replace(
-        /\b(sir|madam|maam|please|ok|okay|so|much|very|lot|again|alright|great|nice|fine)\b/g,
-        "",
-      )
-      .replace(/\s+/g, " ")
-      .trim();
-    if (/^(thank\s*you|thanks|thankyou|thank\s*u)$/.test(stripped)) return true;
-
-    // Tamil farewells: நன்றி (thank you)
-    if (/நன்றி/.test(t)) return true;
-
-    return false;
+    return isCallerFarewellUtteranceShared(transcript);
   }
 
   /**
@@ -8494,7 +8476,7 @@ function buildLangRequestSpec(code: string, mention: RegExp, roman: string[]): L
 
 /** All languages the multilingual toggle supports for explicit switch requests. */
 const LANG_REQUEST_SPECS: LangRequestSpec[] = [
-  buildLangRequestSpec("en-IN", /\b(english|inglish)\b|\bangre[jz]i\b|अंग्रेज़ी|अंग्रेजी|ஆங்கில|இங்கிலிஷ|ఇంగ్లీష|ইংরেজি|انگریزی/iu, ["english", "inglish", "angrezi", "angreji"]),
+  buildLangRequestSpec("en-IN", /\b(english|inglish)\b|\bangre[jz]i\b|अंग्रेज़ी|अंग्रेजी|ஆங்கில|இங்கிலீ?ஷ்?|இங்கிலிஷ்?|இங்கில|ఇంగ్లీష|ইংরেজি|انگریزی/iu, ["english", "inglish", "angrezi", "angreji"]),
   buildLangRequestSpec("hi-IN", /\bhindi\b|हिन्दी|हिंदी|ஹிந்தி|இந்தி|ہندی/iu, ["hindi"]),
   buildLangRequestSpec("ta-IN", /\b(tamil|thamizh|tamizh)\b|தமிழ|तमिल|తమిళ/iu, ["tamil", "thamizh", "tamizh"]),
   buildLangRequestSpec("te-IN", /\btelugu\b|తెలుగు|तेलुगु|தெலுங்கு/iu, ["telugu"]),

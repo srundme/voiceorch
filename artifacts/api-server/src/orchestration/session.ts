@@ -25,6 +25,7 @@ import {
 } from "@workspace/db/call-engine-defaults";
 import { withDbRetry } from "./db-retry.js";
 import { CONVERSATION_DISCIPLINE_BLOCK } from "./conversationDiscipline.js";
+import { transcriptHasFarewellEnding } from "./callFarewell.js";
 import { buildLeadContextBlock, resolvePromptVariables } from "./prompt-vars.js";
 import { createLLMAdapter } from "./adapters/llm/index.js";
 import { resolveMicSensitivity, getMicSensitivityThresholds } from "./mic-sensitivity.js";
@@ -86,34 +87,6 @@ import { completeLiveSquadRun } from "../services/squad-engine.js";
  */
 const DEFAULT_SILENCE_TIMEOUT_SECONDS =
   parseInt(process.env["SILENCE_TIMEOUT_DEFAULT_SECONDS"] ?? "", 10) || 15;
-
-/**
- * Returns true when the last ~300 characters of the transcript contain a
- * farewell phrase, indicating the caller ended the call intentionally.
- * Used to suppress false-positive network-drop callbacks.
- */
-function isFarewellEnding(transcript: string): boolean {
-  if (!transcript) return false;
-  const tail = transcript.slice(-300).toLowerCase();
-  const farewells = [
-    "bye",
-    "goodbye",
-    "good bye",
-    "take care",
-    "talk soon",
-    "see you",
-    "have a good",
-    "thank you bye",
-    "thanks bye",
-    "ok bye",
-    "okay bye",
-    "alright bye",
-    "ciao",
-    "tata",
-    "ta-ta",
-  ];
-  return farewells.some((phrase) => tail.includes(phrase));
-}
 
 interface MetricsAcc {
   sttTotal: number;
@@ -2565,7 +2538,7 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
     // typical farewell language from the agent (cross-language), treat as completed
     // even when the transport closed without the pipeline explicitly calling end_call.
     const closingPhrases = ["thank you", "goodbye", "bye", "have a great", "have a nice", "take care",
-      "talk soon", "speak soon", "धन्यवाद", "अलविदा", "नमस्ते", "நன்றி", "நல்வாழ்த்துக்கள்"];
+      "talk soon", "speak soon", "wish you good health", "धन्यवाद", "अलविदा", "नमस्ते", "நன்றி", "நல்வாழ்த்துக்கள்", "பாய்"];
     const lastChunk = (transcript ?? "").slice(-600).toLowerCase();
     const hasClosingSignal = metricsAcc.count > 0 && closingPhrases.some(p => lastChunk.includes(p));
     const conversationCompleted = session.naturalEndTriggered || session.wasTransferred || bookingCompletedThisCall || hasClosingSignal;
@@ -2928,13 +2901,14 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
       // (sourceCallbackReason === "network_drop"), never schedule another — prevents
       // an infinite redial chain when the retry call also drops.
       //
-      // FAREWELL GUARD: if the transcript tail contains a farewell phrase the caller
-      // said goodbye and the carrier terminated cleanly — not a network drop.
+      // FAREWELL / COMPLETED GUARD: suppress auto-redial when the caller said
+      // goodbye (incl. Tamil பாய்), the agent already delivered a closing line,
+      // or naturalEnd/end_call fired — those are successful ends, not drops.
       const autoRedialCfg = (ag?.agentConfig as { autoRedial?: { enabled?: boolean; delayMinutes?: number; maxAttempts?: number } } | null)?.autoRedial;
-      const wasUnexpectedDrop = !session.naturalEndTriggered && !session.wasTransferred;
+      const wasUnexpectedDrop = !session.naturalEndTriggered && !session.wasTransferred && !conversationCompleted;
       const isRealPhoneCall = session.callerPhone && !session.callerPhone.startsWith("webcall:");
       const isNetworkDropRetry = session.sourceCallbackReason === "network_drop";
-      const hasFarewellEnding = isFarewellEnding(transcript);
+      const hasFarewellEnding = transcriptHasFarewellEnding(transcript);
       const hasConversationContent = metricsAcc.count > 0;
       if (ag && autoRedialCfg?.enabled && wasUnexpectedDrop && !hasFarewellEnding && hasConversationContent && isRealPhoneCall && !isCampaignCall && !isNetworkDropRetry) {
         void scheduleNetworkDropCallback({
@@ -2945,9 +2919,11 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
         }).catch((rdErr) => {
           logger.warn({ sessionId, rdErr }, "Network-drop callback scheduling failed");
         });
-      } else if (ag && autoRedialCfg?.enabled && wasUnexpectedDrop && isRealPhoneCall && !isCampaignCall && !isNetworkDropRetry) {
+      } else if (ag && autoRedialCfg?.enabled && !session.naturalEndTriggered && !session.wasTransferred && isRealPhoneCall && !isCampaignCall && !isNetworkDropRetry) {
         const tail = transcript.slice(-100);
-        if (hasFarewellEnding) {
+        if (conversationCompleted) {
+          logger.info({ sessionId, tail }, "Network-drop suppressed: conversation already completed (closing signal)");
+        } else if (hasFarewellEnding) {
           logger.info({ sessionId, tail }, "Network-drop suppressed: farewell detected in transcript tail");
         } else if (!hasConversationContent) {
           logger.info({ sessionId }, "Network-drop suppressed: zero-turn drop (no conversation content)");

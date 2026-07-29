@@ -331,7 +331,7 @@ export class GeminiLivePipeline implements VoiceSession {
           onAgentText: (text) => this.appendAgent(text),
           speakText: (text) => this.speakRaw(text),
           endCall: () => {
-            this.endReasonHint = "Tool ended call";
+            this.endReasonHint = "end_call";
             this.config.onCallEnd();
           },
         },
