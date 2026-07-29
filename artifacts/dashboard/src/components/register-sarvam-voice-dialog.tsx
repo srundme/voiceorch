@@ -138,41 +138,51 @@ export function RegisterSarvamVoiceDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Add Sarvam cloned voice</DialogTitle>
-          <DialogDescription>
-            Sarvam clones are created in{" "}
-            <a
-              href="https://docs.sarvam.ai/creative-voice-cloning"
-              target="_blank"
-              rel="noreferrer"
-              className="underline inline-flex items-center gap-0.5"
-            >
-              Creative Studio
-              <ExternalLink className="h-3 w-3" />
-            </a>
-            . Paste the speaker id here to use it on SnapServe agents.
+          <DialogDescription className="space-y-2 text-left">
+            <span className="block">
+              Create the clone in{" "}
+              <a
+                href="https://docs.sarvam.ai/creative-voice-cloning"
+                target="_blank"
+                rel="noreferrer"
+                className="underline inline-flex items-center gap-0.5"
+              >
+                Creative Studio
+                <ExternalLink className="h-3 w-3" />
+              </a>
+              , then paste the <strong>speaker / clone id</strong> (not the display name).
+            </span>
+            <span className="block text-amber-700 dark:text-amber-400/90">
+              Clones only work with <strong>your</strong> Sarvam API key — add it under Providers
+              (same account that owns the clone). SnapServe&apos;s managed key cannot see personal clones.
+            </span>
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3 py-1">
           <div className="space-y-1.5">
-            <Label htmlFor="sarvam-clone-name">Display name</Label>
+            <Label htmlFor="sarvam-clone-name">Display name (in SnapServe)</Label>
             <Input
               id="sarvam-clone-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Brand voice"
+              placeholder="My brand voice"
               className="h-9"
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="sarvam-clone-speaker">Speaker / clone id</Label>
+            <Label htmlFor="sarvam-clone-speaker">Speaker / clone id from Sarvam</Label>
             <Input
               id="sarvam-clone-speaker"
               value={speakerId}
               onChange={(e) => setSpeakerId(e.target.value)}
-              placeholder="e.g. my_brand_voice"
+              placeholder="Exact id from Creative Studio — not your name"
               className="h-9 font-mono text-xs"
             />
+            <p className="text-[10px] text-muted-foreground leading-snug">
+              If Sarvam shows a name like &quot;karthikeyan&quot; but a separate speaker id, paste the id.
+              We verify it against your API key before saving.
+            </p>
           </div>
           <div className="space-y-1.5">
             <Label>Language</Label>

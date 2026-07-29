@@ -18,6 +18,7 @@ import {
   resolveVoiceStack,
 } from "./adapters/live/gemini-live-voices.js";
 import { resolveSarvamSttMode } from "./adapters/stt/sarvam-mode.js";
+import { isSarvamCatalogSpeaker } from "./adapters/tts/sarvam.js";
 import {
   clampSarvamIncompleteHoldMs,
   clampSarvamSpeechEndFlushMs,
@@ -1303,6 +1304,31 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
       if (!cfg["authId"]) cfg["authId"] = authId;
       providerKeys.set("vobiz:extraConfig", JSON.stringify(cfg));
       logger.info({}, "Using platform managed VoBiz credentials");
+    }
+  }
+
+  // Sarvam Creative Studio clones are scoped to the API subscription that created
+  // them. Managed agents normally use the platform Sarvam key, which cannot see a
+  // user's personal clone — prefer the agent owner's BYOP Sarvam key for non-catalog speakers.
+  if (
+    agent.ttsProvider?.toLowerCase() === "sarvam"
+    && agent.ttsVoice
+    && !isSarvamCatalogSpeaker(agent.ttsVoice)
+  ) {
+    const ownerSarvam = providerRowsResult.find(
+      (r) => r.providerName.toLowerCase() === "sarvam",
+    );
+    if (ownerSarvam) {
+      providerKeys.set("sarvam", decryptKey(ownerSarvam.apiKey));
+      logger.info(
+        { speaker: agent.ttsVoice, agentId: params.agentId },
+        "Using owner Sarvam API key for cloned speaker",
+      );
+    } else {
+      logger.warn(
+        { speaker: agent.ttsVoice, agentId: params.agentId },
+        "Non-catalog Sarvam speaker without owner API key — TTS will fail until Providers → Sarvam key is added",
+      );
     }
   }
 

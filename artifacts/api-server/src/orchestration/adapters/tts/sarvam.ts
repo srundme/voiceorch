@@ -64,6 +64,22 @@ const V2_SPEAKERS = new Set([
   "anushka", "abhilash", "manisha", "vidya", "arya", "karun", "hitesh",
 ]);
 
+/** Built-in Bulbul speakers (v2 + v3). Anything else is treated as a Creative Studio clone id. */
+const CATALOG_SPEAKERS = new Set([
+  ...V2_SPEAKERS,
+  "ritu", "priya", "neha", "pooja", "simran", "kavya", "ishita", "shreya", "roopa",
+  "tanya", "shruti", "suhani", "kavitha", "rupali",
+  "rahul", "rohan", "aditya", "amit", "dev", "ratan", "varun", "manan", "sumit",
+  "kabir", "aayan", "shubh", "ashutosh", "advait", "anand", "tarun", "sunny",
+  "mani", "gokul", "vijay", "mohit", "rehan", "soham",
+]);
+
+/** True when `speaker` is a public Bulbul catalog name (not a user clone). */
+export function isSarvamCatalogSpeaker(speaker: string | null | undefined): boolean {
+  if (!speaker) return false;
+  return CATALOG_SPEAKERS.has(speaker.trim().toLowerCase());
+}
+
 /** Cartesia-style UUIDs — reject so a pasted Cartesia id never hits Sarvam. */
 function looksLikeUuid(s: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);

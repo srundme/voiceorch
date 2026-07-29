@@ -12,6 +12,7 @@ import { logger } from "../lib/logger.js";
 import { decryptKey } from "../lib/crypto.js";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { createTTSAdapter } from "../orchestration/adapters/tts/index.js";
+import { isSarvamCatalogSpeaker } from "../orchestration/adapters/tts/sarvam.js";
 import { pcmToWav } from "../orchestration/audio.js";
 
 const router: IRouter = Router();
@@ -240,6 +241,64 @@ router.post(
   },
 );
 
+async function getSarvamKeyForUser(userId: string): Promise<{ key: string; source: "user" | "managed" } | null> {
+  const [userRow] = await db
+    .select()
+    .from(providersTable)
+    .where(
+      and(
+        eq(providersTable.userId, userId),
+        eq(providersTable.providerName, "sarvam"),
+        eq(providersTable.isActive, true),
+      ),
+    );
+  if (userRow) return { key: decryptKey(userRow.apiKey), source: "user" };
+
+  const [managed] = await db
+    .select()
+    .from(platformSettingsTable)
+    .where(eq(platformSettingsTable.key, "managed_sarvam_key"));
+  if (managed?.value?.trim()) return { key: managed.value.trim(), source: "managed" };
+  return null;
+}
+
+/** Probe Bulbul with a tiny utterance so we reject bad clone ids before save. */
+async function probeSarvamSpeaker(
+  apiKey: string,
+  speakerId: string,
+  languageBase: string,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const lang = languageBase.includes("-") ? languageBase : `${languageBase}-IN`;
+  try {
+    const tts = createTTSAdapter(
+      "sarvam",
+      apiKey,
+      speakerId,
+      "bulbul:v3",
+      JSON.stringify({ language: lang }),
+      lang,
+    );
+    await tts.synthesize("Hello");
+    tts.close();
+    return { ok: true };
+  } catch (err) {
+    const raw = err instanceof Error ? err.message : String(err);
+    if (/not recognized|invalid_request|speaker/i.test(raw)) {
+      return {
+        ok: false,
+        message:
+          `Sarvam does not recognize speaker "${speakerId}" on this API key. `
+          + "Use the exact Speaker / clone id from Creative Studio (not the display name), "
+          + "and add your Sarvam API key under Providers so SnapServe can reach your clones.",
+      };
+    }
+    return {
+      ok: false,
+      message: `Could not verify speaker with Sarvam: ${raw.slice(0, 240)}`,
+    };
+  }
+}
+
 // ── POST /voices/sarvam-register ─────────────────────────────────────────────
 // Authenticated: register a Sarvam Creative Studio cloned speaker id.
 // Sarvam has no public self-serve clone REST API — clones are created in Studio,
@@ -280,6 +339,31 @@ router.post("/voices/sarvam-register", requireAuth, async (req, res): Promise<vo
   }
   if (!languageRaw.trim()) {
     res.status(400).json({ error: "Select a language for the clone." });
+    return;
+  }
+
+  // Clones are account-scoped — require the user's own Sarvam key whenever the
+  // speaker is not a public catalog name (managed platform key cannot see them).
+  const keyInfo = await getSarvamKeyForUser(userId);
+  if (!keyInfo) {
+    res.status(400).json({
+      error: "Add your Sarvam API key on Providers first, then register the clone speaker id.",
+    });
+    return;
+  }
+  if (keyInfo.source === "managed" && !isSarvamCatalogSpeaker(speakerId)) {
+    res.status(400).json({
+      error:
+        "Cloned voices only work with your own Sarvam API key. "
+        + "Add it under Providers → Sarvam (same account that created the clone in Creative Studio), "
+        + "then try again. Catalog voices like priya or shubh work without a personal key.",
+    });
+    return;
+  }
+
+  const probe = await probeSarvamSpeaker(keyInfo.key, speakerId, toBaseLanguage(languageRaw));
+  if (!probe.ok) {
+    res.status(400).json({ error: probe.message });
     return;
   }
 
