@@ -67,57 +67,55 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
-/* ── Design tokens — light (Sarvam cream / navy / orange) ─────────────────── */
+/* ── Design tokens — light mode ──────────────────────────────────────────── */
 :root {
-  /* Cream base — never pure white */
-  --background:         40 55% 98%;       /* #FDFBF7 */
-  --foreground:         226 42% 20%;      /* #1E2749 Deep Navy Ink */
-  --border:             228 24% 88%;
+  --background:         220 20% 96%;
+  --foreground:         220 14% 10%;
+  --border:             220 14% 88%;
 
-  --card:               40 40% 99%;
-  --card-foreground:    226 42% 20%;
+  --card:               0 0% 100%;
+  --card-foreground:    220 14% 10%;
 
-  --elevated:           40 30% 95%;
+  --elevated:           220 14% 94%;
 
-  --popover:            40 40% 99%;
-  --popover-foreground: 226 42% 20%;
+  --popover:            0 0% 100%;
+  --popover-foreground: 220 14% 10%;
 
-  /* Sarvam Orange CTAs */
-  --primary:            33 93% 54%;       /* #F7941D */
-  --primary-foreground: 232 48% 15%;      /* #14183A on orange */
+  --primary:            220 14% 12%;
+  --primary-foreground: 0 0% 100%;
 
-  --secondary:          228 30% 94%;
-  --secondary-foreground: 226 42% 20%;
+  --secondary:          220 14% 93%;
+  --secondary-foreground: 220 14% 20%;
 
-  --muted:              228 24% 94%;
-  --muted-foreground:   229 24% 38%;      /* #4A527A */
+  --muted:              220 14% 93%;
+  --muted-foreground:   220 10% 36%;
 
-  --accent:             236 60% 95%;      /* soft blue wash */
-  --accent-foreground:  236 66% 40%;
+  --accent:             220 14% 91%;
+  --accent-foreground:  220 14% 10%;
 
   --destructive:        0 84% 60%;
   --destructive-foreground: 0 0% 98%;
 
-  --input:              40 30% 94%;
-  --ring:               236 66% 54%;      /* #3D47D8 Sarvam Blue */
+  --input:              220 14% 90%;
+  --ring:               220 9% 45%;
 
-  --sidebar:              40 45% 97%;
-  --sidebar-foreground:   226 42% 20%;
-  --sidebar-border:       228 24% 88%;
-  --sidebar-primary:      33 93% 54%;
-  --sidebar-primary-foreground: 232 48% 15%;
-  --sidebar-accent:       236 50% 94%;
-  --sidebar-accent-foreground: 226 42% 20%;
-  --sidebar-ring:         236 66% 54%;
+  --sidebar:              220 20% 98%;
+  --sidebar-foreground:   220 14% 10%;
+  --sidebar-border:       220 14% 88%;
+  --sidebar-primary:      220 14% 12%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent:       220 14% 91%;
+  --sidebar-accent-foreground: 220 14% 10%;
+  --sidebar-ring:         220 9% 55%;
 
-  --chart-1: 33 93% 54%;
-  --chart-2: 236 66% 54%;
-  --chart-3: 231 19% 51%;
-  --chart-4: 226 42% 30%;
-  --chart-5: 40 30% 80%;
+  --chart-1: 220 14% 18%;
+  --chart-2: 220 9% 38%;
+  --chart-3: 220 9% 55%;
+  --chart-4: 220 9% 70%;
+  --chart-5: 220 9% 84%;
 
-  --text-faint: 231 19% 51%;             /* #6A719A */
-  --text-meta:  229 24% 38%;             /* #4A527A */
+  --text-faint: 220 9% 42%;
+  --text-meta:  220 9% 34%;
 
   --app-font-sans:    'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
   --app-font-display: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
@@ -125,106 +123,99 @@
   --app-font-mono:    'JetBrains Mono', 'SF Mono', 'Menlo', monospace;
   --radius: 1rem;
 
-  --shadow-card: 0 1px 2px rgba(30,39,73,0.04), 0 0 0 1px rgba(30,39,73,0.05);
-  --shadow-card-hover: 0 4px 12px rgba(30,39,73,0.08), 0 1px 3px rgba(30,39,73,0.05), 0 0 0 1px rgba(30,39,73,0.06);
-  --shadow-sm: 0 1px 2px rgba(30,39,73,0.05);
-  --shadow: 0 1px 3px rgba(30,39,73,0.08), 0 1px 2px rgba(30,39,73,0.05);
-  --shadow-popover: 0 12px 40px rgba(30,39,73,0.12), 0 0 0 1px rgba(30,39,73,0.06);
+  --shadow-card: 0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04);
+  --shadow-card-hover: 0 4px 12px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.05), 0 0 0 1px rgba(0,0,0,0.06);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+  --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.05);
+  --shadow-popover: 0 12px 40px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.06);
 
-  --button-outline:       rgba(30,39,73,0.10);
-  --badge-outline:        rgba(30,39,73,0.06);
-  --primary-border:       rgba(247,148,29,0.35);
-  --secondary-border:     rgba(30,39,73,0.06);
-  --muted-border:         rgba(30,39,73,0.06);
-  --accent-border:        rgba(61,71,216,0.12);
+  --button-outline:       rgba(0,0,0,0.10);
+  --badge-outline:        rgba(0,0,0,0.06);
+  --primary-border:       rgba(0,0,0,0.14);
+  --secondary-border:     rgba(0,0,0,0.06);
+  --muted-border:         rgba(0,0,0,0.06);
+  --accent-border:        rgba(0,0,0,0.06);
   --destructive-border:   rgba(239,68,68,0.35);
   --opaque-button-border-intensity: 8;
 
-  /* ── Sarvam family brand tokens ─────────────────────────────────────────── */
-  --color-brand-orange:     #F7941D;
-  --color-brand-orange-hi:  #F9A94A;
-  --color-brand-cream:      #FDFBF7;
-  --color-brand-navy:       #1E2749;
-  --color-brand-navy-ink:   #14183A;
-  --color-brand-blue:       #3D47D8;
-  --color-brand-periwinkle: #9AA3FF;
-  --color-brand-slate:      #4A527A;
-  --color-brand-slate-hi:   #6A719A;
-  --gradient-brand:       linear-gradient(135deg, #F7941D 0%, #F9A94A 40%, #3D47D8 100%);
-  --gradient-brand-text:  linear-gradient(135deg, #F7941D, #F9A94A, #3D47D8);
-  --gradient-brand-glow:  radial-gradient(ellipse at 40% 30%, rgba(247,148,29,0.35) 0%, rgba(154,163,255,0.18) 45%, transparent 70%);
+  /* ── Brand tokens — for marketing sections only, not app chrome ─────────── */
+  --color-brand-saffron:  #ff9933;
+  --color-brand-teal:     #14b8a6;
+  --color-brand-indigo:   #6366f1;
+  --gradient-brand:       linear-gradient(135deg, #ff9933 0%, #14b8a6 50%, #6366f1 100%);
+  --gradient-brand-text:  linear-gradient(135deg, #ff9933, #14b8a6, #6366f1);
 
-  --shadow-glow-brand:       0 0 24px rgba(247,148,29,0.28), 0 0 48px rgba(154,163,255,0.14);
-  --shadow-glow-brand-hover: 0 0 32px rgba(247,148,29,0.4), 0 0 60px rgba(61,71,216,0.18);
-  --shadow-glow-teal:        0 0 0 1px rgba(61,71,216,0.3), 0 0 20px rgba(154,163,255,0.15);
+  --shadow-glow-brand:       0 0 24px rgba(255,153,51,0.2), 0 0 48px rgba(20,184,166,0.12);
+  --shadow-glow-brand-hover: 0 0 32px rgba(255,153,51,0.35), 0 0 60px rgba(20,184,166,0.2);
+  --shadow-glow-teal:        0 0 0 1px rgba(20,184,166,0.35), 0 0 20px rgba(20,184,166,0.12);
 }
 
-/* ── Dark mode — navy ink + Sarvam orange accent ─────────────────────────── */
+/* ── Dark mode — pure black / white / zinc ───────────────────────────────── */
 .dark {
-  /* ── Surfaces (Deep Navy Ink family) ─ */
-  --background:         232 48% 8%;       /* near #14183A */
-  --foreground:         40 40% 96%;       /* cream-tint text */
-  --border:             228 24% 18%;
+  /* ── Surfaces ─────────────────────── */
+  --background:         0 0% 4%;          /* #0a0a0a */
+  --foreground:         0 0% 98%;         /* #fafafa */
+  --border:             240 4% 16%;       /* #27272a */
 
-  --card:               232 40% 11%;
-  --card-foreground:    40 40% 96%;
+  --card:               0 0% 7%;          /* #111111 */
+  --card-foreground:    0 0% 98%;
 
-  --elevated:           232 36% 13%;
+  --elevated:           0 0% 9%;          /* #171717 */
 
-  --popover:            232 44% 9%;
-  --popover-foreground: 40 40% 96%;
+  --popover:            0 0% 5%;          /* #0d0d0d */
+  --popover-foreground: 0 0% 98%;
 
-  /* Sarvam Orange — primary CTAs / active */
-  --primary:            33 93% 54%;       /* #F7941D */
-  --primary-foreground: 232 48% 12%;
+  /* White primary — buttons, active states */
+  --primary:            0 0% 98%;         /* #fafafa */
+  --primary-foreground: 0 0% 4%;          /* #0a0a0a */
 
-  --secondary:          228 28% 14%;
-  --secondary-foreground: 40 30% 90%;
+  --secondary:          0 0% 11%;         /* #1c1c1c */
+  --secondary-foreground: 0 0% 90%;       /* #e5e5e5 */
 
-  --muted:              228 24% 16%;
-  --muted-foreground:   231 19% 58%;      /* muted slate */
+  --muted:              0 0% 13%;         /* #222222 */
+  --muted-foreground:   240 4% 55%;       /* #888890 */
 
-  --accent:             236 40% 16%;      /* periwinkle haze */
-  --accent-foreground:  234 100% 86%;
+  --accent:             0 0% 12%;         /* #1f1f1f */
+  --accent-foreground:  0 0% 98%;
 
-  --destructive:        0 84% 60%;
+  --destructive:        0 84% 60%;        /* #ef4444 */
   --destructive-foreground: 0 0% 98%;
 
-  --input:              232 36% 12%;
-  --ring:               33 93% 54%;
+  --input:              0 0% 10%;         /* #1a1a1a */
+  --ring:               0 0% 55%;         /* #8c8c8c */
 
   /* ── Sidebar ──────────────────────── */
-  --sidebar:            232 50% 6%;
-  --sidebar-foreground: 231 19% 62%;
-  --sidebar-border:     228 24% 14%;
-  --sidebar-primary:    33 93% 54%;
-  --sidebar-primary-foreground: 232 48% 12%;
-  --sidebar-accent:     236 35% 14%;
-  --sidebar-accent-foreground: 40 40% 96%;
-  --sidebar-ring:       33 93% 54%;
+  --sidebar:            0 0% 3%;          /* #080808 */
+  --sidebar-foreground: 240 4% 60%;       /* #999 */
+  --sidebar-border:     240 4% 14%;       /* #242427 */
+  --sidebar-primary:    0 0% 98%;         /* white — active bg */
+  --sidebar-primary-foreground: 0 0% 4%; /* black text on white */
+  --sidebar-accent:     0 0% 11%;         /* #1c1c1c */
+  --sidebar-accent-foreground: 0 0% 98%;
+  --sidebar-ring:       0 0% 55%;
 
-  /* ── Charts ──────────────────────── */
-  --chart-1: 33 93% 58%;
-  --chart-2: 236 66% 62%;
-  --chart-3: 231 19% 55%;
-  --chart-4: 40 30% 70%;
-  --chart-5: 228 24% 35%;
+  /* ── Charts — greyscale ──────────── */
+  --chart-1: 0 0% 80%;    /* #cccccc */
+  --chart-2: 0 0% 60%;    /* #999999 */
+  --chart-3: 0 0% 42%;    /* #6b6b6b */
+  --chart-4: 0 0% 28%;    /* #474747 */
+  --chart-5: 0 0% 16%;    /* #292929 */
 
   /* ── Text tiers ─────────────────── */
-  --text-faint: 231 19% 55%;
-  --text-meta:  229 20% 45%;
+  --text-faint: 240 4% 46%;  /* #71717a */
+  --text-meta:  240 4% 35%;  /* #52525b */
 
   /* ── Borders ─────────────────────── */
-  --primary-border:     rgba(247,148,29,0.4);
-  --secondary-border:   rgba(106,113,154,0.35);
+  --primary-border:     rgba(255,255,255,0.18);
+  --secondary-border:   rgba(63,63,70,0.8);
   --muted-border:       rgba(255,255,255,0.05);
-  --accent-border:      rgba(154,163,255,0.18);
+  --accent-border:      rgba(255,255,255,0.08);
   --destructive-border: rgba(239,68,68,0.35);
 
   /* ── Shadows ─────────────────────── */
-  --shadow-card:        0 1px 3px rgba(0,0,0,0.55), 0 0 0 1px rgba(74,82,122,0.25);
-  --shadow-card-hover:  0 4px 24px rgba(0,0,0,0.45), 0 0 0 1px rgba(247,148,29,0.18);
-  --shadow-popover:     0 8px 32px rgba(0,0,0,0.55), 0 0 0 1px rgba(154,163,255,0.08);
+  --shadow-card:        0 1px 3px rgba(0,0,0,0.85), 0 0 0 1px rgba(39,39,42,0.95);
+  --shadow-card-hover:  0 4px 24px rgba(0,0,0,0.65), 0 0 0 1px rgba(255,255,255,0.08);
+  --shadow-popover:     0 8px 32px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.05);
 }
 
 /* ── Base ────────────────────────────────────────────────────────────────── */
@@ -249,8 +240,8 @@
   }
 
   .dark ::selection {
-    background: rgba(247,148,29,0.28);
-    color: #FDFBF7;
+    background: rgba(255,255,255,0.15);
+    color: #fafafa;
   }
 
   /* ── Global Card ──────────────────────────────────────────────────────── */
@@ -365,16 +356,16 @@
     border-radius: 10px !important;
   }
 
-  /* ── Active sidebar item — Sarvam orange wash ─────────────────────────── */
+  /* ── Active sidebar item — white text, subtle white wash ──────────────── */
   .dark [data-active="true"] {
-    background-color: rgba(247, 148, 29, 0.14) !important;
-    color: #FDFBF7 !important;
+    background-color: rgba(255, 255, 255, 0.08) !important;
+    color: #fafafa !important;
   }
 
   /* ── Highlighted items (dropdowns, menus) ─────────────────────────────── */
   .dark [data-highlighted],
   .dark [data-state="highlighted"] {
-    background-color: rgba(154, 163, 255, 0.1) !important;
+    background-color: rgba(255, 255, 255, 0.06) !important;
   }
 }
 
@@ -556,7 +547,7 @@
   inset: -1px;
   border-radius: inherit;
   padding: 1px;
-  background: linear-gradient(135deg, rgba(247,148,29,0.55), rgba(154,163,255,0.4), rgba(61,71,216,0.45), rgba(247,148,29,0.55));
+  background: linear-gradient(135deg, rgba(99,102,241,0.5), rgba(20,184,166,0.35), rgba(255,153,51,0.4), rgba(99,102,241,0.5));
   background-size: 300% 300%;
   animation: vibe-gradient-shift 6s ease infinite;
   -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);

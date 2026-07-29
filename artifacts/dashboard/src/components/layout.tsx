@@ -513,12 +513,13 @@ function SidebarContent({
             </>
           ) : (
             <>
-              <SnapServeIcon size={24} className="text-foreground shrink-0" />
+              <SnapServeIcon size={22} className="text-foreground shrink-0 self-center" />
               {!collapsed && (
-                <span className="flex flex-col min-w-0 gap-0.5">
+                <span className="flex flex-col min-w-0 gap-0.5 py-0.5">
                   <span
                     className="leading-none text-[14px] text-foreground whitespace-nowrap"
                     style={{ fontFamily: "system-ui, sans-serif", letterSpacing: "-0.02em" }}
+                    aria-label="SnapServe"
                   >
                     <span style={{ fontWeight: 700 }}>Snap</span>
                     <span style={{ fontWeight: 400, opacity: 0.55 }}>Serve</span>
@@ -527,7 +528,7 @@ function SidebarContent({
                 </span>
               )}
               {!collapsed && partnerCtx?.isPartner && (
-                <span className="px-1.5 py-[2px] rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-500 text-[9px] font-semibold uppercase tracking-wider leading-none shrink-0">
+                <span className="px-1.5 py-[2px] rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-500 text-[9px] font-semibold uppercase tracking-wider leading-none shrink-0 self-center">
                   Partner
                 </span>
               )}
@@ -830,19 +831,19 @@ function VoiceathonTopBanner() {
   };
 
   return (
-    <div className="relative z-40 bg-gradient-to-r from-[#F7941D]/20 via-[#3D47D8]/15 to-[#9AA3FF]/15 border-b border-[#F7941D]/30 px-3 py-2 text-xs md:text-sm text-foreground flex items-center justify-between gap-3 backdrop-blur-md shadow-sm shrink-0">
+    <div className="relative z-40 bg-gradient-to-r from-amber-500/20 via-purple-600/20 to-blue-600/20 border-b border-amber-500/30 px-3 py-2 text-xs md:text-sm text-foreground flex items-center justify-between gap-3 backdrop-blur-md shadow-sm shrink-0">
       <div className="flex items-center gap-2 min-w-0 flex-1 flex-wrap">
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#F7941D]/20 text-[#F9A94A] font-semibold text-[11px] uppercase tracking-wider shrink-0 border border-[#F7941D]/30">
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 font-semibold text-[11px] uppercase tracking-wider shrink-0 border border-amber-500/30">
           🎙️ Live Event
         </span>
         <span className="truncate font-medium text-foreground/90">
-          India's biggest Voice-a-thon powered by <strong className="text-[#F9A94A] font-semibold">VoBiz</strong> & organized by <strong className="text-[#9AA3FF] font-semibold">SnapServe</strong> — Please register now!
+          India's biggest Voice-a-thon powered by <strong className="text-amber-400 font-semibold">VoBiz</strong> & organized by <strong className="text-purple-400 font-semibold">SnapServe</strong> — Please register now!
         </span>
       </div>
       <div className="flex items-center gap-2 shrink-0">
         <a
           href="https://luma.com/event/evt-rA5tJIW6SmKBcGQ"
-          className="luma-checkout--button inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-[#F7941D] hover:bg-[#F9A94A] text-[#14183A] font-semibold text-xs transition-colors shadow-sm cursor-pointer"
+          className="luma-checkout--button inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-amber-500 hover:bg-amber-400 text-black font-semibold text-xs transition-colors shadow-sm cursor-pointer"
           data-luma-action="checkout"
           data-luma-event-id="evt-rA5tJIW6SmKBcGQ"
         >
@@ -996,7 +997,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             ) : (
               <>
                 <SnapServeIcon size={20} className="text-foreground shrink-0" />
-                <span className="flex flex-col min-w-0 leading-none">
+                <span className="flex flex-col min-w-0 leading-none gap-0.5">
                   <span className="text-[13px] text-foreground truncate" style={{ fontFamily: "system-ui, sans-serif", letterSpacing: "-0.02em" }}>
                     <span style={{ fontWeight: 700 }}>Snap</span>
                     <span style={{ fontWeight: 400, opacity: 0.55 }}>Serve</span>

@@ -12,8 +12,8 @@ const DIFFERENTIATORS = [
     tag: "01 — MEMORY",
     headline: "Your agent never\nforgets a caller.",
     body: "Every call extracts structured facts, episode summaries, and verbatim quotes into a 3-layer memory graph. The next call starts with full context — no repeated intros, no forgotten promises.",
-    accent: "#F7941D",
-    glow: "rgba(247,148,29,0.15)",
+    accent: "#a855f7",
+    glow: "rgba(168,85,247,0.15)",
     detail: ["Facts extracted per call", "Episode summaries archived", "Verbatim sentences preserved"],
     icon: "M",
   },
@@ -21,8 +21,8 @@ const DIFFERENTIATORS = [
     tag: "02 — RESILIENCE",
     headline: "Call drops mid-\nconversation? We redial.",
     body: "Network blip, bad signal, accidental hang-up — SnapServe detects the drop in under 200 ms and automatically redials, resuming with full conversation context. Zero leads lost to bad connections.",
-    accent: "#3D47D8",
-    glow: "rgba(61,71,216,0.15)",
+    accent: "#06b6d4",
+    glow: "rgba(6,182,212,0.15)",
     detail: ["<200ms drop detection", "Auto-redial with context", "Seamless resume for caller"],
     icon: "R",
   },
@@ -131,8 +131,8 @@ export default function LandingPage() {
         }
 
         /* Gradient text */
-        .grad-orange { background: linear-gradient(135deg, #F7941D, #F9A94A); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
-        .grad-cyan   { background: linear-gradient(135deg, #3D47D8, #9AA3FF); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+        .grad-purple { background: linear-gradient(135deg, #a855f7, #c084fc); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+        .grad-cyan   { background: linear-gradient(135deg, #06b6d4, #67e8f9); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
         .grad-white  { background: linear-gradient(180deg, #fff 60%, rgba(255,255,255,0.55)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
 
         /* Ticker */
@@ -144,7 +144,7 @@ export default function LandingPage() {
         .orb-anim { animation: orb-pulse 6s ease-in-out infinite; }
 
         /* Btn hover */
-        .btn-primary:hover { opacity:.9; box-shadow: 0 0 40px rgba(247,148,29,.45); }
+        .btn-primary:hover { opacity:.9; box-shadow: 0 0 40px rgba(168,85,247,.45); }
         .btn-ghost:hover   { background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.3); }
         .nav-link:hover    { color:#fff; }
 
@@ -159,7 +159,7 @@ export default function LandingPage() {
       <nav style={{ position: "fixed", inset: "0 0 auto", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 32px", height: 58, background: "rgba(0,0,0,0.8)", backdropFilter: "blur(20px)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
         <Link href="/" style={{ display: "flex", alignItems: "center", gap: 9, textDecoration: "none" }}>
           <svg width="26" height="26" viewBox="0 0 26 26" fill="none">
-            <rect width="26" height="26" rx="7" fill="#F7941D"/>
+            <rect width="26" height="26" rx="7" fill="#a855f7"/>
             <rect x="4" y="7" width="3" height="12" rx="1.5" fill="white" opacity=".9"/>
             <rect x="9" y="4" width="3" height="18" rx="1.5" fill="white"/>
             <rect x="14" y="9" width="3" height="8" rx="1.5" fill="white" opacity=".8"/>
@@ -176,7 +176,7 @@ export default function LandingPage() {
 
         <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
           <Link href="/sign-in" className="nav-link" style={{ fontSize: 13.5, color: "#555", textDecoration: "none", transition: "color .15s", fontWeight: 500 }}>Sign in</Link>
-          <Link href="/sign-up" className="btn-primary" style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#F7941D", color: "#fff", fontSize: 13.5, fontWeight: 600, padding: "8px 18px", borderRadius: 8, textDecoration: "none", transition: "opacity .2s, box-shadow .2s", letterSpacing: "-0.1px" }}>
+          <Link href="/sign-up" className="btn-primary" style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#a855f7", color: "#fff", fontSize: 13.5, fontWeight: 600, padding: "8px 18px", borderRadius: 8, textDecoration: "none", transition: "opacity .2s, box-shadow .2s", letterSpacing: "-0.1px" }}>
             Get started →
           </Link>
         </div>
@@ -189,20 +189,20 @@ export default function LandingPage() {
         <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse 80% 60% at 50% 50%, rgba(0,0,0,0) 0%, #000 100%)", pointerEvents: "none" }} />
 
         {/* Orbs */}
-        <div className="hero-orb orb-anim" style={{ position: "absolute", top: "15%", left: "50%", transform: "translateX(-50%)", width: 700, height: 700, borderRadius: "50%", background: "radial-gradient(circle, rgba(247,148,29,0.18) 0%, rgba(247,148,29,0.04) 50%, transparent 70%)", pointerEvents: "none", zIndex: 0 }} />
-        <div style={{ position: "absolute", top: "30%", left: "20%", width: 400, height: 400, borderRadius: "50%", background: "radial-gradient(circle, rgba(61,71,216,0.06) 0%, transparent 70%)", pointerEvents: "none", zIndex: 0 }} />
+        <div className="hero-orb orb-anim" style={{ position: "absolute", top: "15%", left: "50%", transform: "translateX(-50%)", width: 700, height: 700, borderRadius: "50%", background: "radial-gradient(circle, rgba(168,85,247,0.18) 0%, rgba(168,85,247,0.04) 50%, transparent 70%)", pointerEvents: "none", zIndex: 0 }} />
+        <div style={{ position: "absolute", top: "30%", left: "20%", width: 400, height: 400, borderRadius: "50%", background: "radial-gradient(circle, rgba(6,182,212,0.06) 0%, transparent 70%)", pointerEvents: "none", zIndex: 0 }} />
 
         <div style={{ position: "relative", zIndex: 1, maxWidth: 900 }}>
           {/* Badge */}
-          <div className="hero-badge" style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "rgba(247,148,29,0.12)", border: "1px solid rgba(247,148,29,0.35)", borderRadius: 100, padding: "6px 16px", marginBottom: 36 }}>
-            <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#F7941D", display: "inline-block", boxShadow: "0 0 8px #F7941D" }} />
-            <span style={{ fontSize: 12, color: "#F9A94A", fontWeight: 600, letterSpacing: "0.06em" }}>POWERED BY SARVAM · INDIC VOICE AI</span>
+          <div className="hero-badge" style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "rgba(20,184,166,0.1)", border: "1px solid rgba(20,184,166,0.28)", borderRadius: 100, padding: "6px 16px", marginBottom: 36 }}>
+            <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#14b8a6", display: "inline-block", boxShadow: "0 0 8px #14b8a6" }} />
+            <span style={{ fontSize: 12, color: "#5eead4", fontWeight: 600, letterSpacing: "0.06em" }}>POWERED BY SARVAM · INDIC VOICE AI</span>
           </div>
 
           {/* Headline */}
           <h1 className="hero-h1" style={{ fontWeight: 800, lineHeight: 1.03, letterSpacing: "-4px", marginBottom: 28, overflow: "hidden" }}>
             <span className="grad-white" style={{ display: "block", fontSize: "clamp(3.5rem,8vw,7rem)", fontFamily: "Inter,sans-serif" }}>The Voice AI</span>
-            <span className="grad-orange" style={{ display: "block", fontSize: "clamp(3.5rem,8vw,7rem)", fontFamily: "Inter,sans-serif" }}>Platform That</span>
+            <span className="grad-purple" style={{ display: "block", fontSize: "clamp(3.5rem,8vw,7rem)", fontFamily: "Inter,sans-serif" }}>Platform That</span>
             <span className="grad-white" style={{ display: "block", fontSize: "clamp(3.5rem,8vw,7rem)", fontFamily: "Inter,sans-serif" }}>Remembers</span>
           </h1>
 
@@ -212,7 +212,7 @@ export default function LandingPage() {
 
           {/* CTAs */}
           <div className="hero-ctas" style={{ display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap", marginBottom: 20 }}>
-            <Link href="/sign-up" className="btn-primary" style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "#F7941D", color: "#fff", fontSize: 15, fontWeight: 700, padding: "14px 28px", borderRadius: 10, textDecoration: "none", transition: "opacity .2s, box-shadow .2s", letterSpacing: "-0.2px" }}>
+            <Link href="/sign-up" className="btn-primary" style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "#a855f7", color: "#fff", fontSize: 15, fontWeight: 700, padding: "14px 28px", borderRadius: 10, textDecoration: "none", transition: "opacity .2s, box-shadow .2s", letterSpacing: "-0.2px" }}>
               Start building free
             </Link>
             <a href="#features" className="btn-ghost" style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "rgba(255,255,255,0.04)", color: "#fff", fontSize: 15, fontWeight: 500, padding: "14px 28px", borderRadius: 10, textDecoration: "none", border: "1px solid rgba(255,255,255,0.1)", transition: "background .2s, border-color .2s" }}>
@@ -232,7 +232,7 @@ export default function LandingPage() {
         <div className="ticker-inner">
           {Array.from({ length: 2 }, (_, ri) =>
             ["Caller Memory", "Auto-Redial", "Voice Prints", "Gender Detection", "Campaign Engine", "Native Scheduling", "BYOP", "Live Command Center", "Indian Telephony", "Bolna doesn't have this"].map((item, i) => (
-              <span key={`${ri}-${i}`} style={{ fontSize: 11, color: item === "Bolna doesn't have this" ? "#F7941D" : "#2a2a2a", fontWeight: item === "Bolna doesn't have this" ? 700 : 500, letterSpacing: "0.12em", textTransform: "uppercase", padding: "0 36px", whiteSpace: "nowrap" }}>
+              <span key={`${ri}-${i}`} style={{ fontSize: 11, color: item === "Bolna doesn't have this" ? "#a855f7" : "#2a2a2a", fontWeight: item === "Bolna doesn't have this" ? 700 : 500, letterSpacing: "0.12em", textTransform: "uppercase", padding: "0 36px", whiteSpace: "nowrap" }}>
                 {item} {item !== "Bolna doesn't have this" && <span style={{ color: "#1a1a1a", marginLeft: 36 }}>·</span>}
               </span>
             ))
@@ -243,7 +243,7 @@ export default function LandingPage() {
       {/* ── 5 DIFFERENTIATORS ───────────────────────────────────────────── */}
       <section id="features" style={{ padding: "120px 24px", maxWidth: 1100, margin: "0 auto" }}>
         <div className="reveal" style={{ textAlign: "center", marginBottom: 80 }}>
-          <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "#F7941D", marginBottom: 16 }}>Exclusive features</p>
+          <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "#a855f7", marginBottom: 16 }}>Exclusive features</p>
           <h2 style={{ fontWeight: 800, fontSize: "clamp(2rem,4vw,3.2rem)", letterSpacing: "-2px", lineHeight: 1.1, marginBottom: 16 }}>
             5 things Bolna doesn't have
           </h2>
@@ -286,7 +286,7 @@ export default function LandingPage() {
       <section style={{ background: "#050505", borderTop: "1px solid rgba(255,255,255,0.05)", borderBottom: "1px solid rgba(255,255,255,0.05)", padding: "100px 24px" }}>
         <div style={{ maxWidth: 900, margin: "0 auto" }}>
           <div className="reveal" style={{ textAlign: "center", marginBottom: 64 }}>
-            <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "#F7941D", marginBottom: 16 }}>Memory architecture</p>
+            <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "#a855f7", marginBottom: 16 }}>Memory architecture</p>
             <h2 style={{ fontWeight: 800, fontSize: "clamp(2rem,4vw,3rem)", letterSpacing: "-2px", lineHeight: 1.1, marginBottom: 14 }}>
               3 layers. Every call.<br />Zero configuration.
             </h2>
@@ -297,25 +297,25 @@ export default function LandingPage() {
           <div className="reveal" style={{ display: "flex", alignItems: "stretch", gap: 0, overflowX: "auto", paddingBottom: 8 }}>
             {[
               { label: "Caller Rings",      sub: "phone or webcall",           color: "#6b7280", icon: "C" },
-              { label: "Voice Analysis",    sub: "gender · voice print",        color: "#F7941D", icon: "V" },
-              { label: "Memory Query",      sub: "facts · episodes · sentences", color: "#F7941D", icon: "M", accent: true },
-              { label: "LLM Response",      sub: "context-aware reply",          color: "#3D47D8", icon: "L" },
+              { label: "Voice Analysis",    sub: "gender · voice print",        color: "#a855f7", icon: "V" },
+              { label: "Memory Query",      sub: "facts · episodes · sentences", color: "#a855f7", icon: "M", accent: true },
+              { label: "LLM Response",      sub: "context-aware reply",          color: "#06b6d4", icon: "L" },
               { label: "Action Taken",      sub: "book · transfer · callback",   color: "#22c55e", icon: "OK" },
             ].map((n, i, arr) => (
               <div key={n.label} style={{ display: "flex", alignItems: "center", flex: i === 2 ? "0 0 auto" : "1 1 0" }}>
                 <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 12, minWidth: 120 }}>
-                  <div style={{ width: 72, height: 72, borderRadius: 18, background: n.accent ? "rgba(247,148,29,0.12)" : "rgba(255,255,255,0.03)", border: n.accent ? "1px solid rgba(247,148,29,0.35)" : "1px solid rgba(255,255,255,0.07)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26, boxShadow: n.accent ? "0 0 30px rgba(247,148,29,0.15)" : "none" }}>
+                  <div style={{ width: 72, height: 72, borderRadius: 18, background: n.accent ? "rgba(168,85,247,0.12)" : "rgba(255,255,255,0.03)", border: n.accent ? "1px solid rgba(168,85,247,0.35)" : "1px solid rgba(255,255,255,0.07)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26, boxShadow: n.accent ? "0 0 30px rgba(168,85,247,0.15)" : "none" }}>
                     {n.icon}
                   </div>
                   <div style={{ textAlign: "center" }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: n.accent ? "#F7941D" : "#aaa" }}>{n.label}</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: n.accent ? "#a855f7" : "#aaa" }}>{n.label}</div>
                     <div style={{ fontSize: 10, color: "#333", marginTop: 3 }}>{n.sub}</div>
                   </div>
                 </div>
                 {i < arr.length - 1 && (
                   <div style={{ display: "flex", alignItems: "center", padding: "0 4px", flexShrink: 0 }}>
-                    <div style={{ width: 32, height: 1, background: "rgba(247,148,29,0.25)" }} />
-                    <div style={{ width: 0, height: 0, borderTop: "4px solid transparent", borderBottom: "4px solid transparent", borderLeft: "5px solid rgba(247,148,29,0.4)" }} />
+                    <div style={{ width: 32, height: 1, background: "rgba(168,85,247,0.25)" }} />
+                    <div style={{ width: 0, height: 0, borderTop: "4px solid transparent", borderBottom: "4px solid transparent", borderLeft: "5px solid rgba(168,85,247,0.4)" }} />
                   </div>
                 )}
               </div>
@@ -325,8 +325,8 @@ export default function LandingPage() {
           {/* 3-layer cards */}
           <div className="reveal" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, marginTop: 48 }}>
             {[
-              { title: "Facts Layer",    desc: "Structured facts extracted per call — budget, intent, family info, product interest", icon: "F", color: "#F7941D" },
-              { title: "Episode Layer",  desc: "AI-written summary of each call stored as a searchable episode in the memory graph", icon: "E", color: "#3D47D8" },
+              { title: "Facts Layer",    desc: "Structured facts extracted per call — budget, intent, family info, product interest", icon: "F", color: "#a855f7" },
+              { title: "Episode Layer",  desc: "AI-written summary of each call stored as a searchable episode in the memory graph", icon: "E", color: "#06b6d4" },
               { title: "Sentence Layer", desc: "Verbatim notable quotes preserved word-for-word — what they actually said", icon: "Q", color: "#22c55e" },
             ].map(c => (
               <div key={c.title} style={{ background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 16, padding: "24px 22px", transition: "border-color .2s" }}
@@ -346,7 +346,7 @@ export default function LandingPage() {
         <div style={{ maxWidth: 800, margin: "0 auto", display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 0 }}>
           {STATS.map((s, i) => (
             <div key={s.label} style={{ textAlign: "center", padding: "32px 16px", borderRight: i < STATS.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none" }}>
-              <div style={{ fontWeight: 800, fontSize: "clamp(2rem,4vw,3rem)", letterSpacing: "-2px", color: "#F7941D", marginBottom: 8, fontVariantNumeric: "tabular-nums" }}>
+              <div style={{ fontWeight: 800, fontSize: "clamp(2rem,4vw,3rem)", letterSpacing: "-2px", color: "#a855f7", marginBottom: 8, fontVariantNumeric: "tabular-nums" }}>
                 {s.prefix ?? ""}<span className="stat-num">0</span>{s.suffix}
               </div>
               <div style={{ fontSize: 11, color: "#333", letterSpacing: "0.04em", textTransform: "uppercase", fontWeight: 600 }}>{s.label}</div>
@@ -359,7 +359,7 @@ export default function LandingPage() {
       <section style={{ padding: "80px 24px", background: "#050505", borderTop: "1px solid rgba(255,255,255,0.05)", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
         <div style={{ maxWidth: 1000, margin: "0 auto", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 72, alignItems: "center" }}>
           <div className="reveal">
-            <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "#3D47D8", marginBottom: 18 }}>Auto-redial</p>
+            <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "#06b6d4", marginBottom: 18 }}>Auto-redial</p>
             <h2 style={{ fontWeight: 800, fontSize: "clamp(1.8rem,3vw,2.6rem)", letterSpacing: "-1.5px", lineHeight: 1.15, marginBottom: 18 }}>
               Lost connection.<br />Zero lost leads.
             </h2>
@@ -369,8 +369,8 @@ export default function LandingPage() {
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               {["Drop detected in <200ms", "Redial with full context preserved", "Caller resumes — no re-intro needed"].map(t => (
                 <div key={t} style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <div style={{ width: 22, height: 22, borderRadius: "50%", background: "rgba(61,71,216,0.1)", border: "1px solid rgba(61,71,216,0.3)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5.5l2 2 4-4" stroke="#3D47D8" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  <div style={{ width: 22, height: 22, borderRadius: "50%", background: "rgba(6,182,212,0.1)", border: "1px solid rgba(6,182,212,0.3)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5.5l2 2 4-4" stroke="#06b6d4" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
                   </div>
                   <span style={{ fontSize: "0.85rem", color: "#555" }}>{t}</span>
                 </div>
@@ -407,7 +407,7 @@ export default function LandingPage() {
       <section id="compare" style={{ padding: "100px 24px" }}>
         <div style={{ maxWidth: 860, margin: "0 auto" }}>
           <div className="reveal" style={{ textAlign: "center", marginBottom: 60 }}>
-            <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "#F7941D", marginBottom: 16 }}>vs Bolna AI</p>
+            <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "#a855f7", marginBottom: 16 }}>vs Bolna AI</p>
             <h2 style={{ fontWeight: 800, fontSize: "clamp(2rem,4vw,3rem)", letterSpacing: "-2px", lineHeight: 1.1, marginBottom: 12 }}>Feature by feature</h2>
             <p style={{ color: "#444", fontSize: "0.95rem" }}>Everything Bolna is missing that SnapServe ships today.</p>
           </div>
@@ -417,7 +417,7 @@ export default function LandingPage() {
             <div style={{ display: "grid", gridTemplateColumns: "1fr 160px 160px", background: "rgba(255,255,255,0.03)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
               <div style={{ padding: "16px 24px", fontSize: 11, color: "#333", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase" }}>Feature</div>
               <div style={{ padding: "16px 24px", textAlign: "center", fontSize: 13, color: "#444", fontWeight: 600 }}>Bolna AI</div>
-              <div style={{ padding: "16px 24px", textAlign: "center", fontSize: 13, fontWeight: 700, background: "rgba(247,148,29,0.07)", borderLeft: "1px solid rgba(247,148,29,0.12)", color: "#F7941D" }}>SnapServe</div>
+              <div style={{ padding: "16px 24px", textAlign: "center", fontSize: 13, fontWeight: 700, background: "rgba(168,85,247,0.07)", borderLeft: "1px solid rgba(168,85,247,0.12)", color: "#a855f7" }}>SnapServe</div>
             </div>
 
             {COMPARE.map((row, i) => (
@@ -431,9 +431,9 @@ export default function LandingPage() {
                     : <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 3l8 8M11 3l-8 8" stroke="#222" strokeWidth="1.5" strokeLinecap="round"/></svg>
                   }
                 </div>
-                <div style={{ padding: "13px 24px", display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(247,148,29,0.03)", borderLeft: "1px solid rgba(247,148,29,0.07)" }}>
-                  <div style={{ width: 22, height: 22, borderRadius: "50%", background: "rgba(247,148,29,0.12)", border: "1px solid rgba(247,148,29,0.35)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5.5l2 2 4-4" stroke="#F7941D" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                <div style={{ padding: "13px 24px", display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(168,85,247,0.03)", borderLeft: "1px solid rgba(168,85,247,0.07)" }}>
+                  <div style={{ width: 22, height: 22, borderRadius: "50%", background: "rgba(168,85,247,0.12)", border: "1px solid rgba(168,85,247,0.35)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5.5l2 2 4-4" stroke="#a855f7" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
                   </div>
                 </div>
               </div>
@@ -446,7 +446,7 @@ export default function LandingPage() {
       <section id="pricing" style={{ padding: "80px 24px", background: "#050505", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
         <div style={{ maxWidth: 960, margin: "0 auto" }}>
           <div className="reveal" style={{ marginBottom: 56 }}>
-            <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "#F7941D", marginBottom: 16 }}>Pricing</p>
+            <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "#a855f7", marginBottom: 16 }}>Pricing</p>
             <h2 style={{ fontWeight: 800, fontSize: "clamp(2rem,4vw,3rem)", letterSpacing: "-2px", lineHeight: 1.1, marginBottom: 10 }}>Pay per minute.<br/>No surprises.</h2>
             <p style={{ color: "#444", fontSize: "0.95rem" }}>Default stack is Sarvam STT + TTS. Bring your own keys for other providers when you need them.</p>
           </div>
@@ -457,12 +457,12 @@ export default function LandingPage() {
               { tier: "Production", price: "₹5", unit: "/min", hi: true,  features: ["Same flat ₹5/min", "Card wallet top-ups", "500 concurrent calls", "Priority support", "Smart SIP escalation"] },
               { tier: "Enterprise", price: "Custom", unit: "",    hi: false, features: ["Dedicated infrastructure", "Custom model fine-tuning", "Unlimited concurrency", "24/7 Slack support", "SLA guarantee"] },
             ].map(plan => (
-              <div key={plan.tier} style={{ position: "relative", background: plan.hi ? "rgba(247,148,29,0.07)" : "rgba(255,255,255,0.02)", border: plan.hi ? "1px solid rgba(247,148,29,0.3)" : "1px solid rgba(255,255,255,0.07)", borderRadius: 18, padding: 28, display: "flex", flexDirection: "column", gap: 22, transition: "border-color .2s" }}
+              <div key={plan.tier} style={{ position: "relative", background: plan.hi ? "rgba(168,85,247,0.07)" : "rgba(255,255,255,0.02)", border: plan.hi ? "1px solid rgba(168,85,247,0.3)" : "1px solid rgba(255,255,255,0.07)", borderRadius: 18, padding: 28, display: "flex", flexDirection: "column", gap: 22, transition: "border-color .2s" }}
                 onMouseEnter={e => { if (!plan.hi) (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.14)"; }}
                 onMouseLeave={e => { if (!plan.hi) (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.07)"; }}>
-                {plan.hi && <div style={{ position: "absolute", top: -1, left: 24, right: 24, height: 1, background: "linear-gradient(90deg, transparent, #F7941D, transparent)" }} />}
+                {plan.hi && <div style={{ position: "absolute", top: -1, left: 24, right: 24, height: 1, background: "linear-gradient(90deg, transparent, #a855f7, transparent)" }} />}
                 <div>
-                  <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: plan.hi ? "#F7941D" : "#333", marginBottom: 10 }}>{plan.tier}</div>
+                  <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: plan.hi ? "#a855f7" : "#333", marginBottom: 10 }}>{plan.tier}</div>
                   <div style={{ fontWeight: 800, fontSize: "2.2rem", letterSpacing: "-1.5px", lineHeight: 1 }}>
                     {plan.price}<span style={{ fontSize: "0.9rem", fontWeight: 400, color: "#333", marginLeft: 4 }}>{plan.unit}</span>
                   </div>
@@ -470,14 +470,14 @@ export default function LandingPage() {
                 <ul style={{ listStyle: "none", display: "flex", flexDirection: "column", gap: 10, flex: 1 }}>
                   {plan.features.map(f => (
                     <li key={f} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13, color: "#444" }}>
-                      <span style={{ width: 4, height: 4, borderRadius: "50%", background: plan.hi ? "#F7941D" : "#333", flexShrink: 0 }} />
+                      <span style={{ width: 4, height: 4, borderRadius: "50%", background: plan.hi ? "#a855f7" : "#333", flexShrink: 0 }} />
                       {f}
                     </li>
                   ))}
                 </ul>
                 {plan.tier === "Enterprise"
                   ? <a href="mailto:sales@snapserve.ai" className="btn-ghost" style={{ display: "block", textAlign: "center", padding: "11px 0", borderRadius: 9, fontSize: 13.5, fontWeight: 600, border: "1px solid rgba(255,255,255,0.1)", color: "#fff", textDecoration: "none", transition: "background .2s, border-color .2s" }}>Contact sales</a>
-                  : <Link href="/sign-up" style={{ display: "block", textAlign: "center", padding: "11px 0", borderRadius: 9, fontSize: 13.5, fontWeight: 700, background: plan.hi ? "#F7941D" : "rgba(255,255,255,0.05)", color: "#fff", textDecoration: "none", border: plan.hi ? "none" : "1px solid rgba(255,255,255,0.08)", transition: "opacity .2s" }}
+                  : <Link href="/sign-up" style={{ display: "block", textAlign: "center", padding: "11px 0", borderRadius: 9, fontSize: 13.5, fontWeight: 700, background: plan.hi ? "#a855f7" : "rgba(255,255,255,0.05)", color: "#fff", textDecoration: "none", border: plan.hi ? "none" : "1px solid rgba(255,255,255,0.08)", transition: "opacity .2s" }}
                     onMouseEnter={e => { e.currentTarget.style.opacity = "0.85"; }}
                     onMouseLeave={e => { e.currentTarget.style.opacity = "1"; }}>
                     Start free
@@ -492,15 +492,15 @@ export default function LandingPage() {
       {/* ── CTA ─────────────────────────────────────────────────────────── */}
       <section style={{ padding: "100px 24px" }}>
         <div style={{ maxWidth: 760, margin: "0 auto", textAlign: "center" }}>
-          <div className="reveal" style={{ position: "relative", background: "rgba(247,148,29,0.05)", border: "1px solid rgba(247,148,29,0.18)", borderRadius: 24, padding: "72px 48px", overflow: "hidden" }}>
-            <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", width: 500, height: 300, borderRadius: "50%", background: "radial-gradient(ellipse, rgba(247,148,29,0.12) 0%, transparent 70%)", pointerEvents: "none" }} />
+          <div className="reveal" style={{ position: "relative", background: "rgba(168,85,247,0.05)", border: "1px solid rgba(168,85,247,0.18)", borderRadius: 24, padding: "72px 48px", overflow: "hidden" }}>
+            <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", width: 500, height: 300, borderRadius: "50%", background: "radial-gradient(ellipse, rgba(168,85,247,0.12) 0%, transparent 70%)", pointerEvents: "none" }} />
             <h2 style={{ fontWeight: 800, fontSize: "clamp(1.8rem,4vw,3rem)", letterSpacing: "-2px", lineHeight: 1.1, marginBottom: 16, position: "relative" }}>
               Your callers deserve an<br />agent that remembers them.
             </h2>
             <p style={{ color: "#444", fontSize: "0.95rem", marginBottom: 36, position: "relative" }}>
               ₹500 free credit. Pay by card. Takes 2 minutes.
             </p>
-            <Link href="/sign-up" className="btn-primary" style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "#F7941D", color: "#fff", fontSize: 15, fontWeight: 700, padding: "15px 36px", borderRadius: 10, textDecoration: "none", transition: "opacity .2s, box-shadow .2s", letterSpacing: "-0.2px", position: "relative", boxShadow: "0 0 40px rgba(247,148,29,0.3)" }}>
+            <Link href="/sign-up" className="btn-primary" style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "#a855f7", color: "#fff", fontSize: 15, fontWeight: 700, padding: "15px 36px", borderRadius: 10, textDecoration: "none", transition: "opacity .2s, box-shadow .2s", letterSpacing: "-0.2px", position: "relative", boxShadow: "0 0 40px rgba(168,85,247,0.3)" }}>
               Start building free →
             </Link>
           </div>
@@ -514,7 +514,7 @@ export default function LandingPage() {
             <div style={{ maxWidth: 220 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
                 <svg width="22" height="22" viewBox="0 0 26 26" fill="none">
-                  <rect width="26" height="26" rx="7" fill="#F7941D"/>
+                  <rect width="26" height="26" rx="7" fill="#a855f7"/>
                   <rect x="4" y="7" width="3" height="12" rx="1.5" fill="white" opacity=".9"/>
                   <rect x="9" y="4" width="3" height="18" rx="1.5" fill="white"/>
                   <rect x="14" y="9" width="3" height="8" rx="1.5" fill="white" opacity=".8"/>

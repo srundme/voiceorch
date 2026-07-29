@@ -1,4 +1,4 @@
-# Redeploy trigger: Sarvam co-brand palette + sidebar lockup (dashboard).
+# Redeploy trigger: restore SnapServe mark + original zinc theme (no Sarvam palette).
 FROM node:24-slim AS builder
 WORKDIR /workspace
 
