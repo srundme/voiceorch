@@ -641,7 +641,8 @@ function SidebarContent({
 
       {/* Footer — docs · wallet chip · status · privacy/terms · user */}
       <div className="px-2 shrink-0 border-t border-sidebar-border">
-        {/* Partner white-label branding (clients of a partner) */}
+        {/* Partner white-label branding (clients of a partner).
+            Intentionally NOT “Powered by Sarvam” — partner attribution wins. */}
         {partnerCtx?.branding && (
           <div className="pt-1.5 flex items-center gap-2 px-2.5">
             {partnerCtx.branding.logoUrl && (

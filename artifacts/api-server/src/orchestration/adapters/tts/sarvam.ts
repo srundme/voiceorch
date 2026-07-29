@@ -64,12 +64,21 @@ const V2_SPEAKERS = new Set([
   "anushka", "abhilash", "manisha", "vidya", "arya", "karun", "hitesh",
 ]);
 
+/** Cartesia-style UUIDs — reject so a pasted Cartesia id never hits Sarvam. */
+function looksLikeUuid(s: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
+}
+
 function resolveSpeaker(voice: string | null, model: string): string {
   const fallback = DEFAULT_SPEAKER[model] ?? "ritu";
-  if (!voice || voice.includes("-")) return fallback;
-  if (model === "bulbul:v2") return V2_SPEAKERS.has(voice) ? voice : fallback;
-  if (V2_SPEAKERS.has(voice)) return fallback;
-  return voice;
+  if (!voice) return fallback;
+  const trimmed = voice.trim();
+  if (!trimmed || looksLikeUuid(trimmed)) return fallback;
+  if (model === "bulbul:v2") return V2_SPEAKERS.has(trimmed) ? trimmed : fallback;
+  // v3: reject known v2-only names; accept catalog speakers AND Creative Studio
+  // cloned speaker ids (hyphenated custom ids are allowed — only UUIDs are rejected).
+  if (V2_SPEAKERS.has(trimmed)) return fallback;
+  return trimmed;
 }
 
 function apiModel(model: string): "bulbul:v2" | "bulbul:v3" {
@@ -116,6 +125,8 @@ export class SarvamTTS implements TTSAdapter {
   private warmConnecting: Promise<WebSocket> | null = null;
   private warmPingTimer: ReturnType<typeof setInterval> | null = null;
   private closed = false;
+  /** True while an utterance owns the warm/live WS — parallel prefetch must not steal it. */
+  private wsInUse = false;
 
   constructor(
     apiKey: string,
@@ -396,6 +407,10 @@ export class SarvamTTS implements TTSAdapter {
   /**
    * Streaming synthesis — WebSocket first (with backoff), HTTP stream fallback.
    * Yields raw PCM s16le @ 16 kHz chunks.
+   *
+   * Parallel sentence prefetch: if the warm WS is already synthesizing sentence N,
+   * sentence N+1 uses HTTP stream instead of stealing the socket (calls 4852/4853
+   * firstByteMs spikes up to ~1s when two utterances contended for one WS).
    */
   async synthesizeStream(
     text: string,
@@ -406,31 +421,43 @@ export class SarvamTTS implements TTSAdapter {
     if (signal?.aborted) throw abortError();
     if (this.closed) throw new Error("SarvamTTS: closed");
 
-    let lastErr: unknown;
-    for (let attempt = 0; attempt < WS_RETRY_MAX; attempt++) {
-      if (signal?.aborted) throw abortError();
-      try {
-        await this.synthesizeViaWs(text, onChunk, signal);
-        onDone(text.length);
-        return;
-      } catch (err) {
-        if (isAbort(err)) throw err;
-        lastErr = err;
-        if (err instanceof SarvamWsFatalError) {
-          logger.warn({ err }, "SarvamTTS WS fatal (auth/quota) — not retrying WS");
-          break;
-        }
-        if (attempt + 1 < WS_RETRY_MAX) {
-          const delay = retryDelayMs(attempt);
-          logger.warn({ err, attempt, delay }, "SarvamTTS WS failed — reconnect backoff");
-          await sleep(delay);
-        }
-      }
+    if (this.wsInUse) {
+      logger.info("SarvamTTS WS busy — parallel synth via HTTP stream");
+      await this.synthesizeViaHttpStream(text, onChunk, signal);
+      onDone(text.length);
+      return;
     }
 
-    logger.warn({ err: lastErr }, "SarvamTTS WS exhausted — falling back to HTTP stream");
-    await this.synthesizeViaHttpStream(text, onChunk, signal);
-    onDone(text.length);
+    this.wsInUse = true;
+    try {
+      let lastErr: unknown;
+      for (let attempt = 0; attempt < WS_RETRY_MAX; attempt++) {
+        if (signal?.aborted) throw abortError();
+        try {
+          await this.synthesizeViaWs(text, onChunk, signal);
+          onDone(text.length);
+          return;
+        } catch (err) {
+          if (isAbort(err)) throw err;
+          lastErr = err;
+          if (err instanceof SarvamWsFatalError) {
+            logger.warn({ err }, "SarvamTTS WS fatal (auth/quota) — not retrying WS");
+            break;
+          }
+          if (attempt + 1 < WS_RETRY_MAX) {
+            const delay = retryDelayMs(attempt);
+            logger.warn({ err, attempt, delay }, "SarvamTTS WS failed — reconnect backoff");
+            await sleep(delay);
+          }
+        }
+      }
+
+      logger.warn({ err: lastErr }, "SarvamTTS WS exhausted — falling back to HTTP stream");
+      await this.synthesizeViaHttpStream(text, onChunk, signal);
+      onDone(text.length);
+    } finally {
+      this.wsInUse = false;
+    }
   }
 
   private async synthesizeViaWs(

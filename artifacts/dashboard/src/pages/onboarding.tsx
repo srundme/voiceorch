@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { BrandMark } from "@/components/logo";
+import { SnapServeSarvamLockup } from "@/components/logo";
 import { useLocation } from "wouter";
 import { useCompleteOnboarding, useGetOnboardingStatus, getGetOnboardingStatusQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -455,7 +455,7 @@ export default function OnboardingPage() {
         <>
           <ProgressBar current={stepNum - 1} total={totalSteps} />
           <header className="flex items-center justify-between px-6 pt-6 pb-2 max-w-6xl mx-auto w-full">
-            <BrandMark iconSize={22} wordmarkHeight={16} gapClass="gap-2" />
+            <SnapServeSarvamLockup height={18} on="light" />
             <StepCounter current={stepNum} total={totalSteps} />
           </header>
         </>

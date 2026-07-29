@@ -32,6 +32,7 @@ function shell(body: string): string {
     '<p style="margin:0;font-size:12px;color:#9ca3af;line-height:1.7">' +
     "You received this from SnapServe &nbsp;&middot;&nbsp;" +
     '<a href="https://app.snapserve.ai" style="color:#6b7280;text-decoration:none">app.snapserve.ai</a><br>' +
+    "SnapServe &middot; Powered by Sarvam<br>" +
     "&copy; " + year + " SnapServe. All rights reserved." +
     "</p></div>" +
     "</td></tr>" +
@@ -156,7 +157,7 @@ export function onboardingDay1Email(name: string): string {
     '<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;padding:20px 24px;margin:20px 0">' +
     '<p style="margin:0 0 10px;font-size:14px;font-weight:600;color:#09090b">Creating an agent takes about 3 minutes</p>' +
     '<p style="margin:0 0 6px;font-size:13px;color:#6b7280">- Pick a name and write a short system prompt</p>' +
-    '<p style="margin:0 0 6px;font-size:13px;color:#6b7280">- Choose your ASR / LLM / TTS providers (or use SnapServe managed defaults)</p>' +
+    '<p style="margin:0 0 6px;font-size:13px;color:#6b7280">- Start with Sarvam STT + TTS (SnapServe powered by Sarvam), or bring your own providers</p>' +
     '<p style="margin:0;font-size:13px;color:#6b7280">- Click &ldquo;Web Call&rdquo; to talk to your agent live in the browser &mdash; no phone needed</p>' +
     "</div>" +
     '<div style="margin:24px 0">' + btn("Create my first agent", "https://app.snapserve.ai/agents") + "</div>" +

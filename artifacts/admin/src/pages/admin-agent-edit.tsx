@@ -319,9 +319,9 @@ export default function AdminAgentEdit() {
   const form = useForm<AgentFormValues>({
     resolver: zodResolver(agentFormSchema),
     defaultValues: {
-      name: "", description: "", asrProvider: "azure", asrModel: "",
-      llmProvider: "openai", llmModel: "", ttsProvider: "cartesia",
-      ttsVoice: "", ttsModel: "", telephonyProvider: "twilio",
+      name: "", description: "", asrProvider: "sarvam", asrModel: "saaras:v3",
+      llmProvider: "openai", llmModel: "", ttsProvider: "sarvam",
+      ttsVoice: "priya", ttsModel: "bulbul:v3", telephonyProvider: "vobiz",
       systemPrompt: "", temperature: 0.40, maxDuration: 300,
       firstSpeaker: "assistant", endCallPhrases: "", silenceTimeoutSeconds: 30,
       language: "en-US", asrLanguage: "", backchannelingEnabled: true, backchannelingFrequency: 0.5,

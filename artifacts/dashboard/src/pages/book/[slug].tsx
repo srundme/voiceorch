@@ -18,7 +18,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatApiError } from "@/lib/format-api-error";
-import { BrandMark } from "@/components/logo";
+import { PoweredBySarvam, SnapServeSarvamLockup } from "@/components/logo";
 
 
 export default function PublicBookingPage() {
@@ -114,7 +114,7 @@ export default function PublicBookingPage() {
 
   const BrandHeader = () => (
     <div className="flex justify-center mb-8">
-      <BrandMark iconSize={26} wordmarkHeight={20} />
+      <SnapServeSarvamLockup height={22} on="light" />
     </div>
   );
 
@@ -184,7 +184,7 @@ export default function PublicBookingPage() {
               </div>
             </CardContent>
           </Card>
-          <p className="text-center text-xs text-muted-foreground mt-4">Powered by SnapServe</p>
+          <p className="text-center mt-4"><PoweredBySarvam on="light" /></p>
         </div>
       </div>
     );
@@ -342,7 +342,7 @@ export default function PublicBookingPage() {
             </form>
           </div>
         </div>
-        <p className="text-center text-xs text-muted-foreground mt-8">Powered by SnapServe</p>
+        <p className="text-center mt-8"><PoweredBySarvam on="light" /></p>
       </div>
     </div>
   );

@@ -56,8 +56,25 @@ function serializeClone(row: typeof userClonedVoicesTable.$inferSelect) {
     name: row.name,
     language: row.language,
     description: row.description ?? undefined,
+    provider: (row.provider === "sarvam" ? "sarvam" : "cartesia") as "cartesia" | "sarvam",
     createdAt: row.createdAt.toISOString(),
   };
+}
+
+/** Sarvam Creative Studio speaker / clone ids — not Cartesia UUIDs. */
+function isValidSarvamSpeakerId(raw: string): boolean {
+  const s = raw.trim();
+  if (s.length < 2 || s.length > 80) return false;
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)) {
+    return false;
+  }
+  return /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(s);
+}
+
+function toBaseLanguage(raw: string): string {
+  const trimmed = raw.trim().toLowerCase();
+  if (!trimmed) return "en";
+  return trimmed.split("-")[0] ?? "en";
 }
 
 // ── GET /voices/whitelisted ──────────────────────────────────────────────────
@@ -204,6 +221,7 @@ router.post(
         .values({
           userId,
           cartesiaVoiceId: parsed.id,
+          provider: "cartesia",
           name: parsed.name?.trim() || name,
           language: parsed.language || language,
           description: description ?? parsed.description ?? null,
@@ -222,8 +240,99 @@ router.post(
   },
 );
 
+// ── POST /voices/sarvam-register ─────────────────────────────────────────────
+// Authenticated: register a Sarvam Creative Studio cloned speaker id.
+// Sarvam has no public self-serve clone REST API — clones are created in Studio,
+// then the speaker id is pasted here and used as agents.tts_voice with provider=sarvam.
+// Body JSON: { speakerId, name, language, description?, consent: true }
+
+router.post("/voices/sarvam-register", requireAuth, async (req, res): Promise<void> => {
+  const userId = (req as unknown as { clerkUserId: string }).clerkUserId;
+  const body = req.body as {
+    speakerId?: string;
+    name?: string;
+    language?: string;
+    description?: string;
+    consent?: boolean;
+  };
+
+  const speakerId = typeof body.speakerId === "string" ? body.speakerId.trim() : "";
+  const name = typeof body.name === "string" ? body.name.trim() : "";
+  const languageRaw = typeof body.language === "string" ? body.language : "";
+  const description =
+    typeof body.description === "string" ? body.description.trim() || null : null;
+
+  if (!body.consent) {
+    res.status(400).json({
+      error: "Confirm you have rights to use this voice and created it in Sarvam Creative Studio.",
+    });
+    return;
+  }
+  if (!isValidSarvamSpeakerId(speakerId)) {
+    res.status(400).json({
+      error: "Provide a valid Sarvam speaker / clone id (letters, numbers, _ or -; not a UUID).",
+    });
+    return;
+  }
+  if (!name || name.length > 80) {
+    res.status(400).json({ error: "Provide a voice name (1–80 characters)." });
+    return;
+  }
+  if (!languageRaw.trim()) {
+    res.status(400).json({ error: "Select a language for the clone." });
+    return;
+  }
+
+  const [{ value: cloneCount } = { value: 0 }] = await db
+    .select({ value: count() })
+    .from(userClonedVoicesTable)
+    .where(eq(userClonedVoicesTable.userId, userId));
+
+  if (Number(cloneCount) >= MAX_CLONES_PER_USER) {
+    res.status(400).json({
+      error: `You can keep up to ${MAX_CLONES_PER_USER} cloned voices. Delete one to add another.`,
+    });
+    return;
+  }
+
+  const [existing] = await db
+    .select()
+    .from(userClonedVoicesTable)
+    .where(
+      and(
+        eq(userClonedVoicesTable.userId, userId),
+        eq(userClonedVoicesTable.provider, "sarvam"),
+        eq(userClonedVoicesTable.cartesiaVoiceId, speakerId),
+      ),
+    );
+  if (existing) {
+    res.status(200).json({ voice: serializeClone(existing) });
+    return;
+  }
+
+  try {
+    const [row] = await db
+      .insert(userClonedVoicesTable)
+      .values({
+        userId,
+        cartesiaVoiceId: speakerId,
+        provider: "sarvam",
+        name,
+        language: toBaseLanguage(languageRaw),
+        description,
+      })
+      .returning();
+
+    logger.info({ userId, speakerId, language: languageRaw }, "Sarvam cloned voice registered");
+    res.status(201).json({ voice: serializeClone(row!) });
+  } catch (err) {
+    logger.error({ err, userId, speakerId }, "Sarvam voice register failed");
+    res.status(500).json({ error: "Could not register Sarvam voice. Please try again." });
+  }
+});
+
 // ── DELETE /voices/mine/:id ──────────────────────────────────────────────────
-// :id is the Cartesia voice UUID (same id used as agents.tts_voice).
+// :id is the provider voice id (Cartesia UUID or Sarvam speaker).
 
 router.delete("/voices/mine/:id", requireAuth, async (req, res): Promise<void> => {
   const userId = (req as unknown as { clerkUserId: string }).clerkUserId;
@@ -253,26 +362,28 @@ router.delete("/voices/mine/:id", requireAuth, async (req, res): Promise<void> =
     .delete(userClonedVoicesTable)
     .where(eq(userClonedVoicesTable.id, row.id));
 
-  // Best-effort remote delete — ignore failures so the local row is already gone.
-  const cartesiaKey = await getCartesiaKey();
-  if (cartesiaKey) {
-    try {
-      const delRes = await fetch(`${CARTESIA_BASE_URL}/voices/${encodeURIComponent(voiceId)}`, {
-        method: "DELETE",
-        headers: {
-          "X-API-Key": cartesiaKey,
-          "Cartesia-Version": CARTESIA_VERSION,
-        },
-      });
-      if (!delRes.ok && delRes.status !== 404) {
-        const body = await delRes.text().catch(() => "");
-        logger.warn(
-          { status: delRes.status, body: body.slice(0, 300), voiceId },
-          "Cartesia voice delete failed (local row already removed)",
-        );
+  // Best-effort remote delete for Cartesia only — Sarvam Studio clones stay in Studio.
+  if (row.provider !== "sarvam") {
+    const cartesiaKey = await getCartesiaKey();
+    if (cartesiaKey) {
+      try {
+        const delRes = await fetch(`${CARTESIA_BASE_URL}/voices/${encodeURIComponent(voiceId)}`, {
+          method: "DELETE",
+          headers: {
+            "X-API-Key": cartesiaKey,
+            "Cartesia-Version": CARTESIA_VERSION,
+          },
+        });
+        if (!delRes.ok && delRes.status !== 404) {
+          const body = await delRes.text().catch(() => "");
+          logger.warn(
+            { status: delRes.status, body: body.slice(0, 300), voiceId },
+            "Cartesia voice delete failed (local row already removed)",
+          );
+        }
+      } catch (err) {
+        logger.warn({ err, voiceId }, "Cartesia voice delete request error");
       }
-    } catch (err) {
-      logger.warn({ err, voiceId }, "Cartesia voice delete request error");
     }
   }
 

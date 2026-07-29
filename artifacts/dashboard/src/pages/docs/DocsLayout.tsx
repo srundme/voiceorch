@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { Link, useLocation } from "wouter";
-import { BrandMark } from "@/components/logo";
+import { BrandMark, PoweredBySarvam } from "@/components/logo";
 import { DocsSidebar } from "./DocsSidebar";
 import { DocsSearch } from "./DocsSearch";
 import { TableOfContents } from "./TableOfContents";
@@ -133,6 +133,12 @@ export function DocsLayout({ children, section }: { children: React.ReactNode; s
           <TableOfContents key={section} />
         </aside>
       </div>
+
+      <footer className="border-t border-white/10 py-6 px-6">
+        <div className="max-w-[1600px] mx-auto flex justify-center">
+          <PoweredBySarvam includeSnapServe on="dark" className="opacity-80" />
+        </div>
+      </footer>
     </div>
   );
 }

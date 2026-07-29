@@ -510,10 +510,10 @@ export default function UserDetail() {
               onClick={() => {
                 createAgent.mutate({
                   name: "New Agent",
-                  asrProvider: "azure",
+                  asrProvider: "sarvam",
                   llmProvider: "openai",
-                  ttsProvider: "cartesia",
-                  telephonyProvider: "twilio",
+                  ttsProvider: "sarvam",
+                  telephonyProvider: "vobiz",
                   systemPrompt: "You are a helpful assistant.",
                   status: "inactive",
                 }, {

@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/page-header";
 export default function NotFound() {
   return (
     <div className="min-h-screen w-full flex flex-col bg-background">
-      <PageHeader href="/" />
+      <PageHeader href="/" showSarvamCoBrand />
       <main className="flex-1 flex items-center justify-center px-6 py-12">
         <div className="flex flex-col items-center gap-4 text-center">
           <div className="h-12 w-12 rounded-2xl bg-muted border border-border flex items-center justify-center">

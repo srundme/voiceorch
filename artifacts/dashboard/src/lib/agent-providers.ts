@@ -144,7 +144,15 @@ export function getSarvamTtsVoices(ttsModel?: string | null): { value: string; l
 
 export function isSarvamVoiceCompatible(voice: string | null | undefined, ttsModel?: string | null): boolean {
   if (!voice || voice === "__custom__") return true;
-  return getSarvamTtsVoices(ttsModel).some((v) => v.value === voice);
+  const model = (ttsModel ?? "bulbul:v3").toLowerCase();
+  const isV2Speaker = SARVAM_TTS_VOICES_V2.some((v) => v.value === voice);
+  if (model === "bulbul:v2") {
+    // v2 catalog or custom clone ids (not a known v3-only name).
+    return isV2Speaker || !SARVAM_TTS_VOICES_V3.some((v) => v.value === voice);
+  }
+  // v3: reject known v2-only speakers; allow catalog v3 + Creative Studio clone ids.
+  if (isV2Speaker) return false;
+  return true;
 }
 
 export const TTS_VOICES: Record<string, { value: string; label: string }[] | null> = {

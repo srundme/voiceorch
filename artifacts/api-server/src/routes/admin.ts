@@ -1666,7 +1666,7 @@ router.post("/admin/family/provision", async (req, res): Promise<void> => {
 
     const asrProvider       = (body["asrProvider"] as string) || "sarvam";
     const llmProvider       = (body["llmProvider"] as string) || "qwen";
-    const ttsProvider       = (body["ttsProvider"] as string) || "cartesia";
+    const ttsProvider       = (body["ttsProvider"] as string) || "sarvam";
     const telephonyProvider = (body["telephonyProvider"] as string) || "vobiz";
     const ambientSoundId    = (body["ambientSoundId"] as string | undefined) ?? null;
 

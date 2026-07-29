@@ -19,6 +19,7 @@ import { WebcallPanel } from "@/components/webcall-panel";
 import { AgentConfigCard, EditConfigDialog } from "@/components/agent-config-card";
 import { GeminiLiveVoicePicker } from "@/components/gemini-live-voice-picker";
 import { CloneVoiceDialog, type ClonedVoiceResult } from "@/components/clone-voice-dialog";
+import { RegisterSarvamVoiceDialog } from "@/components/register-sarvam-voice-dialog";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
@@ -979,6 +980,9 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
     staleTime: 60 * 1000,
   });
   const myClones = myClonesData?.voices ?? [];
+  const myCartesiaClones = myClones.filter((c) => (c.provider ?? "cartesia") === "cartesia");
+  const mySarvamClones = myClones.filter((c) => c.provider === "sarvam");
+  const [sarvamCloneOpen, setSarvamCloneOpen] = useState(false);
 
   // Curated Cartesia voice list: prefer admin whitelist (language-filtered),
   // fall back to the static catalog when whitelist is empty so "Choose voice"
@@ -989,7 +993,7 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
     const filtered = filterVoicesForLanguage(all, language);
     const seen = new Set<string>();
     const opts: { value: string; label: string }[] = [];
-    for (const c of myClones) {
+    for (const c of myCartesiaClones) {
       if (seen.has(c.id)) continue;
       seen.add(c.id);
       opts.push({ value: c.id, label: `✦ ${c.name}` });
@@ -1014,7 +1018,7 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
     }
     opts.push({ value: "__custom__", label: "Paste custom Voice ID" });
     return opts;
-  }, [whitelistedData, language, ttsVoice, agent, myClones]);
+  }, [whitelistedData, language, ttsVoice, agent, myCartesiaClones]);
 
   // When the language changes (or the whitelist finishes loading), clear a
   // selected curated voice that no longer supports the language — using the
@@ -1055,13 +1059,41 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
     void queryClient.invalidateQueries({ queryKey: ["voices", "mine"] });
   }
 
+  function applySarvamClonedVoice(voice: ClonedVoiceResult) {
+    form.setValue("ttsProvider", "sarvam", { shouldDirty: true });
+    form.setValue("ttsVoice", voice.id, { shouldDirty: true });
+    setVoiceCustomMode(false);
+    void queryClient.invalidateQueries({ queryKey: ["voices", "mine"] });
+  }
+
   const ttsVoiceRaw   = ttsProvider in TTS_VOICES ? TTS_VOICES[ttsProvider] : undefined;
   const ttsVoiceFree  = ttsVoiceRaw === null;
+  const sarvamOverviewOpts = useMemo(() => {
+    const catalog = getSarvamTtsVoices(ttsModel);
+    const seen = new Set<string>();
+    const opts: { value: string; label: string }[] = [];
+    for (const c of mySarvamClones) {
+      if (seen.has(c.id)) continue;
+      seen.add(c.id);
+      opts.push({ value: c.id, label: `✦ ${c.name}` });
+    }
+    for (const v of catalog) {
+      if (seen.has(v.value)) continue;
+      seen.add(v.value);
+      opts.push(v);
+    }
+    if (ttsVoice && ttsVoice !== "__custom__" && !seen.has(ttsVoice)) {
+      opts.unshift({ value: ttsVoice, label: ttsVoice });
+    }
+    opts.push({ value: "__custom__", label: "Paste custom speaker ID" });
+    return opts;
+  }, [mySarvamClones, ttsModel, ttsVoice]);
+
   const ttsVoiceOpts: { value: string; label: string }[] =
     ttsProvider === "cartesia"
       ? cartesiaOverviewOpts
       : ttsProvider === "sarvam"
-      ? getSarvamTtsVoices(ttsModel)
+      ? sarvamOverviewOpts
       : ((ttsVoiceRaw ?? []) as { value: string; label: string }[]);
 
   const asrLabel       = ASR_PROVIDERS.find(p => p.value === asrProvider)?.label ?? asrProvider;
@@ -1513,7 +1545,24 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
                         Clone voice
                       </Button>
                     )}
+                    {!isGeminiLive && ttsProvider === "sarvam" && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-[10px] gap-1 px-2"
+                        onClick={() => setSarvamCloneOpen(true)}
+                      >
+                        <Sparkles className="h-3 w-3" />
+                        Add Sarvam clone
+                      </Button>
+                    )}
                   </div>
+                  {ttsProvider === "sarvam" && (
+                    <p className="text-[10px] text-muted-foreground/90 leading-relaxed">
+                      Default SnapServe stack · Powered by Sarvam
+                    </p>
+                  )}
                   {ttsVoiceOpts.length > 0 && (
                     <FormField control={form.control} name="ttsVoice" render={({ field }) => (
                       <FormItem className="space-y-0">
@@ -1537,7 +1586,7 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
                       </FormItem>
                     )} />
                   )}
-                  {ttsProvider === "cartesia" && (whitelistedData?.voices ?? []).length > 0 && curatedVoiceOpts.length === 0 && myClones.length === 0 && (
+                  {ttsProvider === "cartesia" && (whitelistedData?.voices ?? []).length > 0 && curatedVoiceOpts.length === 0 && myCartesiaClones.length === 0 && (
                     <p className="text-[10px] text-amber-400/80 leading-relaxed rounded-md border border-amber-500/20 bg-amber-500/5 px-2.5 py-2">
                       No voices available for the selected language.
                     </p>
@@ -1555,7 +1604,7 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
                           className="h-8 text-xs bg-background/50 font-mono"
                         />
                         <FormDescription className="text-[10px]">
-                          Find voice IDs in your {ttsProvider === "cartesia" ? "Cartesia" : ttsProvider === "elevenlabs" ? "ElevenLabs" : "provider"} dashboard.
+                          Find voice IDs in your {ttsProvider === "cartesia" ? "Cartesia" : ttsProvider === "elevenlabs" ? "ElevenLabs" : ttsProvider === "sarvam" ? "Sarvam Creative Studio" : "provider"} dashboard.
                         </FormDescription>
                       </FormItem>
                     )} />
@@ -1567,6 +1616,12 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
                 onOpenChange={setCloneOpen}
                 defaultLanguage={language}
                 onCloned={applyClonedVoice}
+              />
+              <RegisterSarvamVoiceDialog
+                open={sarvamCloneOpen}
+                onOpenChange={setSarvamCloneOpen}
+                defaultLanguage={language}
+                onRegistered={applySarvamClonedVoice}
               />
             </div>
             )}
@@ -1730,6 +1785,7 @@ function VoiceTab({ form }: { form: any }) {
   const geminiLiveVoiceName = (form.watch("geminiLiveVoiceName") as string) ?? "Kore";
   const isGeminiLive   = isGeminiLiveAgent({ llmModel, voiceStack });
   const [cloneOpenV, setCloneOpenV] = useState(false);
+  const [sarvamCloneOpenV, setSarvamCloneOpenV] = useState(false);
   const queryClient = useQueryClient();
 
   // Fetch admin-whitelisted voices (public endpoint, no auth required)
@@ -1745,6 +1801,8 @@ function VoiceTab({ form }: { form: any }) {
     staleTime: 60 * 1000,
   });
   const myClones = myClonesData?.voices ?? [];
+  const myCartesiaClonesV = myClones.filter((c) => (c.provider ?? "cartesia") === "cartesia");
+  const mySarvamClonesV = myClones.filter((c) => c.provider === "sarvam");
 
   // Shared language filter (single source of truth in agent-providers.ts):
   // English agents see ALL whitelisted voices; non-English agents see only
@@ -1754,7 +1812,7 @@ function VoiceTab({ form }: { form: any }) {
     const filtered = filterVoicesForLanguage(all, agentLanguage);
     const seen = new Set<string>();
     const opts: { value: string; label: string }[] = [];
-    for (const c of myClones) {
+    for (const c of myCartesiaClonesV) {
       if (seen.has(c.id)) continue;
       seen.add(c.id);
       opts.push({ value: c.id, label: `✦ ${c.name}` });
@@ -1779,7 +1837,7 @@ function VoiceTab({ form }: { form: any }) {
     }
     opts.push({ value: "__custom__", label: "Paste custom Voice ID" });
     return opts;
-  }, [whitelistedData, agentLanguage, ttsVoice, myClones]);
+  }, [whitelistedData, agentLanguage, ttsVoice, myCartesiaClonesV]);
 
   // When the language changes (or the whitelist finishes loading), clear a
   // selected curated voice that no longer supports the language — using the
@@ -1810,11 +1868,41 @@ function VoiceTab({ form }: { form: any }) {
     void queryClient.invalidateQueries({ queryKey: ["voices", "mine"] });
   }
 
+  function applySarvamClonedVoiceV(voice: ClonedVoiceResult) {
+    form.setValue("ttsProvider", "sarvam", { shouldDirty: true });
+    form.setValue("ttsVoice", voice.id, { shouldDirty: true });
+    setVoiceCustomModeV(false);
+    void queryClient.invalidateQueries({ queryKey: ["voices", "mine"] });
+  }
+
+  const sarvamVoiceOptsV = useMemo(() => {
+    const catalog = getSarvamTtsVoices(ttsModel);
+    const seen = new Set<string>();
+    const opts: { value: string; label: string }[] = [];
+    for (const c of mySarvamClonesV) {
+      if (seen.has(c.id)) continue;
+      seen.add(c.id);
+      opts.push({ value: c.id, label: `✦ ${c.name}` });
+    }
+    for (const v of catalog) {
+      if (seen.has(v.value)) continue;
+      seen.add(v.value);
+      opts.push(v);
+    }
+    if (ttsVoice && ttsVoice !== "__custom__" && !seen.has(ttsVoice)) {
+      opts.unshift({ value: ttsVoice, label: ttsVoice });
+    }
+    opts.push({ value: "__custom__", label: "Paste custom speaker ID" });
+    return opts;
+  }, [mySarvamClonesV, ttsModel, ttsVoice]);
+
   // For non-Cartesia providers fall back to the hardcoded list
   const ttsVoiceRawV  = ttsProvider in TTS_VOICES ? TTS_VOICES[ttsProvider] : undefined;
   const ttsVoiceOptsV: { value: string; label: string }[] =
     ttsProvider === "cartesia"
       ? cartesiaVoiceOpts
+      : ttsProvider === "sarvam"
+      ? sarvamVoiceOptsV
       : ((ttsVoiceRawV ?? []) as { value: string; label: string }[]);
 
   const ttsModelOptsV = TTS_MODELS[ttsProvider] ?? [];
@@ -2064,7 +2152,24 @@ function VoiceTab({ form }: { form: any }) {
                         Clone voice
                       </Button>
                     )}
+                    {ttsProvider === "sarvam" && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-[10px] gap-1 px-2"
+                        onClick={() => setSarvamCloneOpenV(true)}
+                      >
+                        <Sparkles className="h-3 w-3" />
+                        Add Sarvam clone
+                      </Button>
+                    )}
                   </div>
+                  {ttsProvider === "sarvam" && (
+                    <p className="text-[10px] text-muted-foreground leading-relaxed -mt-0.5 mb-1">
+                      Default SnapServe stack · Powered by Sarvam
+                    </p>
+                  )}
                   <Select
                     value={
                       dropdownValV && ttsVoiceOptsV.some((v) => v.value === dropdownValV)
@@ -2096,7 +2201,7 @@ function VoiceTab({ form }: { form: any }) {
               )} />
             )}
 
-            {ttsProvider === "cartesia" && (whitelistedData?.voices ?? []).length > 0 && curatedVoiceOptsV.length === 0 && myClones.length === 0 && (
+            {ttsProvider === "cartesia" && (whitelistedData?.voices ?? []).length > 0 && curatedVoiceOptsV.length === 0 && myCartesiaClonesV.length === 0 && (
               <p className="text-xs text-amber-400/80 leading-relaxed rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2.5 col-span-2">
                 No voices available for the selected language.
               </p>
@@ -2145,6 +2250,12 @@ function VoiceTab({ form }: { form: any }) {
             onOpenChange={setCloneOpenV}
             defaultLanguage={agentLanguage}
             onCloned={applyClonedVoiceV}
+          />
+          <RegisterSarvamVoiceDialog
+            open={sarvamCloneOpenV}
+            onOpenChange={setSarvamCloneOpenV}
+            defaultLanguage={agentLanguage}
+            onRegistered={applySarvamClonedVoiceV}
           />
 
           {showCustomV && (
@@ -5659,8 +5770,8 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
     resolver: zodResolver(agentFormSchema),
     defaultValues: {
       name: "", description: "", asrProvider: "sarvam", asrModel: "saaras:v3",
-      llmProvider: "groq", llmModel: "llama-3.3-70b-versatile", ttsProvider: "cartesia",
-      ttsVoice: "", ttsModel: "", telephonyProvider: "vobiz",
+      llmProvider: "groq", llmModel: "llama-3.3-70b-versatile", ttsProvider: "sarvam",
+      ttsVoice: "priya", ttsModel: "bulbul:v3", telephonyProvider: "vobiz",
       systemPrompt: "", temperature: 0.40, maxDuration: 480,
       greetingMessage: "Hello", firstSpeaker: "assistant", endCallPhrases: "", silenceTimeoutSeconds: 30,
       language: "en-US", asrLanguage: "", backchannelingEnabled: true,
@@ -6419,9 +6530,9 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
         ],
         llmProvider: "google",
         llmModel: "gemini-3.6-flash",
-        ttsProvider: "cartesia",
-        ttsModel: "sonic-3.5",
-        ttsVoice: "a8adc74b-c9c1-45e0-aae7-9a60ba64bbee",
+        ttsProvider: "sarvam",
+        ttsModel: "bulbul:v3",
+        ttsVoice: "priya",
       };
 
       const result = await customFetch<{ id: number }>(`${DASH_API}/agents`, {

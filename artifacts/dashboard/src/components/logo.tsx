@@ -2,9 +2,12 @@
    SnapServeIcon   — the three-bar mark (SVG, inline, scalable)
    SnapServeLogo   — icon + wordmark  ("Snap" Bold / "Serve" Regular)
    SnapServeLoader — full-screen splash with animated bars
+   SnapServeSarvamLockup — official “SnapServe powered by sarvam” image
+   PoweredBySarvam — family co-brand (SnapServe stays primary)
    ─────────────────────────────────────────────────────────────────────────*/
 
 const FONT = "'Tex Gyre Heros', Helvetica, Arial, sans-serif";
+const LOCKUP_SRC = "snapserve-powered-by-sarvam.png";
 
 /* ── BrandMark (image-based lockup, mirrors admin) ----------------------- */
 
@@ -105,6 +108,39 @@ export function SnapServeLogo({
   );
 }
 
+/* ── Official co-brand lockup image ─────────────────────────────────────── */
+
+interface SnapServeSarvamLockupProps {
+  /** Pixel height of the lockup (aspect ~202×32). */
+  height?: number;
+  /**
+   * Asset is white text (for dark UIs). Pass `light` to invert for light backgrounds
+   * via CSS filter so we keep a single source PNG.
+   */
+  on?: "dark" | "light";
+  className?: string;
+}
+
+/** Official “SnapServe powered by sarvam” lockup (product first, Sarvam second). */
+export function SnapServeSarvamLockup({
+  height = 20,
+  on = "dark",
+  className = "",
+}: SnapServeSarvamLockupProps) {
+  const width = Math.round((height * 202) / 32);
+  return (
+    <img
+      src={`${import.meta.env.BASE_URL}${LOCKUP_SRC}`}
+      alt="SnapServe powered by Sarvam"
+      width={width}
+      height={height}
+      style={{ height, width: "auto" }}
+      className={`select-none ${on === "light" ? "invert" : ""} ${className}`}
+      draggable={false}
+    />
+  );
+}
+
 /* ── Loader --------------------------------------------------------------- */
 
 export function SnapServeLoader() {
@@ -136,14 +172,7 @@ export function SnapServeLoader() {
         ))}
       </div>
 
-      {/* Wordmark */}
-      <span
-        style={{ fontFamily: FONT, fontSize: 18, color: "#ffffff", letterSpacing: "-0.01em" }}
-        className="select-none"
-      >
-        <span style={{ fontWeight: 700 }}>Snap</span>
-        <span style={{ fontWeight: 400 }}>Serve</span>
-      </span>
+      <SnapServeSarvamLockup height={28} on="dark" />
 
       <style>{`
         @keyframes ss-bar-pulse {
@@ -154,5 +183,52 @@ export function SnapServeLoader() {
         }
       `}</style>
     </div>
+  );
+}
+
+/* ── Powered by Sarvam (family co-brand) ───────────────────────────────── */
+
+type PoweredBySarvamVariant = "footer" | "inline" | "lockup";
+
+interface PoweredBySarvamProps {
+  /** footer = public page footer; inline = under BrandMark; lockup = full official image */
+  variant?: PoweredBySarvamVariant;
+  className?: string;
+  /** When true, show the official SnapServe + Sarvam lockup image. */
+  includeSnapServe?: boolean;
+  /** Background the lockup sits on — drives invert for light pages. */
+  on?: "dark" | "light";
+}
+
+/**
+ * Family co-brand line. SnapServe remains the product name; Sarvam is secondary.
+ * Prefer the official lockup image when includeSnapServe / lockup variant is set.
+ */
+export function PoweredBySarvam({
+  variant = "footer",
+  className = "",
+  includeSnapServe = false,
+  on = "light",
+}: PoweredBySarvamProps) {
+  if (includeSnapServe || variant === "lockup") {
+    const height = variant === "inline" ? 14 : variant === "lockup" ? 22 : 16;
+    return (
+      <span className={`inline-flex items-center justify-center ${className}`}>
+        <SnapServeSarvamLockup height={height} on={on} />
+      </span>
+    );
+  }
+
+  const sizeClass =
+    variant === "inline" ? "text-[10px]" : "text-xs";
+  const gapClass = variant === "inline" ? "gap-1" : "gap-1.5";
+
+  return (
+    <p
+      className={`inline-flex items-center justify-center ${gapClass} ${sizeClass} text-muted-foreground select-none ${className}`}
+    >
+      <span>Powered by</span>
+      <span className="font-medium text-foreground/70">Sarvam</span>
+    </p>
   );
 }

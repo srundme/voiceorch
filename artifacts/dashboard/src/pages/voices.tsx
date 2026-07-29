@@ -18,6 +18,7 @@ import { formatApiError } from "@/lib/format-api-error";
 import { cn } from "@/lib/utils";
 import { getVoiceAvatar, resolveVoiceGenderLabel } from "@/lib/voice-avatars";
 import { CloneVoiceDialog, type ClonedVoiceResult } from "@/components/clone-voice-dialog";
+import { RegisterSarvamVoiceDialog } from "@/components/register-sarvam-voice-dialog";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const API = `${BASE}/api`;
@@ -79,6 +80,7 @@ export default function VoicesPage() {
   const [myClones, setMyClones] = useState<ClonedVoiceResult[]>([]);
   const [clonesLoading, setClonesLoading] = useState(true);
   const [cloneOpen, setCloneOpen] = useState(false);
+  const [sarvamCloneOpen, setSarvamCloneOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [search, setSearch] = useState("");
@@ -138,7 +140,7 @@ export default function VoicesPage() {
     });
   }
 
-  async function previewVoice(voice: { id: string }) {
+  async function previewVoice(voice: { id: string; provider?: string; language?: string }) {
     if (currentAudioRef.current) {
       currentAudioRef.current.onended = null;
       currentAudioRef.current.onerror = null;
@@ -152,10 +154,20 @@ export default function VoicesPage() {
     }
     setPreviewingId(voice.id);
     try {
+      const provider = voice.provider === "sarvam" ? "sarvam" : "cartesia";
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (provider === "sarvam") {
+        const token = await getToken();
+        if (token) headers.Authorization = `Bearer ${token}`;
+      }
       const res = await fetch(`${API}/voices/preview`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ voiceId: voice.id }),
+        headers,
+        body: JSON.stringify({
+          voiceId: voice.id,
+          provider,
+          language: voice.language,
+        }),
       });
       if (!res.ok) {
         const errData = await res.json().catch(() => ({ error: res.statusText }));
@@ -246,19 +258,36 @@ export default function VoicesPage() {
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Voices</h1>
             <p className="text-muted-foreground mt-1 text-sm">
-              Whitelisted Cartesia voices and your instant clones.
+              Whitelisted Cartesia voices, Cartesia instant clones, and Sarvam Creative Studio clones.
             </p>
           </div>
-          <Button onClick={() => setCloneOpen(true)} className="gap-1.5 w-full sm:w-auto min-h-10 h-11">
-            <Sparkles className="h-4 w-4" />
-            Clone my voice
-          </Button>
+          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+            <Button onClick={() => setCloneOpen(true)} className="gap-1.5 w-full sm:w-auto min-h-10 h-11">
+              <Sparkles className="h-4 w-4" />
+              Clone (Cartesia)
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setSarvamCloneOpen(true)}
+              className="gap-1.5 w-full sm:w-auto min-h-10 h-11"
+            >
+              <Sparkles className="h-4 w-4" />
+              Add Sarvam clone
+            </Button>
+          </div>
         </div>
 
         <CloneVoiceDialog
           open={cloneOpen}
           onOpenChange={setCloneOpen}
           onCloned={(voice) => {
+            setMyClones((prev) => [voice, ...prev.filter((v) => v.id !== voice.id)]);
+          }}
+        />
+        <RegisterSarvamVoiceDialog
+          open={sarvamCloneOpen}
+          onOpenChange={setSarvamCloneOpen}
+          onRegistered={(voice) => {
             setMyClones((prev) => [voice, ...prev.filter((v) => v.id !== voice.id)]);
           }}
         />
@@ -280,14 +309,15 @@ export default function VoicesPage() {
             </div>
           ) : myClones.length === 0 ? (
             <div className="rounded-xl border border-dashed border-border/60 p-6 text-center text-sm text-muted-foreground">
-              No clones yet. Record a short clip to create a custom Cartesia voice instantly.
+              No clones yet. Instant-clone with Cartesia, or add a Sarvam Creative Studio speaker id.
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {myClones.map((voice) => {
                 const isPreviewing = previewingId === voice.id;
+                const providerLabel = voice.provider === "sarvam" ? "Sarvam" : "Cartesia";
                 return (
-                  <Card key={voice.id} className="flex flex-col border border-border/60 bg-card/60">
+                  <Card key={`${voice.provider ?? "cartesia"}:${voice.id}`} className="flex flex-col border border-border/60 bg-card/60">
                     <CardContent className="p-4 flex flex-col gap-3">
                       <div className="min-w-0">
                         <p className="text-sm font-semibold truncate">{voice.name}</p>
@@ -296,7 +326,7 @@ export default function VoicesPage() {
                             {voice.language.toUpperCase()}
                           </Badge>
                           <Badge variant="secondary" className="text-[10px] px-1.5 py-0.5 gap-1">
-                            <Sparkles className="h-2.5 w-2.5" /> Cloned
+                            <Sparkles className="h-2.5 w-2.5" /> {providerLabel}
                           </Badge>
                         </div>
                       </div>

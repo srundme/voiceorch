@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { BrandMark } from "@/components/logo";
+import { BrandMark, SnapServeSarvamLockup } from "@/components/logo";
 
 interface PageHeaderProps {
   /** Optional href the logo links to. Defaults to "/" */
@@ -10,6 +10,8 @@ interface PageHeaderProps {
   className?: string;
   /** Inner max-width container. Defaults to "max-w-6xl" */
   containerClassName?: string;
+  /** Show official SnapServe powered by Sarvam lockup instead of BrandMark alone. */
+  showSarvamCoBrand?: boolean;
 }
 
 /**
@@ -22,6 +24,7 @@ export function PageHeader({
   actions,
   className = "",
   containerClassName = "max-w-6xl",
+  showSarvamCoBrand = false,
 }: PageHeaderProps) {
   return (
     <header
@@ -32,13 +35,18 @@ export function PageHeader({
     >
       <div
         className={
-          "mx-auto flex items-center justify-between h-14 px-6 " +
+          "mx-auto flex items-center justify-between px-6 " +
+          (showSarvamCoBrand ? "min-h-14 py-2 " : "h-14 ") +
           containerClassName
         }
       >
         <Link href={href}>
           <span className="inline-flex items-center cursor-pointer">
-            <BrandMark iconSize={22} wordmarkHeight={16} />
+            {showSarvamCoBrand ? (
+              <SnapServeSarvamLockup height={18} on="light" />
+            ) : (
+              <BrandMark iconSize={22} wordmarkHeight={16} />
+            )}
           </span>
         </Link>
         {actions && <div className="flex items-center gap-3">{actions}</div>}
