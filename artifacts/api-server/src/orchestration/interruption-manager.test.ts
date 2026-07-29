@@ -98,4 +98,13 @@ describe("InterruptionManager", () => {
   it("exposes wordsForInterruption from options", () => {
     expect(new InterruptionManager({ wordsForInterruption: 4 }).getWordsForInterruption()).toBe(4);
   });
+
+  it("tracks calleeSpeaking for coalesce deferral (call 4856)", () => {
+    const m = new InterruptionManager();
+    expect(m.isCalleeSpeaking()).toBe(false);
+    m.onUserSpeechStart();
+    expect(m.isCalleeSpeaking()).toBe(true);
+    m.onUserSpeechEnd();
+    expect(m.isCalleeSpeaking()).toBe(false);
+  });
 });

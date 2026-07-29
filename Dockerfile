@@ -1,4 +1,4 @@
-# Redeploy trigger: SnapServe × Sarvam family announcement modal.
+# Redeploy trigger: call-4856 zigzag coalesce + barge-resume glitch fixes.
 FROM node:24-slim AS builder
 WORKDIR /workspace
 

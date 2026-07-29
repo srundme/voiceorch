@@ -122,7 +122,9 @@ const FILLER_THRESHOLD_MS     = 350;    // play a filler phrase if LLM has not r
 const DEAD_AIR_FILLER_CANCEL_MS = 500; // skip dead-air filler playback if LLM first token
                                         // arrives within this window after filler was enqueued
 const FRAGMENT_COALESCE_MS_DEFAULT = 800;   // fallback when agentConfig omits playing coalesce
-const FRAGMENT_COALESCE_LISTENING_MS_DEFAULT = 150; // fallback when agentConfig omits listening coalesce
+/** Listening-side hold for ack fragments ("Yes Ma'am") — was 150ms; call 4856
+ *  flushed before the caller finished "…how are you?" → zigzag replies. */
+const FRAGMENT_COALESCE_LISTENING_MS_DEFAULT = 450;
 const VAD_FLUSH_BACKSTOP_MS   = 2000;   // speech_start with no interim/final/speech_end for this long → one-shot STT flush (lost-turn anomaly)
 const VAD_FLUSH_COOLDOWN_MS   = 5000;   // min interval between backstop flushes — keeps the flush strictly anomaly-only
 const LLM_TTFT_FALLBACK_MS    = Number(process.env.LLM_TTFT_FALLBACK_MS ?? 1200); // abort slow primary LLM
@@ -1143,6 +1145,51 @@ export class OrchestrationPipeline implements VoiceSession {
     }
   }
 
+  private fragmentCoalesceHoldMs(): number {
+    return (this.isPlaying || this.isSendingTtsAudio)
+      ? (this.agent.fragmentCoalescePlayingMs ?? FRAGMENT_COALESCE_MS_DEFAULT)
+      : (this.agent.fragmentCoalesceListeningMs ?? FRAGMENT_COALESCE_LISTENING_MS_DEFAULT);
+  }
+
+  /** Hold / re-arm a short STT fragment so a follow-up final can merge. */
+  private armFragmentCoalesce(text: string, holdMs?: number): void {
+    const ms = holdMs ?? this.fragmentCoalesceHoldMs();
+    if (ms <= 0) return;
+    if (this._fragmentCoalesce) clearTimeout(this._fragmentCoalesce.timer);
+    this._fragmentCoalesce = {
+      text,
+      timer: setTimeout(() => this.flushFragmentCoalesce(), ms),
+    };
+  }
+
+  private flushFragmentCoalesce(): void {
+    const pending = this._fragmentCoalesce?.text;
+    this._fragmentCoalesce = null;
+    if (!pending || this.closed) return;
+    // Call 4856: coalesce timer fired between "Yes Ma'am" and "how are you?" —
+    // caller VAD had already restarted. Defer until speech_end.
+    if (this.interruptionMgr.isCalleeSpeaking()) {
+      logger.info(
+        { callId: this.config.callId, fragment: pending.slice(0, 80) },
+        "STT fragment coalesce deferred — caller still speaking",
+      );
+      this.armFragmentCoalesce(pending);
+      return;
+    }
+    if (
+      (this.isPlaying || this.isSendingTtsAudio)
+      && isBackchannelOnlyUtterance(pending)
+    ) {
+      this.logDiscardedTranscript(pending, "backchannel_during_playback");
+      logger.info(
+        { callId: this.config.callId, fragment: pending.slice(0, 80) },
+        "Held ack fragment dropped — agent speaking at coalesce-timer fire",
+      );
+      return;
+    }
+    void this.handleStreamingTranscript(pending, Date.now(), "coalesced_fragment");
+  }
+
   private isEnglishStrictAckMode(): boolean {
     return this.requestedLangLatch === "en-IN" || this.requestedLangLatch === "en-US";
   }
@@ -1265,6 +1312,17 @@ export class OrchestrationPipeline implements VoiceSession {
   private handleSttSpeechResumed(): void {
     if (this.isPlaying || this.bargeInRequested) return;
     this.clearEagerPartialTimer();
+    // Still holding an ack fragment — caller kept talking; extend the merge window
+    // so we don't flush "Yes Ma'am" before "how are you?" (call 4856 zigzag).
+    if (this._fragmentCoalesce) {
+      const held = this._fragmentCoalesce.text;
+      this.armFragmentCoalesce(held);
+      logger.info(
+        { callId: this.config.callId, fragment: held.slice(0, 80) },
+        "STT fragment coalesce extended — caller resumed speaking",
+      );
+      return;
+    }
     if (this._specLlmState && !this.isProcessing) {
       this._specLlmState.aborted = true;
       this._specLlmState = null;
@@ -2504,35 +2562,9 @@ export class OrchestrationPipeline implements VoiceSession {
         //     actual ANSWER to the agent's question. Holding 2s here reads as
         //     dead air on every short reply (call-4831 "Okay." turn), so release
         //     after a short merge window instead.
-        const holdMs = (this.isPlaying || this.isSendingTtsAudio)
-          ? (this.agent.fragmentCoalescePlayingMs ?? FRAGMENT_COALESCE_MS_DEFAULT)
-          : (this.agent.fragmentCoalesceListeningMs ?? FRAGMENT_COALESCE_LISTENING_MS_DEFAULT);
+        const holdMs = this.fragmentCoalesceHoldMs();
         if (holdMs > 0) {
-          this._fragmentCoalesce = {
-            text: transcript,
-            timer: setTimeout(() => {
-              const pending = this._fragmentCoalesce?.text;
-              this._fragmentCoalesce = null;
-              if (!pending || this.closed) return;
-              // Context re-check at fire time (review finding): the hold was armed
-              // under one playback phase but may fire in another. If the agent is
-              // NOW speaking and the held text is a pure ack ("okay"/"சரி"), it was
-              // a true backchannel — promoting it to a turn would wrongly barge the
-              // agent. Drop it instead of processing with stale context.
-              if (
-                (this.isPlaying || this.isSendingTtsAudio)
-                && isBackchannelOnlyUtterance(pending)
-              ) {
-                this.logDiscardedTranscript(pending, "backchannel_during_playback");
-                logger.info(
-                  { callId: this.config.callId, fragment: pending.slice(0, 80) },
-                  "Held ack fragment dropped — agent speaking at coalesce-timer fire",
-                );
-                return;
-              }
-              void this.handleStreamingTranscript(pending, Date.now(), "coalesced_fragment");
-            }, holdMs),
-          };
+          this.armFragmentCoalesce(transcript, holdMs);
           logger.info(
             { callId: this.config.callId, fragment: transcript.slice(0, 80), holdMs },
             "STT fragment coalesce hold — awaiting follow-up final",
@@ -2669,6 +2701,12 @@ export class OrchestrationPipeline implements VoiceSession {
       ? baseSpokenResponse.slice(spokenResponse.length).trim()
       : baseSpokenResponse.trim();
     if (!remainder) return;
+    // Call 4856: barge before any paced audio left spokenResponse empty → we
+    // "resumed" the entire line from the start (glitchy double-speak). Only
+    // keep a true unheard *tail* after meaningful progress into the reply.
+    const spokenLen = spokenResponse.trim().length;
+    const minSpoken = Math.min(24, Math.max(12, Math.floor(baseSpokenResponse.length * 0.12)));
+    if (spokenLen < minSpoken) return;
     if (remainder.length > 400) remainder = remainder.slice(0, 400);
     this._bargedReplyRemainder = remainder;
     this._bargedReplyAt = Date.now();

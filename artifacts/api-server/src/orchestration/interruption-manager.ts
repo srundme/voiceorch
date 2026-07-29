@@ -128,6 +128,11 @@ export class InterruptionManager {
     this.utteranceEndAt = Date.now();
   }
 
+  /** True while STT VAD reports the caller is mid-utterance. */
+  isCalleeSpeaking(): boolean {
+    return this.calleeSpeaking;
+  }
+
   getBargeInCount(): number {
     return this.bargeInCount;
   }

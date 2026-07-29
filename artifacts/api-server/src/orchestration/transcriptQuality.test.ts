@@ -68,6 +68,12 @@ describe("checkTranscriptQuality", () => {
     expect(shouldHoldFragmentForCoalesce("இப்ப என்ன time சார்?", { expectedLang: "ta-IN" })).toBe(false);
     expect(isBackchannelOnlyUtterance("hello")).toBe(false);
   });
+
+  it("holds Yes Ma'am so How are you can merge (call 4856 zigzag)", () => {
+    expect(isBackchannelOnlyUtterance("Yes Ma'am")).toBe(true);
+    expect(shouldHoldFragmentForCoalesce("Yes Ma'am", { expectedLang: "en-IN" })).toBe(true);
+    expect(shouldHoldFragmentForCoalesce("How are you, Ma'am?", { expectedLang: "en-IN" })).toBe(false);
+  });
 });
 
 describe("pickClarificationPhrase", () => {
