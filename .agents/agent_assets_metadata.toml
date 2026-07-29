@@ -371,3 +371,21 @@ id = "xhYICXvWMysseQeqHzb1q"
 uri = "file://attached_assets/snapserve-sarvam-poster.jpg"
 type = "image"
 title = "SnapServe × Sarvam Poster"
+
+[[outputs]]
+id = "gxH6k-2t2fmUxukH9TeiR"
+uri = "file://attached_assets/snapserve-sarvam-poster-2.jpg"
+type = "image"
+title = "Poster 2 — Midnight Announcement"
+
+[[outputs]]
+id = "uBOUGccaA7QLtukqa4Ew9"
+uri = "file://attached_assets/snapserve-sarvam-poster-3.jpg"
+type = "image"
+title = "Poster 3 — Sunrise"
+
+[[outputs]]
+id = "b6rzYOw9D0RyGT3nzzf9s"
+uri = "file://attached_assets/snapserve-sarvam-poster-4.jpg"
+type = "image"
+title = "Poster 4 — Editorial"
