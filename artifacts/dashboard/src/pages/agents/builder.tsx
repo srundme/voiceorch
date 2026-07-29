@@ -456,9 +456,22 @@ function AgentInboundPanel({
     queryFn: () => customFetch<{ numbers: string[] }>(`${DASH_API}/phone-numbers/managed`),
     staleTime: 5 * 60 * 1000,
   });
+  const { data: quota, refetch: refetchQuota } = useQuery({
+    queryKey: ["phone-numbers", "managed-quota"],
+    queryFn: () => customFetch<{
+      limit: number;
+      used: number;
+      remaining: number;
+      hasOwnNumber: boolean;
+      limited: boolean;
+      resetsAt: string;
+    }>(`${DASH_API}/phone-numbers/managed-quota`),
+    staleTime: 15_000,
+  });
   const assign = useAssignPhoneNumber();
   const phoneNumbers = Array.isArray(phoneNumbersRaw) ? phoneNumbersRaw : [];
   const assigned = phoneNumbers.find(p => p.agentId === agentId);
+  const ownedCount = phoneNumbers.length;
   const managedNumbers = managedData?.numbers ?? [];
   const testingFromNumber =
     preferredManagedNumber
@@ -502,11 +515,12 @@ function AgentInboundPanel({
       }
       queryClient.invalidateQueries({ queryKey: getListPhoneNumbersQueryKey() });
       queryClient.invalidateQueries({ queryKey: getGetAgentQueryKey(agentId) });
+      void refetchQuota();
       toast({
-        title: nextId ? "Inbound number set" : "Inbound number cleared",
+        title: nextId ? "Your number is live on this agent" : "Number cleared",
         description: nextId
-          ? "Calls to this number route to this agent. Outbound caller ID follows it."
-          : "No number routes inbound calls to this agent.",
+          ? "Inbound rings this agent. Outbound caller ID uses your number — unlimited calls."
+          : "Assign a purchased number to go live.",
       });
       setDialogOpen(false);
     } catch (err) {
@@ -514,75 +528,79 @@ function AgentInboundPanel({
     }
   };
 
+  const trialRemaining = quota?.limited ? quota.remaining : null;
+  const trialLimit = quota?.limit ?? 3;
+  const trialExhausted = quota?.limited && quota.remaining <= 0;
+
   return (
     <div className={cn("space-y-2", className)}>
-      {/* Outbound testing — free platform managed number.
-          Hidden once the agent has its own assigned number, since outbound
-          caller ID then follows that number and this card is redundant. */}
-      {!assigned && (
-      <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/5 p-3 space-y-1.5">
+      {/* Primary path: own number — buy / assign */}
+      <div className={cn(
+        "rounded-xl border p-3 space-y-2.5",
+        assigned
+          ? "border-emerald-500/25 bg-emerald-500/5"
+          : "border-amber-500/30 bg-amber-500/5",
+      )}>
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 min-w-0">
-            <Phone className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-600/90 dark:text-emerald-400/90">
-              Outbound testing
+            <PhoneForwarded className={cn("h-3.5 w-3.5 shrink-0", assigned ? "text-emerald-500" : "text-amber-500")} />
+            <span className={cn(
+              "text-[10px] font-semibold uppercase tracking-wider",
+              assigned ? "text-emerald-600/90 dark:text-emerald-400/90" : "text-amber-600/90 dark:text-amber-400/90",
+            )}>
+              Your phone number
             </span>
-          </div>
-          <span className="text-[9px] font-medium uppercase tracking-wide text-emerald-600/80 dark:text-emerald-400/70 shrink-0">
-            Free
-          </span>
-        </div>
-        {testingFromNumber ? (
-          <>
-            <p className="text-[13px] font-semibold tabular-nums text-foreground tracking-tight">
-              {testingFromNumber}
-            </p>
-            <p className="text-[10px] text-muted-foreground leading-relaxed">
-              Platform managed number — used as caller ID when you click <span className="text-foreground/80">Phone</span>. Outbound only; inbound does not ring this agent.
-            </p>
-          </>
-        ) : (
-          <p className="text-[11px] text-muted-foreground leading-relaxed">
-            No managed testing number is configured yet. Contact support, or assign your own number below for outbound caller ID.
-          </p>
-        )}
-      </div>
-      )}
-
-      {/* Inbound — requires user's assigned number */}
-      <div className="rounded-xl border border-border/50 bg-card/40 p-3 space-y-2.5">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5 min-w-0">
-            <PhoneForwarded className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Inbound</span>
           </div>
           <button
             type="button"
             onClick={() => navigate("/app/phone-numbers")}
             className="text-[10px] font-medium text-muted-foreground hover:text-foreground transition-colors"
           >
-            Numbers →
+            {ownedCount === 0 ? "Buy →" : "Numbers →"}
           </button>
         </div>
 
         {isLoading ? (
           <Skeleton className="h-9 w-full rounded-lg" />
-        ) : (
+        ) : assigned ? (
           <button
             type="button"
             onClick={openDialog}
             className="w-full flex items-center justify-between gap-2 rounded-lg border border-border/50 bg-background/50 px-2.5 py-2 text-left hover:border-border hover:bg-background/70 transition-colors"
           >
             <div className="min-w-0">
-              <p className={cn("text-[12px] font-medium truncate tabular-nums", assigned ? "text-foreground" : "text-muted-foreground")}>
-                {assigned?.number ?? "No number assigned"}
-              </p>
+              <p className="text-[12px] font-medium truncate tabular-nums text-foreground">{assigned.number}</p>
               <p className="text-[10px] text-muted-foreground/70 truncate mt-0.5">
-                {assigned
-                  ? "Receives inbound calls to this agent"
-                  : phoneNumbers.length === 0
-                    ? "Optional — buy a number for inbound only"
-                    : "Click to assign for inbound calls"}
+                Live — inbound + outbound caller ID · unlimited tests
+              </p>
+            </div>
+            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          </button>
+        ) : ownedCount === 0 ? (
+          <div className="space-y-2">
+            <p className="text-[12px] font-medium text-foreground">Required to go live</p>
+            <p className="text-[10px] text-muted-foreground leading-relaxed">
+              Buy your own number for inbound calls, your caller ID on outbound, and unlimited testing. The platform number below is only a short trial.
+            </p>
+            <Button
+              type="button"
+              size="sm"
+              className="h-8 w-full text-xs gap-1.5"
+              onClick={() => navigate("/app/phone-numbers")}
+            >
+              <Plus className="h-3.5 w-3.5" /> Buy a phone number
+            </Button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={openDialog}
+            className="w-full flex items-center justify-between gap-2 rounded-lg border border-amber-500/30 bg-background/50 px-2.5 py-2 text-left hover:border-amber-500/50 transition-colors"
+          >
+            <div className="min-w-0">
+              <p className="text-[12px] font-medium truncate text-foreground">Number purchased — assign it</p>
+              <p className="text-[10px] text-muted-foreground/70 truncate mt-0.5">
+                Click to attach your number for inbound + outbound
               </p>
             </div>
             <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
@@ -590,18 +608,74 @@ function AgentInboundPanel({
         )}
       </div>
 
+      {/* Trial outbound — demoted, capped */}
+      {!assigned && (
+      <div className={cn(
+        "rounded-xl border p-3 space-y-1.5",
+        trialExhausted
+          ? "border-border/40 bg-muted/20 opacity-90"
+          : "border-border/50 bg-card/40",
+      )}>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <Phone className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Trial outbound
+            </span>
+          </div>
+          <span className={cn(
+            "text-[9px] font-medium uppercase tracking-wide shrink-0 rounded-full border px-1.5 py-0.5",
+            trialExhausted
+              ? "border-border/50 text-muted-foreground"
+              : "border-amber-500/30 text-amber-500",
+          )}>
+            {quota?.limited
+              ? (trialExhausted ? "Limit reached" : `${trialRemaining}/${trialLimit} left today`)
+              : "Trial"}
+          </span>
+        </div>
+        {testingFromNumber ? (
+          <>
+            <p className="text-[12px] font-medium tabular-nums text-muted-foreground tracking-tight">
+              {testingFromNumber}
+            </p>
+            <p className="text-[10px] text-muted-foreground leading-relaxed">
+              {trialExhausted
+                ? "Free trial calls are used up for today. Buy a number to keep testing and to receive inbound calls."
+                : `Shared platform line for a quick listen — ${trialLimit} outbound tests/day. Not your number; inbound will not ring this agent.`}
+            </p>
+            {trialExhausted && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-7 w-full text-[11px] gap-1.5 mt-1"
+                onClick={() => navigate("/app/phone-numbers")}
+              >
+                <Plus className="h-3 w-3" /> Buy number to continue
+              </Button>
+            )}
+          </>
+        ) : (
+          <p className="text-[11px] text-muted-foreground leading-relaxed">
+            No trial line configured. Buy your own number to place outbound calls.
+          </p>
+        )}
+      </div>
+      )}
+
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Set inbound number</DialogTitle>
+            <DialogTitle>Attach your phone number</DialogTitle>
             <DialogDescription>
-              Route inbound calls to this agent. Outbound test calls already use the free platform number above — you do not need to buy a number to dial out.
+              Your purchased number handles inbound routing and outbound caller ID. Trial platform lines are shared and capped — buy a number to go live.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-1">
             {phoneNumbers.length === 0 ? (
               <div className="rounded-lg border border-dashed border-border/60 bg-muted/20 px-3 py-4 text-center space-y-2">
-                <p className="text-sm text-muted-foreground">You don’t have any phone numbers yet.</p>
+                <p className="text-sm text-muted-foreground">You don’t have a purchased number yet.</p>
                 <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => { setDialogOpen(false); navigate("/app/phone-numbers"); }}>
                   <Plus className="h-3.5 w-3.5" /> Buy a number
                 </Button>
@@ -628,7 +702,7 @@ function AgentInboundPanel({
                   </SelectContent>
                 </Select>
                 <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  Reassigning a number in use by another agent moves inbound routing to this agent.
+                  Reassigning a number in use by another agent moves inbound and outbound to this agent.
                 </p>
               </>
             )}
@@ -6036,13 +6110,29 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
     initiateOutbound.mutate(
       { data: { agentId, toNumber: callNumber } } as any,
       {
-        onSuccess: () => { setCallDialog(false); setCallNumber(""); toast({ title: "Calling…" }); },
+        onSuccess: () => {
+          setCallDialog(false);
+          setCallNumber("");
+          toast({ title: "Calling…" });
+          queryClient.invalidateQueries({ queryKey: ["phone-numbers", "managed-quota"] });
+        },
         onError: (err: any) => {
           if (isDestinationUnverifiedError(err)) {
             setPendingNumber(callNumber); setCallDialog(false); setOtpOpen(true);
-          } else {
-            toast({ title: "Error", description: formatApiError(err), variant: "destructive" });
+            return;
           }
+          const code = err?.data?.code ?? err?.body?.code;
+          if (code === "MANAGED_OUTBOUND_LIMIT") {
+            setCallDialog(false);
+            toast({
+              title: "Trial calls used up",
+              description: formatApiError(err),
+              variant: "destructive",
+            });
+            navigate("/app/phone-numbers");
+            return;
+          }
+          toast({ title: "Error", description: formatApiError(err), variant: "destructive" });
         },
       }
     );
@@ -6327,7 +6417,7 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
                 </Button>
               </div>
               <p className="text-[10px] text-muted-foreground/65 leading-snug px-0.5">
-                Phone = free outbound test (platform number) · Live Test = in-browser
+                Phone uses your number when assigned — otherwise a capped trial line ({3} calls/day). Live Test = in-browser.
               </p>
             </div>
 
@@ -6421,9 +6511,9 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
               Agent <strong>{agent.name}</strong> will call this number
               {outboundTestingFrom ? (
                 <>
-                  {" "}using free platform caller ID{" "}
+                  {" "}using trial platform caller ID{" "}
                   <span className="font-medium tabular-nums text-foreground">{outboundTestingFrom}</span>
-                  {" "}(outbound only).
+                  {" "}(capped daily · buy your own number for unlimited + inbound).
                 </>
               ) : (
                 "."

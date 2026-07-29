@@ -582,6 +582,16 @@ router.get("/phone-numbers/managed", requireAuth, async (req, res): Promise<void
   res.json({ numbers });
 });
 
+// ── GET /phone-numbers/managed-quota ──────────────────────────────────────────
+// Daily free-trial outbound allowance on platform managed numbers.
+
+router.get("/phone-numbers/managed-quota", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+  const { getManagedOutboundQuota } = await import("../services/managed-outbound-quota.js");
+  const quota = await getManagedOutboundQuota(clerkId);
+  res.json(quota);
+});
+
 // ── GET /phone-numbers ────────────────────────────────────────────────────────
 
 router.get("/phone-numbers", requireAuth, clientContext, async (req, res): Promise<void> => {

@@ -348,6 +348,18 @@ router.post("/calls/outbound", requireAuth, clientContext, async (req, res): Pro
           return;
         }
 
+        // Trial quota: managed-pool dials only. Purchased numbers unlock unlimited.
+        // Apply when the agent has no assigned owned outbound number.
+        if (!agentOutboundNumber && agent.userId) {
+          const { enforceManagedOutboundQuota } = await import("../services/managed-outbound-quota.js");
+          const blocked = await enforceManagedOutboundQuota(agent.userId);
+          if (blocked) {
+            req.log.info({ agentId, userId: agent.userId, quota: blocked.body.quota }, "Managed outbound trial limit hit");
+            res.status(blocked.status).json(blocked.body);
+            return;
+          }
+        }
+
         // Prefer agent's assigned outbound number (from phone_numbers table — already platform-owned,
         // no need to cross-check the managed pool). Fall back to preferredManagedNumber if in pool,
         // else pick randomly from the pool.
