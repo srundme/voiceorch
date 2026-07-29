@@ -16,7 +16,7 @@
 
 import {
   db, workflowsTable, workflowRunsTable, campaignsTable, campaignLeadsTable,
-  callsTable, agentsTable, phoneNumbersTable,
+  callsTable, agentsTable, phoneNumbersTable, journeysTable,
   type Workflow, type WorkflowRun, type WorkflowStep,
 } from "@workspace/db";
 import { eq, and, sql } from "drizzle-orm";
@@ -24,6 +24,14 @@ import { randomBytes } from "node:crypto";
 import { logger } from "../lib/logger.js";
 import { normalizePhone } from "../lib/phone-normalize.js";
 import { fireCampaignCall } from "../orchestration/campaignCaller.js";
+import { scheduleCallbackRequested } from "./autoRedial.js";
+import {
+  getActiveChannel,
+  resolveSendContext,
+  sendWhatsappTemplate,
+  getOwnCredsForUser,
+  type TemplateHint,
+} from "./whatsapp/vobiz.js";
 
 const CALL_TIMEOUT_MS = 20 * 60 * 1000; // give up waiting on a call after 20 min
 
@@ -121,6 +129,12 @@ export async function startWorkflowRun(opts: {
   await db.update(workflowsTable)
     .set({ totalRuns: sql`${workflowsTable.totalRuns} + 1`, lastRunAt: new Date() })
     .where(eq(workflowsTable.id, workflow.id));
+
+  // Keep linked journey counters in sync when runs start via the public hook / test.
+  await db.update(journeysTable)
+    .set({ totalRuns: sql`${journeysTable.totalRuns} + 1`, lastRunAt: new Date() })
+    .where(eq(journeysTable.workflowId, workflow.id));
+
   void advanceRun(run!.id);
   return run!.id;
 }
@@ -175,6 +189,16 @@ export async function advanceRun(runId: number): Promise<void> {
       }
       if (step.type === "send_webhook") {
         await doWebhook(step, context);
+        idx++;
+        continue;
+      }
+      if (step.type === "schedule_callback") {
+        await doScheduleCallback(workflow.userId, step, context);
+        idx++;
+        continue;
+      }
+      if (step.type === "send_whatsapp") {
+        await doSendWhatsapp(workflow.userId, step, context);
         idx++;
         continue;
       }
@@ -341,6 +365,78 @@ async function doWebhook(step: WorkflowStep, context: Ctx): Promise<void> {
     body: JSON.stringify(context),
     signal: AbortSignal.timeout(10_000),
   }).catch((err) => { throw new Error(`webhook POST failed: ${err?.message ?? err}`); });
+}
+
+async function doScheduleCallback(userId: string, step: WorkflowStep, context: Ctx): Promise<void> {
+  const agentId = step.agentId;
+  if (!agentId) throw new Error("schedule_callback missing agentId");
+  const phoneRaw = toStr(getPath(context, step.phoneField ?? "phone") || context["phone"]);
+  if (!phoneRaw.trim()) throw new Error("schedule_callback: no phone number in context");
+
+  const days = Math.max(0, Number(step.callbackDelayDays ?? 0));
+  const secs = Math.max(0, Number(step.delaySeconds ?? 0));
+  const delayMs = days > 0 ? days * 86_400_000 : secs * 1000;
+  const scheduledAt = new Date(Date.now() + Math.max(delayMs, 60_000)); // at least 1 min out
+
+  const callObj = (context["call"] && typeof context["call"] === "object")
+    ? (context["call"] as Record<string, unknown>)
+    : {};
+  const callId = typeof callObj["callId"] === "number" ? callObj["callId"] : null;
+
+  const id = await scheduleCallbackRequested({
+    agentId,
+    toNumber: phoneRaw,
+    userId,
+    callId,
+    scheduledAt,
+    notes: step.notes ?? "Journey schedule_callback",
+  });
+  logger.info({ agentId, phone: phoneRaw, scheduledAt, callbackId: id }, "workflow: schedule_callback queued");
+}
+
+async function doSendWhatsapp(userId: string, step: WorkflowStep, context: Ctx): Promise<void> {
+  const phoneRaw = toStr(getPath(context, step.phoneField ?? "phone") || context["phone"]);
+  if (!phoneRaw.trim()) throw new Error("send_whatsapp: no phone number in context");
+
+  const channel = await getActiveChannel(userId);
+  if (!channel) {
+    logger.warn({ userId }, "workflow: send_whatsapp skipped — no active WhatsApp channel");
+    return;
+  }
+
+  const ctx = await resolveSendContext(channel, () => getOwnCredsForUser(userId));
+  if ("error" in ctx) {
+    logger.warn({ userId, err: ctx.error }, "workflow: send_whatsapp skipped — send context error");
+    return;
+  }
+
+  const callObj = (context["call"] && typeof context["call"] === "object")
+    ? (context["call"] as Record<string, unknown>)
+    : {};
+  const hint = (step.whatsappHint ?? "call_summary") as TemplateHint;
+  const name = toStr(context["name"]) || "there";
+  const summary = toStr(callObj["summary"]) || toStr(callObj["success"]) || "Thanks for speaking with us.";
+  const defaultParams =
+    hint === "booking_confirmed"
+      ? [name, "your appointment", "as scheduled"]
+      : hint === "callback_scheduled"
+        ? [name, "soon"]
+        : [name, summary.slice(0, 120)];
+  const params = (step.whatsappParams?.length ? step.whatsappParams : defaultParams).map(String);
+  const callId = typeof callObj["callId"] === "number" ? callObj["callId"] : null;
+
+  const result = await sendWhatsappTemplate({
+    channel,
+    ctx,
+    toPhone: phoneRaw,
+    hint,
+    params,
+    callId,
+  });
+  if (!result.ok && !result.skipped) {
+    throw new Error(result.error ?? "send_whatsapp failed");
+  }
+  logger.info({ userId, hint, ok: result.ok, skipped: result.skipped }, "workflow: send_whatsapp done");
 }
 
 // ── atomic claim helpers ─────────────────────────────────────────────────────

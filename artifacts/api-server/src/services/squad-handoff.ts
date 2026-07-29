@@ -299,24 +299,6 @@ async function buildTargetAgentConfig(
           ),
         }
       : null,
-    agentKind: (agentCfg["agentKind"] as string | undefined) === "vision" ? "vision" : "voice",
-    visionConfig: (() => {
-      const vc = agentCfg["visionConfig"] as Record<string, unknown> | undefined | null;
-      if (!vc || typeof vc !== "object") return null;
-      return {
-        enabled:         typeof vc["enabled"] === "boolean"         ? vc["enabled"]         : true,
-        defaultProvider: (["gemini","openai","sarvam","azure"].includes(vc["defaultProvider"] as string))
-          ? vc["defaultProvider"] as "gemini" | "openai" | "sarvam" | "azure"
-          : "gemini",
-        mode:            (["photo_upload","live_snapshot","live_stream"].includes(vc["mode"] as string))
-          ? vc["mode"] as "photo_upload" | "live_snapshot" | "live_stream"
-          : "photo_upload",
-        allowWhatsapp:   typeof vc["allowWhatsapp"] === "boolean"   ? vc["allowWhatsapp"]   : false,
-        allowApiStaging: typeof vc["allowApiStaging"] === "boolean" ? vc["allowApiStaging"] : true,
-        retentionDays:   typeof vc["retentionDays"] === "number"    ? vc["retentionDays"]   : 30,
-        notifyOnMedia:   typeof vc["notifyOnMedia"] === "boolean"   ? vc["notifyOnMedia"]   : true,
-      };
-    })(),
   };
   agentConfig.sttConfig.endpointingSilenceMs = agentConfig.asrEndpointingSilenceMs;
 

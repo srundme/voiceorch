@@ -176,51 +176,7 @@ export interface SquadFollowupTool {
   description: string;
 }
 
-/** Free-form image description — "what do you see?" */
-export interface VisionDescribeTool {
-  type: "vision_describe";
-  name: string;
-  description: string;
-  /** Vision provider to use. Defaults to agent visionConfig.defaultProvider */
-  provider?: "gemini" | "openai" | "sarvam" | "azure";
-  /** Custom prompt template. Supports {{caller_name}}, {{agent_goal}}, {{media_id}} */
-  promptTemplate?: string;
-}
-
-/** Structured field extraction — returns a JSON object matching the user-defined schema */
-export interface VisionExtractTool {
-  type: "vision_extract";
-  name: string;
-  description: string;
-  provider?: "gemini" | "openai" | "sarvam" | "azure";
-  promptTemplate?: string;
-  /** JSON Schema object describing the fields to extract */
-  outputSchema?: Record<string, unknown>;
-  /** If true, automatically save extracted data to the agent's custom database schema */
-  saveToDbSchemaId?: number;
-}
-
-/** Binary verification — "is this a valid X?" returns { valid, confidence, reason } */
-export interface VisionVerifyTool {
-  type: "vision_verify";
-  name: string;
-  description: string;
-  provider?: "gemini" | "openai" | "sarvam" | "azure";
-  promptTemplate?: string;
-}
-
-/** Compare two images — face match, before/after, document vs selfie */
-export interface VisionCompareTool {
-  type: "vision_compare";
-  name: string;
-  description: string;
-  provider?: "gemini" | "openai" | "sarvam" | "azure";
-  promptTemplate?: string;
-}
-
-export type VisionTool = VisionDescribeTool | VisionExtractTool | VisionVerifyTool | VisionCompareTool;
-
-export type AgentTool = CallTransferTool | WebhookTool | SendSmsTool | EndCallTool | CalComTool | NativeBookingTool | NativeRescheduleTool | NativeCancelTool | NativeCheckAvailabilityTool | NativeListBookingsTool | TransferColdTool | TransferWarmTool | TransferAgentTool | SquadFollowupTool | VisionDescribeTool | VisionExtractTool | VisionVerifyTool | VisionCompareTool;
+export type AgentTool = CallTransferTool | WebhookTool | SendSmsTool | EndCallTool | CalComTool | NativeBookingTool | NativeRescheduleTool | NativeCancelTool | NativeCheckAvailabilityTool | NativeListBookingsTool | TransferColdTool | TransferWarmTool | TransferAgentTool | SquadFollowupTool;
 
 /** JSON Schema-compatible tool definition passed to LLM providers */
 export interface ToolDefinition {
@@ -491,26 +447,6 @@ export interface AgentConfig {
     model: string;
     voiceName: string;
     thinkingLevel: "minimal" | "low" | "medium" | "high";
-  } | null;
-
-  /** Agent kind — "voice" (default) or "vision" (webcall-only, Gemini Live powered) */
-  agentKind: "voice" | "vision";
-
-  /** Vision configuration — populated when agentKind === "vision" or vision tools are added */
-  visionConfig: {
-    enabled: boolean;
-    /** Default provider for all vision tools unless overridden per-tool */
-    defaultProvider: "gemini" | "openai" | "sarvam" | "azure";
-    /** "photo_upload" = still images only; "live_snapshot" = snap on demand; "live_stream" = continuous 2fps */
-    mode: "photo_upload" | "live_snapshot" | "live_stream";
-    /** Allow WhatsApp images to be staged for this agent */
-    allowWhatsapp: boolean;
-    /** Allow pre-call API staging */
-    allowApiStaging: boolean;
-    /** Days to retain captured media. Default 30 */
-    retentionDays: number;
-    /** Inject a system note when a new image arrives mid-call */
-    notifyOnMedia: boolean;
   } | null;
 }
 

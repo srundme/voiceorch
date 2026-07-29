@@ -30,7 +30,7 @@ export default function Slide15() {
             </div>
           </div>
           <h1 style={{ fontFamily: "var(--font-display-family)", fontSize: "2.6vw", fontWeight: 700, color: "#FFFFFF", margin: 0, lineHeight: 1.15 }}>
-            The agent that sees, hears, and remembers — without leaving the page.
+            The agent that hears, helps, and remembers — without leaving the page.
           </h1>
         </div>
         <span style={{ fontSize: "0.85vw", fontWeight: 600, color: "#4B6CB7", letterSpacing: "0.06em", paddingBottom: "0.3vh" }}>06 / 16</span>
@@ -50,8 +50,8 @@ export default function Slide15() {
                   <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>
                 </svg>
               ),
-              title: "Live KYC — no app switch",
-              body: "The agent speaks to the customer and screens the document simultaneously. Identity verified. Compliance logged. User never redirected.",
+              title: "Live voice workflows — no app switch",
+              body: "The agent speaks to the customer inside your product, qualifies intent, captures details, and completes the next step without sending the user elsewhere.",
             },
             {
               icon: (
@@ -59,8 +59,8 @@ export default function Slide15() {
                   <rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8M12 17v4"/>
                 </svg>
               ),
-              title: "Visual guided support",
-              body: "Agent sees what the customer is looking at on-screen. Guides them step-by-step through forms, documents, or app workflows while speaking.",
+              title: "Guided support inside your app",
+              body: "Agent walks the customer step-by-step through forms, onboarding, and support flows while speaking naturally in real time.",
             },
             {
               icon: (
@@ -101,9 +101,9 @@ export default function Slide15() {
           <div style={{ flex: 1, background: "#1A237E", borderRadius: "1.2vw", padding: "2.4vh 2vw", display: "flex", flexDirection: "column", gap: "0" }}>
             {[
               { step: "01", label: "Customer opens your app", sub: "No redirect. No download." },
-              { step: "02", label: "Agent joins: voice + camera feed", sub: "Sees the screen in real time" },
-              { step: "03", label: "Identity confirmed", sub: "Compliance logged automatically" },
-              { step: "04", label: "KYC approved — agent continues the conversation", sub: "Memory layer updated instantly" },
+              { step: "02", label: "Agent joins by voice", sub: "Converses in real time" },
+              { step: "03", label: "Need captured and resolved", sub: "Details logged automatically" },
+              { step: "04", label: "Conversation continues with memory", sub: "Context updates instantly" },
             ].map(({ step, label, sub }, i) => (
               <div key={step} style={{ display: "flex", flexDirection: "column", position: "relative" }}>
                 <div style={{ display: "flex", gap: "1.2vw", alignItems: "flex-start", paddingBottom: i < 3 ? "2.2vh" : "0" }}>
@@ -141,8 +141,8 @@ export default function Slide15() {
             display: "flex", flexDirection: "column", gap: "1.4vh",
           }}>
             {[
-              { label: "Vapi / Retell", detail: "Voice only. No visual layer. KYC requires a separate app or human handoff." },
-              { label: "Traditional KYC SDKs", detail: "Document scanning with no conversational intelligence. Rigid flows, no memory." },
+              { label: "Vapi / Retell", detail: "Raw voice infrastructure. Great primitives, but product teams still have to build memory, workflows, and business logic on top." },
+              { label: "Traditional IVR stacks", detail: "Rigid menu trees, low completion rates, and no persistent memory across conversations." },
               { label: "Human agents", detail: "Expensive, inconsistent, can't run at 3AM. Can't log a verifiable audit trail automatically." },
             ].map(({ label, detail }) => (
               <div key={label} style={{ display: "flex", gap: "1vw", alignItems: "flex-start" }}>
@@ -159,7 +159,7 @@ export default function Slide15() {
               <div>
                 <div style={{ fontSize: "1.02vw", fontWeight: 700, color: "#FF6F00" }}>SnapServe Voice AI</div>
                 <div style={{ fontSize: "0.94vw", color: "#5B5470", lineHeight: 1.52 }}>
-                  Live today. One embedded agent that speaks, sees, verifies, and remembers — compliant by default, no human required, no app download.
+                  Live today. One embedded agent that speaks, resolves workflows, and remembers context — compliant by default, no human required, no app download.
                 </div>
               </div>
             </div>
@@ -170,7 +170,7 @@ export default function Slide15() {
             borderRadius: "1vw", padding: "1.6vh 1.8vw",
           }}>
             <div style={{ fontSize: "0.98vw", color: "#BF360C", lineHeight: 1.55 }}>
-              <strong>First target:</strong> Indian insurers running manual KYC calls — 40M+ verifications per year, ₹150+ per manual call. SnapServe cuts that to ₹8. <strong>Live in production — insurance pilots running now.</strong>
+              <strong>First target:</strong> Indian businesses running repetitive inbound and outbound call workflows — support, qualification, reminders, booking, and follow-ups. <strong>Live in production now.</strong>
             </div>
           </div>
         </div>

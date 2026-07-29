@@ -88,21 +88,23 @@ import { DestinationOtpDialog } from "@/components/destination-otp-dialog";
 import { RecentNumbersList } from "@/components/recent-numbers-list";
 import { useRecentNumbers } from "@/hooks/use-recent-numbers";
 import { GeneratePromptSheet } from "./generate-prompt-sheet";
+import { JourneyPanel } from "./journey-panel";
 const _DASH_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const DASH_API   = `${_DASH_BASE}/api`;
 
 /* ── Types ──────────────────────────────────────────────────────────────────── */
 
-type TabId = "overview" | "prompt" | "voice" | "tools" | "analysis" | "voicemail" | "advanced" | "versions";
+type TabId = "overview" | "channels" | "prompt" | "voice" | "tools" | "analysis" | "voicemail" | "advanced" | "versions";
 
 interface TabDef { id: TabId; label: string; icon: React.ReactNode }
 
 const TABS: TabDef[] = [
-  { id: "overview",    label: "Overview",    icon: <Bot className="h-3.5 w-3.5" /> },
+  { id: "overview",    label: "Agent",       icon: <Bot className="h-3.5 w-3.5" /> },
+  { id: "channels",    label: "Channels",    icon: <Phone className="h-3.5 w-3.5" /> },
   { id: "prompt",      label: "Prompt",      icon: <FileText className="h-3.5 w-3.5" /> },
   { id: "voice",       label: "Voice",       icon: <Mic className="h-3.5 w-3.5" /> },
   { id: "tools",       label: "Tools",       icon: <Wrench className="h-3.5 w-3.5" /> },
-  { id: "analysis",    label: "Analysis",    icon: <BarChart3 className="h-3.5 w-3.5" /> },
+  { id: "analysis",    label: "Journey",     icon: <GitBranch className="h-3.5 w-3.5" /> },
   { id: "voicemail",   label: "Voicemail",   icon: <VoicemailIcon className="h-3.5 w-3.5" /> },
   { id: "advanced",    label: "Advanced",    icon: <SlidersHorizontal className="h-3.5 w-3.5" /> },
   { id: "versions",    label: "Versions",    icon: <History className="h-3.5 w-3.5" /> },
@@ -645,6 +647,250 @@ function AgentInboundPanel({
   );
 }
 
+type BuilderWhatsappChannel = {
+  mode: "shared" | "own";
+  businessName: string;
+  phoneE164: string | null;
+  status: string;
+  active: boolean;
+};
+
+type BuilderWhatsappResponse = {
+  channel: BuilderWhatsappChannel | null;
+  sharedTierAvailable: boolean;
+  usage: { used24h: number; cap: number } | null;
+};
+
+function StatusBadge({
+  ready,
+  readyLabel = "Ready",
+  emptyLabel = "Needs setup",
+}: {
+  ready: boolean;
+  readyLabel?: string;
+  emptyLabel?: string;
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium",
+        ready
+          ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-400"
+          : "border-amber-500/25 bg-amber-500/10 text-amber-400",
+      )}
+    >
+      <span className={cn("h-1.5 w-1.5 rounded-full", ready ? "bg-emerald-400" : "bg-amber-400")} />
+      {ready ? readyLabel : emptyLabel}
+    </span>
+  );
+}
+
+function JourneyReadinessPanel({ form, agent }: { form: any; agent: any }) {
+  const knowledgeIds = (form.watch("knowledgeSourceIds") ?? []) as number[];
+  const schedulingCalendarId = form.watch("schedulingCalendarId");
+  const schedulingEventTypeId = form.watch("schedulingEventTypeId");
+  const webhookUrl = (form.watch("webhookUrl") ?? "").trim();
+  const [hasInboundPhone, setHasInboundPhone] = useState(false);
+
+  const { data: phoneNumbersRaw } = useListPhoneNumbers({
+    query: { queryKey: getListPhoneNumbersQueryKey(), staleTime: 60_000 },
+  });
+
+  const { data: waData } = useQuery({
+    queryKey: ["builder-whatsapp-channel", agent?.id],
+    enabled: !!agent?.id,
+    queryFn: () => customFetch<BuilderWhatsappResponse>(`${DASH_API}/whatsapp/channel`),
+    staleTime: 60_000,
+  });
+
+  useEffect(() => {
+    const phoneNumbers = Array.isArray(phoneNumbersRaw) ? phoneNumbersRaw : [];
+    setHasInboundPhone(phoneNumbers.some((p: any) => p.agentId === agent?.id));
+  }, [phoneNumbersRaw, agent?.id]);
+
+  const checks = [
+    { label: "Voice + prompt", ready: !!(form.watch("name") ?? "").trim() && !!(form.watch("systemPrompt") ?? "").trim() },
+    { label: "Knowledge attached", ready: knowledgeIds.length > 0 },
+    { label: "Phone channel", ready: hasInboundPhone },
+    { label: "WhatsApp channel", ready: !!waData?.channel?.active },
+    { label: "Booking channel", ready: !!schedulingCalendarId && !!schedulingEventTypeId },
+    { label: "Follow-up output", ready: !!waData?.channel?.active || !!webhookUrl },
+  ];
+
+  const readyCount = checks.filter((c) => c.ready).length;
+
+  return (
+    <div className="rounded-xl border border-border/60 bg-card/30 p-4 space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Journey readiness</p>
+          <h3 className="text-sm font-semibold mt-1">Build a complete agent, not just a voice bot</h3>
+        </div>
+        <span className="text-xs font-semibold text-muted-foreground">{readyCount}/{checks.length}</span>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {checks.map((check) => (
+          <div key={check.label} className="flex items-center justify-between rounded-lg border border-border/40 bg-background/40 px-3 py-2">
+            <span className="text-xs">{check.label}</span>
+            <StatusBadge ready={check.ready} readyLabel="Connected" emptyLabel="Pending" />
+          </div>
+        ))}
+      </div>
+      <p className="text-[11px] text-muted-foreground">
+        The best SnapServe agents usually connect voice, WhatsApp, and at least one follow-up path before they go live.
+      </p>
+    </div>
+  );
+}
+
+function ChannelsTab({ form, agent }: { form: any; agent: any }) {
+  const [, navigate] = useLocation();
+  const schedulingCalendarId = form.watch("schedulingCalendarId");
+  const schedulingEventTypeId = form.watch("schedulingEventTypeId");
+  const webhookUrl = (form.watch("webhookUrl") ?? "").trim();
+
+  const { data: waData, isLoading: waLoading } = useQuery({
+    queryKey: ["builder-whatsapp-channel", agent?.id],
+    enabled: !!agent?.id,
+    queryFn: () => customFetch<BuilderWhatsappResponse>(`${DASH_API}/whatsapp/channel`),
+    staleTime: 60_000,
+  });
+
+  return (
+    <div className="p-6 space-y-8">
+      <section className="space-y-2">
+        <h2 className="text-base font-semibold tracking-tight">Communication channels</h2>
+        <p className="text-[12px] text-muted-foreground max-w-3xl">
+          This is where the agent becomes real. Attach the channels customers use to reach you and the channels SnapServe uses for follow-ups.
+        </p>
+      </section>
+
+      <JourneyReadinessPanel form={form} agent={agent} />
+
+      <section className="grid gap-4 xl:grid-cols-2">
+        <div className="rounded-xl border border-border/60 bg-card/20 p-4 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold">Phone</h3>
+              <p className="text-[11px] text-muted-foreground">Inbound routing, outbound caller ID, and test calls.</p>
+            </div>
+            <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={() => navigate("/app/phone-numbers")}>
+              Manage numbers
+            </Button>
+          </div>
+          {agent?.id ? (
+            <AgentInboundPanel agentId={agent.id} preferredManagedNumber={form.watch("preferredManagedNumber")} />
+          ) : (
+            <p className="text-[11px] text-muted-foreground">Save the agent first to attach inbound phone numbers.</p>
+          )}
+        </div>
+
+        <div className="rounded-xl border border-border/60 bg-card/20 p-4 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold">WhatsApp</h3>
+              <p className="text-[11px] text-muted-foreground">Post-call messages, callback nudges, brochure sends, and chatbot replies.</p>
+            </div>
+            <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={() => navigate("/app/whatsapp")}>
+              Configure WhatsApp
+            </Button>
+          </div>
+          {waLoading ? (
+            <Skeleton className="h-20 w-full rounded-xl" />
+          ) : waData?.channel ? (
+            <div className="rounded-lg border border-border/40 bg-background/40 p-3 space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">{waData.channel.businessName || "WhatsApp channel"}</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    {waData.channel.mode === "own" ? "Own number" : "Shared SnapServe channel"}
+                    {waData.channel.phoneE164 ? ` · ${waData.channel.phoneE164}` : ""}
+                  </p>
+                </div>
+                <StatusBadge ready={waData.channel.active} readyLabel={waData.channel.status || "Active"} emptyLabel="Inactive" />
+              </div>
+              {waData.usage && (
+                <p className="text-[11px] text-muted-foreground">
+                  Usage: {waData.usage.used24h}/{waData.usage.cap} messages in the last 24h.
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="rounded-lg border border-dashed border-border/50 p-4">
+              <p className="text-sm font-medium">No WhatsApp channel yet</p>
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Connect WhatsApp if this agent should send summaries, callback reminders, or chat with leads after calls.
+              </p>
+            </div>
+          )}
+        </div>
+
+        <div className="rounded-xl border border-border/60 bg-card/20 p-4 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold">Booking</h3>
+              <p className="text-[11px] text-muted-foreground">Calendar, event type, meeting links, and booking notifications.</p>
+            </div>
+            <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={() => navigate("/app/scheduling")}>
+              Open scheduling
+            </Button>
+          </div>
+          <div className="rounded-lg border border-border/40 bg-background/40 p-3 space-y-2">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium">Calendar + event type</p>
+                <p className="text-[11px] text-muted-foreground">
+                  {schedulingCalendarId && schedulingEventTypeId
+                    ? "Booking tools and notifications are linked."
+                    : "Link scheduling before promising bookings over voice or WhatsApp."}
+                </p>
+              </div>
+              <StatusBadge ready={!!schedulingCalendarId && !!schedulingEventTypeId} readyLabel="Linked" emptyLabel="Unlinked" />
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-border/60 bg-card/20 p-4 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold">Email + external systems</h3>
+              <p className="text-[11px] text-muted-foreground">Use booking emails today, or drive custom email/CRM actions through post-call webhooks.</p>
+            </div>
+            <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={() => navigate("/app/connections")}>
+              Open connections
+            </Button>
+          </div>
+          <div className="rounded-lg border border-border/40 bg-background/40 p-3 space-y-2">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium">Post-call automation</p>
+                <p className="text-[11px] text-muted-foreground">
+                  {webhookUrl
+                    ? "Webhook is configured for CRM, email, or custom journey actions."
+                    : "No webhook configured yet. Add one if downstream systems should react after calls."}
+                </p>
+              </div>
+              <StatusBadge ready={!!webhookUrl} readyLabel="Connected" emptyLabel="Optional" />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {agent?.id && (
+        <section className="rounded-xl border border-border/60 bg-card/20 p-4 space-y-3">
+          <div>
+            <h3 className="text-sm font-semibold">Webcall</h3>
+            <p className="text-[11px] text-muted-foreground">
+              For agents that need browser-based conversations, guest invite links, or join flows.
+            </p>
+          </div>
+          <WebcallShareLinksSection agentId={agent.id} />
+        </section>
+      )}
+    </div>
+  );
+}
+
 function OverviewTab({ form, agent }: { form: any; agent: any }) {
   const [openSection, setOpenSection] = useState<CardSection | null>(null);
   const [confirmDiscardSection, setConfirmDiscardSection] = useState<CardSection | null>(null);
@@ -856,6 +1102,7 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
       {/* ── Studio overview: pipeline → welcome → canvas ─────────────────────── */}
       <div className="relative min-w-0">
         <div className="p-5 sm:p-6 space-y-6 max-w-3xl">
+          <JourneyReadinessPanel form={form} agent={agent} />
 
           {/* Pipeline chips — top of Overview */}
           <section className="space-y-2.5">
@@ -3784,14 +4031,23 @@ function AnalysisTab({ form, agentId }: { form: any; agentId: number }) {
   return (
     <div className="relative p-6 space-y-8">
 
+      <section className="space-y-2">
+        <h2 className="text-base font-semibold tracking-tight">Journey flow</h2>
+        <p className="text-[12px] text-muted-foreground max-w-3xl">
+          Design what happens before the call, after the call, and when a lead needs follow-ups across phone, WhatsApp, booking, webhooks, and memory.
+        </p>
+      </section>
+
+      <JourneyPanel agentId={agentId} webhookUrl={form.watch("webhookUrl")} />
+
       {/* ── Webhook ── */}
       <div>
         <div className="flex items-center gap-2 mb-1">
           <Webhook className="h-4 w-4 text-violet-400" />
-          <h3 className="text-sm font-semibold">Post-call Webhook</h3>
+          <h3 className="text-sm font-semibold">External journey webhook</h3>
         </div>
         <p className="text-xs text-muted-foreground mb-4">
-          When a call ends we'll POST the full call data (transcript, duration, cost, disposition) to this URL.
+          Use this when the journey should continue in another system after the call, such as email, CRM updates, event registration, or custom workflows.
         </p>
         <div className="space-y-3">
           <FormField control={form.control} name="webhookUrl" render={({ field }) => {
@@ -5725,6 +5981,8 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
       const fieldTabMap: Record<string, TabId> = {
         webhookUrl:               "analysis",
         webhookSecret:            "analysis",
+        schedulingCalendarId:     "channels",
+        schedulingEventTypeId:    "channels",
         noiseCancellationEnabled: "voice",
         ambientNoiseEnabled:      "voice",
         ambientNoiseTrack:        "voice",
@@ -5891,6 +6149,9 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
               </span>
               <span className="text-[11px] text-muted-foreground/50 tabular-nums shrink-0">#{String(agent.id).padStart(4, "0")}</span>
             </div>
+            <p className="text-[12px] text-muted-foreground/80 max-w-3xl">
+              Build the agent, connect its channels, and shape the journey it should run across calls, WhatsApp, booking, follow-ups, and memory.
+            </p>
             <AgentCostSummary form={form} rateMap={rateMap} agent={agent} />
           </div>
 
@@ -5999,6 +6260,7 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
             <div ref={tabContentRef} className="flex-1 min-h-0 overflow-y-auto">
               <form onSubmit={e => e.preventDefault()}>
                 {activeTab === "overview"  && <OverviewTab form={form} agent={agent} />}
+                {activeTab === "channels"  && <ChannelsTab form={form} agent={agent} />}
                 {activeTab === "prompt"    && <PromptTab form={form} />}
                 {activeTab === "voice"     && <VoiceTab form={form} />}
                 {activeTab === "tools"     && <ToolsTab form={form} agentId={agentId} />}
