@@ -1,4 +1,4 @@
-# Redeploy trigger: guided agent creation wizard (dashboard).
+# Redeploy trigger: Sarvam co-brand palette + sidebar lockup (dashboard).
 FROM node:24-slim AS builder
 WORKDIR /workspace
 
