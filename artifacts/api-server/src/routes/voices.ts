@@ -296,8 +296,8 @@ async function probeSarvamSpeaker(
         ok: false,
         message:
           `Sarvam does not recognize speaker "${speakerId}" on this API key. `
-          + "Use the exact Speaker / clone id from Creative Studio (not the display name), "
-          + "and add your Sarvam API key under Providers so SnapServe can reach your clones.",
+          + "Paste the exact Speaker / clone id from Creative Studio (not the display name). "
+          + "The managed / GCP SARVAM_API_KEY must be from the same Sarvam project that owns the clone.",
       };
     }
     return {
@@ -350,21 +350,14 @@ router.post("/voices/sarvam-register", requireAuth, async (req, res): Promise<vo
     return;
   }
 
-  // Clones are account-scoped — require the user's own Sarvam key whenever the
-  // speaker is not a public catalog name (managed platform key cannot see them).
+  // Verify speaker against user key if present, else managed/GCP key.
+  // Clones work on managed TTS when managed_sarvam_key is from the same Sarvam project that created the clone.
   const keyInfo = await getSarvamKeyForUser(userId);
   if (!keyInfo) {
     res.status(400).json({
-      error: "Add your Sarvam API key on Providers first, then register the clone speaker id.",
-    });
-    return;
-  }
-  if (keyInfo.source === "managed" && !isSarvamCatalogSpeaker(speakerId)) {
-    res.status(400).json({
       error:
-        "Cloned voices only work with your own Sarvam API key. "
-        + "Add it under Providers → Sarvam (same account that created the clone in Creative Studio), "
-        + "then try again. Catalog voices like priya or shubh work without a personal key.",
+        "No Sarvam API key available. Set Admin → Managed Keys → Sarvam (or GCP SARVAM_API_KEY), "
+        + "using the same Sarvam project that owns the clone.",
     });
     return;
   }
@@ -603,16 +596,7 @@ router.post("/voices/preview", async (req, res): Promise<void> => {
   let extraConfig: string | null = providerRow?.extraConfig ?? null;
 
   if (!apiKey && provider === "sarvam") {
-    // Catalog Bulbul speakers work on the managed/platform key (Preview Voice + Live Test).
-    // Personal Creative Studio clones still need the owner's Providers → Sarvam key.
-    if (!isSarvamCatalogSpeaker(voiceId)) {
-      res.status(400).json({
-        error:
-          "Cloned Sarvam voices need your own Sarvam API key under Providers "
-          + "(same account that created the clone). Catalog voices like priya work with managed keys.",
-      });
-      return;
-    }
+    // Managed / GCP SARVAM_API_KEY covers catalog + clones owned by that same Sarvam project.
     apiKey = await getManagedSarvamKey();
   }
 

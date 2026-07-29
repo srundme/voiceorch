@@ -150,11 +150,12 @@ export function RegisterSarvamVoiceDialog({
                 Creative Studio
                 <ExternalLink className="h-3 w-3" />
               </a>
-              , then paste the <strong>speaker / clone id</strong> (not the display name).
+              , copy its <strong>speaker / clone id</strong> (not the display name), then add it here.
             </span>
-            <span className="block text-amber-700 dark:text-amber-400/90">
-              Clones only work with <strong>your</strong> Sarvam API key — add it under Providers
-              (same account that owns the clone). SnapServe&apos;s managed key cannot see personal clones.
+            <span className="block text-muted-foreground">
+              For managed TTS: put that same Sarvam project&apos;s API key in{" "}
+              <strong>Admin → Managed Keys → Sarvam</strong> (or GCP <code className="text-[10px]">SARVAM_API_KEY</code>).
+              We verify the speaker against that key before saving.
             </span>
           </DialogDescription>
         </DialogHeader>
@@ -180,8 +181,7 @@ export function RegisterSarvamVoiceDialog({
               className="h-9 font-mono text-xs"
             />
             <p className="text-[10px] text-muted-foreground leading-snug">
-              If Sarvam shows a name like &quot;karthikeyan&quot; but a separate speaker id, paste the id.
-              We verify it against your API key before saving.
+              After save, open Voice → Choose voice → pick ✦ your clone (provider: Sarvam Bulbul).
             </p>
           </div>
           <div className="space-y-1.5">
