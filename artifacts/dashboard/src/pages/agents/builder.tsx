@@ -9,7 +9,7 @@ import {
   User2, Sparkles, BookOpen, ToggleLeft, ToggleRight, Tag, Loader2, Square, AudioLines,
   Play, Pause,
   Timer, ShieldCheck, Layers, Gauge, MicOff, HelpCircle, PhoneOff,
-  History, GitBranch, Eye, Link2, Copy, RotateCcw, ChevronUp, AlertTriangle, ArrowLeftRight,
+  History, GitBranch, Eye, RotateCcw, ChevronUp, AlertTriangle, ArrowLeftRight,
   Upload, Archive, Info, AlertCircle, Calendar, Star,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
@@ -937,18 +937,6 @@ function ChannelsTab({ form, agent }: { form: any; agent: any }) {
           </div>
         </div>
       </section>
-
-      {agent?.id && (
-        <section className="rounded-xl border border-border/60 bg-card/20 p-4 space-y-3">
-          <div>
-            <h3 className="text-sm font-semibold">Webcall</h3>
-            <p className="text-[11px] text-muted-foreground">
-              For agents that need browser-based conversations, guest invite links, or join flows.
-            </p>
-          </div>
-          <WebcallShareLinksSection agentId={agent.id} />
-        </section>
-      )}
     </div>
   );
 }
@@ -2373,174 +2361,6 @@ function VoiceCallFeelPresets({ form }: { form: any }) {
 
 
 /* ── Tab: Tools ─────────────────────────────────────────────────────────────── */
-
-type WebcallLinkRow = {
-  id: number;
-  token: string;
-  label: string | null;
-  purpose: string | null;
-  active: boolean;
-  requireCamera: boolean;
-  useCount: number;
-  maxUses: number | null;
-  expiresAt: string | null;
-  createdAt: string;
-};
-
-function WebcallShareLinksSection({
-  agentId,
-  defaultRequireCamera = true,
-}: {
-  agentId: number | undefined;
-  defaultRequireCamera?: boolean;
-}) {
-  const { toast } = useToast();
-  const [creating, setCreating] = useState(false);
-  const [label, setLabel] = useState("Verification call");
-  const [purpose, setPurpose] = useState("Please join to complete visual verification.");
-  const [requireCamera, setRequireCamera] = useState(defaultRequireCamera);
-
-  const { data: links = [], refetch, isLoading } = useQuery({
-    queryKey: ["webcall-links", agentId],
-    enabled: !!agentId,
-    queryFn: () => customFetch<WebcallLinkRow[]>(`${DASH_API}/agents/${agentId}/webcall-links`),
-  });
-
-  const joinUrl = (token: string) => `${window.location.origin}/join/${token}`;
-
-  const createLink = async () => {
-    if (!agentId) {
-      toast({ title: "Save the agent first", variant: "destructive" });
-      return;
-    }
-    setCreating(true);
-    try {
-      await customFetch(`${DASH_API}/agents/${agentId}/webcall-links`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          label: label.trim() || null,
-          purpose: purpose.trim() || null,
-          requireCamera,
-        }),
-      });
-      await refetch();
-      toast({ title: "Share link created" });
-    } catch (err) {
-      toast({ title: "Could not create link", description: formatApiError(err), variant: "destructive" });
-    } finally {
-      setCreating(false);
-    }
-  };
-
-  const setActive = async (id: number, active: boolean) => {
-    try {
-      await customFetch(`${DASH_API}/webcall-links/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ active }),
-      });
-      await refetch();
-    } catch (err) {
-      toast({ title: "Update failed", description: formatApiError(err), variant: "destructive" });
-    }
-  };
-
-  const removeLink = async (id: number) => {
-    try {
-      await customFetch(`${DASH_API}/webcall-links/${id}`, { method: "DELETE" });
-      await refetch();
-      toast({ title: "Link deleted" });
-    } catch (err) {
-      toast({ title: "Delete failed", description: formatApiError(err), variant: "destructive" });
-    }
-  };
-
-  const copyLink = async (token: string) => {
-    try {
-      await navigator.clipboard.writeText(joinUrl(token));
-      toast({ title: "Link copied" });
-    } catch {
-      toast({ title: "Copy failed", variant: "destructive" });
-    }
-  };
-
-  return (
-    <div>
-      <div className="mb-3">
-        <h3 className="text-sm font-semibold mb-0.5">Shareable invite links</h3>
-        <p className="text-xs text-muted-foreground">
-          Send a link so guests can join with mic and camera for verification. Billed to your wallet.
-        </p>
-      </div>
-
-      <div className="rounded-xl border border-border/60 bg-card/30 p-4 space-y-3 mb-3">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <p className="text-[10px] text-muted-foreground">Label</p>
-            <Input className="h-8 text-xs" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="KYC verification" />
-          </div>
-          <div className="space-y-1">
-            <p className="text-[10px] text-muted-foreground">Purpose (shown to guest)</p>
-            <Input className="h-8 text-xs" value={purpose} onChange={(e) => setPurpose(e.target.value)} placeholder="Show your ID to the agent" />
-          </div>
-        </div>
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <Switch checked={requireCamera} onCheckedChange={setRequireCamera} />
-            <span className="text-[11px] text-muted-foreground">Require camera</span>
-          </div>
-          <Button type="button" size="sm" className="h-7 text-xs" disabled={!agentId || creating} onClick={() => void createLink()}>
-            {creating ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Link2 className="h-3.5 w-3.5 mr-1" />}
-            Create link
-          </Button>
-        </div>
-        {!agentId && (
-          <p className="text-[10px] text-amber-500">Save the agent before creating share links.</p>
-        )}
-      </div>
-
-      {isLoading ? (
-        <p className="text-xs text-muted-foreground">Loading links…</p>
-      ) : links.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-border/50 p-6 text-center">
-          <Link2 className="h-6 w-6 text-muted-foreground/20 mx-auto mb-2" />
-          <p className="text-sm text-muted-foreground/50">No share links yet</p>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {links.map((link) => (
-            <div key={link.id} className={cn("rounded-xl border p-3 space-y-2", link.active ? "border-border/60 bg-card/30" : "border-border/40 bg-card/10 opacity-70")}>
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold truncate">{link.label || "Webcall link"}</p>
-                  <p className="text-[10px] text-muted-foreground truncate font-mono">{joinUrl(link.token)}</p>
-                  {link.purpose && <p className="text-[10px] text-muted-foreground/80 mt-0.5">{link.purpose}</p>}
-                  <p className="text-[10px] text-muted-foreground/60 mt-1">
-                    Uses: {link.useCount}{link.maxUses != null ? ` / ${link.maxUses}` : ""}
-                    {link.requireCamera ? " · Camera required" : ""}
-                    {!link.active ? " · Inactive" : ""}
-                  </p>
-                </div>
-                <div className="flex items-center gap-1 shrink-0">
-                  <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={() => void copyLink(link.token)} title="Copy link">
-                    <Copy className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button type="button" variant="ghost" size="sm" className="h-7 text-[10px] px-2" onClick={() => void setActive(link.id, !link.active)}>
-                    {link.active ? "Disable" : "Enable"}
-                  </Button>
-                  <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => void removeLink(link.id)}>
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined }) {
   const { fields, append, remove } = useFieldArray({ control: form.control, name: "tools" });
