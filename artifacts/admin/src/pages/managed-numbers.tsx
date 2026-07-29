@@ -1,5 +1,10 @@
 import { useState, useEffect } from "react";
-import { useManagedPhoneNumbers, useSaveManagedPhoneNumbers } from "@/hooks/use-admin-api";
+import {
+  useManagedPhoneNumbers,
+  useSaveManagedPhoneNumbers,
+  useManagedOutboundTrial,
+  useSaveManagedOutboundTrial,
+} from "@/hooks/use-admin-api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -13,14 +18,21 @@ import { Save, Phone, RefreshCw, Plus, Trash2, Info } from "lucide-react";
 export default function ManagedNumbers() {
   const { data, isLoading, refetch } = useManagedPhoneNumbers();
   const { mutate: save, isPending } = useSaveManagedPhoneNumbers();
+  const { data: trial, isLoading: trialLoading } = useManagedOutboundTrial();
+  const { mutate: saveTrial, isPending: trialSaving } = useSaveManagedOutboundTrial();
   const { toast } = useToast();
 
   const [selected, setSelected] = useState<string[]>([]);
   const [manualInput, setManualInput] = useState("");
+  const [dailyLimit, setDailyLimit] = useState(3);
 
   useEffect(() => {
     if (data) setSelected(data.selected);
   }, [data]);
+
+  useEffect(() => {
+    if (trial) setDailyLimit(trial.dailyLimit);
+  }, [trial]);
 
   const toggle = (number: string) => {
     setSelected(prev =>
@@ -48,6 +60,23 @@ export default function ManagedNumbers() {
     });
   };
 
+  const handleSaveTrial = () => {
+    saveTrial(
+      { dailyLimit: Math.max(0, Math.floor(dailyLimit)) },
+      {
+        onSuccess: (saved) => {
+          toast({
+            title: "Trial limit saved",
+            description: `Default trial capped at ${saved.dailyLimit} outbound call${saved.dailyLimit === 1 ? "" : "s"}/day. Unlimited trial is granted per account on the Users page.`,
+          });
+        },
+        onError: (err) => {
+          toast({ title: "Error", description: (err as Error).message, variant: "destructive" });
+        },
+      },
+    );
+  };
+
   const available  = data?.available ?? [];
   const fetchError = data?.fetchError ?? null;
   const notInPool  = available.filter(n => !selected.includes(n.number));
@@ -61,6 +90,47 @@ export default function ManagedNumbers() {
           managed telephony option (no personal number or KYC required).
         </p>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            Trial outbound limits
+          </CardTitle>
+          <CardDescription>
+            Default daily cap for users without a purchased number. To give unlimited trial
+            to a specific account, open that user and toggle Unlimited trial.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {trialLoading ? (
+            <Skeleton className="h-16 w-full" />
+          ) : (
+            <>
+              <div className="space-y-1.5">
+                <Label htmlFor="daily-limit">Daily trial call limit</Label>
+                <Input
+                  id="daily-limit"
+                  type="number"
+                  min={0}
+                  className="max-w-[160px]"
+                  value={dailyLimit}
+                  onChange={(e) => setDailyLimit(Number(e.target.value))}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Default is 3. Resets at midnight IST. Purchased numbers are always unlimited.
+                </p>
+              </div>
+
+              <div className="flex justify-end">
+                <Button onClick={handleSaveTrial} disabled={trialSaving}>
+                  {trialSaving ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+                  Save trial limit
+                </Button>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

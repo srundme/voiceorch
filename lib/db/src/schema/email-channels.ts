@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, boolean, index, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, text, timestamp, boolean, index, jsonb } from "drizzle-orm/pg-core";
 
 /**
  * Per-user email messaging channel.

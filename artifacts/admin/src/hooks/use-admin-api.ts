@@ -640,6 +640,46 @@ export function useSaveManagedPhoneNumbers() {
   });
 }
 
+export interface ManagedOutboundTrialSettings {
+  dailyLimit: number;
+}
+
+export function useManagedOutboundTrial() {
+  return useQuery({
+    queryKey: ["admin", "managed-outbound-trial"],
+    queryFn: () => adminFetch<ManagedOutboundTrialSettings>("/managed-outbound-trial"),
+  });
+}
+
+export function useSaveManagedOutboundTrial() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { dailyLimit: number }) =>
+      adminFetch<ManagedOutboundTrialSettings>("/managed-outbound-trial", {
+        method: "PUT",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "managed-outbound-trial"] });
+    },
+  });
+}
+
+export function useSetUserUnlimitedTrial(clerkId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { unlimited: boolean }) =>
+      adminFetch<{ unlimitedManagedTrial: boolean }>(`/users/${clerkId}/unlimited-trial`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "users", clerkId] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
+    },
+  });
+}
+
 // DPDP — admin-triggered erasure (right to be forgotten)
 export function useDpdpErasure() {
   return useMutation({

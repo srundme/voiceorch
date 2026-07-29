@@ -4,6 +4,8 @@
  * Users without a purchased SnapServe number get a small free trial pool so
  * they can hear the agent once — then they must buy a number for unlimited
  * outbound + inbound. Hackathon / sales conversion lever.
+ *
+ * Admins can grant unlimited trial per account (users.unlimited_managed_trial).
  */
 
 import { and, eq, gte, ne, sql, inArray } from "drizzle-orm";
@@ -12,9 +14,10 @@ import {
   callsTable,
   phoneNumbersTable,
   platformSettingsTable,
+  usersTable,
 } from "@workspace/db";
 
-const SETTING_KEY = "managed_outbound_daily_limit";
+const SETTING_LIMIT_KEY = "managed_outbound_daily_limit";
 const DEFAULT_DAILY_LIMIT = 3;
 
 /** Start of "today" in Asia/Kolkata (SnapServe primary market / hackathons). */
@@ -30,14 +33,45 @@ export function startOfTodayIst(): Date {
   return new Date(`${day}T00:00:00+05:30`);
 }
 
-async function getDailyLimit(): Promise<number> {
+export async function getManagedOutboundDailyLimit(): Promise<number> {
   const [row] = await db.select({ value: platformSettingsTable.value })
     .from(platformSettingsTable)
-    .where(eq(platformSettingsTable.key, SETTING_KEY))
+    .where(eq(platformSettingsTable.key, SETTING_LIMIT_KEY))
     .limit(1);
   const n = row?.value ? Number(row.value) : DEFAULT_DAILY_LIMIT;
   if (!Number.isFinite(n) || n < 0) return DEFAULT_DAILY_LIMIT;
   return Math.floor(n);
+}
+
+export async function setManagedOutboundDailyLimit(dailyLimit: number): Promise<number> {
+  const n = Math.max(0, Math.floor(Number(dailyLimit)));
+  const value = String(Number.isFinite(n) ? n : DEFAULT_DAILY_LIMIT);
+  await db.insert(platformSettingsTable)
+    .values({ key: SETTING_LIMIT_KEY, value })
+    .onConflictDoUpdate({
+      target: platformSettingsTable.key,
+      set: { value, updatedAt: new Date() },
+    });
+  return getManagedOutboundDailyLimit();
+}
+
+export async function userHasUnlimitedManagedTrial(userId: string): Promise<boolean> {
+  const [row] = await db.select({ unlimitedManagedTrial: usersTable.unlimitedManagedTrial })
+    .from(usersTable)
+    .where(eq(usersTable.clerkId, userId))
+    .limit(1);
+  return !!row?.unlimitedManagedTrial;
+}
+
+export async function setUserUnlimitedManagedTrial(
+  userId: string,
+  unlimited: boolean,
+): Promise<boolean | null> {
+  const [updated] = await db.update(usersTable)
+    .set({ unlimitedManagedTrial: unlimited })
+    .where(eq(usersTable.clerkId, userId))
+    .returning({ unlimitedManagedTrial: usersTable.unlimitedManagedTrial });
+  return updated ? !!updated.unlimitedManagedTrial : null;
 }
 
 export async function getManagedPhonePool(): Promise<string[]> {
@@ -71,32 +105,47 @@ export type ManagedOutboundQuota = {
   used: number;
   remaining: number;
   hasOwnNumber: boolean;
-  /** True when this user is still on the managed trial pool (no purchase). */
+  /** True when this user is still on the managed trial pool (no purchase) and caps apply. */
   limited: boolean;
+  /** Admin granted unlimited managed trial for this specific account. */
+  unlimitedTrial: boolean;
   resetsAt: string;
 };
 
 export async function getManagedOutboundQuota(userId: string): Promise<ManagedOutboundQuota> {
-  const limit = await getDailyLimit();
-  const hasOwnNumber = await userHasPurchasedNumber(userId);
+  const [limit, unlimitedTrial, hasOwnNumber] = await Promise.all([
+    getManagedOutboundDailyLimit(),
+    userHasUnlimitedManagedTrial(userId),
+    userHasPurchasedNumber(userId),
+  ]);
   const dayStart = startOfTodayIst();
   // Next midnight IST
   const resetsAt = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000).toISOString();
 
-  if (hasOwnNumber) {
+  if (hasOwnNumber || unlimitedTrial) {
+    const onUnlimitedTrial = unlimitedTrial && !hasOwnNumber;
     return {
       limit,
       used: 0,
-      remaining: limit,
-      hasOwnNumber: true,
+      remaining: onUnlimitedTrial ? Number.MAX_SAFE_INTEGER : limit,
+      hasOwnNumber,
       limited: false,
+      unlimitedTrial: onUnlimitedTrial,
       resetsAt,
     };
   }
 
   const pool = await getManagedPhonePool();
   if (pool.length === 0) {
-    return { limit, used: 0, remaining: limit, hasOwnNumber: false, limited: true, resetsAt };
+    return {
+      limit,
+      used: 0,
+      remaining: limit,
+      hasOwnNumber: false,
+      limited: true,
+      unlimitedTrial: false,
+      resetsAt,
+    };
   }
 
   const [agg] = await db.select({ count: sql<number>`count(*)::int` })
@@ -115,6 +164,7 @@ export async function getManagedOutboundQuota(userId: string): Promise<ManagedOu
     remaining,
     hasOwnNumber: false,
     limited: true,
+    unlimitedTrial: false,
     resetsAt,
   };
 }

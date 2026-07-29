@@ -464,6 +464,7 @@ function AgentInboundPanel({
       remaining: number;
       hasOwnNumber: boolean;
       limited: boolean;
+      unlimitedTrial?: boolean;
       resetsAt: string;
     }>(`${DASH_API}/phone-numbers/managed-quota`),
     staleTime: 15_000,
@@ -625,13 +626,17 @@ function AgentInboundPanel({
           </div>
           <span className={cn(
             "text-[9px] font-medium uppercase tracking-wide shrink-0 rounded-full border px-1.5 py-0.5",
-            trialExhausted
-              ? "border-border/50 text-muted-foreground"
-              : "border-amber-500/30 text-amber-500",
+            quota?.unlimitedTrial
+              ? "border-emerald-500/30 text-emerald-500"
+              : trialExhausted
+                ? "border-border/50 text-muted-foreground"
+                : "border-amber-500/30 text-amber-500",
           )}>
-            {quota?.limited
-              ? (trialExhausted ? "Limit reached" : `${trialRemaining}/${trialLimit} left today`)
-              : "Trial"}
+            {quota?.unlimitedTrial
+              ? "Unlimited trial"
+              : quota?.limited
+                ? (trialExhausted ? "Limit reached" : `${trialRemaining}/${trialLimit} left today`)
+                : "Trial"}
           </span>
         </div>
         {testingFromNumber ? (
@@ -640,9 +645,11 @@ function AgentInboundPanel({
               {testingFromNumber}
             </p>
             <p className="text-[10px] text-muted-foreground leading-relaxed">
-              {trialExhausted
-                ? "Free trial calls are used up for today. Buy a number to keep testing and to receive inbound calls."
-                : `Shared platform line for a quick listen — ${trialLimit} outbound tests/day. Not your number; inbound will not ring this agent.`}
+              {quota?.unlimitedTrial
+                ? "Shared platform trial line — unlimited for your account (admin grant). Still not your number; inbound will not ring this agent. Buy a number to go live."
+                : trialExhausted
+                  ? "Free trial calls are used up for today. Buy a number to keep testing and to receive inbound calls."
+                  : `Shared platform line for a quick listen — ${trialLimit} outbound tests/day. Not your number; inbound will not ring this agent.`}
             </p>
             {trialExhausted && (
               <Button

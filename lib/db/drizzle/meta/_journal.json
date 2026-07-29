@@ -568,6 +568,13 @@
       "when": 1789600000000,
       "tag": "0080_email_channels",
       "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "7",
+      "when": 1789700000000,
+      "tag": "0081_unlimited_managed_trial",
+      "breakpoints": true
     }
   ]
 }
