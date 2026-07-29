@@ -13,7 +13,7 @@ import { ThemeSync } from "@/components/theme-sync";
 
 import { Layout } from "@/components/layout";
 import { recordInAppNavigation } from "@/lib/nav-history";
-import { SnapServeLoader, SnapServeSarvamLockup } from "@/components/logo";
+import { SnapServeLoader, PoweredBySarvam } from "@/components/logo";
 import { VoiceAssistant } from "@/components/VoiceAssistant";
 
 // ── Page imports ─────────────────────────────────────────────────────────────
@@ -177,7 +177,16 @@ function SignInPage() {
             <div className="h-[10px] w-[78%] rounded-full bg-white/60" />
             <div className="h-[10px] w-[58%] rounded-full bg-white/35" />
           </div>
-          <SnapServeSarvamLockup height={22} on="dark" />
+          <div className="flex flex-col items-center gap-1.5">
+            <span
+              className="leading-none text-[15px] text-white"
+              style={{ fontFamily: "system-ui, sans-serif", letterSpacing: "-0.02em" }}
+            >
+              <span style={{ fontWeight: 700 }}>Snap</span>
+              <span style={{ fontWeight: 400, opacity: 0.55 }}>Serve</span>
+            </span>
+            <PoweredBySarvam variant="inline" className="justify-center text-white/45 [&_span]:text-white/45" />
+          </div>
         </div>
 
         <h1 className="text-xl font-semibold tracking-tight mb-1.5">

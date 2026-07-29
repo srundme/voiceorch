@@ -136,7 +136,7 @@ export function DocsLayout({ children, section }: { children: React.ReactNode; s
 
       <footer className="border-t border-white/10 py-6 px-6">
         <div className="max-w-[1600px] mx-auto flex justify-center">
-          <PoweredBySarvam includeSnapServe on="dark" className="opacity-80" />
+          <PoweredBySarvam className="opacity-80" />
         </div>
       </footer>
     </div>

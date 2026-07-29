@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Link } from "wouter";
 import { useAuth } from "@/lib/auth";
-import { SnapServeSarvamLockup } from "@/components/logo";
+import { PoweredBySarvam } from "@/components/logo";
 
 /* ─────────────────────────────────────────────────────────────────────────── */
 /*  DATA                                                                        */
@@ -543,7 +543,7 @@ export default function LandingPage() {
           </div>
           <div style={{ borderTop: "1px solid rgba(255,255,255,0.04)", paddingTop: 24, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
             <p style={{ fontSize: 12, color: "#1f1f1f" }}>© 2026 SnapServe AI. All rights reserved.</p>
-            <SnapServeSarvamLockup height={16} on="dark" className="opacity-55" />
+            <PoweredBySarvam className="opacity-70 justify-center" />
           </div>
         </div>
       </footer>

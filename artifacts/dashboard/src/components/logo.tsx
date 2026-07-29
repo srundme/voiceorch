@@ -172,7 +172,16 @@ export function SnapServeLoader() {
         ))}
       </div>
 
-      <SnapServeSarvamLockup height={28} on="dark" />
+      <div className="flex flex-col items-center gap-1.5">
+        <span
+          className="leading-none text-[15px] text-white"
+          style={{ fontFamily: "system-ui, sans-serif", letterSpacing: "-0.02em" }}
+        >
+          <span style={{ fontWeight: 700 }}>Snap</span>
+          <span style={{ fontWeight: 400, opacity: 0.55 }}>Serve</span>
+        </span>
+        <PoweredBySarvam variant="inline" className="text-white/50 [&_span]:text-white/50" />
+      </div>
 
       <style>{`
         @keyframes ss-bar-pulse {
@@ -201,34 +210,25 @@ interface PoweredBySarvamProps {
 }
 
 /**
- * Family co-brand line. SnapServe remains the product name; Sarvam is secondary.
- * Prefer the official lockup image when includeSnapServe / lockup variant is set.
+ * Family co-brand line — text only. SnapServe stays the product mark elsewhere;
+ * this is always “powered by sarvam” (no Sarvam logo asset).
  */
 export function PoweredBySarvam({
   variant = "footer",
   className = "",
-  includeSnapServe = false,
-  on = "light",
+  includeSnapServe: _includeSnapServe = false,
+  on: _on = "light",
 }: PoweredBySarvamProps) {
-  if (includeSnapServe || variant === "lockup") {
-    const height = variant === "inline" ? 14 : variant === "lockup" ? 22 : 16;
-    return (
-      <span className={`inline-flex items-center justify-center ${className}`}>
-        <SnapServeSarvamLockup height={height} on={on} />
-      </span>
-    );
-  }
-
   const sizeClass =
-    variant === "inline" ? "text-[10px]" : "text-xs";
-  const gapClass = variant === "inline" ? "gap-1" : "gap-1.5";
+    variant === "inline" ? "text-[9px]" : "text-[10px]";
+  const gapClass = variant === "inline" ? "gap-1" : "gap-1";
 
   return (
     <p
-      className={`inline-flex items-center justify-center ${gapClass} ${sizeClass} text-muted-foreground select-none ${className}`}
+      className={`inline-flex items-center ${gapClass} ${sizeClass} text-muted-foreground select-none tracking-wide ${className}`}
     >
-      <span>Powered by</span>
-      <span className="font-medium text-foreground/70">Sarvam</span>
+      <span className="font-normal opacity-70">powered by</span>
+      <span className="font-medium text-foreground/65">sarvam</span>
     </p>
   );
 }
