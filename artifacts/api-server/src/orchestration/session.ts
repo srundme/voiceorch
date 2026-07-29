@@ -1276,7 +1276,8 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
   // Apply managed keys for required providers
   for (const providerName of requiredProviders) {
     if (MANAGED[providerName] && (isManaged || !providerKeys.has(providerName))) {
-      const managed = settingsMap.get(MANAGED[providerName]!);
+      const managed = settingsMap.get(MANAGED[providerName]!)
+        ?? (providerName === "sarvam" ? (process.env["SARVAM_API_KEY"] ?? "").trim() || undefined : undefined);
       if (managed) {
         providerKeys.set(providerName, managed);
         logger.info({ providerName, isManaged }, "Using platform managed key for provider");

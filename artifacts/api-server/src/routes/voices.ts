@@ -241,6 +241,17 @@ router.post(
   },
 );
 
+async function getManagedSarvamKey(): Promise<string | null> {
+  const [managed] = await db
+    .select()
+    .from(platformSettingsTable)
+    .where(eq(platformSettingsTable.key, "managed_sarvam_key"));
+  const fromDb = managed?.value?.trim();
+  if (fromDb) return fromDb;
+  const fromEnv = (process.env["SARVAM_API_KEY"] ?? "").trim();
+  return fromEnv || null;
+}
+
 async function getSarvamKeyForUser(userId: string): Promise<{ key: string; source: "user" | "managed" } | null> {
   const [userRow] = await db
     .select()
@@ -254,11 +265,8 @@ async function getSarvamKeyForUser(userId: string): Promise<{ key: string; sourc
     );
   if (userRow) return { key: decryptKey(userRow.apiKey), source: "user" };
 
-  const [managed] = await db
-    .select()
-    .from(platformSettingsTable)
-    .where(eq(platformSettingsTable.key, "managed_sarvam_key"));
-  if (managed?.value?.trim()) return { key: managed.value.trim(), source: "managed" };
+  const managed = await getManagedSarvamKey();
+  if (managed) return { key: managed, source: "managed" };
   return null;
 }
 
@@ -573,14 +581,13 @@ router.post("/voices/preview", async (req, res): Promise<void> => {
     return;
   }
 
-  // ── Other providers: synthesize with the user's own stored key ──────────────
+  // ── Other providers: user key first, then platform managed key (same as live calls) ──
   const userId = (req as unknown as { clerkUserId?: string }).clerkUserId;
   if (!userId) {
     res.status(401).json({ error: "Sign in to preview this provider's voices." });
     return;
   }
 
-  // Resolve the user's active API key for this provider (matches webcall lookup).
   const [providerRow] = await db
     .select()
     .from(providersTable)
@@ -592,18 +599,52 @@ router.post("/voices/preview", async (req, res): Promise<void> => {
       ),
     );
 
-  if (!providerRow) {
+  let apiKey: string | null = providerRow ? decryptKey(providerRow.apiKey) : null;
+  let extraConfig: string | null = providerRow?.extraConfig ?? null;
+
+  if (!apiKey && provider === "sarvam") {
+    // Catalog Bulbul speakers work on the managed/platform key (Preview Voice + Live Test).
+    // Personal Creative Studio clones still need the owner's Providers → Sarvam key.
+    if (!isSarvamCatalogSpeaker(voiceId)) {
+      res.status(400).json({
+        error:
+          "Cloned Sarvam voices need your own Sarvam API key under Providers "
+          + "(same account that created the clone). Catalog voices like priya work with managed keys.",
+      });
+      return;
+    }
+    apiKey = await getManagedSarvamKey();
+  }
+
+  if (!apiKey) {
+    const managedKeyName =
+      provider === "sarvam" ? "managed_sarvam_key"
+        : provider === "elevenlabs" ? "managed_elevenlabs_key"
+          : provider === "openai" || provider === "openai_tts" ? "managed_openai_key"
+            : null;
+    if (managedKeyName) {
+      const [managed] = await db
+        .select()
+        .from(platformSettingsTable)
+        .where(eq(platformSettingsTable.key, managedKeyName));
+      apiKey = managed?.value?.trim() || null;
+    }
+  }
+
+  if (!apiKey) {
     res.status(400).json({
-      error: `No active ${provider} API key found. Add one on the Providers page to preview this voice.`,
+      error:
+        provider === "sarvam"
+          ? "No Sarvam API key available. Add one under Admin → Managed Keys (or Providers), or set SARVAM_API_KEY."
+          : `No active ${provider} API key found. Add one on the Providers page to preview this voice.`,
     });
     return;
   }
 
-  const apiKey = decryptKey(providerRow.apiKey);
   const language = body.language ?? null;
-  const extraConfig = provider === "sarvam"
-    ? JSON.stringify({ language: language ?? "en-IN" })
-    : (providerRow.extraConfig ?? null);
+  if (provider === "sarvam") {
+    extraConfig = JSON.stringify({ language: language ?? "en-IN" });
+  }
 
   try {
     const tts = createTTSAdapter(provider, apiKey, voiceId, modelId ?? null, extraConfig, language);
