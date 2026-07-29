@@ -83,6 +83,70 @@ export const TTS_MODELS: Record<string, { value: string; label: string }[]> = {
   ],
 };
 
+/** Bulbul v3 / v3-beta speakers (skill: anushka/etc. are v2-only). */
+export const SARVAM_TTS_VOICES_V3: { value: string; label: string }[] = [
+  { value: "ritu",     label: "Ritu (female)" },
+  { value: "priya",    label: "Priya (female)" },
+  { value: "neha",     label: "Neha (female)" },
+  { value: "pooja",    label: "Pooja (female)" },
+  { value: "simran",   label: "Simran (female)" },
+  { value: "kavya",    label: "Kavya (female)" },
+  { value: "ishita",   label: "Ishita (female)" },
+  { value: "shreya",   label: "Shreya (female)" },
+  { value: "roopa",    label: "Roopa (female)" },
+  { value: "tanya",    label: "Tanya (female)" },
+  { value: "shruti",   label: "Shruti (female)" },
+  { value: "suhani",   label: "Suhani (female)" },
+  { value: "kavitha",  label: "Kavitha (female)" },
+  { value: "rupali",   label: "Rupali (female)" },
+  { value: "rahul",    label: "Rahul (male)" },
+  { value: "rohan",    label: "Rohan (male)" },
+  { value: "aditya",   label: "Aditya (male)" },
+  { value: "amit",     label: "Amit (male)" },
+  { value: "dev",      label: "Dev (male)" },
+  { value: "ratan",    label: "Ratan (male)" },
+  { value: "varun",    label: "Varun (male)" },
+  { value: "manan",    label: "Manan (male)" },
+  { value: "sumit",    label: "Sumit (male)" },
+  { value: "kabir",    label: "Kabir (male)" },
+  { value: "aayan",    label: "Aayan (male)" },
+  { value: "shubh",    label: "Shubh (male)" },
+  { value: "ashutosh", label: "Ashutosh (male)" },
+  { value: "advait",   label: "Advait (male)" },
+  { value: "anand",    label: "Anand (male)" },
+  { value: "tarun",    label: "Tarun (male)" },
+  { value: "sunny",    label: "Sunny (male)" },
+  { value: "mani",     label: "Mani (male)" },
+  { value: "gokul",    label: "Gokul (male)" },
+  { value: "vijay",    label: "Vijay (male)" },
+  { value: "mohit",    label: "Mohit (male)" },
+  { value: "rehan",    label: "Rehan (male)" },
+  { value: "soham",    label: "Soham (male)" },
+];
+
+/** Bulbul v2 speakers — incompatible with bulbul:v3 (API 400). */
+export const SARVAM_TTS_VOICES_V2: { value: string; label: string }[] = [
+  { value: "anushka",  label: "Anushka (female) — v2" },
+  { value: "manisha",  label: "Manisha (female) — v2" },
+  { value: "vidya",    label: "Vidya (female) — v2" },
+  { value: "arya",     label: "Arya (female) — v2" },
+  { value: "abhilash", label: "Abhilash (male) — v2" },
+  { value: "karun",    label: "Karun (male) — v2" },
+  { value: "hitesh",   label: "Hitesh (male) — v2" },
+];
+
+/** Voices allowed for a Sarvam TTS model. Empty/unknown model → v3. */
+export function getSarvamTtsVoices(ttsModel?: string | null): { value: string; label: string }[] {
+  const model = (ttsModel ?? "bulbul:v3").toLowerCase();
+  if (model === "bulbul:v2") return SARVAM_TTS_VOICES_V2;
+  return SARVAM_TTS_VOICES_V3;
+}
+
+export function isSarvamVoiceCompatible(voice: string | null | undefined, ttsModel?: string | null): boolean {
+  if (!voice || voice === "__custom__") return true;
+  return getSarvamTtsVoices(ttsModel).some((v) => v.value === voice);
+}
+
 export const TTS_VOICES: Record<string, { value: string; label: string }[] | null> = {
   cartesia: [
     { value: "a0e99841-438c-4a64-b679-ae501e7d6091", label: "Barbershop Man" },
@@ -106,52 +170,8 @@ export const TTS_VOICES: Record<string, { value: string; label: string }[] | nul
     { value: "yoZ06aMxZJJ28mfd3POQ", label: "Sam (Male)" },
     { value: "__custom__", label: "Paste custom Voice ID" },
   ],
-  sarvam: [
-    { value: "ritu",     label: "Ritu (female) — v3" },
-    { value: "priya",    label: "Priya (female) — v3" },
-    { value: "neha",     label: "Neha (female) — v3" },
-    { value: "pooja",    label: "Pooja (female) — v3" },
-    { value: "simran",   label: "Simran (female) — v3" },
-    { value: "kavya",    label: "Kavya (female) — v3" },
-    { value: "ishita",   label: "Ishita (female) — v3" },
-    { value: "shreya",   label: "Shreya (female) — v3" },
-    { value: "roopa",    label: "Roopa (female) — v3" },
-    { value: "tanya",    label: "Tanya (female) — v3" },
-    { value: "shruti",   label: "Shruti (female) — v3" },
-    { value: "suhani",   label: "Suhani (female) — v3" },
-    { value: "kavitha",  label: "Kavitha (female) — v3" },
-    { value: "rupali",   label: "Rupali (female) — v3" },
-    { value: "rahul",    label: "Rahul (male) — v3" },
-    { value: "rohan",    label: "Rohan (male) — v3" },
-    { value: "aditya",   label: "Aditya (male) — v3" },
-    { value: "amit",     label: "Amit (male) — v3" },
-    { value: "dev",      label: "Dev (male) — v3" },
-    { value: "ratan",    label: "Ratan (male) — v3" },
-    { value: "varun",    label: "Varun (male) — v3" },
-    { value: "manan",    label: "Manan (male) — v3" },
-    { value: "sumit",    label: "Sumit (male) — v3" },
-    { value: "kabir",    label: "Kabir (male) — v3" },
-    { value: "aayan",    label: "Aayan (male) — v3" },
-    { value: "shubh",    label: "Shubh (male) — v3" },
-    { value: "ashutosh", label: "Ashutosh (male) — v3" },
-    { value: "advait",   label: "Advait (male) — v3" },
-    { value: "anand",    label: "Anand (male) — v3" },
-    { value: "tarun",    label: "Tarun (male) — v3" },
-    { value: "sunny",    label: "Sunny (male) — v3" },
-    { value: "mani",     label: "Mani (male) — v3" },
-    { value: "gokul",    label: "Gokul (male) — v3" },
-    { value: "vijay",    label: "Vijay (male) — v3" },
-    { value: "mohit",    label: "Mohit (male) — v3" },
-    { value: "rehan",    label: "Rehan (male) — v3" },
-    { value: "soham",    label: "Soham (male) — v3" },
-    { value: "anushka",  label: "Anushka (female) — v2" },
-    { value: "manisha",  label: "Manisha (female) — v2" },
-    { value: "vidya",    label: "Vidya (female) — v2" },
-    { value: "arya",     label: "Arya (female) — v2" },
-    { value: "abhilash", label: "Abhilash (male) — v2" },
-    { value: "karun",    label: "Karun (male) — v2" },
-    { value: "hitesh",   label: "Hitesh (male) — v2" },
-  ],
+  // Default catalogue = v3. Use getSarvamTtsVoices(ttsModel) when filtering by model.
+  sarvam: SARVAM_TTS_VOICES_V3,
 };
 
 /**

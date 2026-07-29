@@ -18,6 +18,11 @@ import {
   resolveVoiceStack,
 } from "./adapters/live/gemini-live-voices.js";
 import { resolveSarvamSttMode } from "./adapters/stt/sarvam-mode.js";
+import {
+  clampSarvamIncompleteHoldMs,
+  clampSarvamSpeechEndFlushMs,
+  resolveSarvamHighVadSensitivity,
+} from "@workspace/db/call-engine-defaults";
 import { withDbRetry } from "./db-retry.js";
 import { CONVERSATION_DISCIPLINE_BLOCK } from "./conversationDiscipline.js";
 import { buildLeadContextBlock, resolvePromptVariables } from "./prompt-vars.js";
@@ -575,7 +580,19 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
       backgroundDenoising: agent.asrBackgroundDenoising ?? false,
       confidenceThreshold: agent.asrConfidenceThreshold ?? 0.40,
       endOfTurnConfidence: agent.asrEndOfTurnConfidence ?? 0.70,
-      endOfTurnTimeout: agent.asrEndOfTurnTimeout ?? 5000,
+      // Prefer Latency Tuning UI (asrEndpointingSilenceMs). The asrEndOfTurnTimeout
+      // column is admin-only and historically defaulted to 5000 — that alone added
+      // up to 2s of Deepgram endpointing dead air when the UI knob was ignored.
+      endOfTurnTimeout: (() => {
+        const fromUi = agentCfg["asrEndpointingSilenceMs"];
+        if (typeof fromUi === "number" && Number.isFinite(fromUi) && fromUi > 0) {
+          return Math.max(50, Math.min(5000, Math.round(fromUi)));
+        }
+        if (typeof agent.asrEndOfTurnTimeout === "number" && agent.asrEndOfTurnTimeout > 0) {
+          return Math.max(50, Math.min(30000, Math.round(agent.asrEndOfTurnTimeout)));
+        }
+        return 400;
+      })(),
       keyterms: agent.asrKeyterms
         ? agent.asrKeyterms.split(",").map(s => s.trim()).filter(Boolean)
         : [],
@@ -622,19 +639,36 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     // false-firing word-count barge-in too often on telephony. Semantic
     // interrupt keywords (stop/wait) still bypass the word count.
     wordsForInterruption: (agentCfg["wordsForInterruption"] as number | undefined) ?? 3,
-    incrementalDelay:     (agentCfg["incrementalDelay"]     as number | undefined) ?? 0,
+    // Legacy form default was 350ms — rewrite in-memory so existing agents get
+    // snappy turns without requiring a UI re-save. Intentional non-350 values keep.
+    incrementalDelay: (() => {
+      const v = agentCfg["incrementalDelay"];
+      if (typeof v !== "number" || !Number.isFinite(v)) return 0;
+      return v === 350 ? 0 : Math.max(0, Math.min(1500, Math.round(v)));
+    })(),
     ttsSpeed:             (agentCfg["ttsSpeed"]             as number | undefined) ?? 1.0,
     // P1-H: Call lifecycle
     hangupAfterLlmCall: (agentCfg["hangupAfterLlmCall"] as boolean | undefined) ?? false,
-    // P1-I: Start Speaking Plan — default gives punctuated turns a small 100ms
-    // cushion and unclear/digit-ending turns the full 300ms cap (best-practice
-    // defaults; matches the dashboard/admin agent-editor defaults).
-    startSpeakingPlan: (agentCfg["startSpeakingPlan"] as AgentConfig["startSpeakingPlan"]) ?? {
-      waitSeconds: 0,
-      onPunctuationSeconds: 0.1,
-      onNoPunctuationSeconds: 1.5,
-      onNumberSeconds: 0.5,
-    },
+    // P1-I: Start Speaking Plan — snappy defaults; rewrite legacy 1.5/0.5 footguns.
+    startSpeakingPlan: (() => {
+      const raw = agentCfg["startSpeakingPlan"] as AgentConfig["startSpeakingPlan"] | undefined;
+      const plan = raw ?? {
+        waitSeconds: 0,
+        onPunctuationSeconds: 0.1,
+        onNoPunctuationSeconds: 0.1,
+        onNumberSeconds: 0.1,
+      };
+      return {
+        waitSeconds: plan.waitSeconds ?? 0,
+        onPunctuationSeconds: plan.onPunctuationSeconds ?? 0.1,
+        onNoPunctuationSeconds: plan.onNoPunctuationSeconds === 1.5
+          ? 0.1
+          : (plan.onNoPunctuationSeconds ?? 0.1),
+        onNumberSeconds: plan.onNumberSeconds === 0.5
+          ? 0.1
+          : (plan.onNumberSeconds ?? 0.1),
+      };
+    })(),
     // P1-J: Stop Speaking Plan
     stopSpeakingPlan: (agentCfg["stopSpeakingPlan"] as AgentConfig["stopSpeakingPlan"]) ?? null,
     // P1-K: Compliance
@@ -650,12 +684,30 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     asrEndpointingSilenceMs: (agentCfg["asrEndpointingSilenceMs"] as number | undefined) ?? 250,
     llmMaxTokens: (agentCfg["llmMaxTokens"] as number | null | undefined) ?? null,
     ttsMinSentenceChars: (agentCfg["ttsMinSentenceChars"] as number | undefined) ?? 18,
+    fragmentCoalesceListeningMs: (() => {
+      const v = agentCfg["fragmentCoalesceListeningMs"];
+      if (typeof v !== "number" || !Number.isFinite(v)) return 150;
+      return Math.max(0, Math.min(2000, Math.round(v)));
+    })(),
+    fragmentCoalescePlayingMs: (() => {
+      const v = agentCfg["fragmentCoalescePlayingMs"];
+      if (typeof v !== "number" || !Number.isFinite(v)) return 800;
+      return Math.max(0, Math.min(3000, Math.round(v)));
+    })(),
+    telephonyTailDrainMs: (() => {
+      const v = agentCfg["telephonyTailDrainMs"];
+      if (typeof v !== "number" || !Number.isFinite(v)) return 400;
+      return Math.max(0, Math.min(2000, Math.round(v)));
+    })(),
     sarvamSttMode: (agent.asrProvider ?? "").toLowerCase() === "sarvam"
       ? resolveSarvamSttMode(
           agent.asrLanguage || agent.language || "en-IN",
           (agentCfg["sarvamSttMode"] as string | undefined) ?? null,
         )
       : ((agentCfg["sarvamSttMode"] as string | undefined) ?? null),
+    sarvamHighVadSensitivity: resolveSarvamHighVadSensitivity(agentCfg["sarvamHighVadSensitivity"]),
+    sarvamSpeechEndFlushMs: clampSarvamSpeechEndFlushMs(agentCfg["sarvamSpeechEndFlushMs"] as number | undefined),
+    sarvamIncompleteHoldMs: clampSarvamIncompleteHoldMs(agentCfg["sarvamIncompleteHoldMs"] as number | undefined),
     kbBakedOnly: (agentCfg["kbBakedOnly"] as boolean | undefined) ?? false,
     voiceStack: resolveVoiceStack(agentCfg["voiceStack"] as string | undefined),
     geminiLive: resolveVoiceStack(agentCfg["voiceStack"] as string | undefined) === "gemini_live"

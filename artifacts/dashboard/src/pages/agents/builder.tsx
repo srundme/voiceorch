@@ -36,7 +36,7 @@ import type { AgentVersion } from "@workspace/api-client-react";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { agentFormSchema, hydrateToolsForForm, CALL_ENGINE_PRESETS, type CallEnginePreset, clampBargeInEnergyThreshold, clampEndpointingMs, clampLinearDelayMs, clampInterruptWords, voiceSecondsFromInterruptWords } from "./edit.schema";
+import { agentFormSchema, hydrateToolsForForm, CALL_ENGINE_PRESETS, type CallEnginePreset, clampBargeInEnergyThreshold, clampEndpointingMs, clampLinearDelayMs, clampFragmentCoalesceListeningMs, clampFragmentCoalescePlayingMs, clampTelephonyTailDrainMs, clampSarvamSpeechEndFlushMs, clampSarvamIncompleteHoldMs, clampInterruptWords, voiceSecondsFromInterruptWords } from "./edit.schema";
 import { buildUpdateAgentPayload, StagedPromptEditor } from "./edit";
 import type { AgentFormValues } from "./edit";
 import { Button } from "@/components/ui/button";
@@ -79,6 +79,7 @@ import {
   LANGUAGES, ASR_MODELS, LLM_MODELS, TTS_MODELS, TTS_VOICES, AGENT_TIMEZONES,
   isTamilLanguage, defaultGeminiModel, defaultLlmForLanguages,
   filterVoicesForLanguage, isVoiceCompatibleWithLanguage,
+  getSarvamTtsVoices, isSarvamVoiceCompatible,
   GEMINI_LIVE_LLM_MODEL, GEMINI_LIVE_THINKING_LEVELS,
   geminiLiveModelLabel, isGeminiLiveAgent, isGeminiLiveLlmModel, voiceStackForLlmModel,
   languagesForAgent, isGeminiLiveLanguage,
@@ -737,6 +738,16 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
     }
   }, [language, whitelistedData, ttsProvider, ttsVoice, form]);
 
+  // Clear Sarvam voice when it is incompatible with the selected Bulbul model
+  // (v2 speakers + bulbul:v3 → API 400).
+  useEffect(() => {
+    if (ttsProvider !== "sarvam") return;
+    if (!ttsVoice || ttsVoice === "__custom__") return;
+    if (!isSarvamVoiceCompatible(ttsVoice, ttsModel)) {
+      form.setValue("ttsVoice", "", { shouldDirty: true });
+    }
+  }, [ttsProvider, ttsModel, ttsVoice, form]);
+
   // "Paste custom Voice ID" UI mode — selecting the option must NOT erase an
   // already-saved voice ID; the value only changes when the user types into
   // the custom input or picks a different curated voice.
@@ -754,6 +765,8 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
   const ttsVoiceOpts: { value: string; label: string }[] =
     ttsProvider === "cartesia"
       ? cartesiaOverviewOpts
+      : ttsProvider === "sarvam"
+      ? getSarvamTtsVoices(ttsModel)
       : ((ttsVoiceRaw ?? []) as { value: string; label: string }[]);
 
   const asrLabel       = ASR_PROVIDERS.find(p => p.value === asrProvider)?.label ?? asrProvider;
@@ -1028,24 +1041,33 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
               )}
               {!isGeminiLive && asrProvider === "sarvam" && (
                 <FormField control={form.control} name="sarvamSttMode" render={({ field }) => {
+                  // Must match resolveSarvamSttMode: en → codemix, Indic → transcribe
                   const lang = form.watch("language") ?? "";
-                  const autoDefault = lang.toLowerCase().startsWith("en") ? "transcribe" : "codemix";
+                  const autoDefault = lang.toLowerCase().startsWith("en") ? "codemix" : "transcribe";
                   const currentValue = field.value ?? autoDefault;
                   return (
                   <FormItem className="space-y-1">
                     <FormLabel className="text-[10px] font-medium text-foreground/80">Speech Mode</FormLabel>
                     <SmallSelect value={currentValue} onChange={field.onChange}
                       options={[
-                        { value: "codemix", label: "Mixed / Hinglish (English + Regional words)" },
-                        { value: "verbatim", label: "Native Script (Pure Regional script, e.g. हिंदी)" },
-                        { value: "transcribe", label: "English Only (Strict English text)" },
+                        { value: "codemix", label: "Code-mix (English + regional, e.g. Hinglish)" },
+                        { value: "transcribe", label: "Transcribe (native script, e.g. हिंदी / தமிழ்)" },
+                        { value: "verbatim", label: "Verbatim (exact as spoken, incl. fillers)" },
+                        { value: "translit", label: "Translit (Indic speech → Roman script)" },
+                        { value: "translate", label: "Translate (speech → English text)" },
                       ]} />
                     <p className="text-[9.5px] text-muted-foreground leading-snug mt-1">
-                      {currentValue === "verbatim"
-                        ? "Speech is transcribed into native regional script (e.g. हिंदी / தமிழ்)."
-                        : currentValue === "transcribe"
-                        ? "Speech is transcribed into standard English text."
-                        : "Recommended: Captures mixed English + regional words (Hinglish, Tanglish, etc.)."}
+                      {currentValue === "transcribe"
+                        ? "Clean native-script transcript. Recommended for Indic languages."
+                        : currentValue === "codemix"
+                        ? "English words stay Latin; regional words stay native. Recommended for en-IN / mixed speech."
+                        : currentValue === "verbatim"
+                        ? "Keeps fillers and exact phrasing as spoken."
+                        : currentValue === "translit"
+                        ? "Writes Indic speech in Roman/Latin script."
+                        : currentValue === "translate"
+                        ? "Speech-to-English: any language spoken → English text."
+                        : "Auto: English → code-mix, Indic → native-script transcribe."}
                     </p>
                   </FormItem>
                   );
@@ -1167,8 +1189,20 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
                   <FormField control={form.control} name="ttsModel" render={({ field }) => (
                     <FormItem className="space-y-1">
                       <FormLabel className="text-[10px] text-muted-foreground">Model</FormLabel>
-                      <SmallSelect value={field.value ?? ""} onChange={field.onChange}
-                        options={ttsModelOpts.map((m: any) => ({ value: m.value, label: m.label }))} placeholder="Default" />
+                      <SmallSelect
+                        value={field.value ?? ""}
+                        onChange={(v) => {
+                          field.onChange(v);
+                          if (ttsProvider === "sarvam") {
+                            const current = form.getValues("ttsVoice");
+                            if (!isSarvamVoiceCompatible(current, v)) {
+                              form.setValue("ttsVoice", "", { shouldDirty: true });
+                            }
+                          }
+                        }}
+                        options={ttsModelOpts.map((m: any) => ({ value: m.value, label: m.label }))}
+                        placeholder="Default"
+                      />
                     </FormItem>
                   )} />
                 )}
@@ -1961,8 +1995,8 @@ function VoiceTab({ form }: { form: any }) {
 /** Voice-tab Call Engine presets — writes the same form keys as Advanced → Engine. */
 function VoiceCallFeelPresets({ form }: { form: any }) {
   const asrProviderVal = form.watch("asrProvider") as string | undefined;
-  const endpointMs = form.watch("asrEndpointingSilenceMs") ?? 300;
-  const linearMs = form.watch("linearDelayMs") ?? 350;
+  const endpointMs = form.watch("asrEndpointingSilenceMs") ?? 250;
+  const linearMs = form.watch("linearDelayMs") ?? 0;
   const interruptWords = form.watch("stopSpeakingNumWords") ?? 3;
 
   const activePreset: CallEnginePreset | "custom" = (() => {
@@ -3023,8 +3057,8 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
   const [irdaiConfirmOpen, setIrdaiConfirmOpen] = useState(false);
   const bargeIn = form.watch("bargeInEnabled");
   const asrProviderVal = form.watch("asrProvider") as string | undefined;
-  const endpointMs = form.watch("asrEndpointingSilenceMs") ?? 300;
-  const linearMs = form.watch("linearDelayMs") ?? 350;
+  const endpointMs = form.watch("asrEndpointingSilenceMs") ?? 250;
+  const linearMs = form.watch("linearDelayMs") ?? 0;
   const interruptWords = form.watch("stopSpeakingNumWords") ?? 3;
 
   const activePreset: CallEnginePreset | "custom" = (() => {
@@ -3145,8 +3179,8 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                 name="asrEndpointingSilenceMs"
                 label="Endpointing"
                 hint={asrProviderVal === "sarvam"
-                  ? "Not used with Sarvam STT — its server-side VAD ends the turn at a fixed ~0.5s. Azure only; the value is kept."
-                  : "Milliseconds of silence after the caller stops before we finalize the turn. Fast 150 · Balanced 250 · Patient 500. Azure STT only."}
+                  ? "Not used with Sarvam — use the pause-detection controls below."
+                  : "Milliseconds of silence after the caller stops before we finalize the turn (Azure + Deepgram). Fast 150 · Balanced 250 · Patient 500."}
                 min={100}
                 max={800}
                 step={25}
@@ -3154,13 +3188,84 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                 disabled={asrProviderVal === "sarvam"}
               />
 
+              {asrProviderVal === "sarvam" && (
+                <>
+                  <FormField control={form.control} name="sarvamHighVadSensitivity" render={({ field }) => (
+                    <FormItem className="flex flex-row items-center justify-between gap-3 py-1">
+                      <div>
+                        <FormLabel className="text-[12px] font-medium text-foreground/90">Detect pauses quickly</FormLabel>
+                        <p className="text-[10px] text-muted-foreground/70 mt-0.5">
+                          Default on — agent replies sooner after silence. Turn off if it cuts people off.
+                        </p>
+                      </div>
+                      <FormControl>
+                        <Switch checked={field.value !== false} onCheckedChange={field.onChange} />
+                      </FormControl>
+                    </FormItem>
+                  )} />
+                  <AdvSlider
+                    form={form}
+                    name="sarvamSpeechEndFlushMs"
+                    label="Reply kickoff delay"
+                    hint="Tiny pause after the caller finishes before the agent starts thinking. Default 30ms."
+                    min={0}
+                    max={200}
+                    step={10}
+                    fmt={(v) => `${v}ms`}
+                  />
+                  <AdvSlider
+                    form={form}
+                    name="sarvamIncompleteHoldMs"
+                    label="Wait for unfinished thoughts"
+                    hint="Extra wait when someone seems mid-sentence (e.g. “I want…”). Default 220ms."
+                    min={50}
+                    max={1000}
+                    step={10}
+                    fmt={(v) => `${v}ms`}
+                  />
+                </>
+              )}
+
               <AdvSlider
                 form={form}
                 name="linearDelayMs"
                 label="Linear delay"
-                hint="Extra wait after end-of-turn before the agent speaks — covers mid-sentence pauses."
+                hint="Extra wait after end-of-turn before the agent speaks — covers mid-sentence pauses. Default off (0)."
                 min={0}
                 max={1500}
+                step={50}
+                fmt={(v) => (v === 0 ? "off" : `${v}ms`)}
+              />
+
+              <AdvSlider
+                form={form}
+                name="fragmentCoalesceListeningMs"
+                label="Fragment hold (listening)"
+                hint="Hold short STT fragments while agent is silent. 0 = off. Default 150ms."
+                min={0}
+                max={2000}
+                step={50}
+                fmt={(v) => (v === 0 ? "off" : `${v}ms`)}
+              />
+
+              <AdvSlider
+                form={form}
+                name="fragmentCoalescePlayingMs"
+                label="Fragment hold (playing)"
+                hint="Hold short acks while agent is speaking. 0 = off. Default 800ms."
+                min={0}
+                max={3000}
+                step={50}
+                fmt={(v) => (v === 0 ? "off" : `${v}ms`)}
+              />
+
+              <AdvSlider
+                form={form}
+                name="telephonyTailDrainMs"
+                label="Tail drain"
+                hint="Silence after last TTS so carriers don't clip goodbye. Default 400ms."
+                min={0}
+                max={2000}
                 step={50}
                 fmt={(v) => (v === 0 ? "off" : `${v}ms`)}
               />
@@ -5440,7 +5545,7 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
       tools: [], genderDetectionEnabled: false, voiceMemoryEnabled: false, recordingEnabled: true, languageAutoDetect: false,
       autoSwitchToEnglish: false,
       startSpeakingWaitSecs: 0, startSpeakingOnPunctuationSecs: 0.1,
-      startSpeakingOnNoPunctuationSecs: 0.1, startSpeakingOnNumberSecs: 0,
+      startSpeakingOnNoPunctuationSecs: 0.1, startSpeakingOnNumberSecs: 0.1,
       stopSpeakingNumWords: 1, stopSpeakingVoiceSecs: 0.2, stopSpeakingBackOffSecs: 1,
       complianceIrdai: false, complianceDpdp: false, complianceTrai: false,
       knowledgeSourceIds: [],
@@ -5456,7 +5561,13 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
       llmMaxTokens: 200,
       ttsMinSentenceChars: 18,
       ttsSpeed: 1,
-      linearDelayMs: 50,
+      linearDelayMs: 0,
+      fragmentCoalesceListeningMs: 150,
+      fragmentCoalescePlayingMs: 800,
+      telephonyTailDrainMs: 400,
+      sarvamHighVadSensitivity: true,
+      sarvamSpeechEndFlushMs: 30,
+      sarvamIncompleteHoldMs: 220,
       kbBakedOnly: false,
       autoRedialEnabled: true,
       autoRedialMaxAttempts: 3,
@@ -5535,8 +5646,8 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
       autoSwitchToEnglish:      (agent as any).agentConfig?.autoSwitchToEnglish ?? false,
       startSpeakingWaitSecs:            (agent as any).agentConfig?.startSpeakingPlan?.waitSeconds            ?? 0,
       startSpeakingOnPunctuationSecs:   (agent as any).agentConfig?.startSpeakingPlan?.onPunctuationSeconds   ?? 0.1,
-      startSpeakingOnNoPunctuationSecs: (agent as any).agentConfig?.startSpeakingPlan?.onNoPunctuationSeconds ?? 1.5,
-      startSpeakingOnNumberSecs:        (agent as any).agentConfig?.startSpeakingPlan?.onNumberSeconds        ?? 0.5,
+      startSpeakingOnNoPunctuationSecs: (agent as any).agentConfig?.startSpeakingPlan?.onNoPunctuationSeconds ?? 0.1,
+      startSpeakingOnNumberSecs:        (agent as any).agentConfig?.startSpeakingPlan?.onNumberSeconds        ?? 0.1,
       stopSpeakingNumWords: (() => {
         const fromWords = (agent as any).agentConfig?.wordsForInterruption;
         const fromPlan = (agent as any).agentConfig?.stopSpeakingPlan?.numWords;
@@ -5564,11 +5675,17 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
       inboundPhoneNumberId:            (agent as any).inboundPhoneNumberId ?? undefined,
       outboundPhoneNumberId:           (agent as any).outboundPhoneNumberId ?? undefined,
       preferredManagedNumber:          ((agent as any).agentConfig?.preferredManagedNumber as string | undefined) ?? null,
-      asrEndpointingSilenceMs:         clampEndpointingMs((agent as any).agentConfig?.asrEndpointingSilenceMs ?? 300),
+      asrEndpointingSilenceMs:         clampEndpointingMs((agent as any).agentConfig?.asrEndpointingSilenceMs ?? 250),
       llmMaxTokens:                    (agent as any).agentConfig?.llmMaxTokens ?? null,
       ttsMinSentenceChars:             (agent as any).agentConfig?.ttsMinSentenceChars ?? 15,
       ttsSpeed:                        (agent as any).agentConfig?.ttsSpeed ?? 1,
-      linearDelayMs:                   clampLinearDelayMs((agent as any).agentConfig?.incrementalDelay ?? 350),
+      linearDelayMs:                   clampLinearDelayMs((agent as any).agentConfig?.incrementalDelay ?? 0),
+      fragmentCoalesceListeningMs:     clampFragmentCoalesceListeningMs((agent as any).agentConfig?.fragmentCoalesceListeningMs),
+      fragmentCoalescePlayingMs:       clampFragmentCoalescePlayingMs((agent as any).agentConfig?.fragmentCoalescePlayingMs),
+      telephonyTailDrainMs:            clampTelephonyTailDrainMs((agent as any).agentConfig?.telephonyTailDrainMs),
+      sarvamHighVadSensitivity:        ((agent as any).agentConfig?.sarvamHighVadSensitivity as boolean | undefined) !== false,
+      sarvamSpeechEndFlushMs:          clampSarvamSpeechEndFlushMs((agent as any).agentConfig?.sarvamSpeechEndFlushMs),
+      sarvamIncompleteHoldMs:          clampSarvamIncompleteHoldMs((agent as any).agentConfig?.sarvamIncompleteHoldMs),
       kbBakedOnly:                     ((agent as any).agentConfig?.kbBakedOnly as boolean | undefined) ?? false,
       autoRedialEnabled:      (agent as any).agentConfig?.autoRedial?.enabled ?? false,
       autoRedialMaxAttempts:  (agent as any).agentConfig?.autoRedial?.maxAttempts  ?? 3,
@@ -5622,6 +5739,12 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
         ambientNoiseVolume:       "voice",
         asrEndpointingSilenceMs:  "voice",
         linearDelayMs:            "voice",
+        fragmentCoalesceListeningMs: "voice",
+        fragmentCoalescePlayingMs:   "voice",
+        telephonyTailDrainMs:        "voice",
+        sarvamHighVadSensitivity:    "voice",
+        sarvamSpeechEndFlushMs:      "voice",
+        sarvamIncompleteHoldMs:      "voice",
         stopSpeakingNumWords:     "voice",
         vadSilenceMs:             "advanced",
         bargeInEnabled:           "advanced",

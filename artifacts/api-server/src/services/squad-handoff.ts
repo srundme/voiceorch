@@ -16,6 +16,11 @@ import {
   resolveVoiceStack,
 } from "../orchestration/adapters/live/gemini-live-voices.js";
 import { resolveSarvamSttMode } from "../orchestration/adapters/stt/sarvam-mode.js";
+import {
+  clampSarvamIncompleteHoldMs,
+  clampSarvamSpeechEndFlushMs,
+  resolveSarvamHighVadSensitivity,
+} from "@workspace/db/call-engine-defaults";
 import { resolveMicSensitivity, getMicSensitivityThresholds } from "../orchestration/mic-sensitivity.js";
 import { getAttachedSourceIds } from "../orchestration/kb-retrieval.js";
 import type { AgentConfig, AgentTool, SessionTransport } from "../orchestration/types.js";
@@ -181,7 +186,16 @@ async function buildTargetAgentConfig(
       backgroundDenoising: agent.asrBackgroundDenoising ?? false,
       confidenceThreshold: agent.asrConfidenceThreshold ?? 0.40,
       endOfTurnConfidence: agent.asrEndOfTurnConfidence ?? 0.70,
-      endOfTurnTimeout: agent.asrEndOfTurnTimeout ?? 5000,
+      endOfTurnTimeout: (() => {
+        const fromUi = agentCfg["asrEndpointingSilenceMs"];
+        if (typeof fromUi === "number" && Number.isFinite(fromUi) && fromUi > 0) {
+          return Math.max(50, Math.min(5000, Math.round(fromUi)));
+        }
+        if (typeof agent.asrEndOfTurnTimeout === "number" && agent.asrEndOfTurnTimeout > 0) {
+          return Math.max(50, Math.min(30000, Math.round(agent.asrEndOfTurnTimeout)));
+        }
+        return 400;
+      })(),
       keyterms: agent.asrKeyterms
         ? agent.asrKeyterms.split(",").map((s) => s.trim()).filter(Boolean)
         : [],
@@ -209,14 +223,31 @@ async function buildTargetAgentConfig(
     genderDetectionNeutralSalutation: "",
     voiceMemoryEnabled: false,
     wordsForInterruption: (agentCfg["wordsForInterruption"] as number | undefined) ?? 3,
-    incrementalDelay: (agentCfg["incrementalDelay"] as number | undefined) ?? 0,
+    incrementalDelay: (() => {
+      const v = agentCfg["incrementalDelay"];
+      if (typeof v !== "number" || !Number.isFinite(v)) return 0;
+      return v === 350 ? 0 : Math.max(0, Math.min(1500, Math.round(v)));
+    })(),
     hangupAfterLlmCall: false,
-    startSpeakingPlan: {
-      waitSeconds: 0,
-      onPunctuationSeconds: 0.1,
-      onNoPunctuationSeconds: 1.5,
-      onNumberSeconds: 0.5,
-    },
+    startSpeakingPlan: (() => {
+      const raw = agentCfg["startSpeakingPlan"] as AgentConfig["startSpeakingPlan"] | undefined;
+      const plan = raw ?? {
+        waitSeconds: 0,
+        onPunctuationSeconds: 0.1,
+        onNoPunctuationSeconds: 0.1,
+        onNumberSeconds: 0.1,
+      };
+      return {
+        waitSeconds: plan.waitSeconds ?? 0,
+        onPunctuationSeconds: plan.onPunctuationSeconds ?? 0.1,
+        onNoPunctuationSeconds: plan.onNoPunctuationSeconds === 1.5
+          ? 0.1
+          : (plan.onNoPunctuationSeconds ?? 0.1),
+        onNumberSeconds: plan.onNumberSeconds === 0.5
+          ? 0.1
+          : (plan.onNumberSeconds ?? 0.1),
+      };
+    })(),
     stopSpeakingPlan: null,
     compliance: null,
     contextWindowTurns: agent.contextWindowTurns ?? null,
@@ -228,12 +259,30 @@ async function buildTargetAgentConfig(
     asrEndpointingSilenceMs: (agentCfg["asrEndpointingSilenceMs"] as number | undefined) ?? 250,
     llmMaxTokens: (agentCfg["llmMaxTokens"] as number | null | undefined) ?? null,
     ttsMinSentenceChars: (agentCfg["ttsMinSentenceChars"] as number | undefined) ?? 18,
+    fragmentCoalesceListeningMs: (() => {
+      const v = agentCfg["fragmentCoalesceListeningMs"];
+      if (typeof v !== "number" || !Number.isFinite(v)) return 150;
+      return Math.max(0, Math.min(2000, Math.round(v)));
+    })(),
+    fragmentCoalescePlayingMs: (() => {
+      const v = agentCfg["fragmentCoalescePlayingMs"];
+      if (typeof v !== "number" || !Number.isFinite(v)) return 800;
+      return Math.max(0, Math.min(3000, Math.round(v)));
+    })(),
+    telephonyTailDrainMs: (() => {
+      const v = agentCfg["telephonyTailDrainMs"];
+      if (typeof v !== "number" || !Number.isFinite(v)) return 400;
+      return Math.max(0, Math.min(2000, Math.round(v)));
+    })(),
     sarvamSttMode: (agent.asrProvider ?? "").toLowerCase() === "sarvam"
       ? resolveSarvamSttMode(
           effectiveAgentLang,
           (agentCfg["sarvamSttMode"] as string | undefined) ?? null,
         )
       : ((agentCfg["sarvamSttMode"] as string | undefined) ?? null),
+    sarvamHighVadSensitivity: resolveSarvamHighVadSensitivity(agentCfg["sarvamHighVadSensitivity"]),
+    sarvamSpeechEndFlushMs: clampSarvamSpeechEndFlushMs(agentCfg["sarvamSpeechEndFlushMs"] as number | undefined),
+    sarvamIncompleteHoldMs: clampSarvamIncompleteHoldMs(agentCfg["sarvamIncompleteHoldMs"] as number | undefined),
     kbBakedOnly: (agentCfg["kbBakedOnly"] as boolean | undefined) ?? false,
     voiceStack,
     geminiLive: voiceStack === "gemini_live"

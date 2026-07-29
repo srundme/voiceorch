@@ -115,6 +115,8 @@ class SarvamDispositionLLM implements DispositionLLM {
     transcript: string,
   ): Promise<Record<string, unknown>> {
     // Sarvam json_object mode does not enforce a schema, so embed it in the prompt.
+    // Thinking is ON by default at "low" — disable it so reasoning doesn't consume
+    // the token budget and leave content=null (chat skill gotcha).
     const response = await this.client.chat.completions.create({
       model: this.model,
       temperature: 0,
@@ -123,8 +125,13 @@ class SarvamDispositionLLM implements DispositionLLM {
         { role: "system", content: withSchemaInstruction(systemPrompt, schema) },
         { role: "user", content: `TRANSCRIPT:\n${transcript}` },
       ],
+      // Sarvam extension (OpenAI-compat); not on OpenAI's typed surface.
+      ...( { reasoning_effort: null } as object ),
     });
-    const content = response.choices[0]?.message?.content ?? "{}";
+    const msg = response.choices[0]?.message as
+      | { content?: string | null; reasoning_content?: string | null }
+      | undefined;
+    const content = msg?.content ?? msg?.reasoning_content ?? "{}";
     return JSON.parse(content) as Record<string, unknown>;
   }
 }

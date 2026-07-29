@@ -6,6 +6,8 @@ describe("resolveSarvamSttMode", () => {
     expect(resolveSarvamSttMode("en-IN", "codemix")).toBe("codemix");
     expect(resolveSarvamSttMode("ta-IN", "verbatim")).toBe("verbatim");
     expect(resolveSarvamSttMode("en-IN", "transcribe")).toBe("transcribe");
+    expect(resolveSarvamSttMode("hi-IN", "translate")).toBe("translate");
+    expect(resolveSarvamSttMode("ta-IN", "translit")).toBe("translit");
   });
 
   it("defaults Indic languages to transcribe (clean native script) and en-IN to codemix", () => {
@@ -22,5 +24,9 @@ describe("resolveSarvamSttMode", () => {
     expect(resolveSarvamSttMode(null)).toBe("codemix");
     expect(resolveSarvamSttMode(undefined)).toBe("codemix");
   });
-});
 
+  it("ignores unknown explicit modes and falls back to language default", () => {
+    expect(resolveSarvamSttMode("en-IN", "not-a-mode")).toBe("codemix");
+    expect(resolveSarvamSttMode("ta-IN", "not-a-mode")).toBe("transcribe");
+  });
+});

@@ -6,12 +6,43 @@
 export const CALL_ENGINE_SAFE = {
   bargeInEnergyThreshold: 1200,
   asrEndpointingSilenceMs: 250,
-  incrementalDelay: 350,
+  /** Extra post-transcript wait before LLM — 0 keeps turn latency snappy. */
+  incrementalDelay: 0,
   wordsForInterruption: 3,
   stopSpeakingVoiceFloor: 0.2,
   minEnergy: 800,
   minEndpointingMs: 100,
+  /** Legacy UI defaults that silently added ~1–2s of dead air. */
+  legacyIncrementalDelay: 350,
+  legacyNoPunctuationSeconds: 1.5,
+  legacyNumberSeconds: 0.5,
+  snappyNoPunctuationSeconds: 0.1,
+  snappyNumberSeconds: 0.1,
 } as const;
+
+/** Sarvam STT latency knobs — UI-owned, snappy voice-agent defaults. */
+export const SARVAM_STT_LATENCY_DEFAULTS = {
+  highVadSensitivity: true,
+  /** Fast flush after speech_end / complete transcript. */
+  speechEndFlushMs: 30,
+  /** Hold mid-thought fragments before speech_end. */
+  incompleteHoldMs: 220,
+} as const;
+
+export function clampSarvamSpeechEndFlushMs(value: number | null | undefined): number {
+  const v = typeof value === "number" && Number.isFinite(value) ? value : SARVAM_STT_LATENCY_DEFAULTS.speechEndFlushMs;
+  return Math.max(0, Math.min(200, Math.round(v)));
+}
+
+export function clampSarvamIncompleteHoldMs(value: number | null | undefined): number {
+  const v = typeof value === "number" && Number.isFinite(value) ? value : SARVAM_STT_LATENCY_DEFAULTS.incompleteHoldMs;
+  return Math.max(50, Math.min(1000, Math.round(v)));
+}
+
+export function resolveSarvamHighVadSensitivity(value: unknown): boolean {
+  if (typeof value === "boolean") return value;
+  return SARVAM_STT_LATENCY_DEFAULTS.highVadSensitivity;
+}
 
 export function voiceSecondsFromInterruptWords(numWords: number): number {
   const n = Math.max(1, Math.min(6, Math.round(numWords || 3)));
@@ -94,17 +125,57 @@ export function normalizeCallEngineAgentConfig(
     }
   }
 
+  // Rewrite legacy latency footguns that were form defaults (not intentional tuning).
+  const delay = cfg["incrementalDelay"];
+  if (typeof delay === "number" && delay === CALL_ENGINE_SAFE.legacyIncrementalDelay) {
+    reasons.push(`incrementalDelay ${delay}→${CALL_ENGINE_SAFE.incrementalDelay}`);
+    cfg["incrementalDelay"] = CALL_ENGINE_SAFE.incrementalDelay;
+  }
+
+  const sspRaw = cfg["startSpeakingPlan"];
+  if (sspRaw && typeof sspRaw === "object") {
+    const ssp = { ...(sspRaw as Record<string, unknown>) };
+    let sspChanged = false;
+    if (ssp["onNoPunctuationSeconds"] === CALL_ENGINE_SAFE.legacyNoPunctuationSeconds) {
+      reasons.push(
+        `startSpeakingPlan.onNoPunctuationSeconds ${CALL_ENGINE_SAFE.legacyNoPunctuationSeconds}→${CALL_ENGINE_SAFE.snappyNoPunctuationSeconds}`,
+      );
+      ssp["onNoPunctuationSeconds"] = CALL_ENGINE_SAFE.snappyNoPunctuationSeconds;
+      sspChanged = true;
+    }
+    if (ssp["onNumberSeconds"] === CALL_ENGINE_SAFE.legacyNumberSeconds) {
+      reasons.push(
+        `startSpeakingPlan.onNumberSeconds ${CALL_ENGINE_SAFE.legacyNumberSeconds}→${CALL_ENGINE_SAFE.snappyNumberSeconds}`,
+      );
+      ssp["onNumberSeconds"] = CALL_ENGINE_SAFE.snappyNumberSeconds;
+      sspChanged = true;
+    }
+    if (sspChanged) cfg["startSpeakingPlan"] = ssp;
+  }
+
   const uniqueReasons = [...new Set(reasons)];
   return { changed: uniqueReasons.length > 0, config: cfg, reasons: uniqueReasons };
 }
 
-/** Defaults for INSERT / Vibe create — Bolna Call Engine Balanced. */
+/** Defaults for INSERT / Vibe create — Bolna Call Engine Balanced (snappy latency). */
 export function callEngineInsertDefaults(): Record<string, unknown> {
   return {
     asrEndpointingSilenceMs: CALL_ENGINE_SAFE.asrEndpointingSilenceMs,
     incrementalDelay: CALL_ENGINE_SAFE.incrementalDelay,
     bargeInEnergyThreshold: CALL_ENGINE_SAFE.bargeInEnergyThreshold,
     wordsForInterruption: CALL_ENGINE_SAFE.wordsForInterruption,
+    startSpeakingPlan: {
+      waitSeconds: 0,
+      onPunctuationSeconds: 0.1,
+      onNoPunctuationSeconds: CALL_ENGINE_SAFE.snappyNoPunctuationSeconds,
+      onNumberSeconds: CALL_ENGINE_SAFE.snappyNumberSeconds,
+    },
+    fragmentCoalesceListeningMs: 150,
+    fragmentCoalescePlayingMs: 800,
+    telephonyTailDrainMs: 400,
+    sarvamHighVadSensitivity: SARVAM_STT_LATENCY_DEFAULTS.highVadSensitivity,
+    sarvamSpeechEndFlushMs: SARVAM_STT_LATENCY_DEFAULTS.speechEndFlushMs,
+    sarvamIncompleteHoldMs: SARVAM_STT_LATENCY_DEFAULTS.incompleteHoldMs,
     stopSpeakingPlan: {
       numWords: CALL_ENGINE_SAFE.wordsForInterruption,
       voiceSeconds: voiceSecondsFromInterruptWords(CALL_ENGINE_SAFE.wordsForInterruption),

@@ -120,8 +120,8 @@ const FILLER_THRESHOLD_MS     = 350;    // play a filler phrase if LLM has not r
                                         // token within this window (and backchannel didn't fire)
 const DEAD_AIR_FILLER_CANCEL_MS = 500; // skip dead-air filler playback if LLM first token
                                         // arrives within this window after filler was enqueued
-const FRAGMENT_COALESCE_MS    = 2000;   // hold short English fragments / Indic acks for a follow-up STT final (agent speaking)
-const FRAGMENT_COALESCE_LISTENING_MS = 450; // shorter hold when the agent is silent — "Okay." is then likely the caller's real answer
+const FRAGMENT_COALESCE_MS_DEFAULT = 800;   // fallback when agentConfig omits playing coalesce
+const FRAGMENT_COALESCE_LISTENING_MS_DEFAULT = 150; // fallback when agentConfig omits listening coalesce
 const VAD_FLUSH_BACKSTOP_MS   = 2000;   // speech_start with no interim/final/speech_end for this long → one-shot STT flush (lost-turn anomaly)
 const VAD_FLUSH_COOLDOWN_MS   = 5000;   // min interval between backstop flushes — keeps the flush strictly anomaly-only
 const LLM_TTFT_FALLBACK_MS    = Number(process.env.LLM_TTFT_FALLBACK_MS ?? 1200); // abort slow primary LLM
@@ -147,6 +147,7 @@ const BARGE_IN_TELEPHONY_ACTIVE_TTS_ENERGY_FLOOR = 1200; // COLD-START fallback 
                                          // line-specific. We now MEASURE the echo floor per call (see
                                          // playbackEchoFloor) and set the bar to echoFloor × margin. This
                                          // constant is used only before enough echo has been observed.
+const TELEPHONY_TAIL_DRAIN_MS_DEFAULT = 400; // fallback when agentConfig omits tail drain
 // ── Adaptive (self-calibrating) energy barge-in for the streaming-STT carrier path ──
 // The barge-in bar during active TTS = max(configuredThreshold, measuredEchoFloor × MARGIN),
 // clamped to [configured, MAX]. This lets a NORMAL-volume caller interrupt on a quiet line
@@ -190,12 +191,7 @@ const SELF_ECHO_MIN_OVERLAP   = 0.6;   // fraction of transcript tokens that mus
                                         // recent agent speech to classify it as our own echo
 const CARRIER_ECHO_LATENCY_MS = 1500;  // margin added to the greeting echo-hold to cover the
                                         // round-trip carrier echo latency (observed ~777 ms)
-const TELEPHONY_TAIL_DRAIN_MS = 800;    // After the final utterance fully streams, send silence
-                                         // frames for this long before the next listen / teardown
-                                         // so the carrier's jitter buffer plays out the last words.
-                                         // Sending real silence (not just sleeping) is critical for
-                                         // Vobiz — a passive sleep lets Vobiz detect "no audio" and
-                                         // close its playout window early, clipping the last words.
+// Tail drain duration comes from agentConfig.telephonyTailDrainMs (Latency Tuning UI).
 // ── Voicemail-delivery (Vobiz AMD leave_message) tunables ──────────────────────
 // When the answer webhook detects a machine, we open the media stream and listen
 // to the machine's outgoing greeting. The message is spoken once the greeting ends
@@ -1740,6 +1736,9 @@ export class OrchestrationPipeline implements VoiceSession {
       ? JSON.stringify({
           ...parseJsonObject(providerExtraConfig),
           mode: resolveSarvamSttMode(sttCfg.language, this.agent.sarvamSttMode),
+          highVadSensitivity: this.agent.sarvamHighVadSensitivity,
+          speechEndFlushMs: this.agent.sarvamSpeechEndFlushMs,
+          incompleteHoldMs: this.agent.sarvamIncompleteHoldMs,
         })
       : providerExtraConfig;
     this.stt = createSTTAdapter(
@@ -2444,49 +2443,52 @@ export class OrchestrationPipeline implements VoiceSession {
         //     dead air on every short reply (call-4831 "Okay." turn), so release
         //     after a short merge window instead.
         const holdMs = (this.isPlaying || this.isSendingTtsAudio)
-          ? FRAGMENT_COALESCE_MS
-          : FRAGMENT_COALESCE_LISTENING_MS;
-        this._fragmentCoalesce = {
-          text: transcript,
-          timer: setTimeout(() => {
-            const pending = this._fragmentCoalesce?.text;
-            this._fragmentCoalesce = null;
-            if (!pending || this.closed) return;
-            // Context re-check at fire time (review finding): the hold was armed
-            // under one playback phase but may fire in another. If the agent is
-            // NOW speaking and the held text is a pure ack ("okay"/"சரி"), it was
-            // a true backchannel — promoting it to a turn would wrongly barge the
-            // agent. Drop it instead of processing with stale context.
-            if (
-              (this.isPlaying || this.isSendingTtsAudio)
-              && isBackchannelOnlyUtterance(pending)
-            ) {
-              this.logDiscardedTranscript(pending, "backchannel_during_playback");
-              logger.info(
-                { callId: this.config.callId, fragment: pending.slice(0, 80) },
-                "Held ack fragment dropped — agent speaking at coalesce-timer fire",
-              );
-              return;
-            }
-            void this.handleStreamingTranscript(pending, Date.now(), "coalesced_fragment");
-          }, holdMs),
-        };
-        logger.info(
-          { callId: this.config.callId, fragment: transcript.slice(0, 80), holdMs },
-          "STT fragment coalesce hold — awaiting follow-up final",
-        );
-        this.logDiscardedTranscript(transcript, "fragment_coalesce_hold");
-        this.safetyNet.onFinal();
-        this.clearEagerPartialTimer();
-        // Drop any speculative LLM started on the filler-only partial — the
-        // coalesced follow-up (or flush) will launch a fresh turn.
-        if (this._specLlmState && !this.isProcessing) {
-          this._specLlmState.aborted = true;
-          this._specLlmState = null;
+          ? (this.agent.fragmentCoalescePlayingMs ?? FRAGMENT_COALESCE_MS_DEFAULT)
+          : (this.agent.fragmentCoalesceListeningMs ?? FRAGMENT_COALESCE_LISTENING_MS_DEFAULT);
+        if (holdMs > 0) {
+          this._fragmentCoalesce = {
+            text: transcript,
+            timer: setTimeout(() => {
+              const pending = this._fragmentCoalesce?.text;
+              this._fragmentCoalesce = null;
+              if (!pending || this.closed) return;
+              // Context re-check at fire time (review finding): the hold was armed
+              // under one playback phase but may fire in another. If the agent is
+              // NOW speaking and the held text is a pure ack ("okay"/"சரி"), it was
+              // a true backchannel — promoting it to a turn would wrongly barge the
+              // agent. Drop it instead of processing with stale context.
+              if (
+                (this.isPlaying || this.isSendingTtsAudio)
+                && isBackchannelOnlyUtterance(pending)
+              ) {
+                this.logDiscardedTranscript(pending, "backchannel_during_playback");
+                logger.info(
+                  { callId: this.config.callId, fragment: pending.slice(0, 80) },
+                  "Held ack fragment dropped — agent speaking at coalesce-timer fire",
+                );
+                return;
+              }
+              void this.handleStreamingTranscript(pending, Date.now(), "coalesced_fragment");
+            }, holdMs),
+          };
+          logger.info(
+            { callId: this.config.callId, fragment: transcript.slice(0, 80), holdMs },
+            "STT fragment coalesce hold — awaiting follow-up final",
+          );
+          this.logDiscardedTranscript(transcript, "fragment_coalesce_hold");
+          this.safetyNet.onFinal();
+          this.clearEagerPartialTimer();
+          // Drop any speculative LLM started on the filler-only partial — the
+          // coalesced follow-up (or flush) will launch a fresh turn.
+          if (this._specLlmState && !this.isProcessing) {
+            this._specLlmState.aborted = true;
+            this._specLlmState = null;
+          }
+          this.interruptionMgr.onUserSpeechEnd();
+          if (!this.closed) this.safetyNet.beginListening();
+          return;
         }
-        this.interruptionMgr.onUserSpeechEnd();
-        if (!this.closed) this.safetyNet.beginListening();
-        return;
+        // holdMs === 0: coalesce disabled via Latency Tuning UI — fall through.
       }
     } else if (this._fragmentCoalesce) {
       // Complete follow-up arrived while a fragment was held — merge, don't drop.
@@ -5636,9 +5638,7 @@ export class OrchestrationPipeline implements VoiceSession {
         delayMs = Math.round((plan.onNoPunctuationSeconds ?? 0) * 1000);
       }
       delayMs += Math.round((plan.waitSeconds ?? 0) * 1000);
-      // Safety cap: never stall the LLM for more than 300 ms regardless of agent config.
-      // Values above this add dead air with no perceptible naturalness benefit.
-      delayMs = Math.min(delayMs, 300);
+      // Honor Latency Tuning UI values as-is (schema max 5s). No silent hard cap.
       if (delayMs > 0 && !this.bargeInRequested) {
         await new Promise<void>((r) => setTimeout(r, delayMs));
       }
@@ -8220,7 +8220,9 @@ export class OrchestrationPipeline implements VoiceSession {
       ? FRAME_MS * 8 * 2   // 20 ms × 8000 Hz × 2 bytes  = 320 B (16-bit PCM)
       : FRAME_MS * 8;      // 20 ms × 8000 Hz × 1 byte   = 160 B (µ-law)
     const silenceFrame  = Buffer.alloc(FRAME_BYTES, 0);
-    const frames        = Math.ceil(TELEPHONY_TAIL_DRAIN_MS / FRAME_MS);
+    const frames        = Math.ceil(
+      (this.agent.telephonyTailDrainMs ?? TELEPHONY_TAIL_DRAIN_MS_DEFAULT) / FRAME_MS,
+    );
     let nextTick        = Date.now() + FRAME_MS;
     for (let i = 0; i < frames && !this.closed && !this.bargeInRequested; i++) {
       // When ambient is enabled, carry the ambient bed through the drain window

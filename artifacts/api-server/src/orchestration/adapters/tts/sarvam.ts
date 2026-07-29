@@ -53,6 +53,20 @@ const DEFAULT_SPEAKER: Record<string, string> = {
   "bulbul:v2":      "anushka",
 };
 
+/** v2 speakers are rejected by bulbul:v3 with HTTP 400 — lock by model. */
+const V2_SPEAKERS = new Set([
+  "anushka", "abhilash", "manisha", "vidya", "arya", "karun", "hitesh",
+]);
+
+function resolveSpeaker(voice: string | null, model: string): string {
+  const fallback = DEFAULT_SPEAKER[model] ?? "ritu";
+  if (!voice || voice.includes("-")) return fallback;
+  if (model === "bulbul:v2") return V2_SPEAKERS.has(voice) ? voice : fallback;
+  // v3 / v3-beta: never send a v2 speaker (API 400)
+  if (V2_SPEAKERS.has(voice)) return fallback;
+  return voice;
+}
+
 export class SarvamTTS implements TTSAdapter {
   private key: string;
   private speaker: string;
@@ -86,7 +100,7 @@ export class SarvamTTS implements TTSAdapter {
       }
     }
     this.langCode = (lang && SARVAM_LANG[lang]) ? SARVAM_LANG[lang]! : "en-IN";
-    this.speaker = (voice && !voice.includes("-")) ? voice : (DEFAULT_SPEAKER[this.model] ?? "ritu");
+    this.speaker = resolveSpeaker(voice, this.model);
 
     // Agent ttsSpeed → Bulbul `pace`, clamped to the documented 0.5–2.0 range.
     // Omitted at (near-)1.0 so default-speed agents keep byte-identical requests.

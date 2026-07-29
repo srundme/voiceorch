@@ -209,7 +209,25 @@ router.post("/agents", requireAuth, clientContext, denyManagedClient, async (req
     insertAgentConfig["wordsForInterruption"] = engineDefaults["wordsForInterruption"];
   }
   if (insertAgentConfig["startSpeakingPlan"] == null) {
-    insertAgentConfig["startSpeakingPlan"] = { waitSeconds: 0, onPunctuationSeconds: 0.1, onNoPunctuationSeconds: 0.1, onNumberSeconds: 0 };
+    insertAgentConfig["startSpeakingPlan"] = engineDefaults["startSpeakingPlan"];
+  }
+  if (insertAgentConfig["fragmentCoalesceListeningMs"] == null) {
+    insertAgentConfig["fragmentCoalesceListeningMs"] = engineDefaults["fragmentCoalesceListeningMs"];
+  }
+  if (insertAgentConfig["fragmentCoalescePlayingMs"] == null) {
+    insertAgentConfig["fragmentCoalescePlayingMs"] = engineDefaults["fragmentCoalescePlayingMs"];
+  }
+  if (insertAgentConfig["telephonyTailDrainMs"] == null) {
+    insertAgentConfig["telephonyTailDrainMs"] = engineDefaults["telephonyTailDrainMs"];
+  }
+  if (insertAgentConfig["sarvamHighVadSensitivity"] == null) {
+    insertAgentConfig["sarvamHighVadSensitivity"] = engineDefaults["sarvamHighVadSensitivity"];
+  }
+  if (insertAgentConfig["sarvamSpeechEndFlushMs"] == null) {
+    insertAgentConfig["sarvamSpeechEndFlushMs"] = engineDefaults["sarvamSpeechEndFlushMs"];
+  }
+  if (insertAgentConfig["sarvamIncompleteHoldMs"] == null) {
+    insertAgentConfig["sarvamIncompleteHoldMs"] = engineDefaults["sarvamIncompleteHoldMs"];
   }
   if (insertAgentConfig["stopSpeakingPlan"] == null) {
     insertAgentConfig["stopSpeakingPlan"] = engineDefaults["stopSpeakingPlan"];
