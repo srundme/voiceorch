@@ -21,6 +21,7 @@ import { usePartnerContext } from "@/hooks/use-partner";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 import { loadActingAs, stopActingAs } from "@/lib/acting-as";
+import { SarvamFamilyAnnouncement } from "@/components/sarvam-family-announcement";
 
 /* ─── Error boundary ─────────────────────────────────────────────────────── */
 interface ErrorBoundaryState { hasError: boolean; error: unknown }
@@ -1063,6 +1064,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <NewAgentModal open={newAgentOpen} onClose={() => setNewAgentOpen(false)} />
 
       <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
+
+      <SarvamFamilyAnnouncement />
     </div>
   );
 }

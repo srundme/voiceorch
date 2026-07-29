@@ -1,4 +1,4 @@
-# Redeploy trigger: restore SnapServe mark + original zinc theme (no Sarvam palette).
+# Redeploy trigger: SnapServe × Sarvam family announcement modal.
 FROM node:24-slim AS builder
 WORKDIR /workspace
 
