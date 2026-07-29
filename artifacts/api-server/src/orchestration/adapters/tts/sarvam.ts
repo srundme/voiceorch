@@ -31,6 +31,26 @@ const WS_RETRY_MAX = 3;
 const WS_RETRY_BASE_MS = 400;
 const WS_RETRY_MAX_MS = 4_000;
 
+/**
+ * Decode Sarvam REST `audios[0]` to raw s16le PCM.
+ * Prefer linear16 responses (no header). If WAV/RIFF, locate the `data` chunk
+ * instead of blindly slicing 44 bytes (non-canonical headers cause clicks).
+ */
+function pcmFromSarvamAudio(b64: string): Buffer {
+  const buf = Buffer.from(b64, "base64");
+  if (buf.length < 12 || buf.toString("ascii", 0, 4) !== "RIFF") return buf;
+  let offset = 12;
+  while (offset + 8 <= buf.length) {
+    const id = buf.toString("ascii", offset, offset + 4);
+    const size = buf.readUInt32LE(offset + 4);
+    const dataStart = offset + 8;
+    const dataEnd = Math.min(buf.length, dataStart + size);
+    if (id === "data") return buf.subarray(dataStart, dataEnd);
+    offset = dataStart + size + (size % 2);
+  }
+  return buf.length > WAV_HEADER_BYTES ? buf.subarray(WAV_HEADER_BYTES) : buf;
+}
+
 /** REST /text-to-speech caps input at 2,500 characters. */
 const MAX_TTS_CHARS = 2400;
 /** HTTP stream /text-to-speech/stream caps at 3,500 characters. */
@@ -230,10 +250,12 @@ export class SarvamTTS implements TTSAdapter {
     const data: Record<string, unknown> = {
       speaker: this.speaker,
       target_language_code: this.langCode,
+      // OpenAPI: sample rate is a string enum. Larger max_chunk_length reduces
+      // mid-sentence prosody seams that sound like TTS "glitches".
       speech_sample_rate: "16000",
       output_audio_codec: "linear16",
-      min_buffer_size: 50,
-      max_chunk_length: 200,
+      min_buffer_size: 100,
+      max_chunk_length: 500,
     };
     this.applyPace(data);
     return data;
@@ -397,7 +419,8 @@ export class SarvamTTS implements TTSAdapter {
       speaker: this.speaker,
       model: this.model,
       enable_preprocessing: this.enablePreprocessing,
-      speech_sample_rate: 16000,
+      speech_sample_rate: "16000",
+      output_audio_codec: "linear16",
     };
     this.applyPace(body);
 
@@ -415,8 +438,7 @@ export class SarvamTTS implements TTSAdapter {
     const json = (await resp.json()) as { audios?: string[] };
     if (!json.audios?.[0]) throw new Error("Sarvam TTS: no audio in response");
 
-    const wav = Buffer.from(json.audios[0], "base64");
-    return wav.slice(WAV_HEADER_BYTES);
+    return pcmFromSarvamAudio(json.audios[0]);
   }
 
   async synthesize(text: string): Promise<{ audio: Buffer; characters: number }> {
@@ -617,7 +639,7 @@ export class SarvamTTS implements TTSAdapter {
       speaker: this.speaker,
       model: apiModel(this.model),
       enable_preprocessing: this.enablePreprocessing,
-      speech_sample_rate: 16000,
+      speech_sample_rate: "16000",
       output_audio_codec: "linear16",
     };
     this.applyPace(body);

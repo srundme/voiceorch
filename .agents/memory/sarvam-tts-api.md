@@ -11,7 +11,9 @@ description: Sarvam Bulbul TTS — persistent WebSocket, HTTP fallback, barge-in
 
 **WebSocket** `wss://api.sarvam.ai/text-to-speech/ws?model=bulbul:v3&send_completion_event=true`
 - Header: `api-subscription-key`
-- **Config first:** `{ type:"config", data:{ speaker, target_language_code, speech_sample_rate:"16000", output_audio_codec:"linear16", min_buffer_size:50, max_chunk_length:200, pace? } }`
+- **Config first:** `{ type:"config", data:{ speaker, target_language_code, speech_sample_rate:"16000", output_audio_codec:"linear16", min_buffer_size:100, max_chunk_length:500, pace? } }`
+  - Keep `max_chunk_length` ≥500 — 200 caused mid-sentence prosody seams ("glitchy" voice).
+  - Always send `speech_sample_rate` as a **string** on WS/HTTP/REST (OpenAPI enum).
 - **Text:** `{ type:"text", data:{ text } }` — prefer &lt;500 chars
 - **Flush** after text: `{ type:"flush" }`
 - **Ping** every ~30s on idle warm sockets (server idle-closes ~1 min)
@@ -24,8 +26,8 @@ description: Sarvam Bulbul TTS — persistent WebSocket, HTTP fallback, barge-in
 
 **Speakers:** catalog names + Creative Studio clone speaker ids. Reject Cartesia UUIDs only (hyphenated custom clone ids are OK).
 
-**HTTP stream** `POST /text-to-speech/stream` — `linear16` @ 16 kHz. Cap 3500.
-**REST** `POST /text-to-speech` — base64 WAV, strip 44-byte header. Cap 2500.
+**HTTP stream** `POST /text-to-speech/stream` — `linear16` @ `"16000"`. Cap 3500.
+**REST** `POST /text-to-speech` — prefer `output_audio_codec:"linear16"`; if WAV, parse `data` chunk (do not blind-slice 44). Cap 2500.
 
 Never call `/text-to-speech-streaming` (404). Never send pitch/loudness on v3. Odia = `od-IN`.
 
