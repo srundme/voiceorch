@@ -125,7 +125,7 @@ Billing mode is resolved **dynamically** at call-end time in `minute-rates.ts �
 
 - Platform charges orchestration fee only; users bring their own provider keys
 - Inspired by Bolna open-source framework architecture
-- **GitHub push:** Railway deploys from `srundme/voiceorch` main. Push every code edit there via the REST contents API using the `GITHUB_PERSONAL_ACCESS_TOKEN` secret (NOT `GITHUB_PAT`, which is stale/invalid). Auth header `Authorization: token $GITHUB_PERSONAL_ACCESS_TOKEN`. Do this automatically — don't ask each time.
+- **GitHub push: DO NOT push automatically (user instruction, Jul 29 2026).** Commit locally only; push to `srundme/voiceorch` main ONLY when the user explicitly asks. (Deploys — Railway / GCP Cloud Build — trigger from GitHub main, so nothing deploys until the user requests a push.) When a push is requested, use the `gitPush` callback; token fallback is `GITHUB_PERSONAL_ACCESS_TOKEN` (NOT `GITHUB_PAT`, stale).
 
 ## Gotchas
 
