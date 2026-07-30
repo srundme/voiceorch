@@ -7,4 +7,6 @@ Plivo's `<Stream>` verb (like VoBiz's) takes the WebSocket URL as the element's 
 
 **Why:** BYO-Plivo outbound calls "connected then dropped after silent seconds"; root cause was this XML shape, not audio/auth.
 
+Related Plivo WS protocol quirks (same debugging round): agent→Plivo audio must be `{"event":"media",...}` — `"playback"` is silently dropped (caller hears only Plivo-side prompts, "IVR-like voice"); `clear` needs `streamId`; start event fields are camelCase (`streamId`/`callId`) and carry NO from/to — thread From/To from the answer webhook body via the WS URL query, like VoBiz. Full protocol reference vendored at `.agents/skills/plivo/`.
+
 **How to apply:** any Plivo/VoBiz-family XML builder must put the WS URL in the Stream text node and XML-escape `&` → `&amp;` in the query string (bare `&` = invalid XML = instant hangup). Symptom signature "answers → silence → drop with zero WS logs" = stream never attached; check the answer XML first.
