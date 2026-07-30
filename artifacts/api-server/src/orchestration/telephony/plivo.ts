@@ -53,6 +53,8 @@ export async function handlePlivoWebSocket(
   callbackId?: number,
   fromNumber?: string,
   toNumber?: string,
+  callUuid?: string,
+  answeredAt?: number,
 ): Promise<void> {
   let sessionId: string | null = null;
   let streamId: string | null = null;
@@ -61,8 +63,13 @@ export async function handlePlivoWebSocket(
   // the session as soon as sessionId is assigned so the record isn't stuck in_progress.
   let sessionEndedBeforeReady = false;
 
+  // True once Plivo's "start" event arrives. Session setup begins at WS-open
+  // for latency, but playAudio/clearAudio are only valid after stream start —
+  // pre-start frames (early ambient ticks) are deterministically dropped.
+  let streamStarted = false;
+
   function sendAudioToPlivo(audio: Buffer): void {
-    if (ws.readyState !== ws.OPEN) return;
+    if (ws.readyState !== ws.OPEN || !streamStarted) return;
     // Per official Plivo bidirectional-stream docs, agent→Plivo audio uses
     // event "playAudio" with explicit contentType + sampleRate. Unknown events
     // ("playback", "media") are silently dropped → connected-but-mute agent.
@@ -83,11 +90,98 @@ export async function handlePlivoWebSocket(
    * Ref: https://www.plivo.com/docs/voice/xml/stream/#websocket-messages
    */
   function sendBargeIn(): void {
-    if (ws.readyState !== ws.OPEN) return;
+    if (ws.readyState !== ws.OPEN || !streamStarted) return;
     // Per official Plivo docs, interruption/flush is event "clearAudio".
     ws.send(JSON.stringify({ event: "clearAudio", streamId: streamId ?? undefined }));
     logger.info({ sessionId, streamId }, "Plivo clearAudio sent (barge-in)");
   }
+
+  // ── Immediate session setup ──────────────────────────────────────────────
+  // Previously all setup waited for Plivo's "start" event. Everything the
+  // session needs (from/to/callUuid/answeredAt) is already threaded through the
+  // WS URL by the answer webhook, so start comfort noise and createSession the
+  // moment the socket opens — this shaves the answer→start gap off the caller's
+  // perceived dead air. The "start" event now only captures streamId.
+  const earlyAmbient = startEarlyAmbientKeepalive({
+    agentId,
+    format: "mulaw",
+    send: sendAudioToPlivo,
+  });
+  const stopEarlyAmbient = (): void => { earlyAmbient.stop(); };
+
+  void (async () => {
+    const from = fromNumber ?? "+10000000000";
+    const to   = toNumber   ?? "+10000000001";
+
+    // Load resume context and callback reason from prior call when this is a callback
+    let resumeContext: Parameters<typeof createSession>[0]["resumeContext"] | undefined;
+    let sourceCallbackReason: string | undefined;
+    if (callbackId) {
+      try {
+        const [cbRow] = await db
+          .select({ reason: scheduledCallbacksTable.reason, createdFromCallId: scheduledCallbacksTable.createdFromCallId })
+          .from(scheduledCallbacksTable)
+          .where(eq(scheduledCallbacksTable.id, callbackId));
+        sourceCallbackReason = cbRow?.reason ?? undefined;
+        if (cbRow?.reason === "network_drop" && cbRow.createdFromCallId) {
+          const [priorCall] = await db
+            .select({ resumeContext: callsTable.resumeContext })
+            .from(callsTable)
+            .where(eq(callsTable.id, cbRow.createdFromCallId));
+          if (priorCall?.resumeContext) resumeContext = priorCall.resumeContext;
+        }
+      } catch (rcErr) {
+        logger.warn({ callbackId, rcErr }, "Plivo: failed to load resume context — proceeding without it");
+      }
+    }
+
+    try {
+      const { sessionId: sid } = await createSession({
+        agentId,
+        telephonyProvider: "plivo",
+        toNumber: to,
+        fromNumber: from,
+        externalCallId: callUuid,
+        callDirection,
+        campaignLeadId,
+        resumeContext,
+        sourceCallbackReason,
+        scheduledCallbackId: callbackId,
+        answeredAt,
+        onAudioOut: (audio: Buffer) => {
+          stopEarlyAmbient();
+          sendAudioToPlivo(audio);
+        },
+        onCallEnd: () => {
+          stopEarlyAmbient();
+          // Do NOT close the WS if the call was transferred — the provider is
+          // redirecting the leg to the human agent; a close frame aborts it.
+          const sess = sessionId ? getSession(sessionId) : null;
+          if (sess?.wasTransferred) {
+            logger.info({ sessionId }, "Plivo onCallEnd: skipping ws.close() — call is being transferred");
+            return;
+          }
+          ws.close();
+        },
+        onBargeIn: sendBargeIn,
+      });
+      stopEarlyAmbient();
+      sessionId = sid;
+      if (sessionEndedBeforeReady) {
+        logger.warn({ sessionId, agentId }, "Plivo session ended before setup completed — ending immediately");
+        await endSession(sessionId);
+      } else {
+        logger.info({ sessionId, agentId }, "Plivo session started");
+      }
+    } catch (err) {
+      stopEarlyAmbient();
+      logger.error(
+        { err, agentId, externalCallId: callUuid, streamId, provider: "plivo", reason: toReadableError(err, "Plivo session setup failed") },
+        "Failed to create Plivo session — closing socket before greeting",
+      );
+      ws.close();
+    }
+  })();
 
   ws.on("message", async (raw: Buffer | string, isBinary?: boolean) => {
     // NOTE: the `ws` library delivers TEXT frames as Buffer too — a bare
@@ -110,88 +204,11 @@ export async function handlePlivoWebSocket(
 
     switch (event.event) {
       case "start": {
+        // Session setup already began at WS open (see above) — the start event
+        // only supplies the streamId (needed for clearAudio barge-in).
         streamId = event.start?.streamId ?? event.streamId ?? event.start?.stream_id ?? event.stream_id ?? null;
-        // from/to come from the WS URL query (the start event doesn't carry them).
-        const from = fromNumber ?? event.start?.from ?? "+10000000000";
-        const to   = toNumber   ?? event.start?.to   ?? "+10000000001";
-        const callId = event.start?.callId ?? event.start?.call_id ?? event.call_id;
-
-        // Load resume context and callback reason from prior call when this is a callback
-        let resumeContext: Parameters<typeof createSession>[0]["resumeContext"] | undefined;
-        let sourceCallbackReason: string | undefined;
-        if (callbackId) {
-          try {
-            const [cbRow] = await db
-              .select({ reason: scheduledCallbacksTable.reason, createdFromCallId: scheduledCallbacksTable.createdFromCallId })
-              .from(scheduledCallbacksTable)
-              .where(eq(scheduledCallbacksTable.id, callbackId));
-            sourceCallbackReason = cbRow?.reason ?? undefined;
-            if (cbRow?.reason === "network_drop" && cbRow.createdFromCallId) {
-              const [priorCall] = await db
-                .select({ resumeContext: callsTable.resumeContext })
-                .from(callsTable)
-                .where(eq(callsTable.id, cbRow.createdFromCallId));
-              if (priorCall?.resumeContext) resumeContext = priorCall.resumeContext;
-            }
-          } catch (rcErr) {
-            logger.warn({ callbackId, rcErr }, "Plivo: failed to load resume context — proceeding without it");
-          }
-        }
-
-        // Ambient during createSession — Plivo previously sent nothing until
-        // the pipeline existed (pure dead air, including no agent bg noise).
-        const earlyAmbient = startEarlyAmbientKeepalive({
-          agentId,
-          format: "mulaw",
-          send: sendAudioToPlivo,
-        });
-        const stopEarlyAmbient = (): void => { earlyAmbient.stop(); };
-
-        try {
-          const { sessionId: sid } = await createSession({
-            agentId,
-            telephonyProvider: "plivo",
-            toNumber: to,
-            fromNumber: from,
-            externalCallId: callId,
-            callDirection,
-            campaignLeadId,
-            resumeContext,
-            sourceCallbackReason,
-            scheduledCallbackId: callbackId,
-            onAudioOut: (audio: Buffer) => {
-              stopEarlyAmbient();
-              sendAudioToPlivo(audio);
-            },
-            onCallEnd: () => {
-              stopEarlyAmbient();
-              // Do NOT close the WS if the call was transferred — the provider is
-              // redirecting the leg to the human agent; a close frame aborts it.
-              const sess = sessionId ? getSession(sessionId) : null;
-              if (sess?.wasTransferred) {
-                logger.info({ sessionId }, "Plivo onCallEnd: skipping ws.close() — call is being transferred");
-                return;
-              }
-              ws.close();
-            },
-            onBargeIn: sendBargeIn,
-          });
-          stopEarlyAmbient();
-          sessionId = sid;
-          if (sessionEndedBeforeReady) {
-            logger.warn({ sessionId, agentId }, "Plivo session ended before setup completed — ending immediately");
-            await endSession(sessionId);
-          } else {
-            logger.info({ sessionId, agentId }, "Plivo session started");
-          }
-        } catch (err) {
-          stopEarlyAmbient();
-          logger.error(
-            { err, agentId, externalCallId: callId, streamId, provider: "plivo", reason: toReadableError(err, "Plivo session setup failed") },
-            "Failed to create Plivo session — closing socket before greeting",
-          );
-          ws.close();
-        }
+        streamStarted = true;
+        logger.info({ agentId, streamId, sessionId }, "Plivo stream started");
         break;
       }
 
@@ -246,11 +263,18 @@ export function getPlivoAnswerXML(
   callbackId?: number,
   from?: string,
   to?: string,
+  callUuid?: string,
+  answeredAt?: number,
 ): string {
   const parts: string[] = [];
   if (campaignLeadId) parts.push(`campaignLeadId=${campaignLeadId}`);
   if (callDirection === "outbound") parts.push("dir=out");
   if (callbackId) parts.push(`cbId=${callbackId}`);
+  // CallUUID + answer instant from the answer webhook — lets the WS handler
+  // create the session immediately on connect (no waiting for the start event)
+  // and anchor duration/recording to the real answer time (clamped in index.ts).
+  if (callUuid) parts.push(`callUuid=${encodeURIComponent(callUuid)}`);
+  if (answeredAt) parts.push(`ans=${answeredAt}`);
   // Embed From/To in the WS URL — Plivo's start event does not carry them,
   // and the answer webhook is the only place we see the real numbers.
   if (from) parts.push(`from=${encodeURIComponent(from)}`);

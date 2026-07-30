@@ -451,7 +451,8 @@ router.post("/webhooks/plivo/voice", async (req, res): Promise<void> => {
   // the WS URL since the Stream start event doesn't carry them.
   const plivoFrom = String(req.body?.From ?? req.body?.from ?? "") || undefined;
   const plivoTo   = String(req.body?.To ?? req.body?.to ?? "") || undefined;
-  const xml = getPlivoAnswerXML(wsBaseUrl, agentId, campaignLeadId, callDirection, plivoAnswerCbId, plivoFrom, plivoTo);
+  const plivoCallUuid = String(req.body?.CallUUID ?? req.body?.call_uuid ?? "") || undefined;
+  const xml = getPlivoAnswerXML(wsBaseUrl, agentId, campaignLeadId, callDirection, plivoAnswerCbId, plivoFrom, plivoTo, plivoCallUuid, Date.now());
 
   res.set("Content-Type", "text/xml").send(xml);
 });
