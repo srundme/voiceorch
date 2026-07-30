@@ -140,3 +140,4 @@
 - [BYO telephony ₹1/min discount](byo-telephony-discount.md) — own-carrier calls bill flat rate minus 100 paise via resolveOwnTelephonyDiscount(); partner rates never discounted; separate from "byop" ASR/LLM/TTS mode
 - [Plivo/Twilio webhook signature URLs](plivo-webhook-signature.md) — Plivo v2 signs full-URL+nonce (query stripped); rebuild URLs via signedRequestUrl() (originalUrl + first forwarded value), never req.path; plivo recording/amd webhooks still unauthenticated
 - [Spec-prefill prompt staleness](spec-prefill-staleness.md) — speculative LLM prefills bake in currentLang; a language switch on the final transcript must invalidate them or the reply is in the OLD language
+- [providers.apiKey decrypt-at-read](provider-apikey-decrypt.md) — column is AES-encrypted with plaintext passthrough; every read/forward site needs decryptKey() or newly-saved keys 401 while legacy plaintext keys mask the bug
