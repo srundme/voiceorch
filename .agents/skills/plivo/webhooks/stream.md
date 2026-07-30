@@ -63,14 +63,14 @@ JSON messages on the wss:// connection.
 
 ## WebSocket messages (your agent → Plivo, if bidirectional)
 
-**Send audio:**
+**Send audio** (CORRECTED against official Plivo docs — was wrongly documented as `event:"media"`):
 ```json
-{"event":"media","media":{"payload":"<base64-encoded-audio>"}}
+{"event":"playAudio","media":{"contentType":"audio/x-mulaw","sampleRate":8000,"payload":"<base64-encoded-audio>"}}
 ```
 
-**Clear buffer** (interruption handling):
+**Clear buffer** (interruption handling; CORRECTED — was wrongly documented as `event:"clear"`):
 ```json
-{"event":"clear","streamId":"<stream_id>"}
+{"event":"clearAudio","streamId":"<stream_id>"}
 ```
 
 Useful when caller interrupts — stop in-flight TTS playback.

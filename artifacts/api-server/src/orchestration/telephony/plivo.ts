@@ -63,12 +63,16 @@ export async function handlePlivoWebSocket(
 
   function sendAudioToPlivo(audio: Buffer): void {
     if (ws.readyState !== ws.OPEN) return;
-    // Per Plivo Stream docs, agent→Plivo audio uses event "media" (NOT
-    // "playback" — Plivo silently drops unknown events, which produced calls
-    // where the caller heard only Plivo-side prompts and never the agent).
+    // Per official Plivo bidirectional-stream docs, agent→Plivo audio uses
+    // event "playAudio" with explicit contentType + sampleRate. Unknown events
+    // ("playback", "media") are silently dropped → connected-but-mute agent.
     ws.send(JSON.stringify({
-      event: "media",
-      media: { payload: audio.toString("base64") },
+      event: "playAudio",
+      media: {
+        contentType: "audio/x-mulaw",
+        sampleRate: 8000,
+        payload: audio.toString("base64"),
+      },
     }));
   }
 
@@ -80,9 +84,9 @@ export async function handlePlivoWebSocket(
    */
   function sendBargeIn(): void {
     if (ws.readyState !== ws.OPEN) return;
-    // Plivo's clear message requires the streamId of the stream to flush.
-    ws.send(JSON.stringify({ event: "clear", streamId: streamId ?? undefined }));
-    logger.info({ sessionId, streamId }, "Plivo clear sent (barge-in)");
+    // Per official Plivo docs, interruption/flush is event "clearAudio".
+    ws.send(JSON.stringify({ event: "clearAudio", streamId: streamId ?? undefined }));
+    logger.info({ sessionId, streamId }, "Plivo clearAudio sent (barge-in)");
   }
 
   ws.on("message", async (raw: Buffer | string, isBinary?: boolean) => {
