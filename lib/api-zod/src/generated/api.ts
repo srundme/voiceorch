@@ -1772,7 +1772,9 @@ export const GetWalletResponse = zod.object({
   "autoPayThresholdCents": zod.number().describe('Auto-pay threshold in paise'),
   "autoPayAmountCents": zod.number().describe('Auto-pay credit amount in paise (payable includes GST)'),
   "mandateActive": zod.boolean().describe('Whether a Razorpay recurring card mandate token is saved for auto-pay'),
-  "effectiveRateCentsPerMin": zod.number().optional().describe('Per-minute rate (paise) this account is billed at — the partner-set rate for partner-managed clients, the base rate for a partner\'s own usage, and the flat platform rate otherwise. Drives \"minutes left\" estimates in the UI.')
+  "effectiveRateCentsPerMin": zod.number().optional().describe('Per-minute rate (paise) this account is billed at — the partner-set rate for partner-managed clients, the base rate for a partner\'s own usage, and the flat platform rate otherwise. Drives \"minutes left\" estimates in the UI.'),
+  "minTopupPaise": zod.number().optional().describe('Minimum wallet top-up credit in paise. ₹5,000 (500000) for active partner owners; ₹100 (10000) for everyone else.'),
+  "minTopupInr": zod.number().optional().describe('Minimum wallet top-up credit in INR (rupees)')
 })
 
 
@@ -1818,7 +1820,9 @@ export const VerifyPaymentResponse = zod.object({
   "autoPayThresholdCents": zod.number().describe('Auto-pay threshold in paise'),
   "autoPayAmountCents": zod.number().describe('Auto-pay credit amount in paise (payable includes GST)'),
   "mandateActive": zod.boolean().describe('Whether a Razorpay recurring card mandate token is saved for auto-pay'),
-  "effectiveRateCentsPerMin": zod.number().optional().describe('Per-minute rate (paise) this account is billed at — the partner-set rate for partner-managed clients, the base rate for a partner\'s own usage, and the flat platform rate otherwise. Drives \"minutes left\" estimates in the UI.')
+  "effectiveRateCentsPerMin": zod.number().optional().describe('Per-minute rate (paise) this account is billed at — the partner-set rate for partner-managed clients, the base rate for a partner\'s own usage, and the flat platform rate otherwise. Drives \"minutes left\" estimates in the UI.'),
+  "minTopupPaise": zod.number().optional().describe('Minimum wallet top-up credit in paise. ₹5,000 (500000) for active partner owners; ₹100 (10000) for everyone else.'),
+  "minTopupInr": zod.number().optional().describe('Minimum wallet top-up credit in INR (rupees)')
 })
 
 
@@ -1874,7 +1878,9 @@ export const UpdateAutopayResponse = zod.object({
   "autoPayThresholdCents": zod.number().describe('Auto-pay threshold in paise'),
   "autoPayAmountCents": zod.number().describe('Auto-pay credit amount in paise (payable includes GST)'),
   "mandateActive": zod.boolean().describe('Whether a Razorpay recurring card mandate token is saved for auto-pay'),
-  "effectiveRateCentsPerMin": zod.number().optional().describe('Per-minute rate (paise) this account is billed at — the partner-set rate for partner-managed clients, the base rate for a partner\'s own usage, and the flat platform rate otherwise. Drives \"minutes left\" estimates in the UI.')
+  "effectiveRateCentsPerMin": zod.number().optional().describe('Per-minute rate (paise) this account is billed at — the partner-set rate for partner-managed clients, the base rate for a partner\'s own usage, and the flat platform rate otherwise. Drives \"minutes left\" estimates in the UI.'),
+  "minTopupPaise": zod.number().optional().describe('Minimum wallet top-up credit in paise. ₹5,000 (500000) for active partner owners; ₹100 (10000) for everyone else.'),
+  "minTopupInr": zod.number().optional().describe('Minimum wallet top-up credit in INR (rupees)')
 })
 
 

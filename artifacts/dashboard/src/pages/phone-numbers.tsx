@@ -9,6 +9,8 @@ import {
   useAssignPhoneNumber,
   useReleasePhoneNumber,
   useListAgents,
+  useListProviders,
+  getListProvidersQueryKey,
   useGetKycStatus,
   useStartKyc,
   getListPhoneNumbersQueryKey,
@@ -849,6 +851,17 @@ export default function PhoneNumbersPage() {
   const { data: partnerCtx } = usePartnerContext();
   const isManagedClient = partnerCtx?.isManagedClient === true;
   const { data: numbers, isLoading } = useListPhoneNumbers({ query: { queryKey: getListPhoneNumbersQueryKey() } });
+  // BYO telephony (Plivo/Twilio/VoBiz own account): surface the imported
+  // "fromNumber" from each telephony provider key so users can see it here.
+  const { data: providerKeys } = useListProviders({ query: { queryKey: getListProvidersQueryKey() } });
+  const importedNumbers = (providerKeys ?? [])
+    .filter((p) => p.providerType === "telephony" && p.isActive)
+    .map((p) => {
+      let fromNumber = "";
+      try { fromNumber = (JSON.parse(p.extraConfig ?? "{}") as Record<string, string>)["fromNumber"] ?? ""; } catch { /* ignore */ }
+      return { id: p.id, providerName: p.providerName, fromNumber };
+    })
+    .filter((p) => p.fromNumber);
   const { data: kycData, isLoading: kycLoading } = useGetKycStatus({ query: { queryKey: getGetKycStatusQueryKey() } });
   const startKyc = useStartKyc();
   const release = useReleasePhoneNumber();
@@ -973,6 +986,23 @@ export default function PhoneNumbersPage() {
           </div>
         )}
 
+        {/* Imported BYO telephony numbers (from Provider keys) */}
+        {importedNumbers.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Imported numbers — your own telephony</p>
+            {importedNumbers.map((n) => (
+              <div key={`byo-${n.id}`} className="flex items-center gap-4 p-4 rounded-lg border border-border bg-card">
+                <Phone className="h-4 w-4 text-muted-foreground shrink-0" />
+                <span className="font-mono text-sm text-foreground">{n.fromNumber}</span>
+                <Badge variant="outline" className="capitalize">{n.providerName}</Badge>
+                <span className="ml-auto text-xs text-muted-foreground">
+                  Used automatically by agents with {n.providerName.charAt(0).toUpperCase() + n.providerName.slice(1)} telephony · manage in Settings → Voices and Providers
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Numbers list */}
         {isLoading ? (
           <div className="space-y-2">
@@ -985,6 +1015,7 @@ export default function PhoneNumbersPage() {
             ))}
           </div>
         ) : !numbers || numbers.length === 0 ? (
+          importedNumbers.length > 0 ? null : (
           <div className="flex flex-col items-center justify-center py-24 text-muted-foreground">
             <Phone className="w-12 h-12 mb-4 opacity-30" />
             <p className="text-sm mb-3">No phone numbers yet.</p>
@@ -996,6 +1027,7 @@ export default function PhoneNumbersPage() {
               </Button>
             )}
           </div>
+          )
         ) : (
           <div className="space-y-2">
             {numbers.map(n => (

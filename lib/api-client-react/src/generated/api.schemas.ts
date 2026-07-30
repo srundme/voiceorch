@@ -297,7 +297,7 @@ export interface DispositionField {
 }
 
 /**
- * Tool type: call_transfer, webhook, send_sms, send_email, end_call, cal_com, native_booking, native_reschedule, native_cancel, native_check_availability, native_list_bookings, transfer_cold, transfer_warm, or transfer_agent
+ * Tool type: call_transfer, webhook, send_sms, send_email, end_call, cal_com, native_booking, native_reschedule, native_cancel, native_check_availability, native_list_bookings, transfer_cold, transfer_warm, or transfer_agent, or send_email, or send_whatsapp
  */
 export type AgentToolType = typeof AgentToolType[keyof typeof AgentToolType];
 
@@ -370,7 +370,7 @@ export type AgentToolParameters = {
 };
 
 export interface AgentTool {
-  /** Tool type: call_transfer, webhook, send_sms, send_email, end_call, cal_com, native_booking, native_reschedule, native_cancel, native_check_availability, native_list_bookings, transfer_cold, transfer_warm, or transfer_agent */
+  /** Tool type: call_transfer, webhook, send_sms, send_email, end_call, cal_com, native_booking, native_reschedule, native_cancel, native_check_availability, native_list_bookings, transfer_cold, transfer_warm, or transfer_agent, or send_email, or send_whatsapp */
   type: AgentToolType;
   /** LLM-facing function name (snake_case, no spaces, e.g. transfer_to_human) */
   name: string;
@@ -1777,7 +1777,7 @@ export interface WalletInfo {
   mandateActive: boolean;
   /** Per-minute rate (paise) this account is billed at — the partner-set rate for partner-managed clients, the base rate for a partner's own usage, and the flat platform rate otherwise. Drives "minutes left" estimates in the UI. */
   effectiveRateCentsPerMin?: number;
-  /** Minimum wallet top-up credit in paise. ₹5,000 for active partner owners; ₹100 otherwise. */
+  /** Minimum wallet top-up credit in paise. ₹5,000 (500000) for active partner owners; ₹100 (10000) for everyone else. */
   minTopupPaise?: number;
   /** Minimum wallet top-up credit in INR (rupees) */
   minTopupInr?: number;

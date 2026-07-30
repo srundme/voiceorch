@@ -225,9 +225,9 @@ export function PoweredBySarvam({
 
   return (
     <p
-      className={`inline-flex items-center ${gapClass} ${sizeClass} text-muted-foreground select-none tracking-wide ${className}`}
+      className={`inline-flex items-center whitespace-nowrap ${gapClass} ${sizeClass} text-muted-foreground select-none tracking-wide ${className}`}
     >
-      <span className="font-normal opacity-70">powered by</span>
+      <span className="font-normal opacity-70 whitespace-nowrap">powered by</span>
       <span className="font-medium text-muted-foreground">sarvam</span>
     </p>
   );

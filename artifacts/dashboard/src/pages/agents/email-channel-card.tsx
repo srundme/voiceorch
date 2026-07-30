@@ -34,6 +34,7 @@ type EmailChannel = {
   active: boolean;
   lastError: string | null;
   lastSentAt: string | null;
+  updatedAt?: string | null;
 };
 
 type EmailChannelResponse = {
