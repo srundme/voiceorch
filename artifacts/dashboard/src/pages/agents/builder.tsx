@@ -4076,7 +4076,17 @@ function AgentListPanel({ selectedId, onSelect, rateMap, className }: {
 
 type DispositionCategory = { id: string; name: string; values: string };
 
-function AnalysisTab({ form, agentId, onConfigureEmail }: { form: any; agentId: number; onConfigureEmail?: () => void }) {
+function AnalysisTab({
+  form,
+  agentId,
+  onConfigureEmail,
+  onOpenChannels,
+}: {
+  form: any;
+  agentId: number;
+  onConfigureEmail?: () => void;
+  onOpenChannels?: () => void;
+}) {
   const { toast } = useToast();
 
   // ── Disposition config state ──────────────────────────────────────────────
@@ -4152,22 +4162,27 @@ function AnalysisTab({ form, agentId, onConfigureEmail }: { form: any; agentId: 
     <div className="relative p-6 space-y-8">
 
       <section className="space-y-2">
-        <h2 className="text-base font-semibold tracking-tight">Journey flow</h2>
+        <h2 className="text-base font-semibold tracking-tight">Journey</h2>
         <p className="text-[12px] text-muted-foreground max-w-3xl">
-          Design what happens before the call, after the call, and when a lead needs follow-ups across phone, WhatsApp, booking, webhooks, and memory.
+          Attach one auto-pilot sequence to this agent: lead in → call → WhatsApp/email/callback. Channels hold WhatsApp &amp; Email; this tab turns them into a live flow.
         </p>
       </section>
 
-      <JourneyPanel agentId={agentId} webhookUrl={form.watch("webhookUrl")} onConfigureEmail={onConfigureEmail} />
+      <JourneyPanel
+        agentId={agentId}
+        webhookUrl={form.watch("webhookUrl")}
+        onConfigureEmail={onConfigureEmail}
+        onOpenChannels={onOpenChannels}
+      />
 
-      {/* ── Webhook ── */}
+      {/* ── CRM webhook (separate from lead intake) ── */}
       <div>
         <div className="flex items-center gap-2 mb-1">
           <Webhook className="h-4 w-4 text-violet-400" />
-          <h3 className="text-sm font-semibold">External journey webhook</h3>
+          <h3 className="text-sm font-semibold">CRM / post-call webhook (optional)</h3>
         </div>
         <p className="text-xs text-muted-foreground mb-4">
-          Use this when the journey should continue in another system after the call, such as email, CRM updates, event registration, or custom workflows.
+          Not the lead intake URL above. Use this to notify your CRM or Zap after a call ends. Leave blank if you only need journey intake.
         </p>
         <div className="space-y-3">
           <FormField control={form.control} name="webhookUrl" render={({ field }) => {
@@ -5868,6 +5883,10 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
     handleTabClick("channels");
   };
 
+  const openChannels = () => {
+    handleTabClick("channels");
+  };
+
   useEffect(() => {
     const el = tabContentRef.current;
     if (!el) return;
@@ -6420,7 +6439,7 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
                 {activeTab === "prompt"    && <PromptTab form={form} />}
                 {activeTab === "voice"     && <VoiceTab form={form} />}
                 {activeTab === "tools"     && <ToolsTab form={form} agentId={agentId} />}
-                {activeTab === "analysis"  && <AnalysisTab form={form} agentId={agentId} onConfigureEmail={openEmailChannel} />}
+                {activeTab === "analysis"  && <AnalysisTab form={form} agentId={agentId} onConfigureEmail={openEmailChannel} onOpenChannels={openChannels} />}
                 {activeTab === "voicemail" && <VoicemailTab form={form} />}
                 {activeTab === "advanced"  && <AdvancedTab form={form} agent={agent} />}
                 {activeTab === "versions"  && <VersionsTab agentId={agent.id} />}
