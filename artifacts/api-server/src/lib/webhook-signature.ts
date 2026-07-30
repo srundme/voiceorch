@@ -63,19 +63,24 @@ export function validateTwilioSignature(
 /**
  * Validate a Plivo v2 webhook signature.
  *
+ * Per Plivo's official SDKs, the signed data is the FULL base URL
+ * (scheme://host/path — query string stripped) followed by the nonce:
+ *   signature = base64(HMAC-SHA256(auth_token, base_url + nonce))
+ *
  * @param authToken  The Plivo auth token.
  * @param nonce      Value of X-Plivo-Signature-V2-Nonce header.
- * @param uri        The request URI (path only, no scheme/host).
+ * @param baseUrl    Full URL of this endpoint WITHOUT query string,
+ *                   e.g. "https://app.example.com/api/webhooks/plivo/voice".
  * @param signature  Value of X-Plivo-Signature-V2 header.
  */
 export function validatePlivoSignature(
   authToken: string,
   nonce: string,
-  uri: string,
+  baseUrl: string,
   signature: string,
 ): boolean {
   if (!authToken || !nonce || !signature) return false;
-  const data = nonce + uri;
+  const data = baseUrl + nonce;
   const expected = createHmac("sha256", authToken).update(data, "utf8").digest("base64");
   const expectedBuf = Buffer.from(expected, "utf8");
   const receivedBuf = Buffer.from(signature, "utf8");

@@ -393,7 +393,11 @@ router.post("/webhooks/plivo/voice", async (req, res): Promise<void> => {
         return;
       }
     } else {
-      const valid = validatePlivoSignature(authToken, plivoNonce, req.path, plivoSig);
+      // Plivo signs the full base URL (scheme://host/path, query stripped).
+      const plivoProto = String(req.headers["x-forwarded-proto"] ?? "https");
+      const plivoHost  = String(req.headers["x-forwarded-host"] ?? req.hostname);
+      const plivoBaseUrl = `${plivoProto}://${plivoHost}${req.path}`;
+      const valid = validatePlivoSignature(authToken, plivoNonce, plivoBaseUrl, plivoSig);
       if (!valid) {
         logger.warn({ agentId }, "Plivo signature validation failed");
         if (IS_PROD) {
