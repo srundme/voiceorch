@@ -32,6 +32,7 @@ import {
   useArchiveAgentVersion, useDeleteAgentVersion,
   getListAgentVersionsQueryKey, getGetAgentVersionQueryKey,
   useListPhoneNumbers, useAssignPhoneNumber, getListPhoneNumbersQueryKey,
+  useListProviders, getListProvidersQueryKey,
 } from "@workspace/api-client-react";
 import type { AgentVersion } from "@workspace/api-client-react";
 import {
@@ -439,10 +440,12 @@ const SECTION_FIELDS: Record<CardSection, string[]> = {
 function AgentInboundPanel({
   agentId,
   preferredManagedNumber,
+  telephonyProvider,
   className,
 }: {
   agentId: number;
   preferredManagedNumber?: string | null;
+  telephonyProvider?: string | null;
   className?: string;
 }) {
   const [, navigate] = useLocation();
@@ -471,6 +474,17 @@ function AgentInboundPanel({
     staleTime: 15_000,
   });
   const assign = useAssignPhoneNumber();
+  // BYO telephony (Plivo/Twilio): when the agent dials on the user's own
+  // carrier account, its saved fromNumber IS the agent's number — show it
+  // instead of buy/trial nags.
+  const { data: providerKeys } = useListProviders({ query: { queryKey: getListProvidersQueryKey(), staleTime: 60_000 } });
+  const byo = (telephonyProvider === "plivo" || telephonyProvider === "twilio")
+    ? (providerKeys ?? []).find((p) => p.providerType === "telephony" && p.providerName === telephonyProvider && p.isActive)
+    : undefined;
+  let byoNumber: string | null = null;
+  if (byo) {
+    try { byoNumber = (JSON.parse(byo.extraConfig ?? "{}") as Record<string, string>)["fromNumber"] ?? null; } catch { /* ignore */ }
+  }
   const phoneNumbers = Array.isArray(phoneNumbersRaw) ? phoneNumbersRaw : [];
   const assigned = phoneNumbers.find(p => p.agentId === agentId);
   const ownedCount = phoneNumbers.length;
@@ -539,16 +553,16 @@ function AgentInboundPanel({
       {/* Primary path: own number — buy / assign */}
       <div className={cn(
         "rounded-xl border p-3 space-y-2.5",
-        assigned
+        (assigned || byoNumber)
           ? "border-emerald-500/25 bg-emerald-500/5"
           : "border-amber-500/30 bg-amber-500/5",
       )}>
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 min-w-0">
-            <PhoneForwarded className={cn("h-3.5 w-3.5 shrink-0", assigned ? "text-emerald-500" : "text-amber-500")} />
+            <PhoneForwarded className={cn("h-3.5 w-3.5 shrink-0", (assigned || byoNumber) ? "text-emerald-500" : "text-amber-500")} />
             <span className={cn(
               "text-[10px] font-semibold uppercase tracking-wider",
-              assigned ? "text-emerald-600/90 dark:text-emerald-400/90" : "text-amber-600/90 dark:text-amber-400/90",
+              (assigned || byoNumber) ? "text-emerald-600/90 dark:text-emerald-400/90" : "text-amber-600/90 dark:text-amber-400/90",
             )}>
               Your phone number
             </span>
@@ -564,6 +578,15 @@ function AgentInboundPanel({
 
         {isLoading ? (
           <Skeleton className="h-9 w-full rounded-lg" />
+        ) : byoNumber ? (
+          <div className="w-full flex items-center justify-between gap-2 rounded-lg border border-border/50 bg-background/50 px-2.5 py-2">
+            <div className="min-w-0">
+              <p className="text-[12px] font-medium truncate tabular-nums text-foreground">{byoNumber}</p>
+              <p className="text-[10px] text-muted-foreground/70 truncate mt-0.5">
+                Your own {telephonyProvider === "plivo" ? "Plivo" : "Twilio"} number — outbound caller ID · unlimited calls
+              </p>
+            </div>
+          </div>
         ) : assigned ? (
           <button
             type="button"
@@ -610,8 +633,8 @@ function AgentInboundPanel({
         )}
       </div>
 
-      {/* Trial outbound — demoted, capped */}
-      {!assigned && (
+      {/* Trial outbound — demoted, capped. Hidden for BYO telephony (own carrier = no trial line involved). */}
+      {!assigned && !byoNumber && (
       <div className={cn(
         "rounded-xl border p-3 space-y-1.5",
         trialExhausted
@@ -863,7 +886,7 @@ function ChannelsTab({ form, agent, forceExpandEmail = false }: { form: any; age
             </Button>
           </div>
           {agent?.id ? (
-            <AgentInboundPanel agentId={agent.id} preferredManagedNumber={form.watch("preferredManagedNumber")} />
+            <AgentInboundPanel agentId={agent.id} preferredManagedNumber={form.watch("preferredManagedNumber")} telephonyProvider={form.watch("telephonyProvider")} />
           ) : (
             <p className="text-[11px] text-muted-foreground">Save the agent first to attach inbound phone numbers.</p>
           )}
@@ -1297,6 +1320,7 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
             <AgentInboundPanel
               agentId={agent.id}
               preferredManagedNumber={form.watch("preferredManagedNumber")}
+              telephonyProvider={form.watch("telephonyProvider")}
               className="xl:hidden"
             />
           )}
@@ -6569,6 +6593,7 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
               <AgentInboundPanel
                 agentId={agentId}
                 preferredManagedNumber={form.watch("preferredManagedNumber")}
+                telephonyProvider={form.watch("telephonyProvider")}
               />
               <button
                 type="button"
