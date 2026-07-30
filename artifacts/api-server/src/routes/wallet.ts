@@ -2,7 +2,7 @@ import { Router } from "express";
 import crypto from "crypto";
 import Razorpay from "razorpay";
 import { db } from "@workspace/db";
-import { usersTable, walletTransactionsTable, invoicesTable } from "@workspace/db/schema";
+import { usersTable, walletTransactionsTable, invoicesTable, partnersTable } from "@workspace/db/schema";
 import { eq, desc, sql, and } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logger } from "../lib/logger.js";
@@ -13,9 +13,9 @@ import { issueInvoice, renderInvoiceHtml, renderInvoicePdf } from "../services/i
 import {
   CURRENCY_INR,
   GST_RATE,
-  MIN_TOPUP_PAISE,
   formatInr,
   gstPortionPaise,
+  minTopupPaiseForUser,
   withGstPaise,
 } from "../lib/money-inr.js";
 
@@ -33,7 +33,20 @@ async function getDbUser(clerkId: string) {
   return user ?? null;
 }
 
-function walletInfoPayload(user: typeof usersTable.$inferSelect) {
+/** True when the user owns an active partners row (reseller), not a managed client. */
+async function isActivePartnerOwner(clerkId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ status: partnersTable.status })
+    .from(partnersTable)
+    .where(eq(partnersTable.userId, clerkId));
+  return !!row && row.status === "active";
+}
+
+function walletInfoPayload(
+  user: typeof usersTable.$inferSelect,
+  opts?: { minTopupPaise?: number },
+) {
+  const minTopupPaise = opts?.minTopupPaise ?? minTopupPaiseForUser(false);
   return {
     balanceCents:          user.walletBalanceCents,
     balanceInr:            user.walletBalanceCents / 100,
@@ -46,6 +59,8 @@ function walletInfoPayload(user: typeof usersTable.$inferSelect) {
     autoPayAmountCents:    user.autoPayAmountCents,
     mandateActive:         !!(user.razorpayCustomerId && user.razorpayTokenId),
     gstRate:               GST_RATE,
+    minTopupPaise,
+    minTopupInr:           minTopupPaise / 100,
   };
 }
 
@@ -60,10 +75,14 @@ router.get("/wallet", requireAuth, async (req, res) => {
   // Effective per-minute rate for "minutes left" estimates: partner-managed
   // clients bill at their partner-set rate, partners' own usage bills at
   // their base rate, everyone else at the flat platform rate.
-  const partnerBilling = await resolvePartnerBilling(clerkId);
+  const [partnerBilling, isPartner] = await Promise.all([
+    resolvePartnerBilling(clerkId),
+    isActivePartnerOwner(clerkId),
+  ]);
   const effectiveRateCentsPerMin =
     partnerBilling?.clientRateCentsPerMin ?? getFlatRateCentsPerMin("managed");
-  res.json({ ...walletInfoPayload(user), effectiveRateCentsPerMin });
+  const minTopupPaise = minTopupPaiseForUser(isPartner);
+  res.json({ ...walletInfoPayload(user, { minTopupPaise }), effectiveRateCentsPerMin });
 });
 
 // POST /api/wallet/topup — create Razorpay INR order (base credit + 18% GST payable)
@@ -74,14 +93,15 @@ router.post("/wallet/topup", requireAuth, async (req, res) => {
   }
   const clerkId = (req as any).clerkUserId as string;
   const { amountCents, setupMandate } = req.body as { amountCents: number; setupMandate?: boolean };
-  // amountCents = wallet credit in paise (pre-GST)
-  if (!amountCents || amountCents < MIN_TOPUP_PAISE) {
-    res.status(400).json({ error: `Minimum top-up is ${formatInr(MIN_TOPUP_PAISE)}` });
-    return;
-  }
   const user = await getDbUser(clerkId);
   if (!user) {
     res.status(404).json({ error: "User not found" });
+    return;
+  }
+  // amountCents = wallet credit in paise (pre-GST)
+  const minTopupPaise = minTopupPaiseForUser(await isActivePartnerOwner(clerkId));
+  if (!amountCents || amountCents < minTopupPaise) {
+    res.status(400).json({ error: `Minimum top-up is ${formatInr(minTopupPaise)}` });
     return;
   }
 
@@ -245,7 +265,8 @@ router.post("/wallet/verify-payment", requireAuth, async (req, res) => {
     razorpayPaymentId,
   });
 
-  res.json(walletInfoPayload(updated));
+  const minTopupPaise = minTopupPaiseForUser(await isActivePartnerOwner(clerkId));
+  res.json(walletInfoPayload(updated, { minTopupPaise }));
 });
 
 /**
@@ -428,8 +449,10 @@ router.patch("/wallet/autopay", requireAuth, async (req, res) => {
     res.status(404).json({ error: "User not found" });
     return;
   }
-  if (autoPayAmountCents !== undefined && autoPayAmountCents < MIN_TOPUP_PAISE) {
-    res.status(400).json({ error: `Auto top-up amount must be at least ${formatInr(MIN_TOPUP_PAISE)}` });
+  const isPartner = await isActivePartnerOwner(clerkId);
+  const minTopupPaise = minTopupPaiseForUser(isPartner);
+  if (autoPayAmountCents !== undefined && autoPayAmountCents < minTopupPaise) {
+    res.status(400).json({ error: `Auto top-up amount must be at least ${formatInr(minTopupPaise)}` });
     return;
   }
   const [updated] = await db
@@ -442,7 +465,7 @@ router.patch("/wallet/autopay", requireAuth, async (req, res) => {
     .where(eq(usersTable.id, user.id))
     .returning();
 
-  res.json(walletInfoPayload(updated));
+  res.json(walletInfoPayload(updated, { minTopupPaise }));
 });
 
 // POST /api/wallet/webhook — Razorpay server-to-server webhook

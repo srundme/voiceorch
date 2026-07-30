@@ -8401,6 +8401,14 @@ components:
             rate for partner-managed clients, the base rate for a partner's own
             usage, and the flat platform rate otherwise. Drives "minutes left"
             estimates in the UI.
+        minTopupPaise:
+          type: integer
+          description: >-
+            Minimum wallet top-up credit in paise. ₹5,000 (500000) for active
+            partner owners; ₹100 (10000) for everyone else.
+        minTopupInr:
+          type: number
+          description: Minimum wallet top-up credit in INR (rupees)
 
     WalletTransaction:
       type: object

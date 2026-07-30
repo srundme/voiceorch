@@ -1775,6 +1775,10 @@ export interface WalletInfo {
   mandateActive: boolean;
   /** Per-minute rate (paise) this account is billed at — the partner-set rate for partner-managed clients, the base rate for a partner's own usage, and the flat platform rate otherwise. Drives "minutes left" estimates in the UI. */
   effectiveRateCentsPerMin?: number;
+  /** Minimum wallet top-up credit in paise. ₹5,000 for active partner owners; ₹100 otherwise. */
+  minTopupPaise?: number;
+  /** Minimum wallet top-up credit in INR (rupees) */
+  minTopupInr?: number;
 }
 
 export type WalletTransactionType = typeof WalletTransactionType[keyof typeof WalletTransactionType];
