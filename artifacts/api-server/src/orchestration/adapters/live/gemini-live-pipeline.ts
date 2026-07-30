@@ -1,7 +1,6 @@
 import {
   GoogleGenAI,
   Modality,
-  MediaResolution,
   ThinkingLevel,
   type FunctionCall,
   type LiveServerMessage,
@@ -221,8 +220,6 @@ export class GeminiLivePipeline implements VoiceSession {
       high: ThinkingLevel.HIGH,
     };
 
-    const isLiveStream = this.config.agentConfig.visionConfig?.mode === "live_stream";
-
     this.session = await ai.live.connect({
       model,
       config: {
@@ -238,9 +235,6 @@ export class GeminiLivePipeline implements VoiceSession {
         },
         inputAudioTranscription: {},
         outputAudioTranscription: {},
-        // Enable video input for live_stream vision agents. Without mediaResolution,
-        // Gemini rejects incoming video frames and closes the socket immediately.
-        ...(isLiveStream ? { mediaResolution: MediaResolution.MEDIA_RESOLUTION_MEDIUM } : {}),
         tools,
         temperature: this.agent.temperature,
       },
@@ -331,7 +325,7 @@ export class GeminiLivePipeline implements VoiceSession {
           onAgentText: (text) => this.appendAgent(text),
           speakText: (text) => this.speakRaw(text),
           endCall: () => {
-            this.endReasonHint = "Tool ended call";
+            this.endReasonHint = "end_call";
             this.config.onCallEnd();
           },
         },

@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { useGetWallet, useCreateTopup, useVerifyPayment, useListTransactions, useUpdateAutopay, getGetWalletQueryKey, getListTransactionsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import { usePartnerContext } from "@/hooks/use-partner";
 
 declare global {
   interface Window {
@@ -15,8 +16,9 @@ declare global {
 }
 
 const GST_RATE = 0.18;
-const MIN_TOPUP_INR = 100;
-const TOPUP_PRESETS = [500, 1000, 2000, 5000];
+const DEFAULT_MIN_TOPUP_INR = 100;
+const USER_TOPUP_PRESETS = [500, 1000, 2000, 5000];
+const PARTNER_TOPUP_PRESETS = [5000, 10000, 25000, 50000];
 
 interface InvoiceRow {
   id: number;
@@ -72,6 +74,8 @@ function txTypeLabel(type: string): { label: string; color: string; icon: React.
 export default function WalletPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { data: partnerCtx } = usePartnerContext();
+  const isPartner = partnerCtx?.isPartner === true;
   const [topupAmount, setTopupAmount]     = useState(1000);
   const [customAmount, setCustomAmount]   = useState("");
   const [loading, setLoading]             = useState(false);
@@ -82,6 +86,16 @@ export default function WalletPage() {
   const { mutateAsync: createTopup }                = useCreateTopup();
   const { mutateAsync: verifyPayment }              = useVerifyPayment();
   const { mutateAsync: updateAutopay }              = useUpdateAutopay();
+
+  const minTopupInr = wallet?.minTopupInr
+    ?? (wallet?.minTopupPaise != null ? wallet.minTopupPaise / 100 : undefined)
+    ?? (isPartner ? 5000 : DEFAULT_MIN_TOPUP_INR);
+  const topupPresets = isPartner ? PARTNER_TOPUP_PRESETS : USER_TOPUP_PRESETS;
+
+  useEffect(() => {
+    if (!isPartner) return;
+    setTopupAmount((prev) => (prev < minTopupInr ? minTopupInr : prev));
+  }, [isPartner, minTopupInr]);
 
   const [invoices, setInvoices]           = useState<InvoiceRow[]>([]);
   const [invoicesLoading, setInvoicesLoading] = useState(true);
@@ -149,7 +163,7 @@ export default function WalletPage() {
     }
   }, [toast]);
 
-  const effectiveAmount = customAmount ? Math.max(MIN_TOPUP_INR, Number(customAmount) || 0) : topupAmount;
+  const effectiveAmount = customAmount ? Math.max(minTopupInr, Number(customAmount) || 0) : topupAmount;
   const payableBreakdown = useMemo(() => withGstRupees(effectiveAmount), [effectiveAmount]);
 
   const openCheckout = useCallback(async (amountPaise: number, setupMandate = false) => {
@@ -233,8 +247,8 @@ export default function WalletPage() {
 
   const handleTopup = useCallback(async () => {
     const amountPaise = Math.round(effectiveAmount * 100);
-    if (amountPaise < MIN_TOPUP_INR * 100) {
-      toast({ title: `Minimum top-up is ₹${MIN_TOPUP_INR}`, variant: "destructive" });
+    if (amountPaise < minTopupInr * 100) {
+      toast({ title: `Minimum top-up is ₹${minTopupInr}`, variant: "destructive" });
       return;
     }
     setLoading(true);
@@ -249,7 +263,7 @@ export default function WalletPage() {
     } finally {
       setLoading(false);
     }
-  }, [effectiveAmount, openCheckout, toast]);
+  }, [effectiveAmount, minTopupInr, openCheckout, toast, loadInvoices]);
 
   const handleSetupMandate = useCallback(async () => {
     const amountPaise = wallet?.autoPayAmountCents ?? 50_000;
@@ -341,7 +355,7 @@ export default function WalletPage() {
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {TOPUP_PRESETS.map((amt) => (
+                {topupPresets.map((amt) => (
                   <button
                     key={amt}
                     type="button"
@@ -358,12 +372,12 @@ export default function WalletPage() {
               </div>
 
               <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">Custom amount (min ₹{MIN_TOPUP_INR})</Label>
+                <Label className="text-xs text-muted-foreground">Custom amount (min ₹{minTopupInr})</Label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">₹</span>
                   <Input
                     type="number"
-                    min={MIN_TOPUP_INR}
+                    min={minTopupInr}
                     placeholder="Enter amount"
                     value={customAmount}
                     onChange={(e) => setCustomAmount(e.target.value)}
@@ -439,12 +453,12 @@ export default function WalletPage() {
                   </div>
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Auto top-up credit (min ₹{MIN_TOPUP_INR})</Label>
+                  <Label className="text-xs text-muted-foreground">Auto top-up credit (min ₹{minTopupInr})</Label>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">₹</span>
                     <Input
                       type="number"
-                      min={MIN_TOPUP_INR}
+                      min={minTopupInr}
                       defaultValue={(wallet?.autoPayAmountCents ?? 50_000) / 100}
                       onBlur={(e) => handleAutopaySettings((wallet?.autoPayThresholdCents ?? 10_000) / 100, Number(e.target.value))}
                       className="pl-7 bg-muted border-border text-foreground"

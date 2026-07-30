@@ -15,12 +15,13 @@ import { useAuth } from "@/lib/auth";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useGetWallet, customFetch } from "@workspace/api-client-react";
 import { useMinuteRatesMap, useUserProviderNames } from "@/hooks/use-minute-rates";
-import { SnapServeIcon } from "@/components/logo";
+import { SnapServeIcon, PoweredBySarvam } from "@/components/logo";
 import { Handshake } from "lucide-react";
 import { usePartnerContext } from "@/hooks/use-partner";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 import { loadActingAs, stopActingAs } from "@/lib/acting-as";
+import { SarvamFamilyAnnouncement } from "@/components/sarvam-family-announcement";
 
 /* ─── Error boundary ─────────────────────────────────────────────────────── */
 interface ErrorBoundaryState { hasError: boolean; error: unknown }
@@ -482,8 +483,11 @@ function SidebarContent({
 
   return (
     <div className="flex flex-col h-full bg-sidebar border-r border-sidebar-border">
-      {/* Logo row */}
-      <div className="flex items-center h-[50px] px-3 shrink-0 border-b border-sidebar-border gap-1.5">
+      {/* Logo row — SnapServe mark + text “powered by sarvam” */}
+      <div className={cn(
+        "flex items-center px-3 shrink-0 border-b border-sidebar-border gap-1.5",
+        collapsed ? "h-[50px]" : "h-[58px]"
+      )}>
         <Link href="/app" onClick={onNavClick} className="flex items-center gap-2 flex-1 min-w-0 overflow-hidden">
           {partnerCtx?.branding ? (
             /* White-label: partner-linked clients see their partner's brand here. */
@@ -510,18 +514,22 @@ function SidebarContent({
             </>
           ) : (
             <>
-              <SnapServeIcon size={24} className="text-foreground shrink-0" />
+              <SnapServeIcon size={22} className="text-foreground shrink-0 self-center" />
               {!collapsed && (
-                <span
-                  className="leading-none text-[14px] text-foreground whitespace-nowrap"
-                  style={{ fontFamily: "system-ui, sans-serif", letterSpacing: "-0.02em" }}
-                >
-                  <span style={{ fontWeight: 700 }}>Snap</span>
-                  <span style={{ fontWeight: 400, opacity: 0.5 }}>Serve</span>
+                <span className="flex flex-col min-w-0 gap-0.5 py-0.5">
+                  <span
+                    className="leading-none text-[14px] text-foreground whitespace-nowrap"
+                    style={{ fontFamily: "system-ui, sans-serif", letterSpacing: "-0.02em" }}
+                    aria-label="SnapServe"
+                  >
+                    <span style={{ fontWeight: 700 }}>Snap</span>
+                    <span style={{ fontWeight: 400, opacity: 0.55 }}>Serve</span>
+                  </span>
+                  <PoweredBySarvam variant="inline" className="justify-start" />
                 </span>
               )}
               {!collapsed && partnerCtx?.isPartner && (
-                <span className="px-1.5 py-[2px] rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-500 text-[9px] font-semibold uppercase tracking-wider leading-none shrink-0">
+                <span className="px-1.5 py-[2px] rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-500 text-[9px] font-semibold uppercase tracking-wider leading-none shrink-0 self-center">
                   Partner
                 </span>
               )}
@@ -641,7 +649,8 @@ function SidebarContent({
 
       {/* Footer — docs · wallet chip · status · privacy/terms · user */}
       <div className="px-2 shrink-0 border-t border-sidebar-border">
-        {/* Partner white-label branding (clients of a partner) */}
+        {/* Partner white-label branding (clients of a partner).
+            Intentionally NOT “Powered by Sarvam” — partner attribution wins. */}
         {partnerCtx?.branding && (
           <div className="pt-1.5 flex items-center gap-2 px-2.5">
             {partnerCtx.branding.logoUrl && (
@@ -982,11 +991,22 @@ export function Layout({ children }: { children: React.ReactNode }) {
             </button>
           </SheetTrigger>
           <Link href="/app" className="ml-1 flex items-center gap-1.5 min-w-0">
-            <SnapServeIcon size={20} className="text-foreground shrink-0" />
-            <span className="leading-none text-[13px] text-foreground truncate" style={{ fontFamily: "system-ui, sans-serif", letterSpacing: "-0.02em" }}>
-              <span style={{ fontWeight: 700 }}>Snap</span>
-              <span style={{ fontWeight: 400, opacity: 0.55 }}>Serve</span>
-            </span>
+            {partnerCtx?.branding ? (
+              <span className="leading-none text-[13px] text-foreground truncate font-semibold">
+                {partnerCtx.branding.companyName}
+              </span>
+            ) : (
+              <>
+                <SnapServeIcon size={20} className="text-foreground shrink-0" />
+                <span className="flex flex-col min-w-0 leading-none gap-0.5">
+                  <span className="text-[13px] text-foreground truncate" style={{ fontFamily: "system-ui, sans-serif", letterSpacing: "-0.02em" }}>
+                    <span style={{ fontWeight: 700 }}>Snap</span>
+                    <span style={{ fontWeight: 400, opacity: 0.55 }}>Serve</span>
+                  </span>
+                  <PoweredBySarvam variant="inline" className="justify-start" />
+                </span>
+              </>
+            )}
           </Link>
           <div className="ml-auto flex items-center gap-0.5">
             <ThemeToggle />
@@ -1044,6 +1064,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <NewAgentModal open={newAgentOpen} onClose={() => setNewAgentOpen(false)} />
 
       <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
+
+      <SarvamFamilyAnnouncement />
     </div>
   );
 }

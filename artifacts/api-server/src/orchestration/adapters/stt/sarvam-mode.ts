@@ -18,9 +18,9 @@
  * Only saaras:v3 supports `mode` at all — the caller gates on MODE_CAPABLE.
  */
 
-export type SarvamSttMode = "transcribe" | "codemix" | "verbatim" | "translit";
+export type SarvamSttMode = "transcribe" | "codemix" | "verbatim" | "translit" | "translate";
 
-const VALID_MODES = new Set<string>(["transcribe", "codemix", "verbatim", "translit"]);
+const VALID_MODES = new Set<string>(["transcribe", "codemix", "verbatim", "translit", "translate"]);
 
 export function resolveSarvamSttMode(
   languageCode: string | null | undefined,

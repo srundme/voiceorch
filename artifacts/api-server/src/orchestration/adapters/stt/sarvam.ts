@@ -10,8 +10,8 @@
  * ── WebSocket connection parameters (query string) ───────────────────────────
  *   model               "saaras:v3" (recommended) | "saarika:v2.5" (legacy)
  *   language_code       BCP-47, e.g. "ta-IN", "hi-IN", "en-IN"
- *   mode                "transcribe" | "codemix" | "verbatim" | "translit"
- *                       (saaras:v3 only; codemix handles Tamil+English mixing)
+ *   mode                "transcribe" | "codemix" | "verbatim" | "translit" | "translate"
+ *                       (saaras:v3 only; translate = speech-to-English)
  *   sample_rate         16000 (default) | 8000
  *   input_audio_codec   "pcm_s16le" | "wav"
  *   high_vad_sensitivity true → silence boundary = 2 VAD frames (~64ms @16kHz, ~128ms @8kHz);
@@ -127,6 +127,9 @@ export class SarvamSTT implements STTAdapter {
   private readonly langCode: string;
   private readonly mode: SarvamSttMode;
   private readonly explicitMode: string | null;
+  private readonly highVadSensitivity: boolean;
+  private readonly speechEndFlushMs: number;
+  private readonly incompleteHoldMs: number;
   private readonly cfg: STTConfig;
   /** Native sample rate to actually stream to Sarvam — 8000 for telephony, 16000 for webcall. */
   private readonly sampleRate: 8000 | 16000;
@@ -142,7 +145,12 @@ export class SarvamSTT implements STTAdapter {
     this.sampleRate = cfg.nativeSampleRate === 8000 ? 8000 : 16000;
 
     const extra = extraConfig
-      ? (JSON.parse(extraConfig) as { mode?: string })
+      ? (JSON.parse(extraConfig) as {
+          mode?: string;
+          highVadSensitivity?: boolean;
+          speechEndFlushMs?: number;
+          incompleteHoldMs?: number;
+        })
       : {};
 
     // Model: saaras:v3 (recommended) or saarika:v2.5 (legacy) — the ONLY two
@@ -163,8 +171,30 @@ export class SarvamSTT implements STTAdapter {
       ? resolveSarvamSttMode(this.langCode, this.explicitMode)
       : "transcribe";
 
+    this.highVadSensitivity = typeof extra.highVadSensitivity === "boolean"
+      ? extra.highVadSensitivity
+      : true;
+    this.speechEndFlushMs = typeof extra.speechEndFlushMs === "number" && Number.isFinite(extra.speechEndFlushMs)
+      ? Math.max(0, Math.min(200, Math.round(extra.speechEndFlushMs)))
+      : 30;
+    // Prefer agent UI value; env SARVAM_COALESCE_INCOMPLETE_MS remains a deploy-wide override.
+    const envIncomplete = envInt("SARVAM_COALESCE_INCOMPLETE_MS", -1);
+    this.incompleteHoldMs = envIncomplete >= 0
+      ? Math.max(50, Math.min(1000, envIncomplete))
+      : (typeof extra.incompleteHoldMs === "number" && Number.isFinite(extra.incompleteHoldMs)
+        ? Math.max(50, Math.min(1000, Math.round(extra.incompleteHoldMs)))
+        : 220);
+
     logger.info(
-      { langCode: this.langCode, mode: this.mode, model: this.model, explicitMode: this.explicitMode },
+      {
+        langCode: this.langCode,
+        mode: this.mode,
+        model: this.model,
+        explicitMode: this.explicitMode,
+        highVadSensitivity: this.highVadSensitivity,
+        speechEndFlushMs: this.speechEndFlushMs,
+        incompleteHoldMs: this.incompleteHoldMs,
+      },
       "Sarvam STT: mode resolved",
     );
   }
@@ -229,7 +259,7 @@ export class SarvamSTT implements STTAdapter {
         language_code:      langCode,
         sample_rate:        String(sampleRate),
         input_audio_codec:  "pcm_s16le",
-        high_vad_sensitivity: "true",  // ~128ms silence boundary @8kHz (2 VAD frames) — snappy for voice agents
+        high_vad_sensitivity: this.highVadSensitivity ? "true" : "false",
         vad_signals:        "true",    // emit speech_start / speech_end events
         flush_signal:       "true",    // allow manual buffer flush via flush() call
       });
@@ -268,12 +298,10 @@ export class SarvamSTT implements STTAdapter {
     const COALESCE_MIN_MS        = 120;
     const COALESCE_DEFAULT_MS    = 220;
     const COALESCE_MAX_MS        = 500;  // raised from 350 — covers ~400ms thinking pauses
-    // Extra hold for obviously-incomplete fragments (final arrived, speech_end
-    // not yet seen, text looks mid-thought). Lowered over time 1200 → 800 → 220 ms:
-    // long holds added dead air on multilingual calls where Sarvam's speech_end
-    // fires late, and 220 ms still lets a caller resume a genuine mid-word pause.
-    // Override per-deployment with env SARVAM_COALESCE_INCOMPLETE_MS.
-    const COALESCE_INCOMPLETE_MS = envInt("SARVAM_COALESCE_INCOMPLETE_MS", 220);
+    // Incomplete mid-thought hold — Latency Tuning UI (default 220). Env
+    // SARVAM_COALESCE_INCOMPLETE_MS overrides when set.
+    const COALESCE_INCOMPLETE_MS = this.incompleteHoldMs;
+    const SPEECH_END_FLUSH_MS    = this.speechEndFlushMs;
     const PAUSE_HISTORY_MAX      = 5;
     const pauseHistory: number[] = [];
     let transcriptArrivedAt    = 0;   // wall-clock ms when last transcript buffered
@@ -582,12 +610,12 @@ export class SarvamSTT implements STTAdapter {
           //       thinking pause (~1 s) while the STT silence window is shorter.
           if (coalesceBuf && coalesceTimer) {
             clearTimeout(coalesceTimer);
-            // speech_end received: caller has stopped speaking — flush immediately (30 ms fast-path)
-            coalesceTimer = setTimeout(emitCoalesced, 30);
+            // speech_end received: caller has stopped speaking — flush (UI-configured)
+            coalesceTimer = setTimeout(emitCoalesced, SPEECH_END_FLUSH_MS);
             emitPartial();
             logger.debug(
-              { langCode, buf: coalesceBuf.slice(0, 60) },
-              "Sarvam STT: speech_end received — flushing coalesce buffer immediately (30 ms)",
+              { langCode, buf: coalesceBuf.slice(0, 60), flushMs: SPEECH_END_FLUSH_MS },
+              "Sarvam STT: speech_end received — flushing coalesce buffer",
             );
           }
           _onSpeechEnd?.();
@@ -632,19 +660,14 @@ export class SarvamSTT implements STTAdapter {
           transcriptArrivedAt    = Date.now();   // start of the hold window
           // (Re-)arm the emit timer.
           // Timer selection after each transcript segment:
-          // • speech_end already received + complete → 30 ms (fast-path, normal Sarvam flow).
-          // • speech_end already received + incomplete → adaptiveHoldMs (120–500 ms).
-          //   The caller has stopped talking — NEVER use the COALESCE_INCOMPLETE_MS hold
-          //   after speech_end; that would just be dead air while we wait for speech
-          //   that isn't coming.
-          // • speech_end NOT yet received + incomplete → COALESCE_INCOMPLETE_MS (default 220 ms)
-          //   so the caller can finish their thought before we dispatch to the LLM.
-          // • speech_end NOT yet received + complete → adaptive window.
+          // • speech_end already received → SPEECH_END_FLUSH_MS (UI, default 30).
+          // • incomplete mid-thought → COALESCE_INCOMPLETE_MS (UI, default 220).
+          // • complete transcript, speech_end not yet → SPEECH_END_FLUSH_MS.
           if (coalesceTimer) clearTimeout(coalesceTimer);
           const incomplete = looksIncomplete(coalesceBuf);
           const holdMs = speechEndReceived
-            ? 30
-            : (incomplete ? COALESCE_INCOMPLETE_MS : 30);
+            ? SPEECH_END_FLUSH_MS
+            : (incomplete ? COALESCE_INCOMPLETE_MS : SPEECH_END_FLUSH_MS);
           logger.debug(
             { langCode, buf: coalesceBuf.slice(0, 60), holdMs, speechEndReceived },
             "Sarvam STT: scheduling coalesce emit",

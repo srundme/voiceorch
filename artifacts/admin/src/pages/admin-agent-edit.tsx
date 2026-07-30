@@ -81,7 +81,7 @@ const agentFormSchema = z.object({
   voicemailAction:        z.enum(["hangup", "leave_message", "continue"]).optional(),
   voicemailMessage:       z.string().optional(),
   tools: z.array(z.object({
-    type: z.enum(["call_transfer", "webhook", "send_sms", "end_call", "cal_com", "native_booking", "native_check_availability", "native_list_bookings", "native_reschedule", "native_cancel", "transfer_cold", "transfer_warm", "transfer_agent"]),
+    type: z.enum(["call_transfer", "webhook", "send_sms", "send_email", "send_whatsapp", "end_call", "cal_com", "native_booking", "native_check_availability", "native_list_bookings", "native_reschedule", "native_cancel", "transfer_cold", "transfer_warm", "transfer_agent"]),
     name: z.string().optional(),
     description: z.string().optional(),
     transferTo: z.string().optional(),
@@ -319,9 +319,9 @@ export default function AdminAgentEdit() {
   const form = useForm<AgentFormValues>({
     resolver: zodResolver(agentFormSchema),
     defaultValues: {
-      name: "", description: "", asrProvider: "azure", asrModel: "",
-      llmProvider: "openai", llmModel: "", ttsProvider: "cartesia",
-      ttsVoice: "", ttsModel: "", telephonyProvider: "twilio",
+      name: "", description: "", asrProvider: "sarvam", asrModel: "saaras:v3",
+      llmProvider: "openai", llmModel: "", ttsProvider: "sarvam",
+      ttsVoice: "priya", ttsModel: "bulbul:v3", telephonyProvider: "vobiz",
       systemPrompt: "", temperature: 0.40, maxDuration: 300,
       firstSpeaker: "assistant", endCallPhrases: "", silenceTimeoutSeconds: 30,
       language: "en-US", asrLanguage: "", backchannelingEnabled: true, backchannelingFrequency: 0.5,

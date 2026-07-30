@@ -16,6 +16,7 @@ import WebhooksPage from "./pages/webhooks";
 import PhoneNumbersPage from "./pages/phone-numbers";
 import WalletPage from "./pages/wallet";
 import SdksPage from "./pages/sdks";
+import ClaudeSkillPage from "./pages/claude-skill";
 import ErrorsPage from "./pages/errors";
 import PricingPage from "./pages/pricing";
 import FaqPage from "./pages/faq";
@@ -109,6 +110,9 @@ export default function DocsPage() {
       break;
     case "sdks":
       Content = SdksPage;
+      break;
+    case "claude-skill":
+      Content = ClaudeSkillPage;
       break;
     case "errors":
       Content = ErrorsPage;

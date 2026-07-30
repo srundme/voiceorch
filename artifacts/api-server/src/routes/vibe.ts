@@ -21,10 +21,24 @@ import { filterVoicesByAgentGender } from "./vibe-agent-gender.js";
 
 const router = Router();
 
-const DEFAULT_MALE_VOICE_ID     = "2344e62d-2b68-4873-9ede-9fa64f6ec889";
-const DEFAULT_FEMALE_VOICE_ID   = "a8adc74b-c9c1-45e0-aae7-9a60ba64bbee";
-const DEFAULT_MALE_VOICE_NAME   = "Karthikeyan";
-const DEFAULT_FEMALE_VOICE_NAME = "Gayathri";
+const DEFAULT_MALE_VOICE_ID     = "shubh";
+const DEFAULT_FEMALE_VOICE_ID   = "priya";
+const DEFAULT_MALE_VOICE_NAME   = "Shubh";
+const DEFAULT_FEMALE_VOICE_NAME = "Priya";
+const DEFAULT_TTS_PROVIDER      = "sarvam";
+const DEFAULT_TTS_MODEL         = "bulbul:v3";
+
+function looksLikeCartesiaVoiceId(id: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id.trim());
+}
+
+/** SnapServe default stack is Sarvam; Cartesia UUIDs keep Cartesia TTS. */
+function resolveTtsStackForVoice(voiceId: string): { provider: string; model: string } {
+  if (looksLikeCartesiaVoiceId(voiceId)) {
+    return { provider: "cartesia", model: "sonic-3.5" };
+  }
+  return { provider: DEFAULT_TTS_PROVIDER, model: DEFAULT_TTS_MODEL };
+}
 
 const LANG_MAP: Record<string, { code: string; label: string; gemini: boolean }> = {
   "ta-IN": { code: "ta-IN", label: "Tamil",           gemini: true  },
@@ -1360,6 +1374,7 @@ router.post("/agents/vibe-chat", requireAuth, clientContext, denyManagedClient, 
 
     const resolvedVoiceId   = cfg.voiceId   || (cfg.gender === "female" ? DEFAULT_FEMALE_VOICE_ID   : DEFAULT_MALE_VOICE_ID);
     const resolvedVoiceName = cfg.voiceName || (cfg.gender === "female" ? DEFAULT_FEMALE_VOICE_NAME  : DEFAULT_MALE_VOICE_NAME);
+    const defaultTtsStack = resolveTtsStackForVoice(resolvedVoiceId);
 
     const fallback = `You are ${cfg.agentName}, a voice AI agent for ${cfg.companyName}. Your role is to ${cfg.description}. Be concise, friendly, and professional.${cfg.callTransferEnabled ? ` When the caller needs human help, transfer them to ${cfg.transferName || "our support team"} at ${cfg.transferPhoneNumber}.` : ""} Always introduce yourself at the start of each call.`;
     let systemPrompt = fallback;
@@ -1602,8 +1617,8 @@ router.post("/agents/vibe-chat", requireAuth, clientContext, denyManagedClient, 
             llmModel,
             asrProvider:              (existingAgentRow?.asrProvider as string) ?? "sarvam",
             asrModel:                 (existingAgentRow?.asrModel as string) ?? "saaras:v3",
-            ttsProvider:              (existingAgentRow?.ttsProvider as string) ?? "cartesia",
-            ttsModel:                 (existingAgentRow?.ttsModel as string) ?? "sonic-3.5",
+            ttsProvider:              (existingAgentRow?.ttsProvider as string) ?? defaultTtsStack.provider,
+            ttsModel:                 (existingAgentRow?.ttsModel as string) ?? defaultTtsStack.model,
             telephonyProvider:        (existingAgentRow?.telephonyProvider as string) ?? "vobiz",
             ttsVoice:                 finalVoiceId,
             ttsVoiceName:             finalVoiceName,
@@ -1637,8 +1652,8 @@ router.post("/agents/vibe-chat", requireAuth, clientContext, denyManagedClient, 
           language:                 langCode,
           llmProvider,
           llmModel,
-          ttsProvider:              "cartesia",
-          ttsModel:                 "sonic-3.5",
+          ttsProvider:              defaultTtsStack.provider,
+          ttsModel:                 defaultTtsStack.model,
           ttsVoice:                 resolvedVoiceId,
           telephonyProvider:        "vobiz",
           systemPrompt,

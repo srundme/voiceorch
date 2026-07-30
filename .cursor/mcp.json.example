@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "snapserve": {
+      "command": "node",
+      "args": ["lib/snapserve-mcp/dist/index.js"],
+      "env": {
+        "SNAPSERVE_API_KEY": "sk_live_YOUR_KEY",
+        "SNAPSERVE_BASE_URL": "https://app.snapserve.ai/api"
+      }
+    }
+  }
+}

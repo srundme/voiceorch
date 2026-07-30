@@ -19,6 +19,7 @@ import {
   useUserAuditLogs,
   useSendEmailToUser,
   usePlatformEmails,
+  useSetUserUnlimitedTrial,
 } from "@/hooks/use-admin-api";
 import { formatCentsToDollars, formatDuration, adminFetch } from "@/lib/api";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -28,6 +29,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
@@ -37,7 +39,7 @@ import {
 import {
   ArrowLeft, Wallet, PhoneCall, Bot, Activity, Zap, ShieldAlert, LogIn,
   ClipboardList, Key, ChevronLeft, ChevronRight, Trash2, AlertTriangle, Pencil, Plus, Mail,
-  CheckCircle2, XCircle, Handshake,
+  CheckCircle2, XCircle, Handshake, Infinity as InfinityIcon,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError } from "@/lib/format-api-error";
@@ -59,6 +61,7 @@ export default function UserDetail() {
 
   // Mutations
   const setConcurrentLimit = useSetConcurrentLimit(clerkId || "");
+  const setUnlimitedTrial = useSetUserUnlimitedTrial(clerkId || "");
   const setStatus = useSetUserStatus(clerkId || "");
   const editProfile = useEditUserProfile(clerkId || "");
   const creditWallet = useCreditWallet(clerkId || "");
@@ -378,7 +381,7 @@ export default function UserDetail() {
       {/* ── Overview Tab ─────────────────────────────────────────── */}
       {tab === "overview" && (
         <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
@@ -404,7 +407,39 @@ export default function UserDetail() {
                 </Button>
               </CardContent>
             </Card>
-            <Card className="md:col-span-2">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                  <InfinityIcon className="h-3.5 w-3.5" /> Unlimited trial
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Skip the daily managed outbound cap for this account only.
+                  </p>
+                  <Switch
+                    checked={!!user.unlimitedManagedTrial}
+                    disabled={setUnlimitedTrial.isPending}
+                    onCheckedChange={(checked) => {
+                      setUnlimitedTrial.mutate({ unlimited: checked }, {
+                        onSuccess: () => toast({
+                          title: checked ? "Unlimited trial ON" : "Unlimited trial OFF",
+                          description: checked
+                            ? "This account can place unlimited managed outbound tests."
+                            : "This account is back on the daily trial cap.",
+                        }),
+                        onError: (e) => toast({ title: "Failed", description: formatApiError(e), variant: "destructive" }),
+                      });
+                    }}
+                  />
+                </div>
+                <Badge variant={user.unlimitedManagedTrial ? "default" : "outline"} className={user.unlimitedManagedTrial ? "bg-emerald-600" : ""}>
+                  {user.unlimitedManagedTrial ? "Enabled" : "Capped"}
+                </Badge>
+              </CardContent>
+            </Card>
+            <Card className="md:col-span-3">
               <CardHeader className="pb-2">
                 <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Profile</CardTitle>
               </CardHeader>
@@ -475,10 +510,10 @@ export default function UserDetail() {
               onClick={() => {
                 createAgent.mutate({
                   name: "New Agent",
-                  asrProvider: "azure",
+                  asrProvider: "sarvam",
                   llmProvider: "openai",
-                  ttsProvider: "cartesia",
-                  telephonyProvider: "twilio",
+                  ttsProvider: "sarvam",
+                  telephonyProvider: "vobiz",
                   systemPrompt: "You are a helpful assistant.",
                   status: "inactive",
                 }, {

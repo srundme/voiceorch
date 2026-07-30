@@ -12,6 +12,7 @@ import { logger } from "../lib/logger.js";
 import { decryptKey } from "../lib/crypto.js";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { createTTSAdapter } from "../orchestration/adapters/tts/index.js";
+import { isSarvamCatalogSpeaker } from "../orchestration/adapters/tts/sarvam.js";
 import { pcmToWav } from "../orchestration/audio.js";
 
 const router: IRouter = Router();
@@ -56,8 +57,25 @@ function serializeClone(row: typeof userClonedVoicesTable.$inferSelect) {
     name: row.name,
     language: row.language,
     description: row.description ?? undefined,
+    provider: (row.provider === "sarvam" ? "sarvam" : "cartesia") as "cartesia" | "sarvam",
     createdAt: row.createdAt.toISOString(),
   };
+}
+
+/** Sarvam Creative Studio speaker / clone ids — not Cartesia UUIDs. */
+function isValidSarvamSpeakerId(raw: string): boolean {
+  const s = raw.trim();
+  if (s.length < 2 || s.length > 80) return false;
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)) {
+    return false;
+  }
+  return /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(s);
+}
+
+function toBaseLanguage(raw: string): string {
+  const trimmed = raw.trim().toLowerCase();
+  if (!trimmed) return "en";
+  return trimmed.split("-")[0] ?? "en";
 }
 
 // ── GET /voices/whitelisted ──────────────────────────────────────────────────
@@ -204,6 +222,7 @@ router.post(
         .values({
           userId,
           cartesiaVoiceId: parsed.id,
+          provider: "cartesia",
           name: parsed.name?.trim() || name,
           language: parsed.language || language,
           description: description ?? parsed.description ?? null,
@@ -222,8 +241,183 @@ router.post(
   },
 );
 
+async function getManagedSarvamKey(): Promise<string | null> {
+  const [managed] = await db
+    .select()
+    .from(platformSettingsTable)
+    .where(eq(platformSettingsTable.key, "managed_sarvam_key"));
+  const fromDb = managed?.value?.trim();
+  if (fromDb) return fromDb;
+  const fromEnv = (process.env["SARVAM_API_KEY"] ?? "").trim();
+  return fromEnv || null;
+}
+
+async function getSarvamKeyForUser(userId: string): Promise<{ key: string; source: "user" | "managed" } | null> {
+  const [userRow] = await db
+    .select()
+    .from(providersTable)
+    .where(
+      and(
+        eq(providersTable.userId, userId),
+        eq(providersTable.providerName, "sarvam"),
+        eq(providersTable.isActive, true),
+      ),
+    );
+  if (userRow) return { key: decryptKey(userRow.apiKey), source: "user" };
+
+  const managed = await getManagedSarvamKey();
+  if (managed) return { key: managed, source: "managed" };
+  return null;
+}
+
+/** Probe Bulbul with a tiny utterance so we reject bad clone ids before save. */
+async function probeSarvamSpeaker(
+  apiKey: string,
+  speakerId: string,
+  languageBase: string,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const lang = languageBase.includes("-") ? languageBase : `${languageBase}-IN`;
+  try {
+    const tts = createTTSAdapter(
+      "sarvam",
+      apiKey,
+      speakerId,
+      "bulbul:v3",
+      JSON.stringify({ language: lang }),
+      lang,
+    );
+    await tts.synthesize("Hello");
+    tts.close();
+    return { ok: true };
+  } catch (err) {
+    const raw = err instanceof Error ? err.message : String(err);
+    if (/not recognized|invalid_request|speaker/i.test(raw)) {
+      return {
+        ok: false,
+        message:
+          `Sarvam does not recognize speaker "${speakerId}" on this API key. `
+          + "Paste the exact Speaker / clone id from Creative Studio (not the display name). "
+          + "The managed / GCP SARVAM_API_KEY must be from the same Sarvam project that owns the clone.",
+      };
+    }
+    return {
+      ok: false,
+      message: `Could not verify speaker with Sarvam: ${raw.slice(0, 240)}`,
+    };
+  }
+}
+
+// ── POST /voices/sarvam-register ─────────────────────────────────────────────
+// Authenticated: register a Sarvam Creative Studio cloned speaker id.
+// Sarvam has no public self-serve clone REST API — clones are created in Studio,
+// then the speaker id is pasted here and used as agents.tts_voice with provider=sarvam.
+// Body JSON: { speakerId, name, language, description?, consent: true }
+
+router.post("/voices/sarvam-register", requireAuth, async (req, res): Promise<void> => {
+  const userId = (req as unknown as { clerkUserId: string }).clerkUserId;
+  const body = req.body as {
+    speakerId?: string;
+    name?: string;
+    language?: string;
+    description?: string;
+    consent?: boolean;
+  };
+
+  const speakerId = typeof body.speakerId === "string" ? body.speakerId.trim() : "";
+  const name = typeof body.name === "string" ? body.name.trim() : "";
+  const languageRaw = typeof body.language === "string" ? body.language : "";
+  const description =
+    typeof body.description === "string" ? body.description.trim() || null : null;
+
+  if (!body.consent) {
+    res.status(400).json({
+      error: "Confirm you have rights to use this voice and created it in Sarvam Creative Studio.",
+    });
+    return;
+  }
+  if (!isValidSarvamSpeakerId(speakerId)) {
+    res.status(400).json({
+      error: "Provide a valid Sarvam speaker / clone id (letters, numbers, _ or -; not a UUID).",
+    });
+    return;
+  }
+  if (!name || name.length > 80) {
+    res.status(400).json({ error: "Provide a voice name (1–80 characters)." });
+    return;
+  }
+  if (!languageRaw.trim()) {
+    res.status(400).json({ error: "Select a language for the clone." });
+    return;
+  }
+
+  // Verify speaker against user key if present, else managed/GCP key.
+  // Clones work on managed TTS when managed_sarvam_key is from the same Sarvam project that created the clone.
+  const keyInfo = await getSarvamKeyForUser(userId);
+  if (!keyInfo) {
+    res.status(400).json({
+      error:
+        "No Sarvam API key available. Set Admin → Managed Keys → Sarvam (or GCP SARVAM_API_KEY), "
+        + "using the same Sarvam project that owns the clone.",
+    });
+    return;
+  }
+
+  const probe = await probeSarvamSpeaker(keyInfo.key, speakerId, toBaseLanguage(languageRaw));
+  if (!probe.ok) {
+    res.status(400).json({ error: probe.message });
+    return;
+  }
+
+  const [{ value: cloneCount } = { value: 0 }] = await db
+    .select({ value: count() })
+    .from(userClonedVoicesTable)
+    .where(eq(userClonedVoicesTable.userId, userId));
+
+  if (Number(cloneCount) >= MAX_CLONES_PER_USER) {
+    res.status(400).json({
+      error: `You can keep up to ${MAX_CLONES_PER_USER} cloned voices. Delete one to add another.`,
+    });
+    return;
+  }
+
+  const [existing] = await db
+    .select()
+    .from(userClonedVoicesTable)
+    .where(
+      and(
+        eq(userClonedVoicesTable.userId, userId),
+        eq(userClonedVoicesTable.provider, "sarvam"),
+        eq(userClonedVoicesTable.cartesiaVoiceId, speakerId),
+      ),
+    );
+  if (existing) {
+    res.status(200).json({ voice: serializeClone(existing) });
+    return;
+  }
+
+  try {
+    const [row] = await db
+      .insert(userClonedVoicesTable)
+      .values({
+        userId,
+        cartesiaVoiceId: speakerId,
+        provider: "sarvam",
+        name,
+        language: toBaseLanguage(languageRaw),
+        description,
+      })
+      .returning();
+
+    logger.info({ userId, speakerId, language: languageRaw }, "Sarvam cloned voice registered");
+    res.status(201).json({ voice: serializeClone(row!) });
+  } catch (err) {
+    logger.error({ err, userId, speakerId }, "Sarvam voice register failed");
+    res.status(500).json({ error: "Could not register Sarvam voice. Please try again." });
+  }
+});
+
 // ── DELETE /voices/mine/:id ──────────────────────────────────────────────────
-// :id is the Cartesia voice UUID (same id used as agents.tts_voice).
+// :id is the provider voice id (Cartesia UUID or Sarvam speaker).
 
 router.delete("/voices/mine/:id", requireAuth, async (req, res): Promise<void> => {
   const userId = (req as unknown as { clerkUserId: string }).clerkUserId;
@@ -253,26 +447,28 @@ router.delete("/voices/mine/:id", requireAuth, async (req, res): Promise<void> =
     .delete(userClonedVoicesTable)
     .where(eq(userClonedVoicesTable.id, row.id));
 
-  // Best-effort remote delete — ignore failures so the local row is already gone.
-  const cartesiaKey = await getCartesiaKey();
-  if (cartesiaKey) {
-    try {
-      const delRes = await fetch(`${CARTESIA_BASE_URL}/voices/${encodeURIComponent(voiceId)}`, {
-        method: "DELETE",
-        headers: {
-          "X-API-Key": cartesiaKey,
-          "Cartesia-Version": CARTESIA_VERSION,
-        },
-      });
-      if (!delRes.ok && delRes.status !== 404) {
-        const body = await delRes.text().catch(() => "");
-        logger.warn(
-          { status: delRes.status, body: body.slice(0, 300), voiceId },
-          "Cartesia voice delete failed (local row already removed)",
-        );
+  // Best-effort remote delete for Cartesia only — Sarvam Studio clones stay in Studio.
+  if (row.provider !== "sarvam") {
+    const cartesiaKey = await getCartesiaKey();
+    if (cartesiaKey) {
+      try {
+        const delRes = await fetch(`${CARTESIA_BASE_URL}/voices/${encodeURIComponent(voiceId)}`, {
+          method: "DELETE",
+          headers: {
+            "X-API-Key": cartesiaKey,
+            "Cartesia-Version": CARTESIA_VERSION,
+          },
+        });
+        if (!delRes.ok && delRes.status !== 404) {
+          const body = await delRes.text().catch(() => "");
+          logger.warn(
+            { status: delRes.status, body: body.slice(0, 300), voiceId },
+            "Cartesia voice delete failed (local row already removed)",
+          );
+        }
+      } catch (err) {
+        logger.warn({ err, voiceId }, "Cartesia voice delete request error");
       }
-    } catch (err) {
-      logger.warn({ err, voiceId }, "Cartesia voice delete request error");
     }
   }
 
@@ -378,14 +574,13 @@ router.post("/voices/preview", async (req, res): Promise<void> => {
     return;
   }
 
-  // ── Other providers: synthesize with the user's own stored key ──────────────
+  // ── Other providers: user key first, then platform managed key (same as live calls) ──
   const userId = (req as unknown as { clerkUserId?: string }).clerkUserId;
   if (!userId) {
     res.status(401).json({ error: "Sign in to preview this provider's voices." });
     return;
   }
 
-  // Resolve the user's active API key for this provider (matches webcall lookup).
   const [providerRow] = await db
     .select()
     .from(providersTable)
@@ -397,18 +592,43 @@ router.post("/voices/preview", async (req, res): Promise<void> => {
       ),
     );
 
-  if (!providerRow) {
+  let apiKey: string | null = providerRow ? decryptKey(providerRow.apiKey) : null;
+  let extraConfig: string | null = providerRow?.extraConfig ?? null;
+
+  if (!apiKey && provider === "sarvam") {
+    // Managed / GCP SARVAM_API_KEY covers catalog + clones owned by that same Sarvam project.
+    apiKey = await getManagedSarvamKey();
+  }
+
+  if (!apiKey) {
+    const managedKeyName =
+      provider === "sarvam" ? "managed_sarvam_key"
+        : provider === "elevenlabs" ? "managed_elevenlabs_key"
+          : provider === "openai" || provider === "openai_tts" ? "managed_openai_key"
+            : null;
+    if (managedKeyName) {
+      const [managed] = await db
+        .select()
+        .from(platformSettingsTable)
+        .where(eq(platformSettingsTable.key, managedKeyName));
+      apiKey = managed?.value?.trim() || null;
+    }
+  }
+
+  if (!apiKey) {
     res.status(400).json({
-      error: `No active ${provider} API key found. Add one on the Providers page to preview this voice.`,
+      error:
+        provider === "sarvam"
+          ? "No Sarvam API key available. Add one under Admin → Managed Keys (or Providers), or set SARVAM_API_KEY."
+          : `No active ${provider} API key found. Add one on the Providers page to preview this voice.`,
     });
     return;
   }
 
-  const apiKey = decryptKey(providerRow.apiKey);
   const language = body.language ?? null;
-  const extraConfig = provider === "sarvam"
-    ? JSON.stringify({ language: language ?? "en-IN" })
-    : (providerRow.extraConfig ?? null);
+  if (provider === "sarvam") {
+    extraConfig = JSON.stringify({ language: language ?? "en-IN" });
+  }
 
   try {
     const tts = createTTSAdapter(provider, apiKey, voiceId, modelId ?? null, extraConfig, language);

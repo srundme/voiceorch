@@ -7,6 +7,7 @@ import { SpeakerVerifier, type VoiceMemoryEvent } from "./speakerVerifier.js";
 import { buildDatetimeInjection } from "./datetimeInject.js";
 import { resolveAutoDetectLanguage } from "./language-filler-guard.js";
 import { CONVERSATION_DISCIPLINE_BLOCK, CONVERSATION_DISCIPLINE_TURN_REMINDER, buildAntiRepeatNudge, makeFlowStepGuard, truncateToSingleStep, VOICE_MAX_SENTENCES_PER_TURN } from "./conversationDiscipline.js";
+import { isCallerFarewellUtterance as isCallerFarewellUtteranceShared } from "./callFarewell.js";
 import { shouldSwitchSttLang } from "./stt-language-switch.js";
 import { EAGER_PARTIAL_STABLE_MS, isEagerCommitReady, isSpeculativeHit } from "./eager-stt.js";
 import type { SttFinalMetadata } from "./adapters/stt/base.js";
@@ -29,7 +30,7 @@ import { resolveGoodbyeMessage } from "./types.js";
 import type { VoiceSession } from "./voice-session.js";
 import { retrieveKbContext, retrieveKbContextMultiEx, resolveKbTurnBudgetMs, type KbRetrievalResult } from "./kb-retrieval.js";
 import { KRUTRIM_AUTO_SUMMARY_TITLE } from "../services/kb-source-summary.js";
-import { getBackchannelFillers, pickBackchannelFiller, type BackchannelFillerOptions } from "./backchannel.js";
+import { getBackchannelFillers, pickBackchannelFiller, rememberFillerPhrase, type BackchannelFillerOptions } from "./backchannel.js";
 import { ConversationHistory } from "./conversation-history.js";
 import { performance } from "perf_hooks";
 import {
@@ -87,6 +88,8 @@ import {
   executeNativeReschedule as sharedExecuteNativeReschedule,
   executeNativeCancel as sharedExecuteNativeCancel,
   executeWebhookTool as sharedExecuteWebhookTool,
+  executeSendEmail as sharedExecuteSendEmail,
+  executeSendWhatsapp as sharedExecuteSendWhatsapp,
   parsePreferredDate,
   writeTransferLeadDb,
 } from "../services/tool-executor.js";
@@ -120,8 +123,10 @@ const FILLER_THRESHOLD_MS     = 350;    // play a filler phrase if LLM has not r
                                         // token within this window (and backchannel didn't fire)
 const DEAD_AIR_FILLER_CANCEL_MS = 500; // skip dead-air filler playback if LLM first token
                                         // arrives within this window after filler was enqueued
-const FRAGMENT_COALESCE_MS    = 2000;   // hold short English fragments / Indic acks for a follow-up STT final (agent speaking)
-const FRAGMENT_COALESCE_LISTENING_MS = 450; // shorter hold when the agent is silent — "Okay." is then likely the caller's real answer
+const FRAGMENT_COALESCE_MS_DEFAULT = 800;   // fallback when agentConfig omits playing coalesce
+/** Listening-side hold for ack fragments ("Yes Ma'am") — was 150ms; call 4856
+ *  flushed before the caller finished "…how are you?" → zigzag replies. */
+const FRAGMENT_COALESCE_LISTENING_MS_DEFAULT = 450;
 const VAD_FLUSH_BACKSTOP_MS   = 2000;   // speech_start with no interim/final/speech_end for this long → one-shot STT flush (lost-turn anomaly)
 const VAD_FLUSH_COOLDOWN_MS   = 5000;   // min interval between backstop flushes — keeps the flush strictly anomaly-only
 const LLM_TTFT_FALLBACK_MS    = Number(process.env.LLM_TTFT_FALLBACK_MS ?? 1200); // abort slow primary LLM
@@ -147,6 +152,7 @@ const BARGE_IN_TELEPHONY_ACTIVE_TTS_ENERGY_FLOOR = 1200; // COLD-START fallback 
                                          // line-specific. We now MEASURE the echo floor per call (see
                                          // playbackEchoFloor) and set the bar to echoFloor × margin. This
                                          // constant is used only before enough echo has been observed.
+const TELEPHONY_TAIL_DRAIN_MS_DEFAULT = 400; // fallback when agentConfig omits tail drain
 // ── Adaptive (self-calibrating) energy barge-in for the streaming-STT carrier path ──
 // The barge-in bar during active TTS = max(configuredThreshold, measuredEchoFloor × MARGIN),
 // clamped to [configured, MAX]. This lets a NORMAL-volume caller interrupt on a quiet line
@@ -190,12 +196,7 @@ const SELF_ECHO_MIN_OVERLAP   = 0.6;   // fraction of transcript tokens that mus
                                         // recent agent speech to classify it as our own echo
 const CARRIER_ECHO_LATENCY_MS = 1500;  // margin added to the greeting echo-hold to cover the
                                         // round-trip carrier echo latency (observed ~777 ms)
-const TELEPHONY_TAIL_DRAIN_MS = 800;    // After the final utterance fully streams, send silence
-                                         // frames for this long before the next listen / teardown
-                                         // so the carrier's jitter buffer plays out the last words.
-                                         // Sending real silence (not just sleeping) is critical for
-                                         // Vobiz — a passive sleep lets Vobiz detect "no audio" and
-                                         // close its playout window early, clipping the last words.
+// Tail drain duration comes from agentConfig.telephonyTailDrainMs (Latency Tuning UI).
 // ── Voicemail-delivery (Vobiz AMD leave_message) tunables ──────────────────────
 // When the answer webhook detects a machine, we open the media stream and listen
 // to the machine's outgoing greeting. The message is spoken once the greeting ends
@@ -795,8 +796,12 @@ export class OrchestrationPipeline implements VoiceSession {
   private answerGapLogged = false;
   // Count of filler phrases played due to slow LLM response (>800 ms to first token)
   private fillerPlayedCount = 0;
-  // Last backchannel/dead-air filler phrase spoken, so we never repeat it back-to-back.
-  private lastFillerPhrase: string | null = null;
+  // Recent backchannel/dead-air fillers — avoid repeating the last few phrases.
+  private recentFillerPhrases: string[] = [];
+  /** @deprecated use recentFillerPhrases — kept for any legacy log readers */
+  private get lastFillerPhrase(): string | null {
+    return this.recentFillerPhrases[this.recentFillerPhrases.length - 1] ?? null;
+  }
 
   // ── Per-turn latency instrumentation (monotonic via performance.now()) ─────
   private turnIndex = 0;
@@ -966,6 +971,14 @@ export class OrchestrationPipeline implements VoiceSession {
   /** Language the live streaming-STT session was last switched to via an
    *  explicit caller request (loop guard for switchStreamSTTLanguage). */
   private streamSTTLang: string | null = null;
+  /** Language last applied to TTS via setLanguage (Cartesia/Sarvam). Prevents
+   *  reconnect-loop spam and keeps TTS in sync with currentLang mid-call. */
+  private ttsLang: string | null = null;
+  /** Consecutive-detection guard for mid-call language flips (same idea as STT).
+   *  A single stray STT language_code / script mis-detect must not thrash TTS
+   *  (calls 4852/4853: ta↔hi↔bn within one call). Explicit latch bypasses this. */
+  private _pendingLangConfirm: string = "";
+  private _pendingLangConfirmCount: number = 0;
 
   // Repetition guard (call 548): the last spoken assistant line + how many times
   // in a row the model has repeated itself. Used by the per-turn anti-repeat nudge
@@ -1134,6 +1147,51 @@ export class OrchestrationPipeline implements VoiceSession {
     }
   }
 
+  private fragmentCoalesceHoldMs(): number {
+    return (this.isPlaying || this.isSendingTtsAudio)
+      ? (this.agent.fragmentCoalescePlayingMs ?? FRAGMENT_COALESCE_MS_DEFAULT)
+      : (this.agent.fragmentCoalesceListeningMs ?? FRAGMENT_COALESCE_LISTENING_MS_DEFAULT);
+  }
+
+  /** Hold / re-arm a short STT fragment so a follow-up final can merge. */
+  private armFragmentCoalesce(text: string, holdMs?: number): void {
+    const ms = holdMs ?? this.fragmentCoalesceHoldMs();
+    if (ms <= 0) return;
+    if (this._fragmentCoalesce) clearTimeout(this._fragmentCoalesce.timer);
+    this._fragmentCoalesce = {
+      text,
+      timer: setTimeout(() => this.flushFragmentCoalesce(), ms),
+    };
+  }
+
+  private flushFragmentCoalesce(): void {
+    const pending = this._fragmentCoalesce?.text;
+    this._fragmentCoalesce = null;
+    if (!pending || this.closed) return;
+    // Call 4856: coalesce timer fired between "Yes Ma'am" and "how are you?" —
+    // caller VAD had already restarted. Defer until speech_end.
+    if (this.interruptionMgr.isCalleeSpeaking()) {
+      logger.info(
+        { callId: this.config.callId, fragment: pending.slice(0, 80) },
+        "STT fragment coalesce deferred — caller still speaking",
+      );
+      this.armFragmentCoalesce(pending);
+      return;
+    }
+    if (
+      (this.isPlaying || this.isSendingTtsAudio)
+      && isBackchannelOnlyUtterance(pending)
+    ) {
+      this.logDiscardedTranscript(pending, "backchannel_during_playback");
+      logger.info(
+        { callId: this.config.callId, fragment: pending.slice(0, 80) },
+        "Held ack fragment dropped — agent speaking at coalesce-timer fire",
+      );
+      return;
+    }
+    void this.handleStreamingTranscript(pending, Date.now(), "coalesced_fragment");
+  }
+
   private isEnglishStrictAckMode(): boolean {
     return this.requestedLangLatch === "en-IN" || this.requestedLangLatch === "en-US";
   }
@@ -1256,6 +1314,17 @@ export class OrchestrationPipeline implements VoiceSession {
   private handleSttSpeechResumed(): void {
     if (this.isPlaying || this.bargeInRequested) return;
     this.clearEagerPartialTimer();
+    // Still holding an ack fragment — caller kept talking; extend the merge window
+    // so we don't flush "Yes Ma'am" before "how are you?" (call 4856 zigzag).
+    if (this._fragmentCoalesce) {
+      const held = this._fragmentCoalesce.text;
+      this.armFragmentCoalesce(held);
+      logger.info(
+        { callId: this.config.callId, fragment: held.slice(0, 80) },
+        "STT fragment coalesce extended — caller resumed speaking",
+      );
+      return;
+    }
     if (this._specLlmState && !this.isProcessing) {
       this._specLlmState.aborted = true;
       this._specLlmState = null;
@@ -1319,7 +1388,15 @@ export class OrchestrationPipeline implements VoiceSession {
         metadata: { event: "VAD Speech Start" },
       });
       this.armVadFlushBackstop();
-      this.interruptionMgr.onUserSpeechStart();
+      // Carrier echo of our own TTS often trips Sarvam VAD. Marking calleeSpeaking
+      // during agent playback with no transcript evidence gates outbound audio
+      // (WAIT) and aborts drain mid-sentence with a fake "Playback Completed"
+      // (calls 4852/4853). Real barge-in still works via energy + streaming STT
+      // word evidence; once words arrive we mark speaking normally.
+      const agentAudioLive = this.isPlaying || this.isSendingTtsAudio;
+      if (!(agentAudioLive && this.streamingBargeInWordCount === 0)) {
+        this.interruptionMgr.onUserSpeechStart();
+      }
       this.handleSttSpeechResumed();
     };
   }
@@ -1740,6 +1817,9 @@ export class OrchestrationPipeline implements VoiceSession {
       ? JSON.stringify({
           ...parseJsonObject(providerExtraConfig),
           mode: resolveSarvamSttMode(sttCfg.language, this.agent.sarvamSttMode),
+          highVadSensitivity: this.agent.sarvamHighVadSensitivity,
+          speechEndFlushMs: this.agent.sarvamSpeechEndFlushMs,
+          incompleteHoldMs: this.agent.sarvamIncompleteHoldMs,
         })
       : providerExtraConfig;
     this.stt = createSTTAdapter(
@@ -1777,13 +1857,22 @@ export class OrchestrationPipeline implements VoiceSession {
       ? (this.agent.initialLanguage ?? null)   // returning-caller preference only
       : agentLanguage;                          // strict mode: always lock from config
     if (seedLang) this.currentLang = seedLang;
+    // Prefer the live conversation language (seed / auto-detect memory) over a
+    // stale agent.language so Cartesia/Sarvam start with the right tag — call
+    // 4845 logged language:null on every Tamil synth because agentLanguage was
+    // unset while STT was en-IN.
+    const ttsLanguage = this.currentLang || agentLanguage;
     const ttsExtraConfig = this.agent.ttsProvider === "sarvam"
-      ? JSON.stringify({ language: agentLanguage ?? "en-IN" })
+      ? JSON.stringify({
+          language: ttsLanguage ?? "en-IN",
+          enable_preprocessing: this.agent.sarvamIndicNumbers !== false,
+        })
       : (keys.get(`${this.agent.ttsProvider}:extraConfig`) ?? null);
     this.tts = createTTSAdapter(
       this.agent.ttsProvider, ttsKey, this.agent.ttsVoice, this.agent.ttsModel,
-      ttsExtraConfig, agentLanguage, this.agent.ttsSpeed
+      ttsExtraConfig, ttsLanguage, this.agent.ttsSpeed
     );
+    if (ttsLanguage) this.ttsLang = ttsLanguage;
     // Pre-warm any persistent TTS connections (e.g. Cartesia WebSocket) so the
     // greeting doesn't pay the TCP+TLS+WS handshake cost on its first synthesis.
     this.tts.warmup?.();
@@ -2338,6 +2427,8 @@ export class OrchestrationPipeline implements VoiceSession {
             );
           }
           this.requestedLangLatch = requested;
+          this._pendingLangConfirm = "";
+          this._pendingLangConfirmCount = 0;
           // Explicit requests (including English) hot-swap STT immediately so
           // the stream transcribes in the requested script (call 1881 fix).
           this.maybeSwitchStreamingSttLang(requested, true);
@@ -2367,33 +2458,63 @@ export class OrchestrationPipeline implements VoiceSession {
         }
         detected = resolved.lang;
         if (detected) {
-          if (detected !== this.currentLang) {
-            logger.info(
-              { callId: this.config.callId, from: this.currentLang, to: detected, text: transcript.slice(0, 60) },
-              "Auto-detect: caller language switch detected",
-            );
-            // Capture the switch so processTurn() can annotate the history entry.
-            // Only set when there is a real prior language (not first-turn cold-start).
-            if (this.currentLang) {
-              this._langSwitchThisTurn = { from: this.currentLang, to: detected };
+          const explicitLatch = !!requested && requested === detected;
+          const coldStart = !this.currentLang;
+          let commitLang = coldStart || explicitLatch || detected === this.currentLang;
+          if (!commitLang) {
+            if (detected === this._pendingLangConfirm) {
+              this._pendingLangConfirmCount++;
+            } else {
+              this._pendingLangConfirm = detected;
+              this._pendingLangConfirmCount = 1;
+            }
+            // Require 2 consecutive agreeing finals before flipping mid-call.
+            commitLang = this._pendingLangConfirmCount >= 2;
+            if (!commitLang) {
+              logger.info(
+                {
+                  callId: this.config.callId,
+                  held: this.currentLang,
+                  pending: detected,
+                  count: this._pendingLangConfirmCount,
+                  text: transcript.slice(0, 60),
+                },
+                "Auto-detect: language flip held pending consecutive confirmation",
+              );
             }
           }
-          this.currentLang = detected;
-          if (!detected.startsWith("en-")) {
-            this.lastNonEnglishLang = detected;
-            // Non-English STT switch (immediate on turn 1 so old script doesn't mangled new language).
-            if (!this.requestedLangLatch?.startsWith("en-")) {
-              this.maybeSwitchStreamingSttLang(detected, true);
+          if (commitLang) {
+            this._pendingLangConfirm = "";
+            this._pendingLangConfirmCount = 0;
+            if (detected !== this.currentLang) {
+              logger.info(
+                { callId: this.config.callId, from: this.currentLang, to: detected, text: transcript.slice(0, 60) },
+                "Auto-detect: caller language switch detected",
+              );
+              // Capture the switch so processTurn() can annotate the history entry.
+              // Only set when there is a real prior language (not first-turn cold-start).
+              if (this.currentLang) {
+                this._langSwitchThisTurn = { from: this.currentLang, to: detected };
+              }
             }
-          } else {
-            // English STT hot-swap: keep ASR aligned when caller converses in English.
-            const enTarget = this.requestedLangLatch?.startsWith("en-")
-              ? this.requestedLangLatch
-              : detected;
-            if (this.requestedLangLatch?.startsWith("en-")) {
-              this.maybeSwitchStreamingSttLang(enTarget, true);
-            } else if (this.agent.autoSwitchToEnglish) {
-              this.maybeSwitchStreamingSttLang(enTarget);
+            this.currentLang = detected;
+            this.syncTtsLanguage(detected);
+            if (!detected.startsWith("en-")) {
+              this.lastNonEnglishLang = detected;
+              // Non-English STT switch (immediate on turn 1 so old script doesn't mangled new language).
+              if (!this.requestedLangLatch?.startsWith("en-")) {
+                this.maybeSwitchStreamingSttLang(detected, true);
+              }
+            } else {
+              // English STT hot-swap: keep ASR aligned when caller converses in English.
+              const enTarget = this.requestedLangLatch?.startsWith("en-")
+                ? this.requestedLangLatch
+                : detected;
+              if (this.requestedLangLatch?.startsWith("en-")) {
+                this.maybeSwitchStreamingSttLang(enTarget, true);
+              } else if (this.agent.autoSwitchToEnglish) {
+                this.maybeSwitchStreamingSttLang(enTarget);
+              }
             }
           }
         }
@@ -2416,7 +2537,10 @@ export class OrchestrationPipeline implements VoiceSession {
             );
           }
           this.requestedLangLatch = requested;
+          this._pendingLangConfirm = "";
+          this._pendingLangConfirmCount = 0;
           this.currentLang = requested;
+          this.syncTtsLanguage(requested);
           this.maybeSwitchStreamingSttLang(requested, true);
         }
       }
@@ -2443,50 +2567,27 @@ export class OrchestrationPipeline implements VoiceSession {
         //     actual ANSWER to the agent's question. Holding 2s here reads as
         //     dead air on every short reply (call-4831 "Okay." turn), so release
         //     after a short merge window instead.
-        const holdMs = (this.isPlaying || this.isSendingTtsAudio)
-          ? FRAGMENT_COALESCE_MS
-          : FRAGMENT_COALESCE_LISTENING_MS;
-        this._fragmentCoalesce = {
-          text: transcript,
-          timer: setTimeout(() => {
-            const pending = this._fragmentCoalesce?.text;
-            this._fragmentCoalesce = null;
-            if (!pending || this.closed) return;
-            // Context re-check at fire time (review finding): the hold was armed
-            // under one playback phase but may fire in another. If the agent is
-            // NOW speaking and the held text is a pure ack ("okay"/"சரி"), it was
-            // a true backchannel — promoting it to a turn would wrongly barge the
-            // agent. Drop it instead of processing with stale context.
-            if (
-              (this.isPlaying || this.isSendingTtsAudio)
-              && isBackchannelOnlyUtterance(pending)
-            ) {
-              this.logDiscardedTranscript(pending, "backchannel_during_playback");
-              logger.info(
-                { callId: this.config.callId, fragment: pending.slice(0, 80) },
-                "Held ack fragment dropped — agent speaking at coalesce-timer fire",
-              );
-              return;
-            }
-            void this.handleStreamingTranscript(pending, Date.now(), "coalesced_fragment");
-          }, holdMs),
-        };
-        logger.info(
-          { callId: this.config.callId, fragment: transcript.slice(0, 80), holdMs },
-          "STT fragment coalesce hold — awaiting follow-up final",
-        );
-        this.logDiscardedTranscript(transcript, "fragment_coalesce_hold");
-        this.safetyNet.onFinal();
-        this.clearEagerPartialTimer();
-        // Drop any speculative LLM started on the filler-only partial — the
-        // coalesced follow-up (or flush) will launch a fresh turn.
-        if (this._specLlmState && !this.isProcessing) {
-          this._specLlmState.aborted = true;
-          this._specLlmState = null;
+        const holdMs = this.fragmentCoalesceHoldMs();
+        if (holdMs > 0) {
+          this.armFragmentCoalesce(transcript, holdMs);
+          logger.info(
+            { callId: this.config.callId, fragment: transcript.slice(0, 80), holdMs },
+            "STT fragment coalesce hold — awaiting follow-up final",
+          );
+          this.logDiscardedTranscript(transcript, "fragment_coalesce_hold");
+          this.safetyNet.onFinal();
+          this.clearEagerPartialTimer();
+          // Drop any speculative LLM started on the filler-only partial — the
+          // coalesced follow-up (or flush) will launch a fresh turn.
+          if (this._specLlmState && !this.isProcessing) {
+            this._specLlmState.aborted = true;
+            this._specLlmState = null;
+          }
+          this.interruptionMgr.onUserSpeechEnd();
+          if (!this.closed) this.safetyNet.beginListening();
+          return;
         }
-        this.interruptionMgr.onUserSpeechEnd();
-        if (!this.closed) this.safetyNet.beginListening();
-        return;
+        // holdMs === 0: coalesce disabled via Latency Tuning UI — fall through.
       }
     } else if (this._fragmentCoalesce) {
       // Complete follow-up arrived while a fragment was held — merge, don't drop.
@@ -2605,6 +2706,12 @@ export class OrchestrationPipeline implements VoiceSession {
       ? baseSpokenResponse.slice(spokenResponse.length).trim()
       : baseSpokenResponse.trim();
     if (!remainder) return;
+    // Call 4856: barge before any paced audio left spokenResponse empty → we
+    // "resumed" the entire line from the start (glitchy double-speak). Only
+    // keep a true unheard *tail* after meaningful progress into the reply.
+    const spokenLen = spokenResponse.trim().length;
+    const minSpoken = Math.min(24, Math.max(12, Math.floor(baseSpokenResponse.length * 0.12)));
+    if (spokenLen < minSpoken) return;
     if (remainder.length > 400) remainder = remainder.slice(0, 400);
     this._bargedReplyRemainder = remainder;
     this._bargedReplyAt = Date.now();
@@ -2877,10 +2984,20 @@ export class OrchestrationPipeline implements VoiceSession {
     const isWebcallStreaming = !respectHoldUntil && this.config.telephonyProvider === "webcall";
 
     const now = Date.now();
+    // Without transcript evidence during live TTS, treat energy like the batch path:
+    // respect the extended bargeInHoldUntil so carrier echo of our own voice cannot
+    // fire a mid-sentence streaming_energy cut (call 4853: "One moment…" self-echo).
+    // Once streaming STT has real words, hold is skipped so callers can still interrupt.
+    const noSttEvidenceHold =
+      !respectHoldUntil
+      && this.isSendingTtsAudio
+      && this.streamingBargeInWordCount === 0
+      && now < this.bargeInHoldUntil;
     if (
       now < this.greetingEchoHoldUntil ||
       now < this.bargeInSentenceStartAt + this.bargeInEchoGraceMs ||
-      (respectHoldUntil && now < this.bargeInHoldUntil)
+      (respectHoldUntil && now < this.bargeInHoldUntil) ||
+      noSttEvidenceHold
     ) {
       // Echo grace: suppress (and reset) while our own freshly started audio may
       // still be echoing back. greetingEchoHoldUntil covers the full opening line
@@ -4445,36 +4562,48 @@ export class OrchestrationPipeline implements VoiceSession {
     const _pbStart = Date.now();
     const _pbTurn = job.turnNumber;
     logPlaybackEvent(this.logFn, "Playback Started", { provider: this.agent.ttsProvider, turnNumber: _pbTurn });
-    let _audioDurationMs: number | undefined;
+    let _pacedMs: number | undefined;
+    let _claimedMs: number | undefined;
     this.isSendingTtsAudio = true;
     try {
-      _audioDurationMs = await this.drainSentenceJob(job);
+      const drain = await this.drainSentenceJob(job);
+      _pacedMs = drain?.pacedMs;
+      _claimedMs = drain?.claimedMs ?? job.audioDurationMs;
     } finally {
       this.isSendingTtsAudio = false;
       if (this._activePlaybackText === job.text) {
         this._activePlaybackText = null;
         this._activePlaybackStartedAt = null;
       }
-      const noAudioSent = _audioDurationMs === undefined;
+      const noAudioSent = _pacedMs === undefined || _pacedMs <= 0;
+      const fullyPlayed =
+        !noAudioSent
+        && _claimedMs != null
+        && _claimedMs > 0
+        && _pacedMs! >= _claimedMs * 0.85;
       const _pbEvent: PlaybackEvent = this.closed
         ? "Playback Cancelled"
         : this.bargeInRequested
           ? "Playback Interrupted"
           : noAudioSent
             ? "Playback Cancelled"
-            : "Playback Completed";
+            : fullyPlayed
+              ? "Playback Completed"
+              : "Playback Interrupted";
       logPlaybackEvent(this.logFn, _pbEvent, {
         provider: this.agent.ttsProvider,
         turnNumber: _pbTurn,
         playbackDurationMs: Date.now() - _pbStart,
-        audioDurationMs: _audioDurationMs,
+        audioDurationMs: _pacedMs ?? _claimedMs,
         stopReason: this.closed
           ? "call_closed"
           : this.bargeInRequested
             ? "barge_in"
             : noAudioSent
               ? "audio_gated"
-              : "completed",
+              : fullyPlayed
+                ? "completed"
+                : "partial_emit",
       });
       // Accumulate fully-played sentences for the interruption hint. Only count
       // sentences that completed — a mid-sentence barge-in means the caller may
@@ -4736,9 +4865,12 @@ export class OrchestrationPipeline implements VoiceSession {
    * time. Downsampling, recording, ambient mixing, mulaw/PCM encoding, and
    * pacing all happen here, strictly in playback order — see
    * startSentenceSynthesis for why that ordering matters under prefetch.
-   * Returns the audio duration in milliseconds (from TTS bytes), or undefined.
+   * Returns paced vs claimed durations so playJob telemetry cannot claim
+   * "completed" when WAIT/BLOCK cut the drain short (calls 4852/4853).
    */
-  private async drainSentenceJob(job: TtsSentenceJob): Promise<number | undefined> {
+  private async drainSentenceJob(
+    job: TtsSentenceJob,
+  ): Promise<{ pacedMs: number; claimedMs?: number } | undefined> {
     if (job.sequenceId === FILLER_SEQUENCE_ID && this._skipPendingFillerPlayback) return;
     if (this.bargeInRequested) return;
     if (!this.canEmitAudio(job.sequenceId)) {
@@ -4765,6 +4897,10 @@ export class OrchestrationPipeline implements VoiceSession {
     // per-sentence 600 ms echo grace (bargeInSentenceStartAt + bargeInEchoGraceMs)
     // instead of the extended `bargeInHoldUntil` that protects the batch STT path.
     this.bargeInSentenceStartAt = Date.now();
+
+    /** Wire bytes actually sent (mulaw or PCM8k) — source of truth for pacedMs. */
+    let bytesSent = 0;
+    const noteSent = (chunk: Buffer) => { bytesSent += chunk.length; };
 
     if (job.streaming) {
       // Producer-consumer pacing: pcm16k blocks buffered by startSentenceSynthesis
@@ -4809,11 +4945,26 @@ export class OrchestrationPipeline implements VoiceSession {
       // Without this, late-firing timers cause VoBiz's playout buffer to underrun
       // (gaps/glitches) because audio delivery slows below real-time.
       let nextTick = Date.now() + 20;
-      while (!this.closed && !this.bargeInRequested && this.canEmitAudio(job.sequenceId)) {
+      while (!this.closed && !this.bargeInRequested) {
+        const emitStatus = this.interruptionMgr.getAudioSendStatus(
+          job.sequenceId,
+          this.conversationHistory.length,
+        );
+        if (emitStatus === "BLOCK" || !this.interruptionMgr.isValidSequence(job.sequenceId)) {
+          break;
+        }
+        if (emitStatus === "WAIT") {
+          // Pause — do NOT treat WAIT as completion (that produced fake
+          // "Playback Completed" when echo VAD set calleeSpeaking).
+          const ok = await this.waitForAudioEmit(job.sequenceId, 5_000);
+          if (!ok || this.bargeInRequested || this.closed) break;
+          nextTick = Date.now() + 20;
+          continue;
+        }
+
         if (wireQueue.length === 0) processNextBlock();
         if (wireQueue.length > 0) {
           const chunk = wireQueue.shift()!;
-          if (!this.canEmitAudio(job.sequenceId)) break;
           // Ambient mixing only applies to mulaw output; skip when sending raw PCM
           // (raw PCM is already ambient-mixed above, at real "now", per block).
           const outChunk = (!this.config.rawPcmOutput && this.ambientStream)
@@ -4824,6 +4975,7 @@ export class OrchestrationPipeline implements VoiceSession {
           this.markFirstAudioSent();
           if (this._tTurnFirstAudioOut === null) this._tTurnFirstAudioOut = performance.now();
           this.config.onAudioOut(outChunk);
+          noteSent(outChunk);
           this.lastTtsFrameAt = Date.now(); // mark real audio out for the keepalive watchdog
           // NOTE: do NOT re-arm the echo-grace window per chunk here (see armTailEchoGrace).
           // If TTS is already done and this was the last queued chunk, break
@@ -4847,7 +4999,12 @@ export class OrchestrationPipeline implements VoiceSession {
       // playback exited early via barge-in/close.
       await job.ready;
       if (job.synthError) throw job.synthError;
-      return job.audioDurationMs;
+      if (bytesSent <= 0) return undefined;
+      const bytesPerMs = this.config.rawPcmOutput ? 16 : 8; // 8kHz s16le vs mulaw
+      return {
+        pacedMs: Math.round(bytesSent / bytesPerMs),
+        claimedMs: job.audioDurationMs,
+      };
     } else {
       await job.ready;
       if (job.synthError) throw job.synthError;
@@ -4859,7 +5016,7 @@ export class OrchestrationPipeline implements VoiceSession {
       const ttsPcm16k = job.nonStreamAudio!;
       const ttsPcm8k = downsample16to8(ttsPcm16k);
       this.recording.addAgentChunk(ttsPcm8k);
-      const _audioDurationMs = Math.round((ttsPcm16k.length / 2 / 16000) * 1000);
+      const claimedMs = Math.round((ttsPcm16k.length / 2 / 16000) * 1000);
       if (this.config.rawPcmOutput) {
         // Mix ambient under speech at 16 kHz (mixIntoPcm16k's native rate) then
         // downsample to the 8 kHz raw-PCM web output. When ambient is disabled
@@ -4869,10 +5026,22 @@ export class OrchestrationPipeline implements VoiceSession {
           : ttsPcm8k;
         const PCM_CHUNK = CHUNK_SIZE_MULAW * 2; // 320 bytes = 20ms @ 8kHz 16-bit
         for (let i = 0; i < out8k.length; i += PCM_CHUNK) {
-          if (this.closed || this.bargeInRequested || !this.canEmitAudio(job.sequenceId)) break;
-          if (!this.interruptionMgr.isValidSequence(job.sequenceId)) break;
+          if (this.closed || this.bargeInRequested) break;
+          const emitStatus = this.interruptionMgr.getAudioSendStatus(
+            job.sequenceId,
+            this.conversationHistory.length,
+          );
+          if (emitStatus === "BLOCK" || !this.interruptionMgr.isValidSequence(job.sequenceId)) break;
+          if (emitStatus === "WAIT") {
+            const ok = await this.waitForAudioEmit(job.sequenceId, 5_000);
+            if (!ok || this.bargeInRequested || this.closed) break;
+            i -= PCM_CHUNK; // retry this chunk after WAIT clears
+            continue;
+          }
           this.markFirstAudioSent();
-          this.config.onAudioOut(out8k.slice(i, i + PCM_CHUNK));
+          const slice = out8k.slice(i, i + PCM_CHUNK);
+          this.config.onAudioOut(slice);
+          noteSent(slice);
           this.lastTtsFrameAt = Date.now(); // mark real audio out for the keepalive watchdog
           // Do NOT re-arm echo grace per chunk (see the drain-loop note above):
           // the start grace + tail grace bound the self-echo window. A per-chunk
@@ -4886,12 +5055,23 @@ export class OrchestrationPipeline implements VoiceSession {
       } else {
         const ttsMusaw = encodeMulaw(ttsPcm8k);
         for (let i = 0; i < ttsMusaw.length; i += CHUNK_SIZE_MULAW) {
-          if (this.closed || this.bargeInRequested || !this.canEmitAudio(job.sequenceId)) break;
-          if (!this.interruptionMgr.isValidSequence(job.sequenceId)) break;
+          if (this.closed || this.bargeInRequested) break;
+          const emitStatus = this.interruptionMgr.getAudioSendStatus(
+            job.sequenceId,
+            this.conversationHistory.length,
+          );
+          if (emitStatus === "BLOCK" || !this.interruptionMgr.isValidSequence(job.sequenceId)) break;
+          if (emitStatus === "WAIT") {
+            const ok = await this.waitForAudioEmit(job.sequenceId, 5_000);
+            if (!ok || this.bargeInRequested || this.closed) break;
+            i -= CHUNK_SIZE_MULAW;
+            continue;
+          }
           this.markFirstAudioSent();
           const chunk = ttsMusaw.slice(i, i + CHUNK_SIZE_MULAW);
           const outChunk = this.ambientStream ? this.ambientStream.mixIntoMulaw(chunk) : chunk;
           this.config.onAudioOut(outChunk);
+          noteSent(outChunk);
           this.lastTtsFrameAt = Date.now(); // mark real audio out for the keepalive watchdog
           // Do NOT re-arm echo grace per chunk (see the drain-loop note above):
           // start grace + tail grace bound the self-echo window; a per-chunk
@@ -4902,7 +5082,12 @@ export class OrchestrationPipeline implements VoiceSession {
           }
         }
       }
-      return _audioDurationMs;
+      if (bytesSent <= 0) return undefined;
+      const bytesPerMs = this.config.rawPcmOutput ? 16 : 8;
+      return {
+        pacedMs: Math.round(bytesSent / bytesPerMs),
+        claimedMs,
+      };
     }
   }
 
@@ -5041,6 +5226,22 @@ export class OrchestrationPipeline implements VoiceSession {
       await this.executeWebhookTool(tool, args);
     } else if (tool.type === "send_sms") {
       await this.executeSendSms(tool, args);
+    } else if (tool.type === "send_email") {
+      return await sharedExecuteSendEmail({
+        agentId: this.agent.id,
+        callId: this.config.callId,
+        agentName: this.agent.name,
+        callerPhone: this.config.callerPhone,
+        args,
+      });
+    } else if (tool.type === "send_whatsapp") {
+      return await sharedExecuteSendWhatsapp({
+        agentId: this.agent.id,
+        callId: this.config.callId,
+        agentName: this.agent.name,
+        callerPhone: this.config.callerPhone,
+        args,
+      });
     } else if (tool.type === "end_call") {
       await this.executeEndCall(tool);
     } else if (tool.type === "cal_com") {
@@ -5636,9 +5837,7 @@ export class OrchestrationPipeline implements VoiceSession {
         delayMs = Math.round((plan.onNoPunctuationSeconds ?? 0) * 1000);
       }
       delayMs += Math.round((plan.waitSeconds ?? 0) * 1000);
-      // Safety cap: never stall the LLM for more than 300 ms regardless of agent config.
-      // Values above this add dead air with no perceptible naturalness benefit.
-      delayMs = Math.min(delayMs, 300);
+      // Honor Latency Tuning UI values as-is (schema max 5s). No silent hard cap.
       if (delayMs > 0 && !this.bargeInRequested) {
         await new Promise<void>((r) => setTimeout(r, delayMs));
       }
@@ -6064,10 +6263,11 @@ export class OrchestrationPipeline implements VoiceSession {
         const freq = Math.max(0, Math.min(1, baseFreq));
         if (Math.random() < freq) {
           // Strict, language-based fillers only — no cross-language fallback.
-          const pool = getBackchannelFillers(fillerLang, this.backchannelFillerOpts());
+          const fillerOpts = this.backchannelFillerOpts(transcript);
+          const pool = getBackchannelFillers(fillerLang, fillerOpts);
           if (pool.length > 0) {
-            const phrase = pickBackchannelFiller(fillerLang, this.lastFillerPhrase, this.backchannelFillerOpts())!;
-            this.lastFillerPhrase = phrase;
+            const phrase = pickBackchannelFiller(fillerLang, this.recentFillerPhrases, fillerOpts)!;
+            rememberFillerPhrase(this.recentFillerPhrases, phrase);
             logger.info(
               {
                 callId: this.config.callId,
@@ -6538,8 +6738,9 @@ export class OrchestrationPipeline implements VoiceSession {
             );
             return;
           }
-          const pool = getBackchannelFillers(fillerLang, this.backchannelFillerOpts());
-          const phrase = pickBackchannelFiller(fillerLang, this.lastFillerPhrase, this.backchannelFillerOpts());
+          const fillerOpts = this.backchannelFillerOpts(transcript);
+          const pool = getBackchannelFillers(fillerLang, fillerOpts);
+          const phrase = pickBackchannelFiller(fillerLang, this.recentFillerPhrases, fillerOpts);
           if (!phrase) {
             logger.info(
               {
@@ -6553,6 +6754,7 @@ export class OrchestrationPipeline implements VoiceSession {
             );
             return;
           }
+          rememberFillerPhrase(this.recentFillerPhrases, phrase);
           logger.info(
             {
               callId: this.config.callId,
@@ -6566,7 +6768,6 @@ export class OrchestrationPipeline implements VoiceSession {
             "Dead-air filler enqueued (language-aware, LLM > filler threshold)",
           );
           enqueue(phrase, FILLER_SEQUENCE_ID);
-          this.lastFillerPhrase = phrase;
           this._deadAirFillerEnqueuedAt = Date.now();
           this.fillerPlayedCount++;
           this._fillerPlayedThisTurn = true;
@@ -7483,6 +7684,30 @@ export class OrchestrationPipeline implements VoiceSession {
   }
 
   /**
+   * Keep Cartesia/Sarvam TTS language tags aligned with currentLang. Without
+   * this, auto-detect updates STT+LLM while TTS keeps speaking Tamil text with
+   * language:null or the call-start English tag (call 4845).
+   */
+  private syncTtsLanguage(lang: string): void {
+    if (!lang) return;
+    if (!this.tts.setLanguage) return;
+    if (this.ttsLang === lang) return;
+    try {
+      this.tts.setLanguage(lang);
+      this.ttsLang = lang;
+      logger.info(
+        { callId: this.config.callId, lang, provider: this.agent.ttsProvider },
+        "TTS language switched",
+      );
+    } catch (err) {
+      logger.warn(
+        { callId: this.config.callId, lang, err },
+        "TTS language switch failed — keeping current TTS language",
+      );
+    }
+  }
+
+  /**
    * Passive or explicit streaming-STT language switch with consecutive-detection
    * guard (2 finals) unless `immediate` (explicit caller language request).
    */
@@ -8171,32 +8396,7 @@ export class OrchestrationPipeline implements VoiceSession {
    * call on a mid-conversation polite acknowledgment.
    */
   private isCallerFarewellUtterance(transcript: string): boolean {
-    // Normalise: keep Tamil + lowercase Latin, strip punctuation
-    const t = transcript
-      .toLowerCase()
-      .replace(/[^\u0B80-\u0BFFa-z\s]/g, "")
-      .trim();
-    if (t.length === 0 || t.length > 60) return false;
-
-    // Pure bye/goodbye — unambiguous regardless of surrounding fillers
-    if (/\b(bye|byee|bye\s*bye|goodbye|good\s*bye|cya|tata|tatata)\b/.test(t)) return true;
-
-    // "thank you" / "thanks" — only when the ENTIRE utterance (after stripping
-    // address terms and common intensifiers) IS the thank-you itself.  This
-    // prevents "thank you, now let me ask…" from ending the call mid-sentence.
-    const stripped = t
-      .replace(
-        /\b(sir|madam|maam|please|ok|okay|so|much|very|lot|again|alright|great|nice|fine)\b/g,
-        "",
-      )
-      .replace(/\s+/g, " ")
-      .trim();
-    if (/^(thank\s*you|thanks|thankyou|thank\s*u)$/.test(stripped)) return true;
-
-    // Tamil farewells: நன்றி (thank you)
-    if (/நன்றி/.test(t)) return true;
-
-    return false;
+    return isCallerFarewellUtteranceShared(transcript);
   }
 
   /**
@@ -8220,7 +8420,9 @@ export class OrchestrationPipeline implements VoiceSession {
       ? FRAME_MS * 8 * 2   // 20 ms × 8000 Hz × 2 bytes  = 320 B (16-bit PCM)
       : FRAME_MS * 8;      // 20 ms × 8000 Hz × 1 byte   = 160 B (µ-law)
     const silenceFrame  = Buffer.alloc(FRAME_BYTES, 0);
-    const frames        = Math.ceil(TELEPHONY_TAIL_DRAIN_MS / FRAME_MS);
+    const frames        = Math.ceil(
+      (this.agent.telephonyTailDrainMs ?? TELEPHONY_TAIL_DRAIN_MS_DEFAULT) / FRAME_MS,
+    );
     let nextTick        = Date.now() + FRAME_MS;
     for (let i = 0; i < frames && !this.closed && !this.bargeInRequested; i++) {
       // When ambient is enabled, carry the ambient bed through the drain window
@@ -8457,7 +8659,7 @@ function buildLangRequestSpec(code: string, mention: RegExp, roman: string[]): L
 
 /** All languages the multilingual toggle supports for explicit switch requests. */
 const LANG_REQUEST_SPECS: LangRequestSpec[] = [
-  buildLangRequestSpec("en-IN", /\b(english|inglish)\b|\bangre[jz]i\b|अंग्रेज़ी|अंग्रेजी|ஆங்கில|இங்கிலிஷ|ఇంగ్లీష|ইংরেজি|انگریزی/iu, ["english", "inglish", "angrezi", "angreji"]),
+  buildLangRequestSpec("en-IN", /\b(english|inglish)\b|\bangre[jz]i\b|अंग्रेज़ी|अंग्रेजी|ஆங்கில|இங்கிலீ?ஷ்?|இங்கிலிஷ்?|இங்கில|ఇంగ్లీష|ইংরেজি|انگریزی/iu, ["english", "inglish", "angrezi", "angreji"]),
   buildLangRequestSpec("hi-IN", /\bhindi\b|हिन्दी|हिंदी|ஹிந்தி|இந்தி|ہندی/iu, ["hindi"]),
   buildLangRequestSpec("ta-IN", /\b(tamil|thamizh|tamizh)\b|தமிழ|तमिल|తమిళ/iu, ["tamil", "thamizh", "tamizh"]),
   buildLangRequestSpec("te-IN", /\btelugu\b|తెలుగు|तेलुगु|தெலுங்கு/iu, ["telugu"]),

@@ -20,8 +20,16 @@ export const PHONE_RENEWAL_BASE_PAISE = 70_000;
 /** Flat ₹5 / minute platform fee */
 export const RATE_PAISE_PER_MIN = 500;
 
-/** Minimum wallet top-up credit (₹100) */
+/** Minimum wallet top-up credit (₹100) — regular accounts */
 export const MIN_TOPUP_PAISE = 10_000;
+
+/** Minimum wallet top-up credit for active partner (reseller) owners (₹5,000) */
+export const MIN_PARTNER_TOPUP_PAISE = 500_000;
+
+/** Minimum top-up in paise for the given account type */
+export function minTopupPaiseForUser(isPartner: boolean): number {
+  return isPartner ? MIN_PARTNER_TOPUP_PAISE : MIN_TOPUP_PAISE;
+}
 
 /** Autopay defaults */
 export const AUTOPAY_THRESHOLD_PAISE = 10_000; // ₹100

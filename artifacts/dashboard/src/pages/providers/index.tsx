@@ -54,10 +54,10 @@ interface ProviderDef {
 
 const SUPPORTED_PROVIDERS: Record<string, ProviderDef[]> = {
   asr: [
+    { label: "Sarvam AI (recommended)", value: "sarvam", apiKeyLabel: "API Key", apiKeyPlaceholder: "Paste your Sarvam key…", docsUrl: "https://dashboard.sarvam.ai", docsLabel: "dashboard.sarvam.ai" },
     { label: "Deepgram", value: "deepgram", apiKeyLabel: "API Key", apiKeyPlaceholder: "Paste your Deepgram key…", docsUrl: "https://console.deepgram.com", docsLabel: "console.deepgram.com" },
     { label: "Azure Speech", value: "azure", apiKeyLabel: "Speech Key", apiKeyPlaceholder: "Paste your Azure Speech key…", docsUrl: "https://portal.azure.com", docsLabel: "portal.azure.com", extraFields: [{ key: "region", label: "Region", placeholder: "e.g. eastus", hint: "Azure region where your speech resource is deployed" }] },
     { label: "AssemblyAI", value: "assemblyai", apiKeyLabel: "API Key", apiKeyPlaceholder: "v2-…", docsUrl: "https://www.assemblyai.com/app", docsLabel: "assemblyai.com" },
-    { label: "Sarvam AI", value: "sarvam", apiKeyLabel: "API Key", apiKeyPlaceholder: "Paste your Sarvam key…", docsUrl: "https://dashboard.sarvam.ai", docsLabel: "dashboard.sarvam.ai" },
     { label: "Cartesia", value: "cartesia", apiKeyLabel: "API Key", apiKeyPlaceholder: "Paste your Cartesia key…", docsUrl: "https://play.cartesia.ai/keys", docsLabel: "play.cartesia.ai" },
   ],
   llm: [
@@ -65,12 +65,12 @@ const SUPPORTED_PROVIDERS: Record<string, ProviderDef[]> = {
     { label: "Groq", value: "groq", apiKeyLabel: "API Key", apiKeyPlaceholder: "gsk_…", docsUrl: "https://console.groq.com/keys", docsLabel: "console.groq.com" },
   ],
   tts: [
-    { label: "ElevenLabs", value: "elevenlabs", apiKeyLabel: "API Key", apiKeyPlaceholder: "sk_…", docsUrl: "https://elevenlabs.io/app/settings/api-keys", docsLabel: "elevenlabs.io" },
+    { label: "Sarvam AI (recommended)", value: "sarvam", apiKeyLabel: "API Key", apiKeyPlaceholder: "Paste your Sarvam key…", docsUrl: "https://dashboard.sarvam.ai", docsLabel: "dashboard.sarvam.ai" },
     { label: "Cartesia (Sonic)", value: "cartesia", apiKeyLabel: "API Key", apiKeyPlaceholder: "Paste your Cartesia key…", docsUrl: "https://play.cartesia.ai/keys", docsLabel: "play.cartesia.ai" },
+    { label: "ElevenLabs", value: "elevenlabs", apiKeyLabel: "API Key", apiKeyPlaceholder: "sk_…", docsUrl: "https://elevenlabs.io/app/settings/api-keys", docsLabel: "elevenlabs.io" },
     { label: "OpenAI TTS", value: "openai", apiKeyLabel: "API Key", apiKeyPlaceholder: "sk-…", docsUrl: "https://platform.openai.com/api-keys", docsLabel: "platform.openai.com" },
     { label: "AWS Polly", value: "aws_polly", apiKeyLabel: "Access Key", apiKeyPlaceholder: "AKIA…", docsUrl: "https://console.aws.amazon.com/iam", docsLabel: "console.aws.amazon.com" },
     { label: "Azure TTS", value: "azure", apiKeyLabel: "Speech Key", apiKeyPlaceholder: "Paste your Azure Speech key…", docsUrl: "https://portal.azure.com", docsLabel: "portal.azure.com" },
-    { label: "Sarvam AI", value: "sarvam", apiKeyLabel: "API Key", apiKeyPlaceholder: "Paste your Sarvam key…", docsUrl: "https://dashboard.sarvam.ai", docsLabel: "dashboard.sarvam.ai" },
   ],
   telephony: [
     { label: "Twilio", value: "twilio", apiKeyLabel: "Auth Token", apiKeyPlaceholder: "Paste your Twilio Auth Token…", docsUrl: "https://console.twilio.com", docsLabel: "console.twilio.com", extraFields: [{ key: "accountSid", label: "Account SID", placeholder: "ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", hint: "Found on your Twilio console home page" }, { key: "fromNumber", label: "Twilio Phone Number", placeholder: "+1234567890", hint: "The phone number you bought on Twilio (E.164 format)" }] },
@@ -263,6 +263,9 @@ export default function ProvidersList() {
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/50 mb-1.5">Build</p>
           <h1 className="text-[18px] font-semibold tracking-tight text-foreground leading-none">Providers</h1>
+          <p className="text-xs text-muted-foreground mt-1">
+            SnapServe defaults to Sarvam for speech. Add your own keys for other providers anytime.
+          </p>
           <p className="text-[13px] mt-1.5 text-muted-foreground/60 max-w-[520px]">API keys for your voice AI services. Stored encrypted, never exposed.</p>
         </div>
         <button

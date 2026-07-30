@@ -122,17 +122,25 @@ export class DeepgramSTT implements STTAdapter {
 
     if (useSmartEndpointing) {
       // VAPI/LiveKit mode — use Deepgram's VAD utterance-end events (ML-based endpointing)
+      // Prefer Latency Tuning UI (endpointingSilenceMs) over legacy endOfTurnTimeout.
+      const utteranceEndMs = Math.min(
+        this.cfg.endpointingSilenceMs ?? this.cfg.endOfTurnTimeout,
+        5000,
+      );
       params.set("vad_events", "true");
-      params.set("utterance_end_ms", String(this.cfg.endOfTurnTimeout));
+      params.set("utterance_end_ms", String(utteranceEndMs));
       params.set("interim_results", "true");
       logger.info(
-        { mode: this.cfg.smartEndpointing, utterance_end_ms: this.cfg.endOfTurnTimeout },
+        { mode: this.cfg.smartEndpointing, utterance_end_ms: utteranceEndMs },
         "Deepgram: smart endpointing enabled (utterance_end_ms)"
       );
     } else {
       // Standard silence-based endpointing — Deepgram caps at 2000 ms;
       // values above 2000 cause the WS to close immediately.
-      const endpointing = Math.min(this.cfg.endOfTurnTimeout, 2000);
+      const endpointing = Math.min(
+        this.cfg.endpointingSilenceMs ?? this.cfg.endOfTurnTimeout,
+        2000,
+      );
       params.set("endpointing", String(endpointing));
     }
 

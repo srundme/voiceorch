@@ -40,6 +40,20 @@ export interface SendSmsTool {
   messageTemplate: string;
 }
 
+/** Mid-call email via the user's Email channel (managed SnapServe or BYO Brevo). */
+export interface SendEmailTool {
+  type: "send_email";
+  name: string;
+  description: string;
+}
+
+/** Mid-call WhatsApp via BYO BSP webhook or native Instant/Business channel. */
+export interface SendWhatsappTool {
+  type: "send_whatsapp";
+  name: string;
+  description: string;
+}
+
 export interface EndCallTool {
   type: "end_call";
   name: string;
@@ -176,51 +190,7 @@ export interface SquadFollowupTool {
   description: string;
 }
 
-/** Free-form image description — "what do you see?" */
-export interface VisionDescribeTool {
-  type: "vision_describe";
-  name: string;
-  description: string;
-  /** Vision provider to use. Defaults to agent visionConfig.defaultProvider */
-  provider?: "gemini" | "openai" | "sarvam" | "azure";
-  /** Custom prompt template. Supports {{caller_name}}, {{agent_goal}}, {{media_id}} */
-  promptTemplate?: string;
-}
-
-/** Structured field extraction — returns a JSON object matching the user-defined schema */
-export interface VisionExtractTool {
-  type: "vision_extract";
-  name: string;
-  description: string;
-  provider?: "gemini" | "openai" | "sarvam" | "azure";
-  promptTemplate?: string;
-  /** JSON Schema object describing the fields to extract */
-  outputSchema?: Record<string, unknown>;
-  /** If true, automatically save extracted data to the agent's custom database schema */
-  saveToDbSchemaId?: number;
-}
-
-/** Binary verification — "is this a valid X?" returns { valid, confidence, reason } */
-export interface VisionVerifyTool {
-  type: "vision_verify";
-  name: string;
-  description: string;
-  provider?: "gemini" | "openai" | "sarvam" | "azure";
-  promptTemplate?: string;
-}
-
-/** Compare two images — face match, before/after, document vs selfie */
-export interface VisionCompareTool {
-  type: "vision_compare";
-  name: string;
-  description: string;
-  provider?: "gemini" | "openai" | "sarvam" | "azure";
-  promptTemplate?: string;
-}
-
-export type VisionTool = VisionDescribeTool | VisionExtractTool | VisionVerifyTool | VisionCompareTool;
-
-export type AgentTool = CallTransferTool | WebhookTool | SendSmsTool | EndCallTool | CalComTool | NativeBookingTool | NativeRescheduleTool | NativeCancelTool | NativeCheckAvailabilityTool | NativeListBookingsTool | TransferColdTool | TransferWarmTool | TransferAgentTool | SquadFollowupTool | VisionDescribeTool | VisionExtractTool | VisionVerifyTool | VisionCompareTool;
+export type AgentTool = CallTransferTool | WebhookTool | SendSmsTool | SendEmailTool | SendWhatsappTool | EndCallTool | CalComTool | NativeBookingTool | NativeRescheduleTool | NativeCancelTool | NativeCheckAvailabilityTool | NativeListBookingsTool | TransferColdTool | TransferWarmTool | TransferAgentTool | SquadFollowupTool;
 
 /** JSON Schema-compatible tool definition passed to LLM providers */
 export interface ToolDefinition {
@@ -309,8 +279,10 @@ export interface AgentConfig {
   ttsProvider: string;
   ttsVoice: string | null;
   ttsModel: string | null;
-  /** Playback speed multiplier passed to providers that support it (Cartesia, ElevenLabs). 1.0 = normal, default. */
+  /** Playback speed multiplier passed to providers that support it (Cartesia, ElevenLabs, Sarvam pace). 1.0 = normal, default. */
   ttsSpeed: number;
+  /** Sarvam Bulbul: expand digits to spoken Indic forms. Default true. */
+  sarvamIndicNumbers: boolean;
   telephonyProvider: string;
 
   // Tier 1 — Conversation Behavior
@@ -435,14 +407,47 @@ export interface AgentConfig {
   stagedPromptCoreIdentity: string | null;
 
   // Latency tuning — exposed in agent builder UI
-  /** ms Azure waits after last spoken word before finalising (default 400). */
+  /**
+   * ms of silence after the caller's last word before STT finalizes the turn.
+   * Drives Azure segmentationSilenceTimeoutMs and Deepgram endpointing/utterance_end_ms.
+   */
   asrEndpointingSilenceMs: number;
   /** Cap LLM output tokens to reduce response latency. null = model default. */
   llmMaxTokens: number | null;
   /** Min chars before a comma-clause triggers an early TTS dispatch (default 15). */
   ttsMinSentenceChars: number;
-  /** Per-agent Sarvam STT mode. null = auto (en-IN → transcribe, Indic → codemix). */
+  /**
+   * Hold window (ms) for short ack/fragment STT finals while the agent is silent.
+   * 0 = disable coalesce when listening. Tuned via Latency Tuning UI.
+   */
+  fragmentCoalesceListeningMs: number;
+  /**
+   * Hold window (ms) for short ack/fragment STT finals while the agent is speaking
+   * (true backchannels). 0 = disable. Tuned via Latency Tuning UI.
+   */
+  fragmentCoalescePlayingMs: number;
+  /**
+   * Silence frames (ms) sent after the last TTS utterance so carriers don't clip
+   * the goodbye. Tuned via Latency Tuning UI.
+   */
+  telephonyTailDrainMs: number;
+  /** Per-agent Sarvam STT mode. null = auto (en → codemix, Indic → transcribe). */
   sarvamSttMode: string | null;
+  /**
+   * Sarvam WS `high_vad_sensitivity`. true ≈ 2 VAD frames (~128ms @8kHz silence
+   * boundary). false ≈ ~1s+ silence. Default true (snappy voice agents).
+   */
+  sarvamHighVadSensitivity: boolean;
+  /**
+   * ms to wait after Sarvam speech_end (or a complete transcript) before
+   * emitting the coalesced final to the pipeline. Default 30.
+   */
+  sarvamSpeechEndFlushMs: number;
+  /**
+   * ms to hold an incomplete mid-thought fragment when speech_end has not yet
+   * fired. Default 220. Override historically via SARVAM_COALESCE_INCOMPLETE_MS.
+   */
+  sarvamIncompleteHoldMs: number;
   /**
    * When true, skip per-turn pgvector retrieval entirely — the KB is already baked into
    * the system prompt (see KB_INJECT_MAX_CHARS). Saves ~150-200ms per turn by eliminating
@@ -458,26 +463,6 @@ export interface AgentConfig {
     model: string;
     voiceName: string;
     thinkingLevel: "minimal" | "low" | "medium" | "high";
-  } | null;
-
-  /** Agent kind — "voice" (default) or "vision" (webcall-only, Gemini Live powered) */
-  agentKind: "voice" | "vision";
-
-  /** Vision configuration — populated when agentKind === "vision" or vision tools are added */
-  visionConfig: {
-    enabled: boolean;
-    /** Default provider for all vision tools unless overridden per-tool */
-    defaultProvider: "gemini" | "openai" | "sarvam" | "azure";
-    /** "photo_upload" = still images only; "live_snapshot" = snap on demand; "live_stream" = continuous 2fps */
-    mode: "photo_upload" | "live_snapshot" | "live_stream";
-    /** Allow WhatsApp images to be staged for this agent */
-    allowWhatsapp: boolean;
-    /** Allow pre-call API staging */
-    allowApiStaging: boolean;
-    /** Days to retain captured media. Default 30 */
-    retentionDays: number;
-    /** Inject a system note when a new image arrives mid-call */
-    notifyOnMedia: boolean;
   } | null;
 }
 
@@ -645,6 +630,12 @@ export interface TTSAdapter {
     onDone: (characters: number) => void,
     signal?: AbortSignal
   ): Promise<void>;
+  /**
+   * Hot-swap pronunciation / language tag mid-call (Cartesia, Sarvam).
+   * Called when auto-detect or an explicit language request changes currentLang
+   * so TTS does not keep speaking Tamil text with an English (or null) tag.
+   */
+  setLanguage?(lang: string): void;
   /** Optional teardown — close any persistent connections (e.g. WebSocket).
    *  Called by the pipeline's close() when the call ends. */
   close?(): void;

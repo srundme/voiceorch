@@ -10,11 +10,12 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatApiError } from "@/lib/format-api-error";
-import { SnapServeLogo } from "@/components/logo";
+import { BrandMark, PoweredBySarvam } from "@/components/logo";
 
 const BrandHeader = () => (
-  <div className="flex justify-center mb-8">
-    <SnapServeLogo size="lg" showIcon iconSize={26} className="text-foreground" />
+  <div className="flex flex-col items-center gap-1 mb-8">
+    <BrandMark iconSize={26} wordmarkHeight={20} />
+    <PoweredBySarvam variant="inline" />
   </div>
 );
 
@@ -49,7 +50,7 @@ export default function CancelBookingPage() {
       <div className="max-w-md w-full">
         <BrandHeader />
         {children}
-        <p className="text-center text-xs text-muted-foreground mt-4">Powered by SnapServe</p>
+        <p className="text-center mt-4"><PoweredBySarvam on="light" /></p>
       </div>
     </div>
   );

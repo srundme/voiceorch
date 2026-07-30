@@ -17,6 +17,7 @@ import {
   Variable,
   Wallet,
   Webhook,
+  MessageSquare,
   type LucideIcon,
 } from "lucide-react";
 import { ExternalFooterLink } from "./DocsUi";
@@ -43,6 +44,7 @@ const NAV_GROUPS: NavGroup[] = [
       { title: "Platform concepts", slug: "platform-concepts", icon: BookOpen },
       { title: "Quick Start (API)", slug: "quick-start", icon: Rocket },
       { title: "Authentication", slug: "authentication", icon: KeyRound },
+      { title: "Claude skill & MCP", slug: "claude-skill", icon: MessageSquare },
     ],
   },
   {

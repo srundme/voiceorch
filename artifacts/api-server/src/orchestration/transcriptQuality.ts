@@ -22,8 +22,14 @@ export interface TranscriptQualityOptions {
  * Deliberately conservative — only words where an utterance-final position
  * is nearly always a truncation signal, not an ambiguous one.
  */
+// NOTE: Do NOT include bare `yet` — "No, not yet." is a complete answer (call 4943
+// false-clarification). `already`/`still` stay; they almost never end a finished thought alone.
 const TRUNCATION_DANGLER_RE =
-  /\b(about|with|for|from|into|through|of|to|and|but|or|because|although|though|a|an|the|just|like|so|also|even|only|already|still|yet|both|either|neither|nor|since|until|unless|whether|while|as|if|then|than|that|this|these|those|which|who|whom|whose|when|where|how|what|why|ke|ki|ka|ko|mein|pe|par|se|ne|aur|lekin|jo|ek|toh|bhi|hi|na|kya|kaise|kyun|kyunki|jab|jahan|என்|உன்|என்|எனக்கு|உங்களுக்கு|என்ன|எந்த|இந்த|அந்த|ஒரு|மற்றும்|ஆனால்|அல்லது|ஏனெனில்|எப்படி|எங்கே|எப்போது)\s*[,.]?\s*$/i;
+  /\b(about|with|for|from|into|through|of|to|and|but|or|because|although|though|a|an|the|just|like|so|also|even|only|already|still|both|either|neither|nor|since|until|unless|whether|while|as|if|then|than|that|this|these|those|which|who|whom|whose|when|where|how|what|why|ke|ki|ka|ko|mein|pe|par|se|ne|aur|lekin|jo|ek|toh|bhi|hi|na|kya|kaise|kyun|kyunki|jab|jahan|என்|உன்|என்|எனக்கு|உங்களுக்கு|என்ன|எந்த|இந்த|அந்த|ஒரு|மற்றும்|ஆனால்|அல்லது|ஏனெனில்|எப்படி|எங்கே|எப்போது)\s*[,.]?\s*$/i;
+
+/** Complete short negations that end on "yet" / time words — never clarification-bait. */
+const COMPLETE_SHORT_NEGATION_RE =
+  /^(no|nope|nah)[,!]?\s+(not\s+)?(yet|now|really|today|ready)\.?$/i;
 
 /** Known Sarvam silence/noise hallucinations — too short to be a real turn.
  *  Deliberately excludes normal greetings/acks ("hello", "thanks") — those are
@@ -140,11 +146,20 @@ export function isFalseInterruptionScrap(
  * Incomplete mid-phrase scraps after barge-in are handled by
  * `isFalseInterruptionScrap` instead.
  */
+/**
+ * English content-free stubs that STT often emits from noise / mid-cut scraps
+ * (call 4943: lone "get" became a full LLM turn). Keep allowlists above for
+ * real acks; only drop known non-answers.
+ */
+const ENGLISH_NOISE_STUB_RE =
+  /^(get|got|oh|uh|um|ah|eh|er|hmm|mm|mhm|huh|ha|the|a|an|to|of|in|on|at|is|am|are|was|be|do|did|have|has|had|will|would|can|could|like|so|well|just|and|but|or|if|then|me|my|you|ya|he|she|it|we|they)\.?$/i;
+
 export function isUltraShortNoiseFragment(text: string): boolean {
   const t = text.trim();
   if (!t) return true;
   if (VALID_COMPLETE_SHORT_UTTERANCE_RE.test(t)) return false;
   if (REDUPLICATED_ACK_RE.test(t)) return false;
+  if (COMPLETE_SHORT_NEGATION_RE.test(t)) return false;
   // Common Indic one-word acks / negations — keep for flow control
   if (/^(சரி|சரிங்க|ஆமா|ஆம்|இல்ல|இல்லை|हां|हाँ|ठीक|जी|नहीं|nahi|haan|ha[a]?n)[\s,.!]*$/iu.test(t)) {
     return false;
@@ -159,6 +174,9 @@ export function isUltraShortNoiseFragment(text: string): boolean {
 
   // Only pure single-syllable stubs ("ஆ", "அ", "mm") — never whole short answers.
   if (tokens.length <= 1 && graphemes <= 2) return true;
+
+  // Lone English function-word / filler stubs (3–5 letters) — wait for more speech.
+  if (tokens.length === 1 && ENGLISH_NOISE_STUB_RE.test(t)) return true;
 
   return false;
 }
@@ -274,6 +292,11 @@ export function checkTranscriptQuality(
 
   // Normal one-word greetings / acks ("Hi", "Hello", "Okay") — complete turns.
   if (VALID_COMPLETE_SHORT_UTTERANCE_RE.test(t)) {
+    return { isGarbled: false, reason: "" };
+  }
+
+  // Complete short negations ("No, not yet.") — never ask the caller to repeat.
+  if (COMPLETE_SHORT_NEGATION_RE.test(t) || /\bnot yet\.?$/i.test(t)) {
     return { isGarbled: false, reason: "" };
   }
 

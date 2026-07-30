@@ -262,7 +262,7 @@ Be friendly, not pushy. Respect if they are not interested.`,
     id: 3, category: "support",
     name: "Claims Processing Assistant",
     description: "Guide customers step-by-step through the insurance claims process.",
-    asrProvider: "deepgram", llmProvider: "google", ttsProvider: "cartesia", telephonyProvider: "twilio",
+    asrProvider: "sarvam", llmProvider: "google", ttsProvider: "sarvam", telephonyProvider: "vobiz",
     systemPrompt: `You are a claims processing assistant for {{company_name}}.
 Help customers:
 - Understand what documents they need to submit
@@ -345,9 +345,9 @@ export default function FamilyAgentNew() {
     defaultValues: {
       companyId: "", policyId: "", agentType: "inbound_support",
       name: "", description: "",
-      asrProvider: "deepgram", asrModel: "nova-2",
+      asrProvider: "sarvam", asrModel: "saaras:v3",
       llmProvider: "qwen", llmModel: "qwen/qwen3-32b",
-      ttsProvider: "cartesia", ttsVoice: "", ttsModel: "sonic-3",
+      ttsProvider: "sarvam", ttsVoice: "priya", ttsModel: "bulbul:v3",
       telephonyProvider: "vobiz",
       systemPrompt: "You are a helpful AI voice assistant for insurance customers.",
       temperature: 0.7, maxDuration: 600,

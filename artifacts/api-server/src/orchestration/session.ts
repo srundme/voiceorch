@@ -18,8 +18,17 @@ import {
   resolveVoiceStack,
 } from "./adapters/live/gemini-live-voices.js";
 import { resolveSarvamSttMode } from "./adapters/stt/sarvam-mode.js";
+import { isSarvamCatalogSpeaker } from "./adapters/tts/sarvam.js";
+import {
+  clampSarvamIncompleteHoldMs,
+  clampSarvamSpeechEndFlushMs,
+  resolveSarvamHighVadSensitivity,
+  normalizeCallEngineAgentConfig,
+  FRAGMENT_COALESCE_DEFAULTS,
+} from "@workspace/db/call-engine-defaults";
 import { withDbRetry } from "./db-retry.js";
 import { CONVERSATION_DISCIPLINE_BLOCK } from "./conversationDiscipline.js";
+import { transcriptHasFarewellEnding } from "./callFarewell.js";
 import { buildLeadContextBlock, resolvePromptVariables } from "./prompt-vars.js";
 import { createLLMAdapter } from "./adapters/llm/index.js";
 import { resolveMicSensitivity, getMicSensitivityThresholds } from "./mic-sensitivity.js";
@@ -81,34 +90,6 @@ import { completeLiveSquadRun } from "../services/squad-engine.js";
  */
 const DEFAULT_SILENCE_TIMEOUT_SECONDS =
   parseInt(process.env["SILENCE_TIMEOUT_DEFAULT_SECONDS"] ?? "", 10) || 15;
-
-/**
- * Returns true when the last ~300 characters of the transcript contain a
- * farewell phrase, indicating the caller ended the call intentionally.
- * Used to suppress false-positive network-drop callbacks.
- */
-function isFarewellEnding(transcript: string): boolean {
-  if (!transcript) return false;
-  const tail = transcript.slice(-300).toLowerCase();
-  const farewells = [
-    "bye",
-    "goodbye",
-    "good bye",
-    "take care",
-    "talk soon",
-    "see you",
-    "have a good",
-    "thank you bye",
-    "thanks bye",
-    "ok bye",
-    "okay bye",
-    "alright bye",
-    "ciao",
-    "tata",
-    "ta-ta",
-  ];
-  return farewells.some((phrase) => tail.includes(phrase));
-}
 
 interface MetricsAcc {
   sttTotal: number;
@@ -305,8 +286,11 @@ export async function createSession(params: {
   // Parse tools JSON column (null-safe, type-cast to AgentTool[])
   let tools = Array.isArray(agent.tools) ? (agent.tools as unknown as AgentTool[]) : [];
 
-  // Read agentConfig JSONB for advanced settings
-  const agentCfg = (agent.agentConfig ?? {}) as Record<string, unknown>;
+  // Read agentConfig JSONB for advanced settings — normalize legacy snappy Sarvam/engine
+  // defaults so existing agents get patient STT without requiring a one-off DB migrate.
+  const agentCfg = normalizeCallEngineAgentConfig(
+    (agent.agentConfig ?? {}) as Record<string, unknown>,
+  ).config;
 
   // AMD (voicemail) config — read once, used by both the voicemail-delivery config
   // and the acoustic-confirmation config below. Default action is "hangup" (never
@@ -575,7 +559,19 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
       backgroundDenoising: agent.asrBackgroundDenoising ?? false,
       confidenceThreshold: agent.asrConfidenceThreshold ?? 0.40,
       endOfTurnConfidence: agent.asrEndOfTurnConfidence ?? 0.70,
-      endOfTurnTimeout: agent.asrEndOfTurnTimeout ?? 5000,
+      // Prefer Latency Tuning UI (asrEndpointingSilenceMs). The asrEndOfTurnTimeout
+      // column is admin-only and historically defaulted to 5000 — that alone added
+      // up to 2s of Deepgram endpointing dead air when the UI knob was ignored.
+      endOfTurnTimeout: (() => {
+        const fromUi = agentCfg["asrEndpointingSilenceMs"];
+        if (typeof fromUi === "number" && Number.isFinite(fromUi) && fromUi > 0) {
+          return Math.max(50, Math.min(5000, Math.round(fromUi)));
+        }
+        if (typeof agent.asrEndOfTurnTimeout === "number" && agent.asrEndOfTurnTimeout > 0) {
+          return Math.max(50, Math.min(30000, Math.round(agent.asrEndOfTurnTimeout)));
+        }
+        return 400;
+      })(),
       keyterms: agent.asrKeyterms
         ? agent.asrKeyterms.split(",").map(s => s.trim()).filter(Boolean)
         : [],
@@ -622,19 +618,37 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     // false-firing word-count barge-in too often on telephony. Semantic
     // interrupt keywords (stop/wait) still bypass the word count.
     wordsForInterruption: (agentCfg["wordsForInterruption"] as number | undefined) ?? 3,
-    incrementalDelay:     (agentCfg["incrementalDelay"]     as number | undefined) ?? 0,
+    // Legacy form default was 350ms — rewrite in-memory so existing agents get
+    // snappy turns without requiring a UI re-save. Intentional non-350 values keep.
+    incrementalDelay: (() => {
+      const v = agentCfg["incrementalDelay"];
+      if (typeof v !== "number" || !Number.isFinite(v)) return 0;
+      return v === 350 ? 0 : Math.max(0, Math.min(1500, Math.round(v)));
+    })(),
     ttsSpeed:             (agentCfg["ttsSpeed"]             as number | undefined) ?? 1.0,
+    sarvamIndicNumbers:   agentCfg["sarvamIndicNumbers"] !== false,
     // P1-H: Call lifecycle
     hangupAfterLlmCall: (agentCfg["hangupAfterLlmCall"] as boolean | undefined) ?? false,
-    // P1-I: Start Speaking Plan — default gives punctuated turns a small 100ms
-    // cushion and unclear/digit-ending turns the full 300ms cap (best-practice
-    // defaults; matches the dashboard/admin agent-editor defaults).
-    startSpeakingPlan: (agentCfg["startSpeakingPlan"] as AgentConfig["startSpeakingPlan"]) ?? {
-      waitSeconds: 0,
-      onPunctuationSeconds: 0.1,
-      onNoPunctuationSeconds: 1.5,
-      onNumberSeconds: 0.5,
-    },
+    // P1-I: Start Speaking Plan — snappy defaults; rewrite legacy 1.5/0.5 footguns.
+    startSpeakingPlan: (() => {
+      const raw = agentCfg["startSpeakingPlan"] as AgentConfig["startSpeakingPlan"] | undefined;
+      const plan = raw ?? {
+        waitSeconds: 0,
+        onPunctuationSeconds: 0.1,
+        onNoPunctuationSeconds: 0.1,
+        onNumberSeconds: 0.1,
+      };
+      return {
+        waitSeconds: plan.waitSeconds ?? 0,
+        onPunctuationSeconds: plan.onPunctuationSeconds ?? 0.1,
+        onNoPunctuationSeconds: plan.onNoPunctuationSeconds === 1.5
+          ? 0.1
+          : (plan.onNoPunctuationSeconds ?? 0.1),
+        onNumberSeconds: plan.onNumberSeconds === 0.5
+          ? 0.1
+          : (plan.onNumberSeconds ?? 0.1),
+      };
+    })(),
     // P1-J: Stop Speaking Plan
     stopSpeakingPlan: (agentCfg["stopSpeakingPlan"] as AgentConfig["stopSpeakingPlan"]) ?? null,
     // P1-K: Compliance
@@ -650,12 +664,30 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     asrEndpointingSilenceMs: (agentCfg["asrEndpointingSilenceMs"] as number | undefined) ?? 250,
     llmMaxTokens: (agentCfg["llmMaxTokens"] as number | null | undefined) ?? null,
     ttsMinSentenceChars: (agentCfg["ttsMinSentenceChars"] as number | undefined) ?? 18,
+    fragmentCoalesceListeningMs: (() => {
+      const v = agentCfg["fragmentCoalesceListeningMs"];
+      if (typeof v !== "number" || !Number.isFinite(v)) return FRAGMENT_COALESCE_DEFAULTS.listeningMs;
+      return Math.max(0, Math.min(2000, Math.round(v)));
+    })(),
+    fragmentCoalescePlayingMs: (() => {
+      const v = agentCfg["fragmentCoalescePlayingMs"];
+      if (typeof v !== "number" || !Number.isFinite(v)) return FRAGMENT_COALESCE_DEFAULTS.playingMs;
+      return Math.max(0, Math.min(3000, Math.round(v)));
+    })(),
+    telephonyTailDrainMs: (() => {
+      const v = agentCfg["telephonyTailDrainMs"];
+      if (typeof v !== "number" || !Number.isFinite(v)) return 400;
+      return Math.max(0, Math.min(2000, Math.round(v)));
+    })(),
     sarvamSttMode: (agent.asrProvider ?? "").toLowerCase() === "sarvam"
       ? resolveSarvamSttMode(
           agent.asrLanguage || agent.language || "en-IN",
           (agentCfg["sarvamSttMode"] as string | undefined) ?? null,
         )
       : ((agentCfg["sarvamSttMode"] as string | undefined) ?? null),
+    sarvamHighVadSensitivity: resolveSarvamHighVadSensitivity(agentCfg["sarvamHighVadSensitivity"]),
+    sarvamSpeechEndFlushMs: clampSarvamSpeechEndFlushMs(agentCfg["sarvamSpeechEndFlushMs"] as number | undefined),
+    sarvamIncompleteHoldMs: clampSarvamIncompleteHoldMs(agentCfg["sarvamIncompleteHoldMs"] as number | undefined),
     kbBakedOnly: (agentCfg["kbBakedOnly"] as boolean | undefined) ?? false,
     voiceStack: resolveVoiceStack(agentCfg["voiceStack"] as string | undefined),
     geminiLive: resolveVoiceStack(agentCfg["voiceStack"] as string | undefined) === "gemini_live"
@@ -672,24 +704,6 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
           ),
         }
       : null,
-    agentKind: (agentCfg["agentKind"] as string | undefined) === "vision" ? "vision" : "voice",
-    visionConfig: (() => {
-      const vc = agentCfg["visionConfig"] as Record<string, unknown> | undefined | null;
-      if (!vc || typeof vc !== "object") return null;
-      return {
-        enabled:         typeof vc["enabled"] === "boolean"         ? vc["enabled"]         : true,
-        defaultProvider: (["gemini","openai","sarvam","azure"].includes(vc["defaultProvider"] as string))
-          ? vc["defaultProvider"] as "gemini" | "openai" | "sarvam" | "azure"
-          : "gemini",
-        mode:            (["photo_upload","live_snapshot","live_stream"].includes(vc["mode"] as string))
-          ? vc["mode"] as "photo_upload" | "live_snapshot" | "live_stream"
-          : "photo_upload",
-        allowWhatsapp:   typeof vc["allowWhatsapp"] === "boolean"   ? vc["allowWhatsapp"]   : false,
-        allowApiStaging: typeof vc["allowApiStaging"] === "boolean" ? vc["allowApiStaging"] : true,
-        retentionDays:   typeof vc["retentionDays"] === "number"    ? vc["retentionDays"]   : 30,
-        notifyOnMedia:   typeof vc["notifyOnMedia"] === "boolean"   ? vc["notifyOnMedia"]   : true,
-      };
-    })(),
   };
   // Propagate endpointing silence into STTConfig so Azure adapter picks it up
   agentConfig.sttConfig.endpointingSilenceMs = agentConfig.asrEndpointingSilenceMs;
@@ -1267,7 +1281,8 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
   // Apply managed keys for required providers
   for (const providerName of requiredProviders) {
     if (MANAGED[providerName] && (isManaged || !providerKeys.has(providerName))) {
-      const managed = settingsMap.get(MANAGED[providerName]!);
+      const managed = settingsMap.get(MANAGED[providerName]!)
+        ?? (providerName === "sarvam" ? (process.env["SARVAM_API_KEY"] ?? "").trim() || undefined : undefined);
       if (managed) {
         providerKeys.set(providerName, managed);
         logger.info({ providerName, isManaged }, "Using platform managed key for provider");
@@ -1295,6 +1310,31 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
       if (!cfg["authId"]) cfg["authId"] = authId;
       providerKeys.set("vobiz:extraConfig", JSON.stringify(cfg));
       logger.info({}, "Using platform managed VoBiz credentials");
+    }
+  }
+
+  // Sarvam Creative Studio clones are scoped to the API subscription that created
+  // them. Managed agents normally use the platform Sarvam key, which cannot see a
+  // user's personal clone — prefer the agent owner's BYOP Sarvam key for non-catalog speakers.
+  if (
+    agent.ttsProvider?.toLowerCase() === "sarvam"
+    && agent.ttsVoice
+    && !isSarvamCatalogSpeaker(agent.ttsVoice)
+  ) {
+    const ownerSarvam = providerRowsResult.find(
+      (r) => r.providerName.toLowerCase() === "sarvam",
+    );
+    if (ownerSarvam) {
+      providerKeys.set("sarvam", decryptKey(ownerSarvam.apiKey));
+      logger.info(
+        { speaker: agent.ttsVoice, agentId: params.agentId },
+        "Using owner Sarvam API key for cloned speaker",
+      );
+    } else {
+      logger.warn(
+        { speaker: agent.ttsVoice, agentId: params.agentId },
+        "Non-catalog Sarvam speaker without owner API key — TTS will fail until Providers → Sarvam key is added",
+      );
     }
   }
 
@@ -2513,7 +2553,7 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
     // typical farewell language from the agent (cross-language), treat as completed
     // even when the transport closed without the pipeline explicitly calling end_call.
     const closingPhrases = ["thank you", "goodbye", "bye", "have a great", "have a nice", "take care",
-      "talk soon", "speak soon", "धन्यवाद", "अलविदा", "नमस्ते", "நன்றி", "நல்வாழ்த்துக்கள்"];
+      "talk soon", "speak soon", "wish you good health", "धन्यवाद", "अलविदा", "नमस्ते", "நன்றி", "நல்வாழ்த்துக்கள்", "பாய்"];
     const lastChunk = (transcript ?? "").slice(-600).toLowerCase();
     const hasClosingSignal = metricsAcc.count > 0 && closingPhrases.some(p => lastChunk.includes(p));
     const conversationCompleted = session.naturalEndTriggered || session.wasTransferred || bookingCompletedThisCall || hasClosingSignal;
@@ -2876,13 +2916,14 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
       // (sourceCallbackReason === "network_drop"), never schedule another — prevents
       // an infinite redial chain when the retry call also drops.
       //
-      // FAREWELL GUARD: if the transcript tail contains a farewell phrase the caller
-      // said goodbye and the carrier terminated cleanly — not a network drop.
+      // FAREWELL / COMPLETED GUARD: suppress auto-redial when the caller said
+      // goodbye (incl. Tamil பாய்), the agent already delivered a closing line,
+      // or naturalEnd/end_call fired — those are successful ends, not drops.
       const autoRedialCfg = (ag?.agentConfig as { autoRedial?: { enabled?: boolean; delayMinutes?: number; maxAttempts?: number } } | null)?.autoRedial;
-      const wasUnexpectedDrop = !session.naturalEndTriggered && !session.wasTransferred;
+      const wasUnexpectedDrop = !session.naturalEndTriggered && !session.wasTransferred && !conversationCompleted;
       const isRealPhoneCall = session.callerPhone && !session.callerPhone.startsWith("webcall:");
       const isNetworkDropRetry = session.sourceCallbackReason === "network_drop";
-      const hasFarewellEnding = isFarewellEnding(transcript);
+      const hasFarewellEnding = transcriptHasFarewellEnding(transcript);
       const hasConversationContent = metricsAcc.count > 0;
       if (ag && autoRedialCfg?.enabled && wasUnexpectedDrop && !hasFarewellEnding && hasConversationContent && isRealPhoneCall && !isCampaignCall && !isNetworkDropRetry) {
         void scheduleNetworkDropCallback({
@@ -2893,9 +2934,11 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
         }).catch((rdErr) => {
           logger.warn({ sessionId, rdErr }, "Network-drop callback scheduling failed");
         });
-      } else if (ag && autoRedialCfg?.enabled && wasUnexpectedDrop && isRealPhoneCall && !isCampaignCall && !isNetworkDropRetry) {
+      } else if (ag && autoRedialCfg?.enabled && !session.naturalEndTriggered && !session.wasTransferred && isRealPhoneCall && !isCampaignCall && !isNetworkDropRetry) {
         const tail = transcript.slice(-100);
-        if (hasFarewellEnding) {
+        if (conversationCompleted) {
+          logger.info({ sessionId, tail }, "Network-drop suppressed: conversation already completed (closing signal)");
+        } else if (hasFarewellEnding) {
           logger.info({ sessionId, tail }, "Network-drop suppressed: farewell detected in transcript tail");
         } else if (!hasConversationContent) {
           logger.info({ sessionId }, "Network-drop suppressed: zero-turn drop (no conversation content)");

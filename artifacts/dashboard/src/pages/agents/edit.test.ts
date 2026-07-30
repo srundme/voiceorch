@@ -265,6 +265,18 @@ describe("agentFormSchema — provider/model cross-field validation", () => {
     expect(result.success, JSON.stringify(result)).toBe(true);
   });
 
+  it("default SnapServe stack (Sarvam STT + TTS) — passes schema", () => {
+    const result = agentFormSchema.safeParse({
+      ...VALID_BASE,
+      asrProvider: "sarvam",
+      asrModel: "saaras:v3",
+      ttsProvider: "sarvam",
+      ttsModel: "bulbul:v3",
+      ttsVoice: "priya",
+    });
+    expect(result.success, JSON.stringify(result)).toBe(true);
+  });
+
   it("mismatched ASR provider+model — reports error on asrModel", () => {
     const result = agentFormSchema.safeParse({
       ...VALID_BASE,

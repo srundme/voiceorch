@@ -53,12 +53,16 @@ export const agentFormSchema = z.object({
   timezone:               z.string().optional(),
   autoSwitchToEnglish:    z.boolean().optional(),
   languageAutoDetect:     z.boolean().optional(),
+  /** Languages the agent may follow when Multilingual / auto-detect is on. */
+  multilingualLanguages:  z.array(z.string()).optional(),
+  /** Sarvam TTS: expand digits to spoken Indic forms. Default on. */
+  sarvamIndicNumbers:     z.boolean().optional(),
   machineDetectionMode:   z.enum(["disabled", "enable", "detect_message_end"]).optional(),
   voicemailAction:        z.enum(["hangup", "leave_message", "continue"]).optional(),
   voicemailMessage:       z.string().optional(),
   voicemailLeadInSeconds: z.number().min(0).max(15).optional(),
   tools: z.array(z.object({
-    type: z.enum(["call_transfer", "webhook", "send_sms", "end_call", "cal_com", "native_booking", "native_check_availability", "native_list_bookings", "native_reschedule", "native_cancel", "transfer_cold", "transfer_warm", "transfer_agent"]),
+    type: z.enum(["call_transfer", "webhook", "send_sms", "send_email", "send_whatsapp", "end_call", "cal_com", "native_booking", "native_check_availability", "native_list_bookings", "native_reschedule", "native_cancel", "transfer_cold", "transfer_warm", "transfer_agent"]),
     name: z.string().optional(),
     description: z.string().optional(),
     transferTo: z.string().optional(),
@@ -113,6 +117,9 @@ export const agentFormSchema = z.object({
   llmMaxTokens: z.number().min(1).max(16000).optional().nullable(),
   ttsMinSentenceChars: z.number().min(5).max(200).optional(),
   linearDelayMs: z.number().min(0).max(1500).optional(),
+  fragmentCoalesceListeningMs: z.number().min(0).max(2000).optional(),
+  fragmentCoalescePlayingMs: z.number().min(0).max(3000).optional(),
+  telephonyTailDrainMs: z.number().min(0).max(2000).optional(),
   ttsSpeed: z.number().min(0.7).max(1.5).optional(),
   kbBakedOnly: z.boolean().optional(),
 
@@ -125,7 +132,13 @@ export const agentFormSchema = z.object({
   autoRedialMaxAttempts:  z.number().min(1).max(10).optional(),
 
   // Sarvam STT mode (only relevant when asrProvider === "sarvam")
-  sarvamSttMode: z.enum(["codemix", "verbatim", "transcribe"]).optional(),
+  sarvamSttMode: z.enum(["codemix", "verbatim", "transcribe", "translit", "translate"]).optional(),
+  /** Sarvam high_vad_sensitivity — default true (~128ms silence @8kHz). */
+  sarvamHighVadSensitivity: z.boolean().optional(),
+  /** ms after speech_end before emitting final — default 30. */
+  sarvamSpeechEndFlushMs: z.number().min(0).max(200).optional(),
+  /** ms hold for incomplete mid-thought fragments — default 220. */
+  sarvamIncompleteHoldMs: z.number().min(50).max(1000).optional(),
 
   // Workspace calendar assigned to this agent for native scheduling tools
   schedulingCalendarId: z.number().optional().nullable(),
@@ -178,9 +191,9 @@ export function hydrateToolsForForm(tools: readonly AgentTool[]): AgentFormTool[
 
 /** Bolna-style Call Engine presets (endpointing + linear delay + interrupt words). */
 export const CALL_ENGINE_PRESETS = {
-  fast:     { asrEndpointingSilenceMs: 150, linearDelayMs: 50, stopSpeakingNumWords: 1 },
-  balanced: { asrEndpointingSilenceMs: 250, linearDelayMs: 350, stopSpeakingNumWords: 3 },
-  patient:  { asrEndpointingSilenceMs: 500, linearDelayMs: 700, stopSpeakingNumWords: 4 },
+  fast:     { asrEndpointingSilenceMs: 150, linearDelayMs: 0, stopSpeakingNumWords: 1 },
+  balanced: { asrEndpointingSilenceMs: 250, linearDelayMs: 0, stopSpeakingNumWords: 3 },
+  patient:  { asrEndpointingSilenceMs: 500, linearDelayMs: 350, stopSpeakingNumWords: 4 },
 } as const;
 
 export type CallEnginePreset = keyof typeof CALL_ENGINE_PRESETS;
@@ -198,13 +211,38 @@ export function clampBargeInEnergyThreshold(value: number | null | undefined): n
 }
 
 export function clampEndpointingMs(value: number | null | undefined): number {
-  const v = typeof value === "number" && Number.isFinite(value) ? value : 300;
+  const v = typeof value === "number" && Number.isFinite(value) ? value : 250;
   return Math.max(100, Math.min(800, Math.round(v)));
 }
 
 export function clampLinearDelayMs(value: number | null | undefined): number {
-  const v = typeof value === "number" && Number.isFinite(value) ? value : 400;
+  const v = typeof value === "number" && Number.isFinite(value) ? value : 0;
   return Math.max(0, Math.min(1500, Math.round(v)));
+}
+
+export function clampFragmentCoalesceListeningMs(value: number | null | undefined): number {
+  const v = typeof value === "number" && Number.isFinite(value) ? value : 500;
+  return Math.max(0, Math.min(2000, Math.round(v)));
+}
+
+export function clampFragmentCoalescePlayingMs(value: number | null | undefined): number {
+  const v = typeof value === "number" && Number.isFinite(value) ? value : 1000;
+  return Math.max(0, Math.min(3000, Math.round(v)));
+}
+
+export function clampTelephonyTailDrainMs(value: number | null | undefined): number {
+  const v = typeof value === "number" && Number.isFinite(value) ? value : 400;
+  return Math.max(0, Math.min(2000, Math.round(v)));
+}
+
+export function clampSarvamSpeechEndFlushMs(value: number | null | undefined): number {
+  const v = typeof value === "number" && Number.isFinite(value) ? value : 80;
+  return Math.max(0, Math.min(200, Math.round(v)));
+}
+
+export function clampSarvamIncompleteHoldMs(value: number | null | undefined): number {
+  const v = typeof value === "number" && Number.isFinite(value) ? value : 700;
+  return Math.max(50, Math.min(1000, Math.round(v)));
 }
 
 export function clampInterruptWords(value: number | null | undefined): number {

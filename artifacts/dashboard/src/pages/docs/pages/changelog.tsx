@@ -9,6 +9,19 @@ export default function ChangelogPage() {
         description="Notable documentation and API-consumer changes."
       />
 
+      <h2 id="2026-07-30-claude">2026-07-30 — Claude skill &amp; MCP</h2>
+      <ul>
+        <li>
+          <strong>Docs</strong> — new guide{" "}
+          <a href="/docs/claude-skill">Claude skill &amp; MCP</a> for Claude Desktop / Claude Code
+          (agents, campaigns, website webhooks, and more via live tools).
+        </li>
+        <li>
+          <strong>MCP</strong> — <code>@snapserve/mcp</code> (<code>lib/snapserve-mcp</code>) with
+          <code>SNAPSERVE_API_KEY</code> against <code>https://app.snapserve.ai/api</code>.
+        </li>
+      </ul>
+
       <h2 id="2026-07-15-docs">2026-07-15 — Docs restructure</h2>
       <ul>
         <li>

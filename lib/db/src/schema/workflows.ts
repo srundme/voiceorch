@@ -30,7 +30,10 @@ export type WorkflowStepType =
   | "make_call"
   | "condition"
   | "delay"
-  | "send_webhook";
+  | "send_webhook"
+  | "schedule_callback"
+  | "send_whatsapp"
+  | "send_email";
 
 export interface WorkflowStep {
   /** Stable id within the workflow (used for run bookkeeping). */
@@ -52,6 +55,22 @@ export interface WorkflowStep {
 
   // ── send_webhook ──────────────────────────────────────────────────────────────
   url?: string;
+
+  // ── schedule_callback (telephony auto-dial via callbackScheduler) ───────────
+  /** Absolute delay before the callback fires. Prefer callbackDelayDays for journeys. */
+  callbackDelayDays?: number;
+  notes?: string;
+
+  // ── send_whatsapp (native VoBiz template send) ───────────────────────────────
+  whatsappHint?: "call_summary" | "booking_confirmed" | "callback_scheduled";
+  /** Optional body params; defaults are derived from call context. Supports {{vars}}. */
+  whatsappParams?: string[];
+
+  // ── send_email (managed SnapServe or BYO Brevo) ─────────────────────────────
+  /** Context key for recipient email (default: "email"). */
+  emailField?: string;
+  emailSubject?: string;
+  emailBody?: string;
 }
 
 export const workflowsTable = pgTable("workflows", {

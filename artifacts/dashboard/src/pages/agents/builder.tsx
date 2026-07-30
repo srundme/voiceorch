@@ -8,8 +8,8 @@ import {
   Volume2, Check, X, Pencil, ChevronDown, List, Globe, BarChart3,
   User2, Sparkles, BookOpen, ToggleLeft, ToggleRight, Tag, Loader2, Square, AudioLines,
   Play, Pause,
-  Timer, ShieldCheck, Layers, Gauge, MicOff, HelpCircle, PhoneOff,
-  History, GitBranch, Eye, Link2, Copy, RotateCcw, ChevronUp, AlertTriangle, ArrowLeftRight,
+  Timer, ShieldCheck, Layers, Gauge, MicOff, HelpCircle, PhoneOff, Mail, MessageCircle,
+  History, GitBranch, Eye, RotateCcw, ChevronUp, AlertTriangle, ArrowLeftRight,
   Upload, Archive, Info, AlertCircle, Calendar, Star,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
@@ -19,6 +19,7 @@ import { WebcallPanel } from "@/components/webcall-panel";
 import { AgentConfigCard, EditConfigDialog } from "@/components/agent-config-card";
 import { GeminiLiveVoicePicker } from "@/components/gemini-live-voice-picker";
 import { CloneVoiceDialog, type ClonedVoiceResult } from "@/components/clone-voice-dialog";
+import { RegisterSarvamVoiceDialog } from "@/components/register-sarvam-voice-dialog";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
@@ -36,7 +37,7 @@ import type { AgentVersion } from "@workspace/api-client-react";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { agentFormSchema, hydrateToolsForForm, CALL_ENGINE_PRESETS, type CallEnginePreset, clampBargeInEnergyThreshold, clampEndpointingMs, clampLinearDelayMs, clampInterruptWords, voiceSecondsFromInterruptWords } from "./edit.schema";
+import { agentFormSchema, hydrateToolsForForm, CALL_ENGINE_PRESETS, type CallEnginePreset, clampBargeInEnergyThreshold, clampEndpointingMs, clampLinearDelayMs, clampFragmentCoalesceListeningMs, clampFragmentCoalescePlayingMs, clampTelephonyTailDrainMs, clampSarvamSpeechEndFlushMs, clampSarvamIncompleteHoldMs, clampInterruptWords, voiceSecondsFromInterruptWords } from "./edit.schema";
 import { buildUpdateAgentPayload, StagedPromptEditor } from "./edit";
 import type { AgentFormValues } from "./edit";
 import { Button } from "@/components/ui/button";
@@ -76,9 +77,9 @@ import { useToast } from "@/hooks/use-toast";
 import { formatApiError, mapApiErrors, isDestinationUnverifiedError } from "@/lib/format-api-error";
 import {
   ASR_PROVIDERS, LLM_PROVIDERS, TTS_PROVIDERS,
-  LANGUAGES, ASR_MODELS, LLM_MODELS, TTS_MODELS, TTS_VOICES, AGENT_TIMEZONES,
-  isTamilLanguage, defaultGeminiModel, defaultLlmForLanguages,
+  LANGUAGES, SARVAM_PERSONALISATION_LANGUAGES, ASR_MODELS, LLM_MODELS, TTS_MODELS, TTS_VOICES, AGENT_TIMEZONES,
   filterVoicesForLanguage, isVoiceCompatibleWithLanguage,
+  getSarvamTtsVoices, isSarvamVoiceCompatible,
   GEMINI_LIVE_LLM_MODEL, GEMINI_LIVE_THINKING_LEVELS,
   geminiLiveModelLabel, isGeminiLiveAgent, isGeminiLiveLlmModel, voiceStackForLlmModel,
   languagesForAgent, isGeminiLiveLanguage,
@@ -88,21 +89,24 @@ import { DestinationOtpDialog } from "@/components/destination-otp-dialog";
 import { RecentNumbersList } from "@/components/recent-numbers-list";
 import { useRecentNumbers } from "@/hooks/use-recent-numbers";
 import { GeneratePromptSheet } from "./generate-prompt-sheet";
+import { JourneyPanel } from "./journey-panel";
+import { EmailChannelCard, useEmailChannelReady } from "./email-channel-card";
 const _DASH_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const DASH_API   = `${_DASH_BASE}/api`;
 
 /* ── Types ──────────────────────────────────────────────────────────────────── */
 
-type TabId = "overview" | "prompt" | "voice" | "tools" | "analysis" | "voicemail" | "advanced" | "versions";
+type TabId = "overview" | "channels" | "prompt" | "voice" | "tools" | "analysis" | "voicemail" | "advanced" | "versions";
 
 interface TabDef { id: TabId; label: string; icon: React.ReactNode }
 
 const TABS: TabDef[] = [
-  { id: "overview",    label: "Overview",    icon: <Bot className="h-3.5 w-3.5" /> },
+  { id: "overview",    label: "Agent",       icon: <Bot className="h-3.5 w-3.5" /> },
+  { id: "channels",    label: "Channels",    icon: <Phone className="h-3.5 w-3.5" /> },
   { id: "prompt",      label: "Prompt",      icon: <FileText className="h-3.5 w-3.5" /> },
   { id: "voice",       label: "Voice",       icon: <Mic className="h-3.5 w-3.5" /> },
   { id: "tools",       label: "Tools",       icon: <Wrench className="h-3.5 w-3.5" /> },
-  { id: "analysis",    label: "Analysis",    icon: <BarChart3 className="h-3.5 w-3.5" /> },
+  { id: "analysis",    label: "Journey",     icon: <GitBranch className="h-3.5 w-3.5" /> },
   { id: "voicemail",   label: "Voicemail",   icon: <VoicemailIcon className="h-3.5 w-3.5" /> },
   { id: "advanced",    label: "Advanced",    icon: <SlidersHorizontal className="h-3.5 w-3.5" /> },
   { id: "versions",    label: "Versions",    icon: <History className="h-3.5 w-3.5" /> },
@@ -425,9 +429,9 @@ function AgentCostSummary({ form, rateMap, compact = false }: { form: any; rateM
 }
 
 const SECTION_FIELDS: Record<CardSection, string[]> = {
-  transcriber: ["language", "asrProvider", "asrModel", "sarvamSttMode", "languageAutoDetect"],
+  transcriber: ["language", "asrProvider", "asrModel", "sarvamSttMode", "languageAutoDetect", "multilingualLanguages", "sarvamIndicNumbers"],
   model: ["llmProvider", "llmModel", "temperature"],
-  voice: ["voiceStack", "ttsProvider", "ttsModel", "ttsVoice", "geminiLiveVoiceName", "geminiLiveThinkingLevel"],
+  voice: ["voiceStack", "ttsProvider", "ttsModel", "ttsVoice", "ttsSpeed", "geminiLiveVoiceName", "geminiLiveThinkingLevel"],
 };
 
 /* ── Inbound number card (same assign API as Phone Numbers) ─────────────────── */
@@ -453,9 +457,23 @@ function AgentInboundPanel({
     queryFn: () => customFetch<{ numbers: string[] }>(`${DASH_API}/phone-numbers/managed`),
     staleTime: 5 * 60 * 1000,
   });
+  const { data: quota, refetch: refetchQuota } = useQuery({
+    queryKey: ["phone-numbers", "managed-quota"],
+    queryFn: () => customFetch<{
+      limit: number;
+      used: number;
+      remaining: number;
+      hasOwnNumber: boolean;
+      limited: boolean;
+      unlimitedTrial?: boolean;
+      resetsAt: string;
+    }>(`${DASH_API}/phone-numbers/managed-quota`),
+    staleTime: 15_000,
+  });
   const assign = useAssignPhoneNumber();
   const phoneNumbers = Array.isArray(phoneNumbersRaw) ? phoneNumbersRaw : [];
   const assigned = phoneNumbers.find(p => p.agentId === agentId);
+  const ownedCount = phoneNumbers.length;
   const managedNumbers = managedData?.numbers ?? [];
   const testingFromNumber =
     preferredManagedNumber
@@ -499,11 +517,12 @@ function AgentInboundPanel({
       }
       queryClient.invalidateQueries({ queryKey: getListPhoneNumbersQueryKey() });
       queryClient.invalidateQueries({ queryKey: getGetAgentQueryKey(agentId) });
+      void refetchQuota();
       toast({
-        title: nextId ? "Inbound number set" : "Inbound number cleared",
+        title: nextId ? "Your number is live on this agent" : "Number cleared",
         description: nextId
-          ? "Calls to this number route to this agent. Outbound caller ID follows it."
-          : "No number routes inbound calls to this agent.",
+          ? "Inbound rings this agent. Outbound caller ID uses your number — unlimited calls."
+          : "Assign a purchased number to go live.",
       });
       setDialogOpen(false);
     } catch (err) {
@@ -511,75 +530,79 @@ function AgentInboundPanel({
     }
   };
 
+  const trialRemaining = quota?.limited ? quota.remaining : null;
+  const trialLimit = quota?.limit ?? 3;
+  const trialExhausted = quota?.limited && quota.remaining <= 0;
+
   return (
     <div className={cn("space-y-2", className)}>
-      {/* Outbound testing — free platform managed number.
-          Hidden once the agent has its own assigned number, since outbound
-          caller ID then follows that number and this card is redundant. */}
-      {!assigned && (
-      <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/5 p-3 space-y-1.5">
+      {/* Primary path: own number — buy / assign */}
+      <div className={cn(
+        "rounded-xl border p-3 space-y-2.5",
+        assigned
+          ? "border-emerald-500/25 bg-emerald-500/5"
+          : "border-amber-500/30 bg-amber-500/5",
+      )}>
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 min-w-0">
-            <Phone className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-600/90 dark:text-emerald-400/90">
-              Outbound testing
+            <PhoneForwarded className={cn("h-3.5 w-3.5 shrink-0", assigned ? "text-emerald-500" : "text-amber-500")} />
+            <span className={cn(
+              "text-[10px] font-semibold uppercase tracking-wider",
+              assigned ? "text-emerald-600/90 dark:text-emerald-400/90" : "text-amber-600/90 dark:text-amber-400/90",
+            )}>
+              Your phone number
             </span>
-          </div>
-          <span className="text-[9px] font-medium uppercase tracking-wide text-emerald-600/80 dark:text-emerald-400/70 shrink-0">
-            Free
-          </span>
-        </div>
-        {testingFromNumber ? (
-          <>
-            <p className="text-[13px] font-semibold tabular-nums text-foreground tracking-tight">
-              {testingFromNumber}
-            </p>
-            <p className="text-[10px] text-muted-foreground leading-relaxed">
-              Platform managed number — used as caller ID when you click <span className="text-foreground/80">Phone</span>. Outbound only; inbound does not ring this agent.
-            </p>
-          </>
-        ) : (
-          <p className="text-[11px] text-muted-foreground leading-relaxed">
-            No managed testing number is configured yet. Contact support, or assign your own number below for outbound caller ID.
-          </p>
-        )}
-      </div>
-      )}
-
-      {/* Inbound — requires user's assigned number */}
-      <div className="rounded-xl border border-border/50 bg-card/40 p-3 space-y-2.5">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5 min-w-0">
-            <PhoneForwarded className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Inbound</span>
           </div>
           <button
             type="button"
             onClick={() => navigate("/app/phone-numbers")}
             className="text-[10px] font-medium text-muted-foreground hover:text-foreground transition-colors"
           >
-            Numbers →
+            {ownedCount === 0 ? "Buy →" : "Numbers →"}
           </button>
         </div>
 
         {isLoading ? (
           <Skeleton className="h-9 w-full rounded-lg" />
-        ) : (
+        ) : assigned ? (
           <button
             type="button"
             onClick={openDialog}
             className="w-full flex items-center justify-between gap-2 rounded-lg border border-border/50 bg-background/50 px-2.5 py-2 text-left hover:border-border hover:bg-background/70 transition-colors"
           >
             <div className="min-w-0">
-              <p className={cn("text-[12px] font-medium truncate tabular-nums", assigned ? "text-foreground" : "text-muted-foreground")}>
-                {assigned?.number ?? "No number assigned"}
-              </p>
+              <p className="text-[12px] font-medium truncate tabular-nums text-foreground">{assigned.number}</p>
               <p className="text-[10px] text-muted-foreground/70 truncate mt-0.5">
-                {assigned
-                  ? "Receives inbound calls to this agent"
-                  : phoneNumbers.length === 0
-                    ? "Optional — buy a number for inbound only"
-                    : "Click to assign for inbound calls"}
+                Live — inbound + outbound caller ID · unlimited tests
+              </p>
+            </div>
+            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          </button>
+        ) : ownedCount === 0 ? (
+          <div className="space-y-2">
+            <p className="text-[12px] font-medium text-foreground">Required to go live</p>
+            <p className="text-[10px] text-muted-foreground leading-relaxed">
+              Buy your own number for inbound calls, your caller ID on outbound, and unlimited testing. The platform number below is only a short trial.
+            </p>
+            <Button
+              type="button"
+              size="sm"
+              className="h-8 w-full text-xs gap-1.5"
+              onClick={() => navigate("/app/phone-numbers")}
+            >
+              <Plus className="h-3.5 w-3.5" /> Buy a phone number
+            </Button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={openDialog}
+            className="w-full flex items-center justify-between gap-2 rounded-lg border border-amber-500/30 bg-background/50 px-2.5 py-2 text-left hover:border-amber-500/50 transition-colors"
+          >
+            <div className="min-w-0">
+              <p className="text-[12px] font-medium truncate text-foreground">Number purchased — assign it</p>
+              <p className="text-[10px] text-muted-foreground/70 truncate mt-0.5">
+                Click to attach your number for inbound + outbound
               </p>
             </div>
             <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
@@ -587,18 +610,80 @@ function AgentInboundPanel({
         )}
       </div>
 
+      {/* Trial outbound — demoted, capped */}
+      {!assigned && (
+      <div className={cn(
+        "rounded-xl border p-3 space-y-1.5",
+        trialExhausted
+          ? "border-border/40 bg-muted/20 opacity-90"
+          : "border-border/50 bg-card/40",
+      )}>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <Phone className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Trial outbound
+            </span>
+          </div>
+          <span className={cn(
+            "text-[9px] font-medium uppercase tracking-wide shrink-0 rounded-full border px-1.5 py-0.5",
+            quota?.unlimitedTrial
+              ? "border-emerald-500/30 text-emerald-500"
+              : trialExhausted
+                ? "border-border/50 text-muted-foreground"
+                : "border-amber-500/30 text-amber-500",
+          )}>
+            {quota?.unlimitedTrial
+              ? "Unlimited trial"
+              : quota?.limited
+                ? (trialExhausted ? "Limit reached" : `${trialRemaining}/${trialLimit} left today`)
+                : "Trial"}
+          </span>
+        </div>
+        {testingFromNumber ? (
+          <>
+            <p className="text-[12px] font-medium tabular-nums text-muted-foreground tracking-tight">
+              {testingFromNumber}
+            </p>
+            <p className="text-[10px] text-muted-foreground leading-relaxed">
+              {quota?.unlimitedTrial
+                ? "Shared platform trial line — unlimited for your account (admin grant). Still not your number; inbound will not ring this agent. Buy a number to go live."
+                : trialExhausted
+                  ? "Free trial calls are used up for today. Buy a number to keep testing and to receive inbound calls."
+                  : `Shared platform line for a quick listen — ${trialLimit} outbound tests/day. Not your number; inbound will not ring this agent.`}
+            </p>
+            {trialExhausted && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-7 w-full text-[11px] gap-1.5 mt-1"
+                onClick={() => navigate("/app/phone-numbers")}
+              >
+                <Plus className="h-3 w-3" /> Buy number to continue
+              </Button>
+            )}
+          </>
+        ) : (
+          <p className="text-[11px] text-muted-foreground leading-relaxed">
+            No trial line configured. Buy your own number to place outbound calls.
+          </p>
+        )}
+      </div>
+      )}
+
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Set inbound number</DialogTitle>
+            <DialogTitle>Attach your phone number</DialogTitle>
             <DialogDescription>
-              Route inbound calls to this agent. Outbound test calls already use the free platform number above — you do not need to buy a number to dial out.
+              Your purchased number handles inbound routing and outbound caller ID. Trial platform lines are shared and capped — buy a number to go live.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-1">
             {phoneNumbers.length === 0 ? (
               <div className="rounded-lg border border-dashed border-border/60 bg-muted/20 px-3 py-4 text-center space-y-2">
-                <p className="text-sm text-muted-foreground">You don’t have any phone numbers yet.</p>
+                <p className="text-sm text-muted-foreground">You don’t have a purchased number yet.</p>
                 <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => { setDialogOpen(false); navigate("/app/phone-numbers"); }}>
                   <Plus className="h-3.5 w-3.5" /> Buy a number
                 </Button>
@@ -625,7 +710,7 @@ function AgentInboundPanel({
                   </SelectContent>
                 </Select>
                 <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  Reassigning a number in use by another agent moves inbound routing to this agent.
+                  Reassigning a number in use by another agent moves inbound and outbound to this agent.
                 </p>
               </>
             )}
@@ -641,6 +726,218 @@ function AgentInboundPanel({
           )}
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+type BuilderWhatsappChannel = {
+  mode: "shared" | "own";
+  businessName: string;
+  phoneE164: string | null;
+  status: string;
+  active: boolean;
+};
+
+type BuilderWhatsappResponse = {
+  channel: BuilderWhatsappChannel | null;
+  sharedTierAvailable: boolean;
+  usage: { used24h: number; cap: number } | null;
+};
+
+function StatusBadge({
+  ready,
+  readyLabel = "Ready",
+  emptyLabel = "Needs setup",
+}: {
+  ready: boolean;
+  readyLabel?: string;
+  emptyLabel?: string;
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium",
+        ready
+          ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-400"
+          : "border-amber-500/25 bg-amber-500/10 text-amber-400",
+      )}
+    >
+      <span className={cn("h-1.5 w-1.5 rounded-full", ready ? "bg-emerald-400" : "bg-amber-400")} />
+      {ready ? readyLabel : emptyLabel}
+    </span>
+  );
+}
+
+function JourneyReadinessPanel({ form, agent }: { form: any; agent: any }) {
+  const knowledgeIds = (form.watch("knowledgeSourceIds") ?? []) as number[];
+  const schedulingCalendarId = form.watch("schedulingCalendarId");
+  const schedulingEventTypeId = form.watch("schedulingEventTypeId");
+  const webhookUrl = (form.watch("webhookUrl") ?? "").trim();
+  const [hasInboundPhone, setHasInboundPhone] = useState(false);
+  const emailReady = useEmailChannelReady();
+
+  const { data: phoneNumbersRaw } = useListPhoneNumbers({
+    query: { queryKey: getListPhoneNumbersQueryKey(), staleTime: 60_000 },
+  });
+
+  const { data: waData } = useQuery({
+    queryKey: ["builder-whatsapp-channel", agent?.id],
+    enabled: !!agent?.id,
+    queryFn: () => customFetch<BuilderWhatsappResponse>(`${DASH_API}/whatsapp/channel`),
+    staleTime: 60_000,
+  });
+
+  useEffect(() => {
+    const phoneNumbers = Array.isArray(phoneNumbersRaw) ? phoneNumbersRaw : [];
+    setHasInboundPhone(phoneNumbers.some((p: any) => p.agentId === agent?.id));
+  }, [phoneNumbersRaw, agent?.id]);
+
+  const checks = [
+    { label: "Voice + prompt", ready: !!(form.watch("name") ?? "").trim() && !!(form.watch("systemPrompt") ?? "").trim() },
+    { label: "Knowledge attached", ready: knowledgeIds.length > 0 },
+    { label: "Phone channel", ready: hasInboundPhone },
+    { label: "WhatsApp channel", ready: !!waData?.channel?.active },
+    { label: "Email channel", ready: emailReady },
+    { label: "Booking channel", ready: !!schedulingCalendarId && !!schedulingEventTypeId },
+    { label: "Follow-up output", ready: !!waData?.channel?.active || emailReady || !!webhookUrl },
+  ];
+
+  const readyCount = checks.filter((c) => c.ready).length;
+
+  return (
+    <div className="rounded-xl border border-border/60 bg-card/30 p-4 space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Journey readiness</p>
+          <h3 className="text-sm font-semibold mt-1">Build a complete agent, not just a voice bot</h3>
+        </div>
+        <span className="text-xs font-semibold text-muted-foreground">{readyCount}/{checks.length}</span>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {checks.map((check) => (
+          <div key={check.label} className="flex items-center justify-between rounded-lg border border-border/40 bg-background/40 px-3 py-2">
+            <span className="text-xs">{check.label}</span>
+            <StatusBadge ready={check.ready} readyLabel="Connected" emptyLabel="Pending" />
+          </div>
+        ))}
+      </div>
+      <p className="text-[11px] text-muted-foreground">
+        Messaging channels are Email + WhatsApp only (managed SnapServe or your own Brevo / Vobiz-BSP). SMS is not a messaging channel.
+      </p>
+    </div>
+  );
+}
+
+function ChannelsTab({ form, agent, forceExpandEmail = false }: { form: any; agent: any; forceExpandEmail?: boolean }) {
+  const [, navigate] = useLocation();
+  const schedulingCalendarId = form.watch("schedulingCalendarId");
+  const schedulingEventTypeId = form.watch("schedulingEventTypeId");
+
+  const { data: waData, isLoading: waLoading } = useQuery({
+    queryKey: ["builder-whatsapp-channel", agent?.id],
+    enabled: !!agent?.id,
+    queryFn: () => customFetch<BuilderWhatsappResponse>(`${DASH_API}/whatsapp/channel`),
+    staleTime: 60_000,
+  });
+
+  return (
+    <div className="p-6 space-y-8">
+      <section className="space-y-2">
+        <h2 className="text-base font-semibold tracking-tight">Communication channels</h2>
+        <p className="text-[12px] text-muted-foreground max-w-3xl">
+          This is where the agent becomes real. Attach the channels customers use to reach you and the channels SnapServe uses for follow-ups.
+        </p>
+      </section>
+
+      <JourneyReadinessPanel form={form} agent={agent} />
+
+      <section className="grid gap-4 xl:grid-cols-2">
+        <div className="rounded-xl border border-border/60 bg-card/20 p-4 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold">Phone</h3>
+              <p className="text-[11px] text-muted-foreground">Inbound routing, outbound caller ID, and test calls.</p>
+            </div>
+            <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={() => navigate("/app/phone-numbers")}>
+              Manage numbers
+            </Button>
+          </div>
+          {agent?.id ? (
+            <AgentInboundPanel agentId={agent.id} preferredManagedNumber={form.watch("preferredManagedNumber")} />
+          ) : (
+            <p className="text-[11px] text-muted-foreground">Save the agent first to attach inbound phone numbers.</p>
+          )}
+        </div>
+
+        <div className="rounded-xl border border-border/60 bg-card/20 p-4 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold">WhatsApp</h3>
+              <p className="text-[11px] text-muted-foreground">
+                SnapServe managed, your own VoBiz number, or BYO BSP — post-call messages and chatbot replies.
+              </p>
+            </div>
+            <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={() => navigate("/app/whatsapp")}>
+              Configure WhatsApp
+            </Button>
+          </div>
+          {waLoading ? (
+            <Skeleton className="h-20 w-full rounded-xl" />
+          ) : waData?.channel ? (
+            <div className="rounded-lg border border-border/40 bg-background/40 p-3 space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">{waData.channel.businessName || "WhatsApp channel"}</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    {waData.channel.mode === "own" ? "Own number" : "Shared SnapServe channel"}
+                    {waData.channel.phoneE164 ? ` · ${waData.channel.phoneE164}` : ""}
+                  </p>
+                </div>
+                <StatusBadge ready={waData.channel.active} readyLabel={waData.channel.status || "Active"} emptyLabel="Inactive" />
+              </div>
+              {waData.usage && (
+                <p className="text-[11px] text-muted-foreground">
+                  Usage: {waData.usage.used24h}/{waData.usage.cap} messages in the last 24h.
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="rounded-lg border border-dashed border-border/50 p-4">
+              <p className="text-sm font-medium">No WhatsApp channel yet</p>
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Connect WhatsApp if this agent should send summaries, callback reminders, or chat with leads after calls.
+              </p>
+            </div>
+          )}
+        </div>
+
+        <EmailChannelCard forceExpanded={forceExpandEmail} />
+
+        <div className="rounded-xl border border-border/60 bg-card/20 p-4 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold">Booking</h3>
+              <p className="text-[11px] text-muted-foreground">Calendar, event type, meeting links, and booking notifications.</p>
+            </div>
+            <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={() => navigate("/app/scheduling")}>
+              Open scheduling
+            </Button>
+          </div>
+          <div className="rounded-lg border border-border/40 bg-background/40 p-3 space-y-2">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium">Calendar + event type</p>
+                <p className="text-[11px] text-muted-foreground">
+                  {schedulingCalendarId && schedulingEventTypeId
+                    ? "Booking tools and notifications are linked."
+                    : "Link scheduling before promising bookings over voice or WhatsApp."}
+                </p>
+              </div>
+              <StatusBadge ready={!!schedulingCalendarId && !!schedulingEventTypeId} readyLabel="Linked" emptyLabel="Unlinked" />
+            </div>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }
@@ -683,6 +980,9 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
     staleTime: 60 * 1000,
   });
   const myClones = myClonesData?.voices ?? [];
+  const myCartesiaClones = myClones.filter((c) => (c.provider ?? "cartesia") === "cartesia");
+  const mySarvamClones = myClones.filter((c) => c.provider === "sarvam");
+  const [sarvamCloneOpen, setSarvamCloneOpen] = useState(false);
 
   // Curated Cartesia voice list: prefer admin whitelist (language-filtered),
   // fall back to the static catalog when whitelist is empty so "Choose voice"
@@ -693,7 +993,7 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
     const filtered = filterVoicesForLanguage(all, language);
     const seen = new Set<string>();
     const opts: { value: string; label: string }[] = [];
-    for (const c of myClones) {
+    for (const c of myCartesiaClones) {
       if (seen.has(c.id)) continue;
       seen.add(c.id);
       opts.push({ value: c.id, label: `✦ ${c.name}` });
@@ -718,7 +1018,7 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
     }
     opts.push({ value: "__custom__", label: "Paste custom Voice ID" });
     return opts;
-  }, [whitelistedData, language, ttsVoice, agent, myClones]);
+  }, [whitelistedData, language, ttsVoice, agent, myCartesiaClones]);
 
   // When the language changes (or the whitelist finishes loading), clear a
   // selected curated voice that no longer supports the language — using the
@@ -737,6 +1037,16 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
     }
   }, [language, whitelistedData, ttsProvider, ttsVoice, form]);
 
+  // Clear Sarvam voice when it is incompatible with the selected Bulbul model
+  // (v2 speakers + bulbul:v3 → API 400).
+  useEffect(() => {
+    if (ttsProvider !== "sarvam") return;
+    if (!ttsVoice || ttsVoice === "__custom__") return;
+    if (!isSarvamVoiceCompatible(ttsVoice, ttsModel)) {
+      form.setValue("ttsVoice", "", { shouldDirty: true });
+    }
+  }, [ttsProvider, ttsModel, ttsVoice, form]);
+
   // "Paste custom Voice ID" UI mode — selecting the option must NOT erase an
   // already-saved voice ID; the value only changes when the user types into
   // the custom input or picks a different curated voice.
@@ -749,11 +1059,41 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
     void queryClient.invalidateQueries({ queryKey: ["voices", "mine"] });
   }
 
+  function applySarvamClonedVoice(voice: ClonedVoiceResult) {
+    form.setValue("ttsProvider", "sarvam", { shouldDirty: true });
+    form.setValue("ttsVoice", voice.id, { shouldDirty: true });
+    setVoiceCustomMode(false);
+    void queryClient.invalidateQueries({ queryKey: ["voices", "mine"] });
+  }
+
   const ttsVoiceRaw   = ttsProvider in TTS_VOICES ? TTS_VOICES[ttsProvider] : undefined;
   const ttsVoiceFree  = ttsVoiceRaw === null;
+  const sarvamOverviewOpts = useMemo(() => {
+    const catalog = getSarvamTtsVoices(ttsModel);
+    const seen = new Set<string>();
+    const opts: { value: string; label: string }[] = [];
+    for (const c of mySarvamClones) {
+      if (seen.has(c.id)) continue;
+      seen.add(c.id);
+      opts.push({ value: c.id, label: `✦ ${c.name}` });
+    }
+    for (const v of catalog) {
+      if (seen.has(v.value)) continue;
+      seen.add(v.value);
+      opts.push(v);
+    }
+    if (ttsVoice && ttsVoice !== "__custom__" && !seen.has(ttsVoice)) {
+      opts.unshift({ value: ttsVoice, label: ttsVoice });
+    }
+    opts.push({ value: "__custom__", label: "Paste custom speaker ID" });
+    return opts;
+  }, [mySarvamClones, ttsModel, ttsVoice]);
+
   const ttsVoiceOpts: { value: string; label: string }[] =
     ttsProvider === "cartesia"
       ? cartesiaOverviewOpts
+      : ttsProvider === "sarvam"
+      ? sarvamOverviewOpts
       : ((ttsVoiceRaw ?? []) as { value: string; label: string }[]);
 
   const asrLabel       = ASR_PROVIDERS.find(p => p.value === asrProvider)?.label ?? asrProvider;
@@ -844,7 +1184,6 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
       {/* ── Studio overview: pipeline → welcome → canvas ─────────────────────── */}
       <div className="relative min-w-0">
         <div className="p-5 sm:p-6 space-y-6 max-w-3xl">
-
           {/* Pipeline chips — top of Overview */}
           <section className="space-y-2.5">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/55">Pipeline</p>
@@ -993,15 +1332,8 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
                   <FormLabel className="text-[10px] text-muted-foreground">Language</FormLabel>
                   <SmallSelect value={field.value} onChange={(v) => {
                     field.onChange(v);
-                    // Never auto-swap the LLM while on Gemini Live — that would kick the user off realtime.
-                    if (!isGeminiLive) {
-                      const { llmProvider, llmModel } = defaultLlmForLanguages(v);
-                      form.setValue("llmProvider", llmProvider);
-                      form.setValue("llmModel", llmModel);
-                      // Tamil defaults to Gemini Live — keep the voice stack in sync
-                      // so the language pick actually lands on the realtime stack.
-                      form.setValue("voiceStack", voiceStackForLlmModel(llmModel));
-                    }
+                    // Language alone must never force Gemini Live / swap the LLM.
+                    // Users pick model + voice stack explicitly in the Model / Voice cards.
                   }}
                     options={options.map(l => ({ value: l.value, label: l.label }))} placeholder="Select language" />
                 </FormItem>
@@ -1028,45 +1360,114 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
               )}
               {!isGeminiLive && asrProvider === "sarvam" && (
                 <FormField control={form.control} name="sarvamSttMode" render={({ field }) => {
+                  // Must match resolveSarvamSttMode: en → codemix, Indic → transcribe
                   const lang = form.watch("language") ?? "";
-                  const autoDefault = lang.toLowerCase().startsWith("en") ? "transcribe" : "codemix";
+                  const autoDefault = lang.toLowerCase().startsWith("en") ? "codemix" : "transcribe";
                   const currentValue = field.value ?? autoDefault;
                   return (
                   <FormItem className="space-y-1">
                     <FormLabel className="text-[10px] font-medium text-foreground/80">Speech Mode</FormLabel>
                     <SmallSelect value={currentValue} onChange={field.onChange}
                       options={[
-                        { value: "codemix", label: "Mixed / Hinglish (English + Regional words)" },
-                        { value: "verbatim", label: "Native Script (Pure Regional script, e.g. हिंदी)" },
-                        { value: "transcribe", label: "English Only (Strict English text)" },
+                        { value: "codemix", label: "Code-mix (English + regional, e.g. Hinglish)" },
+                        { value: "transcribe", label: "Transcribe (native script, e.g. हिंदी / தமிழ்)" },
+                        { value: "verbatim", label: "Verbatim (exact as spoken, incl. fillers)" },
+                        { value: "translit", label: "Translit (Indic speech → Roman script)" },
+                        { value: "translate", label: "Translate (speech → English text)" },
                       ]} />
                     <p className="text-[9.5px] text-muted-foreground leading-snug mt-1">
-                      {currentValue === "verbatim"
-                        ? "Speech is transcribed into native regional script (e.g. हिंदी / தமிழ்)."
-                        : currentValue === "transcribe"
-                        ? "Speech is transcribed into standard English text."
-                        : "Recommended: Captures mixed English + regional words (Hinglish, Tanglish, etc.)."}
+                      {currentValue === "transcribe"
+                        ? "Clean native-script transcript. Recommended for Indic languages."
+                        : currentValue === "codemix"
+                        ? "English words stay Latin; regional words stay native. Recommended for en-IN / mixed speech."
+                        : currentValue === "verbatim"
+                        ? "Keeps fillers and exact phrasing as spoken."
+                        : currentValue === "translit"
+                        ? "Writes Indic speech in Roman/Latin script."
+                        : currentValue === "translate"
+                        ? "Speech-to-English: any language spoken → English text."
+                        : "Auto: English → code-mix, Indic → native-script transcribe."}
                     </p>
                   </FormItem>
                   );
                 }} />
               )}
             </div>
-            <div className="flex items-center justify-between border-t border-border pt-2 mt-1">
-              <div>
-                <p className="text-[10px] font-medium text-foreground/80">Multilingual</p>
-                <p className="text-[9px] text-muted-foreground">
-                  {isGeminiLive
-                    ? "Allow Gemini Live to follow the caller when they switch languages mid-call."
-                    : "Automatically detects and switches between supported languages during the conversation."}
-                </p>
+            <div className="space-y-3 border-t border-border pt-3 mt-1">
+              <p className="text-[11px] font-semibold text-foreground tracking-tight">Language personalisation</p>
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-medium text-foreground/80">Switch language during call</p>
+                  <p className="text-[9px] text-muted-foreground">
+                    {isGeminiLive
+                      ? "Allow Gemini Live to follow the caller when they switch languages mid-call."
+                      : "Follow along when the caller switches languages (Sarvam STT + TTS)."}
+                  </p>
+                </div>
+                <FormField control={form.control} name="languageAutoDetect" render={({ field }) => (
+                  <Switch
+                    checked={field.value ?? false}
+                    onCheckedChange={(v) => {
+                      field.onChange(v);
+                      if (v && !(form.getValues("multilingualLanguages")?.length)) {
+                        const start = form.getValues("language") || "en-IN";
+                        const seed = ["en-IN", "hi-IN", "ta-IN"].includes(start)
+                          ? ["en-IN", "hi-IN", "ta-IN"]
+                          : [start, "en-IN"];
+                        form.setValue("multilingualLanguages", [...new Set(seed)], { shouldDirty: true });
+                      }
+                    }}
+                  />
+                )} />
               </div>
-              <FormField control={form.control} name="languageAutoDetect" render={({ field }) => (
-                <Switch
-                  checked={field.value ?? false}
-                  onCheckedChange={(v) => field.onChange(v)}
-                />
-              )} />
+              {!!form.watch("languageAutoDetect") && (
+                <FormField control={form.control} name="multilingualLanguages" render={({ field }) => {
+                  const selected = new Set(field.value ?? []);
+                  return (
+                    <FormItem className="space-y-1.5">
+                      <FormLabel className="text-[10px] font-medium text-foreground/80">Languages allowed</FormLabel>
+                      <p className="text-[9px] text-muted-foreground">Languages the agent can understand and reply in.</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {SARVAM_PERSONALISATION_LANGUAGES.map((lang) => {
+                          const on = selected.has(lang.value);
+                          return (
+                            <button
+                              key={lang.value}
+                              type="button"
+                              onClick={() => {
+                                const next = new Set(selected);
+                                if (on) next.delete(lang.value);
+                                else next.add(lang.value);
+                                field.onChange([...next]);
+                              }}
+                              className={cn(
+                                "px-2 py-0.5 rounded-full text-[10px] border transition-colors",
+                                on
+                                  ? "bg-primary text-primary-foreground border-primary"
+                                  : "bg-background text-muted-foreground border-border hover:border-foreground/30",
+                              )}
+                            >
+                              {lang.label.replace(" (India)", "")}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </FormItem>
+                  );
+                }} />
+              )}
+              <div className="flex items-center justify-between gap-3 border-t border-border/60 pt-2">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-medium text-foreground/80">Output numbers in Indic</p>
+                  <p className="text-[9px] text-muted-foreground">Converts numbers for speech. E.g. &apos;500&apos; → &apos;paanch sau&apos; (Sarvam TTS).</p>
+                </div>
+                <FormField control={form.control} name="sarvamIndicNumbers" render={({ field }) => (
+                  <Switch
+                    checked={field.value !== false}
+                    onCheckedChange={field.onChange}
+                  />
+                )} />
+              </div>
             </div>
           </EditConfigDialog>
 
@@ -1167,8 +1568,20 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
                   <FormField control={form.control} name="ttsModel" render={({ field }) => (
                     <FormItem className="space-y-1">
                       <FormLabel className="text-[10px] text-muted-foreground">Model</FormLabel>
-                      <SmallSelect value={field.value ?? ""} onChange={field.onChange}
-                        options={ttsModelOpts.map((m: any) => ({ value: m.value, label: m.label }))} placeholder="Default" />
+                      <SmallSelect
+                        value={field.value ?? ""}
+                        onChange={(v) => {
+                          field.onChange(v);
+                          if (ttsProvider === "sarvam") {
+                            const current = form.getValues("ttsVoice");
+                            if (!isSarvamVoiceCompatible(current, v)) {
+                              form.setValue("ttsVoice", "", { shouldDirty: true });
+                            }
+                          }
+                        }}
+                        options={ttsModelOpts.map((m: any) => ({ value: m.value, label: m.label }))}
+                        placeholder="Default"
+                      />
                     </FormItem>
                   )} />
                 )}
@@ -1190,7 +1603,24 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
                         Clone voice
                       </Button>
                     )}
+                    {!isGeminiLive && ttsProvider === "sarvam" && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-[10px] gap-1 px-2"
+                        onClick={() => setSarvamCloneOpen(true)}
+                      >
+                        <Sparkles className="h-3 w-3" />
+                        Add Sarvam clone
+                      </Button>
+                    )}
                   </div>
+                  {ttsProvider === "sarvam" && (
+                    <p className="text-[10px] text-muted-foreground/90 leading-relaxed">
+                      Default SnapServe stack · Powered by Sarvam
+                    </p>
+                  )}
                   {ttsVoiceOpts.length > 0 && (
                     <FormField control={form.control} name="ttsVoice" render={({ field }) => (
                       <FormItem className="space-y-0">
@@ -1214,7 +1644,7 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
                       </FormItem>
                     )} />
                   )}
-                  {ttsProvider === "cartesia" && (whitelistedData?.voices ?? []).length > 0 && curatedVoiceOpts.length === 0 && myClones.length === 0 && (
+                  {ttsProvider === "cartesia" && (whitelistedData?.voices ?? []).length > 0 && curatedVoiceOpts.length === 0 && myCartesiaClones.length === 0 && (
                     <p className="text-[10px] text-amber-400/80 leading-relaxed rounded-md border border-amber-500/20 bg-amber-500/5 px-2.5 py-2">
                       No voices available for the selected language.
                     </p>
@@ -1232,7 +1662,7 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
                           className="h-8 text-xs bg-background/50 font-mono"
                         />
                         <FormDescription className="text-[10px]">
-                          Find voice IDs in your {ttsProvider === "cartesia" ? "Cartesia" : ttsProvider === "elevenlabs" ? "ElevenLabs" : "provider"} dashboard.
+                          Find voice IDs in your {ttsProvider === "cartesia" ? "Cartesia" : ttsProvider === "elevenlabs" ? "ElevenLabs" : ttsProvider === "sarvam" ? "Sarvam Creative Studio" : "provider"} dashboard.
                         </FormDescription>
                       </FormItem>
                     )} />
@@ -1244,6 +1674,12 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
                 onOpenChange={setCloneOpen}
                 defaultLanguage={language}
                 onCloned={applyClonedVoice}
+              />
+              <RegisterSarvamVoiceDialog
+                open={sarvamCloneOpen}
+                onOpenChange={setSarvamCloneOpen}
+                defaultLanguage={language}
+                onRegistered={applySarvamClonedVoice}
               />
             </div>
             )}
@@ -1407,6 +1843,7 @@ function VoiceTab({ form }: { form: any }) {
   const geminiLiveVoiceName = (form.watch("geminiLiveVoiceName") as string) ?? "Kore";
   const isGeminiLive   = isGeminiLiveAgent({ llmModel, voiceStack });
   const [cloneOpenV, setCloneOpenV] = useState(false);
+  const [sarvamCloneOpenV, setSarvamCloneOpenV] = useState(false);
   const queryClient = useQueryClient();
 
   // Fetch admin-whitelisted voices (public endpoint, no auth required)
@@ -1422,6 +1859,8 @@ function VoiceTab({ form }: { form: any }) {
     staleTime: 60 * 1000,
   });
   const myClones = myClonesData?.voices ?? [];
+  const myCartesiaClonesV = myClones.filter((c) => (c.provider ?? "cartesia") === "cartesia");
+  const mySarvamClonesV = myClones.filter((c) => c.provider === "sarvam");
 
   // Shared language filter (single source of truth in agent-providers.ts):
   // English agents see ALL whitelisted voices; non-English agents see only
@@ -1431,7 +1870,7 @@ function VoiceTab({ form }: { form: any }) {
     const filtered = filterVoicesForLanguage(all, agentLanguage);
     const seen = new Set<string>();
     const opts: { value: string; label: string }[] = [];
-    for (const c of myClones) {
+    for (const c of myCartesiaClonesV) {
       if (seen.has(c.id)) continue;
       seen.add(c.id);
       opts.push({ value: c.id, label: `✦ ${c.name}` });
@@ -1456,7 +1895,7 @@ function VoiceTab({ form }: { form: any }) {
     }
     opts.push({ value: "__custom__", label: "Paste custom Voice ID" });
     return opts;
-  }, [whitelistedData, agentLanguage, ttsVoice, myClones]);
+  }, [whitelistedData, agentLanguage, ttsVoice, myCartesiaClonesV]);
 
   // When the language changes (or the whitelist finishes loading), clear a
   // selected curated voice that no longer supports the language — using the
@@ -1487,11 +1926,41 @@ function VoiceTab({ form }: { form: any }) {
     void queryClient.invalidateQueries({ queryKey: ["voices", "mine"] });
   }
 
+  function applySarvamClonedVoiceV(voice: ClonedVoiceResult) {
+    form.setValue("ttsProvider", "sarvam", { shouldDirty: true });
+    form.setValue("ttsVoice", voice.id, { shouldDirty: true });
+    setVoiceCustomModeV(false);
+    void queryClient.invalidateQueries({ queryKey: ["voices", "mine"] });
+  }
+
+  const sarvamVoiceOptsV = useMemo(() => {
+    const catalog = getSarvamTtsVoices(ttsModel);
+    const seen = new Set<string>();
+    const opts: { value: string; label: string }[] = [];
+    for (const c of mySarvamClonesV) {
+      if (seen.has(c.id)) continue;
+      seen.add(c.id);
+      opts.push({ value: c.id, label: `✦ ${c.name}` });
+    }
+    for (const v of catalog) {
+      if (seen.has(v.value)) continue;
+      seen.add(v.value);
+      opts.push(v);
+    }
+    if (ttsVoice && ttsVoice !== "__custom__" && !seen.has(ttsVoice)) {
+      opts.unshift({ value: ttsVoice, label: ttsVoice });
+    }
+    opts.push({ value: "__custom__", label: "Paste custom speaker ID" });
+    return opts;
+  }, [mySarvamClonesV, ttsModel, ttsVoice]);
+
   // For non-Cartesia providers fall back to the hardcoded list
   const ttsVoiceRawV  = ttsProvider in TTS_VOICES ? TTS_VOICES[ttsProvider] : undefined;
   const ttsVoiceOptsV: { value: string; label: string }[] =
     ttsProvider === "cartesia"
       ? cartesiaVoiceOpts
+      : ttsProvider === "sarvam"
+      ? sarvamVoiceOptsV
       : ((ttsVoiceRawV ?? []) as { value: string; label: string }[]);
 
   const ttsModelOptsV = TTS_MODELS[ttsProvider] ?? [];
@@ -1678,12 +2147,12 @@ function VoiceTab({ form }: { form: any }) {
   return (
     <div className="relative p-6 space-y-8 max-w-3xl">
 
-      {/* ── SPEAK ── */}
+      {/* ── SPEAKING ── */}
       <section className="space-y-4">
         <div>
-          <h3 className="text-[13px] font-semibold text-foreground tracking-tight">Speak</h3>
+          <h3 className="text-[13px] font-semibold text-foreground tracking-tight">Speaking</h3>
           <p className="text-[11px] text-muted-foreground mt-0.5">
-            How the agent sounds on the call — provider, voice, and model.
+            How the agent sounds on the call — provider, voice, speed, and model.
           </p>
         </div>
         <div className="rounded-xl border border-border/50 bg-card/40 p-4 space-y-3">
@@ -1741,7 +2210,24 @@ function VoiceTab({ form }: { form: any }) {
                         Clone voice
                       </Button>
                     )}
+                    {ttsProvider === "sarvam" && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-[10px] gap-1 px-2"
+                        onClick={() => setSarvamCloneOpenV(true)}
+                      >
+                        <Sparkles className="h-3 w-3" />
+                        Add Sarvam clone
+                      </Button>
+                    )}
                   </div>
+                  {ttsProvider === "sarvam" && (
+                    <p className="text-[10px] text-muted-foreground leading-relaxed -mt-0.5 mb-1">
+                      Default SnapServe stack · Powered by Sarvam
+                    </p>
+                  )}
                   <Select
                     value={
                       dropdownValV && ttsVoiceOptsV.some((v) => v.value === dropdownValV)
@@ -1773,7 +2259,7 @@ function VoiceTab({ form }: { form: any }) {
               )} />
             )}
 
-            {ttsProvider === "cartesia" && (whitelistedData?.voices ?? []).length > 0 && curatedVoiceOptsV.length === 0 && myClones.length === 0 && (
+            {ttsProvider === "cartesia" && (whitelistedData?.voices ?? []).length > 0 && curatedVoiceOptsV.length === 0 && myCartesiaClonesV.length === 0 && (
               <p className="text-xs text-amber-400/80 leading-relaxed rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2.5 col-span-2">
                 No voices available for the selected language.
               </p>
@@ -1823,6 +2309,12 @@ function VoiceTab({ form }: { form: any }) {
             defaultLanguage={agentLanguage}
             onCloned={applyClonedVoiceV}
           />
+          <RegisterSarvamVoiceDialog
+            open={sarvamCloneOpenV}
+            onOpenChange={setSarvamCloneOpenV}
+            defaultLanguage={agentLanguage}
+            onRegistered={applySarvamClonedVoiceV}
+          />
 
           {showCustomV && (
             <FormField control={form.control} name="ttsVoice" render={({ field }) => (
@@ -1849,6 +2341,57 @@ function VoiceTab({ form }: { form: any }) {
               </FormItem>
             )} />
           )}
+
+          {!isGeminiLive && (ttsProvider === "sarvam" || ttsProvider === "cartesia" || ttsProvider === "elevenlabs") && (
+            <div className="border-t border-border/50 pt-3 mt-1">
+              <FormField control={form.control} name="ttsSpeed" render={({ field }) => {
+                const val = typeof field.value === "number" && Number.isFinite(field.value) ? field.value : 1;
+                const pct = ((val - 0.7) / (1.5 - 0.7)) * 100;
+                return (
+                  <FormItem className="space-y-0">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <FormLabel className="text-sm font-medium text-foreground">Speaking speed</FormLabel>
+                        <FormDescription className="text-[10px] mt-0.5">
+                          {ttsProvider === "sarvam"
+                            ? "How fast the agent talks (Sarvam Bulbul pace). 1.0× is normal."
+                            : "How fast the agent talks. 1.0× is normal."}
+                        </FormDescription>
+                      </div>
+                      <div className="flex items-center gap-3 shrink-0 w-[min(100%,220px)]">
+                        <div className="relative h-5 flex-1 flex items-center">
+                          <div className="absolute inset-x-0 h-1.5 rounded-full bg-border/60" />
+                          <div className="absolute left-0 h-1.5 rounded-full bg-primary/70 pointer-events-none" style={{ width: `${pct}%` }} />
+                          <input
+                            type="range"
+                            min={0.7}
+                            max={1.5}
+                            step={0.05}
+                            value={val}
+                            onChange={(e) => field.onChange(parseFloat(e.target.value))}
+                            className="absolute inset-x-0 w-full opacity-0 h-5 cursor-pointer"
+                          />
+                        </div>
+                        <Input
+                          type="number"
+                          min={0.7}
+                          max={1.5}
+                          step={0.05}
+                          value={val}
+                          onChange={(e) => {
+                            const n = parseFloat(e.target.value);
+                            if (Number.isFinite(n)) field.onChange(Math.min(1.5, Math.max(0.7, n)));
+                          }}
+                          className="h-8 w-[4.25rem] text-xs tabular-nums text-center"
+                        />
+                        <span className="text-[10px] text-muted-foreground shrink-0">×</span>
+                      </div>
+                    </div>
+                  </FormItem>
+                );
+              }} />
+            </div>
+          )}
           </>
           )}
         </div>
@@ -1857,7 +2400,7 @@ function VoiceTab({ form }: { form: any }) {
       {/* ── LISTEN ── */}
       <section className="space-y-4">
         <div>
-          <h3 className="text-[13px] font-semibold text-foreground tracking-tight">Listen</h3>
+          <h3 className="text-[13px] font-semibold text-foreground tracking-tight">Listening</h3>
           <p className="text-[11px] text-muted-foreground mt-0.5">
             How the agent hears the caller — noise cancel, backchannels, and ambient bed.
           </p>
@@ -1961,8 +2504,8 @@ function VoiceTab({ form }: { form: any }) {
 /** Voice-tab Call Engine presets — writes the same form keys as Advanced → Engine. */
 function VoiceCallFeelPresets({ form }: { form: any }) {
   const asrProviderVal = form.watch("asrProvider") as string | undefined;
-  const endpointMs = form.watch("asrEndpointingSilenceMs") ?? 300;
-  const linearMs = form.watch("linearDelayMs") ?? 350;
+  const endpointMs = form.watch("asrEndpointingSilenceMs") ?? 250;
+  const linearMs = form.watch("linearDelayMs") ?? 0;
   const interruptWords = form.watch("stopSpeakingNumWords") ?? 3;
 
   const activePreset: CallEnginePreset | "custom" = (() => {
@@ -2039,174 +2582,6 @@ function VoiceCallFeelPresets({ form }: { form: any }) {
 
 /* ── Tab: Tools ─────────────────────────────────────────────────────────────── */
 
-type WebcallLinkRow = {
-  id: number;
-  token: string;
-  label: string | null;
-  purpose: string | null;
-  active: boolean;
-  requireCamera: boolean;
-  useCount: number;
-  maxUses: number | null;
-  expiresAt: string | null;
-  createdAt: string;
-};
-
-function WebcallShareLinksSection({
-  agentId,
-  defaultRequireCamera = true,
-}: {
-  agentId: number | undefined;
-  defaultRequireCamera?: boolean;
-}) {
-  const { toast } = useToast();
-  const [creating, setCreating] = useState(false);
-  const [label, setLabel] = useState("Verification call");
-  const [purpose, setPurpose] = useState("Please join to complete visual verification.");
-  const [requireCamera, setRequireCamera] = useState(defaultRequireCamera);
-
-  const { data: links = [], refetch, isLoading } = useQuery({
-    queryKey: ["webcall-links", agentId],
-    enabled: !!agentId,
-    queryFn: () => customFetch<WebcallLinkRow[]>(`${DASH_API}/agents/${agentId}/webcall-links`),
-  });
-
-  const joinUrl = (token: string) => `${window.location.origin}/join/${token}`;
-
-  const createLink = async () => {
-    if (!agentId) {
-      toast({ title: "Save the agent first", variant: "destructive" });
-      return;
-    }
-    setCreating(true);
-    try {
-      await customFetch(`${DASH_API}/agents/${agentId}/webcall-links`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          label: label.trim() || null,
-          purpose: purpose.trim() || null,
-          requireCamera,
-        }),
-      });
-      await refetch();
-      toast({ title: "Share link created" });
-    } catch (err) {
-      toast({ title: "Could not create link", description: formatApiError(err), variant: "destructive" });
-    } finally {
-      setCreating(false);
-    }
-  };
-
-  const setActive = async (id: number, active: boolean) => {
-    try {
-      await customFetch(`${DASH_API}/webcall-links/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ active }),
-      });
-      await refetch();
-    } catch (err) {
-      toast({ title: "Update failed", description: formatApiError(err), variant: "destructive" });
-    }
-  };
-
-  const removeLink = async (id: number) => {
-    try {
-      await customFetch(`${DASH_API}/webcall-links/${id}`, { method: "DELETE" });
-      await refetch();
-      toast({ title: "Link deleted" });
-    } catch (err) {
-      toast({ title: "Delete failed", description: formatApiError(err), variant: "destructive" });
-    }
-  };
-
-  const copyLink = async (token: string) => {
-    try {
-      await navigator.clipboard.writeText(joinUrl(token));
-      toast({ title: "Link copied" });
-    } catch {
-      toast({ title: "Copy failed", variant: "destructive" });
-    }
-  };
-
-  return (
-    <div>
-      <div className="mb-3">
-        <h3 className="text-sm font-semibold mb-0.5">Shareable invite links</h3>
-        <p className="text-xs text-muted-foreground">
-          Send a link so guests can join with mic and camera for verification. Billed to your wallet.
-        </p>
-      </div>
-
-      <div className="rounded-xl border border-border/60 bg-card/30 p-4 space-y-3 mb-3">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <p className="text-[10px] text-muted-foreground">Label</p>
-            <Input className="h-8 text-xs" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="KYC verification" />
-          </div>
-          <div className="space-y-1">
-            <p className="text-[10px] text-muted-foreground">Purpose (shown to guest)</p>
-            <Input className="h-8 text-xs" value={purpose} onChange={(e) => setPurpose(e.target.value)} placeholder="Show your ID to the agent" />
-          </div>
-        </div>
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <Switch checked={requireCamera} onCheckedChange={setRequireCamera} />
-            <span className="text-[11px] text-muted-foreground">Require camera</span>
-          </div>
-          <Button type="button" size="sm" className="h-7 text-xs" disabled={!agentId || creating} onClick={() => void createLink()}>
-            {creating ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Link2 className="h-3.5 w-3.5 mr-1" />}
-            Create link
-          </Button>
-        </div>
-        {!agentId && (
-          <p className="text-[10px] text-amber-500">Save the agent before creating share links.</p>
-        )}
-      </div>
-
-      {isLoading ? (
-        <p className="text-xs text-muted-foreground">Loading links…</p>
-      ) : links.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-border/50 p-6 text-center">
-          <Link2 className="h-6 w-6 text-muted-foreground/20 mx-auto mb-2" />
-          <p className="text-sm text-muted-foreground/50">No share links yet</p>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {links.map((link) => (
-            <div key={link.id} className={cn("rounded-xl border p-3 space-y-2", link.active ? "border-border/60 bg-card/30" : "border-border/40 bg-card/10 opacity-70")}>
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold truncate">{link.label || "Webcall link"}</p>
-                  <p className="text-[10px] text-muted-foreground truncate font-mono">{joinUrl(link.token)}</p>
-                  {link.purpose && <p className="text-[10px] text-muted-foreground/80 mt-0.5">{link.purpose}</p>}
-                  <p className="text-[10px] text-muted-foreground/60 mt-1">
-                    Uses: {link.useCount}{link.maxUses != null ? ` / ${link.maxUses}` : ""}
-                    {link.requireCamera ? " · Camera required" : ""}
-                    {!link.active ? " · Inactive" : ""}
-                  </p>
-                </div>
-                <div className="flex items-center gap-1 shrink-0">
-                  <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={() => void copyLink(link.token)} title="Copy link">
-                    <Copy className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button type="button" variant="ghost" size="sm" className="h-7 text-[10px] px-2" onClick={() => void setActive(link.id, !link.active)}>
-                    {link.active ? "Disable" : "Enable"}
-                  </Button>
-                  <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => void removeLink(link.id)}>
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined }) {
   const { fields, append, remove } = useFieldArray({ control: form.control, name: "tools" });
   const genderEnabled = form.watch("genderDetectionEnabled") ?? false;
@@ -2282,6 +2657,8 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
     native_reschedule: "reschedule_booking",
     native_cancel: "cancel_booking",
     end_call: "end_call",
+    send_email: "send_email",
+    send_whatsapp: "send_whatsapp",
   };
 
   const toggleNativeTool = (type: string) => {
@@ -2395,6 +2772,22 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
       color: "slate",
       label: "End Call",
       description: "Lets the agent gracefully end the call when the conversation is complete.",
+      needsEventType: false,
+    },
+    {
+      type: "send_email",
+      icon: <Mail className="h-4 w-4" />,
+      color: "sky",
+      label: "Send Email",
+      description: "Lets the agent email the caller mid-call using Channels → Email (SnapServe managed or your Brevo). Asks for their address, then sends the channel template.",
+      needsEventType: false,
+    },
+    {
+      type: "send_whatsapp",
+      icon: <MessageCircle className="h-4 w-4" />,
+      color: "emerald",
+      label: "Send WhatsApp",
+      description: "Lets the agent send a WhatsApp template mid-call via Instant/Business or your BSP webhook. Uses the caller’s phone unless they give another number.",
       needsEventType: false,
     },
   ] as const;
@@ -2947,7 +3340,7 @@ function VoicemailTab({ form }: { form: any }) {
 
 /* ── Tab: Advanced ──────────────────────────────────────────────────────────── */
 
-type AdvSection = "engine" | "limits" | "compliance";
+type AdvSection = "engine" | "limits" | "compliance" | "integrations";
 
 function AdvSlider({ form, name, label, hint, min, max, step, fmt, onValueChange, disabled }: {
   form: any; name: string; label: string; hint?: string;
@@ -3021,10 +3414,18 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
   const [traiConfirmOpen, setTraiConfirmOpen] = useState(false);
   const [dpdpConfirmOpen, setDpdpConfirmOpen] = useState(false);
   const [irdaiConfirmOpen, setIrdaiConfirmOpen] = useState(false);
+
+  // Surface webhook validation errors on the Integrations sub-tab
+  useEffect(() => {
+    if (form.formState.errors?.webhookUrl || form.formState.errors?.webhookSecret) {
+      setSection("integrations");
+    }
+  }, [form.formState.errors?.webhookUrl, form.formState.errors?.webhookSecret]);
+
   const bargeIn = form.watch("bargeInEnabled");
   const asrProviderVal = form.watch("asrProvider") as string | undefined;
-  const endpointMs = form.watch("asrEndpointingSilenceMs") ?? 300;
-  const linearMs = form.watch("linearDelayMs") ?? 350;
+  const endpointMs = form.watch("asrEndpointingSilenceMs") ?? 250;
+  const linearMs = form.watch("linearDelayMs") ?? 0;
   const interruptWords = form.watch("stopSpeakingNumWords") ?? 3;
 
   const activePreset: CallEnginePreset | "custom" = (() => {
@@ -3048,9 +3449,10 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
   };
 
   const nav: { id: AdvSection; icon: React.ReactNode; label: string }[] = [
-    { id: "engine",     icon: <Timer className="h-3.5 w-3.5" />,       label: "Engine"     },
-    { id: "limits",     icon: <Gauge className="h-3.5 w-3.5" />,       label: "Limits"     },
-    { id: "compliance", icon: <ShieldCheck className="h-3.5 w-3.5" />, label: "Compliance" },
+    { id: "engine",       icon: <Timer className="h-3.5 w-3.5" />,       label: "Engine"       },
+    { id: "limits",       icon: <Gauge className="h-3.5 w-3.5" />,       label: "Limits"       },
+    { id: "integrations", icon: <Webhook className="h-3.5 w-3.5" />,     label: "Integrations" },
+    { id: "compliance",   icon: <ShieldCheck className="h-3.5 w-3.5" />, label: "Compliance"   },
   ];
 
   return (
@@ -3145,8 +3547,8 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                 name="asrEndpointingSilenceMs"
                 label="Endpointing"
                 hint={asrProviderVal === "sarvam"
-                  ? "Not used with Sarvam STT — its server-side VAD ends the turn at a fixed ~0.5s. Azure only; the value is kept."
-                  : "Milliseconds of silence after the caller stops before we finalize the turn. Fast 150 · Balanced 250 · Patient 500. Azure STT only."}
+                  ? "Not used with Sarvam — use the pause-detection controls below."
+                  : "Milliseconds of silence after the caller stops before we finalize the turn (Azure + Deepgram). Fast 150 · Balanced 250 · Patient 500."}
                 min={100}
                 max={800}
                 step={25}
@@ -3154,13 +3556,84 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                 disabled={asrProviderVal === "sarvam"}
               />
 
+              {asrProviderVal === "sarvam" && (
+                <>
+                  <FormField control={form.control} name="sarvamHighVadSensitivity" render={({ field }) => (
+                    <FormItem className="flex flex-row items-center justify-between gap-3 py-1">
+                      <div>
+                        <FormLabel className="text-[12px] font-medium text-foreground/90">Detect pauses quickly</FormLabel>
+                        <p className="text-[10px] text-muted-foreground/70 mt-0.5">
+                          Default off — avoids cutting callers mid-sentence on phone audio. Turn on only if replies feel too slow.
+                        </p>
+                      </div>
+                      <FormControl>
+                        <Switch checked={!!field.value} onCheckedChange={field.onChange} />
+                      </FormControl>
+                    </FormItem>
+                  )} />
+                  <AdvSlider
+                    form={form}
+                    name="sarvamSpeechEndFlushMs"
+                    label="Reply kickoff delay"
+                    hint="Tiny pause after the caller finishes before the agent starts thinking. Default 80ms."
+                    min={0}
+                    max={200}
+                    step={10}
+                    fmt={(v) => `${v}ms`}
+                  />
+                  <AdvSlider
+                    form={form}
+                    name="sarvamIncompleteHoldMs"
+                    label="Wait for unfinished thoughts"
+                    hint="Extra wait when someone seems mid-sentence (e.g. “I want…”). Default 700ms."
+                    min={50}
+                    max={1000}
+                    step={10}
+                    fmt={(v) => `${v}ms`}
+                  />
+                </>
+              )}
+
               <AdvSlider
                 form={form}
                 name="linearDelayMs"
                 label="Linear delay"
-                hint="Extra wait after end-of-turn before the agent speaks — covers mid-sentence pauses."
+                hint="Extra wait after end-of-turn before the agent speaks — covers mid-sentence pauses. Default off (0)."
                 min={0}
                 max={1500}
+                step={50}
+                fmt={(v) => (v === 0 ? "off" : `${v}ms`)}
+              />
+
+              <AdvSlider
+                form={form}
+                name="fragmentCoalesceListeningMs"
+                label="Fragment hold (listening)"
+                hint="Hold short STT fragments while agent is silent. 0 = off. Default 500ms."
+                min={0}
+                max={2000}
+                step={50}
+                fmt={(v) => (v === 0 ? "off" : `${v}ms`)}
+              />
+
+              <AdvSlider
+                form={form}
+                name="fragmentCoalescePlayingMs"
+                label="Fragment hold (playing)"
+                hint="Hold short acks while agent is speaking. 0 = off. Default 1000ms."
+                min={0}
+                max={3000}
+                step={50}
+                fmt={(v) => (v === 0 ? "off" : `${v}ms`)}
+              />
+
+              <AdvSlider
+                form={form}
+                name="telephonyTailDrainMs"
+                label="Tail drain"
+                hint="Silence after last TTS so carriers don't clip goodbye. Default 400ms."
+                min={0}
+                max={2000}
                 step={50}
                 fmt={(v) => (v === 0 ? "off" : `${v}ms`)}
               />
@@ -3446,6 +3919,73 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
           </>
         )}
 
+        {/* ── INTEGRATIONS ── */}
+        {section === "integrations" && (
+          <>
+            <div>
+              <h3 className="text-[13px] font-semibold text-foreground">CRM / post-call webhook</h3>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Notify your CRM or Zap after a call ends. Separate from Journey lead intake — leave blank if you only need intake.
+              </p>
+            </div>
+            <div className="space-y-3 rounded-xl border border-border/50 bg-card/40 p-4">
+              <FormField control={form.control} name="webhookUrl" render={({ field }) => {
+                const val = field.value ?? "";
+                const isEmail = val.includes("@") && !val.startsWith("http");
+                const isHttp  = val.length > 0 && val.startsWith("http://");
+                return (
+                  <FormItem className="space-y-1">
+                    <FormLabel className="text-[10px] text-muted-foreground uppercase tracking-wider">Webhook URL</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="https://your-server.com/voiceorch-webhook"
+                        className="h-9 text-sm font-mono bg-background/50"
+                        autoComplete="off"
+                        {...field}
+                      />
+                    </FormControl>
+                    {isEmail && (
+                      <p className="text-xs text-destructive flex items-start gap-1">
+                        <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                        <span>That looks like an email address, not a URL. Enter an <code className="font-mono">https://</code> endpoint.</span>
+                      </p>
+                    )}
+                    {isHttp && !isEmail && (
+                      <p className="text-xs text-amber-500 flex items-start gap-1">
+                        <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                        <span>HTTP is not allowed — must be <code className="font-mono">https://</code></span>
+                      </p>
+                    )}
+                    <FormDescription className="text-[10px]">
+                      Must be HTTPS. We send a JSON payload with <code className="font-mono bg-muted px-0.5 rounded">callId</code>, <code className="font-mono bg-muted px-0.5 rounded">status</code>, <code className="font-mono bg-muted px-0.5 rounded">transcript</code>, <code className="font-mono bg-muted px-0.5 rounded">disposition</code> and more.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                );
+              }} />
+              <FormField control={form.control} name="webhookSecret" render={({ field }) => (
+                <FormItem className="space-y-1">
+                  <FormLabel className="text-[10px] text-muted-foreground uppercase tracking-wider">Signing Secret (optional)</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="password"
+                      placeholder="Shared HMAC secret for signature verification"
+                      className="h-9 text-xs bg-background/50"
+                      autoComplete="new-password"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormDescription className="text-[10px]">
+                    Sent as <code className="font-mono bg-muted px-0.5 rounded">X-Webhook-Signature</code> header so you can verify the payload wasn't tampered with.
+                  </FormDescription>
+                </FormItem>
+              )} />
+            </div>
+
+            <DispositionSettingsPanel agentId={agent?.id ?? 0} />
+          </>
+        )}
+
       </div>
     </div>
   );
@@ -3608,14 +4148,12 @@ function AgentListPanel({ selectedId, onSelect, rateMap, className }: {
   );
 }
 
-/* ── Tab: Analysis ──────────────────────────────────────────────────────────── */
+/* ── Tab: Analysis (Journey) ────────────────────────────────────────────────── */
 
 type DispositionCategory = { id: string; name: string; values: string };
 
-function AnalysisTab({ form, agentId }: { form: any; agentId: number }) {
+function DispositionSettingsPanel({ agentId }: { agentId: number }) {
   const { toast } = useToast();
-
-  // ── Disposition config state ──────────────────────────────────────────────
   const [categories, setCategories] = useState<DispositionCategory[]>([]);
   const [dirty, setDirty] = useState(false);
 
@@ -3684,168 +4222,145 @@ function AnalysisTab({ form, agentId }: { form: any; agentId: number }) {
     setCategories((prev) => prev.map((c) => (c.id === id ? { ...c, [field]: value } : c)));
     setDirty(true);
   }
-  return (
-    <div className="relative p-6 space-y-8">
 
-      {/* ── Webhook ── */}
+  if (agentId <= 0) {
+    return (
       <div>
         <div className="flex items-center gap-2 mb-1">
-          <Webhook className="h-4 w-4 text-violet-400" />
-          <h3 className="text-sm font-semibold">Post-call Webhook</h3>
+          <Tag className="h-4 w-4 text-amber-400" />
+          <h3 className="text-[13px] font-semibold text-foreground">Call Disposition</h3>
         </div>
-        <p className="text-xs text-muted-foreground mb-4">
-          When a call ends we'll POST the full call data (transcript, duration, cost, disposition) to this URL.
+        <p className="text-[11px] text-muted-foreground mt-0.5">
+          Save the agent first to define disposition categories.
         </p>
-        <div className="space-y-3">
-          <FormField control={form.control} name="webhookUrl" render={({ field }) => {
-            const val = field.value ?? "";
-            const isEmail = val.includes("@") && !val.startsWith("http");
-            const isHttp  = val.length > 0 && val.startsWith("http://");
-            return (
-              <FormItem className="space-y-1">
-                <FormLabel className="text-[10px] text-muted-foreground uppercase tracking-wider">Webhook URL</FormLabel>
-                <FormControl>
-                  <Input
-                    placeholder="https://your-server.com/voiceorch-webhook"
-                    className="h-9 text-sm font-mono bg-background/50"
-                    autoComplete="off"
-                    {...field}
-                  />
-                </FormControl>
-                {isEmail && (
-                  <p className="text-xs text-destructive flex items-start gap-1">
-                    <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                    <span>That looks like an email address, not a URL. Enter an <code className="font-mono">https://</code> endpoint.</span>
-                  </p>
-                )}
-                {isHttp && !isEmail && (
-                  <p className="text-xs text-amber-500 flex items-start gap-1">
-                    <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                    <span>HTTP is not allowed — must be <code className="font-mono">https://</code></span>
-                  </p>
-                )}
-                <FormDescription className="text-[10px]">
-                  Must be HTTPS. We send a JSON payload with <code className="font-mono bg-muted px-0.5 rounded">callId</code>, <code className="font-mono bg-muted px-0.5 rounded">status</code>, <code className="font-mono bg-muted px-0.5 rounded">transcript</code>, <code className="font-mono bg-muted px-0.5 rounded">disposition</code> and more.
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            );
-          }} />
-          <FormField control={form.control} name="webhookSecret" render={({ field }) => (
-            <FormItem className="space-y-1">
-              <FormLabel className="text-[10px] text-muted-foreground uppercase tracking-wider">Signing Secret (optional)</FormLabel>
-              <FormControl>
-                <Input
-                  type="password"
-                  placeholder="Shared HMAC secret for signature verification"
-                  className="h-9 text-xs bg-background/50"
-                  autoComplete="new-password"
-                  {...field}
-                />
-              </FormControl>
-              <FormDescription className="text-[10px]">
-                Sent as <code className="font-mono bg-muted px-0.5 rounded">X-Webhook-Signature</code> header so you can verify the payload wasn't tampered with.
-              </FormDescription>
-            </FormItem>
-          )} />
-        </div>
       </div>
+    );
+  }
 
-      {/* ── Call Disposition ── */}
-      <div>
-        <div className="flex items-center justify-between mb-1">
-          <div className="flex items-center gap-2">
-            <Tag className="h-4 w-4 text-amber-400" />
-            <h3 className="text-sm font-semibold">Call Disposition</h3>
-          </div>
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1">
+        <div className="flex items-center gap-2">
+          <Tag className="h-4 w-4 text-amber-400" />
+          <h3 className="text-[13px] font-semibold text-foreground">Call Disposition</h3>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-7 text-xs gap-1"
+          onClick={addCategory}
+        >
+          <Plus className="h-3.5 w-3.5" /> Add Category
+        </Button>
+      </div>
+      <p className="text-[11px] text-muted-foreground mb-4">
+        Define categories and their possible values. After each call the AI automatically picks the best match from the transcript and saves it. Results appear in the call detail page.
+      </p>
+
+      {dispLoading ? (
+        <div className="space-y-2">
+          {[1, 2].map((i) => <div key={i} className="h-16 rounded-xl bg-muted/20 animate-pulse" />)}
+        </div>
+      ) : categories.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-border/50 p-8 text-center">
+          <Tag className="h-7 w-7 text-muted-foreground/20 mx-auto mb-2" />
+          <p className="text-sm font-medium text-muted-foreground/50">No categories yet</p>
+          <p className="text-xs text-muted-foreground/30 mt-0.5">Add a category to start capturing structured call outcomes</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {categories.map((cat) => (
+            <div key={cat.id} className="rounded-xl border border-border/60 bg-card/20 p-4">
+              <div className="flex items-start gap-3">
+                <div className="flex-1 grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Category name</label>
+                    <Input
+                      className="h-8 text-xs"
+                      placeholder="e.g. intent"
+                      value={cat.name}
+                      onChange={(e) => updateCategory(cat.id, "name", e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Possible values <span className="normal-case">(comma-separated)</span></label>
+                    <Input
+                      className="h-8 text-xs"
+                      placeholder="e.g. interested, not_interested, callback"
+                      value={cat.values}
+                      onChange={(e) => updateCategory(cat.id, "values", e.target.value)}
+                    />
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 mt-5 text-muted-foreground hover:text-destructive shrink-0"
+                  onClick={() => removeCategory(cat.id)}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+              {cat.values && (
+                <div className="flex flex-wrap gap-1 mt-3">
+                  {cat.values.split(",").map((v) => v.trim()).filter(Boolean).map((v) => (
+                    <span key={v} className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                      {v}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {(categories.length > 0 || dirty) && (
+        <div className="flex justify-end mt-4">
           <Button
             type="button"
-            variant="outline"
             size="sm"
-            className="h-7 text-xs gap-1"
-            onClick={addCategory}
+            className="h-8 text-xs gap-1.5"
+            disabled={saveMutation.isPending || !dirty}
+            onClick={() => saveMutation.mutate()}
           >
-            <Plus className="h-3.5 w-3.5" /> Add Category
+            <Save className="h-3.5 w-3.5" />
+            {saveMutation.isPending ? "Saving…" : "Save Disposition Config"}
           </Button>
         </div>
-        <p className="text-xs text-muted-foreground mb-4">
-          Define categories and their possible values. After each call the AI automatically picks the best match from the transcript and saves it. Results appear in the call detail page.
+      )}
+    </div>
+  );
+}
+
+function AnalysisTab({
+  form,
+  agentId,
+  onConfigureEmail,
+  onOpenChannels,
+}: {
+  form: any;
+  agentId: number;
+  onConfigureEmail?: () => void;
+  onOpenChannels?: () => void;
+}) {
+  return (
+    <div className="relative p-6 space-y-8">
+      <section className="space-y-2">
+        <h2 className="text-base font-semibold tracking-tight">Journey</h2>
+        <p className="text-[12px] text-muted-foreground max-w-3xl">
+          Attach one auto-pilot sequence to this agent: lead in → call → WhatsApp/email/callback. Channels hold WhatsApp &amp; Email; CRM webhook and disposition live under Advanced → Integrations.
         </p>
+      </section>
 
-        {dispLoading ? (
-          <div className="space-y-2">
-            {[1, 2].map((i) => <div key={i} className="h-16 rounded-xl bg-muted/20 animate-pulse" />)}
-          </div>
-        ) : categories.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-border/50 p-8 text-center">
-            <Tag className="h-7 w-7 text-muted-foreground/20 mx-auto mb-2" />
-            <p className="text-sm font-medium text-muted-foreground/50">No categories yet</p>
-            <p className="text-xs text-muted-foreground/30 mt-0.5">Add a category to start capturing structured call outcomes</p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {categories.map((cat) => (
-              <div key={cat.id} className="rounded-xl border border-border/60 bg-card/20 p-4">
-                <div className="flex items-start gap-3">
-                  <div className="flex-1 grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Category name</label>
-                      <Input
-                        className="h-8 text-xs"
-                        placeholder="e.g. intent"
-                        value={cat.name}
-                        onChange={(e) => updateCategory(cat.id, "name", e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Possible values <span className="normal-case">(comma-separated)</span></label>
-                      <Input
-                        className="h-8 text-xs"
-                        placeholder="e.g. interested, not_interested, callback"
-                        value={cat.values}
-                        onChange={(e) => updateCategory(cat.id, "values", e.target.value)}
-                      />
-                    </div>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 mt-5 text-muted-foreground hover:text-destructive shrink-0"
-                    onClick={() => removeCategory(cat.id)}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-                {cat.values && (
-                  <div className="flex flex-wrap gap-1 mt-3">
-                    {cat.values.split(",").map((v) => v.trim()).filter(Boolean).map((v) => (
-                      <span key={v} className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                        {v}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {(categories.length > 0 || dirty) && (
-          <div className="flex justify-end mt-4">
-            <Button
-              type="button"
-              size="sm"
-              className="h-8 text-xs gap-1.5"
-              disabled={saveMutation.isPending || !dirty}
-              onClick={() => saveMutation.mutate()}
-            >
-              <Save className="h-3.5 w-3.5" />
-              {saveMutation.isPending ? "Saving…" : "Save Disposition Config"}
-            </Button>
-          </div>
-        )}
-      </div>
+      <JourneyPanel
+        agentId={agentId}
+        webhookUrl={form.watch("webhookUrl")}
+        onConfigureEmail={onConfigureEmail}
+        onOpenChannels={onOpenChannels}
+      />
     </div>
   );
 }
@@ -5377,6 +5892,7 @@ function VersionsTab({ agentId }: { agentId: number }) {
 
 function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAgents?: () => void }) {
   const [activeTab, setActiveTab] = useState<TabId>("overview");
+  const [forceExpandEmail, setForceExpandEmail] = useState(false);
   const tabContentRef = useRef<HTMLDivElement>(null);
   const scrollPositions = useRef<Partial<Record<TabId, number>>>({});
   const agentResetSigRef = useRef<string | null>(null);
@@ -5385,7 +5901,17 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
     if (tabContentRef.current) {
       scrollPositions.current[activeTab] = tabContentRef.current.scrollTop;
     }
+    if (tabId !== "channels") setForceExpandEmail(false);
     setActiveTab(tabId);
+  };
+
+  const openEmailChannel = () => {
+    setForceExpandEmail(true);
+    handleTabClick("channels");
+  };
+
+  const openChannels = () => {
+    handleTabClick("channels");
   };
 
   useEffect(() => {
@@ -5424,8 +5950,8 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
     resolver: zodResolver(agentFormSchema),
     defaultValues: {
       name: "", description: "", asrProvider: "sarvam", asrModel: "saaras:v3",
-      llmProvider: "groq", llmModel: "llama-3.3-70b-versatile", ttsProvider: "cartesia",
-      ttsVoice: "", ttsModel: "", telephonyProvider: "vobiz",
+      llmProvider: "groq", llmModel: "llama-3.3-70b-versatile", ttsProvider: "sarvam",
+      ttsVoice: "priya", ttsModel: "bulbul:v3", telephonyProvider: "vobiz",
       systemPrompt: "", temperature: 0.40, maxDuration: 480,
       greetingMessage: "Hello", firstSpeaker: "assistant", endCallPhrases: "", silenceTimeoutSeconds: 30,
       language: "en-US", asrLanguage: "", backchannelingEnabled: true,
@@ -5438,9 +5964,10 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
       voicemailMessage: "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.",
       voicemailLeadInSeconds: 2,
       tools: [], genderDetectionEnabled: false, voiceMemoryEnabled: false, recordingEnabled: true, languageAutoDetect: false,
+      multilingualLanguages: [], sarvamIndicNumbers: true,
       autoSwitchToEnglish: false,
       startSpeakingWaitSecs: 0, startSpeakingOnPunctuationSecs: 0.1,
-      startSpeakingOnNoPunctuationSecs: 0.1, startSpeakingOnNumberSecs: 0,
+      startSpeakingOnNoPunctuationSecs: 0.1, startSpeakingOnNumberSecs: 0.1,
       stopSpeakingNumWords: 1, stopSpeakingVoiceSecs: 0.2, stopSpeakingBackOffSecs: 1,
       complianceIrdai: false, complianceDpdp: false, complianceTrai: false,
       knowledgeSourceIds: [],
@@ -5452,11 +5979,17 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
       inboundPhoneNumberId: undefined,
       outboundPhoneNumberId: undefined,
       preferredManagedNumber: null,
-      asrEndpointingSilenceMs: 150,
+      asrEndpointingSilenceMs: 250,
       llmMaxTokens: 200,
       ttsMinSentenceChars: 18,
       ttsSpeed: 1,
-      linearDelayMs: 50,
+      linearDelayMs: 0,
+      fragmentCoalesceListeningMs: 500,
+      fragmentCoalescePlayingMs: 1000,
+      telephonyTailDrainMs: 400,
+      sarvamHighVadSensitivity: false,
+      sarvamSpeechEndFlushMs: 80,
+      sarvamIncompleteHoldMs: 700,
       kbBakedOnly: false,
       autoRedialEnabled: true,
       autoRedialMaxAttempts: 3,
@@ -5532,11 +6065,15 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
       voiceMemoryEnabled:       (agent as any).agentConfig?.voiceMemoryEnabled ?? false,
       recordingEnabled:         (agent as any).agentConfig?.recordingEnabled ?? false,
       languageAutoDetect:       (agent as any).agentConfig?.languageAutoDetect ?? false,
+      multilingualLanguages:    (agent as any).agentConfig?.multilingualLanguages
+        ?? (agent as any).agentConfig?.secondaryLanguages
+        ?? [],
+      sarvamIndicNumbers:       (agent as any).agentConfig?.sarvamIndicNumbers !== false,
       autoSwitchToEnglish:      (agent as any).agentConfig?.autoSwitchToEnglish ?? false,
       startSpeakingWaitSecs:            (agent as any).agentConfig?.startSpeakingPlan?.waitSeconds            ?? 0,
       startSpeakingOnPunctuationSecs:   (agent as any).agentConfig?.startSpeakingPlan?.onPunctuationSeconds   ?? 0.1,
-      startSpeakingOnNoPunctuationSecs: (agent as any).agentConfig?.startSpeakingPlan?.onNoPunctuationSeconds ?? 1.5,
-      startSpeakingOnNumberSecs:        (agent as any).agentConfig?.startSpeakingPlan?.onNumberSeconds        ?? 0.5,
+      startSpeakingOnNoPunctuationSecs: (agent as any).agentConfig?.startSpeakingPlan?.onNoPunctuationSeconds ?? 0.1,
+      startSpeakingOnNumberSecs:        (agent as any).agentConfig?.startSpeakingPlan?.onNumberSeconds        ?? 0.1,
       stopSpeakingNumWords: (() => {
         const fromWords = (agent as any).agentConfig?.wordsForInterruption;
         const fromPlan = (agent as any).agentConfig?.stopSpeakingPlan?.numWords;
@@ -5564,11 +6101,17 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
       inboundPhoneNumberId:            (agent as any).inboundPhoneNumberId ?? undefined,
       outboundPhoneNumberId:           (agent as any).outboundPhoneNumberId ?? undefined,
       preferredManagedNumber:          ((agent as any).agentConfig?.preferredManagedNumber as string | undefined) ?? null,
-      asrEndpointingSilenceMs:         clampEndpointingMs((agent as any).agentConfig?.asrEndpointingSilenceMs ?? 300),
+      asrEndpointingSilenceMs:         clampEndpointingMs((agent as any).agentConfig?.asrEndpointingSilenceMs ?? 250),
       llmMaxTokens:                    (agent as any).agentConfig?.llmMaxTokens ?? null,
       ttsMinSentenceChars:             (agent as any).agentConfig?.ttsMinSentenceChars ?? 15,
       ttsSpeed:                        (agent as any).agentConfig?.ttsSpeed ?? 1,
-      linearDelayMs:                   clampLinearDelayMs((agent as any).agentConfig?.incrementalDelay ?? 350),
+      linearDelayMs:                   clampLinearDelayMs((agent as any).agentConfig?.incrementalDelay ?? 0),
+      fragmentCoalesceListeningMs:     clampFragmentCoalesceListeningMs((agent as any).agentConfig?.fragmentCoalesceListeningMs),
+      fragmentCoalescePlayingMs:       clampFragmentCoalescePlayingMs((agent as any).agentConfig?.fragmentCoalescePlayingMs),
+      telephonyTailDrainMs:            clampTelephonyTailDrainMs((agent as any).agentConfig?.telephonyTailDrainMs),
+      sarvamHighVadSensitivity:        ((agent as any).agentConfig?.sarvamHighVadSensitivity as boolean | undefined) === true,
+      sarvamSpeechEndFlushMs:          clampSarvamSpeechEndFlushMs((agent as any).agentConfig?.sarvamSpeechEndFlushMs),
+      sarvamIncompleteHoldMs:          clampSarvamIncompleteHoldMs((agent as any).agentConfig?.sarvamIncompleteHoldMs),
       kbBakedOnly:                     ((agent as any).agentConfig?.kbBakedOnly as boolean | undefined) ?? false,
       autoRedialEnabled:      (agent as any).agentConfig?.autoRedial?.enabled ?? false,
       autoRedialMaxAttempts:  (agent as any).agentConfig?.autoRedial?.maxAttempts  ?? 3,
@@ -5597,6 +6140,14 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
         const payload = buildUpdateAgentPayload(data);
         const saved = await updateAgent.mutateAsync({ id: agentId, data: payload as any });
         form.setValue("languageAutoDetect", (saved as any)?.agentConfig?.languageAutoDetect ?? false, { shouldDirty: false });
+        form.setValue(
+          "multilingualLanguages",
+          (saved as any)?.agentConfig?.multilingualLanguages
+            ?? (saved as any)?.agentConfig?.secondaryLanguages
+            ?? [],
+          { shouldDirty: false },
+        );
+        form.setValue("sarvamIndicNumbers", (saved as any)?.agentConfig?.sarvamIndicNumbers !== false, { shouldDirty: false });
         // Sync scheduling fields immediately from the save response so the event-type
         // Select is not shown as "Any event type" while the background refetch is in-flight.
         form.setValue("schedulingCalendarId", (saved as any)?.agentConfig?.calendarCapability?.defaultCalendarId ?? null, { shouldDirty: false });
@@ -5614,14 +6165,22 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
     },
     (errors) => {
       const fieldTabMap: Record<string, TabId> = {
-        webhookUrl:               "analysis",
-        webhookSecret:            "analysis",
+        webhookUrl:               "advanced",
+        webhookSecret:            "advanced",
+        schedulingCalendarId:     "overview",
+        schedulingEventTypeId:    "overview",
         noiseCancellationEnabled: "voice",
         ambientNoiseEnabled:      "voice",
         ambientNoiseTrack:        "voice",
         ambientNoiseVolume:       "voice",
         asrEndpointingSilenceMs:  "voice",
         linearDelayMs:            "voice",
+        fragmentCoalesceListeningMs: "voice",
+        fragmentCoalescePlayingMs:   "voice",
+        telephonyTailDrainMs:        "voice",
+        sarvamHighVadSensitivity:    "voice",
+        sarvamSpeechEndFlushMs:      "voice",
+        sarvamIncompleteHoldMs:      "voice",
         stopSpeakingNumWords:     "voice",
         vadSilenceMs:             "advanced",
         bargeInEnabled:           "advanced",
@@ -5682,13 +6241,29 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
     initiateOutbound.mutate(
       { data: { agentId, toNumber: callNumber } } as any,
       {
-        onSuccess: () => { setCallDialog(false); setCallNumber(""); toast({ title: "Calling…" }); },
+        onSuccess: () => {
+          setCallDialog(false);
+          setCallNumber("");
+          toast({ title: "Calling…" });
+          queryClient.invalidateQueries({ queryKey: ["phone-numbers", "managed-quota"] });
+        },
         onError: (err: any) => {
           if (isDestinationUnverifiedError(err)) {
             setPendingNumber(callNumber); setCallDialog(false); setOtpOpen(true);
-          } else {
-            toast({ title: "Error", description: formatApiError(err), variant: "destructive" });
+            return;
           }
+          const code = err?.data?.code ?? err?.body?.code;
+          if (code === "MANAGED_OUTBOUND_LIMIT") {
+            setCallDialog(false);
+            toast({
+              title: "Trial calls used up",
+              description: formatApiError(err),
+              variant: "destructive",
+            });
+            navigate("/app/phone-numbers");
+            return;
+          }
+          toast({ title: "Error", description: formatApiError(err), variant: "destructive" });
         },
       }
     );
@@ -5776,6 +6351,9 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
               </span>
               <span className="text-[11px] text-muted-foreground/50 tabular-nums shrink-0">#{String(agent.id).padStart(4, "0")}</span>
             </div>
+            <p className="text-[12px] text-muted-foreground/80 max-w-3xl">
+              Build the agent, connect its channels, and shape the journey it should run across calls, WhatsApp, booking, follow-ups, and memory.
+            </p>
             <AgentCostSummary form={form} rateMap={rateMap} agent={agent} />
           </div>
 
@@ -5884,10 +6462,11 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
             <div ref={tabContentRef} className="flex-1 min-h-0 overflow-y-auto">
               <form onSubmit={e => e.preventDefault()}>
                 {activeTab === "overview"  && <OverviewTab form={form} agent={agent} />}
+                {activeTab === "channels"  && <ChannelsTab form={form} agent={agent} forceExpandEmail={forceExpandEmail} />}
                 {activeTab === "prompt"    && <PromptTab form={form} />}
                 {activeTab === "voice"     && <VoiceTab form={form} />}
                 {activeTab === "tools"     && <ToolsTab form={form} agentId={agentId} />}
-                {activeTab === "analysis"  && <AnalysisTab form={form} agentId={agentId} />}
+                {activeTab === "analysis"  && <AnalysisTab form={form} agentId={agentId} onConfigureEmail={openEmailChannel} onOpenChannels={openChannels} />}
                 {activeTab === "voicemail" && <VoicemailTab form={form} />}
                 {activeTab === "advanced"  && <AdvancedTab form={form} agent={agent} />}
                 {activeTab === "versions"  && <VersionsTab agentId={agent.id} />}
@@ -5969,7 +6548,7 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
                 </Button>
               </div>
               <p className="text-[10px] text-muted-foreground/65 leading-snug px-0.5">
-                Phone = free outbound test (platform number) · Live Test = in-browser
+                Phone uses your number when assigned — otherwise a capped trial line ({3} calls/day). Live Test = in-browser.
               </p>
             </div>
 
@@ -6063,9 +6642,9 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
               Agent <strong>{agent.name}</strong> will call this number
               {outboundTestingFrom ? (
                 <>
-                  {" "}using free platform caller ID{" "}
+                  {" "}using trial platform caller ID{" "}
                   <span className="font-medium tabular-nums text-foreground">{outboundTestingFrom}</span>
-                  {" "}(outbound only).
+                  {" "}(capped daily · buy your own number for unlimited + inbound).
                 </>
               ) : (
                 "."
@@ -6144,9 +6723,9 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
         ],
         llmProvider: "google",
         llmModel: "gemini-3.6-flash",
-        ttsProvider: "cartesia",
-        ttsModel: "sonic-3.5",
-        ttsVoice: "a8adc74b-c9c1-45e0-aae7-9a60ba64bbee",
+        ttsProvider: "sarvam",
+        ttsModel: "bulbul:v3",
+        ttsVoice: "priya",
       };
 
       const result = await customFetch<{ id: number }>(`${DASH_API}/agents`, {

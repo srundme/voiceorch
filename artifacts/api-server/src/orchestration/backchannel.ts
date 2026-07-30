@@ -1,87 +1,43 @@
 // Language-keyed backchannel filler bank with context-safe acknowledgments.
 //
-// When backchanneling is enabled, the agent speaks a short filler phrase
-// while the LLM warms up, filling the dead silence between the caller
-// finishing their sentence and the first agent word.
+// Fillers play BEFORE the LLM reply is known. Affirmative acks ("சரி", "Okay",
+// "Sure") before a refusal/negative answer kill the feel — so the default bank
+// is listening-only. Soft acks are allowed only when the caller's turn looks
+// like a safe, non-polar statement (not a question / complaint / refusal).
 //
-// Phrases are intentionally non-committal so they NEVER contradict the
-// subsequent LLM answer (e.g. never say "yes/ஆமா/हाँ" before a "no/இல்லை/नहीं" answer).
+// Never use polar yes/no (ஆமா / हाँ / yes) as fillers.
 
-const BACKCHANNEL_FILLERS: Record<string, string[]> = {
-  // Tamil — strictly non-committal acknowledgments (no polar "ஆமா" that can clash with "இல்ல")
-  "ta": [
-    "சரி",        // okay / right (seri)
-    "hmm",
-    "okay",       // universal
-  ],
-
-  // Hindi — neutral spoken acknowledgments (no polar "हाँ" that can clash with "नहीं")
-  "hi": [
-    "अच्छा",     // I see / okay
-    "हम्म",       // hmm
-    "ठीक है",    // okay
-  ],
-
-  // English — standard neutral fillers
-  "en": [
-    "Got it.",
-    "Okay.",
-    "Mm-hmm.",
-    "I see.",
-  ],
-
-  // Telugu — non-committal
-  "te": [
-    "సరే",        // okay
-    "ఓహో",       // oh I see
-    "hmm",
-  ],
-
-  // Kannada — non-committal
-  "kn": [
-    "ಸರಿ",        // okay
-    "ಓಹ್",        // oh
-    "hmm",
-  ],
-
-  // Malayalam — non-committal
-  "ml": [
-    "ശരി",        // okay
-    "ഉം",          // mm-hmm
-    "okay",
-  ],
-
-  // Marathi — non-committal
-  "mr": [
-    "बरं",          // okay
-    "अच्छा",      // I see
-    "hmm",
-  ],
-
-  // Bengali — non-committal
-  "bn": [
-    "বুঝলাম",    // understood
-    "ঠিক আছে",  // okay
-    "hmm",
-  ],
-
-  // Gujarati — non-committal
-  "gu": [
-    "ઠીક",          // okay
-    "અચ્છા",     // I see
-    "hmm",
-  ],
+/** Pure listening sounds — safe before any answer polarity. */
+const LISTENING_FILLERS: Record<string, string[]> = {
+  ta: ["ம்ம்", "ஆஹா", "அப்படியா", "ஹ்ம்"],
+  hi: ["हम्म", "अच्छा", "उम्म"],
+  en: ["Mm-hmm.", "I see.", "Hmm."],
+  te: ["ఓహో", "అలాగా", "hmm"],
+  kn: ["ಓಹ್", "ಅಲ್ವಾ", "hmm"],
+  ml: ["ഉം", "ഓഹ്", "okay"],
+  mr: ["अच्छा", "हम्म", "hmm"],
+  bn: ["আচ্ছা", "হুম", "hmm"],
+  gu: ["અચ્છા", "હમ્", "hmm"],
 };
 
-/** High-priority neutral fillers used when caller asks a question or has a complex prompt */
-const STRICT_NEUTRAL_FILLERS: Record<string, string[]> = {
-  "ta": ["சரி", "okay"],
-  "hi": ["ठीक है", "अच्छा"],
-  "en": ["Okay.", "Got it."],
-  "te": ["సరే"],
-  "kn": ["ಸರಿ"],
-  "ml": ["ശരി"],
+/**
+ * Soft acknowledgments — imply "I heard you", not agreement.
+ * Only used when caller turn is not a question / risk turn.
+ */
+const SOFT_ACK_FILLERS: Record<string, string[]> = {
+  ta: ["சரிங்க", "புரிஞ்சுது", "ஓகேங்க", "சரி"],
+  hi: ["समझ गया", "ठीक है", "अच्छा जी", "ओके"],
+  en: ["Got it.", "Understood.", "Okay.", "Right."],
+  te: ["సరే", "ఓకే"],
+  kn: ["ಸರಿ", "ಓಕೆ"],
+  ml: ["ശരി", "ഓക്കേ"],
+  mr: ["बरं", "ठीक आहे", "ओके"],
+  bn: ["বুঝলাম", "ঠিক আছে", "ওকে"],
+  gu: ["સમજાયું", "ઠીક", "ઓકે"],
 };
+
+/** How many recent fillers to avoid repeating (ring buffer). */
+export const FILLER_RECENT_AVOID = 3;
 
 export interface BackchannelFillerOptions {
   /** When caller explicitly requested English, only "Okay." is permitted. */
@@ -90,6 +46,41 @@ export interface BackchannelFillerOptions {
   customFillers?: string[];
   /** Latest caller transcript text for semantic context filtering */
   callerTranscript?: string | null;
+}
+
+/**
+ * Caller turns where a soft/positive filler often clashes with a negative
+ * agent reply (capability no, cancel, complaint, refusal, price pushback).
+ */
+export function isRiskyFillerContext(transcript: string): boolean {
+  const t = transcript.trim();
+  if (!t) return false;
+
+  if (t.endsWith("?")) return true;
+
+  // Questions / capability / availability (any language markers we care about)
+  if (
+    /\b(what|why|when|where|how|who|can|could|would|will|is|are|do|does|did|may|might)\b/i.test(t)
+    || /\b(என்ன|எப்போ|ஏன்|எப்படி|யாரு|இருக்கா|வருமா|முடியுமா|கிடைக்குமா|இருக்காங்களா)\b/i.test(t)
+    || /\b(क्या|कब|कहाँ|क्यों|कैसा|कैसे|है\s*क्या|मिल\s*सकता)\b/i.test(t)
+  ) {
+    return true;
+  }
+
+  // Refusal / cancel / complaint / negative polarity from caller
+  if (
+    /\b(no|not|don'?t|never|cancel|stop|refund|wrong|problem|issue|complaint|expensive|can'?t|won'?t|unable|unavailable|sorry)\b/i.test(t)
+    || /\b(இல்லை|வேண்டாம்|ரத்து|நிறுத்து|பிரச்சனை|தவறு|புகார்|விலை|முடியாது|கிடைக்காது|சரியில்லை)\b/i.test(t)
+    || /\b(नहीं|मत|रद्द|बंद|समस्या|गलत|शिकायत|महंगा|नहीं\s*चाहिए)\b/i.test(t)
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+function languageBase(language: string): string {
+  return language.toLowerCase().split(/[-_]/)[0]!;
 }
 
 /**
@@ -104,37 +95,51 @@ export function getBackchannelFillers(
   }
 
   if (!language) return [];
-  const base = language.toLowerCase().split(/[-_]/)[0]!;
+  const base = languageBase(language);
   if (base === "en" && opts?.englishStrictAck) return ["Okay."];
 
-  // If caller asked a question or transcript has question markers, restrict to strict neutral fillers
+  const listening = LISTENING_FILLERS[base] ?? [];
+  const soft = SOFT_ACK_FILLERS[base] ?? [];
   const transcript = opts?.callerTranscript?.trim() || "";
-  const isQuestion = transcript.endsWith("?") ||
-    /\b(what|why|when|where|how|who|can|is|are|do|does|did|will|would|could|என்ன|எப்போ|ஏன்|எப்படி|யாரு|இருக்கா|வருமா|என்னுடைய|क्या|कब|कहाँ|क्यों|कैसा|कैसे)\b/i.test(transcript);
 
-  if (isQuestion && STRICT_NEUTRAL_FILLERS[base]) {
-    return STRICT_NEUTRAL_FILLERS[base]!;
+  // Unknown next-sentence polarity → listening only (safe before "no").
+  if (!transcript || isRiskyFillerContext(transcript)) {
+    return listening.length > 0 ? listening : soft;
   }
 
-  return BACKCHANNEL_FILLERS[base] ?? [];
+  // Safe statement from caller — allow soft acks + listening for variety.
+  const merged = [...listening, ...soft];
+  return merged.length > 0 ? merged : [];
 }
 
 /**
- * Pick one random filler for the language, or null when none is available.
- * Avoids picking the exact same phrase twice in a row.
+ * Pick one filler for the language, or null when none is available.
+ * Avoids the last few phrases so Tamil/Indic calls don't loop the same sound.
  */
 export function pickBackchannelFiller(
   language: string | null | undefined,
-  lastPhrase?: string | null,
+  lastPhrase?: string | string[] | null,
   opts?: BackchannelFillerOptions,
 ): string | null {
   const pool = getBackchannelFillers(language, opts);
   if (pool.length === 0) return null;
   if (pool.length === 1) return pool[0]!;
+
+  const recent = (Array.isArray(lastPhrase) ? lastPhrase : lastPhrase ? [lastPhrase] : [])
+    .map((p) => p.trim().toLowerCase())
+    .filter(Boolean);
+
   let choices = pool;
-  if (lastPhrase) {
-    const filtered = pool.filter((p) => p !== lastPhrase);
+  if (recent.length > 0) {
+    const filtered = pool.filter((p) => !recent.includes(p.trim().toLowerCase()));
     if (filtered.length > 0) choices = filtered;
   }
   return choices[Math.floor(Math.random() * choices.length)]!;
+}
+
+/** Push a spoken filler into a recent-avoid ring (mutates `recent`, returns it). */
+export function rememberFillerPhrase(recent: string[], phrase: string, max = FILLER_RECENT_AVOID): string[] {
+  recent.push(phrase);
+  while (recent.length > max) recent.shift();
+  return recent;
 }

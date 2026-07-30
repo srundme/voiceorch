@@ -92,4 +92,25 @@ describe("buildWhatsappCallEndedPayload", () => {
     expect(payload.meeting_time).toMatch(/20 Jul 2026/i);
     expect(payload.meet_link).toContain("meet.google.com");
   });
+
+  it("includes template_name when provided", () => {
+    const payload = buildWhatsappCallEndedPayload({
+      call: {
+        id: 1,
+        agentId: 2,
+        status: "completed",
+        durationSeconds: 60,
+        callSummary: "hi",
+        dispositionResult: null,
+        recordingUrl: null,
+        metadata: null,
+      } as any,
+      agentName: "Sales AI",
+      phone: "+919876543210",
+      direction: "outbound",
+      templateName: "ss_call_summary",
+    });
+    expect(payload.template_hint).toBe("call_summary");
+    expect(payload.template_name).toBe("ss_call_summary");
+  });
 });

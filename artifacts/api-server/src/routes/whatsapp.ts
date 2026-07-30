@@ -44,6 +44,7 @@ function formatConnection(row: typeof whatsappConnectionsTable.$inferSelect, opt
     requestCallEnabled: row.requestCallEnabled,
     postCallEnabled: row.postCallEnabled,
     buttonIds: row.buttonIds ?? [],
+    templates: row.templates ?? {},
     active: row.active,
     lastInboundAt: row.lastInboundAt?.toISOString() ?? null,
     lastOutboundAt: row.lastOutboundAt?.toISOString() ?? null,
@@ -51,6 +52,25 @@ function formatConnection(row: typeof whatsappConnectionsTable.$inferSelect, opt
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
+}
+
+function normalizeTemplates(raw: unknown): {
+  call_summary?: string;
+  booking_confirmed?: string;
+  callback_scheduled?: string;
+} {
+  if (!raw || typeof raw !== "object") return {};
+  const o = raw as Record<string, unknown>;
+  const out: {
+    call_summary?: string;
+    booking_confirmed?: string;
+    callback_scheduled?: string;
+  } = {};
+  for (const key of ["call_summary", "booking_confirmed", "callback_scheduled"] as const) {
+    const v = o[key];
+    if (typeof v === "string" && v.trim()) out[key] = v.trim();
+  }
+  return out;
 }
 
 function toE164India(raw: string): string {
@@ -127,6 +147,7 @@ router.post("/whatsapp/connections", requireAuth, async (req, res): Promise<void
     requestCallEnabled?: boolean;
     postCallEnabled?: boolean;
     buttonIds?: string[];
+    templates?: Record<string, string>;
   };
 
   const agentId = Number(body.agentId);
@@ -173,6 +194,7 @@ router.post("/whatsapp/connections", requireAuth, async (req, res): Promise<void
     buttonIds: Array.isArray(body.buttonIds) && body.buttonIds.length > 0
       ? body.buttonIds.map(String)
       : undefined,
+    templates: normalizeTemplates(body.templates),
     active: true,
   }).returning();
 
@@ -195,6 +217,7 @@ router.patch("/whatsapp/connections/:id", requireAuth, async (req, res): Promise
   if (typeof body["postCallEnabled"] === "boolean") updates.postCallEnabled = body["postCallEnabled"];
   if (typeof body["active"] === "boolean") updates.active = body["active"];
   if (Array.isArray(body["buttonIds"])) updates.buttonIds = body["buttonIds"].map(String);
+  if (body["templates"] !== undefined) updates.templates = normalizeTemplates(body["templates"]);
   if (body["campaignId"] === null) updates.campaignId = null;
   if (typeof body["campaignId"] === "number") updates.campaignId = body["campaignId"];
   if (typeof body["agentId"] === "number") {

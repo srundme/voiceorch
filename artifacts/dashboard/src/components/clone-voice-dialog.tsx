@@ -63,6 +63,7 @@ export interface ClonedVoiceResult {
   description?: string;
   dbId?: number;
   createdAt?: string;
+  provider?: "cartesia" | "sarvam";
 }
 
 const MAX_RECORD_SECS = 10;

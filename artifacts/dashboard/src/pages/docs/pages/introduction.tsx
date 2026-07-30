@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { BookOpen, Calendar, Code2, PhoneCall, Rocket, Variable } from "lucide-react";
+import { BookOpen, Calendar, Code2, MessageSquare, PhoneCall, Rocket, Variable } from "lucide-react";
 import { Callout, DocCard, PageHeader } from "../DocsUi";
 import { CodeBlock } from "../CodeBlock";
 
@@ -43,6 +43,12 @@ export default function IntroductionPage() {
           description="Create agents, place calls, get transcripts"
           icon={<Code2 />}
         />
+        <DocCard
+          href="/docs/claude-skill"
+          title="Claude skill & MCP"
+          description="Operate SnapServe from Claude Desktop / Claude Code"
+          icon={<MessageSquare />}
+        />
       </div>
 
       <Callout variant="info" title="Two tracks">
@@ -70,6 +76,10 @@ export default function IntroductionPage() {
         </li>
         <li>
           <Link href="/docs/webhooks">Webhooks</Link> — push results to your backend
+        </li>
+        <li>
+          <Link href="/docs/claude-skill">Claude skill &amp; MCP</Link> — agents &amp; campaigns from
+          chat
         </li>
         <li>
           <Link href="/docs/faq">FAQ</Link>

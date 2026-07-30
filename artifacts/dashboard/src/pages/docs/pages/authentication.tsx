@@ -81,7 +81,9 @@ curl https://app.snapserve.ai/api/agents \\
 
       <h2 id="next">Next</h2>
       <p>
-        Follow the <Link href="/docs/quick-start">Quick Start</Link> to list agents and place a call.
+        Follow the <Link href="/docs/quick-start">Quick Start</Link> to list agents and place a call,
+        or connect <Link href="/docs/claude-skill">Claude skill &amp; MCP</Link> to operate SnapServe
+        from Claude Desktop / Claude Code.
       </p>
     </div>
   );

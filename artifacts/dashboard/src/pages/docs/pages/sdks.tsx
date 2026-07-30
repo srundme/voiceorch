@@ -273,6 +273,10 @@ func (c *Client) InitiateOutboundCall(agentID int, toNumber string, variables ma
         For full endpoint schemas and interactive testing, explore the{" "}
         <Link href="/docs/api-reference">API Reference</Link>.
       </p>
+      <p>
+        Prefer chatting with Claude instead of writing wrappers? See{" "}
+        <Link href="/docs/claude-skill">Claude skill &amp; MCP</Link>.
+      </p>
     </div>
   );
 }

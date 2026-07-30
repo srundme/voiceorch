@@ -34,6 +34,8 @@ import type { AgentTool, ToolDefinition } from "../orchestration/types.js";
 import { logger } from "../lib/logger.js";
 import { writeExecutionLog } from "./execution-log.js";
 import type { TimeSlot } from "./scheduling/slot-engine.js";
+import { sendChannelEmail } from "./email-channel.js";
+import { sendMidCallWhatsapp } from "./whatsapp/outbound.js";
 
 // ── Booking diagnostic log helper ────────────────────────────────────────────
 
@@ -317,6 +319,74 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
               delay_minutes: { type: "string", description: "Minutes from now to place the call, e.g. '120' for 2 hours, '1440' for tomorrow" },
             },
             required: ["targetAgentId", "note", "delay_minutes"],
+          },
+        };
+      }
+      if (t.type === "send_email") {
+        return {
+          name: t.name || "send_email",
+          description:
+            (t.description || "Send an email to the caller using the configured Email channel.") +
+            " Use this when the caller asks you to email them something (summary, brochure, confirmation)." +
+            " You MUST have a real email address from the caller before calling — never invent one." +
+            " Optional subject/body override the channel default template; omit them to use the saved template with {{variables}}.",
+          parameters: {
+            type: "object",
+            properties: {
+              to_email: {
+                type: "string",
+                description: "Recipient email address spoken by the caller (required)",
+              },
+              recipient_name: {
+                type: "string",
+                description: "Caller's name for {{name}} in the template",
+              },
+              subject: {
+                type: "string",
+                description: "Optional subject override (supports {{name}}, {{summary}}, etc.)",
+              },
+              body: {
+                type: "string",
+                description: "Optional HTML or plain-text body override (supports {{variables}})",
+              },
+              summary: {
+                type: "string",
+                description: "Short call summary for {{summary}} if not already in context",
+              },
+            },
+            required: ["to_email"],
+          },
+        };
+      }
+      if (t.type === "send_whatsapp") {
+        return {
+          name: t.name || "send_whatsapp",
+          description:
+            (t.description || "Send a WhatsApp template to the caller.") +
+            " Use when the caller asks you to WhatsApp them something." +
+            " Prefer the caller's phone from the call; only pass to_phone if they give a different number." +
+            " template_hint is one of: call_summary, booking_confirmed, callback_scheduled.",
+          parameters: {
+            type: "object",
+            properties: {
+              to_phone: {
+                type: "string",
+                description: "Recipient phone in E.164 or 10-digit local form. Omit to use the caller on this call.",
+              },
+              template_hint: {
+                type: "string",
+                description: "call_summary | booking_confirmed | callback_scheduled (default call_summary)",
+              },
+              template_name: {
+                type: "string",
+                description: "Optional BSP template name override",
+              },
+              summary: {
+                type: "string",
+                description: "Short message body / summary for template variables",
+              },
+            },
+            required: [],
           },
         };
       }
@@ -1767,6 +1837,125 @@ async function isSlotWithinAvailabilityWindow(
 
   const daySchedules = schedules.filter((s) => s.dayOfWeek === dayOfWeek);
   return daySchedules.some((s) => slotTimeStr >= s.startTime && slotTimeStr < s.endTime);
+}
+
+// ── Mid-call email (Email channel: managed or BYO Brevo) ─────────────────────
+
+export async function executeSendEmail(opts: {
+  agentId: number;
+  callId: number;
+  agentName?: string;
+  callerPhone?: string | null;
+  args: Record<string, unknown>;
+}): Promise<string> {
+  const toEmail = String(opts.args["to_email"] ?? opts.args["email"] ?? "").trim();
+  if (!toEmail || !toEmail.includes("@")) {
+    return "email_failed: missing or invalid to_email. Ask the caller for their email address, then try again.";
+  }
+  const domain = toEmail.split("@")[1]?.toLowerCase() ?? "";
+  if (BLOCKED_EMAIL_DOMAINS.includes(domain)) {
+    return "email_failed: that looks like a placeholder email. Ask the caller for their real address.";
+  }
+
+  const [agent] = await db
+    .select({ userId: agentsTable.userId, name: agentsTable.name })
+    .from(agentsTable)
+    .where(eq(agentsTable.id, opts.agentId))
+    .limit(1);
+  if (!agent?.userId) {
+    return "email_failed: could not resolve agent owner for the email channel.";
+  }
+
+  const recipientName = String(opts.args["recipient_name"] ?? opts.args["name"] ?? "").trim();
+  const summary = String(opts.args["summary"] ?? "").trim();
+  const subject = typeof opts.args["subject"] === "string" ? opts.args["subject"].trim() : "";
+  const body = typeof opts.args["body"] === "string" ? opts.args["body"].trim() : "";
+
+  const template =
+    subject || body
+      ? {
+          ...(subject ? { subject } : {}),
+          ...(body ? { body } : {}),
+        }
+      : null;
+
+  logger.info(
+    { callId: opts.callId, agentId: opts.agentId, toEmail, hasOverride: !!(subject || body) },
+    "Executing Send Email tool",
+  );
+
+  const result = await sendChannelEmail({
+    userId: agent.userId,
+    toEmail,
+    context: {
+      name: recipientName || "there",
+      phone: opts.callerPhone ?? "",
+      email: toEmail,
+      summary,
+      agent_name: opts.agentName || agent.name || "SnapServe",
+      call_id: opts.callId,
+    },
+    template,
+    callId: opts.callId,
+    journeyRunHint: "midcall_send_email",
+  });
+
+  if (result.ok) {
+    return `email_sent: successfully sent to ${toEmail}. Confirm briefly to the caller that the email is on its way.`;
+  }
+  if (result.skipped === "inactive" || result.skipped === "missing_config") {
+    return "email_failed: Email channel is not configured or inactive. Tell the caller you cannot send email right now.";
+  }
+  return `email_failed: ${result.error ?? "send failed"}. Apologize and offer another way to follow up.`;
+}
+
+// ── Mid-call WhatsApp (BYO BSP webhook or native Instant/Business) ───────────
+
+export async function executeSendWhatsapp(opts: {
+  agentId: number;
+  callId: number;
+  agentName?: string;
+  callerPhone?: string | null;
+  args: Record<string, unknown>;
+}): Promise<string> {
+  const toPhone = String(opts.args["to_phone"] ?? opts.args["phone"] ?? opts.callerPhone ?? "").trim();
+  if (!toPhone || toPhone.replace(/\D/g, "").length < 8) {
+    return "whatsapp_failed: missing or invalid phone. Ask the caller for their WhatsApp number, then try again.";
+  }
+
+  const [agent] = await db
+    .select({ userId: agentsTable.userId, name: agentsTable.name })
+    .from(agentsTable)
+    .where(eq(agentsTable.id, opts.agentId))
+    .limit(1);
+  if (!agent?.userId) {
+    return "whatsapp_failed: could not resolve agent owner for WhatsApp.";
+  }
+
+  const templateHint = typeof opts.args["template_hint"] === "string" ? opts.args["template_hint"].trim() : "call_summary";
+  const templateName = typeof opts.args["template_name"] === "string" ? opts.args["template_name"].trim() : "";
+  const summary = typeof opts.args["summary"] === "string" ? opts.args["summary"].trim() : "";
+
+  logger.info(
+    { callId: opts.callId, agentId: opts.agentId, toPhone, templateHint },
+    "Executing Send WhatsApp tool",
+  );
+
+  const result = await sendMidCallWhatsapp({
+    userId: agent.userId,
+    agentId: opts.agentId,
+    agentName: opts.agentName || agent.name,
+    callId: opts.callId,
+    toPhone,
+    templateHint,
+    templateName: templateName || undefined,
+    summary,
+  });
+
+  if (result.ok) {
+    return `whatsapp_sent: message queued to ${toPhone} via ${result.via ?? "channel"}. Confirm briefly to the caller.`;
+  }
+  return `whatsapp_failed: ${result.error ?? "send failed"}. Apologize and offer another way to follow up.`;
 }
 
 // ── Transfer lead DB helper ────────────────────────────────────────────────────

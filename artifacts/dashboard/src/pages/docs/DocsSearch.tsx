@@ -10,6 +10,7 @@ const SEARCH_DATA = [
   { title: "Platform concepts", section: "Get started", slug: "platform-concepts", content: "agent call wallet phone webhooks variables tools knowledge" },
   { title: "Quick Start", section: "Get started", slug: "quick-start", content: "sk_live list agents POST outbound curl node python" },
   { title: "Authentication", section: "Get started", slug: "authentication", content: "API keys Bearer sk_live Authorization" },
+  { title: "Claude skill & MCP", section: "Get started", slug: "claude-skill", content: "Claude Desktop Claude Code MCP snapserve skill agents campaigns website webhook sk_live" },
   { title: "Agents & builder", section: "Product", slug: "agents", content: "dashboard builder prompt voice tools publish save agent" },
   { title: "Variables", section: "Product", slug: "variables", content: "mustache customer_name agent variables registry" },
   { title: "Knowledge base", section: "Product", slug: "knowledge-base", content: "RAG documents attach agent upload" },

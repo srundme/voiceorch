@@ -314,6 +314,32 @@ router.patch("/admin/users/:clerkId/test-flag", async (req, res): Promise<void> 
   }
 });
 
+// Grant / revoke unlimited managed outbound trial for a specific account.
+router.patch("/admin/users/:clerkId/unlimited-trial", async (req, res): Promise<void> => {
+  try {
+    const { clerkId } = req.params;
+    const { unlimited } = req.body as { unlimited: boolean };
+
+    if (typeof unlimited !== "boolean") {
+      res.status(400).json({ error: "unlimited must be a boolean" });
+      return;
+    }
+
+    const { setUserUnlimitedManagedTrial } = await import("../services/managed-outbound-quota.js");
+    const result = await setUserUnlimitedManagedTrial(clerkId!, unlimited);
+    if (result === null) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+
+    logger.info({ clerkId, unlimited }, "Admin set user unlimited managed trial");
+    res.json({ unlimitedManagedTrial: result });
+  } catch (err) {
+    req.log.error({ err }, "admin/users/:clerkId/unlimited-trial failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 // ─── Finance ─────────────────────────────────────────────────────────────────
 
 router.get("/admin/finance/summary", async (req, res): Promise<void> => {
@@ -1640,7 +1666,7 @@ router.post("/admin/family/provision", async (req, res): Promise<void> => {
 
     const asrProvider       = (body["asrProvider"] as string) || "sarvam";
     const llmProvider       = (body["llmProvider"] as string) || "qwen";
-    const ttsProvider       = (body["ttsProvider"] as string) || "cartesia";
+    const ttsProvider       = (body["ttsProvider"] as string) || "sarvam";
     const telephonyProvider = (body["telephonyProvider"] as string) || "vobiz";
     const ambientSoundId    = (body["ambientSoundId"] as string | undefined) ?? null;
 

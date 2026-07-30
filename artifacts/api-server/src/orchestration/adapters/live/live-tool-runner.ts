@@ -8,6 +8,8 @@ import {
   executeNativeReschedule,
   executeNativeCancel,
   executeWebhookTool,
+  executeSendEmail,
+  executeSendWhatsapp,
 } from "../../../services/tool-executor.js";
 import { scheduleCallbackRequested } from "../../../services/autoRedial.js";
 import { resolveCallbackTime } from "../../../lib/tz-datetime.js";
@@ -175,6 +177,22 @@ async function executeLiveAgentTool(
       return executeNativeCancel(callId, agentId, tool, args);
     case "send_sms":
       return undefined;
+    case "send_email":
+      return executeSendEmail({
+        agentId: agent.id,
+        callId,
+        agentName: agent.name,
+        callerPhone: config.callerPhone,
+        args,
+      });
+    case "send_whatsapp":
+      return executeSendWhatsapp({
+        agentId: agent.id,
+        callId,
+        agentName: agent.name,
+        callerPhone: config.callerPhone,
+        args,
+      });
     default:
       return `Tool type ${(tool as AgentTool).type} is not supported on the Live stack yet.`;
   }

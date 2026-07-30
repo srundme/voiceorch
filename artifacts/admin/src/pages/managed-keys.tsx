@@ -152,7 +152,8 @@ const CATEGORIES: Category[] = [
       {
         key: "managed_sarvam_key",
         label: "Sarvam API Key",
-        description: "Saaras:v3 streaming STT and Saarika batch STT for Indian languages. Also used for Sarvam LLM and TTS.",
+        description:
+          "One key for Sarvam STT (Saaras), TTS (Bulbul), and LLM. Catalog speakers (priya, shubh, …) work here; personal Creative Studio clones need the account that owns them.",
         placeholder: "...",
       },
       {

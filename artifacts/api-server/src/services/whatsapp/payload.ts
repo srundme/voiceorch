@@ -20,6 +20,8 @@ export type WhatsappCallEndedPayload = {
   meeting_time?: string;
   meet_link?: string;
   template_hint: string;
+  /** Concrete BSP template name when the connection maps the hint. */
+  template_name?: string;
   timestamp: string;
 };
 
@@ -74,6 +76,8 @@ export function buildWhatsappCallEndedPayload(opts: {
   dispositionResult?: unknown;
   meetingTime?: Date | string | null;
   meetLink?: string | null;
+  /** Optional mapped BSP template name for template_hint. */
+  templateName?: string | null;
 }): WhatsappCallEndedPayload {
   const disposition = formatDisposition(opts.dispositionResult ?? opts.call.dispositionResult);
   const summary = opts.callSummary ?? opts.call.callSummary ?? "";
@@ -84,6 +88,8 @@ export function buildWhatsappCallEndedPayload(opts: {
   else if (/callback|call\s*back|call\s*later/i.test(disposition + summary)) {
     templateHint = "callback_scheduled";
   }
+
+  const templateName = (opts.templateName ?? "").trim();
 
   return {
     event: "call.ended",
@@ -101,6 +107,17 @@ export function buildWhatsappCallEndedPayload(opts: {
     ...(opts.meetingTime ? { meeting_time: formatIst(opts.meetingTime) } : {}),
     ...(opts.meetLink ? { meet_link: opts.meetLink } : {}),
     template_hint: templateHint,
+    ...(templateName ? { template_name: templateName } : {}),
     timestamp: new Date().toISOString(),
   };
+}
+
+/** Resolve BSP template name from a connection's templates map. */
+export function resolveConnectionTemplateName(
+  templates: Record<string, string | undefined> | null | undefined,
+  hint: string,
+): string | undefined {
+  if (!templates || typeof templates !== "object") return undefined;
+  const name = templates[hint];
+  return typeof name === "string" && name.trim() ? name.trim() : undefined;
 }

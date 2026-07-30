@@ -49,25 +49,7 @@ function addMarkup(monthlyRateCents: number): number {
   return monthlyRateCents > 0 ? FLAT_MONTHLY_RATE_CENTS : 0;
 }
 
-import { ensureVobizSubAccount, transferVobizSubAccountBalance } from "./kyc.js";
-import { assignNumberToCustomer } from "../services/vobiz-partner-service.js";
-
-// ── Platform and Subaccount Vobiz credentials ──────────────────────────────
-async function getEffectiveVobizCreds(clerkId: string, name?: string | null, email?: string | null) {
-  try {
-    const creds = await ensureVobizSubAccount(clerkId, name, email);
-    if (creds.authId && creds.authToken) {
-      return { authId: creds.authId, authToken: creds.authToken, configured: true, isSubaccount: true };
-    }
-  } catch (err) {
-    console.warn("getEffectiveVobizCreds error:", err);
-  }
-
-  const authId    = process.env["VOBIZ_AUTH_ID"];
-  const authToken = process.env["VOBIZ_AUTH_TOKEN"];
-  return { authId, authToken, configured: !!(authId && authToken), isSubaccount: false };
-}
-
+// ── Platform VoBiz credentials (master wallet — all DID purchase/link/release) ─
 function getPlatformVobizCreds() {
   const authId    = process.env["VOBIZ_AUTH_ID"];
   const authToken = process.env["VOBIZ_AUTH_TOKEN"];
@@ -582,6 +564,16 @@ router.get("/phone-numbers/managed", requireAuth, async (req, res): Promise<void
   res.json({ numbers });
 });
 
+// ── GET /phone-numbers/managed-quota ──────────────────────────────────────────
+// Daily free-trial outbound allowance on platform managed numbers.
+
+router.get("/phone-numbers/managed-quota", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+  const { getManagedOutboundQuota } = await import("../services/managed-outbound-quota.js");
+  const quota = await getManagedOutboundQuota(clerkId);
+  res.json(quota);
+});
+
 // ── GET /phone-numbers ────────────────────────────────────────────────────────
 
 router.get("/phone-numbers", requireAuth, clientContext, async (req, res): Promise<void> => {
@@ -828,7 +820,11 @@ router.post("/phone-numbers/purchase/confirm", requireAuth, denyManagedClient, a
 
   const { number, countryCode, region, numberType, amountCents } = claimed;
 
-  const { authId, authToken, configured } = await getEffectiveVobizCreds(clerkId, user.name, user.email);
+  // Always buy from the platform VoBiz master wallet. Per-user sub-accounts
+  // are not funded for DID cost and caused "balance debit failed" after the
+  // customer already paid via Razorpay. SnapServe owns the DID; SnapServe
+  // billing is Razorpay → user, VoBiz cost → master.
+  const { authId, authToken, configured } = getPlatformVobizCreds();
   if (!configured) {
     await db.update(phoneNumberOrdersTable)
       .set({ status: "failed", failureReason: "Platform carrier credentials not configured" })
@@ -1079,28 +1075,18 @@ router.patch("/phone-numbers/:id/assign", requireAuth, denyManagedClient, async 
       : `Phone number ${row.number} unassigned from agent`,
   });
 
-  // Server-side VoBiz link — users must not wait for support to click APP SnapServe.
+  // Server-side VoBiz link — numbers are purchased on the platform master
+  // account, so configure inbound webhooks with master credentials.
   let inboundLink: ConfigureVobizResult | null = null;
   if (body.data.agentId) {
-    const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, clerkId));
-    const creds = await getEffectiveVobizCreds(clerkId, user?.name, user?.email);
-    if (creds.configured) {
+    const platform = getPlatformVobizCreds();
+    if (platform.configured) {
       inboundLink = await configureVobizNumberWebhook(
-        creds.authId!,
-        creds.authToken!,
+        platform.authId!,
+        platform.authToken!,
         row.number,
         deriveWebhookBase(req),
       );
-      // If number wasn't found on subaccount, fallback to master account
-      if (!inboundLink.verified && creds.isSubaccount && process.env["VOBIZ_AUTH_ID"] && process.env["VOBIZ_AUTH_TOKEN"]) {
-        const masterLink = await configureVobizNumberWebhook(
-          process.env["VOBIZ_AUTH_ID"],
-          process.env["VOBIZ_AUTH_TOKEN"],
-          row.number,
-          deriveWebhookBase(req),
-        );
-        if (masterLink.verified) inboundLink = masterLink;
-      }
       req.log.info(
         { number: row.number, userId: clerkId, ...inboundLink },
         "Vobiz inbound link after assign",
@@ -1136,28 +1122,11 @@ router.post("/phone-numbers/:id/configure-webhook", requireAuth, clientContext, 
     .where(and(eq(phoneNumbersTable.id, id), eq(phoneNumbersTable.userId, clerkId)));
   if (!row) { res.status(404).json({ error: "Phone number not found" }); return; }
 
-  const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, clerkId));
-  const creds = await getEffectiveVobizCreds(clerkId, user?.name, user?.email);
-  if (!creds.configured) { res.status(503).json({ error: "Platform carrier credentials not configured." }); return; }
-
-  if (creds.isSubaccount && creds.authId) {
-    void assignNumberToCustomer(creds.authId, row.number);
-    void transferVobizSubAccountBalance(creds.authId, 50);
-  }
+  const platform = getPlatformVobizCreds();
+  if (!platform.configured) { res.status(503).json({ error: "Platform carrier credentials not configured." }); return; }
 
   const webhookBase = deriveWebhookBase(req);
-  let result = await configureVobizNumberWebhook(creds.authId!, creds.authToken!, row.number, webhookBase);
-
-  // If subaccount check returned unverified (e.g. for numbers purchased on master before fix), try master credentials
-  if (!result.verified && creds.isSubaccount && process.env["VOBIZ_AUTH_ID"] && process.env["VOBIZ_AUTH_TOKEN"]) {
-    const masterResult = await configureVobizNumberWebhook(
-      process.env["VOBIZ_AUTH_ID"],
-      process.env["VOBIZ_AUTH_TOKEN"],
-      row.number,
-      webhookBase,
-    );
-    if (masterResult.verified) result = masterResult;
-  }
+  const result = await configureVobizNumberWebhook(platform.authId!, platform.authToken!, row.number, webhookBase);
 
   req.log.info({ number: row.number, userId: clerkId, ...result }, "Vobiz inbound webhook reconfigured");
 
@@ -1181,8 +1150,8 @@ router.post("/phone-numbers/:id/configure-webhook", requireAuth, clientContext, 
 });
 
 // ── POST /phone-numbers/sync-vobiz-partner ─────────────────────────────────
-// Bulk partner sync: assigns all user numbers to their respective VoBiz sub-account,
-// transfers operational credit from master partner wallet, and links voice webhooks.
+// Re-link inbound webhooks for the user's numbers on the platform master
+// VoBiz account. (Legacy name: previously synced to per-user sub-accounts.)
 
 router.post("/phone-numbers/sync-vobiz-partner", requireAuth, denyManagedClient, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
@@ -1190,9 +1159,9 @@ router.post("/phone-numbers/sync-vobiz-partner", requireAuth, denyManagedClient,
   const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, clerkId));
   if (!user) { res.status(404).json({ error: "User not found" }); return; }
 
-  const creds = await getEffectiveVobizCreds(clerkId, user.name, user.email);
-  if (!creds.configured || !creds.authId) {
-    res.status(503).json({ error: "VoBiz partner credentials not configured" });
+  const platform = getPlatformVobizCreds();
+  if (!platform.configured || !platform.authId) {
+    res.status(503).json({ error: "VoBiz platform credentials not configured" });
     return;
   }
 
@@ -1205,28 +1174,17 @@ router.post("/phone-numbers/sync-vobiz-partner", requireAuth, denyManagedClient,
   const results = [];
 
   for (const num of userNumbers) {
-    // 1. Assign DID to sub-account on VoBiz Partner Console
-    const assigned = await assignNumberToCustomer(creds.authId, num.number);
-
-    // 2. Transfer operational balance from Master Wallet to sub-account
-    await transferVobizSubAccountBalance(creds.authId, 50);
-
-    // 3. Configure voice app webhook
-    let linkResult = await configureVobizNumberWebhook(creds.authId, creds.authToken!, num.number, webhookBase);
-    if (!linkResult.verified && process.env["VOBIZ_AUTH_ID"] && process.env["VOBIZ_AUTH_TOKEN"]) {
-      const masterLink = await configureVobizNumberWebhook(
-        process.env["VOBIZ_AUTH_ID"],
-        process.env["VOBIZ_AUTH_TOKEN"],
-        num.number,
-        webhookBase,
-      );
-      if (masterLink.verified) linkResult = masterLink;
-    }
+    const linkResult = await configureVobizNumberWebhook(
+      platform.authId,
+      platform.authToken!,
+      num.number,
+      webhookBase,
+    );
 
     results.push({
       number: num.number,
-      assignedToSubaccount: assigned,
-      subaccountAuthId: creds.authId,
+      assignedToSubaccount: false,
+      subaccountAuthId: null as string | null,
       linkResult,
     });
   }
@@ -1234,7 +1192,8 @@ router.post("/phone-numbers/sync-vobiz-partner", requireAuth, denyManagedClient,
   res.json({
     ok: true,
     user: user.email ?? clerkId,
-    subaccountAuthId: creds.authId,
+    subaccountAuthId: null,
+    platformAuthId: platform.authId,
     totalSynced: results.length,
     results,
   });

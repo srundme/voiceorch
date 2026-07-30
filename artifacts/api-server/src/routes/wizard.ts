@@ -684,6 +684,34 @@ router.get("/admin/managed-phone-numbers", requireAdmin, async (_req, res): Prom
   res.json({ selected, available, fetchError });
 });
 
+// ── Admin: GET /admin/managed-outbound-trial ──────────────────────────────────
+// Platform-wide daily trial limit only. Unlimited trial is per-account
+// (see PATCH /admin/users/:clerkId/unlimited-trial).
+
+router.get("/admin/managed-outbound-trial", requireAdmin, async (_req, res): Promise<void> => {
+  const { getManagedOutboundDailyLimit } = await import("../services/managed-outbound-quota.js");
+  const dailyLimit = await getManagedOutboundDailyLimit();
+  res.json({ dailyLimit });
+});
+
+// ── Admin: PUT /admin/managed-outbound-trial ──────────────────────────────────
+
+router.put("/admin/managed-outbound-trial", requireAdmin, async (req, res): Promise<void> => {
+  const body = req.body as { dailyLimit?: unknown };
+  if (body.dailyLimit === undefined) {
+    res.status(400).json({ error: "Provide dailyLimit" });
+    return;
+  }
+  const n = Number(body.dailyLimit);
+  if (!Number.isFinite(n) || n < 0) {
+    res.status(400).json({ error: "dailyLimit must be a non-negative number" });
+    return;
+  }
+  const { setManagedOutboundDailyLimit } = await import("../services/managed-outbound-quota.js");
+  const dailyLimit = await setManagedOutboundDailyLimit(Math.floor(n));
+  res.json({ dailyLimit });
+});
+
 // ── Admin: POST /admin/managed-phone-numbers ──────────────────────────────────
 
 router.post("/admin/managed-phone-numbers", requireAdmin, async (req, res): Promise<void> => {

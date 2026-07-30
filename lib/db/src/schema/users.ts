@@ -28,6 +28,8 @@ export const usersTable = pgTable("users", {
   // analytics by default. Set manually from the admin Users page (or auto-set
   // on signup when INTERNAL_EMAIL_PATTERNS matches).
   isTest: boolean("is_test").notNull().default(false),
+  /** Admin grant: skip managed-outbound daily trial cap for this account. */
+  unlimitedManagedTrial: boolean("unlimited_managed_trial").notNull().default(false),
   suspendedAt: timestamp("suspended_at", { withTimezone: true }),
   suspendedReason: text("suspended_reason"),
   // Partner (reseller) linkage — set when this user is a client onboarded by a partner.

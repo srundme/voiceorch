@@ -276,6 +276,8 @@ function normalizeDisconnectReason(raw: string): ReasonMapping {
     case "completed":
     case "complete":
     case "end_call":
+    case "tool ended call":
+    case "tool_ended_call":
       return { reason: "completed", label: "Conversation completed", outcome: "Completed", expected: true, component: "Agent" };
     case "user_hangup":
     case "disconnected":
