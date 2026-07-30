@@ -89,13 +89,38 @@ describe("normalizeCallEngineAgentConfig", () => {
         onNoPunctuationSeconds: 0.1,
         onNumberSeconds: 0.1,
       },
-      fragmentCoalesceListeningMs: 150,
-      fragmentCoalescePlayingMs: 800,
+      fragmentCoalesceListeningMs: 500,
+      fragmentCoalescePlayingMs: 1000,
       telephonyTailDrainMs: 400,
+      sarvamHighVadSensitivity: false,
+      sarvamSpeechEndFlushMs: 80,
+      sarvamIncompleteHoldMs: 700,
+      stopSpeakingPlan: { numWords: 3, voiceSeconds: 0.45, backOffSeconds: 1 },
+    });
+  });
+
+  it("rewrites legacy snappy Sarvam STT defaults (call 4940 profile)", () => {
+    const result = normalizeCallEngineAgentConfig({
       sarvamHighVadSensitivity: true,
       sarvamSpeechEndFlushMs: 30,
       sarvamIncompleteHoldMs: 220,
-      stopSpeakingPlan: { numWords: 3, voiceSeconds: 0.45, backOffSeconds: 1 },
+      fragmentCoalesceListeningMs: 150,
+      fragmentCoalescePlayingMs: 800,
     });
+    expect(result.changed).toBe(true);
+    expect(result.config.sarvamHighVadSensitivity).toBe(false);
+    expect(result.config.sarvamSpeechEndFlushMs).toBe(80);
+    expect(result.config.sarvamIncompleteHoldMs).toBe(700);
+    expect(result.config.fragmentCoalesceListeningMs).toBe(500);
+    expect(result.config.fragmentCoalescePlayingMs).toBe(1000);
+  });
+
+  it("leaves intentional custom Sarvam holds alone", () => {
+    const input = {
+      sarvamHighVadSensitivity: true,
+      sarvamSpeechEndFlushMs: 50,
+      sarvamIncompleteHoldMs: 500,
+    };
+    expect(normalizeCallEngineAgentConfig(input).changed).toBe(false);
   });
 });

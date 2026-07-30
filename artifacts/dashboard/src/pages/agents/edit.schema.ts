@@ -221,12 +221,12 @@ export function clampLinearDelayMs(value: number | null | undefined): number {
 }
 
 export function clampFragmentCoalesceListeningMs(value: number | null | undefined): number {
-  const v = typeof value === "number" && Number.isFinite(value) ? value : 150;
+  const v = typeof value === "number" && Number.isFinite(value) ? value : 500;
   return Math.max(0, Math.min(2000, Math.round(v)));
 }
 
 export function clampFragmentCoalescePlayingMs(value: number | null | undefined): number {
-  const v = typeof value === "number" && Number.isFinite(value) ? value : 800;
+  const v = typeof value === "number" && Number.isFinite(value) ? value : 1000;
   return Math.max(0, Math.min(3000, Math.round(v)));
 }
 
@@ -236,12 +236,12 @@ export function clampTelephonyTailDrainMs(value: number | null | undefined): num
 }
 
 export function clampSarvamSpeechEndFlushMs(value: number | null | undefined): number {
-  const v = typeof value === "number" && Number.isFinite(value) ? value : 30;
+  const v = typeof value === "number" && Number.isFinite(value) ? value : 80;
   return Math.max(0, Math.min(200, Math.round(v)));
 }
 
 export function clampSarvamIncompleteHoldMs(value: number | null | undefined): number {
-  const v = typeof value === "number" && Number.isFinite(value) ? value : 220;
+  const v = typeof value === "number" && Number.isFinite(value) ? value : 700;
   return Math.max(50, Math.min(1000, Math.round(v)));
 }
 

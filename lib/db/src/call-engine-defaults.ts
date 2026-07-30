@@ -20,13 +20,27 @@ export const CALL_ENGINE_SAFE = {
   snappyNumberSeconds: 0.1,
 } as const;
 
-/** Sarvam STT latency knobs — UI-owned, snappy voice-agent defaults. */
+/** Sarvam STT latency knobs — patient defaults (call 4940 premature VAD chops). */
 export const SARVAM_STT_LATENCY_DEFAULTS = {
-  highVadSensitivity: true,
-  /** Fast flush after speech_end / complete transcript. */
-  speechEndFlushMs: 30,
+  /** OFF by default — ON (~128ms silence) cuts mid-utterance on PSTN. */
+  highVadSensitivity: false,
+  /** Pause after speech_end before emitting final. */
+  speechEndFlushMs: 80,
   /** Hold mid-thought fragments before speech_end. */
+  incompleteHoldMs: 700,
+} as const;
+
+/** Prior snappy insert defaults — rewritten to patient values on normalize/session. */
+export const SARVAM_STT_LATENCY_LEGACY_SNAPPY = {
+  highVadSensitivity: true,
+  speechEndFlushMs: 30,
   incompleteHoldMs: 220,
+  fragmentCoalesceListeningMs: 150,
+} as const;
+
+export const FRAGMENT_COALESCE_DEFAULTS = {
+  listeningMs: 500,
+  playingMs: 1000,
 } as const;
 
 export function clampSarvamSpeechEndFlushMs(value: number | null | undefined): number {
@@ -132,6 +146,49 @@ export function normalizeCallEngineAgentConfig(
     cfg["incrementalDelay"] = CALL_ENGINE_SAFE.incrementalDelay;
   }
 
+  // Rewrite legacy snappy Sarvam STT defaults that caused premature VAD chops (call 4940).
+  // Only when the agent still has the old insert triplet — leave intentional custom tuning alone.
+  const sarvamHigh = cfg["sarvamHighVadSensitivity"];
+  const sarvamFlush = cfg["sarvamSpeechEndFlushMs"];
+  const sarvamHold = cfg["sarvamIncompleteHoldMs"];
+  const stillSnappySarvam =
+    (sarvamHigh === true || sarvamHigh === undefined)
+    && (sarvamFlush === SARVAM_STT_LATENCY_LEGACY_SNAPPY.speechEndFlushMs || sarvamFlush === undefined)
+    && (sarvamHold === SARVAM_STT_LATENCY_LEGACY_SNAPPY.incompleteHoldMs || sarvamHold === undefined);
+  if (stillSnappySarvam) {
+    if (cfg["sarvamHighVadSensitivity"] !== SARVAM_STT_LATENCY_DEFAULTS.highVadSensitivity) {
+      reasons.push(
+        `sarvamHighVadSensitivity ${String(sarvamHigh ?? "∅")}→${SARVAM_STT_LATENCY_DEFAULTS.highVadSensitivity}`,
+      );
+      cfg["sarvamHighVadSensitivity"] = SARVAM_STT_LATENCY_DEFAULTS.highVadSensitivity;
+    }
+    if (cfg["sarvamSpeechEndFlushMs"] !== SARVAM_STT_LATENCY_DEFAULTS.speechEndFlushMs) {
+      reasons.push(
+        `sarvamSpeechEndFlushMs ${String(sarvamFlush ?? "∅")}→${SARVAM_STT_LATENCY_DEFAULTS.speechEndFlushMs}`,
+      );
+      cfg["sarvamSpeechEndFlushMs"] = SARVAM_STT_LATENCY_DEFAULTS.speechEndFlushMs;
+    }
+    if (cfg["sarvamIncompleteHoldMs"] !== SARVAM_STT_LATENCY_DEFAULTS.incompleteHoldMs) {
+      reasons.push(
+        `sarvamIncompleteHoldMs ${String(sarvamHold ?? "∅")}→${SARVAM_STT_LATENCY_DEFAULTS.incompleteHoldMs}`,
+      );
+      cfg["sarvamIncompleteHoldMs"] = SARVAM_STT_LATENCY_DEFAULTS.incompleteHoldMs;
+    }
+  }
+
+  const fragListen = cfg["fragmentCoalesceListeningMs"];
+  if (fragListen === SARVAM_STT_LATENCY_LEGACY_SNAPPY.fragmentCoalesceListeningMs) {
+    reasons.push(
+      `fragmentCoalesceListeningMs ${fragListen}→${FRAGMENT_COALESCE_DEFAULTS.listeningMs}`,
+    );
+    cfg["fragmentCoalesceListeningMs"] = FRAGMENT_COALESCE_DEFAULTS.listeningMs;
+  }
+  const fragPlay = cfg["fragmentCoalescePlayingMs"];
+  if (fragPlay === 800) {
+    reasons.push(`fragmentCoalescePlayingMs ${fragPlay}→${FRAGMENT_COALESCE_DEFAULTS.playingMs}`);
+    cfg["fragmentCoalescePlayingMs"] = FRAGMENT_COALESCE_DEFAULTS.playingMs;
+  }
+
   const sspRaw = cfg["startSpeakingPlan"];
   if (sspRaw && typeof sspRaw === "object") {
     const ssp = { ...(sspRaw as Record<string, unknown>) };
@@ -170,8 +227,8 @@ export function callEngineInsertDefaults(): Record<string, unknown> {
       onNoPunctuationSeconds: CALL_ENGINE_SAFE.snappyNoPunctuationSeconds,
       onNumberSeconds: CALL_ENGINE_SAFE.snappyNumberSeconds,
     },
-    fragmentCoalesceListeningMs: 150,
-    fragmentCoalescePlayingMs: 800,
+    fragmentCoalesceListeningMs: FRAGMENT_COALESCE_DEFAULTS.listeningMs,
+    fragmentCoalescePlayingMs: FRAGMENT_COALESCE_DEFAULTS.playingMs,
     telephonyTailDrainMs: 400,
     sarvamHighVadSensitivity: SARVAM_STT_LATENCY_DEFAULTS.highVadSensitivity,
     sarvamSpeechEndFlushMs: SARVAM_STT_LATENCY_DEFAULTS.speechEndFlushMs,

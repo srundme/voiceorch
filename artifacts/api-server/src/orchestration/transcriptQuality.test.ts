@@ -47,6 +47,13 @@ describe("checkTranscriptQuality", () => {
     expect(checkTranscriptQuality("I want to know how", { expectedLang: "en-IN" }).reason).toBe("");
   });
 
+  it("accepts complete 'not yet' answers (call 4943 false clarification)", () => {
+    expect(checkTranscriptQuality("No, not yet.", { expectedLang: "en-IN" }).isGarbled).toBe(false);
+    expect(checkTranscriptQuality("No not yet", { expectedLang: "en-IN" }).isGarbled).toBe(false);
+    expect(checkTranscriptQuality("not yet.", { expectedLang: "en-IN" }).isGarbled).toBe(false);
+    expect(checkTranscriptQuality("No, not yet.", { expectedLang: "en-IN" }).reason).toBe("");
+  });
+
   it("still flags short English dangling prepositions", () => {
     expect(checkTranscriptQuality("concerned about", { expectedLang: "en-IN" }).reason).toBe("truncated-dangling");
   });
@@ -101,6 +108,13 @@ describe("isUltraShortNoiseFragment", () => {
     expect(isUltraShortNoiseFragment("mm")).toBe(true);
   });
 
+  it("drops English noise stubs that became fake turns (call 4943)", () => {
+    expect(isUltraShortNoiseFragment("get")).toBe(true);
+    expect(isUltraShortNoiseFragment("Oh")).toBe(true);
+    expect(isUltraShortNoiseFragment("uh")).toBe(true);
+    expect(isUltraShortNoiseFragment("the")).toBe(true);
+  });
+
   it("keeps real one-/two-word replies that callers actually say", () => {
     expect(isUltraShortNoiseFragment("இருக்கு")).toBe(false);
     expect(isUltraShortNoiseFragment("நல்லா")).toBe(false);
@@ -112,6 +126,8 @@ describe("isUltraShortNoiseFragment", () => {
     expect(isUltraShortNoiseFragment("Okay Okay.")).toBe(false);
     expect(isUltraShortNoiseFragment("Hello")).toBe(false);
     expect(isUltraShortNoiseFragment("சரி")).toBe(false);
+    expect(isUltraShortNoiseFragment("Yes")).toBe(false);
+    expect(isUltraShortNoiseFragment("No, not yet.")).toBe(false);
     expect(isUltraShortNoiseFragment("ஆ Madam பேசலாம் சொல்லுங்க.")).toBe(false);
     expect(isUltraShortNoiseFragment("இல்ல Madam இப்பதான் தெரிஞ்சிருக்கு.")).toBe(false);
   });

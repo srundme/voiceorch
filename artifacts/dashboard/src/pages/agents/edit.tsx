@@ -165,7 +165,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   }
   if (sarvamSttMode) agentConfig["sarvamSttMode"] = sarvamSttMode;
   // Always persist Sarvam STT latency knobs (UI is source of truth; snappy defaults).
-  agentConfig["sarvamHighVadSensitivity"] = sarvamHighVadSensitivity !== false;
+  agentConfig["sarvamHighVadSensitivity"] = sarvamHighVadSensitivity === true;
   agentConfig["sarvamSpeechEndFlushMs"] = clampSarvamSpeechEndFlushMs(sarvamSpeechEndFlushMs);
   agentConfig["sarvamIncompleteHoldMs"] = clampSarvamIncompleteHoldMs(sarvamIncompleteHoldMs);
   if (kbBakedOnly) agentConfig["kbBakedOnly"] = true;
@@ -443,12 +443,12 @@ export default function AgentEdit() {
       ttsMinSentenceChars: 18,
       ttsSpeed: 1,
       linearDelayMs: 0,
-      fragmentCoalesceListeningMs: 150,
-      fragmentCoalescePlayingMs: 800,
+      fragmentCoalesceListeningMs: 500,
+      fragmentCoalescePlayingMs: 1000,
       telephonyTailDrainMs: 400,
-      sarvamHighVadSensitivity: true,
-      sarvamSpeechEndFlushMs: 30,
-      sarvamIncompleteHoldMs: 220,
+      sarvamHighVadSensitivity: false,
+      sarvamSpeechEndFlushMs: 80,
+      sarvamIncompleteHoldMs: 700,
       kbBakedOnly: false,
       startSpeakingWaitSecs: 0,
       startSpeakingOnPunctuationSecs: 0.1,
@@ -709,7 +709,7 @@ export default function AgentEdit() {
       fragmentCoalesceListeningMs: clampFragmentCoalesceListeningMs((agent as any).agentConfig?.fragmentCoalesceListeningMs as number | undefined),
       fragmentCoalescePlayingMs: clampFragmentCoalescePlayingMs((agent as any).agentConfig?.fragmentCoalescePlayingMs as number | undefined),
       telephonyTailDrainMs: clampTelephonyTailDrainMs((agent as any).agentConfig?.telephonyTailDrainMs as number | undefined),
-      sarvamHighVadSensitivity: ((agent as any).agentConfig?.sarvamHighVadSensitivity as boolean | undefined) !== false,
+      sarvamHighVadSensitivity: ((agent as any).agentConfig?.sarvamHighVadSensitivity as boolean | undefined) === true,
       sarvamSpeechEndFlushMs: clampSarvamSpeechEndFlushMs((agent as any).agentConfig?.sarvamSpeechEndFlushMs as number | undefined),
       sarvamIncompleteHoldMs: clampSarvamIncompleteHoldMs((agent as any).agentConfig?.sarvamIncompleteHoldMs as number | undefined),
       kbBakedOnly: ((agent as any).agentConfig?.kbBakedOnly as boolean | undefined) ?? false,
@@ -1634,7 +1634,7 @@ export default function AgentEdit() {
                         onChange={e => field.onChange(parseInt(e.target.value, 10))} />
                     </FormControl>
                     <FormDescription className="text-[11px]">
-                      Hold short STT fragments ("Okay.") while the agent is silent, waiting for a follow-up final. <strong>0 = off.</strong> Default 150ms.
+                      Hold short STT fragments ("Okay.") while the agent is silent, waiting for a follow-up final. <strong>0 = off.</strong> Default 500ms.
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -1648,7 +1648,7 @@ export default function AgentEdit() {
                         onChange={e => field.onChange(parseInt(e.target.value, 10))} />
                     </FormControl>
                     <FormDescription className="text-[11px]">
-                      Hold short acks while the agent is speaking (true backchannels). <strong>0 = off.</strong> Default 800ms.
+                      Hold short acks while the agent is speaking (true backchannels). <strong>0 = off.</strong> Default 1000ms.
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -1695,11 +1695,11 @@ export default function AgentEdit() {
                       <FormItem className="flex flex-col">
                         <FormLabel>Detect pauses quickly</FormLabel>
                         <div className="flex items-center gap-3 pt-2">
-                          <Switch checked={field.value !== false} onCheckedChange={field.onChange} />
-                          <span className="text-sm text-muted-foreground">{(field.value !== false) ? "On (faster)" : "Off (more patient)"}</span>
+                          <Switch checked={!!field.value} onCheckedChange={field.onChange} />
+                          <span className="text-sm text-muted-foreground">{field.value ? "On (faster)" : "Off (more patient)"}</span>
                         </div>
                         <FormDescription className="text-[11px]">
-                          Default <strong>On</strong>. The agent responds sooner after a short silence. Turn off only if it cuts people off mid-sentence.
+                          Default <strong>Off</strong> — avoids cutting callers mid-sentence on phone audio. Turn on only if replies feel too slow.
                         </FormDescription>
                       </FormItem>
                     )} />
@@ -1708,11 +1708,11 @@ export default function AgentEdit() {
                         <FormLabel>Reply kickoff delay (ms)</FormLabel>
                         <FormControl>
                           <Input type="number" min={0} max={200} step={10}
-                            value={field.value ?? 30}
+                            value={field.value ?? 80}
                             onChange={e => field.onChange(parseInt(e.target.value, 10))} />
                         </FormControl>
                         <FormDescription className="text-[11px]">
-                          Tiny pause after the caller finishes before the agent starts thinking. Default <strong>30</strong> (almost instant).
+                          Tiny pause after the caller finishes before the agent starts thinking. Default <strong>80</strong>.
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
@@ -1722,11 +1722,11 @@ export default function AgentEdit() {
                         <FormLabel>Wait for unfinished thoughts (ms)</FormLabel>
                         <FormControl>
                           <Input type="number" min={50} max={1000} step={10}
-                            value={field.value ?? 220}
+                            value={field.value ?? 700}
                             onChange={e => field.onChange(parseInt(e.target.value, 10))} />
                         </FormControl>
                         <FormDescription className="text-[11px]">
-                          Extra wait when someone seems mid-sentence (e.g. “I want…”). Default <strong>220</strong>. Raise if callers get cut off while thinking.
+                          Extra wait when someone seems mid-sentence (e.g. “I want…”). Default <strong>700</strong>. Raise if callers get cut off while thinking.
                         </FormDescription>
                         <FormMessage />
                       </FormItem>

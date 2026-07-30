@@ -3340,7 +3340,7 @@ function VoicemailTab({ form }: { form: any }) {
 
 /* ── Tab: Advanced ──────────────────────────────────────────────────────────── */
 
-type AdvSection = "engine" | "limits" | "compliance";
+type AdvSection = "engine" | "limits" | "compliance" | "integrations";
 
 function AdvSlider({ form, name, label, hint, min, max, step, fmt, onValueChange, disabled }: {
   form: any; name: string; label: string; hint?: string;
@@ -3414,6 +3414,14 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
   const [traiConfirmOpen, setTraiConfirmOpen] = useState(false);
   const [dpdpConfirmOpen, setDpdpConfirmOpen] = useState(false);
   const [irdaiConfirmOpen, setIrdaiConfirmOpen] = useState(false);
+
+  // Surface webhook validation errors on the Integrations sub-tab
+  useEffect(() => {
+    if (form.formState.errors?.webhookUrl || form.formState.errors?.webhookSecret) {
+      setSection("integrations");
+    }
+  }, [form.formState.errors?.webhookUrl, form.formState.errors?.webhookSecret]);
+
   const bargeIn = form.watch("bargeInEnabled");
   const asrProviderVal = form.watch("asrProvider") as string | undefined;
   const endpointMs = form.watch("asrEndpointingSilenceMs") ?? 250;
@@ -3441,9 +3449,10 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
   };
 
   const nav: { id: AdvSection; icon: React.ReactNode; label: string }[] = [
-    { id: "engine",     icon: <Timer className="h-3.5 w-3.5" />,       label: "Engine"     },
-    { id: "limits",     icon: <Gauge className="h-3.5 w-3.5" />,       label: "Limits"     },
-    { id: "compliance", icon: <ShieldCheck className="h-3.5 w-3.5" />, label: "Compliance" },
+    { id: "engine",       icon: <Timer className="h-3.5 w-3.5" />,       label: "Engine"       },
+    { id: "limits",       icon: <Gauge className="h-3.5 w-3.5" />,       label: "Limits"       },
+    { id: "integrations", icon: <Webhook className="h-3.5 w-3.5" />,     label: "Integrations" },
+    { id: "compliance",   icon: <ShieldCheck className="h-3.5 w-3.5" />, label: "Compliance"   },
   ];
 
   return (
@@ -3554,11 +3563,11 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                       <div>
                         <FormLabel className="text-[12px] font-medium text-foreground/90">Detect pauses quickly</FormLabel>
                         <p className="text-[10px] text-muted-foreground/70 mt-0.5">
-                          Default on — agent replies sooner after silence. Turn off if it cuts people off.
+                          Default off — avoids cutting callers mid-sentence on phone audio. Turn on only if replies feel too slow.
                         </p>
                       </div>
                       <FormControl>
-                        <Switch checked={field.value !== false} onCheckedChange={field.onChange} />
+                        <Switch checked={!!field.value} onCheckedChange={field.onChange} />
                       </FormControl>
                     </FormItem>
                   )} />
@@ -3566,7 +3575,7 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                     form={form}
                     name="sarvamSpeechEndFlushMs"
                     label="Reply kickoff delay"
-                    hint="Tiny pause after the caller finishes before the agent starts thinking. Default 30ms."
+                    hint="Tiny pause after the caller finishes before the agent starts thinking. Default 80ms."
                     min={0}
                     max={200}
                     step={10}
@@ -3576,7 +3585,7 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                     form={form}
                     name="sarvamIncompleteHoldMs"
                     label="Wait for unfinished thoughts"
-                    hint="Extra wait when someone seems mid-sentence (e.g. “I want…”). Default 220ms."
+                    hint="Extra wait when someone seems mid-sentence (e.g. “I want…”). Default 700ms."
                     min={50}
                     max={1000}
                     step={10}
@@ -3600,7 +3609,7 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                 form={form}
                 name="fragmentCoalesceListeningMs"
                 label="Fragment hold (listening)"
-                hint="Hold short STT fragments while agent is silent. 0 = off. Default 150ms."
+                hint="Hold short STT fragments while agent is silent. 0 = off. Default 500ms."
                 min={0}
                 max={2000}
                 step={50}
@@ -3611,7 +3620,7 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                 form={form}
                 name="fragmentCoalescePlayingMs"
                 label="Fragment hold (playing)"
-                hint="Hold short acks while agent is speaking. 0 = off. Default 800ms."
+                hint="Hold short acks while agent is speaking. 0 = off. Default 1000ms."
                 min={0}
                 max={3000}
                 step={50}
@@ -3910,6 +3919,73 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
           </>
         )}
 
+        {/* ── INTEGRATIONS ── */}
+        {section === "integrations" && (
+          <>
+            <div>
+              <h3 className="text-[13px] font-semibold text-foreground">CRM / post-call webhook</h3>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Notify your CRM or Zap after a call ends. Separate from Journey lead intake — leave blank if you only need intake.
+              </p>
+            </div>
+            <div className="space-y-3 rounded-xl border border-border/50 bg-card/40 p-4">
+              <FormField control={form.control} name="webhookUrl" render={({ field }) => {
+                const val = field.value ?? "";
+                const isEmail = val.includes("@") && !val.startsWith("http");
+                const isHttp  = val.length > 0 && val.startsWith("http://");
+                return (
+                  <FormItem className="space-y-1">
+                    <FormLabel className="text-[10px] text-muted-foreground uppercase tracking-wider">Webhook URL</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="https://your-server.com/voiceorch-webhook"
+                        className="h-9 text-sm font-mono bg-background/50"
+                        autoComplete="off"
+                        {...field}
+                      />
+                    </FormControl>
+                    {isEmail && (
+                      <p className="text-xs text-destructive flex items-start gap-1">
+                        <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                        <span>That looks like an email address, not a URL. Enter an <code className="font-mono">https://</code> endpoint.</span>
+                      </p>
+                    )}
+                    {isHttp && !isEmail && (
+                      <p className="text-xs text-amber-500 flex items-start gap-1">
+                        <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                        <span>HTTP is not allowed — must be <code className="font-mono">https://</code></span>
+                      </p>
+                    )}
+                    <FormDescription className="text-[10px]">
+                      Must be HTTPS. We send a JSON payload with <code className="font-mono bg-muted px-0.5 rounded">callId</code>, <code className="font-mono bg-muted px-0.5 rounded">status</code>, <code className="font-mono bg-muted px-0.5 rounded">transcript</code>, <code className="font-mono bg-muted px-0.5 rounded">disposition</code> and more.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                );
+              }} />
+              <FormField control={form.control} name="webhookSecret" render={({ field }) => (
+                <FormItem className="space-y-1">
+                  <FormLabel className="text-[10px] text-muted-foreground uppercase tracking-wider">Signing Secret (optional)</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="password"
+                      placeholder="Shared HMAC secret for signature verification"
+                      className="h-9 text-xs bg-background/50"
+                      autoComplete="new-password"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormDescription className="text-[10px]">
+                    Sent as <code className="font-mono bg-muted px-0.5 rounded">X-Webhook-Signature</code> header so you can verify the payload wasn't tampered with.
+                  </FormDescription>
+                </FormItem>
+              )} />
+            </div>
+
+            <DispositionSettingsPanel agentId={agent?.id ?? 0} />
+          </>
+        )}
+
       </div>
     </div>
   );
@@ -4072,24 +4148,12 @@ function AgentListPanel({ selectedId, onSelect, rateMap, className }: {
   );
 }
 
-/* ── Tab: Analysis ──────────────────────────────────────────────────────────── */
+/* ── Tab: Analysis (Journey) ────────────────────────────────────────────────── */
 
 type DispositionCategory = { id: string; name: string; values: string };
 
-function AnalysisTab({
-  form,
-  agentId,
-  onConfigureEmail,
-  onOpenChannels,
-}: {
-  form: any;
-  agentId: number;
-  onConfigureEmail?: () => void;
-  onOpenChannels?: () => void;
-}) {
+function DispositionSettingsPanel({ agentId }: { agentId: number }) {
   const { toast } = useToast();
-
-  // ── Disposition config state ──────────────────────────────────────────────
   const [categories, setCategories] = useState<DispositionCategory[]>([]);
   const [dirty, setDirty] = useState(false);
 
@@ -4158,13 +4222,136 @@ function AnalysisTab({
     setCategories((prev) => prev.map((c) => (c.id === id ? { ...c, [field]: value } : c)));
     setDirty(true);
   }
+
+  if (agentId <= 0) {
+    return (
+      <div>
+        <div className="flex items-center gap-2 mb-1">
+          <Tag className="h-4 w-4 text-amber-400" />
+          <h3 className="text-[13px] font-semibold text-foreground">Call Disposition</h3>
+        </div>
+        <p className="text-[11px] text-muted-foreground mt-0.5">
+          Save the agent first to define disposition categories.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1">
+        <div className="flex items-center gap-2">
+          <Tag className="h-4 w-4 text-amber-400" />
+          <h3 className="text-[13px] font-semibold text-foreground">Call Disposition</h3>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-7 text-xs gap-1"
+          onClick={addCategory}
+        >
+          <Plus className="h-3.5 w-3.5" /> Add Category
+        </Button>
+      </div>
+      <p className="text-[11px] text-muted-foreground mb-4">
+        Define categories and their possible values. After each call the AI automatically picks the best match from the transcript and saves it. Results appear in the call detail page.
+      </p>
+
+      {dispLoading ? (
+        <div className="space-y-2">
+          {[1, 2].map((i) => <div key={i} className="h-16 rounded-xl bg-muted/20 animate-pulse" />)}
+        </div>
+      ) : categories.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-border/50 p-8 text-center">
+          <Tag className="h-7 w-7 text-muted-foreground/20 mx-auto mb-2" />
+          <p className="text-sm font-medium text-muted-foreground/50">No categories yet</p>
+          <p className="text-xs text-muted-foreground/30 mt-0.5">Add a category to start capturing structured call outcomes</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {categories.map((cat) => (
+            <div key={cat.id} className="rounded-xl border border-border/60 bg-card/20 p-4">
+              <div className="flex items-start gap-3">
+                <div className="flex-1 grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Category name</label>
+                    <Input
+                      className="h-8 text-xs"
+                      placeholder="e.g. intent"
+                      value={cat.name}
+                      onChange={(e) => updateCategory(cat.id, "name", e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Possible values <span className="normal-case">(comma-separated)</span></label>
+                    <Input
+                      className="h-8 text-xs"
+                      placeholder="e.g. interested, not_interested, callback"
+                      value={cat.values}
+                      onChange={(e) => updateCategory(cat.id, "values", e.target.value)}
+                    />
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 mt-5 text-muted-foreground hover:text-destructive shrink-0"
+                  onClick={() => removeCategory(cat.id)}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+              {cat.values && (
+                <div className="flex flex-wrap gap-1 mt-3">
+                  {cat.values.split(",").map((v) => v.trim()).filter(Boolean).map((v) => (
+                    <span key={v} className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                      {v}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {(categories.length > 0 || dirty) && (
+        <div className="flex justify-end mt-4">
+          <Button
+            type="button"
+            size="sm"
+            className="h-8 text-xs gap-1.5"
+            disabled={saveMutation.isPending || !dirty}
+            onClick={() => saveMutation.mutate()}
+          >
+            <Save className="h-3.5 w-3.5" />
+            {saveMutation.isPending ? "Saving…" : "Save Disposition Config"}
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AnalysisTab({
+  form,
+  agentId,
+  onConfigureEmail,
+  onOpenChannels,
+}: {
+  form: any;
+  agentId: number;
+  onConfigureEmail?: () => void;
+  onOpenChannels?: () => void;
+}) {
   return (
     <div className="relative p-6 space-y-8">
-
       <section className="space-y-2">
         <h2 className="text-base font-semibold tracking-tight">Journey</h2>
         <p className="text-[12px] text-muted-foreground max-w-3xl">
-          Attach one auto-pilot sequence to this agent: lead in → call → WhatsApp/email/callback. Channels hold WhatsApp &amp; Email; this tab turns them into a live flow.
+          Attach one auto-pilot sequence to this agent: lead in → call → WhatsApp/email/callback. Channels hold WhatsApp &amp; Email; CRM webhook and disposition live under Advanced → Integrations.
         </p>
       </section>
 
@@ -4174,166 +4361,6 @@ function AnalysisTab({
         onConfigureEmail={onConfigureEmail}
         onOpenChannels={onOpenChannels}
       />
-
-      {/* ── CRM webhook (separate from lead intake) ── */}
-      <div>
-        <div className="flex items-center gap-2 mb-1">
-          <Webhook className="h-4 w-4 text-violet-400" />
-          <h3 className="text-sm font-semibold">CRM / post-call webhook (optional)</h3>
-        </div>
-        <p className="text-xs text-muted-foreground mb-4">
-          Not the lead intake URL above. Use this to notify your CRM or Zap after a call ends. Leave blank if you only need journey intake.
-        </p>
-        <div className="space-y-3">
-          <FormField control={form.control} name="webhookUrl" render={({ field }) => {
-            const val = field.value ?? "";
-            const isEmail = val.includes("@") && !val.startsWith("http");
-            const isHttp  = val.length > 0 && val.startsWith("http://");
-            return (
-              <FormItem className="space-y-1">
-                <FormLabel className="text-[10px] text-muted-foreground uppercase tracking-wider">Webhook URL</FormLabel>
-                <FormControl>
-                  <Input
-                    placeholder="https://your-server.com/voiceorch-webhook"
-                    className="h-9 text-sm font-mono bg-background/50"
-                    autoComplete="off"
-                    {...field}
-                  />
-                </FormControl>
-                {isEmail && (
-                  <p className="text-xs text-destructive flex items-start gap-1">
-                    <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                    <span>That looks like an email address, not a URL. Enter an <code className="font-mono">https://</code> endpoint.</span>
-                  </p>
-                )}
-                {isHttp && !isEmail && (
-                  <p className="text-xs text-amber-500 flex items-start gap-1">
-                    <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                    <span>HTTP is not allowed — must be <code className="font-mono">https://</code></span>
-                  </p>
-                )}
-                <FormDescription className="text-[10px]">
-                  Must be HTTPS. We send a JSON payload with <code className="font-mono bg-muted px-0.5 rounded">callId</code>, <code className="font-mono bg-muted px-0.5 rounded">status</code>, <code className="font-mono bg-muted px-0.5 rounded">transcript</code>, <code className="font-mono bg-muted px-0.5 rounded">disposition</code> and more.
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            );
-          }} />
-          <FormField control={form.control} name="webhookSecret" render={({ field }) => (
-            <FormItem className="space-y-1">
-              <FormLabel className="text-[10px] text-muted-foreground uppercase tracking-wider">Signing Secret (optional)</FormLabel>
-              <FormControl>
-                <Input
-                  type="password"
-                  placeholder="Shared HMAC secret for signature verification"
-                  className="h-9 text-xs bg-background/50"
-                  autoComplete="new-password"
-                  {...field}
-                />
-              </FormControl>
-              <FormDescription className="text-[10px]">
-                Sent as <code className="font-mono bg-muted px-0.5 rounded">X-Webhook-Signature</code> header so you can verify the payload wasn't tampered with.
-              </FormDescription>
-            </FormItem>
-          )} />
-        </div>
-      </div>
-
-      {/* ── Call Disposition ── */}
-      <div>
-        <div className="flex items-center justify-between mb-1">
-          <div className="flex items-center gap-2">
-            <Tag className="h-4 w-4 text-amber-400" />
-            <h3 className="text-sm font-semibold">Call Disposition</h3>
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-7 text-xs gap-1"
-            onClick={addCategory}
-          >
-            <Plus className="h-3.5 w-3.5" /> Add Category
-          </Button>
-        </div>
-        <p className="text-xs text-muted-foreground mb-4">
-          Define categories and their possible values. After each call the AI automatically picks the best match from the transcript and saves it. Results appear in the call detail page.
-        </p>
-
-        {dispLoading ? (
-          <div className="space-y-2">
-            {[1, 2].map((i) => <div key={i} className="h-16 rounded-xl bg-muted/20 animate-pulse" />)}
-          </div>
-        ) : categories.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-border/50 p-8 text-center">
-            <Tag className="h-7 w-7 text-muted-foreground/20 mx-auto mb-2" />
-            <p className="text-sm font-medium text-muted-foreground/50">No categories yet</p>
-            <p className="text-xs text-muted-foreground/30 mt-0.5">Add a category to start capturing structured call outcomes</p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {categories.map((cat) => (
-              <div key={cat.id} className="rounded-xl border border-border/60 bg-card/20 p-4">
-                <div className="flex items-start gap-3">
-                  <div className="flex-1 grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Category name</label>
-                      <Input
-                        className="h-8 text-xs"
-                        placeholder="e.g. intent"
-                        value={cat.name}
-                        onChange={(e) => updateCategory(cat.id, "name", e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Possible values <span className="normal-case">(comma-separated)</span></label>
-                      <Input
-                        className="h-8 text-xs"
-                        placeholder="e.g. interested, not_interested, callback"
-                        value={cat.values}
-                        onChange={(e) => updateCategory(cat.id, "values", e.target.value)}
-                      />
-                    </div>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 mt-5 text-muted-foreground hover:text-destructive shrink-0"
-                    onClick={() => removeCategory(cat.id)}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-                {cat.values && (
-                  <div className="flex flex-wrap gap-1 mt-3">
-                    {cat.values.split(",").map((v) => v.trim()).filter(Boolean).map((v) => (
-                      <span key={v} className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                        {v}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {(categories.length > 0 || dirty) && (
-          <div className="flex justify-end mt-4">
-            <Button
-              type="button"
-              size="sm"
-              className="h-8 text-xs gap-1.5"
-              disabled={saveMutation.isPending || !dirty}
-              onClick={() => saveMutation.mutate()}
-            >
-              <Save className="h-3.5 w-3.5" />
-              {saveMutation.isPending ? "Saving…" : "Save Disposition Config"}
-            </Button>
-          </div>
-        )}
-      </div>
     </div>
   );
 }
@@ -5952,17 +5979,17 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
       inboundPhoneNumberId: undefined,
       outboundPhoneNumberId: undefined,
       preferredManagedNumber: null,
-      asrEndpointingSilenceMs: 150,
+      asrEndpointingSilenceMs: 250,
       llmMaxTokens: 200,
       ttsMinSentenceChars: 18,
       ttsSpeed: 1,
       linearDelayMs: 0,
-      fragmentCoalesceListeningMs: 150,
-      fragmentCoalescePlayingMs: 800,
+      fragmentCoalesceListeningMs: 500,
+      fragmentCoalescePlayingMs: 1000,
       telephonyTailDrainMs: 400,
-      sarvamHighVadSensitivity: true,
-      sarvamSpeechEndFlushMs: 30,
-      sarvamIncompleteHoldMs: 220,
+      sarvamHighVadSensitivity: false,
+      sarvamSpeechEndFlushMs: 80,
+      sarvamIncompleteHoldMs: 700,
       kbBakedOnly: false,
       autoRedialEnabled: true,
       autoRedialMaxAttempts: 3,
@@ -6082,7 +6109,7 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
       fragmentCoalesceListeningMs:     clampFragmentCoalesceListeningMs((agent as any).agentConfig?.fragmentCoalesceListeningMs),
       fragmentCoalescePlayingMs:       clampFragmentCoalescePlayingMs((agent as any).agentConfig?.fragmentCoalescePlayingMs),
       telephonyTailDrainMs:            clampTelephonyTailDrainMs((agent as any).agentConfig?.telephonyTailDrainMs),
-      sarvamHighVadSensitivity:        ((agent as any).agentConfig?.sarvamHighVadSensitivity as boolean | undefined) !== false,
+      sarvamHighVadSensitivity:        ((agent as any).agentConfig?.sarvamHighVadSensitivity as boolean | undefined) === true,
       sarvamSpeechEndFlushMs:          clampSarvamSpeechEndFlushMs((agent as any).agentConfig?.sarvamSpeechEndFlushMs),
       sarvamIncompleteHoldMs:          clampSarvamIncompleteHoldMs((agent as any).agentConfig?.sarvamIncompleteHoldMs),
       kbBakedOnly:                     ((agent as any).agentConfig?.kbBakedOnly as boolean | undefined) ?? false,

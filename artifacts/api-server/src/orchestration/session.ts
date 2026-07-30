@@ -23,6 +23,8 @@ import {
   clampSarvamIncompleteHoldMs,
   clampSarvamSpeechEndFlushMs,
   resolveSarvamHighVadSensitivity,
+  normalizeCallEngineAgentConfig,
+  FRAGMENT_COALESCE_DEFAULTS,
 } from "@workspace/db/call-engine-defaults";
 import { withDbRetry } from "./db-retry.js";
 import { CONVERSATION_DISCIPLINE_BLOCK } from "./conversationDiscipline.js";
@@ -284,8 +286,11 @@ export async function createSession(params: {
   // Parse tools JSON column (null-safe, type-cast to AgentTool[])
   let tools = Array.isArray(agent.tools) ? (agent.tools as unknown as AgentTool[]) : [];
 
-  // Read agentConfig JSONB for advanced settings
-  const agentCfg = (agent.agentConfig ?? {}) as Record<string, unknown>;
+  // Read agentConfig JSONB for advanced settings — normalize legacy snappy Sarvam/engine
+  // defaults so existing agents get patient STT without requiring a one-off DB migrate.
+  const agentCfg = normalizeCallEngineAgentConfig(
+    (agent.agentConfig ?? {}) as Record<string, unknown>,
+  ).config;
 
   // AMD (voicemail) config — read once, used by both the voicemail-delivery config
   // and the acoustic-confirmation config below. Default action is "hangup" (never
@@ -661,12 +666,12 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     ttsMinSentenceChars: (agentCfg["ttsMinSentenceChars"] as number | undefined) ?? 18,
     fragmentCoalesceListeningMs: (() => {
       const v = agentCfg["fragmentCoalesceListeningMs"];
-      if (typeof v !== "number" || !Number.isFinite(v)) return 150;
+      if (typeof v !== "number" || !Number.isFinite(v)) return FRAGMENT_COALESCE_DEFAULTS.listeningMs;
       return Math.max(0, Math.min(2000, Math.round(v)));
     })(),
     fragmentCoalescePlayingMs: (() => {
       const v = agentCfg["fragmentCoalescePlayingMs"];
-      if (typeof v !== "number" || !Number.isFinite(v)) return 800;
+      if (typeof v !== "number" || !Number.isFinite(v)) return FRAGMENT_COALESCE_DEFAULTS.playingMs;
       return Math.max(0, Math.min(3000, Math.round(v)));
     })(),
     telephonyTailDrainMs: (() => {
