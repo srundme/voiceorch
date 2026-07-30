@@ -17,6 +17,7 @@ import {
   verifiedPhoneDestinationsTable,
 } from "@workspace/db";
 import { dialTwilio, dialPlivo, dialVobiz, resolveAmdConfig } from "../orchestration/telephony/dial.js";
+import { decryptKey } from "../lib/crypto.js";
 import { getFlatRateCentsPerMin, resolveAgentBillingMode, resolveOwnTelephonyDiscount } from "./minute-rates.js";
 import { resolvePartnerBilling } from "./partner-billing.js";
 import { evaluateIrdaiGate, IRDAI_BLOCKED_MESSAGE, IRDAI_BLOCKED_CODE } from "./irdai/gate.js";
@@ -131,7 +132,7 @@ export async function dialOutboundAgent(opts: {
       }
       effectiveFromNumber = agentOutboundNumber || cfg["fromNumber"]!;
       providerCallId = await dialTwilio({
-        accountSid: cfg["accountSid"]!, authToken: providerRow!.apiKey,
+        accountSid: cfg["accountSid"]!, authToken: decryptKey(providerRow!.apiKey),
         fromNumber: effectiveFromNumber, toNumber,
         webhookUrl: `${baseUrl}/api/webhooks/twilio/voice?agentId=${agentId}&dir=out`,
         statusCallbackUrl: `${baseUrl}/api/webhooks/twilio/status`,
@@ -145,7 +146,7 @@ export async function dialOutboundAgent(opts: {
       }
       effectiveFromNumber = agentOutboundNumber || cfg["fromNumber"]!;
       providerCallId = await dialPlivo({
-        authId: cfg["authId"]!, authToken: providerRow!.apiKey,
+        authId: cfg["authId"]!, authToken: decryptKey(providerRow!.apiKey),
         fromNumber: effectiveFromNumber, toNumber,
         answerUrl: `${baseUrl}/api/webhooks/plivo/voice?agentId=${agentId}&dir=out`,
         maxDurationSeconds,
@@ -169,7 +170,7 @@ export async function dialOutboundAgent(opts: {
         effectiveFromNumber = agentOutboundNumber || cfg["fromNumber"]!;
         vobizCorrToken = randomBytes(8).toString("hex");
         const dialRes = await dialVobiz({
-          authId: cfg["authId"]!, authToken: providerRow!.apiKey,
+          authId: cfg["authId"]!, authToken: decryptKey(providerRow!.apiKey),
           fromNumber: effectiveFromNumber, toNumber,
           answerUrl: `${baseUrl}/api/webhooks/vobiz/voice?agentId=${agentId}&dir=out&corr=${vobizCorrToken}`,
           hangupUrl: `${baseUrl}/api/webhooks/vobiz/status`,

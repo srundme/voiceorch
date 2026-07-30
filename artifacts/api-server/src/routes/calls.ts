@@ -115,6 +115,7 @@ function resolveWebhookBase(req: Parameters<Parameters<IRouter["post"]>[1]>[0], 
 }
 
 import { dialTwilio, dialPlivo, dialVobiz, resolveAmdConfig } from "../orchestration/telephony/dial.js";
+import { decryptKey } from "../lib/crypto.js";
 import { triggerTransfer } from "../orchestration/session.js";
 import { sendBrevoSms } from "../services/brevo.js";
 import { generateAndStoreOtp, verifyDestinationOtp } from "../services/phone-otp.js";
@@ -271,7 +272,7 @@ router.post("/calls/outbound", requireAuth, clientContext, async (req, res): Pro
       if (!cfg["fromNumber"]) { res.status(400).json({ error: 'Twilio provider is missing "fromNumber" in Extra Config. Edit the provider and add a "fromNumber" field.' }); return; }
       effectiveFromNumber = cfg["fromNumber"]!;
       providerCallId = await dialTwilio({
-        accountSid: cfg["accountSid"]!, authToken: providerRow!.apiKey,
+        accountSid: cfg["accountSid"]!, authToken: decryptKey(providerRow!.apiKey),
         fromNumber: cfg["fromNumber"]!, toNumber,
         webhookUrl: `${baseUrl}/api/webhooks/twilio/voice?agentId=${agentId}&dir=out`,
         statusCallbackUrl: `${baseUrl}/api/webhooks/twilio/status`,
@@ -284,7 +285,7 @@ router.post("/calls/outbound", requireAuth, clientContext, async (req, res): Pro
       if (!cfg["fromNumber"]) { res.status(400).json({ error: 'Plivo provider is missing "fromNumber" in Extra Config.' }); return; }
       effectiveFromNumber = cfg["fromNumber"]!;
       providerCallId = await dialPlivo({
-        authId: cfg["authId"]!, authToken: providerRow!.apiKey,
+        authId: cfg["authId"]!, authToken: decryptKey(providerRow!.apiKey),
         fromNumber: cfg["fromNumber"]!, toNumber,
         answerUrl: `${baseUrl}/api/webhooks/plivo/voice?agentId=${agentId}&dir=out`,
         maxDurationSeconds,
@@ -314,7 +315,7 @@ router.post("/calls/outbound", requireAuth, clientContext, async (req, res): Pro
         vobizCorrToken = randomBytes(8).toString("hex");
         {
           const dialRes = await dialVobiz({
-            authId: cfg["authId"]!, authToken: providerRow!.apiKey,
+            authId: cfg["authId"]!, authToken: decryptKey(providerRow!.apiKey),
             fromNumber: cfg["fromNumber"]!, toNumber,
             answerUrl: `${baseUrl}/api/webhooks/vobiz/voice?agentId=${agentId}&dir=out&corr=${vobizCorrToken}`,
             hangupUrl:  `${baseUrl}/api/webhooks/vobiz/status`,
@@ -872,7 +873,7 @@ router.post("/calls/:id/transfer", requireAuth, clientContext, async (req, res):
 
   try {
     const transferred = await triggerTransfer(
-      id, type, target.trim(), handoffMsg, xmlCallbackUrl, authId, provRow.apiKey,
+      id, type, target.trim(), handoffMsg, xmlCallbackUrl, authId, decryptKey(provRow.apiKey),
     );
     if (!transferred) {
       req.log.warn({ callId: id }, "Transfer: no external call ID — cannot redirect (inbound call without externalCallId)");

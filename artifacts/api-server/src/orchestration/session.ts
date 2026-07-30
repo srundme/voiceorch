@@ -3449,7 +3449,7 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
                   eq(providersTable.providerName, session.agentLlmProvider),
                 ),
               );
-              let memLlmKey: string | null = memLlmProvs[0]?.apiKey ?? null;
+              let memLlmKey: string | null = memLlmProvs[0] ? decryptKey(memLlmProvs[0].apiKey) : null;
               let memLlmProvider = session.agentLlmProvider;
               let memLlmModel    = session.agentLlmModel;
               // Managed plan: no BYOP key → fall back to platform managed key (Groq).
