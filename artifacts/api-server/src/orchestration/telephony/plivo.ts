@@ -21,7 +21,9 @@ import { startEarlyAmbientKeepalive } from "./early-ambient.js";
  */
 
 interface PlivoEvent {
-  event: "start" | "media" | "stop" | "playback_begin" | "playback_end";
+  event: "start" | "media" | "dtmf" | "stop" | "playback_begin" | "playback_end";
+  // Plivo sends camelCase (streamId/callId); keep snake_case fallbacks for safety.
+  streamId?: string;
   stream_id?: string;
   call_id?: string;
   media?: {
@@ -32,10 +34,14 @@ interface PlivoEvent {
     track?: string;
   };
   start?: {
-    call_id: string;
-    stream_id: string;
-    from: string;
-    to: string;
+    callId?: string;
+    streamId?: string;
+    call_id?: string;
+    stream_id?: string;
+    /** NOTE: per Plivo Stream docs the start event does NOT carry from/to —
+     *  we thread them through the WS URL query string instead (like VoBiz). */
+    from?: string;
+    to?: string;
   };
 }
 
@@ -45,6 +51,8 @@ export async function handlePlivoWebSocket(
   campaignLeadId?: number,
   callDirection: "inbound" | "outbound" = "inbound",
   callbackId?: number,
+  fromNumber?: string,
+  toNumber?: string,
 ): Promise<void> {
   let sessionId: string | null = null;
   let streamId: string | null = null;
@@ -55,8 +63,11 @@ export async function handlePlivoWebSocket(
 
   function sendAudioToPlivo(audio: Buffer): void {
     if (ws.readyState !== ws.OPEN) return;
+    // Per Plivo Stream docs, agent→Plivo audio uses event "media" (NOT
+    // "playback" — Plivo silently drops unknown events, which produced calls
+    // where the caller heard only Plivo-side prompts and never the agent).
     ws.send(JSON.stringify({
-      event: "playback",
+      event: "media",
       media: { payload: audio.toString("base64") },
     }));
   }
@@ -69,8 +80,9 @@ export async function handlePlivoWebSocket(
    */
   function sendBargeIn(): void {
     if (ws.readyState !== ws.OPEN) return;
-    ws.send(JSON.stringify({ event: "clear" }));
-    logger.info({ sessionId }, "Plivo clear sent (barge-in)");
+    // Plivo's clear message requires the streamId of the stream to flush.
+    ws.send(JSON.stringify({ event: "clear", streamId: streamId ?? undefined }));
+    logger.info({ sessionId, streamId }, "Plivo clear sent (barge-in)");
   }
 
   ws.on("message", async (raw: Buffer | string) => {
@@ -91,10 +103,11 @@ export async function handlePlivoWebSocket(
 
     switch (event.event) {
       case "start": {
-        streamId = event.start?.stream_id ?? event.stream_id ?? null;
-        const fromNumber = event.start?.from ?? "+10000000000";
-        const toNumber = event.start?.to ?? "+10000000001";
-        const callId = event.start?.call_id ?? event.call_id;
+        streamId = event.start?.streamId ?? event.streamId ?? event.start?.stream_id ?? event.stream_id ?? null;
+        // from/to come from the WS URL query (the start event doesn't carry them).
+        const from = fromNumber ?? event.start?.from ?? "+10000000000";
+        const to   = toNumber   ?? event.start?.to   ?? "+10000000001";
+        const callId = event.start?.callId ?? event.start?.call_id ?? event.call_id;
 
         // Load resume context and callback reason from prior call when this is a callback
         let resumeContext: Parameters<typeof createSession>[0]["resumeContext"] | undefined;
@@ -131,8 +144,8 @@ export async function handlePlivoWebSocket(
           const { sessionId: sid } = await createSession({
             agentId,
             telephonyProvider: "plivo",
-            toNumber,
-            fromNumber,
+            toNumber: to,
+            fromNumber: from,
             externalCallId: callId,
             callDirection,
             campaignLeadId,
@@ -224,11 +237,17 @@ export function getPlivoAnswerXML(
   campaignLeadId?: number,
   callDirection: "inbound" | "outbound" = "inbound",
   callbackId?: number,
+  from?: string,
+  to?: string,
 ): string {
   const parts: string[] = [];
   if (campaignLeadId) parts.push(`campaignLeadId=${campaignLeadId}`);
   if (callDirection === "outbound") parts.push("dir=out");
   if (callbackId) parts.push(`cbId=${callbackId}`);
+  // Embed From/To in the WS URL — Plivo's start event does not carry them,
+  // and the answer webhook is the only place we see the real numbers.
+  if (from) parts.push(`from=${encodeURIComponent(from)}`);
+  if (to)   parts.push(`to=${encodeURIComponent(to)}`);
   const qs = parts.length ? `?${parts.join("&")}` : "";
   // Per Plivo Stream XML docs, the WebSocket URL is the TEXT CONTENT of
   // <Stream>, not a child element. The previous <WebSocket url="..."/> child

@@ -447,7 +447,11 @@ router.post("/webhooks/plivo/voice", async (req, res): Promise<void> => {
   const campaignLeadId = req.query["campaignLeadId"] ? parseInt(String(req.query["campaignLeadId"]), 10) : undefined;
   const callDirection = req.query["dir"] === "out" ? "outbound" : "inbound";
   const plivoAnswerCbId = req.query["cbId"] ? (parseInt(String(req.query["cbId"]), 10) || undefined) : undefined;
-  const xml = getPlivoAnswerXML(wsBaseUrl, agentId, campaignLeadId, callDirection, plivoAnswerCbId);
+  // Plivo POSTs From/To (form-encoded) on the answer webhook; thread them into
+  // the WS URL since the Stream start event doesn't carry them.
+  const plivoFrom = String(req.body?.From ?? req.body?.from ?? "") || undefined;
+  const plivoTo   = String(req.body?.To ?? req.body?.to ?? "") || undefined;
+  const xml = getPlivoAnswerXML(wsBaseUrl, agentId, campaignLeadId, callDirection, plivoAnswerCbId, plivoFrom, plivoTo);
 
   res.set("Content-Type", "text/xml").send(xml);
 });

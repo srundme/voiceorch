@@ -270,7 +270,7 @@ server.on("upgrade", (request, socket, head) => { void (async () => {
     logger.info({ provider, agentId, platformTelephony, campaignLeadId, url: safeUrl }, "WebSocket upgraded");
     switch (provider) {
       case "twilio":   void handleTwilioWebSocket(ws, agentId, campaignLeadId, callDirection, vobizCallbackId);                       break;
-      case "plivo":    void handlePlivoWebSocket(ws, agentId, campaignLeadId, callDirection, vobizCallbackId);                        break;
+      case "plivo":    void handlePlivoWebSocket(ws, agentId, campaignLeadId, callDirection, vobizCallbackId, vobizFrom, vobizTo);    break;
       case "vobiz":    void handleVobizWebSocket(ws, agentId, platformTelephony, campaignLeadId, vobizFrom, vobizTo, voicemailDelivery, vobizCallUuid, callDirection, vobizCorrToken, vobizCallbackId, vobizAnsweredAt, amdMachineHint, amdArmed); break;
       case "webcall":  void handleWebcallWebSocket(ws, agentId, webcallUserId!, webcallGuestKey ? { guestKey: webcallGuestKey, linkId: webcallShareLinkId } : undefined); break;
     }
