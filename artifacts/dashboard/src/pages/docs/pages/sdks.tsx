@@ -13,8 +13,57 @@ export default function SdksPage() {
 Header: Authorization: Bearer sk_live_YOUR_API_KEY`}
       />
 
+      <h2 id="official-sdk">Official npm SDK</h2>
+      <p>
+        The official Node.js/TypeScript SDK is published on npm — typed helpers for agents, calls,
+        phone numbers, analytics, webhooks, wallet and scheduling:
+      </p>
+      <CodeBlock language="bash" code={`npm install @snapserveai/sdk`} />
+      <CodeBlock
+        language="typescript"
+        code={`import { SnapServe } from "@snapserveai/sdk";
+
+const snapserve = new SnapServe({ apiKey: process.env.SNAPSERVE_API_KEY! });
+
+const agents = await snapserve.agents.list();
+const call = await snapserve.calls.createOutbound({
+  agentId: agents[0].id,
+  toNumber: "+919812345678",
+});`}
+      />
+
+      <h2 id="mcp">MCP Server — use SnapServe from Claude, Cursor &amp; other AI tools</h2>
+      <p>
+        The official MCP (Model Context Protocol) server lets AI assistants like Claude Desktop and
+        Cursor manage your SnapServe account in plain English — list agents, place calls, read
+        transcripts, check analytics and wallet balance. Requires Node.js on your machine.
+      </p>
+      <CodeBlock
+        language="json"
+        code={`{
+  "mcpServers": {
+    "snapserve": {
+      "command": "npx",
+      "args": ["-y", "@snapserveai/mcp"],
+      "env": { "SNAPSERVE_API_KEY": "sk_live_..." }
+    }
+  }
+}`}
+      />
+      <p>
+        Add this to <code>claude_desktop_config.json</code> (Claude Desktop → Settings → Developer →
+        Edit Config) or your MCP client's config, restart the app, and just ask:{" "}
+        <em>"List my SnapServe agents"</em> or <em>"Call +91… with my sales agent"</em>. A ready-made
+        Claude <strong>skill</strong> (for Claude Code / claude.ai) is also available at{" "}
+        <a href="https://github.com/srundme/snapserve-claude-skill" target="_blank" rel="noreferrer">
+          github.com/srundme/snapserve-claude-skill
+        </a>
+        .
+      </p>
+
+      <h2 id="wrappers">Zero-dependency wrappers</h2>
       <Callout variant="tip" title="Zero Dependencies">
-        These production-grade client wrappers use native environment features (Node `fetch`, Python `urllib`, Go `net/http`). You can copy them directly into your codebase without installing external package dependencies.
+        Prefer not to add a package? These production-grade client wrappers use native environment features (Node `fetch`, Python `urllib`, Go `net/http`). You can copy them directly into your codebase without installing external package dependencies.
       </Callout>
 
       <h2 id="typescript">1. TypeScript / JavaScript (Node.js 18+, Bun, Deno)</h2>
