@@ -419,3 +419,15 @@ id = "OPxvy0zw2zu_22vHDqV-y"
 uri = "file://attached_assets/snapserve-sarvam-sq5.jpg"
 type = "image"
 title = "Square 5 — Indigo Wave"
+
+[[outputs]]
+id = "T-jmT2RQYhq8j4ATO07VU"
+uri = "file://attached_assets/voiceathon-ev1.jpg"
+type = "image"
+title = "Voice-a-thon poster — Cream"
+
+[[outputs]]
+id = "ZBBrR0nPpTEnPWPxOI7h5"
+uri = "file://attached_assets/voiceathon-ev2.jpg"
+type = "image"
+title = "Voice-a-thon poster — Midnight"
