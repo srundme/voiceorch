@@ -230,10 +230,14 @@ export function getPlivoAnswerXML(
   if (callDirection === "outbound") parts.push("dir=out");
   if (callbackId) parts.push(`cbId=${callbackId}`);
   const qs = parts.length ? `?${parts.join("&")}` : "";
+  // Per Plivo Stream XML docs, the WebSocket URL is the TEXT CONTENT of
+  // <Stream>, not a child element. The previous <WebSocket url="..."/> child
+  // was silently ignored by Plivo → no media stream ever connected → the call
+  // sat in silence for a few seconds and dropped. XML-escape "&" in the query
+  // string (bare & is an XML parse error; Plivo decodes &amp; back).
+  const wsUrl = `${wsBaseUrl}/api/ws/plivo/${agentId}${qs}`.replace(/&/g, "&amp;");
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Stream keepCallAlive="true" streamTimeout="600" contentType="audio/x-mulaw;rate=8000" bidirectional="true">
-    <WebSocket url="${wsBaseUrl}/api/ws/plivo/${agentId}${qs}"/>
-  </Stream>
+  <Stream keepCallAlive="true" streamTimeout="86400" contentType="audio/x-mulaw;rate=8000" bidirectional="true">${wsUrl}</Stream>
 </Response>`;
 }
