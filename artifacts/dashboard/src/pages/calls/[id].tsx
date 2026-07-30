@@ -1571,6 +1571,53 @@ export function CallDetailContent({
 
           {/* Right Column: Sidebar */}
           <div className="space-y-4 overflow-auto h-full">
+            {/* Disposition — the call's main outcome, promoted to its own card
+                at the top of the sidebar (was a cramped truncated row inside
+                Call Details). */}
+            {(() => {
+              const r = dispositionResult;
+              if (!r || typeof r !== "object") return null;
+              const meta = new Set(["confidence", "summary"]);
+              const values = Object.entries(r)
+                .filter(([k, v]) => !meta.has(k) && v != null && v !== "")
+                .map(([, v]) => String(v));
+              if (values.length === 0) return null;
+              const confidence = typeof r["confidence"] === "number" ? (r["confidence"] as number) : null;
+              const summary = typeof r["summary"] === "string" ? (r["summary"] as string) : null;
+              return (
+                <Card className="border-primary/30">
+                  <CardHeader className="py-3 border-b">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-sm flex items-center gap-2">
+                        <ClipboardList className="h-4 w-4 text-primary/70" />
+                        Disposition
+                      </CardTitle>
+                      {confidence != null && (
+                        <span className="text-[10px] text-muted-foreground">
+                          {Math.round(confidence * 100)}% confidence
+                        </span>
+                      )}
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-3 space-y-2">
+                    <div className="flex flex-wrap gap-1.5">
+                      {values.map((v, i) => (
+                        <span
+                          key={i}
+                          className="inline-flex items-center px-2 py-1 rounded-md text-xs font-semibold bg-primary/10 border border-primary/30 text-primary capitalize"
+                        >
+                          {v}
+                        </span>
+                      ))}
+                    </div>
+                    {summary && (
+                      <p className="text-xs text-muted-foreground leading-relaxed">{summary}</p>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })()}
+
             {/* Call Details */}
             <Card>
               <CardHeader className="py-3 border-b">
@@ -1594,45 +1641,6 @@ export function CallDetailContent({
                   icon={<Receipt className="h-3 w-3" />}
                 />
                 <DetailRow label="Execution ID" value={getExecutionId(call)} icon={<Hash className="h-3 w-3" />} />
-                <DetailRow
-                  label="Disposition"
-                  icon={<ClipboardList className="h-3 w-3" />}
-                  value={(() => {
-                    const r = dispositionResult;
-                    if (!r || typeof r !== "object") return "—";
-                    const meta = new Set(["confidence", "summary"]);
-                    const values = Object.entries(r)
-                      .filter(([k, v]) => !meta.has(k) && v != null && v !== "")
-                      .map(([, v]) => String(v));
-                    if (values.length === 0) return "—";
-                    const confidence = typeof r["confidence"] === "number" ? (r["confidence"] as number) : null;
-                    const summary = typeof r["summary"] === "string" ? (r["summary"] as string) : null;
-                    return (
-                      <div className="flex flex-col items-end gap-1">
-                        <div className="flex flex-wrap justify-end gap-1">
-                          {values.map((v, i) => (
-                            <span
-                              key={i}
-                              className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-elevated border border-border text-foreground/80 capitalize"
-                            >
-                              {v}
-                            </span>
-                          ))}
-                        </div>
-                        {confidence != null && (
-                          <span className="text-[10px] text-muted-foreground/50">
-                            {Math.round(confidence * 100)}% confidence
-                          </span>
-                        )}
-                        {summary && (
-                          <span className="text-[10px] text-muted-foreground/50 text-right max-w-[180px] truncate" title={summary}>
-                            {summary}
-                          </span>
-                        )}
-                      </div>
-                    );
-                  })()}
-                />
               </CardContent>
             </Card>
 
