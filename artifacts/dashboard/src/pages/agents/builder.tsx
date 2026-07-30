@@ -6048,6 +6048,17 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
       ? preferredManagedWatch.trim()
       : (managedPhoneData?.numbers?.[0] ?? null);
 
+  // BYO telephony (own Plivo/Twilio account): calls go out from the user's own
+  // saved fromNumber, so the dialog must show that instead of the trial caller ID.
+  const telephonyProviderWatch = form.watch("telephonyProvider");
+  const { data: byoProviderKeys } = useListProviders({ query: { queryKey: getListProvidersQueryKey(), staleTime: 60_000 } });
+  const byoOutboundFrom = (() => {
+    if (telephonyProviderWatch !== "plivo" && telephonyProviderWatch !== "twilio") return null;
+    const row = (byoProviderKeys ?? []).find((p) => p.providerType === "telephony" && p.providerName === telephonyProviderWatch && p.isActive);
+    if (!row) return null;
+    try { return (JSON.parse(row.extraConfig ?? "{}") as Record<string, string>)["fromNumber"] ?? null; } catch { return null; }
+  })();
+
   useEffect(() => {
     if (!agent) return;
     // Only reset when the agent's DATA actually changes (id + server updatedAt),
@@ -6677,7 +6688,12 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
             <DialogTitle>Make Outbound Call</DialogTitle>
             <DialogDescription>
               Agent <strong>{agent.name}</strong> will call this number
-              {outboundTestingFrom ? (
+              {byoOutboundFrom ? (
+                <>
+                  {" "}from your own {telephonyProviderWatch === "plivo" ? "Plivo" : "Twilio"} number{" "}
+                  <span className="font-medium tabular-nums text-foreground">{byoOutboundFrom}</span>.
+                </>
+              ) : outboundTestingFrom ? (
                 <>
                   {" "}using trial platform caller ID{" "}
                   <span className="font-medium tabular-nums text-foreground">{outboundTestingFrom}</span>
