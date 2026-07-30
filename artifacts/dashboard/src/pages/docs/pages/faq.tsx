@@ -82,6 +82,15 @@ const FAQS: { q: string; a: ReactNode }[] = [
       </>
     ),
   },
+  {
+    q: "Can I use SnapServe from Claude?",
+    a: (
+      <>
+        Yes — install the SnapServe Claude skill + MCP with your <code>sk_live_…</code> key. Guide:{" "}
+        <Link href="/docs/claude-skill">Claude skill &amp; MCP</Link>.
+      </>
+    ),
+  },
 ];
 
 export default function FaqPage() {

@@ -533,6 +533,7 @@ Use this to prioritize time:
 ## Support
 
 - Use in-dashboard docs under **Docs** for API details.  
+- **Claude skill & MCP:** Docs → [Claude skill & MCP](https://app.snapserve.ai/docs/claude-skill) — connect Claude Desktop / Claude Code with your `sk_live_` key to create agents, campaigns, and website webhooks in chat.  
 - Prefer Webcall for prompt iteration; save phone minutes for final demos.  
 - If WhatsApp Instant fails, check: channel active, correct agent selected, no old BYO webhook override, message log errors.
 
