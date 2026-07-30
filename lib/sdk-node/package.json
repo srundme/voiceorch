@@ -1,5 +1,5 @@
 {
-  "name": "@snapserve/sdk",
+  "name": "@snapserveai/sdk",
   "version": "0.1.0",
   "description": "Official Node.js / TypeScript SDK for the SnapServe AI voice agent API",
   "license": "MIT",

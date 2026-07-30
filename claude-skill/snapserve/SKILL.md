@@ -29,7 +29,7 @@ Base URL: `https://app.snapserve.ai/api` (or the user's own domain if self-hoste
 Prefer the official SDKs when the target environment already has Node.js or Python available —
 they give typed helpers and consistent error handling:
 
-- Node/TypeScript: `npm install @snapserve/sdk` — see `references/node-sdk.md`
+- Node/TypeScript: `npm install @snapserveai/sdk` — see `references/node-sdk.md`
 - Python: `pip install snapserve` — see `references/python-sdk.md`
 
 If neither runtime is convenient, call the REST API directly with `curl` — see

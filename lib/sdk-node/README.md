@@ -1,11 +1,11 @@
-# @snapserve/sdk
+# @snapserveai/sdk
 
 Official Node.js / TypeScript SDK for the [SnapServe](https://snapserve.ai) AI voice agent API.
 
 ## Install
 
 ```bash
-npm install @snapserve/sdk
+npm install @snapserveai/sdk
 ```
 
 ## Usage
@@ -13,7 +13,7 @@ npm install @snapserve/sdk
 Create an API key from **Dashboard → API Keys** (`sk_live_...`), then:
 
 ```ts
-import { SnapServe } from "@snapserve/sdk";
+import { SnapServe } from "@snapserveai/sdk";
 
 const snapserve = new SnapServe({ apiKey: process.env.SNAPSERVE_API_KEY! });
 
@@ -50,7 +50,7 @@ await snapserve.request("GET", "/campaigns");
 Failed requests throw `SnapServeApiError` with `.status` and `.body`.
 
 ```ts
-import { SnapServeApiError } from "@snapserve/sdk";
+import { SnapServeApiError } from "@snapserveai/sdk";
 
 try {
   await snapserve.agents.get(999999);

@@ -1,11 +1,11 @@
 # Node.js / TypeScript SDK
 
 ```bash
-npm install @snapserve/sdk
+npm install @snapserveai/sdk
 ```
 
 ```ts
-import { SnapServe } from "@snapserve/sdk";
+import { SnapServe } from "@snapserveai/sdk";
 
 const snapserve = new SnapServe({ apiKey: process.env.SNAPSERVE_API_KEY! });
 

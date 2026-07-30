@@ -19,7 +19,7 @@ export type { SnapServeClientOptions };
  * SnapServe SDK client.
  *
  * ```ts
- * import { SnapServe } from "@snapserve/sdk";
+ * import { SnapServe } from "@snapserveai/sdk";
  *
  * const snapserve = new SnapServe({ apiKey: process.env.SNAPSERVE_API_KEY! });
  * const agents = await snapserve.agents.list();
