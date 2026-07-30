@@ -431,3 +431,15 @@ id = "ZBBrR0nPpTEnPWPxOI7h5"
 uri = "file://attached_assets/voiceathon-ev2.jpg"
 type = "image"
 title = "Voice-a-thon poster — Midnight"
+
+[[outputs]]
+id = "lht_kCjK3rJ8tMc5fMgop"
+uri = "file://attached_assets/voiceathon-ev1.pdf"
+type = "pdf"
+title = "Voice-a-thon poster — Cream (vector PDF, opens in Illustrator)"
+
+[[outputs]]
+id = "Hqa-ekvo8Gl50CJHgWsVO"
+uri = "file://attached_assets/voiceathon-ev2.pdf"
+type = "pdf"
+title = "Voice-a-thon poster — Midnight (vector PDF, opens in Illustrator)"
