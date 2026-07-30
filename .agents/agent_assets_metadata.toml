@@ -443,3 +443,9 @@ id = "Hqa-ekvo8Gl50CJHgWsVO"
 uri = "file://attached_assets/voiceathon-ev2.pdf"
 type = "pdf"
 title = "Voice-a-thon poster — Midnight (vector PDF, opens in Illustrator)"
+
+[[outputs]]
+id = "6VFDfgFuBhHuSEnGNLJza"
+uri = "file://attached_assets/snapserve-claude-skill.zip"
+type = "unspecified"
+title = "SnapServe Claude Skill (zip)"
