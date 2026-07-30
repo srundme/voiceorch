@@ -1227,14 +1227,28 @@ export default function AgentEdit() {
               </div>
 
               {/* ── Call Settings (kept inline — not part of a provider stage) ── */}
-              <div className="flex items-center gap-4 rounded-xl border border-border/60 bg-card/50 px-4 py-3">
+              <div className="flex flex-wrap items-center gap-4 rounded-xl border border-border/60 bg-card/50 px-4 py-3">
                 <FormField control={form.control} name="maxDuration" render={({ field }) => (
-                  <FormItem className="flex items-center gap-3 space-y-0 flex-1">
+                  <FormItem className="flex items-center gap-3 space-y-0 flex-1 min-w-[260px]">
                     <FormLabel className="text-xs text-muted-foreground whitespace-nowrap">Max Call Duration (seconds)</FormLabel>
                     <FormControl>
                       <Input type="number" className="h-8 max-w-[140px]" placeholder="e.g. 600" {...field}
                         onChange={(e) => field.onChange(parseInt(e.target.value, 10))} />
                     </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="telephonyProvider" render={({ field }) => (
+                  <FormItem className="flex items-center gap-3 space-y-0">
+                    <FormLabel className="text-xs text-muted-foreground whitespace-nowrap">Telephony</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value ?? "vobiz"}>
+                      <FormControl><SelectTrigger className="h-8 w-[220px]"><SelectValue placeholder="VoBiz (managed)" /></SelectTrigger></FormControl>
+                      <SelectContent>
+                        <SelectItem value="vobiz">VoBiz (platform / own number)</SelectItem>
+                        <SelectItem value="plivo">Plivo — your own account</SelectItem>
+                        <SelectItem value="twilio">Twilio — your own account</SelectItem>
+                      </SelectContent>
+                    </Select>
                     <FormMessage />
                   </FormItem>
                 )} />

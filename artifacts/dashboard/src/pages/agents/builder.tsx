@@ -3756,6 +3756,18 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                   </FormItem>
                 );
               }} />
+              <FormField control={form.control} name="telephonyProvider" render={({ field }) => (
+                <FormItem className="space-y-1">
+                  <FormLabel className="text-[12px] font-medium text-foreground/90">Telephony Provider</FormLabel>
+                  <p className="text-[10px] text-muted-foreground/70">Which carrier this agent dials and receives calls on. Plivo/Twilio use your own account key from Settings → Voices and Providers (₹1/min cheaper).</p>
+                  <SmallSelect value={field.value ?? "vobiz"} onChange={field.onChange}
+                    options={[
+                      { value: "vobiz", label: "VoBiz (platform / own number)" },
+                      { value: "plivo", label: "Plivo — your own account" },
+                      { value: "twilio", label: "Twilio — your own account" },
+                    ]} />
+                </FormItem>
+              )} />
             </div>
           </>
         )}
