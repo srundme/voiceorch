@@ -275,6 +275,31 @@ async function getAgentProviderToken(agentId: number, provider: "twilio" | "pliv
   }
 }
 
+/**
+ * First value of a possibly multi-hop forwarded header ("https,http" → "https").
+ */
+function firstForwarded(value: string | string[] | undefined, fallback: string): string {
+  const raw = Array.isArray(value) ? value[0] : value;
+  const first = raw?.split(",")[0]?.trim();
+  return first || fallback;
+}
+
+/**
+ * Reconstruct the public URL of the current request for provider signature
+ * checks. Uses `req.originalUrl` so mount prefixes (this router lives under
+ * `/api`) are preserved — `req.path` is route-local and would drop them.
+ */
+function signedRequestUrl(
+  req: { headers: Record<string, string | string[] | undefined>; hostname: string; originalUrl: string },
+  opts: { includeQuery: boolean },
+): string {
+  const proto = firstForwarded(req.headers["x-forwarded-proto"], "https");
+  const host  = firstForwarded(req.headers["x-forwarded-host"], req.hostname);
+  const pathWithQuery = req.originalUrl || "";
+  const path = opts.includeQuery ? pathWithQuery : (pathWithQuery.split("?")[0] ?? "");
+  return `${proto}://${host}${path}`;
+}
+
 /** Resolve the public WebSocket base URL from the request */
 function getWsBaseUrl(req: Parameters<Parameters<IRouter["post"]>[1]>[0]): string {
   // WEBHOOK_BASE_URL pins us to the Railway prod host (avoids Replit dev mTLS block)
@@ -314,12 +339,9 @@ router.post("/webhooks/twilio/voice", async (req, res): Promise<void> => {
         return;
       }
     } else {
-      const proto = String(req.headers["x-forwarded-proto"] ?? "https");
-      const host  = String(req.headers["x-forwarded-host"] ?? req.hostname);
       // Twilio includes query-string params in the URL it signs (for POST requests
       // the query string appears in the URL, body params are signed separately).
-      const queryStr = req.url?.split("?")[1] ?? "";
-      const fullUrl = `${proto}://${host}${req.path}${queryStr ? "?" + queryStr : ""}`;
+      const fullUrl = signedRequestUrl(req, { includeQuery: true });
       const bodyParams: Record<string, string> = {};
       for (const [k, v] of Object.entries(req.body as Record<string, unknown>)) {
         if (typeof v === "string") bodyParams[k] = v;
@@ -394,9 +416,7 @@ router.post("/webhooks/plivo/voice", async (req, res): Promise<void> => {
       }
     } else {
       // Plivo signs the full base URL (scheme://host/path, query stripped).
-      const plivoProto = String(req.headers["x-forwarded-proto"] ?? "https");
-      const plivoHost  = String(req.headers["x-forwarded-host"] ?? req.hostname);
-      const plivoBaseUrl = `${plivoProto}://${plivoHost}${req.path}`;
+      const plivoBaseUrl = signedRequestUrl(req, { includeQuery: false });
       const valid = validatePlivoSignature(authToken, plivoNonce, plivoBaseUrl, plivoSig);
       if (!valid) {
         logger.warn({ agentId }, "Plivo signature validation failed");
