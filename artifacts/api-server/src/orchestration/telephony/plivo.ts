@@ -85,12 +85,15 @@ export async function handlePlivoWebSocket(
     logger.info({ sessionId, streamId }, "Plivo clear sent (barge-in)");
   }
 
-  ws.on("message", async (raw: Buffer | string) => {
-    // Plivo can send binary audio directly or JSON events
-    if (Buffer.isBuffer(raw)) {
+  ws.on("message", async (raw: Buffer | string, isBinary?: boolean) => {
+    // NOTE: the `ws` library delivers TEXT frames as Buffer too — a bare
+    // Buffer.isBuffer() check swallowed every JSON event (start/media/stop),
+    // so no session was ever created. Only treat true binary frames as audio;
+    // everything else is parsed as a JSON event (mirrors the VoBiz handler).
+    if (isBinary) {
       if (!sessionId) return;
       const session = getSession(sessionId);
-      if (session) session.pipeline.onAudioIn(raw);
+      if (session) session.pipeline.onAudioIn(Buffer.isBuffer(raw) ? raw : Buffer.from(raw));
       return;
     }
 
