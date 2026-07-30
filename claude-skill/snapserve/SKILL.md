@@ -1,62 +1,77 @@
 ---
 name: snapserve
-description: Manage SnapServe AI voice agents, phone calls, provider keys, phone numbers, and analytics via the SnapServe REST API. Use this skill whenever the user asks to create/list/update/delete a SnapServe voice agent, place or review a phone call, check call analytics, manage provider (ASR/LLM/TTS/telephony) keys, manage phone numbers, or check wallet/usage on SnapServe.
+description: >-
+  Operate SnapServe (app.snapserve.ai) end-to-end: create and configure voice
+  agents, place calls, run campaigns, link website forms, attach journeys,
+  WhatsApp/email channels, Google Sheets automatic calls, knowledge bases,
+  dispositions, squads, webcall links, wallet, and analytics. Use when the user
+  mentions SnapServe, voice agents, campaigns, website webhooks, Voiceathon
+  setup, or app.snapserve.ai — especially with SnapServe MCP tools connected.
 ---
 
-# SnapServe
+# SnapServe (app.snapserve.ai)
 
-SnapServe is an AI voice agent orchestration platform. This skill lets Claude manage a user's
-SnapServe account (agents, calls, providers, phone numbers, analytics) directly through the
-SnapServe REST API.
+SnapServe is an Indic-first AI voice agent platform. Prefer **SnapServe MCP tools**
+when connected. Fall back to REST with `SNAPSERVE_API_KEY` — see `references/rest-api.md`
+and `references/workflows.md`.
 
-## Authentication
+## Auth
 
-Every request needs a SnapServe API key, created by the user in **Dashboard → API Keys**
-(`sk_live_...`, shown once at creation time). Ask the user for this key if it is not already
-available as the `SNAPSERVE_API_KEY` environment variable, and never print the full key back —
-only reference it by its last 4 characters.
+- API key from **Dashboard → API Keys** (`sk_live_...`)
+- Env: `SNAPSERVE_API_KEY`, optional `SNAPSERVE_BASE_URL` (default `https://app.snapserve.ai/api`)
+- Header: `Authorization: Bearer sk_live_...`
+- Never print the full key — only last 4 chars
 
-All requests:
+## Product map (A→Z)
 
-```
-Authorization: Bearer sk_live_...
-```
+| Area | What users do | MCP / API |
+|------|----------------|-----------|
+| Agents | Create prompt, voice, tools, Advanced engine | `create_agent`, `update_agent` |
+| Phone | Buy/assign DID | `list_phone_numbers`, `assign_phone_number` |
+| Knowledge | Upload & attach KB | `attach_knowledge` |
+| Calls | Outbound / review / logs | `outbound_call`, `get_call`, `get_call_logs` |
+| Website linking | Form → lead → dial | `create_campaign` → `get_website_webhook` |
+| Campaigns | CSV import, batches, redial | `import_campaign_leads`, `start_campaign_batch` |
+| Journeys | Lead intake sequence | `apply_journey_preset`, `activate_journey` |
+| WhatsApp | Instant / Business / BYO BSP | `get_whatsapp_channel`, connections |
+| Email | Brevo mid-call / post-call | `upsert_email_channel` |
+| Sheets | Automatic Calls from rows | `create_automatic_call`, `start_automatic_call` |
+| Dispositions | Post-call labels | `set_disposition_config` |
+| CRM webhook | Post-call JSON to Zap/CRM | `update_agent` `webhookUrl` or webhook-endpoints |
+| Squads | Multi-agent handoffs | `create_squad`, `start_squad_run` |
+| Webcall | Browser test links | `create_webcall_link` |
+| Wallet / analytics | Balance & performance | `get_wallet`, `get_analytics_dashboard` |
 
-Base URL: `https://app.snapserve.ai/api` (or the user's own domain if self-hosted / staging).
+## Default stack (India / Voiceathon)
 
-## How to call the API
+Prefer unless the user specifies otherwise:
 
-Prefer the official SDKs when the target environment already has Node.js or Python available —
-they give typed helpers and consistent error handling:
-
-- Node/TypeScript: `npm install @snapserve/sdk` — see `references/node-sdk.md`
-- Python: `pip install snapserve` — see `references/python-sdk.md`
-
-If neither runtime is convenient, call the REST API directly with `curl` — see
-`references/rest-api.md` for the endpoint list and example payloads.
-
-## Common tasks
-
-- **"List my voice agents"** → `GET /agents`
-- **"Create an agent named X using OpenAI + Deepgram"** → `POST /agents` with `asrProvider`,
-  `llmProvider`, `ttsProvider`, `telephonyProvider` fields (see `references/rest-api.md` for the
-  supported provider identifiers, drawn from the platform's provider docs).
-- **"Call +1... with agent X"** → `POST /calls/outbound` with `{ agentId, toNumber }`
-- **"How did agent X perform this week?"** → `GET /analytics/agents/{id}`
-- **"Show today's call volume / dashboard"** → `GET /analytics/dashboard`
-- **"Add my OpenAI key as a provider"** → `POST /providers` with `{ type: "llm", provider: "openai", apiKey }`
-- **"What's my wallet balance?"** → `GET /wallet`
+- ASR: **sarvam** (`en-IN` or Indic)
+- LLM: **google** (e.g. gemini flash)
+- TTS: **cartesia** or **sarvam**
+- Telephony: **vobiz**
+- WhatsApp: **Instant** for non-business
+- Website intake: campaign webhook `POST /api/webhooks/lead/{token}`
 
 ## Guardrails
 
-- Never fabricate call transcripts, analytics numbers, or agent IDs — always fetch them from the API.
-- Treat the API key as a secret: never echo it in full, never write it to a file the user didn't
-  ask for, and never send it anywhere other than the SnapServe API host the user configured.
-- Destructive calls (`DELETE /agents/{id}`, `DELETE /providers/{id}`, `DELETE /phone-numbers/{id}`,
-  ending a live call) should be confirmed with the user before executing, since they can disable a
-  live voice agent or drop an active phone call.
-- If a request returns 401, the API key is invalid or revoked — ask the user to check
-  Dashboard → API Keys rather than retrying with a guessed key.
-- For anything not covered by `references/rest-api.md`, the full contract lives in the platform's
-  OpenAPI spec at `/api-docs/openapi.yaml` (or ask the user for it) — do not guess field names for
-  endpoints you have not seen documented.
+1. Never invent transcripts, analytics, or IDs — fetch them.
+2. Confirm before `delete_agent` / `delete_campaign` / releasing numbers.
+3. Destructive call control (`end_call`) — confirm if the call is live production.
+4. On 401 → ask user to rotate/create API key in Dashboard.
+5. Payment/KYC/Razorpay purchase flows are browser-first; tell the user to complete in Dashboard when the API returns a payment URL.
+6. For paths without a named MCP tool, use `snapserve_api`.
+
+## Procedure
+
+```
+- [ ] 1. MCP available? Else curl/SDK with SNAPSERVE_API_KEY
+- [ ] 2. Identify workflow (agent / campaign+website / journey / sheets / WA)
+- [ ] 3. Read references/workflows.md for the matching recipe
+- [ ] 4. Call tools; return IDs + URLs the user must paste (webhook, webcall)
+- [ ] 5. Verify with get_call / list_campaign_leads / get_analytics_dashboard
+```
+
+## Install MCP
+
+See `references/install-mcp.md`.
