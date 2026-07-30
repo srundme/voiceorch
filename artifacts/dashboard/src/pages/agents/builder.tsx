@@ -8,7 +8,7 @@ import {
   Volume2, Check, X, Pencil, ChevronDown, List, Globe, BarChart3,
   User2, Sparkles, BookOpen, ToggleLeft, ToggleRight, Tag, Loader2, Square, AudioLines,
   Play, Pause,
-  Timer, ShieldCheck, Layers, Gauge, MicOff, HelpCircle, PhoneOff,
+  Timer, ShieldCheck, Layers, Gauge, MicOff, HelpCircle, PhoneOff, Mail, MessageCircle,
   History, GitBranch, Eye, RotateCcw, ChevronUp, AlertTriangle, ArrowLeftRight,
   Upload, Archive, Info, AlertCircle, Calendar, Star,
 } from "lucide-react";
@@ -828,7 +828,7 @@ function JourneyReadinessPanel({ form, agent }: { form: any; agent: any }) {
   );
 }
 
-function ChannelsTab({ form, agent }: { form: any; agent: any }) {
+function ChannelsTab({ form, agent, forceExpandEmail = false }: { form: any; agent: any; forceExpandEmail?: boolean }) {
   const [, navigate] = useLocation();
   const schedulingCalendarId = form.watch("schedulingCalendarId");
   const schedulingEventTypeId = form.watch("schedulingEventTypeId");
@@ -911,7 +911,7 @@ function ChannelsTab({ form, agent }: { form: any; agent: any }) {
           )}
         </div>
 
-        <EmailChannelCard />
+        <EmailChannelCard forceExpanded={forceExpandEmail} />
 
         <div className="rounded-xl border border-border/60 bg-card/20 p-4 space-y-3">
           <div className="flex items-center justify-between gap-3">
@@ -2657,6 +2657,8 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
     native_reschedule: "reschedule_booking",
     native_cancel: "cancel_booking",
     end_call: "end_call",
+    send_email: "send_email",
+    send_whatsapp: "send_whatsapp",
   };
 
   const toggleNativeTool = (type: string) => {
@@ -2770,6 +2772,22 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
       color: "slate",
       label: "End Call",
       description: "Lets the agent gracefully end the call when the conversation is complete.",
+      needsEventType: false,
+    },
+    {
+      type: "send_email",
+      icon: <Mail className="h-4 w-4" />,
+      color: "sky",
+      label: "Send Email",
+      description: "Lets the agent email the caller mid-call using Channels → Email (SnapServe managed or your Brevo). Asks for their address, then sends the channel template.",
+      needsEventType: false,
+    },
+    {
+      type: "send_whatsapp",
+      icon: <MessageCircle className="h-4 w-4" />,
+      color: "emerald",
+      label: "Send WhatsApp",
+      description: "Lets the agent send a WhatsApp template mid-call via Instant/Business or your BSP webhook. Uses the caller’s phone unless they give another number.",
       needsEventType: false,
     },
   ] as const;
@@ -4058,7 +4076,7 @@ function AgentListPanel({ selectedId, onSelect, rateMap, className }: {
 
 type DispositionCategory = { id: string; name: string; values: string };
 
-function AnalysisTab({ form, agentId }: { form: any; agentId: number }) {
+function AnalysisTab({ form, agentId, onConfigureEmail }: { form: any; agentId: number; onConfigureEmail?: () => void }) {
   const { toast } = useToast();
 
   // ── Disposition config state ──────────────────────────────────────────────
@@ -4140,7 +4158,7 @@ function AnalysisTab({ form, agentId }: { form: any; agentId: number }) {
         </p>
       </section>
 
-      <JourneyPanel agentId={agentId} webhookUrl={form.watch("webhookUrl")} />
+      <JourneyPanel agentId={agentId} webhookUrl={form.watch("webhookUrl")} onConfigureEmail={onConfigureEmail} />
 
       {/* ── Webhook ── */}
       <div>
@@ -5832,6 +5850,7 @@ function VersionsTab({ agentId }: { agentId: number }) {
 
 function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAgents?: () => void }) {
   const [activeTab, setActiveTab] = useState<TabId>("overview");
+  const [forceExpandEmail, setForceExpandEmail] = useState(false);
   const tabContentRef = useRef<HTMLDivElement>(null);
   const scrollPositions = useRef<Partial<Record<TabId, number>>>({});
   const agentResetSigRef = useRef<string | null>(null);
@@ -5840,7 +5859,13 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
     if (tabContentRef.current) {
       scrollPositions.current[activeTab] = tabContentRef.current.scrollTop;
     }
+    if (tabId !== "channels") setForceExpandEmail(false);
     setActiveTab(tabId);
+  };
+
+  const openEmailChannel = () => {
+    setForceExpandEmail(true);
+    handleTabClick("channels");
   };
 
   useEffect(() => {
@@ -6202,13 +6227,8 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
   const [savedFlash, setSavedFlash] = useState(false);
   const isDirty   = form.formState.isDirty;
 
-  const visibleTabs = TABS.filter((t) => t.id !== "channels" && t.id !== "analysis");
-  // Channels + Journey hidden for now — rebuild later with a proper plan.
+  const visibleTabs = TABS;
   const webTestLabel = "Live Test";
-
-  useEffect(() => {
-    if (activeTab === "channels" || activeTab === "analysis") setActiveTab("overview");
-  }, [activeTab]);
 
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
   const [renameValue, setRenameValue] = useState("");
@@ -6396,11 +6416,11 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
             <div ref={tabContentRef} className="flex-1 min-h-0 overflow-y-auto">
               <form onSubmit={e => e.preventDefault()}>
                 {activeTab === "overview"  && <OverviewTab form={form} agent={agent} />}
-                {activeTab === "channels"  && <ChannelsTab form={form} agent={agent} />}
+                {activeTab === "channels"  && <ChannelsTab form={form} agent={agent} forceExpandEmail={forceExpandEmail} />}
                 {activeTab === "prompt"    && <PromptTab form={form} />}
                 {activeTab === "voice"     && <VoiceTab form={form} />}
                 {activeTab === "tools"     && <ToolsTab form={form} agentId={agentId} />}
-                {activeTab === "analysis"  && <AnalysisTab form={form} agentId={agentId} />}
+                {activeTab === "analysis"  && <AnalysisTab form={form} agentId={agentId} onConfigureEmail={openEmailChannel} />}
                 {activeTab === "voicemail" && <VoicemailTab form={form} />}
                 {activeTab === "advanced"  && <AdvancedTab form={form} agent={agent} />}
                 {activeTab === "versions"  && <VersionsTab agentId={agent.id} />}

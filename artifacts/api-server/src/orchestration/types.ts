@@ -40,6 +40,20 @@ export interface SendSmsTool {
   messageTemplate: string;
 }
 
+/** Mid-call email via the user's Email channel (managed SnapServe or BYO Brevo). */
+export interface SendEmailTool {
+  type: "send_email";
+  name: string;
+  description: string;
+}
+
+/** Mid-call WhatsApp via BYO BSP webhook or native Instant/Business channel. */
+export interface SendWhatsappTool {
+  type: "send_whatsapp";
+  name: string;
+  description: string;
+}
+
 export interface EndCallTool {
   type: "end_call";
   name: string;
@@ -176,7 +190,7 @@ export interface SquadFollowupTool {
   description: string;
 }
 
-export type AgentTool = CallTransferTool | WebhookTool | SendSmsTool | EndCallTool | CalComTool | NativeBookingTool | NativeRescheduleTool | NativeCancelTool | NativeCheckAvailabilityTool | NativeListBookingsTool | TransferColdTool | TransferWarmTool | TransferAgentTool | SquadFollowupTool;
+export type AgentTool = CallTransferTool | WebhookTool | SendSmsTool | SendEmailTool | SendWhatsappTool | EndCallTool | CalComTool | NativeBookingTool | NativeRescheduleTool | NativeCancelTool | NativeCheckAvailabilityTool | NativeListBookingsTool | TransferColdTool | TransferWarmTool | TransferAgentTool | SquadFollowupTool;
 
 /** JSON Schema-compatible tool definition passed to LLM providers */
 export interface ToolDefinition {

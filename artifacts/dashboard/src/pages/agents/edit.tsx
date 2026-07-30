@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useParams } from "wouter";
-import { ArrowLeft, Save, Bot, Plus, Trash2, PhoneForwarded, PhoneCall, Webhook, ChevronDown, ChevronUp, BookOpen, Sparkles, List, Pencil, X, ToggleLeft, ToggleRight, Calendar as CalendarIcon, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Save, Bot, Plus, Trash2, PhoneForwarded, PhoneCall, Webhook, ChevronDown, ChevronUp, BookOpen, Sparkles, List, Pencil, X, ToggleLeft, ToggleRight, Calendar as CalendarIcon, AlertTriangle, Mail, MessageCircle } from "lucide-react";
 import {
   useGetAgent,
   useUpdateAgent,
@@ -503,7 +503,7 @@ export default function AgentEdit() {
     }
   }, [calendarIdForEt]);
 
-  const NATIVE_TOOL_TYPES = ["native_booking", "native_check_availability", "native_list_bookings", "native_reschedule", "native_cancel"];
+  const NATIVE_TOOL_TYPES = ["native_booking", "native_check_availability", "native_list_bookings", "native_reschedule", "native_cancel", "send_email", "send_whatsapp"];
   const watchedTools = (form.watch("tools") ?? []) as any[];
   const hasNativeTool = (type: string) => watchedTools.some((t: any) => t.type === type);
   const nativeToolIndex = (type: string) => watchedTools.findIndex((t: any) => t.type === type);
@@ -514,6 +514,8 @@ export default function AgentEdit() {
     native_reschedule: "reschedule_booking",
     native_cancel: "cancel_booking",
     end_call: "end_call",
+    send_email: "send_email",
+    send_whatsapp: "send_whatsapp",
   };
 
   const toggleNativeTool = (type: string) => {
@@ -539,6 +541,25 @@ export default function AgentEdit() {
     { type: "native_list_bookings", fnName: "list_bookings", icon: <List className="h-4 w-4" />, color: "violet", label: "List Bookings", description: "Allows the agent to retrieve existing bookings for the caller — useful for reschedule or cancellation flows." },
     { type: "native_reschedule", fnName: "reschedule_booking", icon: <Pencil className="h-4 w-4" />, color: "amber", label: "Reschedule Booking", description: "Lets the agent reschedule an existing booking to a new time slot chosen by the caller." },
     { type: "native_cancel", fnName: "cancel_booking", icon: <X className="h-4 w-4" />, color: "red", label: "Cancel Booking", description: "Allows the agent to cancel an upcoming booking on the caller's request." },
+  ] as const;
+
+  const MESSAGING_TOOLS = [
+    {
+      type: "send_email",
+      fnName: "send_email",
+      icon: <Mail className="h-4 w-4" />,
+      color: "sky",
+      label: "Send Email",
+      description: "Lets the agent email the caller mid-call using Channels → Email (SnapServe or your Brevo). Collects their address, then sends the channel template.",
+    },
+    {
+      type: "send_whatsapp",
+      fnName: "send_whatsapp",
+      icon: <MessageCircle className="h-4 w-4" />,
+      color: "emerald",
+      label: "Send WhatsApp",
+      description: "Lets the agent send a WhatsApp template mid-call via Instant/Business or your BSP webhook.",
+    },
   ] as const;
 
   const BOOKING_TOOL_SCHEMAS: Record<string, object> = {
@@ -2013,6 +2034,38 @@ export default function AgentEdit() {
                             </div>
                           );
                         })()}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-2">Messaging</p>
+                <div className="space-y-2">
+                  {MESSAGING_TOOLS.map(({ type, icon, color, label, description }) => {
+                    const isOn = hasNativeTool(type);
+                    const c = bookingColorMap[color];
+                    return (
+                      <div key={type} className={cn("rounded-xl border transition-all duration-150", isOn ? `${c.border} ${c.bg}` : "border-border/60 bg-card/20")}>
+                        <button
+                          type="button"
+                          className="w-full text-left p-4 flex items-start gap-3"
+                          onClick={() => toggleNativeTool(type)}
+                        >
+                          <div className={cn("mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center shrink-0", isOn ? c.iconBg : "bg-muted/30")}>
+                            <span className={cn(isOn ? c.iconText : "text-muted-foreground/35")}>{icon}</span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-0.5">
+                              <span className={cn("text-xs font-semibold", isOn ? c.label : "text-foreground/80")}>{label}</span>
+                            </div>
+                            <p className="text-[11px] text-muted-foreground/60 leading-relaxed">{description}</p>
+                          </div>
+                          <div className="shrink-0 mt-1 text-muted-foreground/50">
+                            {isOn ? <ToggleRight className="h-5 w-5" /> : <ToggleLeft className="h-5 w-5" />}
+                          </div>
+                        </button>
                       </div>
                     );
                   })}

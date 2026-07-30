@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Mail } from "lucide-react";
 import { customFetch } from "@workspace/api-client-react";
@@ -57,7 +57,24 @@ function StatusPill({ ready, label }: { ready: boolean; label: string }) {
   );
 }
 
-export function EmailChannelCard({ compact = false }: { compact?: boolean }) {
+function insertAtCursor(
+  value: string,
+  insert: string,
+  el: HTMLInputElement | HTMLTextAreaElement | null,
+): string {
+  if (!el) return `${value}${insert}`;
+  const start = el.selectionStart ?? value.length;
+  const end = el.selectionEnd ?? value.length;
+  return `${value.slice(0, start)}${insert}${value.slice(end)}`;
+}
+
+export function EmailChannelCard({
+  compact = false,
+  forceExpanded = false,
+}: {
+  compact?: boolean;
+  forceExpanded?: boolean;
+}) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [mode, setMode] = useState<EmailMode>("managed");
@@ -69,6 +86,10 @@ export function EmailChannelCard({ compact = false }: { compact?: boolean }) {
   const [active, setActive] = useState(true);
   const [testTo, setTestTo] = useState("");
   const [expanded, setExpanded] = useState(!compact);
+  const [insertTarget, setInsertTarget] = useState<"subject" | "body">("body");
+  const subjectRef = useRef<HTMLInputElement>(null);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ["email-channel"],
@@ -86,6 +107,14 @@ export function EmailChannelCard({ compact = false }: { compact?: boolean }) {
     setBody(ch.defaultTemplate?.body ?? body);
     setActive(ch.active);
   }, [data?.channel?.id, data?.channel?.updatedAt]);
+
+  useEffect(() => {
+    if (!forceExpanded) return;
+    setExpanded(true);
+    requestAnimationFrame(() => {
+      rootRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }, [forceExpanded]);
 
   const save = useMutation({
     mutationFn: async () =>
@@ -128,9 +157,31 @@ export function EmailChannelCard({ compact = false }: { compact?: boolean }) {
 
   const ch = data?.channel;
   const ready = !!ch?.active && (ch.mode === "managed" || (ch.hasBrevoKey && !!ch.fromEmail));
+  const variables = data?.variables?.length
+    ? data.variables
+    : [
+        { key: "name", label: "Lead name" },
+        { key: "summary", label: "Summary" },
+        { key: "email", label: "Email" },
+        { key: "phone", label: "Phone" },
+        { key: "agent_name", label: "Agent" },
+      ];
+
+  const insertVariable = (key: string) => {
+    const token = `{{${key}}}`;
+    if (insertTarget === "subject") {
+      const next = insertAtCursor(subject, token, subjectRef.current);
+      setSubject(next);
+      requestAnimationFrame(() => subjectRef.current?.focus());
+    } else {
+      const next = insertAtCursor(body, token, bodyRef.current);
+      setBody(next);
+      requestAnimationFrame(() => bodyRef.current?.focus());
+    }
+  };
 
   return (
-    <div className="rounded-xl border border-border/60 bg-card/20 p-4 space-y-3">
+    <div ref={rootRef} className="rounded-xl border border-border/60 bg-card/20 p-4 space-y-3">
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <h3 className="text-sm font-semibold flex items-center gap-2">
@@ -150,6 +201,14 @@ export function EmailChannelCard({ compact = false }: { compact?: boolean }) {
         </Button>
       ) : (
         <div className="space-y-3">
+          <ol className="rounded-lg border border-border/40 bg-background/40 px-3 py-2 space-y-1 text-[11px] text-muted-foreground">
+            <li><span className="font-medium text-foreground/80">1.</span> Choose SnapServe managed or paste your Brevo API key</li>
+            <li><span className="font-medium text-foreground/80">2.</span> For BYO: use a sender email verified in your Brevo dashboard</li>
+            <li><span className="font-medium text-foreground/80">3.</span> Edit the template — click variable chips to insert</li>
+            <li><span className="font-medium text-foreground/80">4.</span> Save, then send a test</li>
+            <li><span className="font-medium text-foreground/80">5.</span> Turn on Journey → Email after call and/or Tools → Send email</li>
+          </ol>
+
           <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
@@ -182,7 +241,7 @@ export function EmailChannelCard({ compact = false }: { compact?: boolean }) {
                 <Input className="h-8 text-xs" value={fromName} onChange={(e) => setFromName(e.target.value)} placeholder="Acme Events" />
               </div>
               <div className="space-y-1">
-                <Label className="text-[10px] text-muted-foreground">From email</Label>
+                <Label className="text-[10px] text-muted-foreground">From email (must be verified in Brevo)</Label>
                 <Input className="h-8 text-xs" value={fromEmail} onChange={(e) => setFromEmail(e.target.value)} placeholder="hello@acme.com" />
               </div>
               <div className="space-y-1 sm:col-span-2">
@@ -196,31 +255,52 @@ export function EmailChannelCard({ compact = false }: { compact?: boolean }) {
                   onChange={(e) => setBrevoKey(e.target.value)}
                   placeholder={ch?.hasBrevoKey ? "Leave blank to keep current key" : "xkeysib-…"}
                 />
+                <p className="text-[10px] text-muted-foreground">
+                  Create an SMTP API key in Brevo → Settings → SMTP & API. Verify the from-address under Senders before testing.
+                </p>
               </div>
             </div>
           )}
 
           <div className="space-y-1">
             <Label className="text-[10px] text-muted-foreground">Email subject (supports {"{{variables}}"})</Label>
-            <Input className="h-8 text-xs" value={subject} onChange={(e) => setSubject(e.target.value)} />
+            <Input
+              ref={subjectRef}
+              className="h-8 text-xs"
+              value={subject}
+              onFocus={() => setInsertTarget("subject")}
+              onChange={(e) => setSubject(e.target.value)}
+            />
           </div>
           <div className="space-y-1">
             <Label className="text-[10px] text-muted-foreground">Email content — paste what should be sent</Label>
             <Textarea
+              ref={bodyRef}
               className="min-h-[110px] text-xs font-mono"
               value={body}
+              onFocus={() => setInsertTarget("body")}
               onChange={(e) => setBody(e.target.value)}
               placeholder="<p>Hi {{name}},</p><p>{{summary}}</p>"
             />
-            <p className="text-[10px] text-muted-foreground leading-relaxed">
-              Variables: {(data?.variables ?? []).map((v) => `{{${v.key}}}`).join(" · ") || "{{name}} · {{summary}} · {{email}}"}
-            </p>
+            <div className="flex flex-wrap gap-1.5 pt-0.5">
+              {variables.map((v) => (
+                <button
+                  key={v.key}
+                  type="button"
+                  title={`Insert {{${v.key}}} into ${insertTarget}`}
+                  onClick={() => insertVariable(v.key)}
+                  className="rounded-md border border-border/50 bg-background/60 px-2 py-0.5 text-[10px] font-mono text-muted-foreground hover:border-sky-500/40 hover:text-sky-300 transition-colors"
+                >
+                  {`{{${v.key}}}`}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="flex items-center justify-between rounded-lg border border-border/40 bg-background/40 px-3 py-2">
             <div>
               <p className="text-xs font-medium">Channel active</p>
-              <p className="text-[10px] text-muted-foreground">Journeys can send email when this is on</p>
+              <p className="text-[10px] text-muted-foreground">Journeys and the Send email tool can send when this is on</p>
             </div>
             <Switch checked={active} onCheckedChange={setActive} />
           </div>

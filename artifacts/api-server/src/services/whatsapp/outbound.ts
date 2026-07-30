@@ -20,6 +20,7 @@ import {
 import { logger } from "../../lib/logger.js";
 import {
   buildWhatsappCallEndedPayload,
+  resolveConnectionTemplateName,
   type WhatsappCallEndedPayload,
 } from "./payload.js";
 import {
@@ -37,7 +38,8 @@ export type { WhatsappCallEndedPayload } from "./payload.js";
 async function postOutbound(
   url: string,
   secret: string | null | undefined,
-  payload: WhatsappCallEndedPayload,
+  payload: WhatsappCallEndedPayload | Record<string, unknown>,
+  eventHeader = "call.ended",
 ): Promise<void> {
   const body = JSON.stringify(payload);
   const timestamp = String(Math.floor(Date.now() / 1000));
@@ -45,7 +47,7 @@ async function postOutbound(
     "Content-Type": "application/json",
     "User-Agent": "SnapServe-WhatsApp/1.0",
     "X-SnapServe-Timestamp": timestamp,
-    "X-SnapServe-Event": "call.ended",
+    "X-SnapServe-Event": eventHeader,
   };
   if (secret) {
     const digest = createHmac("sha256", secret)
@@ -141,7 +143,7 @@ export async function dispatchWhatsappCallEnded(
     }
   } catch { /* ignore */ }
 
-  const payload = buildWhatsappCallEndedPayload({
+  const basePayload = buildWhatsappCallEndedPayload({
     call,
     agentName: agent?.name ?? "",
     phone,
@@ -156,12 +158,19 @@ export async function dispatchWhatsappCallEnded(
   if (withUrl.length > 0) {
     for (const conn of withUrl) {
       try {
+        const mapped = resolveConnectionTemplateName(
+          conn.templates as Record<string, string | undefined> | null,
+          basePayload.template_hint,
+        );
+        const payload: WhatsappCallEndedPayload = mapped
+          ? { ...basePayload, template_name: mapped }
+          : basePayload;
         await postOutbound(conn.outboundWebhookUrl!.trim(), conn.outboundSecret, payload);
         await db.update(whatsappConnectionsTable)
           .set({ lastOutboundAt: new Date(), lastError: null, updatedAt: new Date() })
           .where(eq(whatsappConnectionsTable.id, conn.id));
         logger.info(
-          { callId, connectionId: conn.id, phone },
+          { callId, connectionId: conn.id, phone, template_name: mapped },
           "whatsapp: post-call outbound ok",
         );
       } catch (err) {
@@ -181,7 +190,7 @@ export async function dispatchWhatsappCallEnded(
 
   /* ── Path 2: Native VoBiz send ────────────────────────────────────────── */
   const channel = nativeChannel!;
-  const hint = (payload.template_hint ?? "call_summary") as TemplateHint;
+  const hint = (basePayload.template_hint ?? "call_summary") as TemplateHint;
 
   if (!hintEnabled(channel, hint)) {
     logger.info({ callId, hint, userId: call.userId }, "whatsapp-native: hint disabled by user — skipped");
@@ -230,4 +239,109 @@ export async function dispatchWhatsappCallEnded(
     params,
     callId,
   });
+}
+
+/**
+ * Mid-call WhatsApp send for the voice agent tool.
+ * Prefers BYO BSP webhook for this agent; otherwise native Instant/Business channel.
+ */
+export async function sendMidCallWhatsapp(opts: {
+  userId: string;
+  agentId: number;
+  agentName?: string;
+  callId: number;
+  toPhone: string;
+  templateHint?: string;
+  templateName?: string;
+  summary?: string;
+}): Promise<{ ok: boolean; error?: string; via?: "byo" | "native" }> {
+  const phone = opts.toPhone.trim();
+  if (!phone) return { ok: false, error: "Missing phone number" };
+
+  const hint = (opts.templateHint?.trim() || "call_summary") as TemplateHint;
+  const allowed: TemplateHint[] = ["call_summary", "booking_confirmed", "callback_scheduled"];
+  const safeHint = allowed.includes(hint) ? hint : "call_summary";
+
+  const [conn] = await db
+    .select()
+    .from(whatsappConnectionsTable)
+    .where(and(
+      eq(whatsappConnectionsTable.userId, opts.userId),
+      eq(whatsappConnectionsTable.agentId, opts.agentId),
+      eq(whatsappConnectionsTable.active, true),
+    ))
+    .limit(1);
+
+  const byoUrl = (conn?.outboundWebhookUrl ?? "").trim();
+  if (conn && byoUrl) {
+    const mapped =
+      (opts.templateName ?? "").trim() ||
+      resolveConnectionTemplateName(
+        conn.templates as Record<string, string | undefined> | null,
+        safeHint,
+      );
+    const payload: Record<string, unknown> = {
+      event: "call.mid",
+      action: "send_whatsapp",
+      phone,
+      call_id: opts.callId,
+      agent_id: opts.agentId,
+      agent_name: opts.agentName ?? "",
+      summary: opts.summary ?? "",
+      template_hint: safeHint,
+      ...(mapped ? { template_name: mapped } : {}),
+      timestamp: new Date().toISOString(),
+    };
+    try {
+      await postOutbound(byoUrl, conn.outboundSecret, payload, "call.mid");
+      await db.update(whatsappConnectionsTable)
+        .set({ lastOutboundAt: new Date(), lastError: null, updatedAt: new Date() })
+        .where(eq(whatsappConnectionsTable.id, conn.id));
+      return { ok: true, via: "byo" };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      await db.update(whatsappConnectionsTable)
+        .set({ lastError: msg.slice(0, 500), updatedAt: new Date() })
+        .where(eq(whatsappConnectionsTable.id, conn.id))
+        .catch(() => {});
+      return { ok: false, error: msg, via: "byo" };
+    }
+  }
+
+  const channel = await getActiveChannel(opts.userId);
+  if (!channel) {
+    return { ok: false, error: "No WhatsApp channel or BSP connection configured" };
+  }
+  if (!hintEnabled(channel, safeHint)) {
+    return { ok: false, error: `Template ${safeHint} is disabled on your WhatsApp channel` };
+  }
+
+  const businessName = channel.businessName || opts.agentName || "SnapServe";
+  const summary = (opts.summary ?? "").trim() || "Thanks for speaking with us.";
+  const params =
+    safeHint === "booking_confirmed"
+      ? [businessName, summary, "—"]
+      : [businessName, summary];
+
+  const ctx = await resolveSendContext(channel, async () => {
+    if (channel.mode !== "own") return getMasterVobizCreds();
+    try {
+      const { ensureVobizSubAccount } = await import("../../routes/kyc.js");
+      const creds = await ensureVobizSubAccount(opts.userId);
+      if (creds.authId && creds.authToken) return creds;
+    } catch { /* fall through */ }
+    return getMasterVobizCreds();
+  });
+  if ("error" in ctx) return { ok: false, error: ctx.error, via: "native" };
+
+  const result = await sendWhatsappTemplate({
+    channel,
+    ctx,
+    toPhone: phone,
+    hint: safeHint,
+    params,
+    callId: opts.callId,
+  });
+  if (!result.ok) return { ok: false, error: result.error ?? "send failed", via: "native" };
+  return { ok: true, via: "native" };
 }

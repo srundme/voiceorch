@@ -11,6 +11,14 @@ import { campaignsTable } from "./campaigns";
  * - Outbound: after each call, SnapServe POSTs call.ended to the customer's URL
  *   so they can send a WhatsApp template via their own BSP.
  */
+
+/** Template names the user created in their BSP, keyed by SnapServe hint. */
+export type WhatsappConnectionTemplates = {
+  call_summary?: string;
+  booking_confirmed?: string;
+  callback_scheduled?: string;
+};
+
 export const whatsappConnectionsTable = pgTable("whatsapp_connections", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: text("user_id").notNull(),
@@ -37,6 +45,11 @@ export const whatsappConnectionsTable = pgTable("whatsapp_connections", {
     "call_me",
     "call me",
   ]),
+  /**
+   * Names of templates the user approved in their BSP.
+   * Included as `template_name` on outbound webhooks so Zapier/BSP can send without remapping hints.
+   */
+  templates: jsonb("templates").$type<WhatsappConnectionTemplates>().notNull().default({}),
   active: boolean("active").notNull().default(true),
   lastInboundAt: timestamp("last_inbound_at", { withTimezone: true }),
   lastOutboundAt: timestamp("last_outbound_at", { withTimezone: true }),

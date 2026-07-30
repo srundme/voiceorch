@@ -15,6 +15,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError } from "@/lib/format-api-error";
 import { cn } from "@/lib/utils";
+import { useEmailChannelReady } from "./email-channel-card";
 
 const _DASH_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const DASH_API = `${_DASH_BASE}/api`;
@@ -107,13 +108,16 @@ function statusClass(status: string) {
 export function JourneyPanel({
   agentId,
   webhookUrl,
+  onConfigureEmail,
 }: {
   agentId: number;
   webhookUrl?: string | null;
+  onConfigureEmail?: () => void;
 }) {
   const { toast } = useToast();
   const [, navigate] = useLocation();
   const queryClient = useQueryClient();
+  const emailReady = useEmailChannelReady();
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [testPhone, setTestPhone] = useState("");
   const [callbackDays, setCallbackDays] = useState(5);
@@ -448,6 +452,15 @@ export function JourneyPanel({
                 <div>
                   <p className="text-xs font-medium">Email after call</p>
                   <p className="text-[10px] text-muted-foreground">Uses Channels → Email (SnapServe or Brevo)</p>
+                  {sendEmail && !emailReady && (
+                    <button
+                      type="button"
+                      className="mt-1 text-[10px] text-amber-400 underline underline-offset-2 hover:text-amber-300"
+                      onClick={() => onConfigureEmail?.()}
+                    >
+                      Email channel not ready — open Channels → Email
+                    </button>
+                  )}
                 </div>
                 <Switch checked={sendEmail} onCheckedChange={setSendEmail} />
               </div>

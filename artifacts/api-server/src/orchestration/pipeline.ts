@@ -88,6 +88,8 @@ import {
   executeNativeReschedule as sharedExecuteNativeReschedule,
   executeNativeCancel as sharedExecuteNativeCancel,
   executeWebhookTool as sharedExecuteWebhookTool,
+  executeSendEmail as sharedExecuteSendEmail,
+  executeSendWhatsapp as sharedExecuteSendWhatsapp,
   parsePreferredDate,
   writeTransferLeadDb,
 } from "../services/tool-executor.js";
@@ -5224,6 +5226,22 @@ export class OrchestrationPipeline implements VoiceSession {
       await this.executeWebhookTool(tool, args);
     } else if (tool.type === "send_sms") {
       await this.executeSendSms(tool, args);
+    } else if (tool.type === "send_email") {
+      return await sharedExecuteSendEmail({
+        agentId: this.agent.id,
+        callId: this.config.callId,
+        agentName: this.agent.name,
+        callerPhone: this.config.callerPhone,
+        args,
+      });
+    } else if (tool.type === "send_whatsapp") {
+      return await sharedExecuteSendWhatsapp({
+        agentId: this.agent.id,
+        callId: this.config.callId,
+        agentName: this.agent.name,
+        callerPhone: this.config.callerPhone,
+        args,
+      });
     } else if (tool.type === "end_call") {
       await this.executeEndCall(tool);
     } else if (tool.type === "cal_com") {

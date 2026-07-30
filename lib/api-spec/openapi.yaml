@@ -6888,8 +6888,8 @@ components:
       properties:
         type:
           type: string
-          enum: [call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, native_cancel, native_check_availability, native_list_bookings, transfer_cold, transfer_warm, transfer_agent]
-          description: "Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, native_cancel, native_check_availability, native_list_bookings, transfer_cold, transfer_warm, or transfer_agent"
+          enum: [call_transfer, webhook, send_sms, send_email, send_whatsapp, end_call, cal_com, native_booking, native_reschedule, native_cancel, native_check_availability, native_list_bookings, transfer_cold, transfer_warm, transfer_agent, send_email]
+          description: "Tool type: call_transfer, webhook, send_sms, send_email, end_call, cal_com, native_booking, native_reschedule, native_cancel, native_check_availability, native_list_bookings, transfer_cold, transfer_warm, or transfer_agent, or send_email, or send_whatsapp"
         name:
           type: string
           description: LLM-facing function name (snake_case, no spaces, e.g. transfer_to_human)
