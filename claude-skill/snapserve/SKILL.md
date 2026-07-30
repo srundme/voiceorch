@@ -60,3 +60,21 @@ If neither runtime is convenient, call the REST API directly with `curl` — see
 - For anything not covered by `references/rest-api.md`, the full contract lives in the platform's
   OpenAPI spec at `/api-docs/openapi.yaml` (or ask the user for it) — do not guess field names for
   endpoints you have not seen documented.
+
+## MCP server
+
+For MCP-capable clients (Claude Desktop, Cursor, etc.), prefer the official MCP server over raw API calls:
+
+```json
+{
+  "mcpServers": {
+    "snapserve": {
+      "command": "npx",
+      "args": ["-y", "@snapserveai/mcp"],
+      "env": { "SNAPSERVE_API_KEY": "sk_live_..." }
+    }
+  }
+}
+```
+
+It exposes tools for agents, calls, phone numbers, analytics, wallet, and a generic `snapserve_api_request` escape hatch.

@@ -1,0 +1,39 @@
+{
+  "name": "@snapserveai/mcp",
+  "version": "0.1.0",
+  "description": "Official MCP (Model Context Protocol) server for SnapServe AI voice agents — manage agents, calls, phone numbers, analytics and wallet from Claude Desktop, Cursor, or any MCP client",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "snapserve-mcp": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "snapserve",
+    "voice-agent",
+    "ai",
+    "telephony"
+  ],
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "@snapserveai/sdk": "workspace:^",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "typescript": "^5.5.0"
+  }
+}
