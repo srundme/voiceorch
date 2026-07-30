@@ -138,6 +138,8 @@ async function buildTargetAgentConfig(
     name: agent.name,
     systemPrompt,
     temperature: agent.temperature ?? 0.5,
+    // Same semantics as session.ts: default ON unless explicitly disabled.
+    sarvamIndicNumbers: agentCfg["sarvamIndicNumbers"] !== false,
     llmGenerationParams: {
       ...(typeof agent.temperature === "number" ? { temperature: agent.temperature } : {}),
       // Same resolution semantics as session.ts: explicit null = voice default;

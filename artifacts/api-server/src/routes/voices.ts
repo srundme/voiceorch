@@ -287,7 +287,7 @@ async function probeSarvamSpeaker(
       lang,
     );
     await tts.synthesize("Hello");
-    tts.close();
+    tts.close?.();
     return { ok: true };
   } catch (err) {
     const raw = err instanceof Error ? err.message : String(err);

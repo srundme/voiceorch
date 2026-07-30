@@ -61,5 +61,47 @@ export async function resolveAgentBillingMode(
   return isActuallyByop ? "byop" : "managed";
 }
 
+/** ₹1.00/min discount when the user brings their OWN telephony (Plivo/Twilio/VoBiz creds). */
+export const OWN_TELEPHONY_DISCOUNT_CENTS_PER_MIN = 100;
+
+/**
+ * Returns the per-minute discount (paise) for calls carried on the user's OWN
+ * telephony account: ₹1/min off the flat rate, else 0.
+ *
+ * "Own telephony" = a providers-table row for the agent's telephonyProvider
+ * with complete dialing config (authId/accountSid + fromNumber), i.e. exactly
+ * the condition under which the outbound dial path uses THEIR carrier account
+ * instead of platform-managed numbers.
+ *
+ * Note: applies only to the flat-rate path — partner-set client rates are
+ * used as-is and are not discounted here.
+ */
+export async function resolveOwnTelephonyDiscount(
+  clerkId: string | null | undefined,
+  agent: { telephonyProvider?: string | null },
+): Promise<number> {
+  const provider = agent.telephonyProvider?.toLowerCase();
+  if (!clerkId || !provider) return 0;
+
+  const rows = await db
+    .select({ providerName: providersTable.providerName, extraConfig: providersTable.extraConfig })
+    .from(providersTable)
+    .where(eq(providersTable.userId, clerkId));
+
+  const row = rows.find(r => r.providerName.toLowerCase() === provider);
+  if (!row) return 0;
+
+  let cfg: Record<string, string> = {};
+  try { cfg = row.extraConfig ? JSON.parse(row.extraConfig) as Record<string, string> : {}; } catch { return 0; }
+
+  // Mirror the outbound dial paths' "own credentials" checks per provider.
+  const complete =
+    provider === "twilio" ? !!(cfg["accountSid"] && cfg["fromNumber"])
+    : (provider === "plivo" || provider === "vobiz") ? !!(cfg["authId"] && cfg["fromNumber"])
+    : false;
+
+  return complete ? OWN_TELEPHONY_DISCOUNT_CENTS_PER_MIN : 0;
+}
+
 /** Invalidate cache shim — kept for callers that still import it; now a no-op. */
 export function invalidateMinuteRatesCache(): void {}
