@@ -3467,7 +3467,21 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
               }
               if (memLlmKey) {
                 const memLlm = createLLMAdapter(memLlmProvider, memLlmKey, memLlmModel);
-                const history = session.pipeline.getHistory();
+                // Strip call-screening-bot exchanges (screener prompt + our
+                // scripted reply) before memory extraction — they are operational
+                // boilerplate, not caller facts, and must never pollute the
+                // caller's durable profile/summary.
+                const rawHistory = session.pipeline.getHistory();
+                const history = rawHistory.filter((t, i) => {
+                  if (t.role === "user" && t.content?.startsWith("[call screening bot]")) return false;
+                  const prev = rawHistory[i - 1];
+                  if (
+                    t.role === "assistant" &&
+                    prev?.role === "user" &&
+                    prev.content?.startsWith("[call screening bot]")
+                  ) return false;
+                  return true;
+                });
                 // Pin writes to the agent that answered the call so mid-call
                 // handoffs don't scatter facts across teammate agentIds.
                 const memoryAgentId = session.memoryOwnerAgentId || call.agentId;

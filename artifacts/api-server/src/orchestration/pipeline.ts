@@ -4,6 +4,7 @@ import { GenderDetectorML } from "./genderDetectorML.js";
 import { GenderDetectorMLv2 } from "./genderDetectorMLv2.js";
 import { GenderDetectorChained } from "./genderDetectorChained.js";
 import { SpeakerVerifier, type VoiceMemoryEvent } from "./speakerVerifier.js";
+import { SCREENING_PICKUP_NOTE } from "./callScreening.js";
 import { buildDatetimeInjection } from "./datetimeInject.js";
 import { resolveAutoDetectLanguage } from "./language-filler-guard.js";
 import { CONVERSATION_DISCIPLINE_BLOCK, CONVERSATION_DISCIPLINE_TURN_REMINDER, buildAntiRepeatNudge, makeFlowStepGuard, truncateToSingleStep, VOICE_MAX_SENTENCES_PER_TURN } from "./conversationDiscipline.js";
@@ -943,6 +944,14 @@ export class OrchestrationPipeline implements VoiceSession {
    * existing history. Cleared on speaker handoff.
    */
   private voiceLinkedMemoryBlock: string | null = null;
+  /**
+   * Call-screening bot state (outbound only). "idle" → screener detected &
+   * answered → "responded" → real human picks up → "done" (one-shot restart
+   * note injected). See callScreening.ts.
+   */
+  private screeningState: "idle" | "responded" | "done" = "idle";
+  private readonly screeningWindowStart = Date.now();
+  private pendingScreeningPickupNote = false;
   /** Caller said they cannot hear the agent — next LLM turn must resume, not ask கேக்குதா. */
   private pendingAudioDifficultyNote = false;
   /** Caller asked to clarify the last topic (often mid-cut STT like "about the Kala Fit"). */
@@ -2656,6 +2665,20 @@ export class OrchestrationPipeline implements VoiceSession {
     // is now stale (the caller moved the conversation on); never resume it.
     this._bargedReplyRemainder = null;
 
+    // Outbound call-screening bots (iPhone / Google Call Screen): detect the
+    // screener's prompt early, answer it with one short sentence, and when the
+    // real human then picks up, restart the conversation via a one-shot note.
+    if (this.callDirection === "outbound" && this.screeningState !== "done") {
+      const swallowed = await this.maybeHandleCallScreening(transcript);
+      if (swallowed) {
+        this.safetyNet.onFinal();
+        this.clearEagerPartialTimer();
+        this.interruptionMgr.onUserSpeechEnd();
+        if (!this.closed) this.safetyNet.beginListening();
+        return;
+      }
+    }
+
     if (isCallerAudioDifficulty(transcript)) {
       this.pendingAudioDifficultyNote = true;
     }
@@ -3497,6 +3520,99 @@ export class OrchestrationPipeline implements VoiceSession {
       }
       void this.speakSpeakerHandoffChallenge();
     }
+  }
+
+  /**
+   * Outbound call-screening handling. Returns true when the transcript was the
+   * screening bot itself and must be swallowed (never sent to the LLM as a
+   * caller turn). Returns false to let the transcript flow as a normal turn —
+   * including the real human's pickup, which additionally arms a one-shot
+   * "start over" prompt note.
+   */
+  private async maybeHandleCallScreening(transcript: string): Promise<boolean> {
+    const { detectScreeningPrompt, buildScreeningResponse, CALL_SCREENING_WINDOW_MS } =
+      await import("./callScreening.js");
+
+    if (this.screeningState === "idle") {
+      if (Date.now() - this.screeningWindowStart > CALL_SCREENING_WINDOW_MS) {
+        this.screeningState = "done"; // window over — never engage mid-call
+        return false;
+      }
+      if (!detectScreeningPrompt(transcript)) return false;
+
+      this.screeningState = "responded";
+      const response = buildScreeningResponse({
+        explicit: (this.agent as unknown as Record<string, unknown>)["screeningResponse"] as
+          | string
+          | undefined,
+        agentName: this.agent.name,
+        greetingMessage: this.agent.greetingMessage,
+      });
+      logger.info(
+        { callId: this.config.callId, transcript: transcript.slice(0, 120), response: response.slice(0, 160) },
+        "Call screening bot detected — answering screener, then waiting for the real person",
+      );
+      logWarningEvent(this.logFn, EXEC_COMPONENTS.STT, "Call Screening Detected", ["call_screening"], {
+        turnNumber: this._activeTurnIndex,
+        detail: { screenerPrompt: transcript.slice(0, 160), response: response.slice(0, 160) },
+      });
+      // Keep the screening exchange in history so the LLM has full context if
+      // it ever surfaces, but it is NOT a caller turn (no LLM invocation).
+      // The "[call screening bot]" prefix marks these turns for exclusion from
+      // durable caller-memory extraction (see screeningFreeHistory()).
+      this.conversationHistory.appendUser(`[call screening bot] ${transcript}`);
+      this.conversationHistory.appendAssistant(response);
+
+      // Speak the single screening reply, then go quiet (screeners reject
+      // callers who keep talking). Mirrors silenceCheckIn's system playback.
+      // If the greeting is still playing when the screener is detected, wait
+      // (bounded) for it to finish — the reply must be delivered exactly once,
+      // never silently skipped.
+      if (!this.closed && this.isPlaying) {
+        const waitDeadline = Date.now() + 10_000;
+        while (this.isPlaying && !this.closed && Date.now() < waitDeadline) {
+          await new Promise((r) => setTimeout(r, 100));
+        }
+      }
+      if (!this.closed && !this.isPlaying) {
+        this.prepareSystemPlayback();
+        this.bargeInHoldUntil = Date.now() + this.bargeInEchoGraceMs;
+        this.isPlaying = true;
+        try {
+          await this.playSentence(response);
+        } catch (err) {
+          logger.error({ callId: this.config.callId, err }, "Screening response playback error");
+        } finally {
+          this.isPlaying = false;
+          this.systemPlaybackActive = false;
+          this.armTailEchoGrace();
+        }
+        await this.drainPlaybackTail();
+      }
+      return true; // swallow the screener transcript
+    }
+
+    // state === "responded": the next accepted transcript.
+    if (detectScreeningPrompt(transcript)) {
+      // Screener speaking again (relaying / confirming). Stay quiet — we
+      // already stated our reason; repeating gets calls rejected.
+      logger.info(
+        { callId: this.config.callId, transcript: transcript.slice(0, 120) },
+        "Call screening bot spoke again — staying quiet",
+      );
+      this.conversationHistory.appendUser(`[call screening bot] ${transcript}`);
+      return true;
+    }
+
+    // A non-screener utterance after we answered the screener = the real
+    // person picked up. Restart the conversation from the top.
+    this.screeningState = "done";
+    this.pendingScreeningPickupNote = true;
+    logger.info(
+      { callId: this.config.callId, transcript: transcript.slice(0, 120) },
+      "Real person picked up after call screening — restarting conversation with fresh greeting",
+    );
+    return false; // flows into processTurn as a normal caller turn
   }
 
   /**
@@ -6753,6 +6869,13 @@ export class OrchestrationPipeline implements VoiceSession {
     // turn while the same speaker stays on the line; cleared on handoff.
     if (!this.voiceHandoffActive && this.voiceLinkedMemoryBlock) {
       systemPromptForTurn += `\n\n${this.voiceLinkedMemoryBlock}`;
+    }
+
+    // One-shot: real human picked up after a call-screening bot — restart the
+    // conversation with a fresh greeting (volatile tail, cache-safe).
+    if (this.pendingScreeningPickupNote) {
+      systemPromptForTurn += `\n\n${SCREENING_PICKUP_NOTE}`;
+      this.pendingScreeningPickupNote = false;
     }
 
 
