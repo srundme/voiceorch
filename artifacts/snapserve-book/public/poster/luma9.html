@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Libre+Caslon+Display&family=Inter:wght@500;600;700;800&family=Noto+Sans+Tamil:wght@700;800&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:1080px;height:1080px;overflow:hidden}
+body{font-family:'Inter',sans-serif;background:#F2F1EE;color:#1C1B19;position:relative}
+.art{position:absolute;bottom:0;left:0;right:0;height:400px;background:url(art/skyline-engraved.png) center bottom/cover no-repeat;opacity:.92}
+.fade{position:absolute;bottom:0;left:0;right:0;height:400px;background:linear-gradient(180deg,#F2F1EE 0%,rgba(242,241,238,.2) 50%,rgba(242,241,238,0) 100%)}
+.rule{position:absolute;top:150px;left:84px;right:84px;height:3px;background:#1C1B19}
+.rule2{position:absolute;top:160px;left:84px;right:84px;height:1px;background:#1C1B19}
+.wrap{position:absolute;inset:0;display:flex;flex-direction:column;padding:60px 84px}
+.masthead{display:flex;justify-content:space-between;align-items:center}
+.chips{display:flex;gap:12px}
+.chip{display:flex;align-items:center;gap:8px}
+.chip span{font-size:10px;font-weight:800;letter-spacing:.12em;color:#7B7568}
+.chip img{height:22px}
+.chip+.chip{border-left:1px solid #CFCBC2;padding-left:12px}
+.date{font-size:13px;font-weight:800;letter-spacing:.2em;color:#7B7568}
+.kicker{margin-top:70px;font-size:16px;font-weight:800;letter-spacing:.4em;color:#B3541E}
+h1{font-family:'Libre Caslon Display',serif;font-size:108px;line-height:1.0;margin-top:14px;letter-spacing:-.01em}
+.tamil{font-family:'Noto Sans Tamil',sans-serif;font-weight:800;font-size:46px;margin-top:14px;color:#B3541E}
+.cols{margin-top:34px;display:flex;gap:44px;max-width:820px}
+.col{flex:1;border-top:2px solid #1C1B19;padding-top:12px}
+.col b{display:block;font-size:26px;font-weight:800}
+.col span{font-size:15px;font-weight:600;color:#57534A;line-height:1.5}
+.cta{margin-top:36px;align-self:flex-start;background:#1C1B19;color:#F2F1EE;font-weight:800;font-size:21px;letter-spacing:.14em;padding:17px 58px}
+</style></head><body>
+<div class="art"></div><div class="fade"></div><div class="rule"></div><div class="rule2"></div>
+<div class="wrap">
+  <div class="masthead">
+    <div class="chips">
+      <div class="chip"><span>ORGANISED BY</span><img src="snapserve-logo.png" style="height:24px"></div>
+      <div class="chip"><span>POWERED BY</span><img src="vobiz-logo.png"></div>
+      <div class="chip"><span>CO-SPONSOR</span><img src="zenxai-logo.png"></div>
+    </div>
+    <div class="date">CHENNAI · SEP 5, 2026</div>
+  </div>
+  <div class="kicker">INDIA'S BIGGEST VOICE-A-THON</div>
+  <h1>AI Voice for<br>Tamil Nadu</h1>
+  <div class="tamil">AI குரல் — India speaks in many languages. It's time AI does too.</div>
+  <div class="cols">
+    <div class="col"><b>₹1,00,000</b><span>Prize pool — awards plus platform credits</span></div>
+    <div class="col"><b>9:30 AM – 6 PM</b><span>Olive Public School, Chitlapakkam, Chennai</span></div>
+    <div class="col"><b>Free · 300 seats</b><span>Solo or teams of 2–3 — all builders welcome</span></div>
+  </div>
+  <div class="cta">REGISTER NOW</div>
+</div>
+</body></html>
