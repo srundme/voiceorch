@@ -611,3 +611,21 @@ id = "pucolrLywktljvulHreGz"
 uri = "file://attached_assets/luma-poster-26.jpg"
 type = "image"
 title = "Voice-a-thon Corporate Poster 26"
+
+[[outputs]]
+id = "OQ7BwEKM3CPOszR89hqmc"
+uri = "file://attached_assets/luma-poster-27.jpg"
+type = "image"
+title = "Voice-a-thon Chennai-Tech Poster 27"
+
+[[outputs]]
+id = "bYF3_Knc0jO63iuQzaDSW"
+uri = "file://attached_assets/luma-poster-28.jpg"
+type = "image"
+title = "Voice-a-thon Chennai-Tech Poster 28"
+
+[[outputs]]
+id = "xzHaX2M_Ap0qitvWFdsmP"
+uri = "file://attached_assets/luma-poster-29.jpg"
+type = "image"
+title = "Voice-a-thon Chennai-Tech Poster 29"
