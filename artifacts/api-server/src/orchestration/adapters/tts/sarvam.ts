@@ -37,7 +37,15 @@ const WS_RETRY_MAX_MS = 4_000;
  * instead of blindly slicing 44 bytes (non-canonical headers cause clicks).
  */
 function pcmFromSarvamAudio(b64: string): Buffer {
-  const buf = Buffer.from(b64, "base64");
+  return stripRiffHeader(Buffer.from(b64, "base64"));
+}
+
+/**
+ * Strip a WAV/RIFF header from a buffer if present, returning only PCM data.
+ * Streaming paths MUST use this too — header bytes fed into the pipeline as
+ * PCM are audible as a click/crackle at the start of every sentence.
+ */
+function stripRiffHeader(buf: Buffer): Buffer {
   if (buf.length < 12 || buf.toString("ascii", 0, 4) !== "RIFF") return buf;
   let offset = 12;
   while (offset + 8 <= buf.length) {
@@ -543,7 +551,10 @@ export class SarvamTTS implements TTSAdapter {
         if (msg.type === "audio") {
           const b64 = msg.data?.["audio"];
           if (typeof b64 === "string" && b64.length > 0) {
-            onChunk(Buffer.from(b64, "base64"));
+            // Each WS audio message can arrive WAV-wrapped — strip any RIFF
+            // header or it plays as a click at sentence start.
+            const pcm = pcmFromSarvamAudio(b64);
+            if (pcm.length > 0) onChunk(pcm);
           }
           return;
         }
@@ -658,11 +669,28 @@ export class SarvamTTS implements TTSAdapter {
     if (!resp.body) throw new Error("Sarvam TTS stream: no response body");
 
     const reader = resp.body.getReader();
+    // A WAV/RIFF header may lead the stream (and can span the first reads).
+    // Buffer until we can strip it, then pass everything else straight through.
+    let headBuf: Buffer | null = Buffer.alloc(0);
     try {
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        if (value?.length) onChunk(Buffer.from(value));
+        if (!value?.length) continue;
+        let chunk = Buffer.from(value);
+        if (headBuf !== null) {
+          headBuf = Buffer.concat([headBuf, chunk]);
+          // Wait for enough bytes to identify + skip a header (canonical is 44).
+          if (headBuf.length < 64) continue;
+          chunk = stripRiffHeader(headBuf);
+          headBuf = null;
+        }
+        if (chunk.length > 0) onChunk(chunk);
+      }
+      // Tiny stream that never hit 64 bytes — flush what we have.
+      if (headBuf !== null && headBuf.length > 0) {
+        const chunk = stripRiffHeader(headBuf);
+        if (chunk.length > 0) onChunk(chunk);
       }
     } finally {
       reader.releaseLock();
