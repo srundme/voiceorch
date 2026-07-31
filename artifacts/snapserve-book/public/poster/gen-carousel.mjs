@@ -4,7 +4,7 @@ const slides = [
   { kicker:"ANNOUNCING", l1:"india's biggest<br>voice-a-thon", l2:"for Tamil Nadu", body:[], big:"₹1,00,000 PRIZE POOL · 5 WINNERS", art:"px-c1-hall.png", artW:640, artH:560, logos:true, cta:"SAT, SEP 5 · CHENNAI" },
   { kicker:"HOW TO JOIN — STEP 1", l1:"register on<br>luma", body:["Find the event link on our page and hit <b>Request to Join</b>","Solo, or as a team of <b>2–3 members</b>","Registration closes <b>Aug 15, 11:59 PM</b>"], art:"px-c2-register.png", artW:440, artH:480 },
   { kicker:"HOW TO JOIN — STEP 2", l1:"sign up on<br>snapserve.ai", body:["Create your free account at <b>snapserve.ai</b>","Get confirmed and receive <b>free SnapServe platform credits</b>","Start building immediately — practise, test, iterate before Demo Day"], art:"px-c3-signup.png", artW:470, artH:470 },
-  { kicker:"HOW TO JOIN — STEP 3", l1:"deploy on a real<br>phone number", body:["Get a <b>live phone number</b> and deploy your agent on it","This is <b>mandatory</b> — agents without a phone number are not eligible","Real calls, not chat-window demos"], art:"px-c4-deploy.png", artW:440, artH:460 },
+  { kicker:"HOW TO JOIN — STEP 3", l1:"deploy on a real<br>phone number", body:["Get your <b>Vobiz number</b> right from the <b>SnapServe dashboard</b> — no separate setup","Powered by <b>Vobiz — the most advanced AI telephony</b> for your AI agent","<b>Mandatory</b> — agents without a phone number are not eligible"], art:"px-c4-deploy.png", artW:440, artH:460 },
   { kicker:"DEMO DAY — ROUND 1", l1:"judges come<br>to your table", body:["You demo your agent <b>live via a real phone call</b>","Show a real workflow solving a real problem","Then… the <b>Top 20 teams</b> are revealed"], art:"px-c5-judges.png", artW:520, artH:480 },
   { kicker:"DEMO DAY — THE FINALE", l1:"2 hours.<br>live on stage.", body:["A <b>live problem statement</b> is announced on stage","Finalists build, test and present a <b>brand-new agent from scratch</b>","<b>Top 5 winners</b> + the Participants' Choice Award are crowned"], art:"px-c6-finale.png", artW:500, artH:480 },
   { kicker:"PRIZES", l1:"₹1,00,000<br>prize pool", body:["<b>1st — ₹50,000</b> cash + Trophy + SnapServe & Vobiz credits","<b>2nd — ₹30,000</b> cash + Trophy + SnapServe & Vobiz credits","<b>3rd — ₹20,000</b> cash + Trophy + SnapServe & Vobiz credits"], art:"px-c7-trophy.png", artW:430, artH:470 },
@@ -29,8 +29,7 @@ const logosHtml = `<div class="logos">
 slides.forEach((s, i) => {
   const n = i + 1, total = slides.length;
   const pg = String(n).padStart(2, "0") + " / " + String(total).padStart(2, "0");
-  const runFooter = s.logos ? logosHtml :
-    `<div class="run"><span>INDIA'S BIGGEST VOICE-A-THON</span><span>SEP 5 · CHENNAI · SNAPSERVE.AI</span></div>`;
+  const runFooter = logosHtml;
   const body = s.body.map(b => `<div class="li"><span class="dot"></span><span>${b}</span></div>`).join("");
   const html = `<!DOCTYPE html>
 <html><head><meta charset="utf-8">
