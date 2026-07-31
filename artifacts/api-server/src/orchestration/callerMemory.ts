@@ -368,6 +368,28 @@ export async function loadCallerContext(
   // recent "name" fact (written via the more careful LLM extraction path) as
   // the fallback; if that's also implausible or missing, clear to null so the
   // agent asks the caller for their name instead of repeating garbage back.
+  // Self-heal honorific-polluted names on read (e.g. "Karthik Madam" latched
+  // before honorific stripping existed). Persist the cleaned form so the agent
+  // never reads the honorific back as if it were part of the caller's name.
+  if (normalizedProfile?.name) {
+    const stripped = stripNameHonorifics(normalizedProfile.name);
+    if (stripped !== normalizedProfile.name) {
+      const badName = normalizedProfile.name;
+      normalizedProfile.name = stripped || null;
+      logger.warn(
+        { agentId, phoneNumber, badName, healedName: normalizedProfile.name },
+        "Caller memory: stripped honorific from stored name on read (self-heal)",
+      );
+      db.update(callerProfilesTable)
+        .set({ name: normalizedProfile.name, updatedAt: new Date() })
+        .where(and(
+          eq(callerProfilesTable.agentId,     agentId),
+          eq(callerProfilesTable.phoneNumber, phoneNumber),
+        ))
+        .catch((err) => logger.warn({ err, agentId, phoneNumber }, "Caller memory: honorific self-heal DB write failed"));
+    }
+  }
+
   if (normalizedProfile?.name && !isPlausibleName(normalizedProfile.name)) {
     const badName = normalizedProfile.name;
     const factName = currentFacts.find(r => r.key === "name")?.value ?? null;
@@ -1509,6 +1531,34 @@ const NAME_NEXT_TOKEN_REJECTS = new Set([
   "also", "trying", "going", "looking", "calling",
 ]);
 
+// Honorifics/titles that callers commonly attach around their name when
+// speaking to an agent ("நான் கார்த்திக் மேடம்" → "Karthik Madam"). These are
+// forms of address, not part of the name, and must be stripped before the
+// latch stores anything — otherwise the agent reads the honorific back as if
+// it were the caller's surname. Covers English, Tamil, and Hindi forms.
+const NAME_HONORIFICS = new Set([
+  "sir", "madam", "maam", "ji", "mr", "mrs", "ms", "miss", "dr",
+  "shri", "smt", "thiru", "selvi",
+  "சார்", "மேடம்", "ஜி", "ஐயா", "அய்யா", "அம்மா", "திரு", "செல்வி",
+  "सर", "मैडम", "जी", "श्री", "श्रीमती",
+]);
+
+const normalizeNameWord = (w: string): string =>
+  w.toLowerCase().replace(/[^\p{L}\p{M}]/gu, "");
+
+/**
+ * Strips leading/trailing honorifics from a detected caller name
+ * ("Karthik Madam" → "Karthik", "சார் கார்த்திக்" → "கார்த்திக்").
+ * Returns "" when the candidate was ONLY honorifics (e.g. bare "Madam"),
+ * which callers must treat as no-name.
+ */
+export function stripNameHonorifics(name: string): string {
+  const words = name.trim().split(/\s+/);
+  while (words.length && NAME_HONORIFICS.has(normalizeNameWord(words[words.length - 1]))) words.pop();
+  while (words.length && NAME_HONORIFICS.has(normalizeNameWord(words[0]))) words.shift();
+  return words.join(" ");
+}
+
 /**
  * Rejects candidates that don't structurally look like a human name — either
  * because they're too long/short, contain digits/punctuation, or contain a
@@ -1538,7 +1588,7 @@ export function isPlausibleName(candidate: string): boolean {
 export function detectNameLatch(transcript: string): { name: string; tier: NameLatchTier } | null {
   for (const { pattern, tier } of NAME_PATTERNS) {
     const match = transcript.match(pattern);
-    const candidate = match?.[1]?.trim();
+    const candidate = stripNameHonorifics(match?.[1]?.trim() ?? "");
     if (!candidate || !isPlausibleName(candidate)) continue;
     // Next-token reject: the word immediately after the matched span reveals a
     // sentence continuation, not a self-introduction ("I am Arjun Kumar trying
