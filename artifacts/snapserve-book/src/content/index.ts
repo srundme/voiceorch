@@ -111,6 +111,35 @@ import { adminAuth } from "./chapters/m14-admin-auth";
 import { readingCallLogs } from "./chapters/m15-reading-call-logs";
 import { reliabilityPatterns } from "./chapters/m15-reliability-patterns";
 
+// ── Module 17 — STT Deep Dive ────────────────────────────────────────────────
+import { sttPipelinePath } from "./chapters/d1-stt-pipeline-path";
+import { sarvamSttComplete } from "./chapters/d1-sarvam-stt-complete";
+import { azureSttComplete } from "./chapters/d1-azure-stt-complete";
+import { otherSttAdapters } from "./chapters/d1-other-stt-adapters";
+import { sttTroubleshooting } from "./chapters/d1-stt-troubleshooting";
+
+// ── Module 18 — TTS Deep Dive ────────────────────────────────────────────────
+import { ttsPipelinePath } from "./chapters/d2-tts-pipeline-path";
+import { sarvamTtsComplete } from "./chapters/d2-sarvam-tts-complete";
+import { cartesiaTtsComplete } from "./chapters/d2-cartesia-tts-complete";
+import { otherTtsAdapters } from "./chapters/d2-other-tts-adapters";
+import { ttsTroubleshooting } from "./chapters/d2-tts-troubleshooting";
+
+// ── Module 19 — LLM Deep Dive ────────────────────────────────────────────────
+import { llmPipelinePath } from "./chapters/d3-llm-pipeline-path";
+import { promptAssembly } from "./chapters/d3-prompt-assembly";
+import { geminiAdapterComplete } from "./chapters/d3-gemini-adapter-complete";
+import { openaiCompatAdapters } from "./chapters/d3-openai-compat-adapters";
+import { fallbackAndRetry } from "./chapters/d3-fallback-and-retry";
+import { llmTroubleshooting } from "./chapters/d3-llm-troubleshooting";
+
+// ── Module 20 — Telephony Deep Dive ──────────────────────────────────────────
+import { vobizStreamComplete } from "./chapters/d4-vobiz-stream-complete";
+import { keepaliveAndAudioContinuity } from "./chapters/d4-keepalive-and-audio-continuity";
+import { webhooksAndXml } from "./chapters/d4-webhooks-and-xml";
+import { numbersAndInboundRouting } from "./chapters/d4-numbers-and-inbound-routing";
+import { telephonyTroubleshooting } from "./chapters/d4-telephony-troubleshooting";
+
 // Every chapter is authored. Order within each array defines reading order and
 // the module's chapterSlugs (derived below via `.map((c) => c.slug)`).
 const mbChapters: Chapter[] = [
@@ -235,6 +264,39 @@ const m14Chapters: Chapter[] = [
 const m15Chapters: Chapter[] = [
   readingCallLogs,
   reliabilityPatterns,
+];
+
+const d1Chapters: Chapter[] = [
+  sttPipelinePath,
+  sarvamSttComplete,
+  azureSttComplete,
+  otherSttAdapters,
+  sttTroubleshooting,
+];
+
+const d2Chapters: Chapter[] = [
+  ttsPipelinePath,
+  sarvamTtsComplete,
+  cartesiaTtsComplete,
+  otherTtsAdapters,
+  ttsTroubleshooting,
+];
+
+const d3Chapters: Chapter[] = [
+  llmPipelinePath,
+  promptAssembly,
+  geminiAdapterComplete,
+  openaiCompatAdapters,
+  fallbackAndRetry,
+  llmTroubleshooting,
+];
+
+const d4Chapters: Chapter[] = [
+  vobizStreamComplete,
+  keepaliveAndAudioContinuity,
+  webhooksAndXml,
+  numbersAndInboundRouting,
+  telephonyTroubleshooting,
 ];
 
 export const modules: Module[] = [
@@ -391,6 +453,42 @@ export const modules: Module[] = [
     icon: "Bug",
     chapterSlugs: m15Chapters.map((c) => c.slug),
   },
+  {
+    id: "d1", slug: "stt-deep-dive", number: "17",
+    title: "STT Deep Dive",
+    tagline: "Every line of the ears — hear it, fix it, tune it.",
+    description:
+      "The complete speech-to-text stack, line by line: how caller audio reaches STT, the Sarvam and Azure adapters in full, every other adapter's quirks, and a symptom-by-symptom playbook for misheard words, missed replies, and wrong-language transcripts.",
+    icon: "Ear",
+    chapterSlugs: d1Chapters.map((c) => c.slug),
+  },
+  {
+    id: "d2", slug: "tts-deep-dive", number: "18",
+    title: "TTS Deep Dive",
+    tagline: "Every line of the voice — synthesis, speed, and clean endings.",
+    description:
+      "The complete text-to-speech stack, line by line: sentence prefetch pipelining, the Sarvam Bulbul and Cartesia adapters in full, the remaining adapters, and the playbook for clipped endings, mute agents, slow first audio, and choppy playback.",
+    icon: "Volume2",
+    chapterSlugs: d2Chapters.map((c) => c.slug),
+  },
+  {
+    id: "d3", slug: "llm-deep-dive", number: "19",
+    title: "LLM Deep Dive",
+    tagline: "Every line of the brain — prompts, streaming, and fallbacks.",
+    description:
+      "The complete LLM stack, line by line: the turn loop, system prompt assembly and cache ordering, the Gemini adapter in full, the OpenAI-compatible adapters, fallback and retry chains, and the playbook for wrong-language replies, silent turns, and hallucinations.",
+    icon: "Brain",
+    chapterSlugs: d3Chapters.map((c) => c.slug),
+  },
+  {
+    id: "d4", slug: "telephony-deep-dive", number: "20",
+    title: "Telephony Deep Dive",
+    tagline: "Every line of the phone line — streams, webhooks, and numbers.",
+    description:
+      "The complete telephony stack, line by line: the VoBiz audio stream end to end, keepalive and audio continuity, webhooks and XML call control, number routing and inbound canonicalization, and the playbook for dead air, drops, and one-way audio.",
+    icon: "PhoneCall",
+    chapterSlugs: d4Chapters.map((c) => c.slug),
+  },
 ];
 
 export const allChapters: Chapter[] = [
@@ -411,6 +509,10 @@ export const allChapters: Chapter[] = [
   ...m13Chapters,
   ...m14Chapters,
   ...m15Chapters,
+  ...d1Chapters,
+  ...d2Chapters,
+  ...d3Chapters,
+  ...d4Chapters,
 ];
 
 export const course: Course = {
