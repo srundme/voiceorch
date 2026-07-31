@@ -593,3 +593,21 @@ id = "onj6GeoCAW1fq4yGGx0UK"
 uri = "file://attached_assets/luma-poster-23.jpg"
 type = "image"
 title = "Voice-a-thon Poster 23 (hacker edition)"
+
+[[outputs]]
+id = "89Q2T6z3OjmN-IjXnnK_N"
+uri = "file://attached_assets/luma-poster-24.jpg"
+type = "image"
+title = "Voice-a-thon Corporate Poster 24"
+
+[[outputs]]
+id = "UBx_oEjStx_ZC2XZD9ThA"
+uri = "file://attached_assets/luma-poster-25.jpg"
+type = "image"
+title = "Voice-a-thon Corporate Poster 25"
+
+[[outputs]]
+id = "pucolrLywktljvulHreGz"
+uri = "file://attached_assets/luma-poster-26.jpg"
+type = "image"
+title = "Voice-a-thon Corporate Poster 26"
