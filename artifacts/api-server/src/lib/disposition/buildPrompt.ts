@@ -7,8 +7,8 @@ function formatIST(d: Date): string {
     weekday: "long", day: "numeric", month: "long", year: "numeric",
   }).format(d);
   const timePart = new Intl.DateTimeFormat("en-IN", {
-    timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: false,
-  }).format(d);
+    timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: true,
+  }).format(d).toUpperCase();
   return `${datePart}, ${timePart} IST`;
 }
 
@@ -52,7 +52,7 @@ DATE & TIME CONTEXT:
 - This call took place on: ${formatIST(now)} (date: ${isoDateIST(now)})
 - Timezone: Asia/Kolkata (IST, UTC+05:30)
 - Resolve ALL relative date/time expressions in the transcript ("today", "tomorrow", "day after tomorrow", "next Monday", "this evening", "naalaikku", "kal", etc.) to ABSOLUTE dates anchored to the call date above.
-- Any date you output MUST be in DD/MM/YYYY format; any time MUST be 24-hour HH:MM IST (e.g. "01/08/2026 15:30"). Never output words like "tomorrow" or "next week" as a date value.
+- Any date you output MUST be in DD/MM/YYYY format; any time MUST be 12-hour hh:mm AM/PM IST (e.g. "01/08/2026 01:00 PM"). Never output words like "tomorrow" or "next week" as a date value, and never use 24-hour times like "13:00".
 
 TAXONOMY — the ONLY valid primary → sub combinations:
 ${taxonomyJson}
