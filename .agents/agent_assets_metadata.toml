@@ -449,3 +449,9 @@ id = "6VFDfgFuBhHuSEnGNLJza"
 uri = "file://attached_assets/snapserve-claude-skill.zip"
 type = "unspecified"
 title = "SnapServe Claude Skill (zip)"
+
+[[outputs]]
+id = "AFoygnwxx5y3dP8bL-HGj"
+uri = "file://attached_assets/sarvam-stt-code.pdf"
+type = "pdf"
+title = "Sarvam STT — full code (for class)"
