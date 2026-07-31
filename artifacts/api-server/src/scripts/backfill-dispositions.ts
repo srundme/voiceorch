@@ -98,7 +98,7 @@ async function main(): Promise<void> {
     }
 
     try {
-      const systemPrompt = buildPrompt(cfg);
+      const systemPrompt = buildPrompt(cfg, row.createdAt ?? null);
       const schema = buildSchema(cfg);
       const rawOut = await llm.extract(systemPrompt, schema, transcript);
       const callEvents = (row.callEvents ?? []) as Record<string, unknown>[];

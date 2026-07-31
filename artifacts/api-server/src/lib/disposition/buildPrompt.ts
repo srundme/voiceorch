@@ -1,10 +1,29 @@
 import type { DispositionConfig } from "./types.js";
 
+/** Formats a date as e.g. "Friday, 31 July 2026, 14:05 IST" (Asia/Kolkata). */
+function formatIST(d: Date): string {
+  const datePart = new Intl.DateTimeFormat("en-IN", {
+    timeZone: "Asia/Kolkata",
+    weekday: "long", day: "numeric", month: "long", year: "numeric",
+  }).format(d);
+  const timePart = new Intl.DateTimeFormat("en-IN", {
+    timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: false,
+  }).format(d);
+  return `${datePart}, ${timePart} IST`;
+}
+
+/** ISO date (YYYY-MM-DD) in Asia/Kolkata. */
+function isoDateIST(d: Date): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(d);
+}
+
 /**
  * Builds the system prompt for the disposition LLM pass.
  * Prompt is derived entirely from the agent's taxonomy config — never hardcoded.
+ * `callTime` anchors relative date expressions ("tomorrow", "next Monday") so
+ * extracted dates come out absolute; defaults to now.
  */
-export function buildPrompt(cfg: DispositionConfig): string {
+export function buildPrompt(cfg: DispositionConfig, callTime?: Date | null): string {
   const taxonomyJson = JSON.stringify(cfg.taxonomy, null, 2);
 
   const categoryKeys = Object.keys(cfg.taxonomy);
@@ -23,7 +42,15 @@ export function buildPrompt(cfg: DispositionConfig): string {
           .join("\n")}`
       : "";
 
+  const now = callTime ?? new Date();
+
   return `You are a call disposition classifier for a voice AI sales/support system.
+
+DATE & TIME CONTEXT:
+- This call took place on: ${formatIST(now)} (date: ${isoDateIST(now)})
+- Timezone: Asia/Kolkata (IST, UTC+05:30)
+- Resolve ALL relative date/time expressions in the transcript ("today", "tomorrow", "day after tomorrow", "next Monday", "this evening", "naalaikku", "kal", etc.) to ABSOLUTE dates anchored to the call date above.
+- Any date you output MUST be in YYYY-MM-DD format; any time MUST be 24-hour HH:MM IST (e.g. "2026-08-01 15:30"). Never output words like "tomorrow" or "next week" as a date value.
 
 TAXONOMY — the ONLY valid primary → sub combinations:
 ${taxonomyJson}

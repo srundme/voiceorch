@@ -1118,6 +1118,7 @@ router.patch("/calls/:id/end", requireAuth, clientContext, async (req, res): Pro
     callId:     call.id,
     transcript: call.transcript ?? null,
     callEvents: [],
+    callStartedAt: call.createdAt ?? null,
   }).catch(() => {});
 
   // CRM writeback (fire-and-forget — push call outcome to HubSpot/Zoho if lead was CRM-sourced)

@@ -56,6 +56,8 @@ export interface DisposeCallInput {
   callId:  number;
   transcript?: string | null;
   callEvents?: CallEvent[];
+  /** When the call happened — anchors relative dates ("tomorrow") in the LLM prompt. */
+  callStartedAt?: Date | null;
 }
 
 export async function disposeCall(input: DisposeCallInput): Promise<DispositionResult | null> {
@@ -97,7 +99,7 @@ export async function disposeCall(input: DisposeCallInput): Promise<DispositionR
       return fallbackResult;
     }
 
-    const systemPrompt = buildPrompt(cfg);
+    const systemPrompt = buildPrompt(cfg, input.callStartedAt ?? null);
     const schema       = buildSchema(cfg);
 
     let rawOut: Record<string, unknown>;

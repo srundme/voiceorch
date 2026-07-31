@@ -3419,6 +3419,7 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
           callId:     session.callId,
           transcript: transcript || null,
           callEvents: [{ type: "duration", durationSec: durationSeconds }],
+          callStartedAt: call.createdAt ?? null,
         }).catch((dispErr) => {
           logger.warn({ sessionId, dispErr }, "Post-call taxonomy disposition failed");
         });
