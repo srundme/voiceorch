@@ -851,3 +851,9 @@ id = "WsEEt_rYtIkTKvcP8lr5L"
 uri = "file://attached_assets/luma-poster-54.jpg"
 type = "image"
 title = "Voice-a-thon Poster 54 — Event as Hero"
+
+[[outputs]]
+id = "kp5gpCLZXxlYS5nrijioS"
+uri = "file://attached_assets/luma-poster-54b.jpg"
+type = "image"
+title = "Voice-a-thon Poster 54 — Event as Hero (final)"
