@@ -725,3 +725,27 @@ id = "4MKwplFtXIA0X7lRD4kns"
 uri = "file://attached_assets/luma-poster-45.jpg"
 type = "image"
 title = "Voice-a-thon Poster 45"
+
+[[outputs]]
+id = "9ImhVqCxB8GOnUxv-xjse"
+uri = "file://attached_assets/luma-poster-46.jpg"
+type = "image"
+title = "Voice-a-thon Poster 46 — Speaking to AI"
+
+[[outputs]]
+id = "uFreq8buF7oH93SVF1Mo5"
+uri = "file://attached_assets/luma-poster-47.jpg"
+type = "image"
+title = "Voice-a-thon Poster 47 — Builders at Work"
+
+[[outputs]]
+id = "6WP7ORUH72uqz84F7uD8-"
+uri = "file://attached_assets/luma-poster-48.jpg"
+type = "image"
+title = "Voice-a-thon Poster 48 — AI Live Call"
+
+[[outputs]]
+id = "vpCzg_P_Xq_wF72G1kJWu"
+uri = "file://attached_assets/luma-poster-49.jpg"
+type = "image"
+title = "Voice-a-thon Poster 49 — Event Stage (Dark)"
