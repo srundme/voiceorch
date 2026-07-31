@@ -868,11 +868,12 @@ function ChannelsTab({ form, agent, forceExpandEmail = false }: { form: any; age
   const { data: waConnections } = useQuery({
     queryKey: ["builder-whatsapp-connections", agent?.id],
     enabled: !!agent?.id,
-    queryFn: () => customFetch<Array<{ id: string; name: string; active: boolean; agentId: number | null; metaPhoneNumberId?: string | null; outboundWebhookUrl?: string | null }>>(`${DASH_API}/whatsapp/connections`),
+    queryFn: () => customFetch<{ connections: Array<{ id: string; name: string; active: boolean; agentId: number | null; metaPhoneNumberId?: string | null; outboundWebhookUrl?: string | null }> }>(`${DASH_API}/whatsapp/connections`),
     staleTime: 60_000,
   });
-  const agentConnection = (waConnections ?? []).find((c) => c.active && c.agentId === agent?.id)
-    ?? (waConnections ?? []).find((c) => c.active) ?? null;
+  const waConnList = Array.isArray(waConnections?.connections) ? waConnections.connections : [];
+  const agentConnection = waConnList.find((c) => c.active && c.agentId === agent?.id)
+    ?? waConnList.find((c) => c.active) ?? null;
 
   return (
     <div className="p-6 space-y-8">
