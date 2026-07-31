@@ -845,3 +845,9 @@ id = "K4VowghJ4PawhlZPW9kg8"
 uri = "file://attached_assets/luma-poster-53d.jpg"
 type = "image"
 title = "Voice-a-thon Poster 53 — Coder in the Zone (updated copy)"
+
+[[outputs]]
+id = "WsEEt_rYtIkTKvcP8lr5L"
+uri = "file://attached_assets/luma-poster-54.jpg"
+type = "image"
+title = "Voice-a-thon Poster 54 — Event as Hero"
