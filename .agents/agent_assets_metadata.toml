@@ -857,3 +857,9 @@ id = "kp5gpCLZXxlYS5nrijioS"
 uri = "file://attached_assets/luma-poster-54b.jpg"
 type = "image"
 title = "Voice-a-thon Poster 54 — Event as Hero (final)"
+
+[[outputs]]
+id = "80RQNCNQwR3yMTsr3MUv6"
+uri = "file://artifacts/snapserve-book/public/poster/art/pixel-founder-avatar.png"
+type = "image"
+title = "Your Avatar — Pixel Embroidery Style"
