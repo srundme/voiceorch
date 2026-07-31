@@ -173,10 +173,12 @@ function NativeSection({
   agents,
   onChooseBsp,
   onChooseMeta,
+  metaConnected,
 }: {
   agents: { id: number; name: string }[];
   onChooseBsp?: () => void;
   onChooseMeta?: () => void;
+  metaConnected?: boolean;
 }) {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -512,9 +514,20 @@ function NativeSection({
                 <li>• Pick which template to send for call summary, booking &amp; callback</li>
                 <li>• Post-call, mid-call tool, and Request-a-Call all supported</li>
               </ul>
-              <Button size="sm" variant="outline" className="mt-4 w-full" onClick={() => onChooseMeta?.()}>
-                Connect Meta API
-              </Button>
+              {metaConnected ? (
+                <>
+                  <div className="mt-4 flex items-center justify-center gap-1.5 rounded-md border border-emerald-500/30 bg-emerald-500/10 py-2 text-xs font-medium text-emerald-400">
+                    ✓ Already configured — see Your connections below
+                  </div>
+                  <Button size="sm" variant="ghost" className="mt-2 w-full text-[11px] text-muted-foreground" onClick={() => onChooseMeta?.()}>
+                    Add another connection
+                  </Button>
+                </>
+              ) : (
+                <Button size="sm" variant="outline" className="mt-4 w-full" onClick={() => onChooseMeta?.()}>
+                  Connect Meta API
+                </Button>
+              )}
             </div>
           </div>
         </div>
@@ -1372,7 +1385,7 @@ export default function WhatsAppPage() {
         description="Automatic WhatsApp follow-ups after every AI call — booking confirmations, summaries and callback alerts. Customers can reply to get a call back."
       />
 
-      <NativeSection agents={agents} onChooseBsp={() => openBspCreate("webhook")} onChooseMeta={() => openBspCreate("meta")} />
+      <NativeSection agents={agents} onChooseBsp={() => openBspCreate("webhook")} onChooseMeta={() => openBspCreate("meta")} metaConnected={connections.some((c) => c.active && c.metaPhoneNumberId)} />
 
       {/* Your connections */}
       {(connections.length > 0 || createdSecret || isLoading) && (
