@@ -1145,6 +1145,12 @@ export default function WhatsAppPage() {
         },
       );
       setMetaTplList(res.templates);
+      // Auto-pick the first approved template for Call summary so the
+      // connection works out of the box — user can still change it.
+      if (res.templates.length > 0 && !metaSelSummary) {
+        const first = res.templates[0]!;
+        setMetaSelSummary(JSON.stringify({ name: first.name, language: first.language, paramCount: first.paramCount }));
+      }
       if (res.phone) {
         setMetaPhoneInfo(`✓ ${res.phone.verifiedName ?? ""} ${res.phone.displayPhone ?? ""}`.trim());
       }
