@@ -459,15 +459,6 @@ export const modules: Module[] = [
     chapterSlugs: m15Chapters.map((c) => c.slug),
   },
   {
-    id: "tg", slug: "teachers-guide", number: "T",
-    title: "Teacher's Guide — 10-Day Programme",
-    tagline: "Lesson scripts for teaching the team, one day at a time.",
-    description:
-      "Ready-to-teach lesson plans for the 10-day intern programme. Each day has a timed agenda, plain-English explanations to say aloud, whiteboard diagrams, real code walked line by line, questions to ask the class, and homework. Day 01 covers voice-AI basics and the Sarvam STT adapter.",
-    icon: "GraduationCap",
-    chapterSlugs: tgChapters.map((c) => c.slug),
-  },
-  {
     id: "d1", slug: "stt-deep-dive", number: "17",
     title: "STT Deep Dive",
     tagline: "Every line of the ears — hear it, fix it, tune it.",
@@ -523,12 +514,30 @@ export const allChapters: Chapter[] = [
   ...m13Chapters,
   ...m14Chapters,
   ...m15Chapters,
-  ...tgChapters,
   ...d1Chapters,
   ...d2Chapters,
   ...d3Chapters,
   ...d4Chapters,
 ];
+
+// ── Teacher's Guide — separate area at /teach, NOT part of the intern book ───
+// These chapters are intentionally excluded from `modules` and `allChapters`
+// so they never appear on the Home page, in Search, or in the Exam pool.
+export const teacherModule: Module = {
+  id: "tg", slug: "teachers-guide", number: "T",
+  title: "Teacher's Guide — 10-Day Programme",
+  tagline: "Lesson scripts for teaching the team, one day at a time.",
+  description:
+    "Ready-to-teach lesson plans for the 10-day intern programme. Each day has a timed agenda, plain-English explanations to say aloud, whiteboard diagrams, real code walked line by line, questions to ask the class, and homework.",
+  icon: "GraduationCap",
+  chapterSlugs: tgChapters.map((c) => c.slug),
+};
+
+export const teacherChapters: Chapter[] = tgChapters;
+
+export function getTeacherChapter(slug: string): Chapter | undefined {
+  return tgChapters.find((c) => c.slug === slug);
+}
 
 export const course: Course = {
   title: "The SnapServe Book",

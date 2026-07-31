@@ -5,7 +5,7 @@ import { useInternStore } from "@/hooks/use-intern";
 import { getDeviceId } from "@/lib/device-id";
 
 const PERKS = [
-  { icon: FileText,      text: "99 chapters across 22 modules" },
+  { icon: FileText,      text: "98 chapters across 21 modules" },
   { icon: FlaskConical,  text: "189 annotated source files in File Explorer" },
   { icon: GraduationCap, text: "Final exam to test your understanding" },
   { icon: Trophy,        text: "Named certificate of completion" },

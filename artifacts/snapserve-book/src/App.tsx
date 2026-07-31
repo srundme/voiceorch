@@ -21,11 +21,12 @@ import Certificate from "@/pages/Certificate";
 import Bookmarks from "@/pages/Bookmarks";
 import FileExplorer from "@/pages/FileExplorer";
 import VoiceathonPlaybook from "@/pages/voiceathon-playbook";
+import { TeacherGuideIndex, TeacherGuideChapter } from "@/pages/TeacherGuide";
 
 const queryClient = new QueryClient();
 
 // Public routes that bypass the InternGate registration screen
-const PUBLIC_PATHS = ["/voiceathon"];
+const PUBLIC_PATHS = ["/voiceathon", "/teach"];
 
 function AppContent() {
   const [location] = useLocation();
@@ -41,6 +42,8 @@ function AppContent() {
     return (
       <Switch>
         <Route path="/voiceathon" component={VoiceathonPlaybook} />
+        <Route path="/teach" component={TeacherGuideIndex} />
+        <Route path="/teach/:slug" component={TeacherGuideChapter} />
       </Switch>
     );
   }

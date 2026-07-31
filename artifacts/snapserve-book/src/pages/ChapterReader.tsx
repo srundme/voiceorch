@@ -13,7 +13,7 @@ import { ConnectionsBlockRenderer } from "@/components/blocks/ConnectionsBlockRe
 import { CalloutBlockRenderer, KeyTakeawaysBlockRenderer } from "@/components/blocks/CalloutBlockRenderer";
 import { useAnnotationsStore } from "@/hooks/use-annotations";
 
-function BlockRenderer({ blocks }: { blocks: any[] }) {
+export function BlockRenderer({ blocks }: { blocks: any[] }) {
   return (
     <div className="space-y-12">
       {blocks.map((block, idx) => (
