@@ -749,3 +749,27 @@ id = "vpCzg_P_Xq_wF72G1kJWu"
 uri = "file://attached_assets/luma-poster-49.jpg"
 type = "image"
 title = "Voice-a-thon Poster 49 — Event Stage (Dark)"
+
+[[outputs]]
+id = "oaZnPmvR73dQXKNQXzpW_"
+uri = "file://attached_assets/luma-poster-50.jpg"
+type = "image"
+title = "Voice-a-thon Poster 50 — Builders Celebrating (fixed)"
+
+[[outputs]]
+id = "EYMgc8UcIWHiTnmZK2Y8p"
+uri = "file://attached_assets/luma-poster-51.jpg"
+type = "image"
+title = "Voice-a-thon Poster 51 — Testing the Voice Agent"
+
+[[outputs]]
+id = "wYhBE-ONoi76rRfoHmdLc"
+uri = "file://attached_assets/luma-poster-52.jpg"
+type = "image"
+title = "Voice-a-thon Poster 52 — Demo to the Judge"
+
+[[outputs]]
+id = "xFSR71FASYq-P6RSAhfCM"
+uri = "file://attached_assets/luma-poster-53.jpg"
+type = "image"
+title = "Voice-a-thon Poster 53 — Coder in the Zone"
