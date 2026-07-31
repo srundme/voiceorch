@@ -821,3 +821,27 @@ id = "gzixe54Y-4AQPuQ-a8BEP"
 uri = "file://attached_assets/luma-poster-53c.jpg"
 type = "image"
 title = "Voice-a-thon Poster 53 — Coder in the Zone (final colors)"
+
+[[outputs]]
+id = "E3oo6U4hsjmigt2Pa242c"
+uri = "file://attached_assets/luma-poster-50d.jpg"
+type = "image"
+title = "Voice-a-thon Poster 50 — Builders Celebrating (updated copy)"
+
+[[outputs]]
+id = "_UfNKlHJUFV22viZtrQkB"
+uri = "file://attached_assets/luma-poster-51d.jpg"
+type = "image"
+title = "Voice-a-thon Poster 51 — Testing the Voice Agent (updated copy)"
+
+[[outputs]]
+id = "HH_nqipxyap3kcfA76fJj"
+uri = "file://attached_assets/luma-poster-52d.jpg"
+type = "image"
+title = "Voice-a-thon Poster 52 — Demo to the Judge (updated copy)"
+
+[[outputs]]
+id = "K4VowghJ4PawhlZPW9kg8"
+uri = "file://attached_assets/luma-poster-53d.jpg"
+type = "image"
+title = "Voice-a-thon Poster 53 — Coder in the Zone (updated copy)"
