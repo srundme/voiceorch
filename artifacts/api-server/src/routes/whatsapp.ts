@@ -50,6 +50,7 @@ function formatConnection(row: typeof whatsappConnectionsTable.$inferSelect, opt
     metaConnected: Boolean(row.metaAccessToken && row.metaPhoneNumberId),
     metaPhoneNumberId: row.metaPhoneNumberId,
     metaWabaId: row.metaWabaId,
+    metaApiBase: row.metaApiBase ?? null,
     metaTemplates: row.metaTemplates ?? {},
     active: row.active,
     lastInboundAt: row.lastInboundAt?.toISOString() ?? null,
@@ -175,6 +176,7 @@ router.post("/whatsapp/connections", requireAuth, async (req, res): Promise<void
     metaAccessToken?: string | null;
     metaPhoneNumberId?: string | null;
     metaWabaId?: string | null;
+    metaApiBase?: string | null;
     metaTemplates?: Record<string, unknown>;
   };
 
@@ -226,6 +228,7 @@ router.post("/whatsapp/connections", requireAuth, async (req, res): Promise<void
     metaAccessToken: body.metaAccessToken?.replace(/\s+/g, "") ? encryptKey(body.metaAccessToken.replace(/\s+/g, "")) : null,
     metaPhoneNumberId: body.metaPhoneNumberId?.trim() || null,
     metaWabaId: body.metaWabaId?.trim() || null,
+    metaApiBase: body.metaApiBase?.trim() || null,
     metaTemplates: normalizeMetaTemplates(body.metaTemplates),
     active: true,
   }).returning();
@@ -279,6 +282,9 @@ router.patch("/whatsapp/connections/:id", requireAuth, async (req, res): Promise
   if (typeof body["metaWabaId"] === "string" || body["metaWabaId"] === null) {
     updates.metaWabaId = typeof body["metaWabaId"] === "string" ? body["metaWabaId"].trim() || null : null;
   }
+  if (typeof body["metaApiBase"] === "string" || body["metaApiBase"] === null) {
+    updates.metaApiBase = typeof body["metaApiBase"] === "string" ? body["metaApiBase"].trim() || null : null;
+  }
   if (body["metaTemplates"] !== undefined) updates.metaTemplates = normalizeMetaTemplates(body["metaTemplates"]);
 
   const [row] = await db.update(whatsappConnectionsTable)
@@ -321,6 +327,7 @@ router.post("/whatsapp/meta/templates", requireAuth, async (req, res): Promise<v
     wabaId?: string;
     phoneNumberId?: string;
     connectionId?: string;
+    apiBase?: string;
   };
 
   // Meta tokens are a single unbroken string — pasted tokens often pick up
@@ -329,6 +336,7 @@ router.post("/whatsapp/meta/templates", requireAuth, async (req, res): Promise<v
   let token = (body.accessToken ?? "").replace(/\s+/g, "");
   let wabaId = (body.wabaId ?? "").trim();
   let phoneNumberId = (body.phoneNumberId ?? "").trim();
+  let apiBase = (body.apiBase ?? "").trim();
 
   if ((!token || !wabaId) && body.connectionId) {
     const [conn] = await db
@@ -348,6 +356,7 @@ router.post("/whatsapp/meta/templates", requireAuth, async (req, res): Promise<v
       }
       wabaId = wabaId || (conn.metaWabaId ?? "");
       phoneNumberId = phoneNumberId || (conn.metaPhoneNumberId ?? "");
+      apiBase = apiBase || (conn.metaApiBase ?? "");
     }
   }
 
@@ -358,8 +367,8 @@ router.post("/whatsapp/meta/templates", requireAuth, async (req, res): Promise<v
 
   try {
     const [templates, phoneCheck] = await Promise.all([
-      fetchMetaTemplates(token, wabaId),
-      phoneNumberId ? verifyMetaPhoneNumber(token, phoneNumberId) : Promise.resolve(null),
+      fetchMetaTemplates(token, wabaId, apiBase || null),
+      phoneNumberId ? verifyMetaPhoneNumber(token, phoneNumberId, apiBase || null) : Promise.resolve(null),
     ]);
     if (phoneCheck && !phoneCheck.ok) {
       res.status(400).json({ error: `Phone number ID check failed: ${phoneCheck.error}` });

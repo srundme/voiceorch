@@ -230,6 +230,7 @@ export async function dispatchWhatsappCallEnded(
           toPhone: phone,
           template: tpl,
           params,
+          apiBase: conn.metaApiBase,
         });
         await db.update(whatsappConnectionsTable)
           .set(result.ok
@@ -395,6 +396,7 @@ export async function sendMidCallWhatsapp(opts: {
       toPhone: phone,
       template: tpl,
       params,
+      apiBase: conn.metaApiBase,
     });
     await db.update(whatsappConnectionsTable)
       .set(result.ok

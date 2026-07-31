@@ -11,6 +11,17 @@ import { logger } from "../../lib/logger.js";
 
 const GRAPH_BASE = "https://graph.facebook.com/v21.0";
 
+/**
+ * Some clients use BSP proxy panels (e.g. whatsapi.in) that expose a
+ * Graph-compatible API at their own base URL. When a connection stores a
+ * custom API base we hit that instead of graph.facebook.com.
+ */
+export function resolveApiBase(apiBase?: string | null): string {
+  const b = (apiBase ?? "").trim().replace(/\/+$/, "");
+  if (!b) return GRAPH_BASE;
+  return /^https?:\/\//i.test(b) ? b : `https://${b}`;
+}
+
 export interface MetaTemplateInfo {
   name: string;
   language: string;
@@ -36,10 +47,11 @@ function graphError(json: unknown, status: number): string {
 export async function fetchMetaTemplates(
   accessToken: string,
   wabaId: string,
+  apiBase?: string | null,
 ): Promise<MetaTemplateInfo[]> {
   const out: MetaTemplateInfo[] = [];
   let url: string | null =
-    `${GRAPH_BASE}/${encodeURIComponent(wabaId.trim())}/message_templates` +
+    `${resolveApiBase(apiBase)}/${encodeURIComponent(wabaId.trim())}/message_templates` +
     `?fields=name,status,language,category,components&limit=100`;
 
   // Paginate defensively (cap 5 pages / 500 templates)
@@ -82,10 +94,11 @@ export async function fetchMetaTemplates(
 export async function verifyMetaPhoneNumber(
   accessToken: string,
   phoneNumberId: string,
+  apiBase?: string | null,
 ): Promise<{ ok: true; displayPhone: string | null; verifiedName: string | null } | { ok: false; error: string }> {
   try {
     const res = await fetch(
-      `${GRAPH_BASE}/${encodeURIComponent(phoneNumberId.trim())}?fields=display_phone_number,verified_name`,
+      `${resolveApiBase(apiBase)}/${encodeURIComponent(phoneNumberId.trim())}?fields=display_phone_number,verified_name`,
       { headers: { Authorization: `Bearer ${accessToken}` }, signal: AbortSignal.timeout(15_000) },
     );
     const json = (await res.json().catch(() => null)) as {
@@ -125,6 +138,7 @@ export async function sendMetaTemplate(opts: {
   toPhone: string;
   template: MetaTemplateChoice;
   params: string[];
+  apiBase?: string | null;
 }): Promise<{ ok: true; messageId: string | null } | { ok: false; error: string }> {
   const to = opts.toPhone.replace(/[^\d]/g, ""); // Meta wants digits, no '+'
   const body = {
@@ -147,7 +161,7 @@ export async function sendMetaTemplate(opts: {
 
   try {
     const res = await fetch(
-      `${GRAPH_BASE}/${encodeURIComponent(opts.phoneNumberId.trim())}/messages`,
+      `${resolveApiBase(opts.apiBase)}/${encodeURIComponent(opts.phoneNumberId.trim())}/messages`,
       {
         method: "POST",
         headers: {

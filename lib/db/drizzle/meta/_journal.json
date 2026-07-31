@@ -596,6 +596,13 @@
       "when": 1790000000000,
       "tag": "0084_whatsapp_meta_cloud_api",
       "breakpoints": true
+    },
+    {
+      "idx": 85,
+      "version": "7",
+      "when": 1790100000000,
+      "tag": "0085_whatsapp_meta_api_base",
+      "breakpoints": true
     }
   ]
 }

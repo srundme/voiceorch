@@ -1118,6 +1118,7 @@ export default function WhatsAppPage() {
   const [metaToken, setMetaToken] = useState("");
   const [metaPhoneId, setMetaPhoneId] = useState("");
   const [metaWabaId, setMetaWabaId] = useState("");
+  const [metaApiBase, setMetaApiBase] = useState("");
   const [metaTplList, setMetaTplList] = useState<MetaTplInfo[] | null>(null);
   const [metaFetching, setMetaFetching] = useState(false);
   const [metaPhoneInfo, setMetaPhoneInfo] = useState<string | null>(null);
@@ -1137,6 +1138,7 @@ export default function WhatsAppPage() {
             accessToken: metaToken.trim() || undefined,
             wabaId: metaWabaId.trim() || undefined,
             phoneNumberId: metaPhoneId.trim() || undefined,
+            apiBase: metaApiBase.trim() || undefined,
             connectionId,
           }),
           headers: { "Content-Type": "application/json" },
@@ -1228,6 +1230,18 @@ export default function WhatsAppPage() {
           <Input className="mt-1 h-9 font-mono text-xs" placeholder="WABA ID" value={metaWabaId} onChange={(e) => setMetaWabaId(e.target.value)} />
         </div>
       </div>
+      <div>
+        <Label className="text-xs">API base URL (optional)</Label>
+        <Input
+          className="mt-1 h-9 font-mono text-xs"
+          placeholder="https://graph.facebook.com/v21.0 (default) — or your panel's API URL"
+          value={metaApiBase}
+          onChange={(e) => setMetaApiBase(e.target.value)}
+        />
+        <p className="text-[11px] text-muted-foreground mt-1">
+          Only needed if your token comes from a reseller panel (BSP) like whatsapi.in — paste the panel's "API URL" here. Leave blank for a real Meta token.
+        </p>
+      </div>
       <Button
         type="button"
         variant="outline"
@@ -1302,6 +1316,7 @@ export default function WhatsAppPage() {
                 metaAccessToken: metaToken.trim() || null,
                 metaPhoneNumberId: metaPhoneId.trim() || null,
                 metaWabaId: metaWabaId.trim() || null,
+                metaApiBase: metaApiBase.trim() || null,
                 metaTemplates: metaTemplatesPayload(),
               }
             : {}),
@@ -1405,6 +1420,7 @@ export default function WhatsAppPage() {
                           setMetaToken("");
                           setMetaPhoneId(c.metaPhoneNumberId ?? "");
                           setMetaWabaId(c.metaWabaId ?? "");
+                          setMetaApiBase((c as any).metaApiBase ?? "");
                           setMetaTplList(null);
                           setMetaPhoneInfo(null);
                           setMetaSelSummary(c.metaTemplates?.call_summary ? JSON.stringify(c.metaTemplates.call_summary) : "");
@@ -1667,9 +1683,10 @@ export default function WhatsAppPage() {
                           ...(metaToken.trim() ? { metaAccessToken: metaToken.trim() } : {}),
                           metaPhoneNumberId: metaPhoneId.trim() || null,
                           metaWabaId: metaWabaId.trim() || null,
+                          metaApiBase: metaApiBase.trim() || null,
                           metaTemplates: metaTemplatesPayload(),
                         }
-                      : { metaAccessToken: null, metaPhoneNumberId: null, metaWabaId: null, metaTemplates: {} }),
+                      : { metaAccessToken: null, metaPhoneNumberId: null, metaWabaId: null, metaApiBase: null, metaTemplates: {} }),
                   },
                 });
               }}

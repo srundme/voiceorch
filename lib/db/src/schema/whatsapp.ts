@@ -54,6 +54,8 @@ export const whatsappConnectionsTable = pgTable("whatsapp_connections", {
   metaAccessToken: text("meta_access_token"),
   metaPhoneNumberId: text("meta_phone_number_id"),
   metaWabaId: text("meta_waba_id"),
+  /** Optional Graph-compatible API base URL (BSP proxy panels e.g. whatsapi.in). Null = graph.facebook.com. */
+  metaApiBase: text("meta_api_base"),
   /** Hint → approved Meta template picked by the user (fetched live from Graph API). */
   metaTemplates: jsonb("meta_templates").$type<Record<string, { name: string; language: string; paramCount: number }>>().notNull().default({}),
   active: boolean("active").notNull().default(true),
