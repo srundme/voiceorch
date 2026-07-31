@@ -3475,7 +3475,7 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
   const nav: { id: AdvSection; icon: React.ReactNode; label: string }[] = [
     { id: "engine",       icon: <Timer className="h-3.5 w-3.5" />,       label: "Engine"       },
     { id: "limits",       icon: <Gauge className="h-3.5 w-3.5" />,       label: "Limits"       },
-    { id: "integrations", icon: <Webhook className="h-3.5 w-3.5" />,     label: "Integrations" },
+    { id: "integrations", icon: <BarChart3 className="h-3.5 w-3.5" />,   label: "Analytics" },
     { id: "compliance",   icon: <ShieldCheck className="h-3.5 w-3.5" />, label: "Compliance"   },
   ];
 
