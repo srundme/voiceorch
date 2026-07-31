@@ -1351,32 +1351,10 @@ export default function WhatsAppPage() {
 
       <NativeSection agents={agents} onChooseBsp={() => openBspCreate("webhook")} onChooseMeta={() => openBspCreate("meta")} />
 
-      {/* Bring your BSP */}
+      {/* Your connections */}
+      {(connections.length > 0 || createdSecret || isLoading) && (
       <div className="mx-6 pb-8 space-y-4" id="bsp-adopter">
-        <button
-          type="button"
-          className="flex items-center gap-1.5 text-sm font-semibold text-muted-foreground hover:text-foreground"
-          onClick={() => setShowByo((v) => !v)}
-        >
-          {byoVisible ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-          Bring your BSP
-          {connections.length > 0 && (
-            <Badge variant="secondary" className="text-[10px] ml-1">{connections.length} active</Badge>
-          )}
-        </button>
-
-        {byoVisible && (
           <div className="space-y-5">
-            <div className="flex items-center justify-between">
-              <p className="text-xs text-muted-foreground max-w-xl">
-                Connect any WhatsApp BSP with a webhook + template names. Agents with a BSP connection use it for post-call (overrides Instant).
-              </p>
-              <Button size="sm" variant="outline" onClick={() => openBspCreate("webhook")}>
-                <Plus className="w-4 h-4 mr-1.5" />
-                Add connection
-              </Button>
-            </div>
-
             {createdSecret && (
               <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">
                 <p className="font-medium text-amber-200">Outbound signing secret (copy now — shown once)</p>
@@ -1390,21 +1368,9 @@ export default function WhatsAppPage() {
               </div>
             )}
 
-            <BspAdopterGuide />
-
             {isLoading ? (
               <p className="text-sm text-muted-foreground">Loading…</p>
-            ) : connections.length === 0 ? (
-              <EmptyState
-                icon={<MessageCircle className="w-5 h-5" />}
-                title="No BSP connections"
-                description="Only needed if your BSP should send WhatsApp. Otherwise use Instant or Business above."
-                action={{
-                  label: "Add connection",
-                  onClick: openBspCreate,
-                }}
-              />
-            ) : (
+            ) : connections.length === 0 ? null : (
               <div className="space-y-3">
                 <h2 className="text-sm font-semibold">Your connections</h2>
                 {connections.map((c) => (
@@ -1514,8 +1480,8 @@ export default function WhatsAppPage() {
               </div>
             )}
           </div>
-        )}
       </div>
+      )}
 
       {/* Create */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
