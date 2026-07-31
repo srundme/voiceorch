@@ -218,5 +218,10 @@ export function resolveMetaTemplate(
   if (direct?.name && direct.language) return direct;
   const fallback = metaTemplates["call_summary"];
   if (fallback?.name && fallback.language) return fallback;
+  // Last resort: any linked template on any slot — sending something beats
+  // silently failing when the user only linked e.g. booking_confirmed.
+  for (const v of Object.values(metaTemplates)) {
+    if (v?.name && v.language) return v;
+  }
   return null;
 }

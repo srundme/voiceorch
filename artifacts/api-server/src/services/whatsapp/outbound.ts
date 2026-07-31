@@ -216,6 +216,10 @@ export async function dispatchWhatsappCallEnded(
         );
         if (!tpl) {
           logger.info({ callId, connectionId: conn.id, hint }, "whatsapp-meta: no template linked for hint — skipped");
+          await db.update(whatsappConnectionsTable)
+            .set({ lastError: "No template linked — open the connection (pencil icon), fetch templates and pick one for Call summary", updatedAt: new Date() })
+            .where(eq(whatsappConnectionsTable.id, conn.id))
+            .catch(() => {});
           continue;
         }
         const params = buildMetaParams(hint, {
@@ -384,7 +388,12 @@ export async function sendMidCallWhatsapp(opts: {
       safeHint,
     );
     if (!tpl) {
-      return { ok: false, error: `No Meta template linked for ${safeHint} on this connection`, via: "byo" };
+      const err = `No Meta template linked for ${safeHint} on this connection — open the connection (pencil icon), fetch templates and pick one for Call summary`;
+      await db.update(whatsappConnectionsTable)
+        .set({ lastError: err.slice(0, 500), updatedAt: new Date() })
+        .where(eq(whatsappConnectionsTable.id, conn.id))
+        .catch(() => {});
+      return { ok: false, error: err, via: "byo" };
     }
     const params = buildMetaParams(safeHint, {
       businessName: opts.agentName || "SnapServe",
