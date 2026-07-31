@@ -10,7 +10,7 @@ import {
   Play, Pause,
   Timer, ShieldCheck, Layers, Gauge, MicOff, HelpCircle, PhoneOff, Mail, MessageCircle,
   History, GitBranch, Eye, RotateCcw, ChevronUp, AlertTriangle, ArrowLeftRight,
-  Upload, Archive, Info, AlertCircle, Calendar, Star,
+  Upload, Archive, Info, AlertCircle, Calendar, Star, Rocket,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { motion } from "framer-motion";
@@ -97,17 +97,15 @@ const DASH_API   = `${_DASH_BASE}/api`;
 
 /* ── Types ──────────────────────────────────────────────────────────────────── */
 
-type TabId = "overview" | "channels" | "prompt" | "voice" | "tools" | "analysis" | "voicemail" | "advanced" | "versions";
+type TabId = "overview" | "prompt" | "voice" | "tools" | "launch" | "voicemail" | "advanced" | "versions";
 
 interface TabDef { id: TabId; label: string; icon: React.ReactNode }
 
 const TABS: TabDef[] = [
   { id: "overview",    label: "Agent",       icon: <Bot className="h-3.5 w-3.5" /> },
-  { id: "channels",    label: "Channels",    icon: <Phone className="h-3.5 w-3.5" /> },
   { id: "prompt",      label: "Prompt",      icon: <FileText className="h-3.5 w-3.5" /> },
   { id: "voice",       label: "Voice",       icon: <Mic className="h-3.5 w-3.5" /> },
   { id: "tools",       label: "Tools",       icon: <Wrench className="h-3.5 w-3.5" /> },
-  { id: "analysis",    label: "Journey",     icon: <GitBranch className="h-3.5 w-3.5" /> },
   { id: "voicemail",   label: "Voicemail",   icon: <VoicemailIcon className="h-3.5 w-3.5" /> },
   { id: "advanced",    label: "Advanced",    icon: <SlidersHorizontal className="h-3.5 w-3.5" /> },
   { id: "versions",    label: "Versions",    icon: <History className="h-3.5 w-3.5" /> },
@@ -5972,17 +5970,17 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
     if (tabContentRef.current) {
       scrollPositions.current[activeTab] = tabContentRef.current.scrollTop;
     }
-    if (tabId !== "channels") setForceExpandEmail(false);
+    if (tabId !== "launch") setForceExpandEmail(false);
     setActiveTab(tabId);
   };
 
   const openEmailChannel = () => {
     setForceExpandEmail(true);
-    handleTabClick("channels");
+    handleTabClick("launch");
   };
 
   const openChannels = () => {
-    handleTabClick("channels");
+    handleTabClick("launch");
   };
 
   useEffect(() => {
@@ -6528,27 +6526,53 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
       <div className="flex flex-1 min-h-0">
         <Form {...form}>
           <div className="flex-1 flex flex-col min-w-0 min-h-0">
-            <div className="flex items-center gap-1 px-5 sm:px-6 border-b border-border/40 overflow-x-auto shrink-0 bg-background/80 backdrop-blur-sm">
-              {visibleTabs.map(tab => (
-                <button key={tab.id} onClick={() => handleTabClick(tab.id)}
-                  className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium whitespace-nowrap border-b-2 -mb-px transition-colors ${
-                    activeTab === tab.id
-                      ? "border-foreground text-foreground"
-                      : "border-transparent text-muted-foreground hover:text-foreground"
-                  }`}>
-                  {tab.icon}{tab.label}
+            <div className="flex items-center px-5 sm:px-6 border-b border-border/40 shrink-0 bg-background/80 backdrop-blur-sm">
+              {/* Tabs scroll horizontally; the Connect & Launch pill sits OUTSIDE
+                  the scroll container so it stays visible on narrow screens. */}
+              <div className="flex items-center gap-1 overflow-x-auto min-w-0 flex-1">
+                {visibleTabs.map(tab => (
+                  <button key={tab.id} onClick={() => handleTabClick(tab.id)}
+                    className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium whitespace-nowrap border-b-2 -mb-px transition-colors ${
+                      activeTab === tab.id
+                        ? "border-foreground text-foreground"
+                        : "border-transparent text-muted-foreground hover:text-foreground"
+                    }`}>
+                    {tab.icon}{tab.label}
+                  </button>
+                ))}
+              </div>
+              {/* Connect & Launch — distribution (channels + journey), kept apart
+                  from the agent-brain tabs so the builder stays focused. */}
+              <div className="shrink-0 py-1.5 pl-2">
+                <button
+                  type="button"
+                  onClick={() => handleTabClick("launch")}
+                  className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold whitespace-nowrap transition-colors border ${
+                    activeTab === "launch"
+                      ? "bg-foreground text-background border-foreground"
+                      : "bg-primary/10 text-primary border-primary/30 hover:bg-primary/15"
+                  }`}
+                >
+                  <Rocket className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Connect &amp; Launch</span>
+                  <span className="sm:hidden">Launch</span>
                 </button>
-              ))}
+              </div>
             </div>
 
             <div ref={tabContentRef} className="flex-1 min-h-0 overflow-y-auto">
               <form onSubmit={e => e.preventDefault()}>
                 {activeTab === "overview"  && <OverviewTab form={form} agent={agent} />}
-                {activeTab === "channels"  && <ChannelsTab form={form} agent={agent} forceExpandEmail={forceExpandEmail} />}
                 {activeTab === "prompt"    && <PromptTab form={form} />}
                 {activeTab === "voice"     && <VoiceTab form={form} />}
                 {activeTab === "tools"     && <ToolsTab form={form} agentId={agentId} />}
-                {activeTab === "analysis"  && <AnalysisTab form={form} agentId={agentId} onConfigureEmail={openEmailChannel} onOpenChannels={openChannels} />}
+                {activeTab === "launch"    && (
+                  <div>
+                    <ChannelsTab form={form} agent={agent} forceExpandEmail={forceExpandEmail} />
+                    <div className="border-t border-border/40 mt-2" />
+                    <AnalysisTab form={form} agentId={agentId} onConfigureEmail={openEmailChannel} onOpenChannels={openChannels} />
+                  </div>
+                )}
                 {activeTab === "voicemail" && <VoicemailTab form={form} />}
                 {activeTab === "advanced"  && <AdvancedTab form={form} agent={agent} />}
                 {activeTab === "versions"  && <VersionsTab agentId={agent.id} />}
