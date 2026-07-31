@@ -863,3 +863,15 @@ id = "80RQNCNQwR3yMTsr3MUv6"
 uri = "file://artifacts/snapserve-book/public/poster/art/pixel-founder-avatar.png"
 type = "image"
 title = "Your Avatar — Pixel Embroidery Style"
+
+[[outputs]]
+id = "LFcx_vUMY4D7gf-afVToC"
+uri = "file://artifacts/snapserve-book/public/poster/art/pixel-founder-avatar-2.png"
+type = "image"
+title = "Avatar Option A"
+
+[[outputs]]
+id = "WP3Z6GE8Ebblxw7x9bMBE"
+uri = "file://artifacts/snapserve-book/public/poster/art/pixel-founder-avatar-3.png"
+type = "image"
+title = "Avatar Option B"
