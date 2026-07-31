@@ -78,6 +78,18 @@ export class SpeakerVerifier {
   private handoffFired = false;
   private nextEnrollAttemptAt = 0;
   private samplingPaused = false;
+  /**
+   * Running mean of all confident same-speaker embeddings this call (enroll
+   * window + every strong verify window). The first call thus builds the
+   * voiceprint from the FULL call's speech, not just the first 2.5s; the
+   * refined mean is persisted once at call end via finalize().
+   */
+  private refSum: number[] | null = null;
+  private refCount = 0;
+  private refDirty = false;
+  private finalized = false;
+  /** Latched for the whole call — set on ANY handoff, never cleared, hard-blocks finalize(). */
+  private hadAnyHandoff = false;
   /** Require two consecutive low scores before handoff (reduces noise false-positives). */
   private lowScoreStreak = 0;
   private readonly callId: number;
@@ -169,6 +181,43 @@ export class SpeakerVerifier {
       .finally(() => { this.busy = false; });
   }
 
+  /**
+   * Persist the refined full-call voiceprint at call end. No-op unless the
+   * reference actually improved (>=1 strong verify window folded in) — the
+   * enroll-time upsert already saved the initial print. Never persists after
+   * a handoff fired (mixed speakers must not overwrite the caller's print).
+   */
+  async finalize(): Promise<void> {
+    if (this.finalized) return;
+    this.finalized = true;
+    // Hard block after ANY handoff this call — resetForNewSpeaker() clears
+    // handoffFired, so a re-enrolled second speaker must never be persisted
+    // under the original caller's phone record.
+    if (this.hadAnyHandoff) return;
+    // Let an in-flight enroll/verify settle so we snapshot the latest mean
+    // (bounded wait — never delay teardown by more than ~2s).
+    const waitDeadline = Date.now() + 2_000;
+    while (this.busy && Date.now() < waitDeadline) {
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    if (this.hadAnyHandoff) return;
+    if (!this.enrolled || !this.refDirty || this.handoffFired) return;
+    if (!this.phoneNumber || !this.reference?.length) return;
+    try {
+      await upsertCallerVoiceprint({
+        agentId: this.agentId,
+        phoneNumber: this.phoneNumber,
+        embedding: this.reference,
+      });
+      this.log.info(
+        { callId: this.callId, windows: this.refCount },
+        "Voice Memory: persisted refined full-call voiceprint",
+      );
+    } catch (err) {
+      this.log.warn({ callId: this.callId, err }, "Voice Memory: finalize persist failed");
+    }
+  }
+
   /** After confirmed handoff — re-enroll the new speaker as the reference. */
   resetForNewSpeaker(): void {
     this.reference = null;
@@ -176,6 +225,9 @@ export class SpeakerVerifier {
     this.handoffFired = false;
     this.lowScoreStreak = 0;
     this.nextEnrollAttemptAt = 0;
+    this.refSum = null;
+    this.refCount = 0;
+    this.refDirty = false;
     this.chunks = [];
     this.accumulated = 0;
     this.verifyChunks = [];
@@ -193,6 +245,9 @@ export class SpeakerVerifier {
     this.reference = emb;
     this.enrolled = true;
     this.nextEnrollAttemptAt = 0;
+    this.refSum = emb.slice();
+    this.refCount = 1;
+    this.refDirty = false;
 
     let personKey = "session-only";
     let linkedFromPhone: string | null = null;
@@ -232,6 +287,7 @@ export class SpeakerVerifier {
       const definite = result.similarity < VOICE_HANDOFF_THRESHOLD - 0.22;
       if (!this.handoffFired && (definite || this.lowScoreStreak >= 5)) {
         this.handoffFired = true;
+        this.hadAnyHandoff = true;
         this.onEvent({ type: "handoff", similarity: result.similarity });
       }
     } else {
@@ -242,7 +298,18 @@ export class SpeakerVerifier {
       ) {
         // Only adapt on strong same-speaker matches — mixed two-person audio
         // must not slowly rewrite the reference toward the second speaker.
-        this.reference = result.embedding;
+        // Fold the window into a running mean so the voiceprint converges on
+        // the whole call's speech instead of hopping to the latest window.
+        if (this.refSum && this.refSum.length === result.embedding.length) {
+          for (let i = 0; i < this.refSum.length; i++) {
+            this.refSum[i]! += result.embedding[i]!;
+          }
+          this.refCount++;
+          this.reference = this.refSum.map((v) => v / this.refCount);
+          this.refDirty = true;
+        } else {
+          this.reference = result.embedding;
+        }
       }
     }
   }

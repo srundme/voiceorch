@@ -143,3 +143,4 @@
 - [Spec-prefill prompt staleness](spec-prefill-staleness.md) — speculative LLM prefills bake in currentLang; a language switch on the final transcript must invalidate them or the reply is in the OLD language
 - [providers.apiKey decrypt-at-read](provider-apikey-decrypt.md) — column is AES-encrypted with plaintext passthrough; every read/forward site needs decryptKey() or newly-saved keys 401 while legacy plaintext keys mask the bug
 - [Plivo Stream XML text-content URL](plivo-stream-xml-text-content.md) — <Stream> takes the wss URL as element text; a <WebSocket url> child is silently ignored → answer→silence→drop with zero WS logs
+- [Voice memory full-call print + linked-memory injection](voice-memory-fullcall-linking.md) — first-call print refined via running mean of strong windows, persisted once at close (hard-blocked after ANY handoff); cross-number match injects old number's memory per-turn, cleared on handoff

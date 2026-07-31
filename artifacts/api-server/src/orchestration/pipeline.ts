@@ -936,6 +936,13 @@ export class OrchestrationPipeline implements VoiceSession {
   private voiceHandoffActive = false;
   private voiceLinkedFromPhone: string | null = null;
   private pendingVoiceLinkNote = false;
+  /**
+   * Compact caller-memory block loaded from the phone number the caller's
+   * VOICE matched (they are calling from a new number). Injected into the
+   * volatile per-turn tail every turn so the agent can serve them with their
+   * existing history. Cleared on speaker handoff.
+   */
+  private voiceLinkedMemoryBlock: string | null = null;
   /** Caller said they cannot hear the agent — next LLM turn must resume, not ask கேக்குதா. */
   private pendingAudioDifficultyNote = false;
   /** Caller asked to clarify the last topic (often mid-cut STT like "about the Kala Fit"). */
@@ -3451,6 +3458,11 @@ export class OrchestrationPipeline implements VoiceSession {
           },
           "Voice Memory: same voice matched across phone numbers",
         );
+        // Hand the matched person's memory to the live conversation ASAP:
+        // load the OLD number's caller memory and inject it from the next
+        // turn onward, so the agent serves them with their existing history
+        // even though this number has none.
+        void this.loadVoiceLinkedMemory(ev.linkedFromPhone);
       }
       return;
     }
@@ -3461,6 +3473,9 @@ export class OrchestrationPipeline implements VoiceSession {
       this.speakerChallengeSpoken = false;
       this.salutationCorrection = null;
       this.pendingVoiceLinkNote = false;
+      // A different person is now on the line — the voice-matched memory
+      // belongs to the previous speaker and must not leak to the new one.
+      this.voiceLinkedMemoryBlock = null;
       // Unlock gender so the new speaker can be re-detected.
       const gd = this.genderDetector as GenderDetectorChained | null;
       if (gd && typeof gd.resetForNewSpeaker === "function") {
@@ -3481,6 +3496,47 @@ export class OrchestrationPipeline implements VoiceSession {
         return;
       }
       void this.speakSpeakerHandoffChallenge();
+    }
+  }
+
+  /**
+   * Load caller memory saved under the voice-matched OLD phone number and
+   * build a compact block for per-turn injection. Best-effort, non-blocking —
+   * a failure just means the agent keeps the soft link note without history.
+   */
+  private async loadVoiceLinkedMemory(linkedPhone: string): Promise<void> {
+    try {
+      const { loadCallerContext } = await import("./callerMemory.js");
+      const ctx = await loadCallerContext(this.config.agentConfig.id, linkedPhone);
+      if (this.closed || this.voiceHandoffActive) return;
+
+      const lines: string[] = [];
+      const name = ctx.profile?.name ?? ctx.facts.find((f) => f.key === "name")?.value ?? null;
+      if (name) lines.push(`Name: ${name}`);
+      const summary = ctx.recentCalls.find((c) => c.summary)?.summary ?? ctx.profile?.summary ?? null;
+      if (summary) lines.push(`Previous call summary: ${String(summary).trim()}`);
+      for (const f of ctx.facts.slice(0, 15)) {
+        if (f.key === "name" || f.key === "language_pref" || f.confidence < 0.5) continue;
+        lines.push(`- ${f.key}: ${f.value}`);
+      }
+      if (!lines.length) return;
+
+      this.voiceLinkedMemoryBlock =
+        "=== VOICE-MATCHED CALLER MEMORY ===\n" +
+        "This caller is calling from a NEW number, but their voice matches a known caller. " +
+        "Their history from the previous number is below — use it naturally (do not re-ask known " +
+        "details), but confirm identity before revealing anything sensitive. Dates/relative words " +
+        "below are from PAST calls — recompute against the current date before speaking them.\n" +
+        lines.join("\n");
+      logger.info(
+        { callId: this.config.callId, facts: lines.length, hasSummary: !!summary },
+        "Voice Memory: linked-number caller memory loaded and injected for next turns",
+      );
+    } catch (err) {
+      logger.warn(
+        { callId: this.config.callId, err },
+        "Voice Memory: failed to load linked-number caller memory",
+      );
     }
   }
 
@@ -6693,6 +6749,11 @@ export class OrchestrationPipeline implements VoiceSession {
       systemPromptForTurn += `\n\n${VOICE_LINKED_PHONE_NOTE}`;
       this.pendingVoiceLinkNote = false;
     }
+    // Voice-matched caller history (new number, known voice) — persistent every
+    // turn while the same speaker stays on the line; cleared on handoff.
+    if (!this.voiceHandoffActive && this.voiceLinkedMemoryBlock) {
+      systemPromptForTurn += `\n\n${this.voiceLinkedMemoryBlock}`;
+    }
 
 
 
@@ -8519,6 +8580,8 @@ export class OrchestrationPipeline implements VoiceSession {
 
   close(): void {
     this.closed = true;
+    // Persist the refined full-call voiceprint (fire-and-forget; DB/HTTP only).
+    void this.speakerVerifier?.finalize();
     this.tts.close?.();
     if (this.ambientInterval) {
       clearInterval(this.ambientInterval);
