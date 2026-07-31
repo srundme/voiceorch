@@ -689,3 +689,39 @@ id = "zHo9V-bPo-iNs79R3DrJ8"
 uri = "file://attached_assets/luma-poster-39.jpg"
 type = "image"
 title = "Voice-a-thon Poster 39 — sarvam family edition"
+
+[[outputs]]
+id = "KF7JTNUeL82brlSr1gvs9"
+uri = "file://attached_assets/luma-poster-40.jpg"
+type = "image"
+title = "Voice-a-thon Poster 40"
+
+[[outputs]]
+id = "kGCR5Y10PE_x0HKhHTObG"
+uri = "file://attached_assets/luma-poster-41.jpg"
+type = "image"
+title = "Voice-a-thon Poster 41"
+
+[[outputs]]
+id = "iwymKAMxWoqqUpVYumaa-"
+uri = "file://attached_assets/luma-poster-42.jpg"
+type = "image"
+title = "Voice-a-thon Poster 42"
+
+[[outputs]]
+id = "sdVZwVmykSuYBXsJZis1t"
+uri = "file://attached_assets/luma-poster-43.jpg"
+type = "image"
+title = "Voice-a-thon Poster 43"
+
+[[outputs]]
+id = "pC4WXkVfYeSMRn4sh0BS8"
+uri = "file://attached_assets/luma-poster-44.jpg"
+type = "image"
+title = "Voice-a-thon Poster 44"
+
+[[outputs]]
+id = "4MKwplFtXIA0X7lRD4kns"
+uri = "file://attached_assets/luma-poster-45.jpg"
+type = "image"
+title = "Voice-a-thon Poster 45"
