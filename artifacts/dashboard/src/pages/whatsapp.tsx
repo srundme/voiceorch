@@ -1324,7 +1324,9 @@ export default function WhatsAppPage() {
         headers: { "Content-Type": "application/json" },
       }),
     onSuccess: (row) => {
-      setCreatedSecret(row.outboundSecret ?? null);
+      // The signing secret is only relevant for webhook (BSP/Zapier) sending —
+      // don't confuse Meta API users with it.
+      setCreatedSecret(row.metaPhoneNumberId ? null : row.outboundSecret ?? null);
       void qc.invalidateQueries({ queryKey: ["whatsapp-connections"] });
       toast({ title: "WhatsApp connection created" });
       setCreateOpen(false);
@@ -1456,23 +1458,29 @@ export default function WhatsAppPage() {
                         </div>
                       </div>
                     )}
-                    <div>
-                      <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                        Outbound webhook — SnapServe POSTs here to send a template
-                      </Label>
-                      {c.outboundWebhookUrl ? (
-                        <div className="mt-1 flex items-center gap-2 rounded-md bg-muted/40 px-2.5 py-1.5">
-                          <code className="text-[11px] flex-1 break-all">{c.outboundWebhookUrl}</code>
-                          <a href={c.outboundWebhookUrl} target="_blank" rel="noreferrer" className="text-muted-foreground hover:text-foreground">
-                            <ExternalLink className="w-3.5 h-3.5" />
-                          </a>
-                        </div>
-                      ) : (
-                        <p className="mt-1 text-[11px] text-muted-foreground">
-                          Not set — edit to add your BSP webhook for sending.
-                        </p>
-                      )}
-                    </div>
+                    {c.metaPhoneNumberId && !c.outboundWebhookUrl ? (
+                      <p className="text-[11px] text-muted-foreground">
+                        Sending via Meta API · Phone ID {c.metaPhoneNumberId}
+                      </p>
+                    ) : (
+                      <div>
+                        <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                          Outbound webhook — SnapServe POSTs here to send a template
+                        </Label>
+                        {c.outboundWebhookUrl ? (
+                          <div className="mt-1 flex items-center gap-2 rounded-md bg-muted/40 px-2.5 py-1.5">
+                            <code className="text-[11px] flex-1 break-all">{c.outboundWebhookUrl}</code>
+                            <a href={c.outboundWebhookUrl} target="_blank" rel="noreferrer" className="text-muted-foreground hover:text-foreground">
+                              <ExternalLink className="w-3.5 h-3.5" />
+                            </a>
+                          </div>
+                        ) : (
+                          <p className="mt-1 text-[11px] text-muted-foreground">
+                            Not set — edit to add your BSP webhook for sending.
+                          </p>
+                        )}
+                      </div>
+                    )}
                     {(c.templates?.call_summary || c.templates?.booking_confirmed || c.templates?.callback_scheduled) && (
                       <p className="text-[11px] text-muted-foreground font-mono">
                         Templates:{" "}
