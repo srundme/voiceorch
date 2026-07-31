@@ -863,6 +863,17 @@ function ChannelsTab({ form, agent, forceExpandEmail = false }: { form: any; age
     staleTime: 60_000,
   });
 
+  // BSP/Meta connections are a separate store from the native channel — an
+  // active connection for this agent means WhatsApp IS working for it.
+  const { data: waConnections } = useQuery({
+    queryKey: ["builder-whatsapp-connections", agent?.id],
+    enabled: !!agent?.id,
+    queryFn: () => customFetch<Array<{ id: string; name: string; active: boolean; agentId: number | null; metaPhoneNumberId?: string | null; outboundWebhookUrl?: string | null }>>(`${DASH_API}/whatsapp/connections`),
+    staleTime: 60_000,
+  });
+  const agentConnection = (waConnections ?? []).find((c) => c.active && c.agentId === agent?.id)
+    ?? (waConnections ?? []).find((c) => c.active) ?? null;
+
   return (
     <div className="p-6 space-y-8">
       <section className="space-y-2">
@@ -906,6 +917,18 @@ function ChannelsTab({ form, agent, forceExpandEmail = false }: { form: any; age
           </div>
           {waLoading ? (
             <Skeleton className="h-20 w-full rounded-xl" />
+          ) : agentConnection ? (
+            <div className="rounded-lg border border-border/40 bg-background/40 p-3 space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">{agentConnection.name || "WhatsApp connection"}</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    {agentConnection.metaPhoneNumberId ? "Your WhatsApp Business number (Meta API)" : "BSP webhook connection"}
+                  </p>
+                </div>
+                <StatusBadge ready readyLabel="Active" emptyLabel="Inactive" />
+              </div>
+            </div>
           ) : waData?.channel ? (
             <div className="rounded-lg border border-border/40 bg-background/40 p-3 space-y-2">
               <div className="flex items-center justify-between gap-3">
