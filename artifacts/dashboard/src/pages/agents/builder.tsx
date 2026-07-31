@@ -810,6 +810,17 @@ function JourneyReadinessPanel({ form, agent }: { form: any; agent: any }) {
     staleTime: 60_000,
   });
 
+  // Meta/BSP connections count as a working WhatsApp channel too.
+  const { data: waConnData } = useQuery({
+    queryKey: ["builder-whatsapp-connections", agent?.id],
+    enabled: !!agent?.id,
+    queryFn: () => customFetch<{ connections: Array<{ active: boolean; agentId: number | null }> }>(`${DASH_API}/whatsapp/connections`),
+    staleTime: 60_000,
+  });
+  const waConnActive = (Array.isArray(waConnData?.connections) ? waConnData.connections : [])
+    .some((c) => c.active && (c.agentId === agent?.id || c.agentId == null));
+  const waReady = !!waData?.channel?.active || waConnActive;
+
   useEffect(() => {
     const phoneNumbers = Array.isArray(phoneNumbersRaw) ? phoneNumbersRaw : [];
     setHasInboundPhone(phoneNumbers.some((p: any) => p.agentId === agent?.id));
@@ -819,10 +830,10 @@ function JourneyReadinessPanel({ form, agent }: { form: any; agent: any }) {
     { label: "Voice + prompt", ready: !!(form.watch("name") ?? "").trim() && !!(form.watch("systemPrompt") ?? "").trim() },
     { label: "Knowledge attached", ready: knowledgeIds.length > 0 },
     { label: "Phone channel", ready: hasInboundPhone },
-    { label: "WhatsApp channel", ready: !!waData?.channel?.active },
+    { label: "WhatsApp channel", ready: waReady },
     { label: "Email channel", ready: emailReady },
     { label: "Booking channel", ready: !!schedulingCalendarId && !!schedulingEventTypeId },
-    { label: "Follow-up output", ready: !!waData?.channel?.active || emailReady || !!webhookUrl },
+    { label: "Follow-up output", ready: waReady || emailReady || !!webhookUrl },
   ];
 
   const readyCount = checks.filter((c) => c.ready).length;
