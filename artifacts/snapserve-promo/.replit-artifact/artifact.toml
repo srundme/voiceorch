@@ -1,0 +1,27 @@
+kind = "video"
+previewPath = "/snapserve-promo/"
+title = "SnapServe Voice-a-thon Promo"
+version = "1.0.0"
+id = "artifacts/snapserve-promo"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/snapserve-promo/" ]
+localPort = 18244
+
+[services.development]
+run = "pnpm --filter @workspace/snapserve-promo run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/snapserve-promo", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/snapserve-promo/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "18244"
+BASE_PATH = "/snapserve-promo/"

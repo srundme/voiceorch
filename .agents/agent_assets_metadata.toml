@@ -971,3 +971,9 @@ id = "7uafbWuyCcdbobpHCaE05"
 uri = "file://attached_assets/luma-poster-54c.jpg"
 type = "image"
 title = "Luma Poster — Capitalized"
+
+[[outputs]]
+id = "X1NgSShMj_kscuG8K9dLu"
+uri = "file://artifacts/snapserve-promo/public/audio/bg_music.mp3"
+type = "audio"
+title = "background music"
