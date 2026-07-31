@@ -6,6 +6,93 @@ const COPY = `SNAPSERVE_API_KEY=sk_live_YOUR_KEY
 SNAPSERVE_BASE_URL=https://app.snapserve.ai/api
 # Claude Desktop mcpServers.snapserve → node …/lib/snapserve-mcp/dist/index.js`;
 
+const MCP_JSON = `{
+  "mcpServers": {
+    "snapserve": {
+      "command": "node",
+      "args": ["/ABSOLUTE/PATH/TO/voiceorch/lib/snapserve-mcp/dist/index.js"],
+      "env": {
+        "SNAPSERVE_API_KEY": "sk_live_YOUR_KEY",
+        "SNAPSERVE_BASE_URL": "https://app.snapserve.ai/api"
+      }
+    }
+  }
+}`;
+
+/** Sarvam-style "Available tools" cards — grouped view of the 67 MCP tools. */
+const TOOL_GROUPS: { title: string; desc: string; tools: string }[] = [
+  { title: "Agents",            desc: "Create, update, toggle and version voice agents in plain English.",            tools: "list_agents · create_agent · get_agent · toggle_agent" },
+  { title: "Calls",             desc: "Place outbound calls, end live calls, pull transcripts and execution logs.",   tools: "outbound_call · get_call · get_call_logs · end_call" },
+  { title: "Campaigns & leads", desc: "Run outbound campaigns, batches, retries and website / Sheet lead intake.",    tools: "list_campaigns · get_campaign · get_website_webhook" },
+  { title: "Journeys",          desc: "Build multi-step outreach journeys and activate or pause them.",               tools: "list_journeys · activate_journey · pause_journey" },
+  { title: "WhatsApp & email",  desc: "Check channel status, connections and message templates.",                     tools: "get_whatsapp_channel · get_email_channel" },
+  { title: "Numbers & squads",  desc: "Phone numbers, squads, webcall links and provider keys.",                      tools: "list_phone_numbers · list_squads · list_webcall_links" },
+  { title: "Analytics & wallet",desc: "Dashboards, per-agent analytics, dispositions and wallet balance.",            tools: "get_analytics_dashboard · get_agent_analytics · get_wallet" },
+  { title: "Everything else",   desc: "An escape hatch that can call any SnapServe REST endpoint directly.",          tools: "snapserve_api · snapserve_help" },
+];
+
+function McpHero() {
+  return (
+    <div className="not-prose my-6 rounded-2xl border border-border/60 bg-card/40 p-6">
+      <div className="grid gap-8 lg:grid-cols-[1fr_1.4fr]">
+        <div className="flex flex-col justify-center">
+          <h2 className="text-2xl font-bold tracking-tight text-foreground m-0">Connect SnapServe over MCP</h2>
+          <p className="text-sm text-muted-foreground mt-3">
+            Drive your whole SnapServe account — agents, calls, campaigns, journeys, WhatsApp,
+            analytics — as tools from Claude, Cursor, Windsurf, and any MCP-aware client.
+            67 tools, plus a skill that teaches the assistant how SnapServe works.
+          </p>
+          <div className="flex gap-2 mt-4">
+            <a href="https://app.snapserve.ai/app/api-keys" target="_blank" rel="noreferrer"
+               className="inline-flex items-center rounded-full bg-foreground text-background px-4 py-2 text-xs font-semibold no-underline">
+              Get API Key
+            </a>
+            <a href="#install-mcp"
+               className="inline-flex items-center rounded-full border border-border px-4 py-2 text-xs font-semibold text-foreground no-underline">
+              Full setup guide
+            </a>
+          </div>
+        </div>
+        <ol className="m-0 list-none p-0 space-y-4">
+          <li>
+            <p className="text-sm font-semibold text-foreground m-0">1 · Get your API key</p>
+            <p className="text-xs text-muted-foreground mt-0.5 mb-0">
+              Generate an <code>sk_live_…</code> key from Dashboard → API Keys.
+            </p>
+          </li>
+          <li>
+            <p className="text-sm font-semibold text-foreground m-0">2 · Add the SnapServe MCP server</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Paste this into your client&apos;s MCP config and add your key.</p>
+            <CodeBlock language="json" code={MCP_JSON} />
+          </li>
+          <li>
+            <p className="text-sm font-semibold text-foreground m-0">3 · Verify the connection</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Ask your assistant to run a SnapServe tool:</p>
+            <CodeBlock language="text" code={`Using SnapServe, list my agents and show my wallet balance.`} />
+          </li>
+        </ol>
+      </div>
+    </div>
+  );
+}
+
+function AvailableTools() {
+  return (
+    <div className="not-prose my-6">
+      <h2 className="text-lg font-semibold text-foreground mb-3" id="available-tools">Available tools</h2>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {TOOL_GROUPS.map((g) => (
+          <div key={g.title} className="rounded-xl border border-border/60 bg-card/40 p-4">
+            <p className="text-sm font-semibold text-foreground m-0">{g.title}</p>
+            <p className="text-xs text-muted-foreground mt-1 mb-2">{g.desc}</p>
+            <p className="text-[10px] font-mono text-muted-foreground/70 m-0 break-words">{g.tools}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function ClaudeSkillPage() {
   return (
     <div>
@@ -25,6 +112,9 @@ export default function ClaudeSkillPage() {
         }
         copyText={COPY}
       />
+
+      <McpHero />
+      <AvailableTools />
 
       <Callout variant="tip" title="Skill vs MCP">
         The <strong>skill</strong> teaches Claude <em>how</em> SnapServe works (workflows, safe
