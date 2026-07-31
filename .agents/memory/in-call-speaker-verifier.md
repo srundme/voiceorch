@@ -23,3 +23,5 @@ Webcall is now a thin adapter over the shared `createSession`/pipeline core (see
 
 ## Tuning (env, all optional — sensible defaults in speakerVerifier.ts)
 `SPEAKER_VERIFY_THRESHOLD` (0.5), `SPEAKER_VERIFY_ENROLL_SECONDS` (13), `SPEAKER_VERIFY_WINDOW_SECONDS` (24), `SPEAKER_VERIFY_MIN_CONSECUTIVE` (2), `SPEAKER_VERIFY_COOLDOWN_MS` (45000), `SPEAKER_VERIFY_ENERGY_GATE` (250). All warning-only, so a slightly-off value only changes sensitivity.
+
+**Silence-diluted windows = false handoffs (calls 5026/5028):** feeding all non-paused frames into enroll/verify windows lets caller silence/carrier comfort noise dominate a window — it embeds as a "different voice" (similarity ~0 to 0.46 for the SAME speaker) and fires the deep-low fast path. Fix: energy-gate the feed (`addSpeechChunk(pcm, hasSpeech)`) so only speech frames accumulate, and require 2 consecutive deep-low windows for the fast handoff path. This also degraded saved voiceprints → cross-number matching failed. VoiceMemory now writes per-call exec-log rows (enabled/armed/enrolled/handoff/service errors) so it's diagnosable from the dashboard Logs tab.

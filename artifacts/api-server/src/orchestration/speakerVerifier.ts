@@ -147,8 +147,15 @@ export class SpeakerVerifier {
     }
   }
 
-  addSpeechChunk(pcm8k: Buffer): void {
-    if (!this.armed || this.samplingPaused) return;
+  /**
+   * @param hasSpeech energy-VAD verdict for this frame from the pipeline.
+   * Silence / carrier comfort-noise frames must never enter enroll or verify
+   * windows: a window diluted with silence embeds as a "different voice"
+   * (near-zero similarity) and fires false mid-call handoffs on the SAME
+   * speaker (calls 5026/5028 — scores 0.28/-0.04 for one person talking).
+   */
+  addSpeechChunk(pcm8k: Buffer, hasSpeech: boolean): void {
+    if (!this.armed || this.samplingPaused || !hasSpeech) return;
     this.chunks.push(pcm8k);
     this.accumulated += pcm8k.byteLength;
     while (this.accumulated > MAX_BYTES && this.chunks.length > 1) {
@@ -305,8 +312,12 @@ export class SpeakerVerifier {
       // "who is speaking?" challenge when the same caller briefly mismatches
       // (noise, distance, codec). Call 2626 fired on short “Hello…” / Tamil talk
       // overlaps — need a longer streak and a deeper single-shot cliff.
+      // A single deep-low window is no longer enough (false handoffs on the
+      // same speaker, calls 5026/5028): even speech-only windows can score low
+      // on short bursts/noise. Require TWO consecutive deep-low windows for the
+      // fast path; the 5-window streak stays as the slow path.
       const definite = result.similarity < VOICE_HANDOFF_THRESHOLD - 0.22;
-      if (!this.handoffFired && (definite || this.lowScoreStreak >= 5)) {
+      if (!this.handoffFired && ((definite && this.lowScoreStreak >= 2) || this.lowScoreStreak >= 5)) {
         this.handoffFired = true;
         this.hadAnyHandoff = true;
         this.execLog("info", "Different voice detected mid-call — speaker handoff", {

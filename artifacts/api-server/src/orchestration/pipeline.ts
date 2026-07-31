@@ -3248,7 +3248,7 @@ export class OrchestrationPipeline implements VoiceSession {
       this.speakerVerifier?.setSamplingPaused(
         this.isPlaying || this.isSendingTtsAudio || Date.now() < this.bargeInHoldUntil,
       );
-      this.speakerVerifier?.addSpeechChunk(pcm8k);
+      this.speakerVerifier?.addSpeechChunk(pcm8k, hasSpeech);
 
       // ── Input-level self-echo gate (Live Call / carrier path only) ─────────────
       // Root fix for the greeting-startup delay: on the carrier path there is no
@@ -3330,7 +3330,7 @@ export class OrchestrationPipeline implements VoiceSession {
     this.speakerVerifier?.setSamplingPaused(
       this.isPlaying || this.isSendingTtsAudio || Date.now() < this.bargeInHoldUntil,
     );
-    this.speakerVerifier?.addSpeechChunk(pcm8k);
+    this.speakerVerifier?.addSpeechChunk(pcm8k, hasSpeech);
 
     // Batch STT path with local VAD + barge-in detection
     if (hasSpeech) this.silenceWatchdog?.onSpeechEnergy();
