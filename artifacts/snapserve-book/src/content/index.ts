@@ -111,6 +111,9 @@ import { adminAuth } from "./chapters/m14-admin-auth";
 import { readingCallLogs } from "./chapters/m15-reading-call-logs";
 import { reliabilityPatterns } from "./chapters/m15-reliability-patterns";
 
+// ── Teacher's Guide — 10-Day Programme ───────────────────────────────────────
+import { teachDay01Stt } from "./chapters/tg-day01-stt";
+
 // ── Module 17 — STT Deep Dive ────────────────────────────────────────────────
 import { sttPipelinePath } from "./chapters/d1-stt-pipeline-path";
 import { sarvamSttComplete } from "./chapters/d1-sarvam-stt-complete";
@@ -265,6 +268,8 @@ const m15Chapters: Chapter[] = [
   readingCallLogs,
   reliabilityPatterns,
 ];
+
+const tgChapters: Chapter[] = [teachDay01Stt];
 
 const d1Chapters: Chapter[] = [
   sttPipelinePath,
@@ -454,6 +459,15 @@ export const modules: Module[] = [
     chapterSlugs: m15Chapters.map((c) => c.slug),
   },
   {
+    id: "tg", slug: "teachers-guide", number: "T",
+    title: "Teacher's Guide — 10-Day Programme",
+    tagline: "Lesson scripts for teaching the team, one day at a time.",
+    description:
+      "Ready-to-teach lesson plans for the 10-day intern programme. Each day has a timed agenda, plain-English explanations to say aloud, whiteboard diagrams, real code walked line by line, questions to ask the class, and homework. Day 01 covers voice-AI basics and the Sarvam STT adapter.",
+    icon: "GraduationCap",
+    chapterSlugs: tgChapters.map((c) => c.slug),
+  },
+  {
     id: "d1", slug: "stt-deep-dive", number: "17",
     title: "STT Deep Dive",
     tagline: "Every line of the ears — hear it, fix it, tune it.",
@@ -509,6 +523,7 @@ export const allChapters: Chapter[] = [
   ...m13Chapters,
   ...m14Chapters,
   ...m15Chapters,
+  ...tgChapters,
   ...d1Chapters,
   ...d2Chapters,
   ...d3Chapters,
