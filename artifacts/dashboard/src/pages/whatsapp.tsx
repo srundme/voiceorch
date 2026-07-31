@@ -172,9 +172,11 @@ const inr = (paise: number) => `₹${(paise / 100).toLocaleString("en-IN", { max
 function NativeSection({
   agents,
   onChooseBsp,
+  onChooseMeta,
 }: {
   agents: { id: number; name: string }[];
   onChooseBsp?: () => void;
+  onChooseMeta?: () => void;
 }) {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -463,11 +465,11 @@ function NativeSection({
           <div>
             <h3 className="text-sm font-semibold">Which describes you best?</h3>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Instant if you have no WhatsApp Business setup. Meta if you own a WABA. BSP if you already send WhatsApp elsewhere.
+              Instant if you have no WhatsApp Business setup. Meta API if you already have a WhatsApp Business account.
             </p>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2">
             {/* Non-business → instant shared tier */}
             <div className="rounded-lg border border-emerald-500/25 bg-emerald-500/[0.04] p-5 flex flex-col">
               <div className="flex items-center gap-2">
@@ -497,39 +499,21 @@ function NativeSection({
               )}
             </div>
 
-            {/* Business → own-brand wizard */}
-            <div className="rounded-lg border border-border/60 bg-card/30 p-5 flex flex-col">
+            {/* Business → direct Meta Cloud API */}
+            <div className="rounded-lg border border-sky-500/25 bg-sky-500/[0.04] p-5 flex flex-col">
               <div className="flex items-center gap-2">
                 <Building2 className="w-4 h-4 text-sky-400" />
-                <h3 className="text-sm font-semibold">I have a Meta Business account</h3>
-                <Badge variant="outline" className="text-[10px]">Your brand</Badge>
+                <h3 className="text-sm font-semibold">I have a WhatsApp Business account</h3>
+                <Badge className="bg-sky-500/15 text-sky-300 border-transparent text-[10px]">Meta API · your brand</Badge>
               </div>
               <ul className="mt-3 space-y-1.5 text-xs text-muted-foreground flex-1">
                 <li>• Messages come from <strong className="text-foreground">your own WhatsApp number</strong> with your name &amp; logo</li>
-                <li>• Higher limits: 250/day to start, Meta raises it to 2,000+ automatically</li>
-                <li>• Buy a WhatsApp-ready number from SnapServe (Phone Number ID auto-assigned), or connect one already registered in your WABA</li>
-                <li>• Needs your WABA ID + a permanent Meta access token</li>
+                <li>• Connect directly with your Meta access token — we fetch your approved templates automatically</li>
+                <li>• Pick which template to send for call summary, booking &amp; callback</li>
+                <li>• Post-call, mid-call tool, and Request-a-Call all supported</li>
               </ul>
-              <Button size="sm" variant="outline" className="mt-4 w-full" onClick={() => openBizWizard()}>
-                Start Business setup
-              </Button>
-            </div>
-
-            {/* BSP adopter */}
-            <div className="rounded-lg border border-violet-500/25 bg-violet-500/[0.04] p-5 flex flex-col">
-              <div className="flex items-center gap-2">
-                <Webhook className="w-4 h-4 text-violet-400" />
-                <h3 className="text-sm font-semibold">I already use a BSP</h3>
-                <Badge className="bg-violet-500/15 text-violet-300 border-transparent text-[10px]">Any provider</Badge>
-              </div>
-              <ul className="mt-3 space-y-1.5 text-xs text-muted-foreground flex-1">
-                <li>• Keep Interakt, Wati, AiSensy, Gupshup, Yellow, Zapier — whatever you use</li>
-                <li>• Create templates in your BSP, paste one webhook URL here</li>
-                <li>• Pick an agent · post-call, mid-call tool, and/or Request-a-Call</li>
-                <li>• SnapServe triggers your BSP — we don't send WhatsApp ourselves</li>
-              </ul>
-              <Button size="sm" variant="outline" className="mt-4 w-full" onClick={() => onChooseBsp?.()}>
-                Connect my BSP
+              <Button size="sm" variant="outline" className="mt-4 w-full" onClick={() => onChooseMeta?.()}>
+                Connect Meta API
               </Button>
             </div>
           </div>
@@ -1294,9 +1278,10 @@ export default function WhatsAppPage() {
     setMetaSelCallback("");
   };
 
-  const openBspCreate = () => {
+  const openBspCreate = (mode: "webhook" | "meta" = "webhook") => {
     resetForm();
     setAgentId(agents[0]?.id ?? "");
+    setConnMode(mode);
     setShowByo(true);
     setCreateOpen(true);
   };
@@ -1364,7 +1349,7 @@ export default function WhatsAppPage() {
         description="Automatic WhatsApp follow-ups after every AI call — booking confirmations, summaries and callback alerts. Customers can reply to get a call back."
       />
 
-      <NativeSection agents={agents} onChooseBsp={openBspCreate} />
+      <NativeSection agents={agents} onChooseBsp={() => openBspCreate("webhook")} onChooseMeta={() => openBspCreate("meta")} />
 
       {/* Bring your BSP */}
       <div className="mx-6 pb-8 space-y-4" id="bsp-adopter">
@@ -1386,7 +1371,7 @@ export default function WhatsAppPage() {
               <p className="text-xs text-muted-foreground max-w-xl">
                 Connect any WhatsApp BSP with a webhook + template names. Agents with a BSP connection use it for post-call (overrides Instant).
               </p>
-              <Button size="sm" variant="outline" onClick={openBspCreate}>
+              <Button size="sm" variant="outline" onClick={() => openBspCreate("webhook")}>
                 <Plus className="w-4 h-4 mr-1.5" />
                 Add connection
               </Button>
