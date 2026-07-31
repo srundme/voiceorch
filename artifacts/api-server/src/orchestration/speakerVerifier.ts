@@ -17,6 +17,7 @@ import { writeExecutionLog } from "../services/execution-log.js";
 import { genderServiceBaseUrl } from "./genderService.js";
 import {
   VOICE_HANDOFF_THRESHOLD,
+  VOICE_MATCH_THRESHOLD,
   upsertCallerVoiceprint,
 } from "./voiceMemoryStore.js";
 
@@ -93,6 +94,10 @@ export class SpeakerVerifier {
   private hadAnyHandoff = false;
   /** Require two consecutive low scores before handoff (reduces noise false-positives). */
   private lowScoreStreak = 0;
+  /** True once a cross-number voice link fired this call (enroll or refined re-match). */
+  private linked = false;
+  /** Last refCount at which a refined cross-number re-match ran (milestone gate). */
+  private lastRematchRefCount = 1;
   private readonly callId: number;
   private readonly agentId: number;
   private readonly phoneNumber: string | null;
@@ -249,6 +254,10 @@ export class SpeakerVerifier {
     this.refSum = null;
     this.refCount = 0;
     this.refDirty = false;
+    // New speaker = new identity: clear the cross-number link latch and the
+    // rematch milestone so speaker B gets fresh 2/4/8 rematch attempts.
+    this.linked = false;
+    this.lastRematchRefCount = 1;
     this.chunks = [];
     this.accumulated = 0;
     this.verifyChunks = [];
@@ -273,6 +282,7 @@ export class SpeakerVerifier {
     let personKey = "session-only";
     let linkedFromPhone: string | null = null;
     let score: number | null = null;
+    let nearMiss: { score: number; phoneNumber: string } | null = null;
     if (this.phoneNumber) {
       const saved = await upsertCallerVoiceprint({
         agentId: this.agentId,
@@ -282,7 +292,9 @@ export class SpeakerVerifier {
       personKey = saved.personKey;
       linkedFromPhone = saved.linkedFromPhone;
       score = saved.score;
+      nearMiss = saved.nearMiss;
     }
+    this.linked = !!linkedFromPhone;
 
     this.log.info(
       { callId: this.callId, bytes: pcm.byteLength, linked: !!linkedFromPhone },
@@ -292,10 +304,57 @@ export class SpeakerVerifier {
       "success",
       linkedFromPhone
         ? `Voiceprint enrolled — same voice recognized from another number (${linkedFromPhone})`
-        : "Voiceprint enrolled for this caller",
-      { personKey, linkedFromPhone, score },
+        : nearMiss
+          ? `Voiceprint enrolled — a similar voice exists on ${nearMiss.phoneNumber} but scored ${nearMiss.score.toFixed(2)}, below the ${VOICE_MATCH_THRESHOLD} match bar (will retry with a refined voiceprint as the call goes on)`
+          : "Voiceprint enrolled for this caller",
+      { personKey, linkedFromPhone, score, nearMiss },
     );
     this.onEvent({ type: "enrolled", personKey, linkedFromPhone, score });
+  }
+
+  /**
+   * Cross-number re-match with the refined running-mean voiceprint. The
+   * 2.5s enroll window is the weakest sample of the whole call — two different
+   * handsets often score just under the match bar on it (calls 5029-5031).
+   * As strong verify windows fold into the reference, retry the match at
+   * refCount milestones; a late link still lets the live call pick up the
+   * matched person's memory via the same "enrolled" event path.
+   */
+  private async attemptRefinedRematch(): Promise<void> {
+    if (this.linked || !this.phoneNumber || !this.reference?.length) return;
+    try {
+      const saved = await upsertCallerVoiceprint({
+        agentId: this.agentId,
+        phoneNumber: this.phoneNumber,
+        embedding: this.reference,
+      });
+      this.refDirty = false; // just persisted the current mean
+      if (saved.linkedFromPhone) {
+        this.linked = true;
+        this.log.info(
+          { callId: this.callId, linkedFromPhone: saved.linkedFromPhone, score: saved.score, windows: this.refCount },
+          "Voice Memory: refined voiceprint matched another number mid-call",
+        );
+        this.execLog(
+          "success",
+          `Same voice recognized from another number (${saved.linkedFromPhone}) after voiceprint refinement`,
+          { personKey: saved.personKey, linkedFromPhone: saved.linkedFromPhone, score: saved.score, windows: this.refCount },
+        );
+        this.onEvent({
+          type: "enrolled",
+          personKey: saved.personKey,
+          linkedFromPhone: saved.linkedFromPhone,
+          score: saved.score,
+        });
+      } else if (saved.nearMiss) {
+        this.log.info(
+          { callId: this.callId, nearMiss: saved.nearMiss, windows: this.refCount },
+          "Voice Memory: refined re-match still below match bar",
+        );
+      }
+    } catch (err) {
+      this.log.warn({ callId: this.callId, err }, "Voice Memory: refined re-match failed");
+    }
   }
 
   private async verify(pcm: Buffer): Promise<void> {
@@ -343,6 +402,13 @@ export class SpeakerVerifier {
           this.refCount++;
           this.reference = this.refSum.map((v) => v / this.refCount);
           this.refDirty = true;
+          // Retry the cross-number match with the refined mean at doubling
+          // milestones (2, 4, 8, ...) — the enroll-window match often lands
+          // just under the bar across two different handsets.
+          if (!this.linked && this.phoneNumber && this.refCount >= this.lastRematchRefCount * 2) {
+            this.lastRematchRefCount = this.refCount;
+            void this.attemptRefinedRematch();
+          }
         } else {
           this.reference = result.embedding;
         }

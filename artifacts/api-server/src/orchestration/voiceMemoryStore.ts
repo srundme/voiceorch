@@ -37,12 +37,18 @@ export interface VoiceMatchResult {
   samePhone: boolean;
 }
 
+export interface VoiceMatchOutcome {
+  match: VoiceMatchResult | null;
+  /** Best candidate that scored BELOW the match bar (diagnostics only). */
+  nearMiss: { score: number; phoneNumber: string } | null;
+}
+
 /** Find best voice match for this agent (excluding optional phone). */
 export async function findBestVoiceMatch(opts: {
   agentId: number;
   embedding: number[];
   excludePhone?: string | null;
-}): Promise<VoiceMatchResult | null> {
+}): Promise<VoiceMatchOutcome> {
   const { agentId, embedding, excludePhone } = opts;
   try {
     const rows = await db
@@ -62,11 +68,13 @@ export async function findBestVoiceMatch(opts: {
       )
       .limit(200);
 
+    // Track the best candidate even below the match bar — a silent `continue`
+    // made sub-threshold near-misses invisible (calls 5029-5031: "not
+    // recognised" with no score anywhere in the logs).
     let best: VoiceMatchResult | null = null;
     for (const row of rows) {
       const emb = row.embedding as number[];
       const score = cosine(embedding, emb);
-      if (score < VOICE_MATCH_THRESHOLD) continue;
       if (!best || score > best.score) {
         best = {
           personKey: row.personKey,
@@ -76,10 +84,17 @@ export async function findBestVoiceMatch(opts: {
         };
       }
     }
-    return best;
+    if (best && best.score < VOICE_MATCH_THRESHOLD) {
+      logger.info(
+        { agentId, bestScore: best.score, bestPhone: best.matchedPhone, threshold: VOICE_MATCH_THRESHOLD },
+        "Voice memory: best cross-number candidate below match threshold",
+      );
+      return { match: null, nearMiss: { score: best.score, phoneNumber: best.matchedPhone } };
+    }
+    return { match: best, nearMiss: null };
   } catch (err) {
     logger.warn({ err, agentId }, "Voice memory: findBestVoiceMatch failed");
-    return null;
+    return { match: null, nearMiss: null };
   }
 }
 
@@ -93,11 +108,16 @@ export async function upsertCallerVoiceprint(opts: {
   embedding: number[];
   displayName?: string | null;
   score?: number | null;
-}): Promise<{ personKey: string; linkedFromPhone: string | null; score: number | null }> {
+}): Promise<{
+  personKey: string;
+  linkedFromPhone: string | null;
+  score: number | null;
+  nearMiss: { score: number; phoneNumber: string } | null;
+}> {
   const phoneNumber = canonicalizeCallerKey(opts.phoneNumber) ?? opts.phoneNumber;
   const { agentId, embedding, displayName } = opts;
 
-  const cross = await findBestVoiceMatch({ agentId, embedding, excludePhone: phoneNumber });
+  const { match: cross, nearMiss } = await findBestVoiceMatch({ agentId, embedding, excludePhone: phoneNumber });
   let personKey = cross?.personKey ?? randomUUID();
   const linkedFromPhone = cross?.matchedPhone ?? null;
   const score = cross?.score ?? opts.score ?? null;
@@ -180,7 +200,7 @@ export async function upsertCallerVoiceprint(opts: {
     "Voice memory: voiceprint upserted",
   );
 
-  return { personKey, linkedFromPhone, score };
+  return { personKey, linkedFromPhone, score, nearMiss };
 }
 
 /** Other phones sharing this personKey (for memory redirect). */
