@@ -38,9 +38,19 @@ export interface MetaTemplateChoice {
 }
 
 function graphError(json: unknown, status: number): string {
-  const err = (json as { error?: { message?: string; code?: number } } | null)?.error;
-  if (err?.message) return err.message;
+  const j = json as { error?: { message?: string; code?: number } | string } | null;
+  if (typeof j?.error === "string" && j.error) return j.error; // BSP panels return { success:false, error:"..." }
+  if (typeof j?.error === "object" && j.error?.message) return j.error.message;
   return `Meta API HTTP ${status}`;
+}
+
+/** BSP panels (e.g. whatapi.in) return HTTP 200 with { success:false, error:"..." }. */
+function bspError(json: unknown): string | null {
+  const j = json as { success?: boolean; error?: unknown } | null;
+  if (j && (j.success === false || (j.error != null && !("data" in (j as object))))) {
+    return graphError(json, 200);
+  }
+  return null;
 }
 
 /** Fetch approved templates from the user's WABA. Throws with a readable message. */
@@ -68,6 +78,8 @@ export async function fetchMetaTemplates(
       paging?: { next?: string };
     } | null;
     if (!res.ok) throw new Error(graphError(json, res.status));
+    const bsp = bspError(json);
+    if (bsp) throw new Error(bsp);
 
     for (const t of json?.data ?? []) {
       if (!t.name || !t.language) continue;
@@ -105,6 +117,8 @@ export async function verifyMetaPhoneNumber(
       display_phone_number?: string; verified_name?: string;
     } | null;
     if (!res.ok) return { ok: false, error: graphError(json, res.status) };
+    const bsp = bspError(json);
+    if (bsp && !json?.display_phone_number) return { ok: false, error: bsp };
     return { ok: true, displayPhone: json?.display_phone_number ?? null, verifiedName: json?.verified_name ?? null };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
@@ -179,6 +193,11 @@ export async function sendMetaTemplate(opts: {
       const msg = graphError(json, res.status);
       logger.warn({ to, template: opts.template.name, msg }, "whatsapp-meta: send failed");
       return { ok: false, error: msg };
+    }
+    const bsp = bspError(json);
+    if (bsp && !json?.messages?.length) {
+      logger.warn({ to, template: opts.template.name, msg: bsp }, "whatsapp-meta: send failed (bsp)");
+      return { ok: false, error: bsp };
     }
     return { ok: true, messageId: json?.messages?.[0]?.id ?? null };
   } catch (err) {
