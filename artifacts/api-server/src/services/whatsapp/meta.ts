@@ -139,6 +139,9 @@ export function buildMetaParams(
   } else {
     base = [ctx.businessName, ctx.summary || "Thanks for speaking with us — we'll be in touch."];
   }
+  // With a single-variable template, the message content matters more than the
+  // business name — otherwise dynamic mid-call messages would be dropped.
+  if (paramCount === 1 && ctx.summary) base = [ctx.summary];
   const fitted = base.slice(0, paramCount);
   while (fitted.length < paramCount) fitted.push("—");
   // Meta rejects empty params and newlines/tabs in body params

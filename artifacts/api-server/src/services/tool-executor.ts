@@ -362,8 +362,9 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
         return {
           name: t.name || "send_whatsapp",
           description:
-            (t.description || "Send a WhatsApp template to the caller.") +
+            (t.description || "Send a WhatsApp message to the caller.") +
             " Use when the caller asks you to WhatsApp them something." +
+            " Put the actual content you want to send in `message` — it is delivered inside the business's approved WhatsApp template." +
             " Prefer the caller's phone from the call; only pass to_phone if they give a different number." +
             " template_hint is one of: call_summary, booking_confirmed, callback_scheduled.",
           parameters: {
@@ -372,6 +373,10 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
               to_phone: {
                 type: "string",
                 description: "Recipient phone in E.164 or 10-digit local form. Omit to use the caller on this call.",
+              },
+              message: {
+                type: "string",
+                description: "The message content to send (any text: details, address, price, link, summary…). Inserted into the approved template's variable.",
               },
               template_hint: {
                 type: "string",
@@ -383,7 +388,7 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
               },
               summary: {
                 type: "string",
-                description: "Short message body / summary for template variables",
+                description: "Alias of message (deprecated — prefer message)",
               },
             },
             required: [],
@@ -1934,7 +1939,8 @@ export async function executeSendWhatsapp(opts: {
 
   const templateHint = typeof opts.args["template_hint"] === "string" ? opts.args["template_hint"].trim() : "call_summary";
   const templateName = typeof opts.args["template_name"] === "string" ? opts.args["template_name"].trim() : "";
-  const summary = typeof opts.args["summary"] === "string" ? opts.args["summary"].trim() : "";
+  const message = typeof opts.args["message"] === "string" ? opts.args["message"].trim() : "";
+  const summary = message || (typeof opts.args["summary"] === "string" ? opts.args["summary"].trim() : "");
 
   logger.info(
     { callId: opts.callId, agentId: opts.agentId, toPhone, templateHint },
