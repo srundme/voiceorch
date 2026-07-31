@@ -13,6 +13,7 @@
  */
 
 import { logger as rootLogger } from "../lib/logger.js";
+import { writeExecutionLog } from "../services/execution-log.js";
 import { genderServiceBaseUrl } from "./genderService.js";
 import {
   VOICE_HANDOFF_THRESHOLD,
@@ -111,11 +112,24 @@ export class SpeakerVerifier {
     this.log = rootLogger;
   }
 
+  /** One-shot latches so retry loops don't spam the call's Logs tab. */
+  private execEmbedErrorLogged = false;
+  private execVerifyErrorLogged = false;
+
+  /** Per-call execution-log row (Call Log "Logs" tab). Never throws. */
+  private execLog(status: import("../services/execution-log.js").ExecStatus, note: string, metadata: Record<string, unknown> = {}): void {
+    writeExecutionLog(this.callId, this.agentId, "VoiceMemory", "response", {
+      status,
+      metadata: { note, ...metadata },
+    });
+  }
+
   /** Start sampling after greeting (same timing as gender detection). */
   arm(): void {
     if (this.armed) return;
     this.armed = true;
     this.log.info({ callId: this.callId }, "Voice Memory ARMED — sampling caller for enroll/verify");
+    this.execLog("info", "Voice Memory armed — sampling caller speech for voiceprint enroll/verify");
   }
 
   /**
@@ -267,6 +281,13 @@ export class SpeakerVerifier {
       { callId: this.callId, bytes: pcm.byteLength, linked: !!linkedFromPhone },
       "Voice Memory: enrolled reference voiceprint",
     );
+    this.execLog(
+      "success",
+      linkedFromPhone
+        ? `Voiceprint enrolled — same voice recognized from another number (${linkedFromPhone})`
+        : "Voiceprint enrolled for this caller",
+      { personKey, linkedFromPhone, score },
+    );
     this.onEvent({ type: "enrolled", personKey, linkedFromPhone, score });
   }
 
@@ -288,6 +309,10 @@ export class SpeakerVerifier {
       if (!this.handoffFired && (definite || this.lowScoreStreak >= 5)) {
         this.handoffFired = true;
         this.hadAnyHandoff = true;
+        this.execLog("info", "Different voice detected mid-call — speaker handoff", {
+          similarity: result.similarity,
+          threshold: VOICE_HANDOFF_THRESHOLD,
+        });
         this.onEvent({ type: "handoff", similarity: result.similarity });
       }
     } else {
@@ -334,6 +359,10 @@ export class SpeakerVerifier {
           { callId: this.callId, url, status: res.status, latencyMs: Date.now() - t0 },
           "Voice Memory: embed request non-200",
         );
+        if (!this.execEmbedErrorLogged) {
+          this.execEmbedErrorLogged = true;
+          this.execLog("error", `Voice analysis service rejected the enroll request (HTTP ${res.status}) — voiceprint not created`, { httpStatus: res.status });
+        }
         return null;
       }
       const body = (await res.json()) as { embedding?: number[] | null; error?: string };
@@ -347,6 +376,10 @@ export class SpeakerVerifier {
           },
           "Voice Memory: embed returned no embedding — check gender-service /speaker/health (ECAPA)",
         );
+        if (!this.execEmbedErrorLogged) {
+          this.execEmbedErrorLogged = true;
+          this.execLog("error", "Voice analysis service returned no voiceprint (speaker model not ready?) — voiceprint not created", { error: body.error ?? "empty_embedding" });
+        }
         return null;
       }
       return body.embedding;
@@ -362,6 +395,10 @@ export class SpeakerVerifier {
         },
         "Voice Memory: embed request failed",
       );
+      if (!this.execEmbedErrorLogged) {
+        this.execEmbedErrorLogged = true;
+        this.execLog("error", "Voice analysis service unreachable — voiceprint not created (check GENDER_SERVICE_URL / service health)", { errName: (err as Error)?.name, errMsg: (err as Error)?.message });
+      }
       return null;
     }
   }
@@ -413,6 +450,10 @@ export class SpeakerVerifier {
         },
         "Voice Memory: verify request failed",
       );
+      if (!this.execVerifyErrorLogged) {
+        this.execVerifyErrorLogged = true;
+        this.execLog("error", "Voice analysis service unreachable during mid-call verification", { errName: (err as Error)?.name, errMsg: (err as Error)?.message });
+      }
       return { similarity: null, embedding: null };
     }
   }

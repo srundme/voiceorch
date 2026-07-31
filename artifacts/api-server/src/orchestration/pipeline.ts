@@ -1801,6 +1801,10 @@ export class OrchestrationPipeline implements VoiceSession {
         { callId: config.callId, agentId: config.agentConfig.id },
         "Voice Memory enabled — will enroll/verify caller voice this call",
       );
+      this.logExec("VoiceMemory", "response", {
+        status: "info",
+        metadata: { note: "Voice Memory enabled for this agent — caller voiceprint will be enrolled/verified after the greeting" },
+      });
     }
 
     const keys = config.providerKeys;
