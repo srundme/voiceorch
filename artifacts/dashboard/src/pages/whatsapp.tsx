@@ -43,10 +43,25 @@ type WaConnection = {
     booking_confirmed?: string;
     callback_scheduled?: string;
   };
+  metaConnected?: boolean;
+  metaPhoneNumberId?: string | null;
+  metaWabaId?: string | null;
+  metaTemplates?: Record<string, MetaTplChoice>;
   active: boolean;
   lastInboundAt: string | null;
   lastOutboundAt: string | null;
   lastError: string | null;
+};
+
+type MetaTplChoice = { name: string; language: string; paramCount: number };
+
+type MetaTplInfo = {
+  name: string;
+  language: string;
+  status: string;
+  category: string | null;
+  paramCount: number;
+  bodyPreview: string;
 };
 
 type WaChannel = {
@@ -1114,6 +1129,145 @@ export default function WhatsAppPage() {
   const [tplCallback, setTplCallback] = useState("");
   const [createdSecret, setCreatedSecret] = useState<string | null>(null);
 
+  // Direct Meta Cloud API mode
+  const [connMode, setConnMode] = useState<"webhook" | "meta">("webhook");
+  const [metaToken, setMetaToken] = useState("");
+  const [metaPhoneId, setMetaPhoneId] = useState("");
+  const [metaWabaId, setMetaWabaId] = useState("");
+  const [metaTplList, setMetaTplList] = useState<MetaTplInfo[] | null>(null);
+  const [metaFetching, setMetaFetching] = useState(false);
+  const [metaPhoneInfo, setMetaPhoneInfo] = useState<string | null>(null);
+  const [metaSelSummary, setMetaSelSummary] = useState("");   // JSON of MetaTplChoice or ""
+  const [metaSelBooking, setMetaSelBooking] = useState("");
+  const [metaSelCallback, setMetaSelCallback] = useState("");
+
+  const fetchMetaTemplates = async (connectionId?: string) => {
+    setMetaFetching(true);
+    setMetaPhoneInfo(null);
+    try {
+      const res = await customFetch<{ templates: MetaTplInfo[]; phone: { displayPhone: string | null; verifiedName: string | null } | null }>(
+        `${API}/whatsapp/meta/templates`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            accessToken: metaToken.trim() || undefined,
+            wabaId: metaWabaId.trim() || undefined,
+            phoneNumberId: metaPhoneId.trim() || undefined,
+            connectionId,
+          }),
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+      setMetaTplList(res.templates);
+      if (res.phone) {
+        setMetaPhoneInfo(`✓ ${res.phone.verifiedName ?? ""} ${res.phone.displayPhone ?? ""}`.trim());
+      }
+      if (res.templates.length === 0) {
+        toast({ title: "Connected, but no approved templates found", description: "Create and approve templates in Meta WhatsApp Manager first." });
+      } else {
+        toast({ title: `Found ${res.templates.length} approved templates` });
+      }
+    } catch (err) {
+      setMetaTplList(null);
+      toast({ title: "Meta connection failed", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
+    } finally {
+      setMetaFetching(false);
+    }
+  };
+
+  const metaTemplatesPayload = () => {
+    const parse = (s: string): MetaTplChoice | null => {
+      try { return s ? (JSON.parse(s) as MetaTplChoice) : null; } catch { return null; }
+    };
+    const out: Record<string, MetaTplChoice> = {};
+    const s = parse(metaSelSummary); if (s) out.call_summary = s;
+    const b = parse(metaSelBooking); if (b) out.booking_confirmed = b;
+    const c = parse(metaSelCallback); if (c) out.callback_scheduled = c;
+    return out;
+  };
+
+  const tplOption = (t: MetaTplInfo) => JSON.stringify({ name: t.name, language: t.language, paramCount: t.paramCount });
+
+  const renderMetaTplSelect = (label: string, value: string, onChange: (v: string) => void) => {
+    const list = metaTplList ?? [];
+    const inList = value && list.some((t) => tplOption(t) === value);
+    let savedLabel = "";
+    if (value && !inList) {
+      try {
+        const v = JSON.parse(value) as MetaTplChoice;
+        savedLabel = `${v.name} (${v.language}, saved)`;
+      } catch { /* ignore */ }
+    }
+    return (
+      <div>
+        <Label className="text-[10px] text-muted-foreground">{label}</Label>
+        <select
+          className="mt-1 w-full h-8 rounded-md border border-input bg-background px-2 text-xs"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          disabled={list.length === 0 && !value}
+        >
+          <option value="">— none —</option>
+          {savedLabel && <option value={value}>{savedLabel}</option>}
+          {list.map((t) => (
+            <option key={`${t.name}|${t.language}`} value={tplOption(t)}>
+              {t.name} ({t.language}, {t.paramCount} variable{t.paramCount === 1 ? "" : "s"})
+            </option>
+          ))}
+        </select>
+      </div>
+    );
+  };
+
+  const renderMetaFields = (connectionId?: string) => (
+    <div className="space-y-3">
+      <div>
+        <Label className="text-xs">Meta permanent access token {connectionId ? "" : "*"}</Label>
+        <Input
+          className="mt-1 h-9 font-mono text-xs"
+          type="password"
+          placeholder={connectionId ? "Leave blank to keep the saved token" : "EAAG…"}
+          value={metaToken}
+          onChange={(e) => setMetaToken(e.target.value)}
+        />
+        <p className="text-[11px] text-muted-foreground mt-1">
+          Meta Business → System user → Generate token with <code>whatsapp_business_messaging</code> + <code>whatsapp_business_management</code>.
+        </p>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <Label className="text-xs">Phone number ID *</Label>
+          <Input className="mt-1 h-9 font-mono text-xs" placeholder="123456789012345" value={metaPhoneId} onChange={(e) => setMetaPhoneId(e.target.value)} />
+        </div>
+        <div>
+          <Label className="text-xs">WhatsApp Business Account ID *</Label>
+          <Input className="mt-1 h-9 font-mono text-xs" placeholder="WABA ID" value={metaWabaId} onChange={(e) => setMetaWabaId(e.target.value)} />
+        </div>
+      </div>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={metaFetching || ((!metaToken.trim() || !metaWabaId.trim()) && !connectionId)}
+        onClick={() => void fetchMetaTemplates(connectionId)}
+      >
+        {metaFetching ? "Connecting to Meta…" : "Fetch approved templates"}
+      </Button>
+      {metaPhoneInfo && <p className="text-[11px] text-emerald-500">{metaPhoneInfo}</p>}
+      {metaTplList && (
+        <div className="rounded-md border border-border/50 p-3 space-y-2">
+          <p className="text-xs font-medium">Link templates ({metaTplList.length} approved found)</p>
+          {renderMetaTplSelect("Call summary", metaSelSummary, setMetaSelSummary)}
+          {renderMetaTplSelect("Booking confirmed", metaSelBooking, setMetaSelBooking)}
+          {renderMetaTplSelect("Callback scheduled", metaSelCallback, setMetaSelCallback)}
+          <p className="text-[10px] text-muted-foreground">
+            Variables are filled in order: business name, then summary / meeting time. Pick templates with 1–3 variables.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+
   const templatesPayload = () => ({
     ...(tplSummary.trim() ? { call_summary: tplSummary.trim() } : {}),
     ...(tplBooking.trim() ? { booking_confirmed: tplBooking.trim() } : {}),
@@ -1129,6 +1283,15 @@ export default function WhatsAppPage() {
     setTplSummary("");
     setTplBooking("");
     setTplCallback("");
+    setConnMode("webhook");
+    setMetaToken("");
+    setMetaPhoneId("");
+    setMetaWabaId("");
+    setMetaTplList(null);
+    setMetaPhoneInfo(null);
+    setMetaSelSummary("");
+    setMetaSelBooking("");
+    setMetaSelCallback("");
   };
 
   const openBspCreate = () => {
@@ -1145,10 +1308,18 @@ export default function WhatsAppPage() {
         body: JSON.stringify({
           name,
           agentId: Number(agentId),
-          outboundWebhookUrl: outboundUrl.trim() || null,
+          outboundWebhookUrl: connMode === "webhook" ? (outboundUrl.trim() || null) : null,
           requestCallEnabled: requestCall,
           postCallEnabled: postCall,
           templates: templatesPayload(),
+          ...(connMode === "meta"
+            ? {
+                metaAccessToken: metaToken.trim() || null,
+                metaPhoneNumberId: metaPhoneId.trim() || null,
+                metaWabaId: metaWabaId.trim() || null,
+                metaTemplates: metaTemplatesPayload(),
+              }
+            : {}),
         }),
         headers: { "Content-Type": "application/json" },
       }),
@@ -1279,6 +1450,15 @@ export default function WhatsAppPage() {
                           setOutboundUrl(c.outboundWebhookUrl ?? "");
                           setRequestCall(c.requestCallEnabled);
                           setPostCall(c.postCallEnabled);
+                          setConnMode(c.metaConnected ? "meta" : "webhook");
+                          setMetaToken("");
+                          setMetaPhoneId(c.metaPhoneNumberId ?? "");
+                          setMetaWabaId(c.metaWabaId ?? "");
+                          setMetaTplList(null);
+                          setMetaPhoneInfo(null);
+                          setMetaSelSummary(c.metaTemplates?.call_summary ? JSON.stringify(c.metaTemplates.call_summary) : "");
+                          setMetaSelBooking(c.metaTemplates?.booking_confirmed ? JSON.stringify(c.metaTemplates.booking_confirmed) : "");
+                          setMetaSelCallback(c.metaTemplates?.callback_scheduled ? JSON.stringify(c.metaTemplates.callback_scheduled) : "");
                           setTplSummary(c.templates?.call_summary ?? "");
                           setTplBooking(c.templates?.booking_confirmed ?? "");
                           setTplCallback(c.templates?.callback_scheduled ?? "");
@@ -1356,12 +1536,28 @@ export default function WhatsAppPage() {
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Connect your BSP</DialogTitle>
+            <DialogTitle>Connect WhatsApp</DialogTitle>
             <DialogDescription>
-              Paste your webhook and map template names you already created in your WhatsApp provider.
+              Connect your Meta account directly, or paste a BSP/Zapier webhook.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-1 rounded-md border border-border/50 p-1">
+              <button
+                type="button"
+                className={`h-8 rounded text-xs font-medium ${connMode === "meta" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                onClick={() => setConnMode("meta")}
+              >
+                Meta Cloud API (direct)
+              </button>
+              <button
+                type="button"
+                className={`h-8 rounded text-xs font-medium ${connMode === "webhook" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                onClick={() => setConnMode("webhook")}
+              >
+                Webhook (BSP / Zapier)
+              </button>
+            </div>
             <div>
               <Label className="text-xs">Name</Label>
               <Input className="mt-1 h-9" value={name} onChange={(e) => setName(e.target.value)} />
@@ -1379,6 +1575,7 @@ export default function WhatsAppPage() {
                 ))}
               </select>
             </div>
+            {connMode === "meta" ? renderMetaFields() : (<>
             <div>
               <Label className="text-xs">Outbound webhook URL</Label>
               <Input
@@ -1406,6 +1603,7 @@ export default function WhatsAppPage() {
                 <Input className="mt-1 h-8 text-xs font-mono" placeholder="ss_callback_scheduled" value={tplCallback} onChange={(e) => setTplCallback(e.target.value)} />
               </div>
             </div>
+            </>)}
             <div className="flex items-center justify-between">
               <div>
                 <Label className="text-xs">Post-call messages</Label>
@@ -1427,7 +1625,7 @@ export default function WhatsAppPage() {
           <DialogFooter>
             <Button variant="ghost" onClick={() => setCreateOpen(false)}>Cancel</Button>
             <Button
-              disabled={!agentId || createMut.isPending}
+              disabled={!agentId || createMut.isPending || (connMode === "meta" && (!metaToken.trim() || !metaPhoneId.trim()))}
               onClick={() => createMut.mutate()}
             >
               Create
@@ -1440,13 +1638,14 @@ export default function WhatsAppPage() {
       <Dialog open={!!editConn} onOpenChange={(o) => !o && setEditConn(null)}>
         <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Edit BSP connection</DialogTitle>
+            <DialogTitle>{connMode === "meta" ? "Edit Meta connection" : "Edit BSP connection"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <div>
               <Label className="text-xs">Name</Label>
               <Input className="mt-1 h-9" value={name} onChange={(e) => setName(e.target.value)} />
             </div>
+            {connMode === "meta" ? renderMetaFields(editConn?.id) : (<>
             <div>
               <Label className="text-xs">Outbound webhook URL</Label>
               <Input
@@ -1471,6 +1670,7 @@ export default function WhatsAppPage() {
                 <Input className="mt-1 h-8 text-xs font-mono" value={tplCallback} onChange={(e) => setTplCallback(e.target.value)} />
               </div>
             </div>
+            </>)}
             <div className="flex items-center justify-between">
               <Label className="text-xs">Post-call messages</Label>
               <Switch checked={postCall} onCheckedChange={setPostCall} />
@@ -1506,11 +1706,19 @@ export default function WhatsAppPage() {
                   id: editConn.id,
                   body: {
                     name,
-                    outboundWebhookUrl: outboundUrl.trim() || null,
+                    outboundWebhookUrl: connMode === "webhook" ? (outboundUrl.trim() || null) : null,
                     requestCallEnabled: requestCall,
                     postCallEnabled: postCall,
                     active: editConn.active,
                     templates: templatesPayload(),
+                    ...(connMode === "meta"
+                      ? {
+                          ...(metaToken.trim() ? { metaAccessToken: metaToken.trim() } : {}),
+                          metaPhoneNumberId: metaPhoneId.trim() || null,
+                          metaWabaId: metaWabaId.trim() || null,
+                          metaTemplates: metaTemplatesPayload(),
+                        }
+                      : { metaAccessToken: null, metaPhoneNumberId: null, metaWabaId: null, metaTemplates: {} }),
                   },
                 });
               }}

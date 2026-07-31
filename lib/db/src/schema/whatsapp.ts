@@ -50,6 +50,12 @@ export const whatsappConnectionsTable = pgTable("whatsapp_connections", {
    * Included as `template_name` on outbound webhooks so Zapier/BSP can send without remapping hints.
    */
   templates: jsonb("templates").$type<WhatsappConnectionTemplates>().notNull().default({}),
+  /** Meta WhatsApp Cloud API direct connection (no BSP middleman). Token AES-encrypted at rest. */
+  metaAccessToken: text("meta_access_token"),
+  metaPhoneNumberId: text("meta_phone_number_id"),
+  metaWabaId: text("meta_waba_id"),
+  /** Hint → approved Meta template picked by the user (fetched live from Graph API). */
+  metaTemplates: jsonb("meta_templates").$type<Record<string, { name: string; language: string; paramCount: number }>>().notNull().default({}),
   active: boolean("active").notNull().default(true),
   lastInboundAt: timestamp("last_inbound_at", { withTimezone: true }),
   lastOutboundAt: timestamp("last_outbound_at", { withTimezone: true }),

@@ -21,6 +21,8 @@ import {
   isRequestCallEvent,
 } from "../services/whatsapp/normalize.js";
 import { dialOutboundAgent, OutboundDialError } from "../services/outbound-agent-dial.js";
+import { encryptKey, decryptKey } from "../lib/crypto.js";
+import { fetchMetaTemplates, verifyMetaPhoneNumber, type MetaTemplateChoice } from "../services/whatsapp/meta.js";
 
 const router: IRouter = Router();
 
@@ -45,6 +47,10 @@ function formatConnection(row: typeof whatsappConnectionsTable.$inferSelect, opt
     postCallEnabled: row.postCallEnabled,
     buttonIds: row.buttonIds ?? [],
     templates: row.templates ?? {},
+    metaConnected: Boolean(row.metaAccessToken && row.metaPhoneNumberId),
+    metaPhoneNumberId: row.metaPhoneNumberId,
+    metaWabaId: row.metaWabaId,
+    metaTemplates: row.metaTemplates ?? {},
     active: row.active,
     lastInboundAt: row.lastInboundAt?.toISOString() ?? null,
     lastOutboundAt: row.lastOutboundAt?.toISOString() ?? null,
@@ -69,6 +75,24 @@ function normalizeTemplates(raw: unknown): {
   for (const key of ["call_summary", "booking_confirmed", "callback_scheduled"] as const) {
     const v = o[key];
     if (typeof v === "string" && v.trim()) out[key] = v.trim();
+  }
+  return out;
+}
+
+function normalizeMetaTemplates(raw: unknown): Record<string, MetaTemplateChoice> {
+  if (!raw || typeof raw !== "object") return {};
+  const out: Record<string, MetaTemplateChoice> = {};
+  for (const key of ["call_summary", "booking_confirmed", "callback_scheduled"]) {
+    const v = (raw as Record<string, unknown>)[key];
+    if (!v || typeof v !== "object") continue;
+    const o = v as Record<string, unknown>;
+    if (typeof o["name"] === "string" && o["name"].trim() && typeof o["language"] === "string" && o["language"].trim()) {
+      out[key] = {
+        name: o["name"].trim(),
+        language: o["language"].trim(),
+        paramCount: Number.isFinite(Number(o["paramCount"])) ? Math.max(0, Number(o["paramCount"])) : 0,
+      };
+    }
   }
   return out;
 }
@@ -148,6 +172,10 @@ router.post("/whatsapp/connections", requireAuth, async (req, res): Promise<void
     postCallEnabled?: boolean;
     buttonIds?: string[];
     templates?: Record<string, string>;
+    metaAccessToken?: string | null;
+    metaPhoneNumberId?: string | null;
+    metaWabaId?: string | null;
+    metaTemplates?: Record<string, unknown>;
   };
 
   const agentId = Number(body.agentId);
@@ -195,6 +223,10 @@ router.post("/whatsapp/connections", requireAuth, async (req, res): Promise<void
       ? body.buttonIds.map(String)
       : undefined,
     templates: normalizeTemplates(body.templates),
+    metaAccessToken: body.metaAccessToken?.trim() ? encryptKey(body.metaAccessToken.trim()) : null,
+    metaPhoneNumberId: body.metaPhoneNumberId?.trim() || null,
+    metaWabaId: body.metaWabaId?.trim() || null,
+    metaTemplates: normalizeMetaTemplates(body.metaTemplates),
     active: true,
   }).returning();
 
@@ -235,6 +267,19 @@ router.patch("/whatsapp/connections/:id", requireAuth, async (req, res): Promise
   if (body["regenerateOutboundSecret"] === true) {
     updates.outboundSecret = `whsec_${randomBytes(24).toString("hex")}`;
   }
+  // Meta Cloud API fields. Token: string = set (encrypted), null = disconnect, absent = keep.
+  if (typeof body["metaAccessToken"] === "string") {
+    updates.metaAccessToken = body["metaAccessToken"].trim() ? encryptKey(body["metaAccessToken"].trim()) : null;
+  } else if (body["metaAccessToken"] === null) {
+    updates.metaAccessToken = null;
+  }
+  if (typeof body["metaPhoneNumberId"] === "string" || body["metaPhoneNumberId"] === null) {
+    updates.metaPhoneNumberId = typeof body["metaPhoneNumberId"] === "string" ? body["metaPhoneNumberId"].trim() || null : null;
+  }
+  if (typeof body["metaWabaId"] === "string" || body["metaWabaId"] === null) {
+    updates.metaWabaId = typeof body["metaWabaId"] === "string" ? body["metaWabaId"].trim() || null : null;
+  }
+  if (body["metaTemplates"] !== undefined) updates.metaTemplates = normalizeMetaTemplates(body["metaTemplates"]);
 
   const [row] = await db.update(whatsappConnectionsTable)
     .set(updates)
@@ -262,6 +307,73 @@ router.delete("/whatsapp/connections/:id", requireAuth, async (req, res): Promis
     return;
   }
   res.sendStatus(204);
+});
+
+/**
+ * Fetch approved templates from the user's Meta WABA.
+ * Creds come either raw from the request (pre-save preview) or from a stored
+ * connection (connectionId). Also verifies the phone number ID when given.
+ */
+router.post("/whatsapp/meta/templates", requireAuth, async (req, res): Promise<void> => {
+  const userId = (req as any).clerkUserId as string;
+  const body = req.body as {
+    accessToken?: string;
+    wabaId?: string;
+    phoneNumberId?: string;
+    connectionId?: string;
+  };
+
+  let token = (body.accessToken ?? "").trim();
+  let wabaId = (body.wabaId ?? "").trim();
+  let phoneNumberId = (body.phoneNumberId ?? "").trim();
+
+  if ((!token || !wabaId) && body.connectionId) {
+    const [conn] = await db
+      .select()
+      .from(whatsappConnectionsTable)
+      .where(and(
+        eq(whatsappConnectionsTable.id, String(body.connectionId)),
+        eq(whatsappConnectionsTable.userId, userId),
+      ))
+      .limit(1);
+    if (conn?.metaAccessToken) {
+      try {
+        token = token || decryptKey(conn.metaAccessToken);
+      } catch {
+        res.status(400).json({ error: "Saved access token could not be read — please paste it again." });
+        return;
+      }
+      wabaId = wabaId || (conn.metaWabaId ?? "");
+      phoneNumberId = phoneNumberId || (conn.metaPhoneNumberId ?? "");
+    }
+  }
+
+  if (!token || !wabaId) {
+    res.status(400).json({ error: "accessToken and wabaId are required (WhatsApp Business Account ID from Meta Business settings)" });
+    return;
+  }
+
+  try {
+    const [templates, phoneCheck] = await Promise.all([
+      fetchMetaTemplates(token, wabaId),
+      phoneNumberId ? verifyMetaPhoneNumber(token, phoneNumberId) : Promise.resolve(null),
+    ]);
+    if (phoneCheck && !phoneCheck.ok) {
+      res.status(400).json({ error: `Phone number ID check failed: ${phoneCheck.error}` });
+      return;
+    }
+    res.json({
+      templates: templates.filter((t) => t.status === "APPROVED"),
+      allCount: templates.length,
+      phone: phoneCheck && phoneCheck.ok
+        ? { displayPhone: phoneCheck.displayPhone, verifiedName: phoneCheck.verifiedName }
+        : null,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.warn({ err, userId }, "whatsapp-meta: template fetch failed");
+    res.status(400).json({ error: msg });
+  }
 });
 
 /* ── Public inbound webhook ─────────────────────────────────────────────── */

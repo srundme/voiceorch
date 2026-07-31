@@ -23,6 +23,13 @@ import {
   resolveConnectionTemplateName,
   type WhatsappCallEndedPayload,
 } from "./payload.js";
+import { decryptKey } from "../../lib/crypto.js";
+import {
+  buildMetaParams,
+  resolveMetaTemplate,
+  sendMetaTemplate,
+  type MetaTemplateChoice,
+} from "./meta.js";
 import {
   getActiveChannel,
   hintEnabled,
@@ -105,9 +112,12 @@ export async function dispatchWhatsappCallEnded(
       eq(whatsappConnectionsTable.postCallEnabled, true),
     ));
   const withUrl = connections.filter((c) => (c.outboundWebhookUrl ?? "").trim());
+  const withMeta = connections.filter(
+    (c) => !(c.outboundWebhookUrl ?? "").trim() && c.metaAccessToken && c.metaPhoneNumberId,
+  );
 
-  const nativeChannel = withUrl.length === 0 ? await getActiveChannel(call.userId) : null;
-  if (withUrl.length === 0 && !nativeChannel) return;
+  const nativeChannel = withUrl.length === 0 && withMeta.length === 0 ? await getActiveChannel(call.userId) : null;
+  if (withUrl.length === 0 && withMeta.length === 0 && !nativeChannel) return;
 
   let direction = "inbound";
   try {
@@ -183,6 +193,63 @@ export async function dispatchWhatsappCallEnded(
           { err, callId, connectionId: conn.id },
           "whatsapp: post-call outbound failed",
         );
+      }
+    }
+    return;
+  }
+
+  /* ── Path 1.5: Direct Meta Cloud API send ─────────────────────────────── */
+  if (withMeta.length > 0) {
+    const hint = (basePayload.template_hint ?? "call_summary") as string;
+    const businessName = agent?.name || "SnapServe";
+    const summary = (opts?.callSummary ?? call.callSummary ?? "").trim();
+    // Quality gate mirrors native path: skip failed/no-pickup calls unless a booking exists.
+    if (call.status !== "completed" && !meetingTime) {
+      logger.info({ callId, status: call.status }, "whatsapp-meta: non-completed call without booking — skipped");
+      return;
+    }
+    for (const conn of withMeta) {
+      try {
+        const tpl = resolveMetaTemplate(
+          conn.metaTemplates as Record<string, MetaTemplateChoice | undefined> | null,
+          hint,
+        );
+        if (!tpl) {
+          logger.info({ callId, connectionId: conn.id, hint }, "whatsapp-meta: no template linked for hint — skipped");
+          continue;
+        }
+        const params = buildMetaParams(hint, {
+          businessName,
+          summary,
+          meetingTime: meetingTime ? formatMeetingTimeIST(meetingTime) : null,
+          meetLink,
+        }, tpl.paramCount);
+        const result = await sendMetaTemplate({
+          accessToken: decryptKey(conn.metaAccessToken!),
+          phoneNumberId: conn.metaPhoneNumberId!,
+          toPhone: phone,
+          template: tpl,
+          params,
+        });
+        await db.update(whatsappConnectionsTable)
+          .set(result.ok
+            ? { lastOutboundAt: new Date(), lastError: null, updatedAt: new Date() }
+            : { lastError: result.ok ? null : result.error.slice(0, 500), updatedAt: new Date() })
+          .where(eq(whatsappConnectionsTable.id, conn.id))
+          .catch(() => {});
+        logger.info(
+          { callId, connectionId: conn.id, phone, template: tpl.name, ok: result.ok, ...(result.ok ? {} : { error: result.error }) },
+          "whatsapp-meta: post-call send",
+        );
+      } catch (err) {
+        // Decrypt failure or other per-connection error — record it and keep
+        // processing remaining connections instead of aborting the dispatch.
+        const msg = err instanceof Error ? err.message : String(err);
+        await db.update(whatsappConnectionsTable)
+          .set({ lastError: `Meta send failed: ${msg}`.slice(0, 500), updatedAt: new Date() })
+          .where(eq(whatsappConnectionsTable.id, conn.id))
+          .catch(() => {});
+        logger.warn({ err, callId, connectionId: conn.id }, "whatsapp-meta: post-call send error");
       }
     }
     return;
@@ -302,6 +369,45 @@ export async function sendMidCallWhatsapp(opts: {
       const msg = err instanceof Error ? err.message : String(err);
       await db.update(whatsappConnectionsTable)
         .set({ lastError: msg.slice(0, 500), updatedAt: new Date() })
+        .where(eq(whatsappConnectionsTable.id, conn.id))
+        .catch(() => {});
+      return { ok: false, error: msg, via: "byo" };
+    }
+  }
+
+  /* Mid-call direct Meta Cloud API send */
+  if (conn && conn.metaAccessToken && conn.metaPhoneNumberId) {
+    try {
+    const tpl = resolveMetaTemplate(
+      conn.metaTemplates as Record<string, MetaTemplateChoice | undefined> | null,
+      safeHint,
+    );
+    if (!tpl) {
+      return { ok: false, error: `No Meta template linked for ${safeHint} on this connection`, via: "byo" };
+    }
+    const params = buildMetaParams(safeHint, {
+      businessName: opts.agentName || "SnapServe",
+      summary: (opts.summary ?? "").trim(),
+    }, tpl.paramCount);
+    const result = await sendMetaTemplate({
+      accessToken: decryptKey(conn.metaAccessToken),
+      phoneNumberId: conn.metaPhoneNumberId,
+      toPhone: phone,
+      template: tpl,
+      params,
+    });
+    await db.update(whatsappConnectionsTable)
+      .set(result.ok
+        ? { lastOutboundAt: new Date(), lastError: null, updatedAt: new Date() }
+        : { lastError: result.ok ? null : result.error.slice(0, 500), updatedAt: new Date() })
+      .where(eq(whatsappConnectionsTable.id, conn.id))
+      .catch(() => {});
+    if (!result.ok) return { ok: false, error: result.error, via: "byo" };
+    return { ok: true, via: "byo" };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      await db.update(whatsappConnectionsTable)
+        .set({ lastError: `Meta send failed: ${msg}`.slice(0, 500), updatedAt: new Date() })
         .where(eq(whatsappConnectionsTable.id, conn.id))
         .catch(() => {});
       return { ok: false, error: msg, via: "byo" };

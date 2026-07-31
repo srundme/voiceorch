@@ -589,6 +589,13 @@
       "when": 1789900000000,
       "tag": "0083_whatsapp_connection_templates",
       "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1790000000000,
+      "tag": "0084_whatsapp_meta_cloud_api",
+      "breakpoints": true
     }
   ]
 }
