@@ -113,6 +113,7 @@ import { reliabilityPatterns } from "./chapters/m15-reliability-patterns";
 
 // ── Teacher's Guide — 10-Day Programme ───────────────────────────────────────
 import { teachDay01Stt } from "./chapters/tg-day01-stt";
+import { teachDay01SttFullCode } from "./chapters/tg-day01-stt-fullcode";
 
 // ── Module 17 — STT Deep Dive ────────────────────────────────────────────────
 import { sttPipelinePath } from "./chapters/d1-stt-pipeline-path";
@@ -269,7 +270,7 @@ const m15Chapters: Chapter[] = [
   reliabilityPatterns,
 ];
 
-const tgChapters: Chapter[] = [teachDay01Stt];
+const tgChapters: Chapter[] = [teachDay01Stt, teachDay01SttFullCode];
 
 const d1Chapters: Chapter[] = [
   sttPipelinePath,
