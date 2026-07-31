@@ -223,7 +223,7 @@ router.post("/whatsapp/connections", requireAuth, async (req, res): Promise<void
       ? body.buttonIds.map(String)
       : undefined,
     templates: normalizeTemplates(body.templates),
-    metaAccessToken: body.metaAccessToken?.trim() ? encryptKey(body.metaAccessToken.trim()) : null,
+    metaAccessToken: body.metaAccessToken?.replace(/\s+/g, "") ? encryptKey(body.metaAccessToken.replace(/\s+/g, "")) : null,
     metaPhoneNumberId: body.metaPhoneNumberId?.trim() || null,
     metaWabaId: body.metaWabaId?.trim() || null,
     metaTemplates: normalizeMetaTemplates(body.metaTemplates),
@@ -269,7 +269,7 @@ router.patch("/whatsapp/connections/:id", requireAuth, async (req, res): Promise
   }
   // Meta Cloud API fields. Token: string = set (encrypted), null = disconnect, absent = keep.
   if (typeof body["metaAccessToken"] === "string") {
-    updates.metaAccessToken = body["metaAccessToken"].trim() ? encryptKey(body["metaAccessToken"].trim()) : null;
+    updates.metaAccessToken = body["metaAccessToken"].replace(/\s+/g, "") ? encryptKey(body["metaAccessToken"].replace(/\s+/g, "")) : null;
   } else if (body["metaAccessToken"] === null) {
     updates.metaAccessToken = null;
   }
@@ -323,7 +323,10 @@ router.post("/whatsapp/meta/templates", requireAuth, async (req, res): Promise<v
     connectionId?: string;
   };
 
-  let token = (body.accessToken ?? "").trim();
+  // Meta tokens are a single unbroken string — pasted tokens often pick up
+  // line breaks / spaces from the Meta UI, which Graph rejects with
+  // "Cannot parse access token". Strip ALL whitespace, not just the edges.
+  let token = (body.accessToken ?? "").replace(/\s+/g, "");
   let wabaId = (body.wabaId ?? "").trim();
   let phoneNumberId = (body.phoneNumberId ?? "").trim();
 
