@@ -191,9 +191,13 @@ export function hydrateToolsForForm(tools: readonly AgentTool[]): AgentFormTool[
 
 /** Bolna-style Call Engine presets (endpointing + linear delay + interrupt words). */
 export const CALL_ENGINE_PRESETS = {
-  fast:     { asrEndpointingSilenceMs: 150, linearDelayMs: 0, stopSpeakingNumWords: 1 },
-  balanced: { asrEndpointingSilenceMs: 250, linearDelayMs: 0, stopSpeakingNumWords: 3 },
-  patient:  { asrEndpointingSilenceMs: 500, linearDelayMs: 350, stopSpeakingNumWords: 4 },
+  // sarvamHighVadSensitivity ("Detect pauses quickly") is the single biggest
+  // Sarvam latency lever: OFF = Sarvam waits ~1-2s of silence before ending the
+  // turn; ON = ~0.13s. Fast MUST turn it on or the preset leaves a ~2s tax in
+  // place (call 5096). Balanced/Patient keep it off to protect slow speakers.
+  fast:     { asrEndpointingSilenceMs: 150, linearDelayMs: 0,   stopSpeakingNumWords: 1, sarvamHighVadSensitivity: true,  sarvamIncompleteHoldMs: 300 },
+  balanced: { asrEndpointingSilenceMs: 250, linearDelayMs: 0,   stopSpeakingNumWords: 3, sarvamHighVadSensitivity: false, sarvamIncompleteHoldMs: 700 },
+  patient:  { asrEndpointingSilenceMs: 500, linearDelayMs: 350, stopSpeakingNumWords: 4, sarvamHighVadSensitivity: false, sarvamIncompleteHoldMs: 1000 },
 } as const;
 
 export type CallEnginePreset = keyof typeof CALL_ENGINE_PRESETS;

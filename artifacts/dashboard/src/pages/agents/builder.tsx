@@ -2574,6 +2574,9 @@ function VoiceCallFeelPresets({ form }: { form: any }) {
         endpointMs === p.asrEndpointingSilenceMs
         && linearMs === p.linearDelayMs
         && interruptWords === p.stopSpeakingNumWords
+        && (asrProviderVal !== "sarvam"
+          || ((form.watch("sarvamHighVadSensitivity") ?? false) === p.sarvamHighVadSensitivity
+            && (form.watch("sarvamIncompleteHoldMs") ?? 700) === p.sarvamIncompleteHoldMs))
       ) return key;
     }
     return "custom";
@@ -2585,6 +2588,9 @@ function VoiceCallFeelPresets({ form }: { form: any }) {
     form.setValue("linearDelayMs", p.linearDelayMs, { shouldDirty: true });
     form.setValue("stopSpeakingNumWords", p.stopSpeakingNumWords, { shouldDirty: true });
     form.setValue("stopSpeakingVoiceSecs", voiceSecondsFromInterruptWords(p.stopSpeakingNumWords), { shouldDirty: true });
+    // Sarvam pause-detection is part of the preset — Fast without it leaves a ~2s turn tax.
+    form.setValue("sarvamHighVadSensitivity", p.sarvamHighVadSensitivity, { shouldDirty: true });
+    form.setValue("sarvamIncompleteHoldMs", p.sarvamIncompleteHoldMs, { shouldDirty: true });
   };
 
   return (
@@ -3494,6 +3500,9 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
         endpointMs === p.asrEndpointingSilenceMs
         && linearMs === p.linearDelayMs
         && interruptWords === p.stopSpeakingNumWords
+        && (asrProviderVal !== "sarvam"
+          || ((form.watch("sarvamHighVadSensitivity") ?? false) === p.sarvamHighVadSensitivity
+            && (form.watch("sarvamIncompleteHoldMs") ?? 700) === p.sarvamIncompleteHoldMs))
       ) return key;
     }
     return "custom";
@@ -3505,6 +3514,9 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
     form.setValue("linearDelayMs", p.linearDelayMs, { shouldDirty: true });
     form.setValue("stopSpeakingNumWords", p.stopSpeakingNumWords, { shouldDirty: true });
     form.setValue("stopSpeakingVoiceSecs", voiceSecondsFromInterruptWords(p.stopSpeakingNumWords), { shouldDirty: true });
+    // Sarvam pause-detection is part of the preset — Fast without it leaves a ~2s turn tax.
+    form.setValue("sarvamHighVadSensitivity", p.sarvamHighVadSensitivity, { shouldDirty: true });
+    form.setValue("sarvamIncompleteHoldMs", p.sarvamIncompleteHoldMs, { shouldDirty: true });
   };
 
   const nav: { id: AdvSection; icon: React.ReactNode; label: string }[] = [
