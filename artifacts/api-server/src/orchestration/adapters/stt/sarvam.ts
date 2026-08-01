@@ -13,7 +13,6 @@
  *   mode                "transcribe" | "codemix" | "verbatim" | "translit" | "translate"
  *                       (saaras:v3 only; translate = speech-to-English)
  *   sample_rate         16000 (default) | 8000
- *   input_audio_codec   "pcm_s16le" | "wav"
  *   high_vad_sensitivity true → silence boundary = 2 VAD frames (~64ms @16kHz, ~128ms @8kHz);
  *                        default (false) is 18-of-24 frames ≈ 1s+. Fine-tune params
  *                        (negative_frames_count etc.) can override — see Sarvam Fine VAD Tuning docs.
@@ -23,10 +22,9 @@
  *   Header: api-subscription-key: <key>
  *
  * ── Audio message (JSON text, sent as each PCM chunk arrives) ────────────────
- *   { audio: { data: "<base64 raw PCM>", encoding: "audio/wav", sample_rate: 16000 } }
- *   NOTE: encoding enum MUST be "audio/wav" — "pcm_s16le" is rejected by Sarvam's
- *   Pydantic model even though the URL param `input_audio_codec=pcm_s16le` sets
- *   the actual codec. Confirmed via live WebSocket probe (June 2026).
+ *   { audio: { data: "<base64 WAV (44-byte header + PCM)>", encoding: "audio/wav", sample_rate: 16000 } }
+ *   Each chunk is wrapped in a real WAV container via pcmToWav() so the payload
+ *   matches the declared encoding — no reliance on a URL-param codec override.
  *
  * ── Server → client messages (JSON text) ─────────────────────────────────────
  *   { type: "events", data: { signal_type: "START_SPEECH" | "END_SPEECH" } }
@@ -259,7 +257,6 @@ export class SarvamSTT implements STTAdapter {
         model:              model,
         language_code:      langCode,
         sample_rate:        String(sampleRate),
-        input_audio_codec:  "pcm_s16le",
         high_vad_sensitivity: this.highVadSensitivity ? "true" : "false",
         vad_signals:        "true",    // emit speech_start / speech_end events
         flush_signal:       "true",    // allow manual buffer flush via flush() call
@@ -511,11 +508,12 @@ export class SarvamSTT implements STTAdapter {
       // this, a stale lastMsgAt from before the gap would trip a false positive on the
       // very first chunk after playback and terminate a perfectly healthy socket.
       if (now - lastAudioSentAt > WS_DEAD_MS) lastMsgAt = now;
+      const wav = pcmToWav(chunk, sampleRate);
       ws.send(
         JSON.stringify({
           audio: {
-            data:        chunk.toString("base64"),
-            encoding:    "audio/wav",   // enum must be "audio/wav"; actual codec is set via URL param
+            data:        wav.toString("base64"),
+            encoding:    "audio/wav",   // real WAV container — header matches declared encoding
             sample_rate: sampleRate,
           },
         }),
@@ -778,11 +776,11 @@ export class SarvamSTT implements STTAdapter {
         emitCoalesced();
         // Ask Sarvam to immediately finalize its internal audio buffer.
         if (!wsReady || ws.readyState !== WebSocket.OPEN) return;
-        const emptyData = Buffer.alloc(0);
+        const emptyWav = pcmToWav(Buffer.alloc(0), sampleRate);
         ws.send(
           JSON.stringify({
             audio: {
-              data:        emptyData.toString("base64"),
+              data:        emptyWav.toString("base64"),
               encoding:    "audio/wav",
               sample_rate: sampleRate,
             },
@@ -877,7 +875,7 @@ export class SarvamSTT implements STTAdapter {
         try {
           ws.send(JSON.stringify({
             audio: {
-              data:        KEEPALIVE_FRAME.toString("base64"),
+              data:        pcmToWav(KEEPALIVE_FRAME, sampleRate).toString("base64"),
               encoding:    "audio/wav",
               sample_rate: sampleRate,
             },
