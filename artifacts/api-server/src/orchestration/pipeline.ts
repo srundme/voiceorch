@@ -5276,6 +5276,11 @@ export class OrchestrationPipeline implements VoiceSession {
           await new Promise<void>((r) => setTimeout(r, 10));
         }
       };
+      // Underrun instrumentation: every mid-sentence buffer dry-out is an
+      // audible glitch ("sticky/breaking" voice). Counted per sentence and
+      // surfaced in the downloadable call execution log after playback.
+      let underrunCount = 0;
+      let underrunWaitMs = 0;
       await awaitPrebuffer(TTS_PREBUFFER_MS, TTS_PREBUFFER_CAP_MS);
       // Re-anchor the per-sentence echo grace + adaptive echo-floor calibration
       // window to actual playback start: the prebuffer wait above would
@@ -5337,9 +5342,27 @@ export class OrchestrationPipeline implements VoiceSession {
           // resuming on the very next 20 ms chunk (which turns one slow patch
           // into a rapid stutter of micro-gaps), re-buffer a short runway so
           // playback resumes smoothly, then reset pacing to avoid a burst.
+          underrunCount++;
+          const _uStart = Date.now();
           await awaitPrebuffer(TTS_REBUFFER_MS, TTS_REBUFFER_CAP_MS);
+          underrunWaitMs += Date.now() - _uStart;
           nextTick = Date.now() + 20;
         }
+      }
+      if (underrunCount > 0 && !this.closed) {
+        logger.warn(
+          { callId: this.config.callId, underrunCount, underrunWaitMs, sentenceLen: job.text?.length ?? 0 },
+          "TTS playback underruns — synthesis slower than realtime mid-sentence (audible glitches)",
+        );
+        this.logExec("TTS", "system", {
+          status: "info",
+          metadata: {
+            event: "Playback underruns (audible glitch)",
+            underrunCount,
+            underrunWaitMs,
+            provider: this.agent.ttsProvider,
+          },
+        });
       }
       // Ensure synthesis has fully settled (so a real error surfaces) even if
       // playback exited early via barge-in/close.
