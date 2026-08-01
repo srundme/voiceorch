@@ -319,6 +319,8 @@ export type HandoffSessionHooks = {
   onTranscript?: (speaker: "user" | "agent", text: string) => void;
   rawPcmOutput?: boolean;
   callDirection: "inbound" | "outbound";
+  /** Squad-shared memory owner — keeps voiceprints/memory on ONE record across handoffs. */
+  memoryOwnerAgentId?: number;
 };
 
 /**
@@ -403,6 +405,7 @@ export async function performSquadAgentHandoff(opts: {
           onCallEnd: hooks.onCallEnd,
           onBargeIn: hooks.onBargeIn,
           callDirection: hooks.callDirection,
+          memoryOwnerAgentId: hooks.memoryOwnerAgentId,
         })
       : new OrchestrationPipeline({
           callId: hooks.callId,
@@ -417,6 +420,7 @@ export async function performSquadAgentHandoff(opts: {
           onCallEnd: hooks.onCallEnd,
           onBargeIn: hooks.onBargeIn,
           callDirection: hooks.callDirection,
+          memoryOwnerAgentId: hooks.memoryOwnerAgentId,
         });
   } catch (err) {
     logger.error({ err, callId: hooks.callId }, "Failed to create handoff pipeline — keeping previous agent");

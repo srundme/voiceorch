@@ -698,6 +698,12 @@ export interface SessionConfig {
   rawPcmOutput?: boolean;
   /** True when caller memory shows this is a returning caller (>=1 prior completed call). */
   isReturningCaller?: boolean;
+  /**
+   * Canonical agentId that owns caller memory + voiceprints for this call.
+   * For squad members this is the squad's shared owner (entry agent), so the
+   * whole squad reads/writes ONE customer record. Defaults to the agent itself.
+   */
+  memoryOwnerAgentId?: number;
   /** Returning caller's remembered name — used for an instant opener (no greeting-LLM wait). */
   returningCallerName?: string | null;
   /** Inbound vs outbound — used for post-greeting listen timing on telephony calls. */

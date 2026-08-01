@@ -351,3 +351,40 @@ export async function consumeFollowupContext(
     return "";
   }
 }
+
+/**
+ * Squad-shared memory owner. All members of a squad read/write ONE caller
+ * memory + voiceprint record, keyed under a canonical "owner" agentId so the
+ * whole squad recognizes the caller regardless of which member answers.
+ * Owner = entry member's agent, else supervisor, else lowest member agentId
+ * (deterministic + stable). Falls back to the agent itself when not in a squad.
+ */
+export async function resolveSquadMemoryOwnerAgentId(
+  agentId: number,
+  userId: string | null | undefined,
+  /** When the call already knows its squad (campaign/queue path), use THAT
+   *  squad — membership lookup alone can pick the wrong squad for agents in
+   *  several active squads. */
+  knownSquadId?: number | null,
+): Promise<number> {
+  if (!userId && !knownSquadId) return agentId;
+  try {
+    const team = knownSquadId
+      ? await loadSquadTeam(knownSquadId, agentId)
+      : userId
+        ? await findSquadForAgent(agentId, userId)
+        : null;
+    if (!team) return agentId;
+    const entry = team.squad.entryMemberId != null
+      ? team.members.find((m) => m.id === team.squad.entryMemberId)
+      : undefined;
+    const owner =
+      entry?.agentId
+      ?? team.squad.supervisorAgentId
+      ?? team.members.reduce((min, m) => Math.min(min, m.agentId), agentId);
+    return owner ?? agentId;
+  } catch (err) {
+    logger.warn({ err, agentId }, "Squad memory owner resolution failed — using own agentId");
+    return agentId;
+  }
+}

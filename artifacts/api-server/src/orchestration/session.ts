@@ -775,10 +775,23 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
   const kbExcludeTitles =
     agent.llmProvider?.toLowerCase() === "krutrim" ? undefined : [KRUTRIM_AUTO_SUMMARY_TITLE];
 
+  // Squad-shared memory: members of one squad read/write ONE caller record
+  // (keyed under the squad's canonical owner agent) so every teammate
+  // recognizes the caller. Solo agents: owner = self (unchanged behavior).
+  let memoryOwnerAgentId = params.agentId;
+  try {
+    const { resolveSquadMemoryOwnerAgentId } = await import("../services/squad-teamwork.js");
+    memoryOwnerAgentId = await resolveSquadMemoryOwnerAgentId(params.agentId, agent.userId, params.squadId ?? null);
+  } catch { /* non-fatal — fall back to own agentId */ }
+  // Persona-swap invalidation compares the answering agent's prompt hash; with
+  // a shared owner record + different member prompts it would false-fire and
+  // wipe squad memory on every member alternation — disable it when shared.
+  const memoryPersonaHash = memoryOwnerAgentId === params.agentId ? personaHash : undefined;
+
   const [callerCtxResult, campaignLeadResult, kbEntriesResult, providerRowsResult] = await Promise.all([
     // 1. Caller memory (3-layer: profile + facts + archive)
     callerPhone
-      ? loadCallerContext(params.agentId, callerPhone, personaHash).catch((memErr) => {
+      ? loadCallerContext(memoryOwnerAgentId, callerPhone, memoryPersonaHash).catch((memErr) => {
           logger.warn({ agentId: params.agentId, callerPhone, memErr }, `Failed to load caller context — ${memErr instanceof Error ? memErr.message : String(memErr)} — continuing without memory`);
           return null;
         })
@@ -1811,6 +1824,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
           onTranscript: params.onTranscript,
           rawPcmOutput: params.rawPcmOutput,
           callDirection,
+          memoryOwnerAgentId: live.memoryOwnerAgentId,
         },
       });
 
@@ -2046,6 +2060,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
         providerKeys,
         telephonyProvider: params.telephonyProvider,
         callerPhone,
+        memoryOwnerAgentId,
         campaignLeadId: params.campaignLeadId ?? null,
         onAudioOut: params.onAudioOut,
         rawPcmOutput: params.rawPcmOutput ?? (params.telephonyProvider === "vobiz"),
@@ -2074,6 +2089,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     providerKeys,
     telephonyProvider: params.telephonyProvider,
     callerPhone,
+    memoryOwnerAgentId,
     campaignLeadId: params.campaignLeadId ?? null,
     onAudioOut: params.onAudioOut,
     rawPcmOutput: params.rawPcmOutput ?? (params.telephonyProvider === "vobiz"),
@@ -2121,7 +2137,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
         // Real-time name latch — persist immediately so the name is saved even
         // if the call drops before the post-call LLM extraction runs.
         void latchCallerName({
-          agentId:      params.agentId,
+          agentId:      memoryOwnerAgentId,
           phoneNumber:  callerPhone,
           transcript:   text,
           existingName: callerProfileSnapshot?.name ?? null,
@@ -2137,7 +2153,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
         });
         // Real-time structured fact latch — pattern-based detection, fire-and-forget
         void latchCallerFact({
-          agentId:       params.agentId,
+          agentId:       memoryOwnerAgentId,
           phoneNumber:   callerPhone,
           transcript:    text,
           callId:        callRecord.id,
@@ -2204,7 +2220,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     sourceCallbackReason: params.sourceCallbackReason ?? null,
     squadRunId:           attachedSquadRunId,
     squadId:              attachedSquadId,
-    memoryOwnerAgentId:   params.agentId,
+    memoryOwnerAgentId,
     handoffTranscriptAccum: "",
   });
 
@@ -3496,7 +3512,10 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
                   durationSeconds,
                   callerNameInCall:  session.callerNameLatchedThisCall,
                   callerNameLatchTier: session.callerNameLatchTier,
-                  personaHash:       session.personaHash ?? undefined,
+                  // Persona-swap invalidation only for solo agents — with a
+                  // squad-shared owner record, member prompt hashes differ and
+                  // would false-fire the swap wipe on every alternation.
+                  personaHash:       memoryAgentId === call.agentId ? (session.personaHash ?? undefined) : undefined,
                   // Persist the language the caller was using when the call ended.
                   // Only meaningful when languageAutoDetect is ON; ignored otherwise
                   // because the pipeline always ends in the agent's fixed language.

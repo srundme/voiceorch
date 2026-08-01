@@ -1793,7 +1793,9 @@ export class OrchestrationPipeline implements VoiceSession {
     if (config.agentConfig.voiceMemoryEnabled) {
       this.speakerVerifier = new SpeakerVerifier({
         callId: config.callId,
-        agentId: config.agentConfig.id,
+        // Squad-shared: voiceprints live under the squad's memory owner so
+        // any member recognizes the caller's voice.
+        agentId: config.memoryOwnerAgentId ?? config.agentConfig.id,
         phoneNumber: config.callerPhone ?? null,
         onEvent: (ev) => this.onVoiceMemoryEvent(ev),
       });
@@ -3627,7 +3629,7 @@ export class OrchestrationPipeline implements VoiceSession {
   private async loadVoiceLinkedMemory(linkedPhone: string): Promise<void> {
     try {
       const { loadCallerContext } = await import("./callerMemory.js");
-      const ctx = await loadCallerContext(this.config.agentConfig.id, linkedPhone);
+      const ctx = await loadCallerContext(this.config.memoryOwnerAgentId ?? this.config.agentConfig.id, linkedPhone);
       if (this.closed || this.voiceHandoffActive) return;
 
       const lines: string[] = [];
