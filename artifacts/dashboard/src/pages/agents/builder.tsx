@@ -860,152 +860,6 @@ function JourneyReadinessPanel({ form, agent }: { form: any; agent: any }) {
   );
 }
 
-/* ── Go Live — guided step-by-step launch flow ──────────────────────────────
-   Replaces the dense "Connect & Launch" wall with 4 plain steps: the user
-   always sees what is done, what is next, and one button per step. The full
-   channels + journey configuration stays available below, collapsed. */
-function GoLiveTab({
-  form, agent, agentId, forceExpandEmail,
-  onTestPhone, onTestWeb, onPublish,
-  onConfigureEmail, onOpenChannels,
-}: {
-  form: any; agent: any; agentId: number; forceExpandEmail: boolean;
-  onTestPhone: () => void; onTestWeb: () => void; onPublish: () => void;
-  onConfigureEmail: () => void; onOpenChannels: () => void;
-}) {
-  const [showAdvanced, setShowAdvanced] = useState(forceExpandEmail);
-  useEffect(() => { if (forceExpandEmail) setShowAdvanced(true); }, [forceExpandEmail]);
-
-  const { data: phoneNumbersRaw } = useListPhoneNumbers({
-    query: { queryKey: getListPhoneNumbersQueryKey(), staleTime: 60_000 },
-  });
-  const phoneAssigned = (Array.isArray(phoneNumbersRaw) ? phoneNumbersRaw : [])
-    .some((p: any) => p.agentId === agentId);
-
-  const { data: versionsData } = useListAgentVersions(agentId);
-  const isLive = (versionsData?.versions ?? []).some((v: any) => v.status === "production");
-
-  const built = !!(form.watch("name") ?? "").trim() && !!(form.watch("systemPrompt") ?? "").trim();
-
-  const steps: Array<{
-    title: string; desc: string; done: boolean;
-    action?: { label: string; onClick: () => void; secondary?: { label: string; onClick: () => void } };
-  }> = [
-    {
-      title: "Build your agent",
-      desc: built
-        ? "Name, prompt and voice are set. You can keep refining anytime."
-        : "Give the agent a name and tell it what to say (Prompt tab).",
-      done: built,
-    },
-    {
-      title: "Give it a phone number",
-      desc: phoneAssigned
-        ? "A number is attached — customers can call your agent."
-        : "Attach a number so real customers can call in and your agent calls out from your own number. Without one, you only get the shared trial line.",
-      done: phoneAssigned,
-      action: phoneAssigned ? undefined : { label: "Assign a number", onClick: () => setShowAdvanced(true) },
-    },
-    {
-      title: "Try a test call",
-      desc: "Hear your agent before customers do — call your own phone, or test right in the browser.",
-      done: false,
-      action: { label: "Call my phone", onClick: onTestPhone, secondary: { label: "Test in browser", onClick: onTestWeb } },
-    },
-    {
-      title: "Publish",
-      desc: isLive
-        ? "A version is live in production. Publish again after big changes."
-        : "Freeze this setup as the live version. Until you publish, it stays a draft.",
-      done: isLive,
-      action: { label: isLive ? "Publish new version" : "Publish now", onClick: onPublish },
-    },
-  ];
-  // The first not-done step is "up next" — everything the user needs to focus on.
-  const nextIdx = steps.findIndex((s) => !s.done && s.title !== "Try a test call");
-
-  return (
-    <div className="p-6 space-y-6">
-      <section className="space-y-1">
-        <h2 className="text-base font-semibold tracking-tight">Go live in 4 steps</h2>
-        <p className="text-[12px] text-muted-foreground max-w-3xl">
-          Follow the steps below — green means done. WhatsApp, email, booking and follow-ups are optional extras further down.
-        </p>
-      </section>
-
-      <div className="max-w-2xl space-y-2.5">
-        {steps.map((step, i) => {
-          const isNext = i === nextIdx;
-          return (
-            <div
-              key={step.title}
-              className={cn(
-                "flex items-start gap-3.5 rounded-xl border p-4 transition-colors",
-                step.done
-                  ? "border-green-500/30 bg-green-500/[0.04]"
-                  : isNext
-                    ? "border-primary/40 bg-primary/[0.05] ring-1 ring-primary/20"
-                    : "border-border/50 bg-card/20",
-              )}
-            >
-              <div
-                className={cn(
-                  "flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[12px] font-semibold mt-0.5",
-                  step.done ? "bg-green-500/20 text-green-500" : isNext ? "bg-primary/15 text-primary" : "bg-muted/40 text-muted-foreground",
-                )}
-              >
-                {step.done ? <Check className="h-4 w-4" /> : i + 1}
-              </div>
-              <div className="min-w-0 flex-1 space-y-1">
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-semibold">{step.title}</p>
-                  {isNext && (
-                    <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-semibold text-primary">Up next</span>
-                  )}
-                </div>
-                <p className="text-[12px] text-muted-foreground leading-relaxed">{step.desc}</p>
-                {step.action && (
-                  <div className="flex flex-wrap gap-2 pt-1.5">
-                    <Button type="button" size="sm" className="h-8 text-xs rounded-lg"
-                      variant={step.done ? "outline" : "default"}
-                      onClick={step.action.onClick}>
-                      {step.action.label}
-                    </Button>
-                    {step.action.secondary && (
-                      <Button type="button" size="sm" variant="outline" className="h-8 text-xs rounded-lg"
-                        onClick={step.action.secondary.onClick}>
-                        {step.action.secondary.label}
-                      </Button>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Everything else — full channel + journey configuration, collapsed */}
-      <div className="border-t border-border/40 pt-4">
-        <button
-          type="button"
-          onClick={() => setShowAdvanced((v) => !v)}
-          className="flex items-center gap-2 text-[13px] font-medium text-muted-foreground hover:text-foreground transition-colors"
-        >
-          {showAdvanced ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-          More channels &amp; follow-ups <span className="text-muted-foreground/60 font-normal">(WhatsApp, email, booking — optional)</span>
-        </button>
-        {showAdvanced && (
-          <div className="-mx-6 mt-2">
-            <ChannelsTab form={form} agent={agent} forceExpandEmail={forceExpandEmail} />
-            <div className="border-t border-border/40 mt-2" />
-            <AnalysisTab form={form} agentId={agentId} onConfigureEmail={onConfigureEmail} onOpenChannels={onOpenChannels} />
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
 
 function ChannelsTab({ form, agent, forceExpandEmail = false }: { form: any; agent: any; forceExpandEmail?: boolean }) {
   const [, navigate] = useLocation();
@@ -6714,17 +6568,11 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
                 {activeTab === "voice"     && <VoiceTab form={form} />}
                 {activeTab === "tools"     && <ToolsTab form={form} agentId={agentId} />}
                 {activeTab === "launch"    && (
-                  <GoLiveTab
-                    form={form}
-                    agent={agent}
-                    agentId={agentId}
-                    forceExpandEmail={forceExpandEmail}
-                    onTestPhone={() => setCallDialog(true)}
-                    onTestWeb={() => setShowWebcall(true)}
-                    onPublish={() => setPublishModalOpen(true)}
-                    onConfigureEmail={openEmailChannel}
-                    onOpenChannels={openChannels}
-                  />
+                  <div>
+                    <ChannelsTab form={form} agent={agent} forceExpandEmail={forceExpandEmail} />
+                    <div className="border-t border-border/40 mt-2" />
+                    <AnalysisTab form={form} agentId={agentId} onConfigureEmail={openEmailChannel} onOpenChannels={openChannels} />
+                  </div>
                 )}
                 {activeTab === "voicemail" && <VoicemailTab form={form} />}
                 {activeTab === "advanced"  && <AdvancedTab form={form} agent={agent} />}
