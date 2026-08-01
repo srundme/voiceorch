@@ -639,6 +639,15 @@ export class SarvamSTT implements STTAdapter {
           // lets detectScriptLanguage() run and catch actual Indic-script characters
           // (Tamil, Hindi, etc.) in the transcript text.
           const reportedLang = msg.data?.language_code;
+          // Instrumentation (do NOT change filtering yet): log every reported
+          // language_code with the init language + resolved mode so wrong-language
+          // calls can be diagnosed — if reportedLang never differs from langCode
+          // the echo-back assumption below holds; if it differs on wrong-language
+          // calls, the filter is discarding real detections.
+          logger.info(
+            { reportedLang, langCode, differs: !!reportedLang && reportedLang !== langCode, model, mode },
+            "Sarvam STT: language_code on transcript message",
+          );
           if (reportedLang && reportedLang !== langCode) {
             coalesceLang = reportedLang;
           }
