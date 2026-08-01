@@ -913,8 +913,12 @@ router.delete("/agents/:id/caller-memory/:phone/facts/:factId", requireAuth, cli
 router.delete("/agents/:id/caller-memory/:phone", requireAuth, clientContext, denyManagedClient, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const agentId = parseInt(String(req.params["id"] ?? ""), 10);
-  const phoneNumber = decodeURIComponent(String(req.params["phone"] ?? ""));
-  if (isNaN(agentId) || !phoneNumber) { res.status(400).json({ error: "Invalid params" }); return; }
+  const rawPhone = decodeURIComponent(String(req.params["phone"] ?? ""));
+  if (isNaN(agentId) || !rawPhone) { res.status(400).json({ error: "Invalid params" }); return; }
+  // Memory rows are stored under the canonical caller key — canonicalize the
+  // route param or deletes silently miss rows (e.g. "+91 98..." vs "9198...").
+  const { canonicalizeCallerKey } = await import("../orchestration/callerMemory.js");
+  const phoneNumber = canonicalizeCallerKey(rawPhone) ?? rawPhone;
 
   const [agent] = await db.select({ id: agentsTable.id })
     .from(agentsTable)

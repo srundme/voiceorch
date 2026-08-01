@@ -144,11 +144,36 @@ export async function upsertCallerVoiceprint(opts: {
   let cross = outcome.match;
   const nearMiss = outcome.nearMiss;
 
+  // Fetch this phone's existing voiceprint row up-front — the soft-link and
+  // personKey decisions below both depend on it.
+  let existingPersonKey: string | null = null;
+  try {
+    const [existing] = await db
+      .select({ personKey: callerVoiceprintsTable.personKey })
+      .from(callerVoiceprintsTable)
+      .where(and(
+        eq(callerVoiceprintsTable.agentId, agentId),
+        eq(callerVoiceprintsTable.phoneNumber, phoneNumber),
+      ))
+      .limit(1);
+    existingPersonKey = existing?.personKey ?? null;
+  } catch { /* non-fatal */ }
+
   // Name-corroborated soft link: telephony scores for the SAME person across
   // devices routinely land well below the hard bar (16k-trained embedder on
   // 8k audio). If the best candidate is at least somewhat similar AND both
   // phones' caller profiles carry the same stated name, accept the link.
-  if (!cross && nearMiss && nearMiss.score >= VOICE_SOFT_MATCH_THRESHOLD) {
+  // Guards against wrong merges (common names): requires a clear margin over
+  // the next-best DIFFERENT person, a meaningful name, and NEVER re-assigns a
+  // phone that already belongs to a DIFFERENT person cluster on soft evidence
+  // alone — only a hard-threshold match may do that.
+  const softLinkAllowed =
+    !existingPersonKey || (nearMiss ? existingPersonKey === nearMiss.personKey : false);
+  if (
+    !cross && nearMiss && softLinkAllowed
+    && nearMiss.score >= VOICE_SOFT_MATCH_THRESHOLD
+    && (nearMiss.margin == null || nearMiss.margin >= 0.10)
+  ) {
     try {
       const phones = [phoneNumber, nearMiss.phoneNumber];
       const profiles = await db
@@ -160,7 +185,7 @@ export async function upsertCallerVoiceprint(opts: {
         ));
       const myName = normalizeName(profiles.find((p) => p.phoneNumber === phoneNumber)?.name);
       const theirName = normalizeName(profiles.find((p) => p.phoneNumber === nearMiss.phoneNumber)?.name);
-      if (myName && theirName && myName === theirName) {
+      if (myName && theirName && myName === theirName && myName.length >= 3) {
         cross = { personKey: nearMiss.personKey, matchedPhone: nearMiss.phoneNumber, score: nearMiss.score, samePhone: false };
         logger.info(
           { agentId, phoneNumber, matchedPhone: nearMiss.phoneNumber, score: nearMiss.score, name: myName },
@@ -177,18 +202,11 @@ export async function upsertCallerVoiceprint(opts: {
   const score = cross?.score ?? opts.score ?? null;
 
   try {
-    const [existing] = await db
-      .select({ personKey: callerVoiceprintsTable.personKey })
-      .from(callerVoiceprintsTable)
-      .where(and(
-        eq(callerVoiceprintsTable.agentId, agentId),
-        eq(callerVoiceprintsTable.phoneNumber, phoneNumber),
-      ))
-      .limit(1);
-    if (existing?.personKey) {
-      // `cross` is only set when a link decision was accepted (hard-threshold
-      // match or name-corroborated soft match) — adopt its personKey either way.
-      personKey = cross ? cross.personKey : existing.personKey;
+    if (existingPersonKey) {
+      // Adopt the matched cluster's personKey only on a hard-threshold match,
+      // or on a soft match that doesn't move the phone between clusters
+      // (softLinkAllowed guaranteed that above). Otherwise keep the existing key.
+      personKey = cross ? cross.personKey : existingPersonKey;
     }
     // Sticky link: if this phone's personKey is ALREADY shared with another
     // phone (linked on a previous call), honor that link even when today's
