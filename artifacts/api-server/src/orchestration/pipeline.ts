@@ -381,6 +381,13 @@ const VOICE_LINKED_PHONE_NOTE =
   "different phone number. Treat them as possibly the same person — you may gently recognize them if " +
   "it feels natural, but confirm name/details if unsure. This is a soft signal, not identity verification.";
 
+const VOICE_LINK_ACK_NOTE =
+  "[RECOGNIZE THE CALLER — THIS REPLY] You have just recognized this caller from a previous " +
+  "conversation (see VOICE-MATCHED CALLER MEMORY above). In THIS reply, briefly and warmly " +
+  "acknowledge that you remember speaking with them before — naturally, in one short phrase " +
+  "woven into your answer (e.g. mention their name or something from the last conversation). " +
+  "Never mention phone numbers, voice matching, or how you recognized them. Do this once only.";
+
 /**
  * Build a COMPACT system prompt for the greeting-only LLM call. Returning callers were
  * triggering a greeting generated against the full ~31k-token system prompt, adding
@@ -944,6 +951,9 @@ export class OrchestrationPipeline implements VoiceSession {
   private voiceHandoffActive = false;
   private voiceLinkedFromPhone: string | null = null;
   private pendingVoiceLinkNote = false;
+  /** One-shot: proactively acknowledge the recognized caller on the first turn
+   *  after voice-matched memory is injected. */
+  private pendingVoiceLinkAck = false;
   /**
    * Compact caller-memory block loaded from the phone number the caller's
    * VOICE matched (they are calling from a new number). Injected into the
@@ -3512,6 +3522,7 @@ export class OrchestrationPipeline implements VoiceSession {
       // A different person is now on the line — the voice-matched memory
       // belongs to the previous speaker and must not leak to the new one.
       this.voiceLinkedMemoryBlock = null;
+      this.pendingVoiceLinkAck = false;
       // Unlock gender so the new speaker can be re-detected.
       const gd = this.genderDetector as GenderDetectorChained | null;
       if (gd && typeof gd.resetForNewSpeaker === "function") {
@@ -3648,8 +3659,18 @@ export class OrchestrationPipeline implements VoiceSession {
         if (f.key === "name" || f.key === "language_pref" || f.confidence < 0.5) continue;
         lines.push(`- ${f.key}: ${f.value}`);
       }
-      if (!lines.length) return;
+      if (!lines.length) {
+        this.logExec("VoiceMemory", "system", {
+          status: "info",
+          metadata: {
+            note: "Voice-matched number has no usable caller memory — nothing to inject",
+            linkedPhone,
+          },
+        });
+        return;
+      }
 
+      this.pendingVoiceLinkAck = true;
       this.voiceLinkedMemoryBlock =
         "=== VOICE-MATCHED CALLER MEMORY ===\n" +
         "This caller is calling from a NEW number, but their voice matches a known caller. " +
@@ -3661,11 +3682,29 @@ export class OrchestrationPipeline implements VoiceSession {
         { callId: this.config.callId, facts: lines.length, hasSummary: !!summary },
         "Voice Memory: linked-number caller memory loaded and injected for next turns",
       );
+      this.logExec("VoiceMemory", "system", {
+        status: "success",
+        metadata: {
+          note: "Voice-matched caller memory injected into upcoming turns",
+          linkedPhone,
+          factLines: lines.length,
+          hasSummary: !!summary,
+          hasName: !!name,
+        },
+      });
     } catch (err) {
       logger.warn(
         { callId: this.config.callId, err },
         "Voice Memory: failed to load linked-number caller memory",
       );
+      this.logExec("VoiceMemory", "system", {
+        status: "error",
+        metadata: {
+          note: "Failed to load voice-matched caller memory",
+          linkedPhone,
+          error: err instanceof Error ? err.message : String(err),
+        },
+      });
     }
   }
 
@@ -6940,6 +6979,14 @@ export class OrchestrationPipeline implements VoiceSession {
     // turn while the same speaker stays on the line; cleared on handoff.
     if (!this.voiceHandoffActive && this.voiceLinkedMemoryBlock) {
       systemPromptForTurn += `\n\n${this.voiceLinkedMemoryBlock}`;
+      // One-shot: on the first turn after the linked memory arrives, have the
+      // agent proactively acknowledge the returning caller instead of waiting
+      // to be asked "do you remember me?" (user report: recognition worked but
+      // the agent never said so).
+      if (this.pendingVoiceLinkAck) {
+        systemPromptForTurn += `\n\n${VOICE_LINK_ACK_NOTE}`;
+        this.pendingVoiceLinkAck = false;
+      }
     }
 
     // One-shot: real human picked up after a call-screening bot — restart the
