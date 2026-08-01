@@ -351,9 +351,22 @@ export class SpeakerVerifier {
           { callId: this.callId, nearMiss: saved.nearMiss, windows: this.refCount },
           "Voice Memory: refined re-match still below match bar",
         );
+        // Exec-log so user-downloadable call logs show the retry trail —
+        // logger.info alone is server-console-only (calls 4980-4982 were
+        // undiagnosable without it).
+        this.execLog(
+          "info",
+          `Refined voiceprint re-match (window ${this.refCount}) still below the match bar — best candidate ${saved.nearMiss.phoneNumber} scored ${saved.nearMiss.score.toFixed(2)}`,
+          { nearMiss: saved.nearMiss, windows: this.refCount },
+        );
       }
     } catch (err) {
       this.log.warn({ callId: this.callId, err }, "Voice Memory: refined re-match failed");
+      this.execLog(
+        "error",
+        `Refined voiceprint re-match failed: ${err instanceof Error ? err.message : String(err)}`,
+        { windows: this.refCount },
+      );
     }
   }
 
