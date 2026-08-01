@@ -21,6 +21,14 @@ export const VOICE_HANDOFF_THRESHOLD = Number(process.env["VOICE_MEMORY_HANDOFF_
  * is accepted as the same person.
  */
 export const VOICE_SOFT_MATCH_THRESHOLD = Number(process.env["VOICE_MEMORY_SOFT_MATCH_THRESHOLD"] ?? 0.40);
+/**
+ * Solo-candidate link: when the best candidate is the ONLY person the fresh
+ * voice resembles (no next-best different person at all) and the raw score is
+ * comfortably above the soft floor, link WITHOUT name corroboration.
+ * Telephony compresses same-person scores; a clear solo 0.55+ is strong
+ * evidence when there is no competing identity (call 5035: 0.56 solo).
+ */
+export const VOICE_SOLO_LINK_THRESHOLD = Number(process.env["VOICE_MEMORY_SOLO_LINK_THRESHOLD"] ?? 0.55);
 
 /**
  * Adaptive score normalization (AS-norm / S-norm). Instead of judging the raw
@@ -263,6 +271,22 @@ export async function upsertCallerVoiceprint(opts: {
     logger.info(
       { agentId, phoneNumber, matchedPhone: nearMiss.phoneNumber, score: nearMiss.score, normScore: nearMiss.normScore },
       "Voice memory: AS-norm cross-number link (voice far above impostor cohort)",
+    );
+  }
+
+  // Solo-candidate link: only one person in the whole voiceprint base
+  // resembles this voice (margin == null means there was no next-best
+  // DIFFERENT person to compare against) and the score clears a stricter
+  // bar than the soft floor. No name needed. Same cluster-safety rule.
+  if (
+    !cross && nearMiss && softLinkAllowed
+    && nearMiss.margin == null
+    && nearMiss.score >= VOICE_SOLO_LINK_THRESHOLD
+  ) {
+    cross = { personKey: nearMiss.personKey, matchedPhone: nearMiss.phoneNumber, score: nearMiss.score, samePhone: false };
+    logger.info(
+      { agentId, phoneNumber, matchedPhone: nearMiss.phoneNumber, score: nearMiss.score, threshold: VOICE_SOLO_LINK_THRESHOLD },
+      "Voice memory: solo-candidate cross-number link (sole resembling person, score above solo bar)",
     );
   }
 
