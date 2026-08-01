@@ -261,6 +261,10 @@ export class GeminiLivePipeline implements VoiceSession {
       },
       callbacks: {
         onmessage: (msg) => {
+          // Handle interruption SYNCHRONOUSLY, before the ordered chain — a
+          // long-running tool call inside the chain must never head-of-line
+          // block the barge-in (queue clear + carrier clearAudio).
+          if (msg.serverContent?.interrupted) this.handleInterrupted();
           this.msgChain = this.msgChain
             .then(() => this.onServerMessage(msg))
             .catch((err) => logger.error({ callId: this.config.callId, err }, "Gemini Live message handler error"));
@@ -285,15 +289,6 @@ export class GeminiLivePipeline implements VoiceSession {
     if (this.closed) return;
 
     const content = msg.serverContent;
-    if (content?.interrupted) {
-      const droppedMs = this.outFrames8k.length * GeminiLivePipeline.FRAME_MS;
-      this.pendingOut24k = Buffer.alloc(0);
-      this.outFrames8k.length = 0; // drop locally queued (unplayed) audio immediately
-      this.isPlayingOut = false;
-      this.config.onBargeIn?.();
-      logger.info({ callId: this.config.callId, droppedMs }, "Gemini Live: interrupted — cleared queued audio");
-    }
-
     if (content?.inputTranscription?.text) {
       const text = content.inputTranscription.text.trim();
       if (text) {
@@ -324,6 +319,17 @@ export class GeminiLivePipeline implements VoiceSession {
     if (content?.turnComplete) {
       this.isPlayingOut = false;
     }
+  }
+
+  /** Runs synchronously from onmessage — must never await (see onmessage note). */
+  private handleInterrupted(): void {
+    if (this.closed) return;
+    const droppedMs = this.outFrames8k.length * GeminiLivePipeline.FRAME_MS;
+    this.pendingOut24k = Buffer.alloc(0);
+    this.outFrames8k.length = 0; // drop locally queued (unplayed) audio immediately
+    this.isPlayingOut = false;
+    this.config.onBargeIn?.();
+    logger.info({ callId: this.config.callId, droppedMs }, "Gemini Live: interrupted — cleared queued audio");
   }
 
   private flushOutboundAudio(): void {
