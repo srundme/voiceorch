@@ -4157,7 +4157,7 @@ export class OrchestrationPipeline implements VoiceSession {
       this._currentTurnPlayedSentences = [];
       this.isPlaying = true;
       try {
-        await this.playSentence(greeting, greetingEmotions);
+        await this.playTextAsSentences(greeting, greetingEmotions);
       } finally {
         this.isPlaying = false;
         this.armTailEchoGrace();
@@ -4723,6 +4723,33 @@ export class OrchestrationPipeline implements VoiceSession {
     const seqId = this.interruptionMgr.beginAgentTurn();
     this.activeAgentSequenceId = seqId;
     return this.playJob(this.startSentenceSynthesis(text, this._activeTurnIndex, seqId, undefined, emotions));
+  }
+
+  /**
+   * Like playSentence, but for LONG single-shot texts (greeting, voicemail
+   * message). Splits the text into sentences and plays them with the same
+   * synthesize-N+1-while-N-plays prefetch the turn queues use. A single 250-char
+   * TTS request makes the provider stream fall behind real-time mid-delivery
+   * (call 5047: 16 s greeting audio arrived over 9.2 s but with slow patches →
+   * audible mid-sentence gaps); per-sentence requests keep each synthesis short
+   * and absorb the next sentence's latency inside current playback.
+   */
+  private async playTextAsSentences(text: string, emotions?: string[]): Promise<void> {
+    const { sentences, remainder } = extractSentences(text, this.agent.ttsMinSentenceChars);
+    if (remainder.trim()) sentences.push(remainder.trim());
+    if (sentences.length <= 1) return this.playSentence(text, emotions);
+    const seqId = this.interruptionMgr.beginAgentTurn();
+    this.activeAgentSequenceId = seqId;
+    let next = this.startSentenceSynthesis(sentences[0]!, this._activeTurnIndex, seqId, undefined, emotions);
+    for (let i = 0; i < sentences.length; i++) {
+      const job = next;
+      if (i + 1 < sentences.length) {
+        // Prefetch: kick off the next sentence's synthesis BEFORE awaiting playback.
+        next = this.startSentenceSynthesis(sentences[i + 1]!, this._activeTurnIndex, seqId, undefined, emotions);
+      }
+      await this.playJob(job);
+      if (this.closed || this.bargeInRequested || !this.interruptionMgr.isValidSequence(seqId)) break;
+    }
   }
 
   /**
