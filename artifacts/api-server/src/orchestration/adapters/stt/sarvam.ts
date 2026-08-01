@@ -276,7 +276,10 @@ export class SarvamSTT implements STTAdapter {
     const MAX_RECONNECT = 10;
 
     const audioQueue: Buffer[] = [];
-    const MAX_QUEUE_BYTES = 256_000; // ~8s @ 16kHz s16le — matches MAX_RECONNECT backoff ceiling (8000ms)
+    // Time-based cap (~8s of audio) so it matches the MAX_RECONNECT backoff
+    // ceiling (8000ms) at BOTH sample rates — a fixed byte cap would buffer
+    // ~16s at 8kHz telephony and replay stale caller audio after reconnect.
+    const MAX_QUEUE_BYTES = sampleRate * 2 * 8; // s16le mono: bytes/sec × 8s (256KB @16k, 128KB @8k)
     let queueTrimLogged   = false;  // throttle: log queue trim at most once per reconnect episode
     let speechEndAt       = 0;     // timestamp of last END_SPEECH event for latency tracking
     let speechEndReceived = false; // true once speech_end fires; reset on speech_start
