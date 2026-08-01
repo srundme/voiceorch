@@ -810,6 +810,8 @@ export class OrchestrationPipeline implements VoiceSession {
   // Carrier answer/bridge time (epoch ms) from the answer webhook, when known.
   // Used only for the once-per-call answer→first-audio gap diagnostic.
   private answeredAtMs: number | null = null;
+  /** When the pipeline object was constructed (≈ session setup done). */
+  private pipelineCreatedAtMs = 0;
   private answerGapLogged = false;
   // Count of filler phrases played due to slow LLM response (>800 ms to first token)
   private fillerPlayedCount = 0;
@@ -1735,6 +1737,7 @@ export class OrchestrationPipeline implements VoiceSession {
       this.answeredAtMs = config.answeredAt;
       this.recording.anchorStart(config.answeredAt);
     }
+    this.pipelineCreatedAtMs = Date.now();
     this.voicemailDelivery = config.voicemailDelivery ?? null;
     this.amdConfirm = config.amdConfirm ?? null;
     this.bargeInCallback = config.onBargeIn ?? null;
@@ -2975,15 +2978,36 @@ export class OrchestrationPipeline implements VoiceSession {
     this.firstAudioSentAt = Date.now();
     if (!this.answerGapLogged && this.answeredAtMs) {
       this.answerGapLogged = true;
+      // Split the caller-perceived dead air into its two phases:
+      //  setupMs    = carrier answer → pipeline ready (XML roundtrip + WS
+      //               connect + start event + createSession DB work)
+      //  pipelineMs = pipeline ready → first outbound audio frame (AMD window,
+      //               greeting LLM/TTS, prebuffer)
+      const setupMs = this.pipelineCreatedAtMs - this.answeredAtMs;
+      const pipelineMs = this.firstAudioSentAt - this.pipelineCreatedAtMs;
       logger.info(
         {
           callId: this.config.callId,
           answeredAt: this.answeredAtMs,
           firstAudioSentAt: this.firstAudioSentAt,
           answerToFirstAudioMs: this.firstAudioSentAt - this.answeredAtMs,
+          setupMs,
+          pipelineMs,
         },
         "Answer→first-audio gap (carrier answer to first outbound audio)",
       );
+      // Also surface the breakdown in the downloadable call execution log so
+      // dead-air reports can be diagnosed from an exported call log alone.
+      this.logExec("Agent", "system", {
+        status: "info",
+        turnNumber: 0,
+        metadata: {
+          event: "Answer → First Audio breakdown",
+          answerToFirstAudioMs: this.firstAudioSentAt - this.answeredAtMs,
+          setupMs,
+          pipelineMs,
+        },
+      });
     }
   }
 
