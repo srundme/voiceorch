@@ -28,6 +28,7 @@ export const ASR_MODELS: Record<string, { value: string; label: string }[]> = {
   assemblyai: [{ value: "best", label: "Best (default)" }, { value: "nano", label: "Nano (fast)" }],
   sarvam: [
     { value: "saarika:v2.5",       label: "Saarika v2.5 — real-time streaming (recommended)" },
+    { value: "saaras:v4",          label: "Saaras v4 — latest" },
     { value: "saaras:v3",          label: "Saaras v3 — real-time streaming" },
     { value: "saaras:v3-realtime", label: "Saaras v3 Real-time — streaming" },
     { value: "saarika:flash",      label: "Saarika Flash — batch (fast)" },

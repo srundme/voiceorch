@@ -75,7 +75,7 @@ const ASR_MODELS: Record<string, { value: string; label: string }[]> = {
   deepgram:   [{ value: "nova-2", label: "Nova-2 (recommended)" }, { value: "nova-2-phonecall", label: "Nova-2 Phone Call" }],
   azure:      [{ value: "en-US-standard", label: "en-US-standard" }, { value: "en-IN-standard", label: "en-IN-standard" }],
   assemblyai: [{ value: "best", label: "Best (default)" }, { value: "nano", label: "Nano (fast)" }],
-  sarvam:     [{ value: "saaras:v3", label: "Saaras v3 (recommended)" }, { value: "saarika:v2.5", label: "Saarika v2.5" }],
+  sarvam:     [{ value: "saaras:v4", label: "Saaras v4 (latest)" }, { value: "saaras:v3", label: "Saaras v3 (recommended)" }, { value: "saarika:v2.5", label: "Saarika v2.5" }],
   cartesia:   [{ value: "sonic-english", label: "Sonic English" }, { value: "sonic-multilingual", label: "Sonic Multilingual" }],
 };
 const LLM_MODELS: Record<string, { value: string; label: string }[]> = {

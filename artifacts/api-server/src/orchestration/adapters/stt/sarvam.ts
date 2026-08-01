@@ -59,8 +59,8 @@ function envInt(name: string, def: number): number {
 const BATCH_URL = "https://api.sarvam.ai/speech-to-text";
 const WS_BASE   = "wss://api.sarvam.ai/speech-to-text/ws";
 
-/** Only saaras:v3 supports the `mode` parameter. */
-const MODE_CAPABLE = new Set(["saaras:v3"]);
+/** Only saaras:v3/v4 support the `mode` parameter. */
+const MODE_CAPABLE = new Set(["saaras:v3", "saaras:v4"]);
 
 /**
  * Strip leaked diarization/speaker labels (e.g. "Speaker 1:", "speaker:") from a
@@ -153,12 +153,13 @@ export class SarvamSTT implements STTAdapter {
         })
       : {};
 
-    // Model: saaras:v3 (recommended) or saarika:v2.5 (legacy) — the ONLY two
-    // models the streaming WS endpoint accepts (live-verified). "saaras:v2.5"
-    // was never a valid streaming model; normalise it to saaras:v3 so a stale
-    // stored value can't 400 the socket into a reconnect loop.
+    // Model: saaras:v4 (latest), saaras:v3 (recommended) or saarika:v2.5
+    // (legacy) — the only models the streaming WS endpoint accepts (v3/v2.5
+    // live-verified; v4 per Jul 2026 docs). "saaras:v2.5" was never a valid
+    // streaming model; normalise unknowns to saaras:v3 so a stale stored
+    // value can't 400 the socket into a reconnect loop.
     const requested = (model ?? "").trim();
-    this.model = ["saaras:v3", "saarika:v2.5"].includes(requested)
+    this.model = ["saaras:v4", "saaras:v3", "saarika:v2.5"].includes(requested)
       ? requested
       : "saaras:v3";
 
@@ -208,7 +209,7 @@ export class SarvamSTT implements STTAdapter {
     // Copy into a plain ArrayBuffer to avoid SharedArrayBuffer incompatibility with Blob.
     const wavBuf = wav.buffer.slice(wav.byteOffset, wav.byteOffset + wav.byteLength) as ArrayBuffer;
     formData.append("file", new Blob([wavBuf], { type: "audio/wav" }), "audio.wav");
-    formData.append("model", this.model === "saaras:v3" ? "saaras:v3" : "saarika:v2.5");
+    formData.append("model", this.model.startsWith("saaras") ? this.model : "saarika:v2.5");
     formData.append("language_code", this.langCode);
     if (MODE_CAPABLE.has(this.model)) {
       formData.append("mode", this.mode);

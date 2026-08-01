@@ -23,6 +23,7 @@ export const TELEPHONY_PROVIDERS = [
 
 export const ASR_MODELS: Record<string, { value: string; label: string }[]> = {
   sarvam: [
+    { value: "saaras:v4",    label: "Saaras v4 — latest (new, test before switching)" },
     { value: "saaras:v3",    label: "Saaras v3 — real-time streaming (recommended)" },
     { value: "saarika:v2.5", label: "Saarika v2.5 — real-time streaming (legacy)" },
   ],
