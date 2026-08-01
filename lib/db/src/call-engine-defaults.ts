@@ -33,8 +33,8 @@ export const SARVAM_STT_LATENCY_DEFAULTS = {
 /** Prior snappy insert defaults — rewritten to patient values on normalize/session. */
 export const SARVAM_STT_LATENCY_LEGACY_SNAPPY = {
   highVadSensitivity: true,
-  speechEndFlushMs: 30,
-  incompleteHoldMs: 220,
+  speechEndFlushMs: 0,
+  incompleteHoldMs: 120,
   fragmentCoalesceListeningMs: 150,
 } as const;
 

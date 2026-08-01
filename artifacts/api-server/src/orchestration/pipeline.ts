@@ -131,7 +131,7 @@ const FILLER_THRESHOLD_MS     = 350;    // play a filler phrase if LLM has not r
                                         // token within this window (and backchannel didn't fire)
 const DEAD_AIR_FILLER_CANCEL_MS = 500; // skip dead-air filler playback if LLM first token
                                         // arrives within this window after filler was enqueued
-const FRAGMENT_COALESCE_MS_DEFAULT = 800;   // fallback when agentConfig omits playing coalesce
+const FRAGMENT_COALESCE_MS_DEFAULT = 1000;  // fallback when agentConfig omits playing coalesce — keep in sync with FRAGMENT_COALESCE_DEFAULTS.playingMs (lib/db)
 /** Listening-side hold for ack fragments ("Yes Ma'am") — was 150ms; call 4856
  *  flushed before the caller finished "…how are you?" → zigzag replies. */
 const FRAGMENT_COALESCE_LISTENING_MS_DEFAULT = 250;
@@ -761,6 +761,8 @@ export class OrchestrationPipeline implements VoiceSession {
   // Single-resolution latch: set once confirmAmdMachineThenBranch() resolves its
   // verdict. Late/duplicate external callbacks after this are logged + ignored.
   private amdResolved = false;
+  // Greeting LLM prewarm launched during the AMD confirmation window (outbound dead-air fix).
+  private _greetingPrewarm: Promise<string> | null = null;
 
   // P1-D: Per-agent VAD / barge-in settings (set from agent config in constructor)
   private readonly vadSilenceMs: number;
@@ -3949,6 +3951,91 @@ export class OrchestrationPipeline implements VoiceSession {
     }
   }
 
+  /**
+   * Cold-caller LLM opener, extracted from greet() so the AMD confirmation
+   * window can prewarm it in parallel. Never throws — falls back internally.
+   */
+  private async generateGreetingLlmText(resumeDropped: boolean, greetLang: string): Promise<string> {
+    let greeting = "";
+        const greetingTrigger: import("./types.js").ConversationTurn[] = [];
+        try {
+          const greetingSystemPrompt = this.substituteSalutation(
+            buildCompactGreetingPrompt(
+              this.agent.systemPrompt,
+              greetLang,
+              resumeDropped,
+            ),
+            this.salutationFor(null),
+          );
+          const _greetLlmStartAt = Date.now();
+          this.logExec("LLM", "request", {
+            provider: this.agent.llmProvider,
+            status: "info",
+            turnNumber: 0,
+            requestPayload: { purpose: "greeting", promptChars: greetingSystemPrompt.length },
+          });
+          await this.llm.chat(
+            greetingTrigger, greetingSystemPrompt,
+            (token) => { greeting += token; },
+            (full) => { greeting = full; },
+            {
+              onUsage: (usage) => {
+                this.hasRealLlmUsage = true;
+                this.llmInputTokensTotal += usage.inputTokens;
+                this.llmOutputTokensTotal += usage.outputTokens;
+              },
+            }
+          );
+          const greetingLlmMs = Date.now() - _greetLlmStartAt;
+          logger.info(
+            { callId: this.config.callId, greetingLlmMs, promptChars: greetingSystemPrompt.length },
+            "Greeting LLM completed",
+          );
+          this.logExec("LLM", "response", {
+            provider: this.agent.llmProvider,
+            status: "success",
+            turnNumber: 0,
+            latencyMs: greetingLlmMs,
+            responsePayload: { purpose: "greeting", text: greeting.slice(0, 200) },
+          });
+        } catch (llmErr) {
+          // Recoverable: a transient greeting-LLM failure must NOT drop the call
+          // before the agent speaks. Fall back to the configured static greeting
+          // if present, otherwise a minimal neutral opener, and continue the call.
+          const reason = toReadableError(llmErr, "Greeting LLM error");
+          // Prefer a real static greeting; never fall back to outbound stubs
+          // ("Hello") — that recreates the dead-air / media-drop failure mode.
+          let fallback = (this.agent.greetingMessage ?? "").trim();
+          if (this.callDirection === "outbound" && isStubGreeting(fallback)) {
+            fallback = "";
+          }
+          fallback = fallback || neutralGreeting(this.agent.language);
+          logger.error(
+            { callId: this.config.callId, agentId: this.agent.id, provider: this.agent.llmProvider, err: llmErr },
+            `${reason} — falling back to a safe spoken opener instead of dropping the call`,
+          );
+          this.logExec("LLM", "response", {
+            provider: this.agent.llmProvider,
+            status: "error",
+            turnNumber: 0,
+            responsePayload: { purpose: "greeting", error: reason, fallback: fallback.slice(0, 120) },
+          });
+          greeting = fallback;
+        }
+    return greeting;
+  }
+
+  /** Predicts whether greet() will need the greeting LLM (mirrors its gating). */
+  private greetingWillNeedLlm(): boolean {
+    if (this.agent.firstSpeaker === "user") return false;
+    if (this.config.isReturningCaller === true && !this.isResumeDroppedCall && this.callDirection !== "outbound") return false;
+    const greetLang = this.currentLang || this.agent.sttConfig.language || this.agent.language || "en-IN";
+    let greeting = this.isResumeDroppedCall ? "" : (this.agent.greetingMessage ?? "");
+    if (this.callDirection === "outbound" && isStubGreeting(greeting)) greeting = "";
+    if (greeting.trim() && !greetLang.toLowerCase().startsWith("en") && !/[\u0900-\u0DFF]/.test(greeting)) greeting = "";
+    return !greeting.trim();
+  }
+
   async greet(): Promise<void> {
     if (this.closed) return;
     // Prefer ambient ready before first speech so BG noise isn't silent for seconds
@@ -4068,71 +4155,15 @@ export class OrchestrationPipeline implements VoiceSession {
 
       if (!greeting.trim()) {
         // Cold-caller path with empty static greeting: ask the LLM for a short opener.
-        const greetingTrigger: import("./types.js").ConversationTurn[] = [];
-        try {
-          const greetingSystemPrompt = this.substituteSalutation(
-            buildCompactGreetingPrompt(
-              this.agent.systemPrompt,
-              greetLang,
-              resumeDropped,
-            ),
-            this.salutationFor(null),
-          );
-          const _greetLlmStartAt = Date.now();
-          this.logExec("LLM", "request", {
-            provider: this.agent.llmProvider,
-            status: "info",
-            turnNumber: 0,
-            requestPayload: { purpose: "greeting", promptChars: greetingSystemPrompt.length },
-          });
-          await this.llm.chat(
-            greetingTrigger, greetingSystemPrompt,
-            (token) => { greeting += token; },
-            (full) => { greeting = full; },
-            {
-              onUsage: (usage) => {
-                this.hasRealLlmUsage = true;
-                this.llmInputTokensTotal += usage.inputTokens;
-                this.llmOutputTokensTotal += usage.outputTokens;
-              },
-            }
-          );
-          const greetingLlmMs = Date.now() - _greetLlmStartAt;
-          logger.info(
-            { callId: this.config.callId, greetingLlmMs, promptChars: greetingSystemPrompt.length },
-            "Greeting LLM completed",
-          );
-          this.logExec("LLM", "response", {
-            provider: this.agent.llmProvider,
-            status: "success",
-            turnNumber: 0,
-            latencyMs: greetingLlmMs,
-            responsePayload: { purpose: "greeting", text: greeting.slice(0, 200) },
-          });
-        } catch (llmErr) {
-          // Recoverable: a transient greeting-LLM failure must NOT drop the call
-          // before the agent speaks. Fall back to the configured static greeting
-          // if present, otherwise a minimal neutral opener, and continue the call.
-          const reason = toReadableError(llmErr, "Greeting LLM error");
-          // Prefer a real static greeting; never fall back to outbound stubs
-          // ("Hello") — that recreates the dead-air / media-drop failure mode.
-          let fallback = (this.agent.greetingMessage ?? "").trim();
-          if (this.callDirection === "outbound" && isStubGreeting(fallback)) {
-            fallback = "";
-          }
-          fallback = fallback || neutralGreeting(this.agent.language);
-          logger.error(
-            { callId: this.config.callId, agentId: this.agent.id, provider: this.agent.llmProvider, err: llmErr },
-            `${reason} — falling back to a safe spoken opener instead of dropping the call`,
-          );
-          this.logExec("LLM", "response", {
-            provider: this.agent.llmProvider,
-            status: "error",
-            turnNumber: 0,
-            responsePayload: { purpose: "greeting", error: reason, fallback: fallback.slice(0, 120) },
-          });
-          greeting = fallback;
+        // The AMD confirmation window may have prewarmed this in parallel (outbound
+        // dead-air fix: AMD window + greeting LLM used to stack serially).
+        if (this._greetingPrewarm) {
+          greeting = await this._greetingPrewarm;
+          this._greetingPrewarm = null;
+        } else {
+          greeting = await this.generateGreetingLlmText(resumeDropped, greetLang);
         }
+        if (this.closed) return;
         // Strip <think> reasoning blocks and markup. For Cartesia, extract the
         // leading <emotion> tag first so it can be forwarded to the voice controls
         // while TTS receives clean text (all other TTS engines ignore the emotion).
@@ -4327,6 +4358,14 @@ export class OrchestrationPipeline implements VoiceSession {
     // This loop is now the SOLE frame sender — silence the keepalive watchdog
     // so two pumps never interleave on the same socket (helicopter chop).
     this.amdVmManualPumpActive = true;
+    // Outbound dead-air fix: the greeting LLM (1–3s) used to start only AFTER
+    // this confirmation window (1.2–3.2s). Prewarm it in parallel; greet()
+    // consumes the promise. Wasted only when the verdict is machine + hangup.
+    if (this.greetingWillNeedLlm()) {
+      const preLang = this.currentLang || this.agent.sttConfig.language || this.agent.language || "en-IN";
+      this._greetingPrewarm = this.generateGreetingLlmText(this.isResumeDroppedCall, preLang).catch(() => "");
+      logger.info({ callId: this.config.callId }, "AMD confirm: greeting LLM prewarm started in parallel");
+    }
     const startedAt = Date.now();
     logger.info(
       {

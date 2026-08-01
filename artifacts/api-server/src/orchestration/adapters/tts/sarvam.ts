@@ -266,6 +266,8 @@ export class SarvamTTS implements TTSAdapter {
       // mid-sentence prosody seams that sound like TTS "glitches".
       speech_sample_rate: 16000,
       output_audio_codec: "linear16",
+      // 320 bytes = 10ms at 16k s16le. 100 (~3ms) made Sarvam flush tiny
+      // chunks — heavy JSON/base64 overhead per frame and unstable accumulation.
       min_buffer_size: 320,
       max_chunk_length: 500,
     };
