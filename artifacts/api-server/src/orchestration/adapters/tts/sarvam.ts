@@ -28,6 +28,10 @@ const WAV_HEADER_BYTES = 44;
 const WS_CONNECT_TIMEOUT_MS = 8_000;
 const WS_PING_INTERVAL_MS = 30_000;
 const WS_RETRY_MAX = 3;
+/** After flush, if the WS goes fully idle this long with no message (audio,
+ * event, or error), assume "final" was lost and resolve — every armed message
+ * re-arms the timer, so slow-but-alive synthesis of long sentences is safe. */
+const FINAL_EVENT_IDLE_MS = Math.max(1000, Number(process.env.SARVAM_TTS_FINAL_IDLE_MS ?? 2500));
 const WS_RETRY_BASE_MS = 400;
 const WS_RETRY_MAX_MS = 4_000;
 
@@ -540,7 +544,26 @@ export class SarvamTTS implements TTSAdapter {
         });
       };
 
+      // Sarvam sometimes never sends the "final" event. Without a backstop the
+      // promise hangs until the 8s stream timeout — the caller hears silence
+      // mid-sentence while the pipeline rebuffer-loops. If the socket goes
+      // fully idle after flush, treat synthesis as complete: all audio that
+      // arrived has already been forwarded. Drop (don't park) the socket since
+      // its state is unknown.
+      let idleTimer: NodeJS.Timeout | null = null;
+      const armIdle = () => {
+        if (idleTimer) clearTimeout(idleTimer);
+        idleTimer = setTimeout(() => {
+          settle(() => {
+            logger.warn({ textLen: text.length }, "SarvamTTS WS final-event idle backstop — resolving without final");
+            try { ws.close(1000, "final-idle"); } catch { /* ignore */ }
+            resolve();
+          });
+        }, FINAL_EVENT_IDLE_MS);
+      };
+
       const onMessage = (raw: WebSocket.RawData) => {
+        armIdle();
         let msg: { type?: string; data?: Record<string, unknown> };
         try {
           msg = JSON.parse(String(raw)) as { type?: string; data?: Record<string, unknown> };
@@ -601,6 +624,7 @@ export class SarvamTTS implements TTSAdapter {
       };
 
       const cleanup = () => {
+        if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
         signal?.removeEventListener("abort", onAbort);
         ws.off("message", onMessage);
         ws.off("close", onClose);
@@ -622,6 +646,7 @@ export class SarvamTTS implements TTSAdapter {
         }
         // Flush so remaining buffer is processed even below min_buffer_size.
         ws.send(JSON.stringify({ type: "flush" }));
+        armIdle();
       } catch (err) {
         settle(() => reject(err instanceof Error ? err : new Error(String(err))));
       }
