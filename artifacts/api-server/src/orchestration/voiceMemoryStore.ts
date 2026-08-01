@@ -22,6 +22,32 @@ export const VOICE_HANDOFF_THRESHOLD = Number(process.env["VOICE_MEMORY_HANDOFF_
  */
 export const VOICE_SOFT_MATCH_THRESHOLD = Number(process.env["VOICE_MEMORY_SOFT_MATCH_THRESHOLD"] ?? 0.40);
 
+/**
+ * Adaptive score normalization (AS-norm / S-norm). Instead of judging the raw
+ * cosine on an absolute bar, judge it RELATIVE to how this voice scores
+ * against a cohort of OTHER callers of the same agent (impostors). On 8kHz
+ * telephony where all raw scores are compressed downward, a raw 0.45 that
+ * sits several standard deviations above the impostor crowd is strong
+ * evidence of a true match.
+ */
+/** Minimum number of different-person cohort prints required to trust normalization. */
+export const VOICE_ASNORM_MIN_COHORT = Number(process.env["VOICE_MEMORY_ASNORM_MIN_COHORT"] ?? 8);
+/** Normalized-score acceptance bar, in std-dev units above the impostor mean. */
+export const VOICE_ASNORM_THRESHOLD = Number(process.env["VOICE_MEMORY_ASNORM_THRESHOLD"] ?? 4.0);
+/** Top-K cohort scores used for the adaptive statistics (per side). */
+const VOICE_ASNORM_TOP_K = Number(process.env["VOICE_MEMORY_ASNORM_TOP_K"] ?? 50);
+/** Std floor — tiny cohorts can produce degenerate (near-zero) std. */
+const ASNORM_STD_FLOOR = 0.02;
+
+/** Mean/std of the top-K highest values. */
+function topKStats(scores: number[], k: number): { mean: number; std: number; n: number } | null {
+  if (scores.length === 0) return null;
+  const top = [...scores].sort((a, b) => b - a).slice(0, Math.max(1, k));
+  const mean = top.reduce((s, v) => s + v, 0) / top.length;
+  const variance = top.reduce((s, v) => s + (v - mean) * (v - mean), 0) / top.length;
+  return { mean, std: Math.sqrt(variance), n: top.length };
+}
+
 /** Normalize a caller name for corroboration compare (case/space/punct-insensitive). */
 function normalizeName(name: string | null | undefined): string | null {
   if (!name) return null;
@@ -55,7 +81,16 @@ export interface VoiceMatchResult {
 export interface VoiceMatchOutcome {
   match: VoiceMatchResult | null;
   /** Best candidate that scored BELOW the match bar (diagnostics + name-corroborated linking). */
-  nearMiss: { score: number; phoneNumber: string; personKey: string; margin: number | null } | null;
+  nearMiss: {
+    score: number;
+    phoneNumber: string;
+    personKey: string;
+    margin: number | null;
+    /** AS-norm score in std-dev units above the impostor cohort mean (null = cohort too small). */
+    normScore: number | null;
+    /** True when the normalized score cleared VOICE_ASNORM_THRESHOLD. */
+    asnormAccept: boolean;
+  } | null;
 }
 
 /** Find best voice match for this agent (excluding optional phone). */
@@ -86,11 +121,13 @@ export async function findBestVoiceMatch(opts: {
     // Track the best candidate even below the match bar — a silent `continue`
     // made sub-threshold near-misses invisible (calls 5029-5031: "not
     // recognised" with no score anywhere in the logs).
+    const scored: { row: (typeof rows)[number]; score: number }[] = [];
     let best: VoiceMatchResult | null = null;
     let secondScore: number | null = null;
     for (const row of rows) {
       const emb = row.embedding as number[];
       const score = cosine(embedding, emb);
+      scored.push({ row, score });
       if (!best || score > best.score) {
         if (best && best.personKey !== row.personKey) secondScore = best.score;
         best = {
@@ -108,11 +145,43 @@ export async function findBestVoiceMatch(opts: {
     // else", useful for tuning and for future relative-decision logic.
     const margin = best && secondScore != null ? best.score - secondScore : null;
     if (best && best.score < VOICE_MATCH_THRESHOLD) {
+      // ---- AS-norm (S-norm): judge the raw score relative to the impostor cohort. ----
+      // Cohort = prints belonging to persons OTHER than the best candidate.
+      let normScore: number | null = null;
+      let asnormAccept = false;
+      const bestPersonKey = best.personKey;
+      const cohort = scored.filter((s) => s.row.personKey !== bestPersonKey);
+      if (cohort.length >= VOICE_ASNORM_MIN_COHORT) {
+        // z-side: fresh (test) embedding vs cohort — scores already computed.
+        const zStats = topKStats(cohort.map((c) => c.score), VOICE_ASNORM_TOP_K);
+        // t-side: the CANDIDATE's enrolled embedding vs the same cohort.
+        const bestEmb = scored.find((s) => s.row.phoneNumber === best!.matchedPhone)?.row.embedding as number[] | undefined;
+        const tScores = bestEmb ? cohort.map((c) => cosine(bestEmb, c.row.embedding as number[])) : [];
+        const tStats = topKStats(tScores, VOICE_ASNORM_TOP_K);
+        if (zStats && tStats) {
+          const zStd = Math.max(zStats.std, ASNORM_STD_FLOOR);
+          const tStd = Math.max(tStats.std, ASNORM_STD_FLOOR);
+          normScore = 0.5 * ((best.score - zStats.mean) / zStd + (best.score - tStats.mean) / tStd);
+          // Relative acceptance still requires a minimal absolute floor —
+          // a voice that towers over strangers but is barely similar at all
+          // (raw < soft floor) is not trusted.
+          asnormAccept = normScore >= VOICE_ASNORM_THRESHOLD && best.score >= VOICE_SOFT_MATCH_THRESHOLD;
+        }
+      }
       logger.info(
-        { agentId, bestScore: best.score, bestPhone: best.matchedPhone, margin, threshold: VOICE_MATCH_THRESHOLD },
+        {
+          agentId, bestScore: best.score, bestPhone: best.matchedPhone, margin,
+          threshold: VOICE_MATCH_THRESHOLD, cohortSize: cohort.length, normScore, asnormAccept,
+        },
         "Voice memory: best cross-number candidate below match threshold",
       );
-      return { match: null, nearMiss: { score: best.score, phoneNumber: best.matchedPhone, personKey: best.personKey, margin } };
+      return {
+        match: null,
+        nearMiss: {
+          score: best.score, phoneNumber: best.matchedPhone, personKey: best.personKey,
+          margin, normScore, asnormAccept,
+        },
+      };
     }
     return { match: best, nearMiss: null };
   } catch (err) {
@@ -169,6 +238,19 @@ export async function upsertCallerVoiceprint(opts: {
   // alone — only a hard-threshold match may do that.
   const softLinkAllowed =
     !existingPersonKey || (nearMiss ? existingPersonKey === nearMiss.personKey : false);
+
+  // AS-norm relative link: the fresh voice scored far above the impostor
+  // cohort (several std-devs) even though the raw score sits below the hard
+  // bar. Same cluster-safety rule as all soft evidence: never re-assigns a
+  // phone already in a DIFFERENT person cluster.
+  if (!cross && nearMiss && softLinkAllowed && nearMiss.asnormAccept) {
+    cross = { personKey: nearMiss.personKey, matchedPhone: nearMiss.phoneNumber, score: nearMiss.score, samePhone: false };
+    logger.info(
+      { agentId, phoneNumber, matchedPhone: nearMiss.phoneNumber, score: nearMiss.score, normScore: nearMiss.normScore },
+      "Voice memory: AS-norm cross-number link (voice far above impostor cohort)",
+    );
+  }
+
   if (
     !cross && nearMiss && softLinkAllowed
     && nearMiss.score >= VOICE_SOFT_MATCH_THRESHOLD
