@@ -11,7 +11,6 @@ import {
   CURRENCY_INR,
   GST_RATE,
   PHONE_RENEWAL_TOTAL_PAISE,
-  phoneMonthlyBasePaise,
   phonePurchaseBasePaise,
   withGstPaise,
   formatInr,
@@ -879,7 +878,7 @@ router.post("/phone-numbers/purchase/confirm", requireAuth, denyManagedClient, a
     vobizNumberId:    vobizNumber.id,
     status:           "active",
     monthlyRateCents: phonePurchaseBasePaise(number),
-    renewalRateCents: withGstPaise(phoneMonthlyBasePaise(number)),
+    renewalRateCents: withGstPaise(phonePurchaseBasePaise(number)), // renewal = same as purchase price
     purchasedAt:      now,
     nextRenewalAt,
     lastRenewalAt:    now,

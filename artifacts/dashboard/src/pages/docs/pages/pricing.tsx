@@ -29,8 +29,8 @@ Min top-up credit: ₹100`}
               ["Voice orchestration", "₹5 / minute (flat)"],
               ["Wallet top-up", "Chosen credit + 18% GST (card)"],
               ["Phone number monthly rental", "80-series ₹599 · 79-series ₹699 · others ₹659 (+18% GST)"],
-              ["Phone number first purchase", "Monthly rental + ₹100 one-time setup + 18% GST (card)"],
-              ["Phone number renewal (30 days)", "Monthly rental + GST from wallet"],
+              ["Phone number first purchase", "Monthly rental + ₹100 setup + 18% GST (card)"],
+              ["Phone number renewal (30 days)", "Same price as purchase, from wallet"],
               ["Minimum top-up credit", "₹100"],
             ].map(([a, b]) => (
               <tr key={a} className="border-b border-white/5 last:border-0">

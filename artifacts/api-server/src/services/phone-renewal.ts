@@ -14,7 +14,7 @@ import { and, eq, lte, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { phoneNumbersTable, usersTable, walletTransactionsTable } from "@workspace/db/schema";
 import { logger } from "../lib/logger.js";
-import { formatInr, phoneMonthlyBasePaise, withGstPaise } from "../lib/money-inr.js";
+import { formatInr, phonePurchaseBasePaise, withGstPaise } from "../lib/money-inr.js";
 import { triggerAutoDebit } from "./wallet-auto-debit.js";
 
 let started = false;
@@ -29,12 +29,12 @@ const RENEWAL_INTERVAL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
  */
 async function renewOne(row: typeof phoneNumbersTable.$inferSelect): Promise<boolean> {
   if (!row.renewalRateCents || row.renewalRateCents <= 0) return true; // free number; just advance below
-  // Voice DIDs: prefix-tiered rate computed live so price changes apply to ALL
-  // numbers, including ones purchased before the tiering. WhatsApp numbers keep
-  // their stored flat renewal rate — tiering applies to voice only.
+  // Voice DIDs: renewal = SAME price as first purchase (tiered monthly + ₹100 + GST),
+  // computed live so price changes apply to ALL numbers, including ones purchased
+  // before the tiering. WhatsApp numbers keep their stored flat renewal rate.
   const renewalCents = row.numberType === "whatsapp"
     ? row.renewalRateCents
-    : withGstPaise(phoneMonthlyBasePaise(row.number));
+    : withGstPaise(phonePurchaseBasePaise(row.number));
 
   const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, row.userId));
   if (!user) {

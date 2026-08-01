@@ -429,7 +429,7 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
   const MONTHLY_INR = Math.max(PHONE_BASE_INR - SETUP_INR, 0);
   const PHONE_GST_INR = Math.round(PHONE_BASE_INR * 0.18);
   const PHONE_TOTAL_INR = PHONE_BASE_INR + PHONE_GST_INR;
-  const RENEWAL_TOTAL_INR = MONTHLY_INR + Math.round(MONTHLY_INR * 0.18);
+  const RENEWAL_TOTAL_INR = PHONE_TOTAL_INR; // renewal = same price as purchase
   const isPaidNumber = (selectedNum?.monthlyRateCents ?? 0) > 0;
 
   function handleSearch() {
@@ -567,7 +567,7 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
               <span className="text-foreground">₹{MONTHLY_INR}.00</span>
             </div>
             <div className="flex justify-between px-4 py-2.5">
-              <span className="text-muted-foreground">One-time setup cost</span>
+              <span className="text-muted-foreground">Setup cost</span>
               <span className="text-foreground">₹100.00</span>
             </div>
             <div className="flex justify-between px-4 py-2.5">
@@ -580,13 +580,13 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
             </div>
             <div className="flex justify-between px-4 py-2.5">
               <span className="text-muted-foreground">Renews every 30 days (wallet)</span>
-              <span className="text-foreground">₹{MONTHLY_INR} + GST (₹{RENEWAL_TOTAL_INR})</span>
+              <span className="text-foreground">₹{PHONE_BASE_INR} + GST (₹{RENEWAL_TOTAL_INR})</span>
             </div>
           </div>
           <div className="flex items-start gap-3 p-3 rounded-lg border border-zinc-500/20 bg-zinc-500/5 text-foreground text-xs">
             <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
             <span>
-              You&apos;ll pay ₹{PHONE_TOTAL_INR} now by card (₹{PHONE_BASE_INR} + 18% GST). Since the ₹{SETUP_INR} setup fee is one-time, the number then renews at ₹{MONTHLY_INR} + 18% GST (₹{RENEWAL_TOTAL_INR} total) from your wallet every 30 days.
+              You&apos;ll pay ₹{PHONE_TOTAL_INR} now by card (₹{PHONE_BASE_INR} + 18% GST). The number then renews at the same price — ₹{PHONE_BASE_INR} + 18% GST (₹{RENEWAL_TOTAL_INR} total) — from your wallet every 30 days.
             </span>
           </div>
           <DialogFooter>
