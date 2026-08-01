@@ -260,7 +260,7 @@ export class SarvamTTS implements TTSAdapter {
       target_language_code: this.langCode,
       // OpenAPI: sample rate is a string enum. Larger max_chunk_length reduces
       // mid-sentence prosody seams that sound like TTS "glitches".
-      speech_sample_rate: "16000",
+      speech_sample_rate: 16000,
       output_audio_codec: "linear16",
       min_buffer_size: 100,
       max_chunk_length: 500,
@@ -427,7 +427,7 @@ export class SarvamTTS implements TTSAdapter {
       speaker: this.speaker,
       model: this.model,
       enable_preprocessing: this.enablePreprocessing,
-      speech_sample_rate: "16000",
+      speech_sample_rate: 16000,
       output_audio_codec: "linear16",
     };
     this.applyPace(body);
@@ -650,7 +650,7 @@ export class SarvamTTS implements TTSAdapter {
       speaker: this.speaker,
       model: apiModel(this.model),
       enable_preprocessing: this.enablePreprocessing,
-      speech_sample_rate: "16000",
+      speech_sample_rate: 16000,
       output_audio_codec: "linear16",
     };
     this.applyPace(body);
