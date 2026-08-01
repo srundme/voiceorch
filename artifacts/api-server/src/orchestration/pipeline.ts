@@ -119,6 +119,13 @@ const MIN_SPEECH_BYTES        = 3200;   // ~200ms @ 8kHz PCM — skip noise burs
 const CHUNK_SIZE_MULAW        = 160;    // 20ms @ 8kHz mulaw for paced batch playback
 const VAD_THRESHOLD           = 100;    // RMS threshold for speech detection
 const STREAM_ACCUM_BYTES      = 640;    // 20ms of 16kHz PCM before forwarding a TTS stream chunk
+// TTS jitter buffer (see drainSentenceJob): runway of audio to queue before
+// starting/resuming the paced send pump, so momentary provider-stream hiccups
+// don't become audible mid-sentence gaps. Caps bound the added latency.
+const TTS_PREBUFFER_MS     = Math.max(0, Number(process.env.TTS_PREBUFFER_MS ?? 300));
+const TTS_PREBUFFER_CAP_MS = Math.max(TTS_PREBUFFER_MS, Number(process.env.TTS_PREBUFFER_CAP_MS ?? 600));
+const TTS_REBUFFER_MS      = Math.max(0, Number(process.env.TTS_REBUFFER_MS ?? 160));
+const TTS_REBUFFER_CAP_MS  = Math.max(TTS_REBUFFER_MS, Number(process.env.TTS_REBUFFER_CAP_MS ?? 400));
 const HANDOFF_SILENCE_MS      = 3000;   // sustained silence that may indicate a phone handoff
 const FILLER_THRESHOLD_MS     = 350;    // play a filler phrase if LLM has not returned a first
                                         // token within this window (and backchannel didn't fire)
@@ -5118,6 +5125,34 @@ export class OrchestrationPipeline implements VoiceSession {
         return true;
       };
 
+      // Buffered-but-unsent audio in ms (16 kHz s16le pcmQueue = 32 bytes/ms).
+      const bufferedMs = () => {
+        let bytes = 0;
+        for (let i = pcmIdx; i < job.pcmQueue.length; i++) bytes += job.pcmQueue[i].length;
+        return bytes / 32 + (wireQueue.length * 20);
+      };
+      // Jitter buffer: wait until targetMs of audio is queued (or synthesis
+      // finishes / capMs passes) before (re)starting the send pump. Without
+      // this, playback starts on the FIRST 20 ms chunk and every momentary
+      // Sarvam stream hiccup becomes an audible mid-sentence gap on the
+      // carrier (call 5046: 14.9 s of audio took 17.3 s to play).
+      const awaitPrebuffer = async (targetMs: number, capMs: number) => {
+        const deadline = Date.now() + capMs;
+        while (
+          !this.closed && !this.bargeInRequested && !job.synthDone &&
+          this.interruptionMgr.isValidSequence(job.sequenceId) &&
+          bufferedMs() < targetMs && Date.now() < deadline
+        ) {
+          await new Promise<void>((r) => setTimeout(r, 10));
+        }
+      };
+      await awaitPrebuffer(TTS_PREBUFFER_MS, TTS_PREBUFFER_CAP_MS);
+      // Re-anchor the per-sentence echo grace + adaptive echo-floor calibration
+      // window to actual playback start: the prebuffer wait above would
+      // otherwise consume the grace period before any audio is audible, and
+      // caller audio during the wait could be sampled as "echo".
+      this.bargeInSentenceStartAt = Date.now();
+
       // Drift-compensated pacing: track the "ideal" next send time and adjust
       // each sleep so that accumulated setTimeout jitter is self-corrected.
       // Without this, late-firing timers cause VoBiz's playout buffer to underrun
@@ -5168,9 +5203,12 @@ export class OrchestrationPipeline implements VoiceSession {
         } else if (job.synthDone) {
           break; // no more buffered blocks and TTS finished — we're done
         } else {
-          // Momentarily nothing buffered while TTS is still streaming —
-          // wait a short tick before checking again
-          await new Promise<void>((r) => setTimeout(r, 5));
+          // Underrun mid-sentence while TTS is still streaming: instead of
+          // resuming on the very next 20 ms chunk (which turns one slow patch
+          // into a rapid stutter of micro-gaps), re-buffer a short runway so
+          // playback resumes smoothly, then reset pacing to avoid a burst.
+          await awaitPrebuffer(TTS_REBUFFER_MS, TTS_REBUFFER_CAP_MS);
+          nextTick = Date.now() + 20;
         }
       }
       // Ensure synthesis has fully settled (so a real error surfaces) even if
