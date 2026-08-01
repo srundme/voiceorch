@@ -443,7 +443,7 @@ export default function AgentEdit() {
       ttsMinSentenceChars: 18,
       ttsSpeed: 1,
       linearDelayMs: 0,
-      fragmentCoalesceListeningMs: 500,
+      fragmentCoalesceListeningMs: 250,
       fragmentCoalescePlayingMs: 1000,
       telephonyTailDrainMs: 400,
       sarvamHighVadSensitivity: false,
@@ -1648,7 +1648,7 @@ export default function AgentEdit() {
                         onChange={e => field.onChange(parseInt(e.target.value, 10))} />
                     </FormControl>
                     <FormDescription className="text-[11px]">
-                      Hold short STT fragments ("Okay.") while the agent is silent, waiting for a follow-up final. <strong>0 = off.</strong> Default 500ms.
+                      Hold short STT fragments ("Okay.") while the agent is silent, waiting for a follow-up final. <strong>0 = off.</strong> Default 250ms.
                     </FormDescription>
                     <FormMessage />
                   </FormItem>

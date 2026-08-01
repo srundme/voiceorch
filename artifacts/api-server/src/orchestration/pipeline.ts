@@ -134,7 +134,7 @@ const DEAD_AIR_FILLER_CANCEL_MS = 500; // skip dead-air filler playback if LLM f
 const FRAGMENT_COALESCE_MS_DEFAULT = 800;   // fallback when agentConfig omits playing coalesce
 /** Listening-side hold for ack fragments ("Yes Ma'am") — was 150ms; call 4856
  *  flushed before the caller finished "…how are you?" → zigzag replies. */
-const FRAGMENT_COALESCE_LISTENING_MS_DEFAULT = 450;
+const FRAGMENT_COALESCE_LISTENING_MS_DEFAULT = 250;
 const VAD_FLUSH_BACKSTOP_MS   = 2000;   // speech_start with no interim/final/speech_end for this long → one-shot STT flush (lost-turn anomaly)
 const VAD_FLUSH_COOLDOWN_MS   = 5000;   // min interval between backstop flushes — keeps the flush strictly anomaly-only
 const LLM_TTFT_FALLBACK_MS    = Number(process.env.LLM_TTFT_FALLBACK_MS ?? 1200); // abort slow primary LLM
@@ -1319,7 +1319,8 @@ export class OrchestrationPipeline implements VoiceSession {
   private scheduleEagerLlm(partial: string): void {
     if (this.isPlaying || this.isSendingTtsAudio || this.closed || this.isProcessing) return;
     if (this._specLlmState) return;
-    if (!this.conversationHistory.some((t) => t.role === "assistant")) return;
+    // Turn 1 allowed: the greeting response is the most latency-sensitive turn.
+    // Speculative output is validated against the final transcript before use.
     this.eagerPartialText = partial;
     if (this.eagerPartialTimer) clearTimeout(this.eagerPartialTimer);
     this.eagerPartialTimer = setTimeout(() => {
@@ -1335,7 +1336,7 @@ export class OrchestrationPipeline implements VoiceSession {
   private handleSttSpeechEnd(): void {
     if (this.closed || this.isPlaying || this.isSendingTtsAudio || this.isProcessing) return;
     if (this._specLlmState) return;
-    if (!this.conversationHistory.some((t) => t.role === "assistant")) return;
+    // Turn 1 allowed (see scheduleEagerLlm).
     const text = this.streamSTT?.getPendingTranscript?.()?.trim() ?? this.eagerPartialText.trim();
     if (!text) return;
     this.clearEagerPartialTimer();

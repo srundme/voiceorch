@@ -225,7 +225,7 @@ export function clampLinearDelayMs(value: number | null | undefined): number {
 }
 
 export function clampFragmentCoalesceListeningMs(value: number | null | undefined): number {
-  const v = typeof value === "number" && Number.isFinite(value) ? value : 500;
+  const v = typeof value === "number" && Number.isFinite(value) ? value : 250;
   return Math.max(0, Math.min(2000, Math.round(v)));
 }
 

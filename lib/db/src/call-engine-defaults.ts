@@ -39,7 +39,11 @@ export const SARVAM_STT_LATENCY_LEGACY_SNAPPY = {
 } as const;
 
 export const FRAGMENT_COALESCE_DEFAULTS = {
-  listeningMs: 500,
+  // listeningMs 500→250 (Aug 2026): "yes"/"okay" while the agent is silent is
+  // usually the caller's ANSWER; 500ms of hold read as dead air on every short
+  // reply. 250ms still catches Sarvam speech-resume (VAD start arrives in
+  // ~100-300ms), which extends the window when the caller keeps talking.
+  listeningMs: 250,
   playingMs: 1000,
 } as const;
 
@@ -177,6 +181,12 @@ export function normalizeCallEngineAgentConfig(
   }
 
   const fragListen = cfg["fragmentCoalesceListeningMs"];
+  // Migrate the previous platform default (500) to the new default — agents
+  // that never customized this stored 500 verbatim.
+  if (fragListen === 500) {
+    reasons.push(`fragmentCoalesceListeningMs 500→${FRAGMENT_COALESCE_DEFAULTS.listeningMs}`);
+    cfg["fragmentCoalesceListeningMs"] = FRAGMENT_COALESCE_DEFAULTS.listeningMs;
+  }
   if (fragListen === SARVAM_STT_LATENCY_LEGACY_SNAPPY.fragmentCoalesceListeningMs) {
     reasons.push(
       `fragmentCoalesceListeningMs ${fragListen}→${FRAGMENT_COALESCE_DEFAULTS.listeningMs}`,

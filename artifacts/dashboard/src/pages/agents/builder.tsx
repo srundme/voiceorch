@@ -3693,7 +3693,7 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                     form={form}
                     name="fragmentCoalesceListeningMs"
                     label="Fragment hold (listening)"
-                    hint="Hold short STT fragments while agent is silent. 0 = off. Default 500ms."
+                    hint="Hold short STT fragments while agent is silent. 0 = off. Default 250ms."
                     min={0}
                     max={2000}
                     step={50}
@@ -6082,7 +6082,7 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
       ttsMinSentenceChars: 18,
       ttsSpeed: 1,
       linearDelayMs: 0,
-      fragmentCoalesceListeningMs: 500,
+      fragmentCoalesceListeningMs: 250,
       fragmentCoalescePlayingMs: 1000,
       telephonyTailDrainMs: 400,
       sarvamHighVadSensitivity: false,

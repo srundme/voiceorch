@@ -9,7 +9,7 @@ import { isBackchannelOnlyUtterance } from "./transcriptQuality.js";
 import { envInt } from "./utils.js";
 
 /** Stable-partial timer before launching eager LLM (Path A Bolna-feel: 180ms). */
-export const EAGER_PARTIAL_STABLE_MS = envInt("EAGER_PARTIAL_STABLE_MS", 180, 50);
+export const EAGER_PARTIAL_STABLE_MS = envInt("EAGER_PARTIAL_STABLE_MS", 120, 50);
 
 /** Trailing-char tolerance when final extends a speculative partial. */
 const SPECULATIVE_TRAIL_CHARS = 24;
@@ -33,6 +33,13 @@ export function isSpeculativeHit(partial: string, final: string): boolean {
  */
 export function isEagerCommitReady(partial: string, opts?: { speechEnd?: boolean }): boolean {
   const t = partial.trim();
+  // speech_end IS the stabilization signal — Sarvam's VAD already declared the
+  // caller done. Launch on any real text. Pure backchannels stay excluded: their
+  // finals are held by the pipeline fragment-coalesce anyway, so a speculative
+  // launch on "okay"/"சரி" is always wasted work.
+  if (opts?.speechEnd) {
+    return t.length >= 2 && !isBackchannelOnlyUtterance(t);
+  }
   if (t.length < 3) return false;
   // Pure backchannels ("சரி", "okay") often precede a real question — wait for final/coalesce.
   if (isBackchannelOnlyUtterance(t)) return false;
@@ -41,9 +48,5 @@ export function isEagerCommitReady(partial: string, opts?: { speechEnd?: boolean
   if (words.length >= 3) return true;
   // Two-word Indic content replies ("எங்க எங்க") — Path A Bolna-feel
   if (words.length >= 2 && t.length >= 8) return true;
-  if (opts?.speechEnd) {
-    if (words.length >= 1 && t.length >= 4) return true;
-    if (t.length >= 8) return true;
-  }
   return false;
 }
