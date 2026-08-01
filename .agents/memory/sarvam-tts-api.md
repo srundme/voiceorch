@@ -35,3 +35,6 @@ Never call `/text-to-speech-streaming` (404). Never send pitch/loudness on v3. O
 
 ## Streaming audio may be WAV-wrapped (Jul 2026)
 Sarvam TTS can return WAV/RIFF-headed audio even when linear16 is requested — on ALL paths (REST, WS per-message, HTTP stream head). Header bytes fed to the pipeline as PCM = audible click/crackle at every sentence start on telephony. Every ingest point must strip via stripRiffHeader (data-chunk scan, not blind 44-byte slice); HTTP stream must buffer the first ~64 bytes since the header can span reads.
+
+## speech_sample_rate must be a NUMBER (Aug 2026)
+Sarvam TTS (batch + /stream + WS) began rejecting string sample rates with 400 "Speech sample rate can only be 8000, 16000, 22050, 24000 Hz". Send `speech_sample_rate: 16000` (number). Broke live calls Aug 1 2026; likely tightened with the v4 rollout.
