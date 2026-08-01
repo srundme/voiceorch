@@ -5,14 +5,29 @@
  */
 
 import { createHash, randomUUID } from "node:crypto";
-import { and, eq, ne, sql } from "drizzle-orm";
-import { db, callerVoiceprintsTable, canonicalizeCallerKey } from "@workspace/db";
+import { and, eq, inArray, ne, sql } from "drizzle-orm";
+import { db, callerVoiceprintsTable, callerProfilesTable, canonicalizeCallerKey } from "@workspace/db";
 import { logger } from "../lib/logger.js";
 
 /** Hard match for cross-number same-person (stricter). */
 export const VOICE_MATCH_THRESHOLD = Number(process.env["VOICE_MEMORY_MATCH_THRESHOLD"] ?? 0.82);
 /** Soft mid-call handoff alert (more sensitive). */
 export const VOICE_HANDOFF_THRESHOLD = Number(process.env["VOICE_MEMORY_HANDOFF_THRESHOLD"] ?? 0.72);
+/**
+ * Soft floor for NAME-CORROBORATED cross-number linking. 8kHz telephony audio
+ * through a 16kHz-trained embedder drags same-person cross-device scores far
+ * below the hard bar (observed 0.42-0.46 for a confirmed same speaker), so a
+ * voice that is at least "somewhat similar" PLUS the same stated caller name
+ * is accepted as the same person.
+ */
+export const VOICE_SOFT_MATCH_THRESHOLD = Number(process.env["VOICE_MEMORY_SOFT_MATCH_THRESHOLD"] ?? 0.40);
+
+/** Normalize a caller name for corroboration compare (case/space/punct-insensitive). */
+function normalizeName(name: string | null | undefined): string | null {
+  if (!name) return null;
+  const n = name.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, "").replace(/\s+/g, " ").trim();
+  return n.length >= 2 ? n : null;
+}
 
 function cosine(a: number[], b: number[]): number {
   if (!a?.length || a.length !== b.length) return 0;
@@ -39,8 +54,8 @@ export interface VoiceMatchResult {
 
 export interface VoiceMatchOutcome {
   match: VoiceMatchResult | null;
-  /** Best candidate that scored BELOW the match bar (diagnostics only). */
-  nearMiss: { score: number; phoneNumber: string } | null;
+  /** Best candidate that scored BELOW the match bar (diagnostics + name-corroborated linking). */
+  nearMiss: { score: number; phoneNumber: string; personKey: string; margin: number | null } | null;
 }
 
 /** Find best voice match for this agent (excluding optional phone). */
@@ -72,24 +87,32 @@ export async function findBestVoiceMatch(opts: {
     // made sub-threshold near-misses invisible (calls 5029-5031: "not
     // recognised" with no score anywhere in the logs).
     let best: VoiceMatchResult | null = null;
+    let secondScore: number | null = null;
     for (const row of rows) {
       const emb = row.embedding as number[];
       const score = cosine(embedding, emb);
       if (!best || score > best.score) {
+        if (best && best.personKey !== row.personKey) secondScore = best.score;
         best = {
           personKey: row.personKey,
           matchedPhone: row.phoneNumber,
           score,
           samePhone: false,
         };
+      } else if (row.personKey !== best.personKey && (secondScore == null || score > secondScore)) {
+        secondScore = score;
       }
     }
+    // margin = separation of the best candidate from the next-best DIFFERENT
+    // person — high margin means "clearly closer to this person than anyone
+    // else", useful for tuning and for future relative-decision logic.
+    const margin = best && secondScore != null ? best.score - secondScore : null;
     if (best && best.score < VOICE_MATCH_THRESHOLD) {
       logger.info(
-        { agentId, bestScore: best.score, bestPhone: best.matchedPhone, threshold: VOICE_MATCH_THRESHOLD },
+        { agentId, bestScore: best.score, bestPhone: best.matchedPhone, margin, threshold: VOICE_MATCH_THRESHOLD },
         "Voice memory: best cross-number candidate below match threshold",
       );
-      return { match: null, nearMiss: { score: best.score, phoneNumber: best.matchedPhone } };
+      return { match: null, nearMiss: { score: best.score, phoneNumber: best.matchedPhone, personKey: best.personKey, margin } };
     }
     return { match: best, nearMiss: null };
   } catch (err) {
@@ -117,7 +140,38 @@ export async function upsertCallerVoiceprint(opts: {
   const phoneNumber = canonicalizeCallerKey(opts.phoneNumber) ?? opts.phoneNumber;
   const { agentId, embedding, displayName } = opts;
 
-  const { match: cross, nearMiss } = await findBestVoiceMatch({ agentId, embedding, excludePhone: phoneNumber });
+  const outcome = await findBestVoiceMatch({ agentId, embedding, excludePhone: phoneNumber });
+  let cross = outcome.match;
+  const nearMiss = outcome.nearMiss;
+
+  // Name-corroborated soft link: telephony scores for the SAME person across
+  // devices routinely land well below the hard bar (16k-trained embedder on
+  // 8k audio). If the best candidate is at least somewhat similar AND both
+  // phones' caller profiles carry the same stated name, accept the link.
+  if (!cross && nearMiss && nearMiss.score >= VOICE_SOFT_MATCH_THRESHOLD) {
+    try {
+      const phones = [phoneNumber, nearMiss.phoneNumber];
+      const profiles = await db
+        .select({ phoneNumber: callerProfilesTable.phoneNumber, name: callerProfilesTable.name })
+        .from(callerProfilesTable)
+        .where(and(
+          eq(callerProfilesTable.agentId, agentId),
+          inArray(callerProfilesTable.phoneNumber, phones),
+        ));
+      const myName = normalizeName(profiles.find((p) => p.phoneNumber === phoneNumber)?.name);
+      const theirName = normalizeName(profiles.find((p) => p.phoneNumber === nearMiss.phoneNumber)?.name);
+      if (myName && theirName && myName === theirName) {
+        cross = { personKey: nearMiss.personKey, matchedPhone: nearMiss.phoneNumber, score: nearMiss.score, samePhone: false };
+        logger.info(
+          { agentId, phoneNumber, matchedPhone: nearMiss.phoneNumber, score: nearMiss.score, name: myName },
+          "Voice memory: name-corroborated cross-number link (voice similar + same caller name)",
+        );
+      }
+    } catch (err) {
+      logger.warn({ err, agentId }, "Voice memory: name corroboration lookup failed");
+    }
+  }
+
   let personKey = cross?.personKey ?? randomUUID();
   let linkedFromPhone = cross?.matchedPhone ?? null;
   const score = cross?.score ?? opts.score ?? null;
@@ -132,11 +186,9 @@ export async function upsertCallerVoiceprint(opts: {
       ))
       .limit(1);
     if (existing?.personKey) {
-      if (cross && cross.score >= VOICE_MATCH_THRESHOLD) {
-        personKey = cross.personKey;
-      } else {
-        personKey = existing.personKey;
-      }
+      // `cross` is only set when a link decision was accepted (hard-threshold
+      // match or name-corroborated soft match) — adopt its personKey either way.
+      personKey = cross ? cross.personKey : existing.personKey;
     }
     // Sticky link: if this phone's personKey is ALREADY shared with another
     // phone (linked on a previous call), honor that link even when today's
