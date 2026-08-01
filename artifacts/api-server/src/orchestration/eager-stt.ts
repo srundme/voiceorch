@@ -9,7 +9,7 @@ import { isBackchannelOnlyUtterance } from "./transcriptQuality.js";
 import { envInt } from "./utils.js";
 
 /** Stable-partial timer before launching eager LLM (Path A Bolna-feel: 180ms). */
-export const EAGER_PARTIAL_STABLE_MS = envInt("EAGER_PARTIAL_STABLE_MS", 120, 50);
+export const EAGER_PARTIAL_STABLE_MS = envInt("EAGER_PARTIAL_STABLE_MS", 60, 30);
 
 /** Trailing-char tolerance when final extends a speculative partial. */
 const SPECULATIVE_TRAIL_CHARS = 24;
