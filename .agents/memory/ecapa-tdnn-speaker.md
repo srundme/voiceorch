@@ -43,3 +43,4 @@ Same-person cross-device telephony cosine ≈ 0.42–0.46 (16k-trained ECAPA on 
 2. Sticky link: phones already sharing a personKey stay linked regardless of today's score.
 3. Name-corroborated soft link: score ≥0.40 (VOICE_MEMORY_SOFT_MATCH_THRESHOLD) + margin ≥0.10 over next-best different person + same normalized caller_profiles.name (≥3 chars); never moves a phone between existing clusters on soft evidence.
 Deleting caller memory (dashboard route) now also deletes the voiceprint (self + squad owner), with the :phone param canonicalized.
+4. AS-norm relative link: when below hard bar, S-norm vs impostor cohort (other personKeys, recent-first deterministic 200-row set); accept at normScore ≥4 std (VOICE_MEMORY_ASNORM_THRESHOLD) + raw ≥0.40 + margin ≥0.10 + ≥8 DISTINCT impostor identities (VOICE_MEMORY_ASNORM_MIN_COHORT); soft evidence never moves clusters.
