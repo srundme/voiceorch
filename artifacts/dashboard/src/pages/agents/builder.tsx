@@ -6078,6 +6078,16 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
     queryFn: () => customFetch<{ numbers: string[] }>(`${DASH_API}/phone-numbers/managed`),
     staleTime: 5 * 60 * 1000,
   });
+  // Agent's own assigned number (phone_numbers.agentId) — the backend dials
+  // from it when set (agent.outboundPhoneNumberId), so the dialog must show it
+  // instead of the trial caller ID.
+  const { data: builderPhoneNumbersRaw } = useListPhoneNumbers({
+    query: { queryKey: getListPhoneNumbersQueryKey(), staleTime: 60_000 },
+  });
+  const assignedOutboundNumber = (() => {
+    const list = Array.isArray(builderPhoneNumbersRaw) ? builderPhoneNumbersRaw : [];
+    return list.find((p) => p.agentId === agentId)?.number ?? null;
+  })();
   const outboundTestingFrom =
     (typeof preferredManagedWatch === "string" && preferredManagedWatch.trim())
       ? preferredManagedWatch.trim()
@@ -6734,6 +6744,11 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
                 <>
                   {" "}from your own {telephonyProviderWatch === "plivo" ? "Plivo" : "Twilio"} number{" "}
                   <span className="font-medium tabular-nums text-foreground">{byoOutboundFrom}</span>.
+                </>
+              ) : assignedOutboundNumber ? (
+                <>
+                  {" "}from your number{" "}
+                  <span className="font-medium tabular-nums text-foreground">{assignedOutboundNumber}</span>.
                 </>
               ) : outboundTestingFrom ? (
                 <>
