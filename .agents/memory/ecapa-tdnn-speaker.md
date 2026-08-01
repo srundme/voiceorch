@@ -36,3 +36,10 @@ SpeechBrain must be installed in the correct Python env:
 Also in `artifacts/gender-service/requirements.txt` as `speechbrain>=1.0.0`.
 
 The gender-service warmup background task pre-loads the model so the first real request is not slow (~10 s cold start on first ever download, <2 s if weights are cached in /tmp/speechbrain_ecapa).
+
+## Cross-number matching (Aug 2026)
+Same-person cross-device telephony cosine ≈ 0.42–0.46 (16k-trained ECAPA on 8k audio) — the 0.82 hard bar is unreachable across handsets. Layered decision now in voiceMemoryStore:
+1. Hard match ≥0.82 (unchanged).
+2. Sticky link: phones already sharing a personKey stay linked regardless of today's score.
+3. Name-corroborated soft link: score ≥0.40 (VOICE_MEMORY_SOFT_MATCH_THRESHOLD) + margin ≥0.10 over next-best different person + same normalized caller_profiles.name (≥3 chars); never moves a phone between existing clusters on soft evidence.
+Deleting caller memory (dashboard route) now also deletes the voiceprint (self + squad owner), with the :phone param canonicalized.
