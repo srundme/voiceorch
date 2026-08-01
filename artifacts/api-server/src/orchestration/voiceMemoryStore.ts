@@ -116,6 +116,11 @@ export async function findBestVoiceMatch(opts: {
             )
           : eq(callerVoiceprintsTable.agentId, agentId),
       )
+      // Deterministic, most-relevant-first candidate set: the cap below means
+      // large agents score against a SUBSET, so it must always be the same
+      // subset (most recent callers) — an arbitrary subset would make AS-norm
+      // acceptance vary run-to-run.
+      .orderBy(sql`${callerVoiceprintsTable.lastSeenAt} DESC NULLS LAST, ${callerVoiceprintsTable.phoneNumber} ASC`)
       .limit(200);
 
     // Track the best candidate even below the match bar — a silent `continue`
@@ -151,7 +156,12 @@ export async function findBestVoiceMatch(opts: {
       let asnormAccept = false;
       const bestPersonKey = best.personKey;
       const cohort = scored.filter((s) => s.row.personKey !== bestPersonKey);
-      if (cohort.length >= VOICE_ASNORM_MIN_COHORT) {
+      // Min-cohort is counted in DISTINCT impostor identities, not rows — a
+      // few people with several linked phones each would otherwise satisfy
+      // the row count while providing too few independent voices, making the
+      // std estimate overconfident.
+      const distinctImpostors = new Set(cohort.map((c) => c.row.personKey)).size;
+      if (distinctImpostors >= VOICE_ASNORM_MIN_COHORT) {
         // z-side: fresh (test) embedding vs cohort — scores already computed.
         const zStats = topKStats(cohort.map((c) => c.score), VOICE_ASNORM_TOP_K);
         // t-side: the CANDIDATE's enrolled embedding vs the same cohort.
@@ -162,10 +172,15 @@ export async function findBestVoiceMatch(opts: {
           const zStd = Math.max(zStats.std, ASNORM_STD_FLOOR);
           const tStd = Math.max(tStats.std, ASNORM_STD_FLOOR);
           normScore = 0.5 * ((best.score - zStats.mean) / zStd + (best.score - tStats.mean) / tStd);
-          // Relative acceptance still requires a minimal absolute floor —
+          // Relative acceptance still requires: (a) a minimal absolute floor —
           // a voice that towers over strangers but is barely similar at all
-          // (raw < soft floor) is not trusted.
-          asnormAccept = normScore >= VOICE_ASNORM_THRESHOLD && best.score >= VOICE_SOFT_MATCH_THRESHOLD;
+          // (raw < soft floor) is not trusted — and (b) an ambiguity guard:
+          // if the next-best DIFFERENT person is nearly as close (margin
+          // < 0.10), the identity is ambiguous and no link is made.
+          asnormAccept =
+            normScore >= VOICE_ASNORM_THRESHOLD
+            && best.score >= VOICE_SOFT_MATCH_THRESHOLD
+            && (margin == null || margin >= 0.10);
         }
       }
       logger.info(
