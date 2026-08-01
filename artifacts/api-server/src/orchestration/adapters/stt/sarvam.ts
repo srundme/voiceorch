@@ -358,30 +358,15 @@ export class SarvamSTT implements STTAdapter {
     let _onSpeechStart: (() => void) | null = null;
     let _onSpeechEnd: (() => void) | null = null;
 
-    // ── Adaptive transcript coalescing ───────────────────────────────────────
-    // The hold window self-calibrates to this caller's mid-sentence pause rhythm:
-    //   fast speaker → 120 ms · medium → 220 ms · slow / older caller → 350 ms
-    // Seeded at COALESCE_DEFAULT_MS until at least 2 real pauses are observed;
-    // converges within 2–3 turns of natural speech.
-    const COALESCE_MIN_MS = 120;
-    const COALESCE_DEFAULT_MS = 220;
-    const COALESCE_MAX_MS = 500; // raised from 350 — covers ~400ms thinking pauses
+    // ── Transcript coalescing holds ──────────────────────────────────────────
+    // Two UI-configurable timers drive coalescing (an older adaptive pause-history
+    // system was removed as dead code — it was only ever referenced in logs):
     // Incomplete mid-thought hold — Latency Tuning UI (default 220). Env
     // SARVAM_COALESCE_INCOMPLETE_MS overrides when set.
     const COALESCE_INCOMPLETE_MS = this.incompleteHoldMs;
     const SPEECH_END_FLUSH_MS = this.speechEndFlushMs;
-    const PAUSE_HISTORY_MAX = 5;
-    const pauseHistory: number[] = [];
     let transcriptArrivedAt = 0; // wall-clock ms when last transcript buffered
     let coalesceMergedSegments = 0; // # of Sarvam segments folded into current buf
-
-    function adaptiveHoldMs(): number {
-      if (pauseHistory.length < 2) return COALESCE_DEFAULT_MS;
-      const avg = pauseHistory.reduce((a, b) => a + b, 0) / pauseHistory.length;
-      if (avg < 150) return COALESCE_MIN_MS;
-      if (avg < 400) return COALESCE_DEFAULT_MS;
-      return COALESCE_MAX_MS;
-    }
 
     /**
      * Common single-word utterances that are COMPLETE responses — acknowledgements,
@@ -742,8 +727,6 @@ export class SarvamSTT implements STTAdapter {
         {
           text: text.slice(0, 120),
           segments,
-          holdMs: adaptiveHoldMs(),
-          pauseHistory: pauseHistory.slice(),
           detectedLang: lang,
         },
         "Sarvam STT: emitting adaptive-coalesced transcript",
@@ -841,28 +824,14 @@ export class SarvamSTT implements STTAdapter {
           _onSpeechStart?.();
           logger.debug({ langCode }, "Sarvam STT: speech start");
           // If we are holding a transcript and the user resumed speaking, cancel
-          // the emit timer, record the pause length for adaptive calibration, and
-          // wait for the next transcript to append before emitting.
+          // the emit timer and wait for the next transcript to append before emitting.
           if (coalesceTimer && coalesceBuf) {
             clearTimeout(coalesceTimer);
             coalesceTimer = null;
-            if (transcriptArrivedAt > 0) {
-              const pauseMs = Date.now() - transcriptArrivedAt;
-              if (pauseMs > 40 && pauseMs < 1200) {
-                // filter: ignore sub-40ms noise & >1.2s stale gaps
-                pauseHistory.push(pauseMs);
-                if (pauseHistory.length > PAUSE_HISTORY_MAX)
-                  pauseHistory.shift();
-              }
-              transcriptArrivedAt = 0;
-            }
+            transcriptArrivedAt = 0;
             logger.debug(
-              {
-                langCode,
-                pauseHistory: pauseHistory.slice(),
-                nextHoldMs: adaptiveHoldMs(),
-              },
-              "Sarvam STT: coalesce hold cancelled — speech resumed, pause recorded",
+              { langCode },
+              "Sarvam STT: coalesce hold cancelled — speech resumed",
             );
           }
           return;
@@ -876,17 +845,8 @@ export class SarvamSTT implements STTAdapter {
           speechEndAt = Date.now();
           logger.debug({ langCode }, "Sarvam STT: speech end");
           // Fast-path when transcript is ALREADY buffered (multi-segment coalescing):
-          // caller has stopped talking — shorten any running timer.
-          // Universal thinking-pause rule (language-agnostic):
-          //   • CLEARLY COMPLETE  → 30 ms fast-flush
-          //       – Terminal punctuation (.?!।) — STT itself declared it done
-          //       – Single known-affirmation word ("yes", "சரி", "हाँ", …)
-          //   • EVERYTHING ELSE   → max(adaptiveHoldMs(), 700 ms)
-          //       Covers ALL mid-sentence fragments in ALL languages without
-          //       enumerating grammar patterns. "5 lakhs", "எனக்கு வந்து",
-          //       "mujhe chahiye", "I want", Telugu/Kannada partials, etc.
-          //       all wait 700 ms, which is enough to survive a normal human
-          //       thinking pause (~1 s) while the STT silence window is shorter.
+          // caller has stopped talking — shorten any running timer to the
+          // UI-configured SPEECH_END_FLUSH_MS (default 30ms).
           if (coalesceBuf && coalesceTimer) {
             clearTimeout(coalesceTimer);
             // speech_end received: caller has stopped speaking — flush (UI-configured)
