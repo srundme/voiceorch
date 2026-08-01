@@ -346,7 +346,7 @@ export default function FamilyAgentNew() {
     defaultValues: {
       companyId: "", policyId: "", agentType: "inbound_support",
       name: "", description: "",
-      asrProvider: "sarvam", asrModel: "saaras:v4",
+      asrProvider: "sarvam", asrModel: "saaras:v3",
       llmProvider: "qwen", llmModel: "qwen/qwen3-32b",
       ttsProvider: "sarvam", ttsVoice: "priya", ttsModel: "bulbul:v3",
       telephonyProvider: "vobiz",

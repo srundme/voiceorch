@@ -27,8 +27,8 @@ export const ASR_MODELS: Record<string, { value: string; label: string }[]> = {
   azure:      [{ value: "en-US-standard", label: "Auto (base model from language)" }, { value: "en-US-enhanced", label: "Auto — enhanced (base model from language)" }, { value: "en-IN-standard", label: "Auto — Indic (base model from language)" }],
   assemblyai: [{ value: "best", label: "Best (default)" }, { value: "nano", label: "Nano (fast)" }],
   sarvam: [
-    { value: "saaras:v4",          label: "Saaras v4 — latest (recommended)" },
-    { value: "saaras:v3",          label: "Saaras v3 — real-time streaming" },
+    { value: "saaras:v3",          label: "Saaras v3 — real-time streaming (recommended)" },
+    { value: "saaras:v4",          label: "Saaras v4 — new (unstable streaming, avoid)" },
     { value: "saarika:v2.5",       label: "Saarika v2.5 — real-time streaming (legacy)" },
     { value: "saaras:v3-realtime", label: "Saaras v3 Real-time — streaming" },
     { value: "saarika:flash",      label: "Saarika Flash — batch (fast)" },
