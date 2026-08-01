@@ -2602,8 +2602,8 @@ function VoiceCallFeelPresets({ form }: { form: any }) {
         </p>
         {asrProviderVal === "sarvam" && (
           <p className="text-[11px] text-muted-foreground mt-1">
-            Note: the silence-window part of these presets applies to Azure STT only — Sarvam&apos;s
-            server-side VAD is fixed at ~0.5s. Pacing delay and interruption sensitivity still apply.
+            Fast turns on quick pause detection (~0.13s) for Sarvam; Balanced and Patient
+            use Sarvam&apos;s patient mode so slow speakers aren&apos;t cut off.
           </p>
         )}
       </div>
@@ -3618,52 +3618,21 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                 name="asrEndpointingSilenceMs"
                 label="Endpointing"
                 hint={asrProviderVal === "sarvam"
-                  ? "Not used with Sarvam — use the pause-detection controls below."
+                  ? "Silence before the agent decides you finished. With Sarvam: under 200ms = fast pause detection (~0.13s), 200ms+ = patient (~1s+). Fast 150 · Balanced 250 · Patient 500."
                   : "Milliseconds of silence after the caller stops before we finalize the turn (Azure + Deepgram). Fast 150 · Balanced 250 · Patient 500."}
                 min={100}
                 max={800}
                 step={25}
                 fmt={(v) => `${v}ms`}
-                disabled={asrProviderVal === "sarvam"}
+                onValueChange={(v: number) => {
+                  // Sarvam has no fine-grained silence window — only fast (~0.13s)
+                  // vs patient (~1-2s) server VAD. Map the single Endpointing knob
+                  // onto that switch so users get Bolna-style one-slider control.
+                  if (asrProviderVal === "sarvam") {
+                    form.setValue("sarvamHighVadSensitivity", v < 200, { shouldDirty: true });
+                  }
+                }}
               />
-
-              {asrProviderVal === "sarvam" && (
-                <>
-                  <FormField control={form.control} name="sarvamHighVadSensitivity" render={({ field }) => (
-                    <FormItem className="flex flex-row items-center justify-between gap-3 py-1">
-                      <div>
-                        <FormLabel className="text-[12px] font-medium text-foreground/90">Detect pauses quickly</FormLabel>
-                        <p className="text-[10px] text-muted-foreground/70 mt-0.5">
-                          Default off — avoids cutting callers mid-sentence on phone audio. Turn on only if replies feel too slow.
-                        </p>
-                      </div>
-                      <FormControl>
-                        <Switch checked={!!field.value} onCheckedChange={field.onChange} />
-                      </FormControl>
-                    </FormItem>
-                  )} />
-                  <AdvSlider
-                    form={form}
-                    name="sarvamSpeechEndFlushMs"
-                    label="Reply kickoff delay"
-                    hint="Tiny pause after the caller finishes before the agent starts thinking. Default 80ms."
-                    min={0}
-                    max={200}
-                    step={10}
-                    fmt={(v) => `${v}ms`}
-                  />
-                  <AdvSlider
-                    form={form}
-                    name="sarvamIncompleteHoldMs"
-                    label="Wait for unfinished thoughts"
-                    hint="Extra wait when someone seems mid-sentence (e.g. “I want…”). Default 700ms."
-                    min={50}
-                    max={1000}
-                    step={10}
-                    fmt={(v) => `${v}ms`}
-                  />
-                </>
-              )}
 
               <AdvSlider
                 form={form}
@@ -3676,38 +3645,84 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                 fmt={(v) => (v === 0 ? "off" : `${v}ms`)}
               />
 
-              <AdvSlider
-                form={form}
-                name="fragmentCoalesceListeningMs"
-                label="Fragment hold (listening)"
-                hint="Hold short STT fragments while agent is silent. 0 = off. Default 500ms."
-                min={0}
-                max={2000}
-                step={50}
-                fmt={(v) => (v === 0 ? "off" : `${v}ms`)}
-              />
+              <details className="group pt-1">
+                <summary className="cursor-pointer list-none text-[11.5px] font-medium text-muted-foreground hover:text-foreground transition-colors select-none">
+                  <span className="inline-block transition-transform group-open:rotate-90 mr-1">›</span>
+                  Advanced timing — rarely needed
+                </summary>
+                <div className="space-y-5 pt-4">
+                  {asrProviderVal === "sarvam" && (
+                    <>
+                      <FormField control={form.control} name="sarvamHighVadSensitivity" render={({ field }) => (
+                        <FormItem className="flex flex-row items-center justify-between gap-3 py-1">
+                          <div>
+                            <FormLabel className="text-[12px] font-medium text-foreground/90">Detect pauses quickly</FormLabel>
+                            <p className="text-[10px] text-muted-foreground/70 mt-0.5">
+                              Set automatically by the Endpointing slider (under 200ms = on). On = ~0.13s pause detection, off = patient ~1s+.
+                            </p>
+                          </div>
+                          <FormControl>
+                            <Switch checked={!!field.value} onCheckedChange={field.onChange} />
+                          </FormControl>
+                        </FormItem>
+                      )} />
+                      <AdvSlider
+                        form={form}
+                        name="sarvamSpeechEndFlushMs"
+                        label="Reply kickoff delay"
+                        hint="Tiny pause after the caller finishes before the agent starts thinking. Default 80ms."
+                        min={0}
+                        max={200}
+                        step={10}
+                        fmt={(v) => `${v}ms`}
+                      />
+                      <AdvSlider
+                        form={form}
+                        name="sarvamIncompleteHoldMs"
+                        label="Wait for unfinished thoughts"
+                        hint="Extra wait when someone seems mid-sentence (e.g. “I want…”). Default 700ms."
+                        min={50}
+                        max={1000}
+                        step={10}
+                        fmt={(v) => `${v}ms`}
+                      />
+                    </>
+                  )}
 
-              <AdvSlider
-                form={form}
-                name="fragmentCoalescePlayingMs"
-                label="Fragment hold (playing)"
-                hint="Hold short acks while agent is speaking. 0 = off. Default 1000ms."
-                min={0}
-                max={3000}
-                step={50}
-                fmt={(v) => (v === 0 ? "off" : `${v}ms`)}
-              />
+                  <AdvSlider
+                    form={form}
+                    name="fragmentCoalesceListeningMs"
+                    label="Fragment hold (listening)"
+                    hint="Hold short STT fragments while agent is silent. 0 = off. Default 500ms."
+                    min={0}
+                    max={2000}
+                    step={50}
+                    fmt={(v) => (v === 0 ? "off" : `${v}ms`)}
+                  />
 
-              <AdvSlider
-                form={form}
-                name="telephonyTailDrainMs"
-                label="Tail drain"
-                hint="Silence after last TTS so carriers don't clip goodbye. Default 400ms."
-                min={0}
-                max={2000}
-                step={50}
-                fmt={(v) => (v === 0 ? "off" : `${v}ms`)}
-              />
+                  <AdvSlider
+                    form={form}
+                    name="fragmentCoalescePlayingMs"
+                    label="Fragment hold (playing)"
+                    hint="Hold short acks while agent is speaking. 0 = off. Default 1000ms."
+                    min={0}
+                    max={3000}
+                    step={50}
+                    fmt={(v) => (v === 0 ? "off" : `${v}ms`)}
+                  />
+
+                  <AdvSlider
+                    form={form}
+                    name="telephonyTailDrainMs"
+                    label="Tail drain"
+                    hint="Silence after last TTS so carriers don't clip goodbye. Default 400ms."
+                    min={0}
+                    max={2000}
+                    step={50}
+                    fmt={(v) => (v === 0 ? "off" : `${v}ms`)}
+                  />
+                </div>
+              </details>
 
               <FormField control={form.control} name="silenceTimeoutSeconds" render={({ field }) => {
                 const val = field.value ?? 30;
