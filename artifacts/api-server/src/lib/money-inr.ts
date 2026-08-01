@@ -11,11 +11,35 @@ export const CURRENCY_INR = "INR" as const;
 /** ₹500 signup free credit */
 export const SIGNUP_CREDIT_PAISE = 50_000;
 
-/** ₹800 phone number base for first purchase (₹700 rental + ₹100 setup before GST) */
+/** ₹800 phone number base for first purchase (₹700 rental + ₹100 setup before GST).
+ *  NOTE: voice DIDs now use prefix-tiered pricing (phoneMonthlyBasePaise below);
+ *  these flat constants remain in use for WhatsApp number purchases only. */
 export const PHONE_BASE_PAISE = 80_000;
 
-/** ₹700 phone number base for monthly renewals (telephony rental before GST) */
+/** ₹700 phone number base for monthly renewals (telephony rental before GST) — WhatsApp only, see above */
 export const PHONE_RENEWAL_BASE_PAISE = 70_000;
+
+/** ₹100 one-time setup fee on first voice-number purchase (before GST) */
+export const PHONE_SETUP_PAISE = 10_000;
+
+/**
+ * Prefix-tiered monthly rental for voice numbers (before GST):
+ *   +91 80… series → ₹599/mo
+ *   +91 79… series → ₹699/mo
+ *   everything else → ₹659/mo
+ * Accepts E.164 ("+9180…"), bare digits ("9180…"), or national ("080…") forms.
+ */
+export function phoneMonthlyBasePaise(number: string): number {
+  const digits = String(number ?? "").replace(/\D/g, "").replace(/^0+/, "");
+  if (digits.startsWith("9180")) return 59_900;
+  if (digits.startsWith("9179")) return 69_900;
+  return 65_900;
+}
+
+/** First-purchase base for a voice number: tiered monthly rental + one-time ₹100 setup (before GST) */
+export function phonePurchaseBasePaise(number: string): number {
+  return phoneMonthlyBasePaise(number) + PHONE_SETUP_PAISE;
+}
 
 /** Flat ₹5 / minute platform fee */
 export const RATE_PAISE_PER_MIN = 500;

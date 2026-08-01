@@ -15,8 +15,9 @@ DELETE https://app.snapserve.ai/api/phone-numbers/{id}`}
       />
 
       <Callout variant="info" title="India pricing">
-        Base <strong>₹800</strong> + <strong>18% GST</strong> = pay <strong>₹944</strong> by card.
-        Renews every 30 days. KYC required before purchase.
+        Monthly rental by series: <strong>80-series ₹599</strong>, <strong>79-series ₹699</strong>,
+        <strong> others ₹659</strong> — plus a one-time ₹100 setup and 18% GST by card on first purchase.
+        Renews every 30 days at the monthly rental + GST. KYC required before purchase.
       </Callout>
 
       <Endpoint

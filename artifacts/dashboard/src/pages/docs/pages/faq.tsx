@@ -55,7 +55,7 @@ const FAQS: { q: string; a: ReactNode }[] = [
     q: "Why can’t I buy a phone number?",
     a: (
       <>
-        Complete <strong>KYC</strong>, pay by <strong>card</strong> (₹800 + 18% GST), and have wallet
+        Complete <strong>KYC</strong>, pay by <strong>card</strong> (₹599–₹699/mo by series + ₹100 setup + 18% GST), and have wallet
         funds for renewals. See <Link href="/docs/phone-numbers">Phone numbers</Link>.
       </>
     ),

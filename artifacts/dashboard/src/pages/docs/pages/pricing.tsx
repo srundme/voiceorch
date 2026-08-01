@@ -10,7 +10,7 @@ export default function PricingPage() {
         description="Prepaid INR only — no monthly subscription tiers. Top up a wallet (card) and usage deducts as calls run."
         copyText={`Welcome credit: ₹500
 Voice orchestration: ₹5 / minute
-Phone number: ₹800 + 18% GST = ₹944
+Phone number: ₹599–₹699/mo by series + one-time ₹100 setup + 18% GST
 Min top-up credit: ₹100`}
       />
 
@@ -28,8 +28,9 @@ Min top-up credit: ₹100`}
               ["Welcome credit (new accounts)", "₹500 (no GST)"],
               ["Voice orchestration", "₹5 / minute (flat)"],
               ["Wallet top-up", "Chosen credit + 18% GST (card)"],
-              ["Phone number (first month)", "₹800 + 18% GST = ₹944 (card)"],
-              ["Phone number renewal (30 days)", "₹800 + GST from wallet"],
+              ["Phone number monthly rental", "80-series ₹599 · 79-series ₹699 · others ₹659 (+18% GST)"],
+              ["Phone number first purchase", "Monthly rental + ₹100 one-time setup + 18% GST (card)"],
+              ["Phone number renewal (30 days)", "Monthly rental + GST from wallet"],
               ["Minimum top-up credit", "₹100"],
             ].map(([a, b]) => (
               <tr key={a} className="border-b border-white/5 last:border-0">

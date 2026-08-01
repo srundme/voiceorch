@@ -30,7 +30,7 @@ export default function PlatformConceptsPage() {
       <h2 id="phone">Phone number</h2>
       <p>
         Caller ID outbound and DID inbound. India numbers need KYC. Purchase is card checkout
-        (₹800 + GST). <Link href="/docs/phone-numbers">Phone numbers guide</Link>.
+        (₹599–₹699/mo by series + ₹100 setup + GST). <Link href="/docs/phone-numbers">Phone numbers guide</Link>.
       </p>
 
       <h2 id="wallet">Wallet</h2>

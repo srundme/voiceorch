@@ -10,9 +10,10 @@ import { issueInvoice } from "../services/invoice.js";
 import {
   CURRENCY_INR,
   GST_RATE,
-  PHONE_BASE_PAISE,
-  PHONE_TOTAL_PAISE,
   PHONE_RENEWAL_TOTAL_PAISE,
+  phoneMonthlyBasePaise,
+  phonePurchaseBasePaise,
+  withGstPaise,
   formatInr,
   gstPortionPaise,
 } from "../lib/money-inr.js";
@@ -31,11 +32,11 @@ import {
 const router: IRouter = Router();
 
 // ── Pricing ───────────────────────────────────────────────────────────────────
-// SnapServe charges ₹800 + 18% GST for any phone number (first purchase via
-// Razorpay INR card checkout). Carrier VoBiz INR cost is never surfaced. Renewal
-// every 30 days debits ₹800 + GST from the wallet (see services/phone-renewal.ts).
-const FLAT_MONTHLY_RATE_CENTS = PHONE_BASE_PAISE; // ₹800 base for first purchase
-export const RENEWAL_RATE_CENTS = PHONE_RENEWAL_TOTAL_PAISE; // ₹700 + 18% GST = ₹826 wallet debit
+// Prefix-tiered monthly rental (before GST): +9180→₹599, +9179→₹699, else ₹659.
+// First purchase (Razorpay card) = monthly rental + ₹100 one-time setup + GST.
+// Renewal every 30 days debits monthly rental + GST from the wallet
+// (see services/phone-renewal.ts). Carrier VoBiz INR cost is never surfaced.
+export const RENEWAL_RATE_CENTS = PHONE_RENEWAL_TOTAL_PAISE; // legacy flat rate — still used by WhatsApp numbers
 export const RENEWAL_INTERVAL_DAYS = 30;
 
 function getRazorpay() {
@@ -45,8 +46,8 @@ function getRazorpay() {
   });
 }
 
-function addMarkup(monthlyRateCents: number): number {
-  return monthlyRateCents > 0 ? FLAT_MONTHLY_RATE_CENTS : 0;
+function addMarkup(monthlyRateCents: number, number: string): number {
+  return monthlyRateCents > 0 ? phonePurchaseBasePaise(number) : 0;
 }
 
 // ── Platform VoBiz credentials (master wallet — all DID purchase/link/release) ─
@@ -654,7 +655,7 @@ router.get("/phone-numbers/available", requireAuth, async (req, res): Promise<vo
         region:           n.region ?? null,
         numberType:       "local" as const,
         // Apply reseller markup — never expose carrier's raw price to end-users
-        monthlyRateCents: addMarkup(Math.round((n.monthly_fee ?? 0) * 100)),
+        monthlyRateCents: addMarkup(Math.round((n.monthly_fee ?? 0) * 100), n.e164),
       }));
 
     res.json(ListAvailablePhoneNumbersResponse.parse(available));
@@ -715,9 +716,9 @@ router.post("/phone-numbers/purchase/initiate", requireAuth, denyManagedClient, 
     return;
   }
 
-  const basePaise = FLAT_MONTHLY_RATE_CENTS;
+  const basePaise = phonePurchaseBasePaise(number);
   const gstPaise = gstPortionPaise(basePaise);
-  const payablePaise = PHONE_TOTAL_PAISE;
+  const payablePaise = withGstPaise(basePaise);
   const razorpay = getRazorpay();
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -872,8 +873,8 @@ router.post("/phone-numbers/purchase/confirm", requireAuth, denyManagedClient, a
     numberType:       numberType ?? "local",
     vobizNumberId:    vobizNumber.id,
     status:           "active",
-    monthlyRateCents: FLAT_MONTHLY_RATE_CENTS,
-    renewalRateCents: RENEWAL_RATE_CENTS,
+    monthlyRateCents: phonePurchaseBasePaise(number),
+    renewalRateCents: withGstPaise(phoneMonthlyBasePaise(number)),
     purchasedAt:      now,
     nextRenewalAt,
     lastRenewalAt:    now,
@@ -889,7 +890,7 @@ router.post("/phone-numbers/purchase/confirm", requireAuth, denyManagedClient, a
     userId:            user.id,
     type:              "debit",
     amountCents:       -amountCents,
-    description:       `Phone number ${number} purchased (${formatInr(PHONE_BASE_PAISE)} + GST ${formatInr(gstPortionPaise(PHONE_BASE_PAISE))} = ${formatInr(amountCents)}, paid by card)`,
+    description:       `Phone number ${number} purchased (${formatInr(phonePurchaseBasePaise(number))} + GST ${formatInr(gstPortionPaise(phonePurchaseBasePaise(number)))} = ${formatInr(amountCents)}, paid by card)`,
     status:            "completed",
     razorpayOrderId,
     razorpayPaymentId,
@@ -909,7 +910,7 @@ router.post("/phone-numbers/purchase/confirm", requireAuth, denyManagedClient, a
     type: "phone_number",
     description: `Phone number ${number} — provisioning & 1 month rental`,
     hsnSac: "998411",
-    amountCents: PHONE_BASE_PAISE,
+    amountCents: phonePurchaseBasePaise(number),
     gstInclusive: false,
     razorpayOrderId,
     razorpayPaymentId,

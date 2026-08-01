@@ -14,7 +14,7 @@ import { and, eq, lte, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { phoneNumbersTable, usersTable, walletTransactionsTable } from "@workspace/db/schema";
 import { logger } from "../lib/logger.js";
-import { formatInr } from "../lib/money-inr.js";
+import { formatInr, phoneMonthlyBasePaise, withGstPaise } from "../lib/money-inr.js";
 import { triggerAutoDebit } from "./wallet-auto-debit.js";
 
 let started = false;
@@ -28,8 +28,10 @@ const RENEWAL_INTERVAL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
  * (row is left untouched so it's retried on the next sweep).
  */
 async function renewOne(row: typeof phoneNumbersTable.$inferSelect): Promise<boolean> {
-  const renewalCents = row.renewalRateCents;
-  if (!renewalCents || renewalCents <= 0) return true; // nothing to charge; just advance below
+  if (!row.renewalRateCents || row.renewalRateCents <= 0) return true; // free number; just advance below
+  // Prefix-tiered rate computed live so price changes apply to ALL numbers,
+  // including ones purchased before the tiering (stored renewalRateCents may be stale).
+  const renewalCents = withGstPaise(phoneMonthlyBasePaise(row.number));
 
   const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, row.userId));
   if (!user) {
