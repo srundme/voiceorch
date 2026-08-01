@@ -119,7 +119,7 @@ export async function upsertCallerVoiceprint(opts: {
 
   const { match: cross, nearMiss } = await findBestVoiceMatch({ agentId, embedding, excludePhone: phoneNumber });
   let personKey = cross?.personKey ?? randomUUID();
-  const linkedFromPhone = cross?.matchedPhone ?? null;
+  let linkedFromPhone = cross?.matchedPhone ?? null;
   const score = cross?.score ?? opts.score ?? null;
 
   try {
@@ -136,6 +136,20 @@ export async function upsertCallerVoiceprint(opts: {
         personKey = cross.personKey;
       } else {
         personKey = existing.personKey;
+      }
+    }
+    // Sticky link: if this phone's personKey is ALREADY shared with another
+    // phone (linked on a previous call), honor that link even when today's
+    // fresh sample scores below the match bar — cross-device/line variation
+    // makes raw scores unreliable, but an established link is ground truth.
+    if (!linkedFromPhone) {
+      const siblings = await listPhonesForPerson({ agentId, personKey, excludePhone: phoneNumber });
+      if (siblings.length > 0) {
+        linkedFromPhone = siblings[0];
+        logger.info(
+          { agentId, phoneNumber, linkedFromPhone },
+          "Voice memory: phone already linked to another number via shared personKey — honoring stored link",
+        );
       }
     }
   } catch { /* non-fatal */ }
