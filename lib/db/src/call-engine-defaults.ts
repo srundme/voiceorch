@@ -181,12 +181,9 @@ export function normalizeCallEngineAgentConfig(
   }
 
   const fragListen = cfg["fragmentCoalesceListeningMs"];
-  // Migrate the previous platform default (500) to the new default — agents
-  // that never customized this stored 500 verbatim.
-  if (fragListen === 500) {
-    reasons.push(`fragmentCoalesceListeningMs 500→${FRAGMENT_COALESCE_DEFAULTS.listeningMs}`);
-    cfg["fragmentCoalesceListeningMs"] = FRAGMENT_COALESCE_DEFAULTS.listeningMs;
-  }
+  // NOTE: the previous platform default (500) is migrated once via DB migration,
+  // NOT here — a per-session rewrite would silently override users who
+  // deliberately set 500 in the dashboard afterwards.
   if (fragListen === SARVAM_STT_LATENCY_LEGACY_SNAPPY.fragmentCoalesceListeningMs) {
     reasons.push(
       `fragmentCoalesceListeningMs ${fragListen}→${FRAGMENT_COALESCE_DEFAULTS.listeningMs}`,
