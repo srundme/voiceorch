@@ -29,6 +29,7 @@ Query params:
 - `encoding` enum MUST be `"audio/wav"` — `"pcm_s16le"` is rejected with Pydantic validation error
 - The actual codec is controlled by URL param `input_audio_codec=pcm_s16le`; send raw PCM as base64, no WAV header needed
 - Confirmed via live WebSocket probe (June 2026): flat format → "Input should be a valid dictionary or instance of AudioContent"; pcm_s16le encoding → "Input should be 'audio/wav'"
+- **Aug 2026 incident: do NOT wrap each chunk in a real WAV container.** A spec claimed per-chunk `pcmToWav()` wrapping was the fix for garbled transcripts; deploying it produced ZERO transcripts on live calls (VAD fired, no transcript messages) and was reverted same day. Raw PCM + `input_audio_codec=pcm_s16le` is the proven-working format — never "fix" it without a live probe first.
 
 ## Server → client messages (JSON text)
 Per official docs (confirmed June 2026):
