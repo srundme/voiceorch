@@ -31,6 +31,9 @@ Query params:
 - Confirmed via live WebSocket probe (June 2026): flat format → "Input should be a valid dictionary or instance of AudioContent"; pcm_s16le encoding → "Input should be 'audio/wav'"
 - **Aug 2026 incident: do NOT wrap each chunk in a real WAV container.** A spec claimed per-chunk `pcmToWav()` wrapping was the fix for garbled transcripts; deploying it produced ZERO transcripts on live calls (VAD fired, no transcript messages) and was reverted same day. Raw PCM + `input_audio_codec=pcm_s16le` is the proven-working format — never "fix" it without a live probe first.
 
+## saaras:v4 — announced Jul 30 2026, streaming UNSTABLE (Aug 1 2026)
+Live call on v4 showed repeated "2s of speech, zero WS activity" backstop fires and one fully lost turn (no transcript ever). v3 on the same account minutes earlier was fast. Keep v3 as platform default/recommended; re-test v4 before promoting.
+
 ## Server → client messages (JSON text)
 Per official docs (confirmed June 2026):
 ```json
