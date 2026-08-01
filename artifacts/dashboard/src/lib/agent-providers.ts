@@ -23,8 +23,8 @@ export const TELEPHONY_PROVIDERS = [
 
 export const ASR_MODELS: Record<string, { value: string; label: string }[]> = {
   sarvam: [
-    { value: "saaras:v4",    label: "Saaras v4 — latest (new, test before switching)" },
-    { value: "saaras:v3",    label: "Saaras v3 — real-time streaming (recommended)" },
+    { value: "saaras:v4",    label: "Saaras v4 — latest (recommended)" },
+    { value: "saaras:v3",    label: "Saaras v3 — real-time streaming" },
     { value: "saarika:v2.5", label: "Saarika v2.5 — real-time streaming (legacy)" },
   ],
 };
@@ -48,7 +48,7 @@ export const LLM_MODELS: Record<string, { value: string; label: string }[]> = {
   ],
   qwen:      [{ value: "qwen/qwen3-32b", label: "Qwen 3 32B (recommended)" }, { value: "qwen/qwen3-235b-a22b", label: "Qwen 3 235B" }],
   groq:      [{ value: "llama-3.3-70b-versatile", label: "Llama 3.3 70B (recommended)" }, { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B (fast)" }, { value: "gemma2-9b-it", label: "Gemma 2 9B" }],
-  sarvam:    [{ value: "sarvam-30b", label: "Sarvam 30B (recommended)" }, { value: "sarvam-105b", label: "Sarvam 105B" }],
+  sarvam:    [{ value: "sarvam-105b", label: "Sarvam 105B (recommended)" }],
   together: [
     { value: "Qwen/Qwen3.6-35B-A3B",   label: "Qwen3.6 35B-A3B — fast, low cost (recommended)" },
     { value: "Qwen/Qwen3.5-397B-A17B", label: "Qwen3.5 397B-A17B — best quality, agentic use" },
@@ -494,10 +494,10 @@ export function defaultGeminiModel(): string {
 /** Canonical LLM defaults for the VoiceOrch auto-selection rule.
  *  Tamil stays on the classic STT→LLM→TTS stack (never auto-enters Gemini Live).
  *  Live remains an explicit model pick only. */
-export const DEFAULT_TAMIL_LLM_PROVIDER = "google" as const;
-export const DEFAULT_TAMIL_LLM_MODEL    = "gemini-3.5-flash-lite" as const;
-export const DEFAULT_NONTAMIL_LLM_PROVIDER = "groq" as const;
-export const DEFAULT_NONTAMIL_LLM_MODEL    = "llama-3.3-70b-versatile" as const;
+export const DEFAULT_TAMIL_LLM_PROVIDER = "sarvam" as const;
+export const DEFAULT_TAMIL_LLM_MODEL    = "sarvam-105b" as const;
+export const DEFAULT_NONTAMIL_LLM_PROVIDER = "sarvam" as const;
+export const DEFAULT_NONTAMIL_LLM_MODEL    = "sarvam-105b" as const;
 
 /**
  * Returns the canonical llmProvider + llmModel for the given language selection.

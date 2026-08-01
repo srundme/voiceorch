@@ -22,9 +22,9 @@ const RAW_SSE_DIAG_MAX_BUFFER = 2000;
  * Docs: https://docs.sarvam.ai/api-reference-docs/chat-completion/overview
  *
  * Models:
- *   - sarvam-30b  (default) — 64K context, lower latency / faster TTFT, best for voice agents
- *   - sarvam-105b           — 128K context, highest quality (higher latency)
- *   (sarvam-m / 24B is deprecated — aliased to sarvam-30b below.)
+ *   - sarvam-105b (default) — 128K context, highest quality; measured TTFT 120-220ms
+ *     in production (Aug 2026) — fast enough for voice, so it is the sole offering.
+ *   (sarvam-m / 24B and sarvam-30b are retired — aliased to sarvam-105b below.)
  *
  * Endpoint: POST https://api.sarvam.ai/v1/chat/completions
  * Auth: `api-subscription-key` header (also accepts `Authorization: Bearer <key>`).
@@ -270,15 +270,19 @@ export class SarvamLLM implements LLMAdapter {
     this.genParams = genParams ?? {};
     this.callId = callId;
     const ALIASES: Record<string, string> = {
-      "sarvam-m":        "sarvam-30b",
-      "sarvam-2b":       "sarvam-30b",
-      "sarvam-2b-v0.5":  "sarvam-30b",
-      "sarvam-m1":       "sarvam-30b",
+      "sarvam-m":        "sarvam-105b",
+      "sarvam-2b":       "sarvam-105b",
+      "sarvam-2b-v0.5":  "sarvam-105b",
+      "sarvam-m1":       "sarvam-105b",
       // Retired fixed-context variants — the base models now serve the full window.
-      "sarvam-30b-16k":  "sarvam-30b",
+      "sarvam-30b-16k":  "sarvam-105b",
       "sarvam-105b-32k": "sarvam-105b",
+      // sarvam-30b retired platform-wide (Aug 2026): 105b measured faster TTFT
+      // in production and is the sole offered Sarvam chat model. Existing
+      // agent rows that still say sarvam-30b are served by 105b via this alias.
+      "sarvam-30b":      "sarvam-105b",
     };
-    const raw = model ?? "sarvam-30b";
+    const raw = model ?? "sarvam-105b";
     this.model = ALIASES[raw] ?? raw;
   }
 

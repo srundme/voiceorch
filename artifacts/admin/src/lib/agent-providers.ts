@@ -27,9 +27,9 @@ export const ASR_MODELS: Record<string, { value: string; label: string }[]> = {
   azure:      [{ value: "en-US-standard", label: "Auto (base model from language)" }, { value: "en-US-enhanced", label: "Auto — enhanced (base model from language)" }, { value: "en-IN-standard", label: "Auto — Indic (base model from language)" }],
   assemblyai: [{ value: "best", label: "Best (default)" }, { value: "nano", label: "Nano (fast)" }],
   sarvam: [
-    { value: "saarika:v2.5",       label: "Saarika v2.5 — real-time streaming (recommended)" },
-    { value: "saaras:v4",          label: "Saaras v4 — latest" },
+    { value: "saaras:v4",          label: "Saaras v4 — latest (recommended)" },
     { value: "saaras:v3",          label: "Saaras v3 — real-time streaming" },
+    { value: "saarika:v2.5",       label: "Saarika v2.5 — real-time streaming (legacy)" },
     { value: "saaras:v3-realtime", label: "Saaras v3 Real-time — streaming" },
     { value: "saarika:flash",      label: "Saarika Flash — batch (fast)" },
   ],
@@ -44,7 +44,7 @@ export const LLM_MODELS: Record<string, { value: string; label: string }[]> = {
   google:    [{ value: "gemini-3.5-flash-lite", label: "Gemini 3.5 Flash Lite (fastest — lowest latency)" }, { value: "gemini-3.6-flash", label: "Gemini 3.6 Flash (recommended)" }, { value: "gemini-3.5-flash", label: "Gemini 3.5 Flash (most capable)" }, { value: "gemini-3.1-flash-lite", label: "Gemini 3.1 Flash Lite (low-latency)" }, { value: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite (previous gen)" }, { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash (previous gen)" }, { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro (previous gen)" }],
   qwen:      [{ value: "qwen/qwen3-32b", label: "Qwen 3 32B (recommended)" }, { value: "qwen/qwen3-235b-a22b", label: "Qwen 3 235B" }],
   groq:      [{ value: "llama-3.3-70b-versatile", label: "Llama 3.3 70B (recommended)" }, { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B (fast)" }, { value: "gemma2-9b-it", label: "Gemma 2 9B" }],
-  sarvam:    [{ value: "sarvam-30b", label: "Sarvam 30B (recommended)" }, { value: "sarvam-105b", label: "Sarvam 105B" }],
+  sarvam:    [{ value: "sarvam-105b", label: "Sarvam 105B (recommended)" }],
   deepseek:  [{ value: "deepseek-chat", label: "DeepSeek Chat" }, { value: "deepseek-reasoner", label: "DeepSeek Reasoner" }],
   mistral:   [{ value: "mistral-large-latest", label: "Mistral Large" }, { value: "mistral-small-latest", label: "Mistral Small" }],
 };

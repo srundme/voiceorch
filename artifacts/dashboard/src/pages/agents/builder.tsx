@@ -6020,8 +6020,8 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
   const form = useForm<AgentFormValues>({
     resolver: zodResolver(agentFormSchema),
     defaultValues: {
-      name: "", description: "", asrProvider: "sarvam", asrModel: "saaras:v3",
-      llmProvider: "groq", llmModel: "llama-3.3-70b-versatile", ttsProvider: "sarvam",
+      name: "", description: "", asrProvider: "sarvam", asrModel: "saaras:v4",
+      llmProvider: "sarvam", llmModel: "sarvam-105b", ttsProvider: "sarvam",
       ttsVoice: "priya", ttsModel: "bulbul:v3", telephonyProvider: "vobiz",
       systemPrompt: "", temperature: 0.40, maxDuration: 480,
       greetingMessage: "Hello", firstSpeaker: "assistant", endCallPhrases: "", silenceTimeoutSeconds: 30,
