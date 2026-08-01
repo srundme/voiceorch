@@ -63,6 +63,25 @@ export class GeminiLivePipeline implements VoiceSession {
   private greetingSent = false;
   private pendingOut24k = Buffer.alloc(0);
   private isPlayingOut = false;
+
+  // ── Paced outbound pump ──────────────────────────────────────────────────
+  // Gemini Live streams a whole reply's audio much faster than real time. If we
+  // forward it to the carrier as it arrives, the carrier buffers many seconds of
+  // speech and a barge-in "clearAudio" can't stop what's already buffered — the
+  // caller keeps hearing the old (pre-interruption) answer. So we hold frames
+  // HERE and release them at real-time pace (20ms frames + small jitter lead);
+  // on interruption the local queue is dropped instantly.
+  private outFrames8k: Buffer[] = [];
+  private pumpTimer: ReturnType<typeof setInterval> | null = null;
+  private pumpAnchorMs = 0;
+  private framesSent = 0;
+  private static readonly FRAME_MS = 20;
+  private static readonly LEAD_MS = 240; // frames allowed ahead of real time (carrier jitter buffer)
+
+  // Serialize server-message handling: tool calls await inside the handler, and
+  // firing handlers unordered lets late audio/transcripts overtake an
+  // interruption (stale-answer symptom).
+  private msgChain: Promise<void> = Promise.resolve();
   constructor(config: SessionConfig) {
     this.config = config;
     this.agent = config.agentConfig;
@@ -178,6 +197,8 @@ export class GeminiLivePipeline implements VoiceSession {
   close(): void {
     if (this.closed) return;
     this.closed = true;
+    this.stopPump();
+    this.outFrames8k.length = 0;
     try {
       this.session?.close();
     } catch (err) {
@@ -239,7 +260,11 @@ export class GeminiLivePipeline implements VoiceSession {
         temperature: this.agent.temperature,
       },
       callbacks: {
-        onmessage: (msg) => { void this.onServerMessage(msg); },
+        onmessage: (msg) => {
+          this.msgChain = this.msgChain
+            .then(() => this.onServerMessage(msg))
+            .catch((err) => logger.error({ callId: this.config.callId, err }, "Gemini Live message handler error"));
+        },
         onerror: (e) => {
           logger.error({ callId: this.config.callId, err: e.error ?? e }, "Gemini Live socket error");
           this.handleFatal(e.error ?? e);
@@ -261,9 +286,12 @@ export class GeminiLivePipeline implements VoiceSession {
 
     const content = msg.serverContent;
     if (content?.interrupted) {
+      const droppedMs = this.outFrames8k.length * GeminiLivePipeline.FRAME_MS;
       this.pendingOut24k = Buffer.alloc(0);
+      this.outFrames8k.length = 0; // drop locally queued (unplayed) audio immediately
       this.isPlayingOut = false;
       this.config.onBargeIn?.();
+      logger.info({ callId: this.config.callId, droppedMs }, "Gemini Live: interrupted — cleared queued audio");
     }
 
     if (content?.inputTranscription?.text) {
@@ -299,14 +327,47 @@ export class GeminiLivePipeline implements VoiceSession {
   }
 
   private flushOutboundAudio(): void {
-    // Process in ~20ms frames at 24kHz (480 samples = 960 bytes)
+    // Slice into ~20ms frames at 24kHz (480 samples = 960 bytes) and queue them
+    // for the paced pump — never forward faster than real time (see pump docs).
     const FRAME_BYTES_24K = 960;
     while (this.pendingOut24k.length >= FRAME_BYTES_24K) {
       const frame24k = this.pendingOut24k.subarray(0, FRAME_BYTES_24K);
       this.pendingOut24k = this.pendingOut24k.subarray(FRAME_BYTES_24K);
-      const pcm8k = downsample24to8(frame24k);
-      this.recording.addAgentChunk(pcm8k);
+      this.outFrames8k.push(downsample24to8(frame24k));
+    }
+    if (this.outFrames8k.length) this.ensurePump();
+  }
+
+  private ensurePump(): void {
+    if (this.pumpTimer) return;
+    this.pumpAnchorMs = Date.now();
+    this.framesSent = 0;
+    this.pumpTimer = setInterval(() => this.pumpTick(), 10);
+  }
+
+  private stopPump(): void {
+    if (this.pumpTimer) {
+      clearInterval(this.pumpTimer);
+      this.pumpTimer = null;
+    }
+  }
+
+  private pumpTick(): void {
+    if (this.closed) { this.stopPump(); return; }
+    if (this.outFrames8k.length === 0) {
+      // Drained — stop; a fresh anchor starts with the next reply's audio.
+      this.stopPump();
+      return;
+    }
+    const elapsedMs = Date.now() - this.pumpAnchorMs + GeminiLivePipeline.LEAD_MS;
+    while (
+      this.outFrames8k.length > 0 &&
+      this.framesSent * GeminiLivePipeline.FRAME_MS < elapsedMs
+    ) {
+      const pcm8k = this.outFrames8k.shift()!;
+      this.framesSent++;
       this.isPlayingOut = true;
+      this.recording.addAgentChunk(pcm8k); // record at playback time, not arrival time
       const out = this.config.rawPcmOutput ? pcm8k : encodeMulaw(pcm8k);
       this.config.onAudioOut(out);
     }
