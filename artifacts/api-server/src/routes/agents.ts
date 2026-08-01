@@ -1,7 +1,8 @@
 // agents router — supports call_transfer + webhook (custom function) tools + AMD voicemail detection
 import { Router, type IRouter } from "express";
 import { eq, and, count, desc, asc, isNull, inArray, max } from "drizzle-orm";
-import { db, agentsTable, agentVersionsTable, callerProfilesTable, callerFactsTable, callerCallArchiveTable, callerSentencesTable, callerFactSentenceLinksTable, callerEpisodeFactLinksTable, providersTable, agentKnowledgeSourcesTable, phoneNumbersTable, callsTable, executionLogsTable, schedulingCalendarsTable, availabilitySchedulesTable, type AgentConfig } from "@workspace/db";
+import { logger } from "../lib/logger.js";
+import { db, agentsTable, agentVersionsTable, callerProfilesTable, callerFactsTable, callerVoiceprintsTable, callerCallArchiveTable, callerSentencesTable, callerFactSentenceLinksTable, callerEpisodeFactLinksTable, providersTable, agentKnowledgeSourcesTable, phoneNumbersTable, callsTable, executionLogsTable, schedulingCalendarsTable, availabilitySchedulesTable, type AgentConfig } from "@workspace/db";
 import {
   CreateAgentBody,
   UpdateAgentBody,
@@ -973,6 +974,21 @@ router.delete("/agents/:id/caller-memory/:phone", requireAuth, clientContext, de
       updatedAt:         new Date(),
     })
     .where(and(eq(callerProfilesTable.agentId, agentId), eq(callerProfilesTable.phoneNumber, phoneNumber)));
+
+  // 6. Delete the caller's voiceprint too — deleting memory must also forget
+  //    the voice, or the "deleted" caller would still be voice-recognized and
+  //    re-linked to other numbers. Covers the squad-shared owner record as well.
+  try {
+    const { resolveSquadMemoryOwnerAgentId } = await import("../services/squad-teamwork.js");
+    const ownerAgentId = await resolveSquadMemoryOwnerAgentId(agentId, clerkId);
+    await db.delete(callerVoiceprintsTable)
+      .where(and(
+        inArray(callerVoiceprintsTable.agentId, [...new Set([agentId, ownerAgentId])]),
+        eq(callerVoiceprintsTable.phoneNumber, phoneNumber),
+      ));
+  } catch (err) {
+    logger.warn({ err, agentId, phoneNumber }, "Caller memory delete: voiceprint cleanup failed");
+  }
 
   res.status(204).end();
 });
