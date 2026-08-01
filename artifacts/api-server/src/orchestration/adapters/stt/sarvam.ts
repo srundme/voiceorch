@@ -276,7 +276,7 @@ export class SarvamSTT implements STTAdapter {
     const MAX_RECONNECT = 10;
 
     const audioQueue: Buffer[] = [];
-    const MAX_QUEUE_BYTES = 64_000; // ~2 s @ 16 kHz s16le — drop oldest chunks beyond this
+    const MAX_QUEUE_BYTES = 256_000; // ~8s @ 16kHz s16le — matches MAX_RECONNECT backoff ceiling (8000ms)
     let queueTrimLogged   = false;  // throttle: log queue trim at most once per reconnect episode
     let speechEndAt       = 0;     // timestamp of last END_SPEECH event for latency tracking
     let speechEndReceived = false; // true once speech_end fires; reset on speech_start
@@ -757,7 +757,10 @@ export class SarvamSTT implements STTAdapter {
             }
             if (!queueTrimLogged) {
               queueTrimLogged = true;
-              logger.debug({ droppedBytes: dropped }, "Sarvam STT: audio queue trimmed — dropped stale chunks during reconnect backoff");
+              logger.warn(
+                { droppedBytes: dropped },
+                "Sarvam STT: audio queue trimmed — dropped stale chunks during reconnect backoff",
+              );
             }
           }
         } else {
