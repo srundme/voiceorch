@@ -122,9 +122,9 @@ const STREAM_ACCUM_BYTES      = 640;    // 20ms of 16kHz PCM before forwarding a
 // TTS jitter buffer (see drainSentenceJob): runway of audio to queue before
 // starting/resuming the paced send pump, so momentary provider-stream hiccups
 // don't become audible mid-sentence gaps. Caps bound the added latency.
-const TTS_PREBUFFER_MS     = Math.max(0, Number(process.env.TTS_PREBUFFER_MS ?? 200));
+const TTS_PREBUFFER_MS     = Math.max(0, Number(process.env.TTS_PREBUFFER_MS ?? 300));
 const TTS_PREBUFFER_CAP_MS = Math.max(TTS_PREBUFFER_MS, Number(process.env.TTS_PREBUFFER_CAP_MS ?? 600));
-const TTS_REBUFFER_MS      = Math.max(0, Number(process.env.TTS_REBUFFER_MS ?? 100));
+const TTS_REBUFFER_MS      = Math.max(0, Number(process.env.TTS_REBUFFER_MS ?? 160));
 const TTS_REBUFFER_CAP_MS  = Math.max(TTS_REBUFFER_MS, Number(process.env.TTS_REBUFFER_CAP_MS ?? 400));
 const HANDOFF_SILENCE_MS      = 3000;   // sustained silence that may indicate a phone handoff
 const FILLER_THRESHOLD_MS     = 350;    // play a filler phrase if LLM has not returned a first
