@@ -30,7 +30,9 @@ export const PHONE_SETUP_PAISE = 10_000;
  * Accepts E.164 ("+9180…"), bare digits ("9180…"), or national ("080…") forms.
  */
 export function phoneMonthlyBasePaise(number: string): number {
-  const digits = String(number ?? "").replace(/\D/g, "").replace(/^0+/, "");
+  let digits = String(number ?? "").replace(/\D/g, "").replace(/^0+/, "");
+  // National 10-digit form (e.g. "80xxxxxxxx" after stripping the trunk 0) → canonical 91-prefixed
+  if (digits.length === 10) digits = `91${digits}`;
   if (digits.startsWith("9180")) return 59_900;
   if (digits.startsWith("9179")) return 69_900;
   return 65_900;

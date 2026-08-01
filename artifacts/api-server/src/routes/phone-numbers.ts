@@ -865,6 +865,11 @@ router.post("/phone-numbers/purchase/confirm", requireAuth, denyManagedClient, a
   const now = new Date();
   const nextRenewalAt = new Date(now.getTime() + RENEWAL_INTERVAL_DAYS * 24 * 60 * 60 * 1000);
 
+  // Bookkeeping amounts are locked to what the order actually charged
+  // (amountCents = base + 18% GST at initiate time), so a pricing change
+  // between initiate and confirm can't make records disagree with the payment.
+  const paidBasePaise = Math.round(amountCents / (1 + GST_RATE));
+
   const [row] = await db.insert(phoneNumbersTable).values({
     userId:           clerkId,
     number,
@@ -890,7 +895,7 @@ router.post("/phone-numbers/purchase/confirm", requireAuth, denyManagedClient, a
     userId:            user.id,
     type:              "debit",
     amountCents:       -amountCents,
-    description:       `Phone number ${number} purchased (${formatInr(phonePurchaseBasePaise(number))} + GST ${formatInr(gstPortionPaise(phonePurchaseBasePaise(number)))} = ${formatInr(amountCents)}, paid by card)`,
+    description:       `Phone number ${number} purchased (${formatInr(paidBasePaise)} + GST ${formatInr(amountCents - paidBasePaise)} = ${formatInr(amountCents)}, paid by card)`,
     status:            "completed",
     razorpayOrderId,
     razorpayPaymentId,
@@ -910,7 +915,7 @@ router.post("/phone-numbers/purchase/confirm", requireAuth, denyManagedClient, a
     type: "phone_number",
     description: `Phone number ${number} — provisioning & 1 month rental`,
     hsnSac: "998411",
-    amountCents: phonePurchaseBasePaise(number),
+    amountCents: paidBasePaise,
     gstInclusive: false,
     razorpayOrderId,
     razorpayPaymentId,

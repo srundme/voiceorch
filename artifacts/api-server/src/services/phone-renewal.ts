@@ -29,9 +29,12 @@ const RENEWAL_INTERVAL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
  */
 async function renewOne(row: typeof phoneNumbersTable.$inferSelect): Promise<boolean> {
   if (!row.renewalRateCents || row.renewalRateCents <= 0) return true; // free number; just advance below
-  // Prefix-tiered rate computed live so price changes apply to ALL numbers,
-  // including ones purchased before the tiering (stored renewalRateCents may be stale).
-  const renewalCents = withGstPaise(phoneMonthlyBasePaise(row.number));
+  // Voice DIDs: prefix-tiered rate computed live so price changes apply to ALL
+  // numbers, including ones purchased before the tiering. WhatsApp numbers keep
+  // their stored flat renewal rate — tiering applies to voice only.
+  const renewalCents = row.numberType === "whatsapp"
+    ? row.renewalRateCents
+    : withGstPaise(phoneMonthlyBasePaise(row.number));
 
   const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, row.userId));
   if (!user) {
