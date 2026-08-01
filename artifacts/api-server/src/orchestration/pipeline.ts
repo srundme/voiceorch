@@ -7425,9 +7425,26 @@ export class OrchestrationPipeline implements VoiceSession {
               cacheBase: cacheBaseForTurn,
             }
       );
+      clearTtftFallbackTimer();
+      // Silent-turn guard: Sarvam models occasionally burn all effort on
+      // reasoning and return completely empty text (no tokens streamed, no
+      // tool call). Treat that as retryable — a quick same-provider retry
+      // (~200ms) beats leaving the caller in dead air. Safe because nothing
+      // was enqueued to TTS (llmFirstTokenAt === null).
+      if (
+        llmAttempt < MAX_LLM_ATTEMPTS &&
+        llmFirstTokenAt === null &&
+        !triggeredToolName &&
+        llmResponse.trim() === "" &&
+        pendingText.trim() === "" &&
+        !this.bargeInRequested &&
+        !this.closed
+      ) {
+        llmErr = new Error("Empty LLM response (silent turn)");
+        continue;
+      }
       _agnostTurn?.end(llmResponse);
       llmErr = null;
-      clearTtftFallbackTimer();
       break;
     } catch (err) {
       llmErr = err;
