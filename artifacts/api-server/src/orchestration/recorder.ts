@@ -75,6 +75,15 @@ const BYTES_PER_SAMPLE = 2; // LINEAR16
 const DEFAULT_GAP_RESYNC_MS = 120;
 
 /**
+ * Gap-resync threshold for the browser web-call path (incl. meeting bots),
+ * whose caller frames arrive every ~128 ms — above the 120 ms telephony
+ * default. See the doc block above: without this, nearly every caller frame
+ * trips the wall-clock resync and gets jitter-sized silence injected before
+ * it (~8 Hz amplitude chop on the caller channel).
+ */
+export const WEBCALL_GAP_RESYNC_MS = 300;
+
+/**
  * Hard cap (ms) on the silence inserted in a single append — for leading-anchor
  * padding OR a genuine idle-gap re-sync. A real answer→first-media gap is a few
  * seconds and a real conversational pause is at most tens of seconds; anything
@@ -84,6 +93,19 @@ const DEFAULT_GAP_RESYNC_MS = 120;
  * padding untouched. 5 min comfortably exceeds any legitimate single gap.
  */
 const MAX_PAD_MS = 300_000;
+
+/**
+ * Peak absolute 16-bit sample value of a PCM buffer, sampled sparsely (every
+ * 50th sample) to keep finalize cheap on long calls. 0 means digital silence.
+ */
+function trackPeak(pcm: Buffer): number {
+  let peak = 0;
+  for (let i = 0; i + 1 < pcm.length; i += 100) {
+    const v = Math.abs(pcm.readInt16LE(i));
+    if (v > peak) peak = v;
+  }
+  return peak;
+}
 
 /** Per-track capture state. */
 interface Track {
@@ -225,6 +247,20 @@ export class RecordingBuffer {
     try {
       const callerPcm = Buffer.concat(this.caller.chunks);
       const agentPcm  = Buffer.concat(this.agent.chunks);
+      // Diagnostic: per-track content stats so a "my voice is missing" report
+      // can be triaged from logs alone — distinguishes "no caller frames ever
+      // arrived" (bytes=0) from "frames arrived but were silent" (peak≈0) from
+      // "track is fine, playback/channel issue downstream".
+      logger.info(
+        {
+          callId,
+          callerSec: +(this.caller.bytes / (this.sampleRate * BYTES_PER_SAMPLE)).toFixed(1),
+          agentSec: +(this.agent.bytes / (this.sampleRate * BYTES_PER_SAMPLE)).toFixed(1),
+          callerPeak: trackPeak(callerPcm),
+          agentPeak: trackPeak(agentPcm),
+        },
+        "Recording finalize: track stats (caller=L, agent=R)",
+      );
       // Tracks may differ in length (e.g. a long agent tail with no caller
       // frames, or vice-versa). Span the longer one; the encoder reads the
       // shorter track as silence past its end.

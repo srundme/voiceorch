@@ -8,7 +8,7 @@ import {
 } from "@google/genai";
 import type { AgentConfig, ConversationTurn, SessionConfig } from "../../types.js";
 import type { VoiceSession } from "../../voice-session.js";
-import { RecordingBuffer } from "../../recorder.js";
+import { RecordingBuffer, WEBCALL_GAP_RESYNC_MS } from "../../recorder.js";
 import {
   decodeMulaw,
   downsample24to8,
@@ -52,7 +52,7 @@ export class GeminiLivePipeline implements VoiceSession {
   private readonly config: SessionConfig;
   private readonly agent: AgentConfig;
   private readonly apiKey: string;
-  private readonly recording = new RecordingBuffer(8000);
+  private readonly recording: RecordingBuffer;
   private readonly history: ConversationTurn[] = [];
   private lastUserText: string | null = null;
   private lastAgentText: string | null = null;
@@ -90,6 +90,10 @@ export class GeminiLivePipeline implements VoiceSession {
       throw new Error("Gemini Live requires a Google API key (managed or BYOP)");
     }
     this.apiKey = key;
+    this.recording = new RecordingBuffer(
+      8000,
+      config.telephonyProvider === "webcall" ? WEBCALL_GAP_RESYNC_MS : undefined,
+    );
     if (config.answeredAt) {
       this.recording.anchorStart(config.answeredAt);
     }

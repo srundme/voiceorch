@@ -24,7 +24,7 @@ import { resolveMicSensitivity, getMicSensitivityThresholds, type MicSensitivity
 import { AmbientNoiseStream, FileAmbientNoiseStream, TRACK_PARAMS, loadPcmLoop, peekCachedPcmLoop, AMBIENT_LEVELS } from "./ambient.js";
 import { DtmfDetector } from "./dtmf.js";
 import { processAudioIn, processRawPcm8kIn, destroyAudioSession } from "./audioPool.js";
-import { RecordingBuffer } from "./recorder.js";
+import { RecordingBuffer, WEBCALL_GAP_RESYNC_MS } from "./recorder.js";
 import type { AudioProcessResult } from "./audioPool.js";
 import type { AgentConfig, AgentTool, ConversationTurn, LLMAdapter, LLMUsage, SessionConfig, StreamSTT, STTConfig, ToolDefinition } from "./types.js";
 import { resolveGoodbyeMessage } from "./types.js";
@@ -869,8 +869,10 @@ export class OrchestrationPipeline implements VoiceSession {
   private baselineInputTokensEstimate = 0; // what full-history would have cost
   private currentStageIndex = 0;           // for staged prompt layer
 
-  // Recording — stereo WAV of both sides (caller=L, agent=R)
-  private recording = new RecordingBuffer(8000);
+  // Recording — stereo WAV of both sides (caller=L, agent=R). Gap threshold is
+  // set in the constructor: webcall caller frames arrive every ~128 ms, above
+  // the 120 ms telephony default (see WEBCALL_GAP_RESYNC_MS in recorder.ts).
+  private recording: RecordingBuffer;
 
   private conversationHistory = new ConversationHistory();
   private closed = false;
@@ -1730,6 +1732,10 @@ export class OrchestrationPipeline implements VoiceSession {
     this.callDirection = config.callDirection ?? "inbound";
     this.isResumeDroppedCall = config.isResumeDroppedCall === true;
     this.agent = config.agentConfig;
+    this.recording = new RecordingBuffer(
+      8000,
+      config.telephonyProvider === "webcall" ? WEBCALL_GAP_RESYNC_MS : undefined,
+    );
     // Anchor the recording clock to the carrier answer time (when known) so the
     // gap between carrier answer and the first media frame is padded as leading
     // silence — the recording then lines up with what the caller heard live.
