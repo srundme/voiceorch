@@ -16,7 +16,7 @@
  *   input_audio_codec   "pcm_s16le" | "wav"
  *   high_vad_sensitivity true → silence boundary = 2 VAD frames (~64ms @16kHz, ~128ms @8kHz);
  *                        default (false) is 18-of-24 frames ≈ 1s+. Fine-tune params
- *                        (negative_frames_count etc.) can override — see Sarvam Fine VAD Tuning docs.
+ *                        (negative_frames_count etc.) can override — see Sarvam Fine VAD Tuning doyescs.
  *   vad_signals         true → emits START_SPEECH / END_SPEECH events
  *
  * ── Auth ─────────────────────────────────────────────────────────────────────
