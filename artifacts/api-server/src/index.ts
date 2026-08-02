@@ -161,6 +161,7 @@ server.on("upgrade", (request, socket, head) => { void (async () => {
   let webcallUserId: string | null = null;
   let webcallGuestKey: string | null = null;
   let webcallShareLinkId: number | null = null;
+  let webcallMeetMid: string | null = null;
   if (provider === "webcall") {
     const shareToken = qs.get("share");
     const sessionToken = qs.get("token");
@@ -200,6 +201,7 @@ server.on("upgrade", (request, socket, head) => { void (async () => {
           return;
         }
         webcallUserId = payload.userId;
+        webcallMeetMid = payload.mid ?? null;
       } catch (err) {
         logger.error({ err, agentId }, "Meet-bot webcall upgrade failed");
         socket.write("HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\n\r\n");
@@ -317,6 +319,7 @@ server.on("upgrade", (request, socket, head) => { void (async () => {
         const hdAudio = /[?&]rate=16000(&|$)/.test(request.url ?? "");
         void handleWebcallWebSocket(ws, agentId, webcallUserId!, {
           ...(webcallGuestKey ? { guestKey: webcallGuestKey, linkId: webcallShareLinkId } : {}),
+          ...(webcallMeetMid ? { meetMid: webcallMeetMid } : {}),
           hdAudio,
         });
         break;

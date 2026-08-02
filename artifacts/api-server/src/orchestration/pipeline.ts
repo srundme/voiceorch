@@ -877,6 +877,13 @@ export class OrchestrationPipeline implements VoiceSession {
   private conversationHistory = new ConversationHistory();
   private closed = false;
 
+  // ── Meeting speaker identification (Recall bot calls) ─────────────────────
+  // Driven externally by services/meet-roster.ts via the public setters below.
+  // All three degrade to no-ops on non-meeting calls (never set).
+  private meetingRosterLine: string | null = null;
+  private meetingSpeakerName: string | null = null;
+  private pendingMeetingNotes: string[] = [];
+
   // ── Bolna-parity: conversation-quality metrics ────────────────────────────
   /** Total characters spoken by the agent across all turns (proxy for speak time). */
   private _agentSpeakCharsTotal = 0;
@@ -6924,6 +6931,19 @@ export class OrchestrationPipeline implements VoiceSession {
     }
     const sentHistoryLen = historyForLlm.length;
 
+    // Meeting speaker identification: tag the caller's utterance with the name
+    // of the participant Recall last reported speaking, so the LLM knows WHO in
+    // the meeting said it. LLM-history-only — UI transcripts stay untagged.
+    if (this.meetingSpeakerName && historyForLlm.length > 0) {
+      const lastTurn = historyForLlm[historyForLlm.length - 1]!;
+      if (lastTurn.role === "user") {
+        historyForLlm = [
+          ...historyForLlm.slice(0, -1),
+          { ...lastTurn, content: `[Speaker: ${this.meetingSpeakerName}] ${lastTurn.content}` },
+        ];
+      }
+    }
+
     // Per-turn language reminder: append a compact reminder to the last user turn.
     // This is the strongest enforcement point — it sits immediately before the LLM
     // generates, so it can't be pushed out of attention by a long system prompt.
@@ -7113,6 +7133,17 @@ export class OrchestrationPipeline implements VoiceSession {
     if (this.pendingScreeningPickupNote) {
       systemPromptForTurn += `\n\n${SCREENING_PICKUP_NOTE}`;
       this.pendingScreeningPickupNote = false;
+    }
+
+    // ── Meeting speaker identification (Recall bot calls) ────────────────────
+    // Persistent participant-list line + one-shot join/leave notes. Volatile
+    // tail placement keeps the cached static prefix byte-stable.
+    if (this.meetingRosterLine) {
+      systemPromptForTurn += `\n\n${this.meetingRosterLine}`;
+    }
+    if (this.pendingMeetingNotes.length) {
+      const notes = this.pendingMeetingNotes.splice(0, this.pendingMeetingNotes.length);
+      systemPromptForTurn += `\n\n[MEETING UPDATE] ${notes.join(" ")} Acknowledge only if natural — do not interrupt the current topic.`;
     }
 
 
@@ -8805,6 +8836,24 @@ export class OrchestrationPipeline implements VoiceSession {
     // immediately followed by onCallEnd(); drain the carrier's playout buffer so
     // the final words aren't clipped by teardown.
     await this.drainPlaybackTail();
+  }
+
+  // ── Meeting speaker identification (services/meet-roster.ts) ──────────────
+  /** Persistent participant-list context line (null clears it). */
+  setMeetingRoster(line: string | null): void {
+    this.meetingRosterLine = line ? line.slice(0, 2000) : null;
+  }
+
+  /** Name of the participant currently/last speaking (tags next user turn). */
+  setMeetingSpeaker(name: string | null): void {
+    this.meetingSpeakerName = name ? name.slice(0, 60) : null;
+  }
+
+  /** One-shot join/leave note delivered in the next turn's volatile tail. */
+  injectMeetingNote(note: string): void {
+    const n = note.trim().slice(0, 200);
+    if (!n || this.pendingMeetingNotes.length >= 10) return;
+    this.pendingMeetingNotes.push(n);
   }
 
   /**

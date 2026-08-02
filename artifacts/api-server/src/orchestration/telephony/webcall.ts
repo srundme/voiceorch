@@ -1,6 +1,7 @@
 import type { WebSocket } from "ws";
 import { createSession, getSession, endSession, failSession } from "../session.js";
 import { downsample16to8 } from "../audio.js";
+import { attachMeetSession, detachMeetSession } from "../../services/meet-roster.js";
 import { toReadableError } from "../utils.js";
 import { logger } from "../../lib/logger.js";
 
@@ -35,7 +36,7 @@ export async function handleWebcallWebSocket(
   ws: WebSocket,
   agentId: number,
   userId: string,
-  opts?: { guestKey?: string; linkId?: number | null; hdAudio?: boolean },
+  opts?: { guestKey?: string; linkId?: number | null; hdAudio?: boolean; meetMid?: string },
 ): Promise<void> {
   let sessionId: string | null = null;
   // The socket can close / error / send "end" while createSession is still
@@ -61,6 +62,7 @@ export async function handleWebcallWebSocket(
   function requestEnd(): void {
     if (ending) return;
     ending = true;
+    if (opts?.meetMid) detachMeetSession(opts.meetMid);
     if (sessionId) {
       endSession(sessionId).catch((e: unknown) =>
         logger.error({ sessionId, err: e }, "Webcall endSession failed"));
@@ -173,6 +175,12 @@ export async function handleWebcallWebSocket(
       onProviderIssue: (_component, message) => sendJson({ type: "notice", message }),
     });
     sessionId = sid;
+    // Meeting bot: attach the pipeline to the speaker roster so Recall
+    // participant webhooks can feed names into the live conversation.
+    if (opts?.meetMid) {
+      const pipeline = getSession(sid)?.pipeline;
+      if (pipeline) attachMeetSession(opts.meetMid, pipeline);
+    }
     if (endedBeforeReady) {
       logger.warn({ sessionId, agentId }, "Webcall ended before setup completed — ending immediately");
       await endSession(sessionId);

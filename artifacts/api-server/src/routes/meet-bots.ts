@@ -4,6 +4,7 @@
 //          GET  /meet-bots/:botId            — status
 //          DELETE /meet-bots/:botId          — bot leaves the meeting
 import { Router, type IRouter } from "express";
+import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { db, agentsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
@@ -17,6 +18,11 @@ import {
   getRecallBot,
   leaveRecallBot,
 } from "../services/meet-bots.js";
+import {
+  createMeetRoster,
+  handleRecallParticipantEvent,
+  RECALL_PARTICIPANT_EVENTS,
+} from "../services/meet-roster.js";
 
 const router: IRouter = Router();
 
@@ -49,6 +55,22 @@ router.get("/meet-bots/page", async (req, res) => {
     .send(buildMeetBotPageHtml({ agentId: payload.agentId, token, agentName }));
 });
 
+// ── Public: Recall real-time participant events (speaker identification) ─────
+// Auth = the same signed launch token, carried in the webhook URL we gave
+// Recall at bot creation. Always 200s (Recall retries on non-2xx; a forged or
+// expired token should be dropped silently, not hammered).
+router.post("/meet-bots/recall-events", (req, res) => {
+  res.json({ ok: true });
+  try {
+    const token = typeof req.query["mb"] === "string" ? req.query["mb"] : "";
+    const payload = token ? verifyMeetBotToken(token) : null;
+    if (!payload?.mid) return;
+    handleRecallParticipantEvent(payload.mid, req.body);
+  } catch (err) {
+    logger.warn({ err }, "Recall participant event handling failed");
+  }
+});
+
 // ── Authed: launch a bot ─────────────────────────────────────────────────────
 router.post("/meet-bots", requireAuth, async (req, res) => {
   const userId = (req as unknown as { clerkUserId: string }).clerkUserId;
@@ -79,14 +101,22 @@ router.post("/meet-bots", requireAuth, async (req, res) => {
       return;
     }
 
-    const token = signMeetBotToken({ agentId, userId, exp: Date.now() + PAGE_TOKEN_TTL_MS });
-    const pageUrl = `${getSelfBaseUrl()}/api/meet-bots/page?mb=${encodeURIComponent(token)}`;
+    const mid = randomUUID();
+    const botName = agent.name || "Voice Agent";
+    const token = signMeetBotToken({ agentId, userId, exp: Date.now() + PAGE_TOKEN_TTL_MS, mid });
+    const base = getSelfBaseUrl();
+    const pageUrl = `${base}/api/meet-bots/page?mb=${encodeURIComponent(token)}`;
+    // Speaker identification: register the roster BEFORE the bot exists so the
+    // earliest participant webhooks land on a live entry.
+    createMeetRoster(mid, botName);
     const bot = await createRecallBot({
       meetingUrl,
-      botName: agent.name || "Voice Agent",
+      botName,
       pageUrl,
       ownerUserId: userId,
       agentId,
+      eventsUrl: `${base}/api/meet-bots/recall-events?mb=${encodeURIComponent(token)}`,
+      eventsList: RECALL_PARTICIPANT_EVENTS,
     });
     logger.info({ userId, agentId, botId: bot.id }, "Meeting bot created");
     res.json({ botId: bot.id, status: bot.statusCode ?? "created" });

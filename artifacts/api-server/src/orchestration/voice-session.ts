@@ -43,4 +43,13 @@ export interface VoiceSession {
    * Only implemented by GeminiLivePipeline; classic pipeline ignores it.
    */
   onVideoFrame?(jpegBase64: string, mimeType?: string): void;
+
+  /**
+   * Optional: meeting speaker identification (Recall bot calls). Driven by
+   * services/meet-roster.ts. Only the classic pipeline implements these; the
+   * roster calls them defensively (`?.`) so Live sessions simply lack names.
+   */
+  setMeetingRoster?(line: string | null): void;
+  setMeetingSpeaker?(name: string | null): void;
+  injectMeetingNote?(note: string): void;
 }

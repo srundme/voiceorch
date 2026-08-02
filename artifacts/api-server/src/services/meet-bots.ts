@@ -61,6 +61,13 @@ export interface MeetBotTokenPayload {
   agentId: number;
   userId: string;
   exp: number; // epoch ms
+  /**
+   * Unique meeting id minted per bot launch. Keys the in-memory speaker roster
+   * (services/meet-roster.ts): Recall participant webhooks and the bot page's
+   * webcall WS both carry this token, so both sides meet at the same roster.
+   * Optional for backward compat with tokens minted before this field existed.
+   */
+  mid?: string;
 }
 
 function tokenSecret(): string {
@@ -137,6 +144,9 @@ export async function createRecallBot(opts: {
   pageUrl: string;
   ownerUserId: string;
   agentId: number;
+  /** Webhook URL for real-time participant events (speaker identification). */
+  eventsUrl?: string;
+  eventsList?: string[];
 }): Promise<RecallBotSummary> {
   const res = await recallFetch("/bot/", {
     method: "POST",
@@ -157,6 +167,17 @@ export async function createRecallBot(opts: {
         zoom: "web_4_core",
         microsoft_teams: "web_4_core",
       },
+      // Speaker identification: subscribe to real-time participant events
+      // (join/leave/speech_on/...) delivered as webhooks to our server.
+      ...(opts.eventsUrl && opts.eventsList?.length
+        ? {
+            recording_config: {
+              realtime_endpoints: [
+                { type: "webhook", url: opts.eventsUrl, events: opts.eventsList },
+              ],
+            },
+          }
+        : {}),
     }),
   });
   if (!res.ok) {
