@@ -407,6 +407,16 @@ function isStubGreeting(text: string): boolean {
   return /^(hi|hello|hey|hi there|hello there)[!.,\s]*$/i.test(t);
 }
 
+/**
+ * Prompts up to this size skip section-clipping entirely and greet from the
+ * FULL system prompt. The clipped compact prompt repeatedly starved the
+ * greeting LLM of context (invented company call 5198; ignored caller memory
+ * call 5246; translated "Fortune Trade Fairs" into an astrologer persona call
+ * 5250). Full-prompt correctness beats the few hundred ms the clip saves;
+ * clipping remains only for very large prompts (e.g. huge baked KB blocks).
+ */
+const GREETING_FULL_PROMPT_MAX_CHARS = 12_000;
+
 function buildCompactGreetingPrompt(fullSystemPrompt: string, language: string, resumeDropped = false): string {
   const memoryMatch = fullSystemPrompt.match(
     /=== CALLER MEMORY[\s\S]*?={20,}/,
@@ -468,6 +478,21 @@ function buildCompactGreetingPrompt(fullSystemPrompt: string, language: string, 
       "this is a repeat conversation: briefly acknowledge it naturally in ONE short clause and skip the first-time welcome. " +
       "Reference ONLY facts explicitly written in the memory — never invent or infer details."
     : "";
+  if (fullSystemPrompt.length <= GREETING_FULL_PROMPT_MAX_CHARS) {
+    // Full-prompt greeting: the model sees exactly what it sees on every
+    // later turn, so the opener can no longer contradict the conversation.
+    const fullOpeningRule = resumeDropped
+      ? openingLengthRule // resume-after-drop instructions apply unchanged
+      : "[OPENING] Produce ONLY your first spoken line of this call, following the opening/greeting " +
+        "instructions in your prompt above. Keep it short and natural — do not continue past the opener.";
+    return [
+      fullSystemPrompt,
+      languageInstruction,
+      fullOpeningRule,
+      returningCallerRule,
+      antiInventionRule,
+    ].filter(Boolean).join("\n\n");
+  }
   const parts = [
     memoryBlock,
     scriptBlock,
