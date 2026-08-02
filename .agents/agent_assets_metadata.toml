@@ -977,3 +977,17 @@ id = "X1NgSShMj_kscuG8K9dLu"
 uri = "file://artifacts/snapserve-promo/public/audio/bg_music.mp3"
 type = "audio"
 title = "background music"
+
+[[outputs]]
+id = "RO6tGxgukccEOaF5C1XmJ"
+uri = "file://snapserve-agent/snapserve-knowledge-base.md"
+type = "text"
+title = "SnapServe Knowledge Base (upload this)"
+description = "Markdown KB file covering the whole SnapServe product — upload in Dashboard → Knowledge and attach to the agent."
+
+[[outputs]]
+id = "Yuc7fsX7Mnq2Ws94txADo"
+uri = "file://snapserve-agent/system-prompt.txt"
+type = "text"
+title = "Snapy — System Prompt (paste this)"
+description = "Chennai-colloquial, language-switching SnapServe representative persona for the Google Meet agent."
