@@ -94,7 +94,7 @@ server.on("upgrade", (request, socket, head) => { void (async () => {
   // Redact the session JWT / share token before ANY logging
   // — the webcall transport carries ?token= / ?share= which must never reach the logs,
   // including the rate-limit warning below.
-  const safeUrl = url.replace(/([?&](?:token|auth|share)=)[^&]*/gi, "$1[redacted]");
+  const safeUrl = url.replace(/([?&](?:token|auth|share|meetbot)=)[^&]*/gi, "$1[redacted]");
 
   // Match /api/ws/<provider>/<agentId>[?pt=1]
   const match = url.match(/^\/api\/ws\/(twilio|plivo|vobiz|webcall)\/(\d+)/);
@@ -164,8 +164,49 @@ server.on("upgrade", (request, socket, head) => { void (async () => {
   if (provider === "webcall") {
     const shareToken = qs.get("share");
     const sessionToken = qs.get("token");
+    const meetBotToken = qs.get("meetbot");
 
-    if (shareToken) {
+    if (meetBotToken) {
+      // Meeting bot (Recall.ai): the bot's webpage connects with a signed,
+      // expiring token minted at bot launch (routes/meet-bots.ts). It grants
+      // exactly one agent on behalf of the launching user — re-verify agent
+      // ownership + wallet like the Live Test path.
+      try {
+        const { verifyMeetBotToken } = await import("./services/meet-bots.js");
+        const payload = verifyMeetBotToken(meetBotToken);
+        if (!payload || payload.agentId !== agentId) {
+          socket.write("HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\n\r\n");
+          socket.destroy();
+          return;
+        }
+        const rows = await db
+          .select({ userId: agentsTable.userId })
+          .from(agentsTable)
+          .where(eq(agentsTable.id, agentId));
+        if (!rows[0] || rows[0].userId !== payload.userId) {
+          logger.warn({ agentId }, "Meet-bot upgrade rejected — agent ownership mismatch");
+          socket.write("HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n");
+          socket.destroy();
+          return;
+        }
+        const walletRows = await db
+          .select({ walletBalanceCents: usersTable.walletBalanceCents })
+          .from(usersTable)
+          .where(eq(usersTable.clerkId, payload.userId));
+        if (walletRows[0] && walletRows[0].walletBalanceCents <= 0) {
+          logger.warn({ agentId, user: payload.userId }, "Meet-bot upgrade rejected — insufficient balance");
+          socket.write("HTTP/1.1 402 Payment Required\r\nContent-Length: 0\r\n\r\n");
+          socket.destroy();
+          return;
+        }
+        webcallUserId = payload.userId;
+      } catch (err) {
+        logger.error({ err, agentId }, "Meet-bot webcall upgrade failed");
+        socket.write("HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\n\r\n");
+        socket.destroy();
+        return;
+      }
+    } else if (shareToken) {
       try {
         const { resolveShareTokenForWebcall, recordWebcallLinkUse } = await import("./services/webcall-links.js");
         const resolved = await resolveShareTokenForWebcall(shareToken, agentId);

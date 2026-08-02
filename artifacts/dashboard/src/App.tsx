@@ -30,6 +30,7 @@ import WalletTabPage      from "@/pages/wallet-tabbed";
 // Individual / deep-link pages (unchanged)
 import AgentBuilder            from "@/pages/agents/builder";
 import SquadsPage              from "@/pages/squads/index";
+import MeetPage                from "@/pages/meet/index";
 import CallsList               from "@/pages/calls/index";
 import CallDetail              from "@/pages/calls/[id]";
 import ProvidersList           from "@/pages/providers/index";
@@ -313,6 +314,9 @@ function AppRoutes() {
           <TabRedirect to="/app/squads" />
         </Route>
         <Route path="/app/squads" component={SquadsPage} />
+
+        {/* ── Meeting bots (send an agent into Google Meet/Zoom/Teams) ── */}
+        <Route path="/app/meet" component={MeetPage} />
 
         {/* ── Team → settings?tab=team redirect ── */}
         <Route path="/app/team">

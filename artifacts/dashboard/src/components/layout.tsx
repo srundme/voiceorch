@@ -7,7 +7,7 @@ import {
   Settings, Wallet, Mic2, Key,
   Menu, ChevronDown, ChevronLeft, ChevronRight,
   LogOut, Bell, Search, SlidersHorizontal, BookOpen, PlugZap, Sun, Moon, Sparkles,
-  MessageCircle, X, Wand2, Wrench,
+  MessageCircle, X, Wand2, Wrench, Video,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -115,6 +115,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { name: "Campaigns", href: "/app/campaigns", icon: Zap },
       { name: "WhatsApp",  href: "/app/whatsapp",  icon: MessageCircle },
+      { name: "Meetings",  href: "/app/meet",      icon: Video },
     ],
   },
   {
@@ -198,6 +199,7 @@ const ROUTE_TITLES: [string, string][] = [
   ["/app/test-simulator",  "Test Simulator"],
   ["/app/analytics",       "Analytics"],
   ["/app/squads",          "Squads"],
+  ["/app/meet",            "Meetings"],
   // Legacy routes (redirect targets still render briefly)
   ["/app/team",            "General"],
   ["/app/automatic-calls", "Campaigns"],

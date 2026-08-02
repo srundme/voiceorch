@@ -66,6 +66,7 @@ packages = ["ffmpeg-full", "libsndfile"]
 [userenv.shared]
 WEBHOOK_BASE_URL = "https://app.snapserve.ai"
 GENDER_SERVICE_URL = "https://workspacegender-service-production.up.railway.app"
+RECALL_REGION = "ap-northeast-1"
 
 [userenv.production]
 APP_BASE_URL = "https://app.snapserve.ai"
