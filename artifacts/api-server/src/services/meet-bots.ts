@@ -216,18 +216,28 @@ export function buildMeetBotPageHtml(opts: { agentId: number; token: string; age
   return `<!doctype html>
 <html><head><meta charset="utf-8"><title>Voice Agent</title>
 <style>
-  html,body{margin:0;height:100%;background:#0b1020;color:#e7ecf5;font-family:system-ui,sans-serif;
-  display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px}
-  .pulse{width:64px;height:64px;border-radius:50%;background:#3b82f6;animation:p 1.6s ease-in-out infinite}
-  @keyframes p{0%,100%{transform:scale(1);opacity:.85}50%{transform:scale(1.25);opacity:1}}
-  #st{font-size:14px;opacity:.8}
-  #nm{font-size:20px;font-weight:600}
+  /* Mimic Google Meet's native camera-off tile: flat dark background with a
+     solid-color initial circle. Meet itself overlays the bot's name at the
+     bottom-left, so the page renders nothing else (status is kept in the DOM
+     for debugging but visually hidden). */
+  html,body{margin:0;height:100%;background:#202124;font-family:'Google Sans',Roboto,system-ui,sans-serif;
+  display:flex;align-items:center;justify-content:center}
+  .avatar{width:120px;height:120px;border-radius:50%;background:#5f6368;
+  display:flex;align-items:center;justify-content:center;
+  color:#fff;font-size:56px;font-weight:400;user-select:none}
+  #st{position:absolute;left:-9999px}
 </style></head><body>
-<div class="pulse"></div><div id="nm"></div><div id="st">connecting…</div>
+<div class="avatar" id="av"></div><div id="st">connecting…</div>
 <script>
 (function(){
   var CFG = ${cfg};
-  document.getElementById("nm").textContent = CFG.agentName;
+  // Meet-style avatar: initial letter on a deterministic color from the name.
+  var AV_COLORS = ["#1a73e8","#d93025","#188038","#e37400","#9334e6","#007b83","#b31412","#7627bb"];
+  var nm = (CFG.agentName || "?").trim();
+  var hash = 0; for (var i = 0; i < nm.length; i++) hash = (hash * 31 + nm.charCodeAt(i)) >>> 0;
+  var av = document.getElementById("av");
+  av.textContent = nm.charAt(0).toUpperCase();
+  av.style.background = AV_COLORS[hash % AV_COLORS.length];
   var st = document.getElementById("st");
   function setSt(t){ st.textContent = t; }
 
