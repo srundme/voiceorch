@@ -18,13 +18,38 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { createHmac, timingSafeEqual } from "node:crypto";
 
+const RECALL_REGIONS = ["ap-northeast-1", "us-west-2", "us-east-1", "eu-central-1"];
 const RECALL_REGION = () => process.env["RECALL_REGION"] || "us-west-2";
-const recallBase = () => `https://${RECALL_REGION()}.recall.ai/api/v1`;
 
 function recallKey(): string {
-  const k = process.env["RECALL_API_KEY"];
+  const k = (process.env["RECALL_API_KEY"] ?? "").trim();
   if (!k) throw new Error("RECALL_API_KEY is not configured");
   return k;
+}
+
+// Recall API keys are region-scoped and a wrong RECALL_REGION yields a
+// confusing 401. Resolve the working region ONCE by probing (configured
+// region first), then cache for the process lifetime.
+let resolvedRegion: string | null = null;
+async function resolveRecallBase(): Promise<string> {
+  if (resolvedRegion) return `https://${resolvedRegion}.recall.ai/api/v1`;
+  const candidates = [RECALL_REGION(), ...RECALL_REGIONS.filter((r) => r !== RECALL_REGION())];
+  for (const region of candidates) {
+    try {
+      const res = await fetch(`https://${region}.recall.ai/api/v1/bot/?limit=1`, {
+        headers: { accept: "application/json", authorization: recallKey() },
+      });
+      if (res.ok) {
+        resolvedRegion = region;
+        return `https://${region}.recall.ai/api/v1`;
+      }
+    } catch {
+      /* network error — try next region */
+    }
+  }
+  throw new Error(
+    "Recall API key was rejected by every Recall region — verify RECALL_API_KEY is the API key from the Recall.ai dashboard (not a webhook secret)",
+  );
 }
 
 // ── Signed page/WS token ─────────────────────────────────────────────────────
@@ -81,7 +106,8 @@ export interface RecallBotSummary {
 }
 
 async function recallFetch(path: string, init?: RequestInit): Promise<Response> {
-  return fetch(`${recallBase()}${path}`, {
+  const base = await resolveRecallBase();
+  return fetch(`${base}${path}`, {
     ...init,
     headers: {
       accept: "application/json",
