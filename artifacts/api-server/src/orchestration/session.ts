@@ -74,7 +74,15 @@ import {
 } from "./callerMemory.js";
 import { performSquadAgentHandoff } from "../services/squad-handoff.js";
 import { completeLiveSquadRun, ensureLiveSquadRunForCall } from "../services/squad-engine.js";
-import { resolveSquadMemoryOwnerAgentId, findSquadForAgent } from "../services/squad-teamwork.js";
+import {
+  resolveSquadMemoryOwnerAgentId,
+  findSquadForAgent,
+  loadSquadTeam,
+  buildSquadTools,
+  buildSquadPromptBlock,
+  buildSharedCallerFactsBlock,
+  consumeFollowupContext,
+} from "../services/squad-teamwork.js";
 import { lookupSheetsForSession } from "../services/sheets-writeback.js";
 
 
@@ -248,6 +256,7 @@ export async function createSession(params: {
   squadRunId?: number;
   squadId?: number;
 }): Promise<{ sessionId: string; callDbId: number }> {
+  const createSessionStartMs = Date.now();
 
   // Browser "Live Test" transport — labels the call record + lifecycle log so the
   // calls log can distinguish test calls, and forces PCM audio I/O.
@@ -591,9 +600,9 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     promptVariables: Array.isArray(agentCfg["promptVariables"])
       ? (agentCfg["promptVariables"] as Array<{ key: string; defaultValue: string; description?: string }>)
       : [],
-    // P1-B: Knowledge Base RAG
+    // P1-B: Knowledge Base RAG (resolved asynchronously in parallel pre-fetch below)
     knowledgeBaseId: agent.knowledgeBaseId ?? null,
-    knowledgeSourceIds: await knowledgeSourceIdsPromise,
+    knowledgeSourceIds: [],
     // P1-C: Webhook HMAC secret
     webhookSecret: (agentCfg["webhookSecret"] as string | undefined) ?? null,
     // P1-D: VAD / Barge-in tuning (defaults match the hardcoded pipeline constants)
@@ -787,7 +796,6 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
   // recognizes the caller. Solo agents: owner = self (unchanged behavior).
   let memoryOwnerAgentId = params.agentId;
   try {
-    const { resolveSquadMemoryOwnerAgentId } = await import("../services/squad-teamwork.js");
     memoryOwnerAgentId = await resolveSquadMemoryOwnerAgentId(params.agentId, agent.userId, params.squadId ?? null);
   } catch { /* non-fatal — fall back to own agentId */ }
   // Persona-swap invalidation compares the answering agent's prompt hash; with
@@ -821,13 +829,16 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
           })
       : Promise.resolve(null),
 
-    // 3. Knowledge base (all attached sources, fair per-source budgeting)
-    agentConfig.knowledgeSourceIds.length > 0
-      ? buildKnowledgeBaseBlockEx(agentConfig.knowledgeSourceIds, kbBakedMaxChars, kbExcludeTitles).catch((kbErr) => {
-          logger.warn({ agentId: params.agentId, knowledgeSourceIds: agentConfig.knowledgeSourceIds, kbErr }, "Failed to load knowledge base — continuing without it");
-          return null;
-        })
-      : Promise.resolve(null),
+    // 3. Knowledge base (pre-fetched source IDs + fair per-source budgeting)
+    (async () => {
+      const sourceIds = await knowledgeSourceIdsPromise;
+      agentConfig.knowledgeSourceIds = sourceIds;
+      if (sourceIds.length === 0) return null;
+      return buildKnowledgeBaseBlockEx(sourceIds, kbBakedMaxChars, kbExcludeTitles).catch((kbErr) => {
+        logger.warn({ agentId: params.agentId, knowledgeSourceIds: sourceIds, kbErr }, "Failed to load knowledge base — continuing without it");
+        return null;
+      });
+    })(),
 
     // 4. Provider API keys — independent of above, fetch in parallel
     agent.userId
@@ -1714,13 +1725,6 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
 
           // Teamwork: auto-inject handoff/follow-up tools, teammate roster,
           // shared caller notes, and any pending follow-up task context.
-          const {
-            loadSquadTeam,
-            buildSquadTools,
-            buildSquadPromptBlock,
-            buildSharedCallerFactsBlock,
-            consumeFollowupContext,
-          } = await import("../services/squad-teamwork.js");
           const team = await loadSquadTeam(resolvedSquadId, params.agentId);
           if (team && team.teammates.length > 0) {
             const injectedTools = buildSquadTools(team, agentConfig.tools);
@@ -1782,7 +1786,6 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
       let durableFacts: Record<string, unknown> | undefined;
       if (callerPhone) {
         try {
-          const { loadCallerContext } = await import("./callerMemory.js");
           const ownerId = live.memoryOwnerAgentId || fromAgentId;
           const ctx = await loadCallerContext(ownerId, callerPhone);
           if (ctx.facts.length > 0) {
@@ -2085,6 +2088,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
       })
     : new OrchestrationPipeline({
     callId: callRecord.id,
+    sessionCreatedAtMs: createSessionStartMs,
     agentConfig,
     providerKeys,
     telephonyProvider: params.telephonyProvider,

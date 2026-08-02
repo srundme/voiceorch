@@ -4315,6 +4315,15 @@ export class OrchestrationPipeline implements VoiceSession {
       }
       this._currentTurnPlayedSentences = [];
       this.isPlaying = true;
+      const bootLatencyMs = Date.now() - (this.config.sessionCreatedAtMs ?? Date.now());
+      logger.info(
+        { callId: this.config.callId, bootLatencyMs, greetingLen: greeting.length },
+        "Call pipeline boot complete — playing opening greeting",
+      );
+      this.logExec("Pipeline", "system", {
+        status: "info",
+        metadata: { bootLatencyMs, greetingLen: greeting.length },
+      });
       try {
         await this.playTextAsSentences(greeting, greetingEmotions);
       } finally {

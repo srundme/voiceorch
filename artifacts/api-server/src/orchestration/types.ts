@@ -721,6 +721,8 @@ export interface SessionConfig {
    *  silence — aligning the recording clock with what the caller heard live.
    *  Absent for webcall (no carrier answer gap). */
   answeredAt?: number;
+  /** Epoch ms when createSession was invoked — used to record per-call boot latency. */
+  sessionCreatedAtMs?: number;
   /** When set, the session does NOT run the conversation pipeline. Instead it waits for
    *  the answering machine's outgoing greeting to end — detected acoustically via inbound
    *  VAD (sustained silence after speech ≈ the record beep) — then speaks `message` once
