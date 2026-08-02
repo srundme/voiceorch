@@ -31,7 +31,7 @@ const WS_RETRY_MAX = 3;
 /** After flush, if the WS goes fully idle this long with no message (audio,
  * event, or error), assume "final" was lost and resolve — every armed message
  * re-arms the timer, so slow-but-alive synthesis of long sentences is safe. */
-const FINAL_EVENT_IDLE_MS = Math.max(1000, Number(process.env.SARVAM_TTS_FINAL_IDLE_MS ?? 2500));
+const FINAL_EVENT_IDLE_MS = Math.max(1000, Number(process.env.SARVAM_TTS_FINAL_IDLE_MS ?? 1500));
 const WS_RETRY_BASE_MS = 400;
 const WS_RETRY_MAX_MS = 4_000;
 
