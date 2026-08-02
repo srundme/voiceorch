@@ -696,6 +696,11 @@ export interface SessionConfig {
    *  Used for telephony providers (e.g. Vobiz) that natively accept PCM, avoiding a
    *  lossy mulaw encode→decode round-trip. */
   rawPcmOutput?: boolean;
+  /** Sample rate of the raw PCM output leg (only meaningful with rawPcmOutput).
+   *  8000 (default) for carrier-grade legs; 16000 for browser webcall clients
+   *  that negotiated HD audio — skips the final downsample so the agent's TTS
+   *  keeps its full bandwidth. */
+  rawPcmOutputRate?: 8000 | 16000;
   /** True when caller memory shows this is a returning caller (>=1 prior completed call). */
   isReturningCaller?: boolean;
   /**

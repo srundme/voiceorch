@@ -92,7 +92,7 @@ export function WebcallPanel({
     if (!ctx) return;
     const pcm = new Int16Array(buf);
     if (pcm.length === 0) return;
-    const audioBuf = ctx.createBuffer(1, pcm.length, 8000);
+    const audioBuf = ctx.createBuffer(1, pcm.length, 16000); // HD webcall: server sends 16 kHz PCM (rate=16000 negotiated)
     const ch = audioBuf.getChannelData(0);
     for (let i = 0; i < pcm.length; i++) ch[i] = pcm[i] / 0x8000;
     const src = ctx.createBufferSource();
@@ -206,7 +206,7 @@ export function WebcallPanel({
       worklet.connect(sink);
       sink.connect(capture.destination);
 
-      const playback = new AudioContext({ sampleRate: 8000 });
+      const playback = new AudioContext({ sampleRate: 16000 });
       playbackCtxRef.current = playback;
       await playback.resume();
       nextStartRef.current = playback.currentTime;
@@ -216,7 +216,7 @@ export function WebcallPanel({
         ? `share=${encodeURIComponent(shareToken)}`
         : `token=${encodeURIComponent(sessionToken!)}`;
       const ws = new WebSocket(
-        `${proto}://${location.host}/api/ws/webcall/${agentId}?${authQs}`,
+        `${proto}://${location.host}/api/ws/webcall/${agentId}?${authQs}&rate=16000`,
       );
       ws.binaryType = "arraybuffer";
       wsRef.current = ws;

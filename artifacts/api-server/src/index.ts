@@ -313,7 +313,14 @@ server.on("upgrade", (request, socket, head) => { void (async () => {
       case "twilio":   void handleTwilioWebSocket(ws, agentId, campaignLeadId, callDirection, vobizCallbackId);                       break;
       case "plivo":    void handlePlivoWebSocket(ws, agentId, campaignLeadId, callDirection, vobizCallbackId, vobizFrom, vobizTo, vobizCallUuid, vobizAnsweredAt);    break;
       case "vobiz":    void handleVobizWebSocket(ws, agentId, platformTelephony, campaignLeadId, vobizFrom, vobizTo, voicemailDelivery, vobizCallUuid, callDirection, vobizCorrToken, vobizCallbackId, vobizAnsweredAt, amdMachineHint, amdArmed); break;
-      case "webcall":  void handleWebcallWebSocket(ws, agentId, webcallUserId!, webcallGuestKey ? { guestKey: webcallGuestKey, linkId: webcallShareLinkId } : undefined); break;
+      case "webcall": {
+        const hdAudio = /[?&]rate=16000(&|$)/.test(request.url ?? "");
+        void handleWebcallWebSocket(ws, agentId, webcallUserId!, {
+          ...(webcallGuestKey ? { guestKey: webcallGuestKey, linkId: webcallShareLinkId } : {}),
+          hdAudio,
+        });
+        break;
+      }
     }
   });
 })(); });

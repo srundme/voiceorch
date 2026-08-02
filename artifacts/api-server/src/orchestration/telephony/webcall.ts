@@ -35,7 +35,7 @@ export async function handleWebcallWebSocket(
   ws: WebSocket,
   agentId: number,
   userId: string,
-  opts?: { guestKey?: string; linkId?: number | null },
+  opts?: { guestKey?: string; linkId?: number | null; hdAudio?: boolean },
 ): Promise<void> {
   let sessionId: string | null = null;
   // The socket can close / error / send "end" while createSession is still
@@ -151,6 +151,9 @@ export async function handleWebcallWebSocket(
       toNumber: `webcall-agent-${agentId}`,
       fromNumber: guestKey ? `webcall-${guestKey}` : `webcall-user-${userId}`,
       rawPcmOutput: true,
+      // HD mode (negotiated via ?rate=16000): the client receives 16 kHz PCM
+      // — the TTS keeps its full bandwidth instead of the 8 kHz carrier rate.
+      rawPcmOutputRate: opts?.hdAudio ? 16000 : 8000,
       onAudioOut: sendAudio,
       onCallEnd: () => { ending = true; sendJson({ type: "call_end" }); ws.close(); },
       onBargeIn: () => sendJson({ type: "clear" }),
@@ -165,7 +168,7 @@ export async function handleWebcallWebSocket(
       await endSession(sessionId);
       return;
     }
-    sendJson({ type: "ready", callId: getSession(sid)?.callId ?? null });
+    sendJson({ type: "ready", callId: getSession(sid)?.callId ?? null, audioSampleRate: opts?.hdAudio ? 16000 : 8000 });
     logger.info({ sessionId, agentId, userId, guest: !!guestKey, linkId: opts?.linkId ?? null }, "Webcall session started");
   } catch (err) {
     const reason = toReadableError(err, "Webcall session setup failed");

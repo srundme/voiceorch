@@ -203,6 +203,8 @@ export async function createSession(params: {
   /** Overrides the default audio-format derivation. When omitted, PCM output is
    *  used for Vobiz only. The browser webcall transport sets this true. */
   rawPcmOutput?: boolean;
+  /** 16000 for browser webcall clients that negotiated HD audio; default 8000. */
+  rawPcmOutputRate?: 8000 | 16000;
   /** When true, the session runs in voicemail-delivery mode instead of the normal
    *  conversation pipeline: it waits for the answering machine's greeting to end
    *  (acoustic VAD cue) then speaks the agent's configured `voicemailMessage` once
@@ -1823,6 +1825,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
           onBargeIn: params.onBargeIn,
           onTranscript: params.onTranscript,
           rawPcmOutput: params.rawPcmOutput,
+          rawPcmOutputRate: params.rawPcmOutputRate,
           callDirection,
           memoryOwnerAgentId: live.memoryOwnerAgentId,
         },
@@ -2064,6 +2067,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
         campaignLeadId: params.campaignLeadId ?? null,
         onAudioOut: params.onAudioOut,
         rawPcmOutput: params.rawPcmOutput ?? (params.telephonyProvider === "vobiz"),
+        rawPcmOutputRate: params.rawPcmOutputRate,
         onTranscript: (speaker, text) => {
           logger.debug({ callId: callRecord.id, speaker, text: text.slice(0, 80) }, "Transcript");
           params.onTranscript?.(speaker, text);
@@ -2093,6 +2097,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     campaignLeadId: params.campaignLeadId ?? null,
     onAudioOut: params.onAudioOut,
     rawPcmOutput: params.rawPcmOutput ?? (params.telephonyProvider === "vobiz"),
+    rawPcmOutputRate: params.rawPcmOutputRate,
     voicemailDelivery: (params.voicemailDelivery || ((params.amdMachineHint || params.amdArmed) && amdVoicemailAction === "leave_message"))
       ? {
           message: (typeof agentCfg["voicemailMessage"] === "string" && (agentCfg["voicemailMessage"] as string).trim())

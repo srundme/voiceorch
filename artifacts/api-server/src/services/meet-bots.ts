@@ -220,8 +220,9 @@ export function buildMeetBotPageHtml(opts: { agentId: number; token: string; age
   // Letting Chrome resample each tiny AudioBuffer independently puts an
   // audible seam at every frame boundary (~25/sec) = gritty "sticky" voice.
   var upLast = 0, upFrac = 0;
+  var inRate = 8000; // actual server rate arrives in the "ready" message
   function upsampleTo(ctxRate, pcm){
-    var ratio = 8000 / ctxRate;           // input samples per output sample
+    var ratio = inRate / ctxRate;         // input samples per output sample
     var outLen = Math.floor((pcm.length - upFrac) / ratio);
     if (outLen <= 0) return new Float32Array(0);
     var out = new Float32Array(outLen);
@@ -263,14 +264,14 @@ export function buildMeetBotPageHtml(opts: { agentId: number; token: string; age
   }
 
   var proto = location.protocol === "https:" ? "wss" : "ws";
-  var ws = new WebSocket(proto + "://" + location.host + "/api/ws/webcall/" + CFG.agentId + "?meetbot=" + encodeURIComponent(CFG.token));
+  var ws = new WebSocket(proto + "://" + location.host + "/api/ws/webcall/" + CFG.agentId + "?meetbot=" + encodeURIComponent(CFG.token) + "&rate=16000");
   ws.binaryType = "arraybuffer";
 
   ws.onmessage = function(ev){
     if (typeof ev.data === "string") {
       try {
         var msg = JSON.parse(ev.data);
-        if (msg.type === "ready") setSt("in the meeting");
+        if (msg.type === "ready") { if (msg.audioSampleRate) inRate = msg.audioSampleRate; setSt("in the meeting"); }
         else if (msg.type === "clear") clearPlayback();
         else if (msg.type === "call_end") setSt("call ended");
         else if (msg.type === "error") setSt("error: " + (msg.message||""));

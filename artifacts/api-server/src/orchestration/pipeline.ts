@@ -1966,7 +1966,7 @@ export class OrchestrationPipeline implements VoiceSession {
           callId: config.callId,
           track,
           ambientType,
-          encoding: config.rawPcmOutput ? "pcm16-8k" : "mulaw-8k",
+          encoding: config.rawPcmOutput ? `pcm16-${(config.rawPcmOutputRate ?? 8000) / 1000}k` : "mulaw-8k",
           telephonyProvider: config.telephonyProvider,
           volumeScale: ambientVolumeScale,
           levels: {
@@ -2066,7 +2066,9 @@ export class OrchestrationPipeline implements VoiceSession {
             // into a raw-PCM stream makes the browser reinterpret them as PCM16
             // and play garbled static during silence gaps.
             const chunk = this.config.rawPcmOutput
-              ? this.ambientStream.nextPcmChunk()
+              ? (this.pcmOutRate() === 16000
+                  ? upsample8to16(this.ambientStream.nextPcmChunk())
+                  : this.ambientStream.nextPcmChunk())
               : this.ambientStream.nextMulawChunk();
             this.config.onAudioOut(chunk);
             // Prove (once per call) that ambient audio actually went out on the
@@ -2075,7 +2077,7 @@ export class OrchestrationPipeline implements VoiceSession {
             if (!this.ambientFirstChunkLogged) {
               this.ambientFirstChunkLogged = true;
               logger.info(
-                { callId: this.config.callId, bytes: chunk.length, encoding: this.config.rawPcmOutput ? "pcm16-8k" : "mulaw-8k" },
+                { callId: this.config.callId, bytes: chunk.length, encoding: this.config.rawPcmOutput ? `pcm16-${this.pcmOutRate() / 1000}k` : "mulaw-8k" },
                 "Ambient noise: first silence chunk emitted to caller",
               );
             }
@@ -4381,13 +4383,19 @@ export class OrchestrationPipeline implements VoiceSession {
     );
   }
 
+  /** Sample rate of the raw-PCM output leg (8000 unless a webcall client
+   *  negotiated HD 16k). Only meaningful when rawPcmOutput is true. */
+  private pcmOutRate(): number {
+    return this.config.rawPcmOutput ? (this.config.rawPcmOutputRate ?? 8000) : 8000;
+  }
+
   async confirmAmdMachineThenBranch(): Promise<void> {
     if (this.closed) return;
     const action = this.amdConfirm?.action ?? "hangup";
 
     // 20 ms comfort-noise frame keeps the Vobiz bridge alive while we listen silently.
     const FRAME_MS    = 20;
-    const FRAME_BYTES = this.config.rawPcmOutput ? FRAME_MS * 8 * 2 : FRAME_MS * 8;
+    const FRAME_BYTES = this.config.rawPcmOutput ? FRAME_MS * (this.pcmOutRate() / 1000) * 2 : FRAME_MS * 8;
     const silenceFrame = Buffer.alloc(FRAME_BYTES, 0);
 
     this.amdConfirming = true;
@@ -4530,7 +4538,7 @@ export class OrchestrationPipeline implements VoiceSession {
 
     // 20 ms comfort-noise frame, sized to the negotiated output format.
     const FRAME_MS    = 20;
-    const FRAME_BYTES = this.config.rawPcmOutput ? FRAME_MS * 8 * 2 : FRAME_MS * 8;
+    const FRAME_BYTES = this.config.rawPcmOutput ? FRAME_MS * (this.pcmOutRate() / 1000) * 2 : FRAME_MS * 8;
     const silenceFrame = Buffer.alloc(FRAME_BYTES, 0);
 
     const startedAt = Date.now();
@@ -5250,13 +5258,16 @@ export class OrchestrationPipeline implements VoiceSession {
         if (this.config.rawPcmOutput) {
           // Vobiz/web accept LINEAR16 PCM natively — skip mulaw encode to avoid
           // lossy round-trip. Mix ambient under speech (at 16 kHz, where the
-          // ambient stream's mixIntoPcm16k operates) before downsampling to 8 kHz.
-          const out8k = this.ambientStream
-            ? downsample16to8(this.ambientStream.mixIntoPcm16k(pcm16k))
-            : pcm8k;
-          const PCM_CHUNK = CHUNK_SIZE_MULAW * 2; // 320 bytes = 20ms @ 8kHz 16-bit
-          for (let i = 0; i < out8k.length; i += PCM_CHUNK) {
-            wireQueue.push(out8k.slice(i, i + PCM_CHUNK));
+          // ambient stream's mixIntoPcm16k operates). HD webcall (16k) keeps the
+          // full-bandwidth mix; carrier-grade legs downsample to 8 kHz.
+          const rate = this.pcmOutRate();
+          const mixed16k = this.ambientStream ? this.ambientStream.mixIntoPcm16k(pcm16k) : pcm16k;
+          const out = rate === 16000
+            ? mixed16k
+            : (this.ambientStream ? downsample16to8(mixed16k) : pcm8k);
+          const PCM_CHUNK = CHUNK_SIZE_MULAW * 2 * (rate / 8000); // 20ms: 320B @8k, 640B @16k
+          for (let i = 0; i < out.length; i += PCM_CHUNK) {
+            wireQueue.push(out.slice(i, i + PCM_CHUNK));
           }
         } else {
           const mulaw = encodeMulaw(pcm8k);
@@ -5381,7 +5392,7 @@ export class OrchestrationPipeline implements VoiceSession {
       await job.ready;
       if (job.synthError) throw job.synthError;
       if (bytesSent <= 0) return undefined;
-      const bytesPerMs = this.config.rawPcmOutput ? 16 : 8; // 8kHz s16le vs mulaw
+      const bytesPerMs = this.config.rawPcmOutput ? (this.pcmOutRate() / 1000) * 2 : 8; // s16le vs mulaw
       return {
         pacedMs: Math.round(bytesSent / bytesPerMs),
         claimedMs: job.audioDurationMs,
@@ -5399,13 +5410,16 @@ export class OrchestrationPipeline implements VoiceSession {
       this.recording.addAgentChunk(ttsPcm8k);
       const claimedMs = Math.round((ttsPcm16k.length / 2 / 16000) * 1000);
       if (this.config.rawPcmOutput) {
-        // Mix ambient under speech at 16 kHz (mixIntoPcm16k's native rate) then
-        // downsample to the 8 kHz raw-PCM web output. When ambient is disabled
-        // this reuses ttsPcm8k unchanged, so the non-ambient path is untouched.
-        const out8k = this.ambientStream
-          ? downsample16to8(this.ambientStream.mixIntoPcm16k(ttsPcm16k))
-          : ttsPcm8k;
-        const PCM_CHUNK = CHUNK_SIZE_MULAW * 2; // 320 bytes = 20ms @ 8kHz 16-bit
+        // Mix ambient under speech at 16 kHz (mixIntoPcm16k's native rate).
+        // HD webcall (16k) sends the mix as-is; carrier-grade legs downsample
+        // to 8 kHz. When ambient is disabled the 8k path reuses ttsPcm8k
+        // unchanged, so the non-ambient path is untouched.
+        const outRate = this.pcmOutRate();
+        const mixed16k = this.ambientStream ? this.ambientStream.mixIntoPcm16k(ttsPcm16k) : ttsPcm16k;
+        const out8k = outRate === 16000
+          ? mixed16k
+          : (this.ambientStream ? downsample16to8(mixed16k) : ttsPcm8k);
+        const PCM_CHUNK = CHUNK_SIZE_MULAW * 2 * (outRate / 8000); // 20ms: 320B @8k, 640B @16k
         for (let i = 0; i < out8k.length; i += PCM_CHUNK) {
           if (this.closed || this.bargeInRequested) break;
           const emitStatus = this.interruptionMgr.getAudioSendStatus(
@@ -5429,7 +5443,7 @@ export class OrchestrationPipeline implements VoiceSession {
           // re-arm would span the whole sentence and block mid-sentence barge-in.
           // Skip the trailing sleep on the last chunk so drainPlaybackTail can
           // start immediately — no setTimeout-jitter gap before silence frames.
-          if (i + PCM_CHUNK < ttsPcm8k.length) {
+          if (i + PCM_CHUNK < out8k.length) {
             await new Promise<void>((r) => setTimeout(r, 20));
           }
         }
@@ -5464,7 +5478,7 @@ export class OrchestrationPipeline implements VoiceSession {
         }
       }
       if (bytesSent <= 0) return undefined;
-      const bytesPerMs = this.config.rawPcmOutput ? 16 : 8;
+      const bytesPerMs = this.config.rawPcmOutput ? (this.pcmOutRate() / 1000) * 2 : 8;
       return {
         pacedMs: Math.round(bytesSent / bytesPerMs),
         claimedMs,
@@ -8835,7 +8849,7 @@ export class OrchestrationPipeline implements VoiceSession {
     // For Twilio / Plivo (mulaw) the same frames extend their jitter buffer.
     const FRAME_MS      = 20;
     const FRAME_BYTES   = this.config.rawPcmOutput
-      ? FRAME_MS * 8 * 2   // 20 ms × 8000 Hz × 2 bytes  = 320 B (16-bit PCM)
+      ? FRAME_MS * (this.pcmOutRate() / 1000) * 2   // 320 B @8k / 640 B @16k (16-bit PCM)
       : FRAME_MS * 8;      // 20 ms × 8000 Hz × 1 byte   = 160 B (µ-law)
     const silenceFrame  = Buffer.alloc(FRAME_BYTES, 0);
     const frames        = Math.ceil(
@@ -8859,7 +8873,9 @@ export class OrchestrationPipeline implements VoiceSession {
       let frame: Buffer = silenceFrame;
       if (this.ambientStream) {
         frame = this.config.rawPcmOutput
-          ? this.ambientStream.nextPcmChunk()
+          ? (this.pcmOutRate() === 16000
+              ? upsample8to16(this.ambientStream.nextPcmChunk())
+              : this.ambientStream.nextPcmChunk())
           : this.ambientStream.nextMulawChunk();
       }
       this.config.onAudioOut(frame);

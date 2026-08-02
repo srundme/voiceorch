@@ -318,6 +318,7 @@ export type HandoffSessionHooks = {
   onBargeIn?: () => void;
   onTranscript?: (speaker: "user" | "agent", text: string) => void;
   rawPcmOutput?: boolean;
+  rawPcmOutputRate?: 8000 | 16000;
   callDirection: "inbound" | "outbound";
   /** Squad-shared memory owner — keeps voiceprints/memory on ONE record across handoffs. */
   memoryOwnerAgentId?: number;
@@ -401,6 +402,7 @@ export async function performSquadAgentHandoff(opts: {
           campaignLeadId: hooks.campaignLeadId,
           onAudioOut: hooks.onAudioOut,
           rawPcmOutput: hooks.rawPcmOutput ?? (hooks.telephonyProvider === "vobiz"),
+          rawPcmOutputRate: hooks.rawPcmOutputRate,
           onTranscript: (speaker, text) => hooks.onTranscript?.(speaker, text),
           onCallEnd: hooks.onCallEnd,
           onBargeIn: hooks.onBargeIn,
@@ -416,6 +418,7 @@ export async function performSquadAgentHandoff(opts: {
           campaignLeadId: hooks.campaignLeadId,
           onAudioOut: hooks.onAudioOut,
           rawPcmOutput: hooks.rawPcmOutput ?? (hooks.telephonyProvider === "vobiz"),
+          rawPcmOutputRate: hooks.rawPcmOutputRate,
           onTranscript: (speaker, text) => hooks.onTranscript?.(speaker, text),
           onCallEnd: hooks.onCallEnd,
           onBargeIn: hooks.onBargeIn,
