@@ -147,4 +147,5 @@
 - [Outbound call-screening bot handling](call-screening-bots.md) — iPhone/Google screeners: phrase-detect first 25s (no generic "what's this about" patterns), one deferred-if-playing reply then silence, restart-note on human pickup; screening turns filtered from memory extraction
 - [Squad-shared memory owner](squad-shared-memory.md) — squad members read/write ONE caller memory + voiceprint record via resolveSquadMemoryOwnerAgentId; personaHash invalidation disabled when owner≠self
 - [Gemini Live pacing & barge-in](gemini-live-pacing-bargein.md) — Live audio must be locally paced (never dump to carrier) + `interrupted` handled sync before the ordered msg chain; Live has NO per-turn exec logging
+- [Meet-bot speaker identification](meetbot-speaker-id.md) — Recall participant webhooks → mid-keyed roster → optional VoiceSession setters; speech_off must not clear the label; user wants the ORIGINAL simple bot tile
 - [TTS jitter buffer](tts-jitter-buffer.md) — pre-buffer ~300ms before the paced pump + rebuffer on underrun; MUST re-anchor bargeInSentenceStartAt after the wait or echo grace/calibration break
