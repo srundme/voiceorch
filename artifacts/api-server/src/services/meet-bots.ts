@@ -149,6 +149,14 @@ export async function createRecallBot(opts: {
       output_media: {
         camera: { kind: "webpage", config: { url: opts.pageUrl } },
       },
+      // The default `web` variant gives the bot's browser only 250 millicores,
+      // which starves real-time audio (choppy/"sticky" voice). Recall's own FAQ
+      // prescribes web_4_core for output-media agents.
+      variant: {
+        google_meet: "web_4_core",
+        zoom: "web_4_core",
+        microsoft_teams: "web_4_core",
+      },
     }),
   });
   if (!res.ok) {
