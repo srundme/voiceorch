@@ -202,12 +202,17 @@ export function buildMeetBotPageHtml(opts: { agentId: number; token: string; age
   var st = document.getElementById("st");
   function setSt(t){ st.textContent = t; }
 
+  // Playback context runs at the browser's NATIVE rate — forcing 8000Hz can
+  // silently detach the context from tab-audio capture in the headless bot
+  // (agent audio then never reaches the meeting). Buffers are created at 8000Hz
+  // and Chrome resamples them to the context rate on playback.
   var playCtx = null, playQueue = [], playing = false, activeSources = [];
   function ensurePlayCtx(){
-    if (!playCtx) playCtx = new (window.AudioContext||window.webkitAudioContext)({ sampleRate: 8000 });
-    if (playCtx.state === "suspended") playCtx.resume();
+    if (!playCtx) playCtx = new (window.AudioContext||window.webkitAudioContext)();
+    if (playCtx.state !== "running") playCtx.resume();
     return playCtx;
   }
+  setInterval(function(){ if (playCtx && playCtx.state !== "running") playCtx.resume(); }, 1000);
   function playNext(){
     if (playing || !playQueue.length) return;
     playing = true;
