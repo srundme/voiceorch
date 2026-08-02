@@ -59,10 +59,17 @@ export async function handleWebcallWebSocket(
     if (ws.readyState === ws.OPEN) ws.send(pcm8k);
   }
 
+  // Idempotent: MUST run on every teardown path (client "end", ws close, ws
+  // error, onCallEnd) regardless of `ending` state, or the roster keeps a live
+  // reference to a dead pipeline for hours.
+  function detachRoster(): void {
+    if (opts?.meetMid) detachMeetSession(opts.meetMid);
+  }
+
   function requestEnd(): void {
+    detachRoster();
     if (ending) return;
     ending = true;
-    if (opts?.meetMid) detachMeetSession(opts.meetMid);
     if (sessionId) {
       endSession(sessionId).catch((e: unknown) =>
         logger.error({ sessionId, err: e }, "Webcall endSession failed"));
@@ -142,6 +149,7 @@ export async function handleWebcallWebSocket(
 
   ws.on("error", (err: unknown) => {
     logger.error({ sessionId, agentId, err }, "Webcall WS error");
+    detachRoster();
     if (ending) return;
     ending = true;
     if (sessionId) {
@@ -167,7 +175,7 @@ export async function handleWebcallWebSocket(
       // — the TTS keeps its full bandwidth instead of the 8 kHz carrier rate.
       rawPcmOutputRate: opts?.hdAudio ? 16000 : 8000,
       onAudioOut: sendAudio,
-      onCallEnd: () => { ending = true; sendJson({ type: "call_end" }); ws.close(); },
+      onCallEnd: () => { detachRoster(); ending = true; sendJson({ type: "call_end" }); ws.close(); },
       onBargeIn: () => sendJson({ type: "clear" }),
       onTranscript: (speaker, text) => sendJson({ type: "transcript", speaker, text }),
       // Non-fatal provider failure (e.g. TTS rejecting every sentence): the call
