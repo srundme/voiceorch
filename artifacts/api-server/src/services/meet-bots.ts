@@ -213,64 +213,23 @@ export async function leaveRecallBot(botId: string): Promise<void> {
 
 export function buildMeetBotPageHtml(opts: { agentId: number; token: string; agentName: string }): string {
   const cfg = JSON.stringify({ agentId: opts.agentId, token: opts.token, agentName: opts.agentName });
-  // Camera-tile design notes (Recall renders this at up to 1280x720, 16:9):
-  //   • Meeting platforms crop tiles adaptively — everything important sits in
-  //     a generous center safezone.
-  //   • Text ≥50px equivalent and bold: tiles are downscaled + recompressed.
-  //   • Solid colors / minimal gradients survive video compression best.
-  //   • The waveform animates only while agent audio is actually scheduled, so
-  //     participants can SEE when the agent is talking vs listening.
   return `<!doctype html>
 <html><head><meta charset="utf-8"><title>Voice Agent</title>
 <style>
-  html,body{margin:0;height:100%;background:#0a0f1e;color:#f2f5fb;
-    font-family:system-ui,-apple-system,"Segoe UI",sans-serif;overflow:hidden}
-  body{display:flex;align-items:center;justify-content:center;flex-direction:column;gap:3.6vh;
-    background:radial-gradient(95vw 95vh at 50% 118%,#13265e 0%,#0a0f1e 64%)}
-  .brand{position:absolute;top:5.5vh;left:0;right:0;text-align:center;
-    font-size:3vh;font-weight:800;letter-spacing:.34em;color:#6d86dd;text-transform:uppercase}
-  .wave{display:flex;align-items:center;gap:1.6vh;height:16vh}
-  .wave b{width:2.4vh;border-radius:1.2vh;background:#3b82f6;height:3vh;transition:height .12s}
-  body.speaking .wave b{animation:eq 1s ease-in-out infinite}
-  body.speaking .wave b:nth-child(1){animation-delay:0s}
-  body.speaking .wave b:nth-child(2){animation-delay:.15s}
-  body.speaking .wave b:nth-child(3){animation-delay:.3s}
-  body.speaking .wave b:nth-child(4){animation-delay:.45s}
-  body.speaking .wave b:nth-child(5){animation-delay:.6s}
-  @keyframes eq{0%,100%{height:3.5vh}50%{height:15vh}}
-  body.listening .wave b{animation:breathe 2.4s ease-in-out infinite}
-  body.listening .wave b:nth-child(odd){animation-delay:1.2s}
-  @keyframes breathe{0%,100%{height:3vh;opacity:.75}50%{height:5.5vh;opacity:1}}
-  #nm{font-size:7.5vh;font-weight:800;letter-spacing:.01em;text-align:center;
-    max-width:80vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .pill{display:flex;align-items:center;gap:1.4vh;background:rgba(255,255,255,.08);
-    border:1px solid rgba(255,255,255,.14);border-radius:99px;padding:1.4vh 3.2vh;
-    font-size:3.4vh;font-weight:600;color:#c8d4f2}
-  .dot{width:1.8vh;height:1.8vh;border-radius:50%;background:#f59e0b}
-  body.live .dot{background:#22c55e;box-shadow:0 0 1.6vh #22c55e}
-  body.dead .dot{background:#ef4444}
-</style></head><body class="listening">
-<div class="brand">SnapServe &middot; AI Voice Agent</div>
-<div class="wave"><b></b><b></b><b></b><b></b><b></b></div>
-<div id="nm"></div>
-<div class="pill"><span class="dot"></span><span id="st">Connecting&hellip;</span></div>
+  html,body{margin:0;height:100%;background:#0b1020;color:#e7ecf5;font-family:system-ui,sans-serif;
+  display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px}
+  .pulse{width:64px;height:64px;border-radius:50%;background:#3b82f6;animation:p 1.6s ease-in-out infinite}
+  @keyframes p{0%,100%{transform:scale(1);opacity:.85}50%{transform:scale(1.25);opacity:1}}
+  #st{font-size:14px;opacity:.8}
+  #nm{font-size:20px;font-weight:600}
+</style></head><body>
+<div class="pulse"></div><div id="nm"></div><div id="st">connecting…</div>
 <script>
 (function(){
   var CFG = ${cfg};
   document.getElementById("nm").textContent = CFG.agentName;
   var st = document.getElementById("st");
   function setSt(t){ st.textContent = t; }
-  function setMode(m){ document.body.className = m; }
-  // Speaking indicator: audio is "playing" while the scheduled cursor is ahead
-  // of the context clock. Polled — no hooks needed in the audio path.
-  var live = false, ended = false;
-  setInterval(function(){
-    if (ended) return;
-    var speaking = playCtx && nextPlayTime > playCtx.currentTime + 0.05;
-    if (!live) return;
-    setMode(speaking ? "live speaking" : "live listening");
-    setSt(speaking ? "Speaking" : "Listening");
-  }, 150);
 
   // Playback context runs at the browser's NATIVE rate — forcing 8000Hz can
   // silently detach the context from tab-audio capture in the headless bot
@@ -350,10 +309,10 @@ export function buildMeetBotPageHtml(opts: { agentId: number; token: string; age
     if (typeof ev.data === "string") {
       try {
         var msg = JSON.parse(ev.data);
-        if (msg.type === "ready") { if (msg.audioSampleRate) inRate = msg.audioSampleRate; live = true; setMode("live listening"); setSt("Listening"); }
+        if (msg.type === "ready") { if (msg.audioSampleRate) inRate = msg.audioSampleRate; setSt("in the meeting"); }
         else if (msg.type === "clear") clearPlayback();
-        else if (msg.type === "call_end") { ended = true; live = false; setMode("dead"); setSt("Call ended"); }
-        else if (msg.type === "error") { ended = true; live = false; setMode("dead"); setSt("Error: " + (msg.message||"")); }
+        else if (msg.type === "call_end") setSt("call ended");
+        else if (msg.type === "error") setSt("error: " + (msg.message||""));
       } catch(e){}
       return;
     }
@@ -366,11 +325,11 @@ export function buildMeetBotPageHtml(opts: { agentId: number; token: string; age
       try { ws.send(JSON.stringify({ type: "stats", underruns: underruns, framesIn: framesIn, ctxRate: playCtx ? playCtx.sampleRate : 0, ctxState: playCtx ? playCtx.state : "none", inRate: inRate })); } catch(e){}
     }
   }, 10000);
-  ws.onclose = function(){ if (!ended) { ended = true; live = false; setMode("dead"); setSt("Disconnected"); } };
-  ws.onerror = function(){ if (!ended) { ended = true; live = false; setMode("dead"); setSt("Connection error"); } };
+  ws.onclose = function(){ setSt("disconnected"); };
+  ws.onerror = function(){ setSt("connection error"); };
 
   ws.onopen = function(){
-    setSt("Joining\\u2026");
+    setSt("joining…");
     navigator.mediaDevices.getUserMedia({ audio: true }).then(function(stream){
       var ctx = new (window.AudioContext||window.webkitAudioContext)();
       var srcNode = ctx.createMediaStreamSource(stream);
