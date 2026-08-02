@@ -62,6 +62,9 @@ export function WebcallPanel({
   const sourceNodeRef  = useRef<MediaStreamAudioSourceNode | null>(null);
   const activeSources  = useRef<AudioBufferSourceNode[]>([]);
   const nextStartRef   = useRef(0);
+  // Server-declared PCM rate from the "ready" message. We request 16k HD, but
+  // fall back gracefully if the server answers with 8k (older deploy).
+  const audioRateRef   = useRef(16000);
   const lineIdRef      = useRef(0);
   const mutedRef       = useRef(false);
   const callIdRef      = useRef<number | null>(null);
@@ -92,7 +95,7 @@ export function WebcallPanel({
     if (!ctx) return;
     const pcm = new Int16Array(buf);
     if (pcm.length === 0) return;
-    const audioBuf = ctx.createBuffer(1, pcm.length, 16000); // HD webcall: server sends 16 kHz PCM (rate=16000 negotiated)
+    const audioBuf = ctx.createBuffer(1, pcm.length, audioRateRef.current); // rate negotiated via "ready" (16k HD, 8k fallback)
     const ch = audioBuf.getChannelData(0);
     for (let i = 0; i < pcm.length; i++) ch[i] = pcm[i] / 0x8000;
     const src = ctx.createBufferSource();
@@ -226,12 +229,15 @@ export function WebcallPanel({
         let msg: { type?: string; speaker?: "user" | "agent"; text?: string; message?: string };
         try { msg = JSON.parse(ev.data); } catch { return; }
         switch (msg.type) {
-          case "ready":
+          case "ready": {
             if (typeof (msg as { callId?: number }).callId === "number") {
               callIdRef.current = (msg as { callId: number }).callId;
             }
+            const rate = (msg as { audioSampleRate?: number }).audioSampleRate;
+            audioRateRef.current = rate === 16000 || rate === 8000 ? rate : 8000;
             setState("live");
             break;
+          }
           case "transcript":
             if (msg.speaker && msg.text) {
               const line: Line = { id: lineIdRef.current++, speaker: msg.speaker, text: msg.text };
