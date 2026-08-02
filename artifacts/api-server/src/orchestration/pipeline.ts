@@ -8842,11 +8842,21 @@ export class OrchestrationPipeline implements VoiceSession {
   /** Persistent participant-list context line (null clears it). */
   setMeetingRoster(line: string | null): void {
     this.meetingRosterLine = line ? line.slice(0, 2000) : null;
+    // Exec-logged so prod call logs prove exactly what participant list the
+    // LLM was given on this call (hallucinated-name triage).
+    logWarningEvent(this.logFn, EXEC_COMPONENTS.Agent, "Meeting Roster Updated", [], {
+      turnNumber: this._activeTurnIndex,
+      detail: { roster: this.meetingRosterLine ?? "(cleared)" },
+    });
   }
 
   /** Name of the participant currently/last speaking (tags next user turn). */
   setMeetingSpeaker(name: string | null): void {
     this.meetingSpeakerName = name ? name.slice(0, 60) : null;
+    logWarningEvent(this.logFn, EXEC_COMPONENTS.Agent, "Meeting Speaker Changed", [], {
+      turnNumber: this._activeTurnIndex,
+      detail: { speaker: this.meetingSpeakerName ?? "(cleared)" },
+    });
   }
 
   /** One-shot join/leave note delivered in the next turn's volatile tail. */
