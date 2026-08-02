@@ -216,18 +216,40 @@ export function buildMeetBotPageHtml(opts: { agentId: number; token: string; age
     return playCtx;
   }
   setInterval(function(){ if (playCtx && playCtx.state !== "running") playCtx.resume(); }, 1000);
+  // Continuous 8k -> context-rate upsampler with state carried across frames.
+  // Letting Chrome resample each tiny AudioBuffer independently puts an
+  // audible seam at every frame boundary (~25/sec) = gritty "sticky" voice.
+  var upLast = 0, upFrac = 0;
+  function upsampleTo(ctxRate, pcm){
+    var ratio = 8000 / ctxRate;           // input samples per output sample
+    var outLen = Math.floor((pcm.length - upFrac) / ratio);
+    if (outLen <= 0) return new Float32Array(0);
+    var out = new Float32Array(outLen);
+    var pos = upFrac;
+    for (var i=0;i<outLen;i++){
+      var i0 = Math.floor(pos);
+      var t = pos - i0;
+      var s0 = i0 === 0 ? upLast : pcm[i0-1]/32768;
+      var s1 = pcm[Math.min(i0, pcm.length-1)]/32768;
+      out[i] = s0 + (s1 - s0) * t;
+      pos += ratio;
+    }
+    upLast = pcm[pcm.length-1]/32768;
+    upFrac = pos - Math.floor(pos);
+    return out;
+  }
   function enqueuePcm(pcm){
     var ctx = ensurePlayCtx();
-    var f32 = new Float32Array(pcm.length);
-    for (var i=0;i<pcm.length;i++) f32[i] = pcm[i]/32768;
-    var buf = ctx.createBuffer(1, f32.length, 8000);
+    var f32 = upsampleTo(ctx.sampleRate, pcm);
+    if (!f32.length) return;
+    var buf = ctx.createBuffer(1, f32.length, ctx.sampleRate);
     buf.getChannelData(0).set(f32);
     var src = ctx.createBufferSource();
     src.buffer = buf; src.connect(ctx.destination);
     var now = ctx.currentTime;
     // If the cursor fell behind (stream start or underrun), re-anchor with a
-    // small jitter lead instead of playing immediately back-to-back.
-    if (nextPlayTime < now + 0.02) nextPlayTime = now + 0.15;
+    // jitter lead instead of playing immediately back-to-back.
+    if (nextPlayTime < now + 0.02) nextPlayTime = now + 0.3;
     src.start(nextPlayTime);
     nextPlayTime += buf.duration;
     activeSources.push(src);
@@ -237,7 +259,7 @@ export function buildMeetBotPageHtml(opts: { agentId: number; token: string; age
   }
   function clearPlayback(){
     activeSources.slice().forEach(function(s){ try{s.stop();}catch(e){} });
-    activeSources = []; nextPlayTime = 0;
+    activeSources = []; nextPlayTime = 0; upLast = 0; upFrac = 0;
   }
 
   var proto = location.protocol === "https:" ? "wss" : "ws";
