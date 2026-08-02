@@ -206,35 +206,38 @@ export function buildMeetBotPageHtml(opts: { agentId: number; token: string; age
   // silently detach the context from tab-audio capture in the headless bot
   // (agent audio then never reaches the meeting). Buffers are created at 8000Hz
   // and Chrome resamples them to the context rate on playback.
-  var playCtx = null, playQueue = [], playing = false, activeSources = [];
+  // Gapless scheduled playback: each incoming frame is scheduled on a running
+  // time cursor (not chained via onended, which leaves audible micro-gaps
+  // between the small server frames). A ~150ms lead absorbs network jitter.
+  var playCtx = null, nextPlayTime = 0, activeSources = [];
   function ensurePlayCtx(){
     if (!playCtx) playCtx = new (window.AudioContext||window.webkitAudioContext)();
     if (playCtx.state !== "running") playCtx.resume();
     return playCtx;
   }
   setInterval(function(){ if (playCtx && playCtx.state !== "running") playCtx.resume(); }, 1000);
-  function playNext(){
-    if (playing || !playQueue.length) return;
-    playing = true;
+  function enqueuePcm(pcm){
     var ctx = ensurePlayCtx();
-    var pcm = playQueue.shift();
     var f32 = new Float32Array(pcm.length);
     for (var i=0;i<pcm.length;i++) f32[i] = pcm[i]/32768;
     var buf = ctx.createBuffer(1, f32.length, 8000);
     buf.getChannelData(0).set(f32);
     var src = ctx.createBufferSource();
     src.buffer = buf; src.connect(ctx.destination);
+    var now = ctx.currentTime;
+    // If the cursor fell behind (stream start or underrun), re-anchor with a
+    // small jitter lead instead of playing immediately back-to-back.
+    if (nextPlayTime < now + 0.02) nextPlayTime = now + 0.15;
+    src.start(nextPlayTime);
+    nextPlayTime += buf.duration;
     activeSources.push(src);
     src.onended = function(){
       var ix = activeSources.indexOf(src); if (ix>=0) activeSources.splice(ix,1);
-      playing = false; playNext();
     };
-    src.start();
   }
   function clearPlayback(){
-    playQueue = [];
     activeSources.slice().forEach(function(s){ try{s.stop();}catch(e){} });
-    activeSources = []; playing = false;
+    activeSources = []; nextPlayTime = 0;
   }
 
   var proto = location.protocol === "https:" ? "wss" : "ws";
@@ -252,8 +255,7 @@ export function buildMeetBotPageHtml(opts: { agentId: number; token: string; age
       } catch(e){}
       return;
     }
-    playQueue.push(new Int16Array(ev.data));
-    playNext();
+    enqueuePcm(new Int16Array(ev.data));
   };
   ws.onclose = function(){ setSt("disconnected"); };
   ws.onerror = function(){ setSt("connection error"); };
