@@ -2,9 +2,10 @@
 type ModuleMap = Record<string, () => Promise<Record<string, unknown>>>;
 export const modules: ModuleMap = {
   "./components/mockups/dash-e/TerminalBlack.tsx": () => import("../components/mockups/dash-e/TerminalBlack.tsx"),
+  "./components/mockups/dash-f/NoirMinimal.tsx": () => import("../components/mockups/dash-f/NoirMinimal.tsx"),
   "./components/mockups/dash-g/ObsidianEditorial.tsx": () => import("../components/mockups/dash-g/ObsidianEditorial.tsx"),
   "./components/mockups/snapserve-console/AgentBuilder.tsx": () => import("../components/mockups/snapserve-console/AgentBuilder.tsx"),
+  "./components/mockups/snapserve-console/AgentBuilderTech.tsx": () => import("../components/mockups/snapserve-console/AgentBuilderTech.tsx"),
   "./components/mockups/snapserve-console/Home.tsx": () => import("../components/mockups/snapserve-console/Home.tsx"),
-  "./components/mockups/dash-f/NoirMinimal.tsx": () => import("../components/mockups/dash-f/NoirMinimal.tsx"),
   "./components/mockups/snapserve-landing/LandingPage.tsx": () => import("../components/mockups/snapserve-landing/LandingPage.tsx")
 };
