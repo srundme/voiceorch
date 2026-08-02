@@ -418,8 +418,12 @@ function buildCompactGreetingPrompt(fullSystemPrompt: string, language: string, 
   // hallucinated a fictional company). Each clip therefore falls back to a
   // greedy hard-capped grab, and if we STILL have nothing, we take the top of
   // the prompt body — identity is almost always written first.
-  const identityMatch = fullSystemPrompt.match(/\bIDENTITY\b[\s\S]{0,800}?(?=\n---|\nCALL FLOW|\nGREETING|\n===|$)/i)
-    ?? fullSystemPrompt.match(/\bIDENTITY\b[\s\S]{0,800}/i);
+  // 1600-char cap: real IDENTITY sections routinely run past 800 chars, and the
+  // old 800 cap silently truncated opening rules written at the section's tail
+  // (call 5246: the "hello already spoken / acknowledge returning caller" rules
+  // were cut off → greeting re-greeted with வணக்கம் and ignored caller memory).
+  const identityMatch = fullSystemPrompt.match(/\bIDENTITY\b[\s\S]{0,1600}?(?=\n---|\nCALL FLOW|\nGREETING|\n===|$)/i)
+    ?? fullSystemPrompt.match(/\bIDENTITY\b[\s\S]{0,1600}/i);
   const callFlowMatch = fullSystemPrompt.match(/\bCALL FLOW\b[\s\S]{0,2200}?(?=\n===|\n\[|$)/i)
     ?? fullSystemPrompt.match(/\bGREETING\b[\s\S]{0,1800}?(?=\n===|\n\[|$)/i)
     ?? fullSystemPrompt.match(/\bCALL FLOW\b[\s\S]{0,2200}/i);
@@ -459,11 +463,17 @@ function buildCompactGreetingPrompt(fullSystemPrompt: string, language: string, 
   const antiInventionRule =
     "[NEVER INVENT] Use ONLY the company name, brand names, and facts written in the instructions above. " +
     "If no company name is given above, greet WITHOUT naming any company — NEVER make up a company, product, or service.";
+  const returningCallerRule = memoryBlock && !resumeDropped
+    ? "[RETURNING CALLER] If the CALLER MEMORY above contains actual facts about this caller (not just an empty template), " +
+      "this is a repeat conversation: briefly acknowledge it naturally in ONE short clause and skip the first-time welcome. " +
+      "Reference ONLY facts explicitly written in the memory — never invent or infer details."
+    : "";
   const parts = [
     memoryBlock,
     scriptBlock,
     languageInstruction,
     openingLengthRule,
+    returningCallerRule,
     antiInventionRule,
   ].filter(Boolean);
   return parts.join("\n\n");
