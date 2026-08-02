@@ -5013,6 +5013,13 @@ export class OrchestrationPipeline implements VoiceSession {
     // ₹ from being generated, but this is a safety net for any that slip through.
     text = text.replace(/₹\s*/g, "");
 
+    // Long ALL-CAPS words (6+ letters, e.g. "CODISSIA") get spelled out
+    // letter-by-letter by TTS engines, which treat them as acronyms. Real
+    // spoken acronyms (GST, PM, EV, AI, WhatsApp caps like "OK") are short,
+    // so title-casing only 6+ letter runs is safe: CODISSIA → Codissia,
+    // which engines then pronounce as a normal word.
+    text = text.replace(/\b[A-Z]{6,}\b/g, (w) => w[0] + w.slice(1).toLowerCase());
+
     // Meter characters at request-dispatch time — TTS providers charge for the
     // text submitted when the HTTP request is sent, not when audio delivery
     // completes. Dispatch may now happen while a prior sentence is still
