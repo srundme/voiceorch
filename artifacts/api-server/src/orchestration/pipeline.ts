@@ -1939,6 +1939,22 @@ export class OrchestrationPipeline implements VoiceSession {
       sttCfg
     );
     this.llm = createLLMAdapter(this.agent.llmProvider, llmKey, this.agent.llmModel, undefined, this.agent.llmGenerationParams, config.callId);
+
+    // Seed currentLang for per-turn LLM language injection.
+    const agentLanguage = this.agent.language ?? null;
+    const seedLang = this.agent.languageAutoDetect
+      ? (this.agent.initialLanguage ?? null)   // returning-caller preference only
+      : agentLanguage;                          // strict mode: always lock from config
+    if (seedLang) this.currentLang = seedLang;
+
+    // Launch greeting LLM prewarm IMMEDIATELY after LLM adapter creation so the 1-3s LLM round-trip
+    // gets maximum overlap with fallback LLM init, TTS setup, and noise cancellation.
+    if (!this.amdConfirm && this.greetingWillNeedLlm()) {
+      const preLang = this.currentLang || this.agent.sttConfig.language || this.agent.language || "en-IN";
+      this._greetingPrewarm = this.generateGreetingLlmText(this.isResumeDroppedCall, preLang).catch(() => "");
+      logger.info({ callId: config.callId }, "Greeting LLM prewarm started (constructor entry)");
+    }
+
     // P0-B: Initialise fallback LLM adapter if the agent has one configured and the key is available
     if (this.agent.fallbackLlmProvider) {
       const fallbackKey = keys.get(this.agent.fallbackLlmProvider);
@@ -1947,31 +1963,7 @@ export class OrchestrationPipeline implements VoiceSession {
         logger.info({ callId: config.callId, fallbackProvider: this.agent.fallbackLlmProvider }, "Fallback LLM adapter initialised");
       }
     }
-    // AgentConfig.language already holds asrLanguage || agent.language
-    // (merged in session.ts). Use it directly for TTS language.
-    const agentLanguage = this.agent.language ?? null;
-    // Seed currentLang for per-turn LLM language injection.
-    //
-    // Strict mode (Auto-detect OFF): seed from agentLanguage so the ABSOLUTE RULE
-    // fires from turn 1 and enforces a single language throughout the call.
-    //
-    // Auto-detect mode (Auto-detect ON): ONLY seed from a returning caller's
-    // remembered language preference (initialLanguage). Do NOT seed from
-    // agentLanguage here — doing so injects e.g. "[LANGUAGE RULE] Respond in English"
-    // on turn 1 when the agent language field is "en-IN", which directly fights a
-    // Tamil/Hindi system prompt and causes the greeting to come out in English instead.
-    // With no seed, currentLang stays "" and buildLangGuard() injects nothing — the
-    // system prompt defines the starting language. currentLang fills in after the
-    // first transcript arrives via script detection, and subsequent turns get the
-    // correct per-caller language rule.
-    const seedLang = this.agent.languageAutoDetect
-      ? (this.agent.initialLanguage ?? null)   // returning-caller preference only
-      : agentLanguage;                          // strict mode: always lock from config
-    if (seedLang) this.currentLang = seedLang;
-    // Prefer the live conversation language (seed / auto-detect memory) over a
-    // stale agent.language so Cartesia/Sarvam start with the right tag — call
-    // 4845 logged language:null on every Tamil synth because agentLanguage was
-    // unset while STT was en-IN.
+
     const ttsLanguage = this.currentLang || agentLanguage;
     const ttsExtraConfig = this.agent.ttsProvider === "sarvam"
       ? JSON.stringify({
@@ -1984,20 +1976,12 @@ export class OrchestrationPipeline implements VoiceSession {
       ttsExtraConfig, ttsLanguage, this.agent.ttsSpeed
     );
     if (ttsLanguage) this.ttsLang = ttsLanguage;
-    // Pre-warm any persistent TTS connections (e.g. Cartesia WebSocket) so the
-    // greeting doesn't pay the TCP+TLS+WS handshake cost on its first synthesis.
-    this.tts.warmup?.();
-
-    // No-AMD greeting prewarm: on calls WITHOUT an AMD confirmation window
-    // (inbound, webcall, outbound with AMD off) the greeting LLM used to start
-    // serially inside greet(), after STT connect + ambient load. Launch it now
-    // so the 1–3s LLM round-trip overlaps that setup instead of following it.
-    // AMD calls keep their existing prewarm inside confirmAmdMachineThenBranch()
-    // (started there so a machine verdict can skip the wasted call less often).
-    if (!this.amdConfirm && this.greetingWillNeedLlm()) {
-      const preLang = this.currentLang || this.agent.sttConfig.language || this.agent.language || "en-IN";
-      this._greetingPrewarm = this.generateGreetingLlmText(this.isResumeDroppedCall, preLang).catch(() => "");
-      logger.info({ callId: config.callId }, "Greeting LLM prewarm started (no-AMD path)");
+    // Pre-warm any persistent TTS connections (e.g. Cartesia / Sarvam WebSocket) with a bounded 500ms wait.
+    if (this.tts.warmup) {
+      void Promise.race([
+        Promise.resolve(this.tts.warmup()),
+        new Promise<void>((resolve) => setTimeout(resolve, 500)),
+      ]).catch(() => { /* ignore warmup error */ });
     }
 
     if (this.agent.noiseCancellationEnabled) {

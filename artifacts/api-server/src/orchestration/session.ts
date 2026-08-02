@@ -73,7 +73,9 @@ import {
   type NameLatchTier,
 } from "./callerMemory.js";
 import { performSquadAgentHandoff } from "../services/squad-handoff.js";
-import { completeLiveSquadRun } from "../services/squad-engine.js";
+import { completeLiveSquadRun, ensureLiveSquadRunForCall } from "../services/squad-engine.js";
+import { resolveSquadMemoryOwnerAgentId, findSquadForAgent } from "../services/squad-teamwork.js";
+import { lookupSheetsForSession } from "../services/sheets-writeback.js";
 
 
 /**
@@ -279,6 +281,9 @@ export async function createSession(params: {
       );
     }
   }
+
+  // Fire attached KB source IDs query immediately so DB latency overlaps with prompt building
+  const knowledgeSourceIdsPromise = getAttachedSourceIds(agent.id, agent.knowledgeBaseId).catch(() => [] as number[]);
 
   // Parse comma-separated end-call phrases
   const endCallPhrases = agent.endCallPhrases
@@ -588,7 +593,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
       : [],
     // P1-B: Knowledge Base RAG
     knowledgeBaseId: agent.knowledgeBaseId ?? null,
-    knowledgeSourceIds: await getAttachedSourceIds(agent.id, agent.knowledgeBaseId),
+    knowledgeSourceIds: await knowledgeSourceIdsPromise,
     // P1-C: Webhook HMAC secret
     webhookSecret: (agentCfg["webhookSecret"] as string | undefined) ?? null,
     // P1-D: VAD / Barge-in tuning (defaults match the hardcoded pipeline constants)
@@ -790,7 +795,14 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
   // wipe squad memory on every member alternation — disable it when shared.
   const memoryPersonaHash = memoryOwnerAgentId === params.agentId ? personaHash : undefined;
 
-  const [callerCtxResult, campaignLeadResult, kbEntriesResult, providerRowsResult] = await Promise.all([
+  const [
+    callerCtxResult,
+    campaignLeadResult,
+    kbEntriesResult,
+    providerRowsResult,
+    upcomingBookingsResult,
+    inboundSheetLookupResult,
+  ] = await Promise.all([
     // 1. Caller memory (3-layer: profile + facts + archive)
     callerPhone
       ? loadCallerContext(memoryOwnerAgentId, callerPhone, memoryPersonaHash).catch((memErr) => {
@@ -826,6 +838,45 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
           return [] as Array<typeof providersTable.$inferSelect>;
         })
       : Promise.resolve([] as Array<typeof providersTable.$inferSelect>),
+
+    // 5. Upcoming bookings (pre-fetched in parallel)
+    (!isWebcall && callerPhone)
+      ? (async () => {
+          const callerRawNumber = callDirection === "outbound" ? params.toNumber : params.fromNumber;
+          if (!callerRawNumber || !agent.id) return [];
+          const now = new Date();
+          return db
+            .select({
+              slotStart: bookingsTable.slotStart,
+              slotEnd: bookingsTable.slotEnd,
+              status: bookingsTable.status,
+              meetLink: bookingsTable.meetLink,
+              eventName: eventTypesTable.name,
+            })
+            .from(bookingsTable)
+            .innerJoin(callsTable, eq(bookingsTable.callId, callsTable.id))
+            .leftJoin(eventTypesTable, eq(bookingsTable.eventTypeId, eventTypesTable.id))
+            .where(
+              and(
+                eq(callsTable.agentId, agent.id),
+                or(
+                  eq(callsTable.fromNumber, callerRawNumber),
+                  eq(callsTable.toNumber, callerRawNumber),
+                ),
+                gt(bookingsTable.slotStart, now),
+                ne(bookingsTable.status, "cancelled"),
+              ),
+            )
+            .orderBy(bookingsTable.slotStart)
+            .limit(3)
+            .catch(() => []);
+        })()
+      : Promise.resolve([]),
+
+    // 6. Inbound Automatic Calls sheet lookup (pre-fetched in parallel)
+    (callDirection === "inbound" && !isWebcall && agent.userId && params.fromNumber?.trim())
+      ? lookupSheetsForSession(agent.userId, params.agentId, params.fromNumber).catch(() => null)
+      : Promise.resolve(null),
   ]);
 
   // Apply caller memory to system prompt
@@ -919,83 +970,47 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     }
   }
 
-  // ── Inject DB-backed upcoming bookings (authoritative, freshly computed) ──────
-  // Caller-memory summaries store relative day-words ("tomorrow") that go stale on
-  // a follow-up call. To keep the agent temporally accurate we look up this
-  // caller's confirmed upcoming meetings straight from the calendar and inject the
-  // ABSOLUTE date/time plus the day-word recomputed against *today*. This block is
-  // appended AFTER caller memory so the LLM treats it as the final authority.
-  if (!isWebcall && callerPhone) {
+  // ── Inject DB-backed upcoming bookings (pre-fetched in parallel) ─────────────
+  if (!isWebcall && callerPhone && upcomingBookingsResult && upcomingBookingsResult.length > 0) {
     try {
-      const callerRawNumber = callDirection === "outbound" ? params.toNumber : params.fromNumber;
-      if (callerRawNumber && agent.id) {
-        const now = new Date();
-        const upcoming = await db
-          .select({
-            slotStart: bookingsTable.slotStart,
-            slotEnd: bookingsTable.slotEnd,
-            status: bookingsTable.status,
-            meetLink: bookingsTable.meetLink,
-            eventName: eventTypesTable.name,
-          })
-          .from(bookingsTable)
-          .innerJoin(callsTable, eq(bookingsTable.callId, callsTable.id))
-          .leftJoin(eventTypesTable, eq(bookingsTable.eventTypeId, eventTypesTable.id))
-          .where(
-            and(
-              eq(callsTable.agentId, agent.id),
-              or(
-                eq(callsTable.fromNumber, callerRawNumber),
-                eq(callsTable.toNumber, callerRawNumber),
-              ),
-              gt(bookingsTable.slotStart, now),
-              ne(bookingsTable.status, "cancelled"),
-            ),
-          )
-          .orderBy(bookingsTable.slotStart)
-          .limit(3);
+      const tz = (agentCfg["timezone"] as string | undefined) || "Asia/Kolkata";
+      const now = new Date();
+      const ymdInTz = (d: Date): string => d.toLocaleDateString("en-CA", { timeZone: tz }); // YYYY-MM-DD
+      const dayDelta = (from: string, to: string): number => {
+        const a = Date.UTC(+from.slice(0, 4), +from.slice(5, 7) - 1, +from.slice(8, 10));
+        const b = Date.UTC(+to.slice(0, 4), +to.slice(5, 7) - 1, +to.slice(8, 10));
+        return Math.round((b - a) / 86_400_000);
+      };
+      const todayYmd = ymdInTz(now);
+      const relWord = (delta: number): string =>
+        delta === 0 ? "today" : delta === 1 ? "tomorrow" : delta < 0 ? `${Math.abs(delta)} day(s) ago` : `in ${delta} days`;
 
-        if (upcoming.length > 0) {
-          const tz = (agentCfg["timezone"] as string | undefined) || "Asia/Kolkata";
-          // Calendar-day delta between two instants in the agent's timezone.
-          const ymdInTz = (d: Date): string => d.toLocaleDateString("en-CA", { timeZone: tz }); // YYYY-MM-DD
-          const dayDelta = (from: string, to: string): number => {
-            const a = Date.UTC(+from.slice(0, 4), +from.slice(5, 7) - 1, +from.slice(8, 10));
-            const b = Date.UTC(+to.slice(0, 4), +to.slice(5, 7) - 1, +to.slice(8, 10));
-            return Math.round((b - a) / 86_400_000);
-          };
-          const todayYmd = ymdInTz(now);
-          const relWord = (delta: number): string =>
-            delta === 0 ? "today" : delta === 1 ? "tomorrow" : delta < 0 ? `${Math.abs(delta)} day(s) ago` : `in ${delta} days`;
+      const todayReadable = now.toLocaleDateString("en-IN", {
+        weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: tz,
+      });
+      const lines = upcomingBookingsResult.map((b) => {
+        const abs = b.slotStart.toLocaleString("en-IN", {
+          weekday: "long", day: "numeric", month: "long", year: "numeric",
+          hour: "numeric", minute: "2-digit", hour12: true, timeZone: tz,
+        });
+        const delta = dayDelta(todayYmd, ymdInTz(b.slotStart));
+        const title = b.eventName ? `"${b.eventName}"` : "the meeting";
+        return `- ${title} on ${abs} (that is ${relWord(delta)}).`;
+      });
 
-          const todayReadable = now.toLocaleDateString("en-IN", {
-            weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: tz,
-          });
-          const lines = upcoming.map((b) => {
-            const abs = b.slotStart.toLocaleString("en-IN", {
-              weekday: "long", day: "numeric", month: "long", year: "numeric",
-              hour: "numeric", minute: "2-digit", hour12: true, timeZone: tz,
-            });
-            const delta = dayDelta(todayYmd, ymdInTz(b.slotStart));
-            const title = b.eventName ? `"${b.eventName}"` : "the meeting";
-            return `- ${title} on ${abs} (that is ${relWord(delta)}).`;
-          });
+      agentConfig.systemPrompt +=
+        `\n\n[UPCOMING BOOKINGS — LIVE FROM CALENDAR, AUTHORITATIVE]\n` +
+        `Today is ${todayReadable}. This caller has the following confirmed upcoming meeting(s). ` +
+        `Use these EXACT dates and times — they OVERRIDE any relative day-words ("tomorrow", "next week") ` +
+        `that may appear in the caller memory above, which could be stale.\n` +
+        lines.join("\n") +
+        `\nWhen you refer to a meeting, say the relative day-word that is correct for TODAY ` +
+        `(e.g. only say "tomorrow" if it is genuinely the next day; say "today" if it is today).`;
 
-          agentConfig.systemPrompt +=
-            `\n\n[UPCOMING BOOKINGS — LIVE FROM CALENDAR, AUTHORITATIVE]\n` +
-            `Today is ${todayReadable}. This caller has the following confirmed upcoming meeting(s). ` +
-            `Use these EXACT dates and times — they OVERRIDE any relative day-words ("tomorrow", "next week") ` +
-            `that may appear in the caller memory above, which could be stale.\n` +
-            lines.join("\n") +
-            `\nWhen you refer to a meeting, say the relative day-word that is correct for TODAY ` +
-            `(e.g. only say "tomorrow" if it is genuinely the next day; say "today" if it is today).`;
-
-          logger.info(
-            { agentId: params.agentId, callerPhone, bookingCount: upcoming.length },
-            "Upcoming bookings injected into system prompt",
-          );
-        }
-      }
+      logger.info(
+        { agentId: params.agentId, callerPhone, bookingCount: upcomingBookingsResult.length },
+        "Upcoming bookings injected into system prompt",
+      );
     } catch (bookingErr) {
       logger.warn(
         { agentId: params.agentId, callerPhone, bookingErr },
@@ -1078,63 +1093,43 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     }
   }
 
-  // ── Inbound Automatic Calls sheet lookup (phone → same lead row) ────────────
-  // Outbound sheet dials already inject via campaign leadData. For inbound, match
-  // the caller phone against the user's Automatic Calls pipelines and stash
-  // pipeline/row meta on the call for hangup writeback.
+  // ── Inbound Automatic Calls sheet lookup (pre-fetched in parallel) ──────────
   let inboundSheetVars: Record<string, string> = {};
   let inboundSheetMeta: { pipelineId: string; sheetRowIndex: number } | null = null;
-  const hasOutboundSheetLead = !!(
-    campaignLeadResult?.leadData as Record<string, string> | undefined
-  )?.["__sheet_pipeline_id"];
-  if (
-    !hasOutboundSheetLead
-    && callDirection === "inbound"
-    && !isWebcall
-    && agent.userId
-    && params.fromNumber?.trim()
-  ) {
-    try {
-      const { lookupSheetsForSession } = await import("../services/sheets-writeback.js");
-      const hit = await lookupSheetsForSession(agent.userId, params.agentId, params.fromNumber);
-      if (hit.pipelineId && hit.sheetRowIndex != null) {
-        inboundSheetMeta = { pipelineId: hit.pipelineId, sheetRowIndex: hit.sheetRowIndex };
-        inboundSheetVars = { ...hit.vars };
-        // Strip internal keys from prompt vars
-        delete inboundSheetVars["__sheet_pipeline_id"];
-        delete inboundSheetVars["__sheet_row_index"];
-        if (inboundSheetVars.name?.trim()) {
-          if (!inboundSheetVars["customer_name"]) inboundSheetVars["customer_name"] = inboundSheetVars.name;
-          if (!inboundSheetVars["caller_name"]) inboundSheetVars["caller_name"] = inboundSheetVars.name;
-        }
-        const sheetBlock = buildLeadContextBlock(inboundSheetVars);
-        if (sheetBlock) {
-          const labeled = sheetBlock.replace("=== LEAD CONTEXT ===", "=== SHEET LOOKUP ===");
-          agentConfig.systemPrompt = `${labeled}\n\n${agentConfig.systemPrompt}`;
-          logger.info(
-            {
-              agentId: params.agentId,
-              pipelineId: hit.pipelineId,
-              sheetRowIndex: hit.sheetRowIndex,
-              fieldCount: Object.keys(inboundSheetVars).length,
-            },
-            "Inbound sheet lookup injected into system prompt",
-          );
-        }
-      } else if (Object.keys(hit.vars).length > 0) {
-        // Legacy binding lookup (no pipeline writeback meta)
-        inboundSheetVars = hit.vars;
-        const sheetBlock = buildLeadContextBlock(inboundSheetVars);
-        if (sheetBlock) {
-          const labeled = sheetBlock.replace("=== LEAD CONTEXT ===", "=== SHEET LOOKUP ===");
-          agentConfig.systemPrompt = `${labeled}\n\n${agentConfig.systemPrompt}`;
-        }
+  if (inboundSheetLookupResult) {
+    const hit = inboundSheetLookupResult;
+    if (hit.pipelineId && hit.sheetRowIndex != null) {
+      inboundSheetMeta = { pipelineId: hit.pipelineId, sheetRowIndex: hit.sheetRowIndex };
+      inboundSheetVars = { ...hit.vars };
+      // Strip internal keys from prompt vars
+      delete inboundSheetVars["__sheet_pipeline_id"];
+      delete inboundSheetVars["__sheet_row_index"];
+      if (inboundSheetVars.name?.trim()) {
+        if (!inboundSheetVars["customer_name"]) inboundSheetVars["customer_name"] = inboundSheetVars.name;
+        if (!inboundSheetVars["caller_name"]) inboundSheetVars["caller_name"] = inboundSheetVars.name;
       }
-    } catch (sheetLookupErr) {
-      logger.warn(
-        { err: sheetLookupErr, agentId: params.agentId },
-        "Inbound sheet lookup failed — continuing without sheet context",
-      );
+      const sheetBlock = buildLeadContextBlock(inboundSheetVars);
+      if (sheetBlock) {
+        const labeled = sheetBlock.replace("=== LEAD CONTEXT ===", "=== SHEET LOOKUP ===");
+        agentConfig.systemPrompt = `${labeled}\n\n${agentConfig.systemPrompt}`;
+        logger.info(
+          {
+            agentId: params.agentId,
+            pipelineId: hit.pipelineId,
+            sheetRowIndex: hit.sheetRowIndex,
+            fieldCount: Object.keys(inboundSheetVars).length,
+          },
+          "Inbound sheet lookup injected into system prompt",
+        );
+      }
+    } else if (Object.keys(hit.vars).length > 0) {
+      // Legacy binding lookup (no pipeline writeback meta)
+      inboundSheetVars = hit.vars;
+      const sheetBlock = buildLeadContextBlock(inboundSheetVars);
+      if (sheetBlock) {
+        const labeled = sheetBlock.replace("=== LEAD CONTEXT ===", "=== SHEET LOOKUP ===");
+        agentConfig.systemPrompt = `${labeled}\n\n${agentConfig.systemPrompt}`;
+      }
     }
   }
 
@@ -1651,49 +1646,50 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
   let attachedSquadId: number | null = params.squadId ?? null;
   if (!attachedSquadRunId && agent.userId) {
     try {
-      const { ensureLiveSquadRunForCall } = await import("../services/squad-engine.js");
       let resolvedSquadId: number | null = params.squadId ?? null;
       let phoneNumberId: number | null = null;
       let campaignId: number | null = null;
 
-      if (params.campaignLeadId) {
-        const [lead] = await db.select({
-          campaignId: campaignLeadsTable.campaignId,
-        }).from(campaignLeadsTable).where(eq(campaignLeadsTable.id, params.campaignLeadId)).limit(1);
-        if (lead) {
-          campaignId = lead.campaignId;
-          const [camp] = await db.select({
-            squadId: campaignsTable.squadId,
-          }).from(campaignsTable).where(eq(campaignsTable.id, lead.campaignId)).limit(1);
-          if (camp?.squadId) resolvedSquadId = camp.squadId;
-        }
-      }
+      const [leadRes, pnRes, membershipTeam] = await Promise.all([
+        params.campaignLeadId
+          ? db.select({ campaignId: campaignLeadsTable.campaignId })
+              .from(campaignLeadsTable)
+              .where(eq(campaignLeadsTable.id, params.campaignLeadId))
+              .limit(1)
+              .then(([r]) => r ?? null)
+              .catch(() => null)
+          : Promise.resolve(null),
 
-      if (!resolvedSquadId && callDirection === "inbound" && params.toNumber) {
-        const [pn] = await db.select({
-          id: phoneNumbersTable.id,
-          squadId: phoneNumbersTable.squadId,
-        }).from(phoneNumbersTable)
-          .where(and(
-            eq(phoneNumbersTable.number, params.toNumber),
-            eq(phoneNumbersTable.userId, agent.userId),
-          ))
+        (!resolvedSquadId && callDirection === "inbound" && params.toNumber)
+          ? db.select({ id: phoneNumbersTable.id, squadId: phoneNumbersTable.squadId })
+              .from(phoneNumbersTable)
+              .where(and(eq(phoneNumbersTable.number, params.toNumber), eq(phoneNumbersTable.userId, agent.userId)))
+              .limit(1)
+              .then(([r]) => r ?? null)
+              .catch(() => null)
+          : Promise.resolve(null),
+
+        (!resolvedSquadId)
+          ? findSquadForAgent(params.agentId, agent.userId).catch(() => null)
+          : Promise.resolve(null),
+      ]);
+
+      if (leadRes) {
+        campaignId = leadRes.campaignId;
+        const [camp] = await db.select({ squadId: campaignsTable.squadId })
+          .from(campaignsTable)
+          .where(eq(campaignsTable.id, leadRes.campaignId))
           .limit(1);
-        if (pn?.squadId) {
-          resolvedSquadId = pn.squadId;
-          phoneNumberId = pn.id;
-        }
+        if (camp?.squadId) resolvedSquadId = camp.squadId;
       }
 
-      // Membership fallback: the agent itself belongs to an active squad, so
-      // any call it answers (its own number, campaign, webcall) is squad-aware
-      // without extra wiring.
-      if (!resolvedSquadId) {
-        const { findSquadForAgent } = await import("../services/squad-teamwork.js");
-        const membershipTeam = await findSquadForAgent(params.agentId, agent.userId);
-        if (membershipTeam && membershipTeam.teammates.length > 0) {
-          resolvedSquadId = membershipTeam.squad.id;
-        }
+      if (!resolvedSquadId && pnRes?.squadId) {
+        resolvedSquadId = pnRes.squadId;
+        phoneNumberId = pnRes.id;
+      }
+
+      if (!resolvedSquadId && membershipTeam && membershipTeam.teammates.length > 0) {
+        resolvedSquadId = membershipTeam.squad.id;
       }
 
       if (resolvedSquadId) {

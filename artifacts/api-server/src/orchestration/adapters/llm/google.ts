@@ -68,7 +68,7 @@ export function makeGeminiPreambleGuard(): (token: string) => string {
   let committed = false;
   let buf = "";
   // Bound on how long we wait for an unterminated leading bracket line to close.
-  const OPEN_BRACKET_WAIT_LIMIT = 200;
+  const OPEN_BRACKET_WAIT_LIMIT = 100;
   return function guard(token: string): string {
     if (committed) return token;
     buf += token;
@@ -140,14 +140,12 @@ const CACHE_MAX_WARMS = Number(process.env.GEMINI_CACHE_MAX_WARMS) || 3;
 // where turn 1 arrives before the greeting-time warm has resolved. Bounded so it
 // cannot noticeably delay a turn when the cache API is genuinely slow; in the
 // common case (warm took ~300-800 ms) the wait is much shorter than this cap.
-const CACHE_WARM_WAIT_MS = 1000;
+const CACHE_WARM_WAIT_MS = 3000;
 
 // Hard request timeout so a stalled Gemini connection fails fast and the
 // pipeline's existing same-provider retry / fallback-LLM logic can take over,
-// instead of a live call hanging on a single slow request. The legacy SDK has
-// no default timeout of its own (only what Node's fetch/undici apply), so this
-// is a real, previously-missing bound on worst-case per-turn latency.
-const REQUEST_TIMEOUT_MS = Number(process.env.GEMINI_REQUEST_TIMEOUT_MS) || 20000;
+// instead of a live call hanging on a single slow request.
+const REQUEST_TIMEOUT_MS = Number(process.env.GEMINI_REQUEST_TIMEOUT_MS) || 8000;
 
 // On Gemini 3.x, thought tokens COUNT toward maxOutputTokens and thinking cannot
 // be fully disabled (thinkingLevel:"minimal" is the floor). Sending the agent's

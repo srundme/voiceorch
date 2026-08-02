@@ -357,15 +357,6 @@ export class SarvamLLM implements LLMAdapter {
     //                 EMPTY response (silent turn). Previously "medium" but that
     //                 caused 3+ consecutive silent turns (500+ reasoning tokens,
     //                 zero output). The TOOL USE — MANDATORY system-prompt injection
-    //                 below compensates for any tendency to ask confirmation first.
-    //   sarvam-105b → "low": 105b with "medium" reasoning generates thousands of
-    //                 reasoning tokens and produces an EMPTY final response, causing
-    //                 10–15 s silent turns. 105b is powerful enough at "low" to call
-    //                 tools correctly without over-reasoning.
-    if (hasTools && genBody["reasoning_effort"] === null) {
-      genBody["reasoning_effort"] = "low";
-    }
-
     // Reasoning tokens count toward max_tokens. On tool turns (reasoning active)
     // a small agent-configured cap can be consumed ENTIRELY by the hidden
     // reasoning trace, leaving content:null — a silent turn. Enforce the
@@ -375,11 +366,14 @@ export class SarvamLLM implements LLMAdapter {
       if (typeof mt === "number" && mt < 500) genBody["max_tokens"] = 500;
     }
 
-    // Sarvam-specific tool-use injection: placed at the very top of the system
-    // prompt. Without this, sarvam-30b confirms before every action even when
-    // explicitly instructed not to.
+    // Sarvam-specific tool guidance prompt injection: placed at the top of system prompt.
     const effectiveSystemPrompt = hasTools
-      ? `[TOOL USE — MANDATORY] You have tools available. Rules:\n1. When you have the caller's name, email, and time — call the tool NOW. Do NOT announce "I'll book…" first.\n2. When the caller says yes, ok, confirm, sure, or any affirmative — call the tool IMMEDIATELY. Do NOT ask any follow-up question.\n3. NEVER ask for confirmation before calling a tool. NEVER summarise what you are about to do. Just call the tool.\n\n${systemPrompt}`
+      ? `[TOOL GUIDANCE] You have tools available. Use them naturally:
+1. When you have ALL required information from the caller, call the tool. You may give a brief spoken confirmation ("Booking your appointment…") before the tool call.
+2. If the caller says yes/ok/confirm and you already have their details, call the tool — don't ask for confirmation again.
+3. If you're MISSING required information, ask for it conversationally. Don't call a tool with incomplete data.
+
+${systemPrompt}`
       : systemPrompt;
 
     const body: Record<string, unknown> = {
@@ -590,7 +584,7 @@ export class SarvamLLM implements LLMAdapter {
     // it was forwarded to TTS). Resolve the withheld buffer through the unified
     // parser (JSON envelope OR bracket/key-value envelope), validating the name
     // against the tools offered this turn; on success execute the tool, otherwise
-    // speak it as genuine text — never silently drop it.
+    // drop it silently — never speak malformed raw JSON to the caller.
     if (bufferingJson) {
       const parsedCall = options?.onToolCall
         ? parseToolEnvelope(jsonBuffer, validToolNames)
@@ -621,27 +615,34 @@ export class SarvamLLM implements LLMAdapter {
         options.onToolCall(parsedCall.name, parsedCall.args);
         return; // exactly one terminal callback — do NOT also call onDone
       }
-      onDone(jsonBuffer, usage);
+      // FIX: If parsing failed, do NOT speak the raw JSON to the caller.
+      // Drop it silently (emit empty string). The pipeline safety net will handle clarification.
+      if (rawSseDebugEnabled()) {
+        logger.warn(
+          {
+            evt: "sarvam_tool_parse_failed_not_spoken",
+            callId: this.callId,
+            model: this.model,
+            jsonBufferLength: jsonBuffer.length,
+            jsonBuffer:
+              jsonBuffer.length > RAW_SSE_DIAG_MAX_BUFFER
+                ? `${jsonBuffer.slice(0, RAW_SSE_DIAG_MAX_BUFFER)}…[truncated]`
+                : jsonBuffer,
+          },
+          "Sarvam LLM: buffered tool call failed to parse — dropping (NOT spoken to caller)",
+        );
+      }
+      onDone("", usage);
       return;
     }
 
     // Plain text reply — but first check for a trailing <function>name</function> tag.
-    // Sarvam occasionally emits the tool call AFTER conversational text (third emission
-    // format, distinct from the structured delta.tool_calls path and the JSON-buffer path):
-    //   "சரி, connect பண்றேன்!\n\n<function>transfer_to_human</function>"
-    // The buffer-and-sniff above won't catch it because the first char is not `{`/`[`/`` ` ``.
-    // The existing tool-tail TTS-leak guard strips the tag from TTS, but onToolCall is never
-    // fired — so the tool call is silently dropped. Detect it here, at end-of-stream, on the
-    // plain-text path only (not when bufferingJson / sawToolDelta already handled it).
     if (!sawToolDelta && !bufferingJson && options?.onToolCall && validToolNames.size > 0) {
       const fnTagMatch = /^([\s\S]*?)\s*<function>([^<]+)<\/function>\s*$/.exec(full);
       if (fnTagMatch) {
         const textBefore = fnTagMatch[1] ?? "";
         const toolName   = (fnTagMatch[2] ?? "").trim();
         if (validToolNames.has(toolName)) {
-          // The tag was streamed character-by-character via onToken; the TTS sentence
-          // extractor's tool-tail guard strips it from audio. Fire onToolCall so the
-          // pipeline actually executes the tool (which was previously silently dropped).
           options.onToolDetected?.({ format: "function_tag" });
           options.onToolParsed?.({ name: toolName, format: "function_tag", args: {} });
           options.onToolCall(toolName, {});
