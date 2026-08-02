@@ -412,10 +412,24 @@ function buildCompactGreetingPrompt(fullSystemPrompt: string, language: string, 
     /=== CALLER MEMORY[\s\S]*?={20,}/,
   );
   const memoryBlock = memoryMatch?.[0] ?? "";
-  const identityMatch = fullSystemPrompt.match(/\bIDENTITY\b[\s\S]{0,800}?(?=\n---|\nCALL FLOW|\nGREETING|\n===|$)/i);
+  // Section clips. The lazy terminator-anchored patterns fail entirely when a
+  // prompt uses plain-text headings with no ===/---/[ boundary markers (call
+  // 5198: both clips came back empty → the greeting LLM had NO identity and
+  // hallucinated a fictional company). Each clip therefore falls back to a
+  // greedy hard-capped grab, and if we STILL have nothing, we take the top of
+  // the prompt body — identity is almost always written first.
+  const identityMatch = fullSystemPrompt.match(/\bIDENTITY\b[\s\S]{0,800}?(?=\n---|\nCALL FLOW|\nGREETING|\n===|$)/i)
+    ?? fullSystemPrompt.match(/\bIDENTITY\b[\s\S]{0,800}/i);
   const callFlowMatch = fullSystemPrompt.match(/\bCALL FLOW\b[\s\S]{0,2200}?(?=\n===|\n\[|$)/i)
-    ?? fullSystemPrompt.match(/\bGREETING\b[\s\S]{0,1800}?(?=\n===|\n\[|$)/i);
-  const scriptBlock = [identityMatch?.[0], callFlowMatch?.[0]].filter(Boolean).join("\n\n");
+    ?? fullSystemPrompt.match(/\bGREETING\b[\s\S]{0,1800}?(?=\n===|\n\[|$)/i)
+    ?? fullSystemPrompt.match(/\bCALL FLOW\b[\s\S]{0,2200}/i);
+  let scriptBlock = [identityMatch?.[0], callFlowMatch?.[0]].filter(Boolean).join("\n\n");
+  if (!scriptBlock) {
+    // No recognizable sections at all — use the start of the prompt (after any
+    // caller-memory prefix) so the opener at least knows who it works for.
+    const body = memoryBlock ? fullSystemPrompt.slice(fullSystemPrompt.indexOf(memoryBlock) + memoryBlock.length) : fullSystemPrompt;
+    scriptBlock = body.trim().slice(0, 1500);
+  }
   const langName = LANG_DISPLAY_NAMES[language] ?? language;
   const isEnglish = language.startsWith("en");
   // For non-English target languages, mirror the colloquial REGISTER + proper-noun
@@ -442,11 +456,15 @@ function buildCompactGreetingPrompt(fullSystemPrompt: string, language: string, 
       ? "[OPENING] Speak the GREETING / opening from CALL FLOW above as a single uninterrupted turn. " +
         "Use the caller's company/contact name when present. Do not replace the scripted pitch with a one-word Hello."
       : "[OPENING LENGTH] Your opening line must be ONE short, natural sentence — a brief greeting only. Do not list services, ask multiple questions, or explain anything yet; wait for the caller to respond.";
+  const antiInventionRule =
+    "[NEVER INVENT] Use ONLY the company name, brand names, and facts written in the instructions above. " +
+    "If no company name is given above, greet WITHOUT naming any company — NEVER make up a company, product, or service.";
   const parts = [
     memoryBlock,
     scriptBlock,
     languageInstruction,
     openingLengthRule,
+    antiInventionRule,
   ].filter(Boolean);
   return parts.join("\n\n");
 }
