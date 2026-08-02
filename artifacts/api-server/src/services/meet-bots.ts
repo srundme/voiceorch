@@ -210,6 +210,7 @@ export function buildMeetBotPageHtml(opts: { agentId: number; token: string; age
   // time cursor (not chained via onended, which leaves audible micro-gaps
   // between the small server frames). A ~150ms lead absorbs network jitter.
   var playCtx = null, nextPlayTime = 0, activeSources = [];
+  var underruns = 0, framesIn = 0, started = false;
   function ensurePlayCtx(){
     if (!playCtx) playCtx = new (window.AudioContext||window.webkitAudioContext)();
     if (playCtx.state !== "running") playCtx.resume();
@@ -248,9 +249,17 @@ export function buildMeetBotPageHtml(opts: { agentId: number; token: string; age
     var src = ctx.createBufferSource();
     src.buffer = buf; src.connect(ctx.destination);
     var now = ctx.currentTime;
+    framesIn++;
     // If the cursor fell behind (stream start or underrun), re-anchor with a
-    // jitter lead instead of playing immediately back-to-back.
-    if (nextPlayTime < now + 0.02) nextPlayTime = now + 0.3;
+    // jitter lead instead of playing immediately back-to-back. 600ms lead:
+    // Recall's headless browser + the Railway->bot network path can stall
+    // longer than a normal browser tab, and each stall past the lead is an
+    // audible gap ("sticky" voice). Extra latency is fine in a meeting.
+    if (nextPlayTime < now + 0.02) {
+      if (started) underruns++;
+      started = true;
+      nextPlayTime = now + 0.6;
+    }
     src.start(nextPlayTime);
     nextPlayTime += buf.duration;
     activeSources.push(src);
@@ -280,6 +289,13 @@ export function buildMeetBotPageHtml(opts: { agentId: number; token: string; age
     }
     enqueuePcm(new Int16Array(ev.data));
   };
+  // Playback health telemetry: lets the server log how often the bot's
+  // browser starved (each underrun = an audible gap in the meeting).
+  setInterval(function(){
+    if (ws.readyState === 1) {
+      try { ws.send(JSON.stringify({ type: "stats", underruns: underruns, framesIn: framesIn, ctxRate: playCtx ? playCtx.sampleRate : 0, ctxState: playCtx ? playCtx.state : "none", inRate: inRate })); } catch(e){}
+    }
+  }, 10000);
   ws.onclose = function(){ setSt("disconnected"); };
   ws.onerror = function(){ setSt("connection error"); };
 

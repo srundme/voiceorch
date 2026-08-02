@@ -114,6 +114,16 @@ export async function handleWebcallWebSocket(
       requestEnd();
       return;
     }
+    if (msg.type === "stats") {
+      // Meet-bot page playback health — shows up in server logs so bot-side
+      // audio starvation is diagnosable without access to the headless browser.
+      const m = msg as unknown as { underruns?: number; framesIn?: number; ctxRate?: number; ctxState?: string; inRate?: number };
+      logger.info(
+        { sessionId, agentId, underruns: m.underruns, framesIn: m.framesIn, ctxRate: m.ctxRate, ctxState: m.ctxState, inRate: m.inRate },
+        "Webcall client playback stats",
+      );
+      return;
+    }
     if (msg.type === "video_frame" && msg.data) {
       if (!sessionId) return;
       const session = getSession(sessionId);
