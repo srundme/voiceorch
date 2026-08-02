@@ -109,6 +109,7 @@
 - [Pre-dial skip vs duplicate detection](predial-skip-vs-duplicate.md) — a lead skipped for a transient reason (no agent/DNC/TRAI) before any dial attempt must not permanently block re-import as a "duplicate"
 - [Silence-hangup watchdog](silence-hangup-watchdog.md) — silence timer must be fed by raw speech ENERGY on both STT paths + speak a check-in before ending (reason=silence_timeout); anti-repeat nudge must be intent-gated (hold/question ≠ advance)
 - [Gemini JSON-mode MAX_TOKENS truncation](gemini-json-mode-max-tokens.md) — structured-output calls truncated at the token cap are unparseable; check finishReason + adaptive recovery retry, never identical retries
+- [Compact greeting prompt hallucination](greeting-compact-prompt-hallucination.md) — opener uses a regex-clipped mini prompt; if IDENTITY/CALL FLOW clips miss, LLM invents a company; 3-layer fallback + [NEVER INVENT] rule now mandatory
 - [Opening-only prompt directives must be one-shot](opening-only-prompt-directives.md) — "open the call by X" directives in the persistent prompt double-deliver; neutralize via volatile-tail note once an assistant opener exists
 - [Krutrim Cloud LLM integration](krutrim-integration.md) — real model catalogue (gpt-oss-20b default), streaming quirks (thinking in delta.reasoning not delta.content), Session Expired = stale key
 - [KB baked-injection cap for voice TTFT](kb-baked-cap-voice-ttft.md) — non-Gemini agents now default to 4000-char KB cap (session.ts); per-turn retrieval covers the rest; 22K→7K prompt = ~400-600ms TTFT gain on small models
