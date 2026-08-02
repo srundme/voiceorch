@@ -21,8 +21,9 @@ import {
 const router: IRouter = Router();
 
 const MEET_URL_RE = /^https:\/\/(meet\.google\.com|[a-z0-9.-]*zoom\.us|teams\.microsoft\.com|teams\.live\.com)\//i;
-// Bots can sit in a long meeting — token must outlive it comfortably.
-const PAGE_TOKEN_TTL_MS = 12 * 60 * 60 * 1000;
+// The bot loads the page within a minute of launch, but may reconnect mid-
+// meeting — keep the token valid for a long meeting, no longer.
+const PAGE_TOKEN_TTL_MS = 4 * 60 * 60 * 1000;
 
 // ── Public: bot page ─────────────────────────────────────────────────────────
 router.get("/meet-bots/page", async (req, res) => {
@@ -84,6 +85,8 @@ router.post("/meet-bots", requireAuth, async (req, res) => {
       meetingUrl,
       botName: agent.name || "Voice Agent",
       pageUrl,
+      ownerUserId: userId,
+      agentId,
     });
     logger.info({ userId, agentId, botId: bot.id }, "Meeting bot created");
     res.json({ botId: bot.id, status: bot.statusCode ?? "created" });
@@ -93,9 +96,21 @@ router.post("/meet-bots", requireAuth, async (req, res) => {
   }
 });
 
+/** Fetch the bot from Recall and enforce ownership via creation metadata. */
+async function getOwnedBot(botId: string, userId: string) {
+  const bot = await getRecallBot(botId);
+  if (!bot.ownerUserId || bot.ownerUserId !== userId) return null; // fail closed
+  return bot;
+}
+
 router.get("/meet-bots/:botId", requireAuth, async (req, res) => {
+  const userId = (req as unknown as { clerkUserId: string }).clerkUserId;
   try {
-    const bot = await getRecallBot(String(req.params["botId"]));
+    const bot = await getOwnedBot(String(req.params["botId"]), userId);
+    if (!bot) {
+      res.status(404).json({ error: "Bot not found" });
+      return;
+    }
     res.json({ botId: bot.id, status: bot.statusCode });
   } catch (err) {
     res.status(502).json({ error: err instanceof Error ? err.message : "Failed to fetch bot status" });
@@ -103,8 +118,14 @@ router.get("/meet-bots/:botId", requireAuth, async (req, res) => {
 });
 
 router.delete("/meet-bots/:botId", requireAuth, async (req, res) => {
+  const userId = (req as unknown as { clerkUserId: string }).clerkUserId;
   try {
-    await leaveRecallBot(String(req.params["botId"]));
+    const bot = await getOwnedBot(String(req.params["botId"]), userId);
+    if (!bot) {
+      res.status(404).json({ error: "Bot not found" });
+      return;
+    }
+    await leaveRecallBot(bot.id);
     res.json({ ok: true });
   } catch (err) {
     res.status(502).json({ error: err instanceof Error ? err.message : "Failed to remove bot" });

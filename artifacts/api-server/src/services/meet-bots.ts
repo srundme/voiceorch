@@ -74,6 +74,9 @@ export interface RecallBotSummary {
   id: string;
   meetingUrl?: string | null;
   statusCode: string | null;   // latest status_changes code, e.g. "in_call_recording"
+  /** Ownership metadata we attach at creation — authorization source of truth. */
+  ownerUserId: string | null;
+  agentId: number | null;
   raw?: unknown;
 }
 
@@ -92,10 +95,13 @@ async function recallFetch(path: string, init?: RequestInit): Promise<Response> 
 function summarizeBot(bot: any): RecallBotSummary {
   const changes = Array.isArray(bot?.status_changes) ? bot.status_changes : [];
   const last = changes.length ? changes[changes.length - 1] : null;
+  const meta = bot?.metadata ?? {};
   return {
     id: String(bot?.id ?? ""),
     meetingUrl: bot?.meeting_url?.meeting_id ? null : (typeof bot?.meeting_url === "string" ? bot.meeting_url : null),
     statusCode: last?.code ?? null,
+    ownerUserId: typeof meta.ownerUserId === "string" ? meta.ownerUserId : null,
+    agentId: Number.isFinite(Number(meta.agentId)) ? Number(meta.agentId) : null,
   };
 }
 
@@ -103,12 +109,17 @@ export async function createRecallBot(opts: {
   meetingUrl: string;
   botName: string;
   pageUrl: string;
+  ownerUserId: string;
+  agentId: number;
 }): Promise<RecallBotSummary> {
   const res = await recallFetch("/bot/", {
     method: "POST",
     body: JSON.stringify({
       meeting_url: opts.meetingUrl,
       bot_name: opts.botName,
+      // Ownership is enforced on every status/leave call by reading this back
+      // from Recall (no local DB row to drift or lose on restart).
+      metadata: { ownerUserId: opts.ownerUserId, agentId: String(opts.agentId) },
       output_media: {
         camera: { kind: "webpage", config: { url: opts.pageUrl } },
       },
