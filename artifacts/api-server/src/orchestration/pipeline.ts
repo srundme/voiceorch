@@ -1922,6 +1922,18 @@ export class OrchestrationPipeline implements VoiceSession {
     // greeting doesn't pay the TCP+TLS+WS handshake cost on its first synthesis.
     this.tts.warmup?.();
 
+    // No-AMD greeting prewarm: on calls WITHOUT an AMD confirmation window
+    // (inbound, webcall, outbound with AMD off) the greeting LLM used to start
+    // serially inside greet(), after STT connect + ambient load. Launch it now
+    // so the 1–3s LLM round-trip overlaps that setup instead of following it.
+    // AMD calls keep their existing prewarm inside confirmAmdMachineThenBranch()
+    // (started there so a machine verdict can skip the wasted call less often).
+    if (!this.amdConfirm && this.greetingWillNeedLlm()) {
+      const preLang = this.currentLang || this.agent.sttConfig.language || this.agent.language || "en-IN";
+      this._greetingPrewarm = this.generateGreetingLlmText(this.isResumeDroppedCall, preLang).catch(() => "");
+      logger.info({ callId: config.callId }, "Greeting LLM prewarm started (no-AMD path)");
+    }
+
     if (this.agent.noiseCancellationEnabled) {
       // VoBiz denoises at the carrier layer (always on, no API knob) and the
       // browser runs AEC/NS for webcall — on those paths the transport passes
