@@ -7,6 +7,7 @@ import { requireAuth } from "../middlewares/requireAuth.js";
 import { clientContext, denyManagedClient, getManagingPartner } from "../middlewares/clientContext.js";
 import { logActivity } from "../lib/activity.js";
 import { issueInvoice } from "../services/invoice.js";
+import { syncByoPlivoNumbers } from "../services/byo-numbers.js";
 import {
   CURRENCY_INR,
   GST_RATE,
@@ -578,6 +579,9 @@ router.get("/phone-numbers/managed-quota", requireAuth, async (req, res): Promis
 
 router.get("/phone-numbers", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
+  // Backfill for users whose Plivo key predates BYO-number import: cheap
+  // DB-only reconciliation (only hits the Plivo API when a row changes).
+  await syncByoPlivoNumbers(clerkId);
   const rows = await db
     .select()
     .from(phoneNumbersTable)
@@ -964,7 +968,7 @@ router.patch("/phone-numbers/:id/assign", requireAuth, denyManagedClient, async 
   if (!body.success) { res.status(400).json({ error: "Validation failed", issues: body.error.issues }); return; }
 
   const [target] = await db
-    .select({ service: phoneNumbersTable.service })
+    .select({ service: phoneNumbersTable.service, provider: phoneNumbersTable.provider })
     .from(phoneNumbersTable)
     .where(and(eq(phoneNumbersTable.id, params.data.id), eq(phoneNumbersTable.userId, clerkId)));
   if (!target) { res.status(404).json({ error: "Phone number not found" }); return; }
@@ -1083,7 +1087,12 @@ router.patch("/phone-numbers/:id/assign", requireAuth, denyManagedClient, async 
   // Server-side VoBiz link — numbers are purchased on the platform master
   // account, so configure inbound webhooks with master credentials.
   let inboundLink: ConfigureVobizResult | null = null;
-  if (body.data.agentId) {
+  if (body.data.agentId && target.provider === "plivo") {
+    // BYO Plivo number — inbound routes by To-number lookup on our Plivo
+    // webhook; refresh the user's own Plivo app/number link (best-effort).
+    await syncByoPlivoNumbers(clerkId, { configureAll: true });
+    inboundLink = { appId: null, linked: true, verified: false, detail: "Routed via your Plivo account" };
+  } else if (body.data.agentId) {
     const platform = getPlatformVobizCreds();
     if (platform.configured) {
       inboundLink = await configureVobizNumberWebhook(
@@ -1235,6 +1244,9 @@ router.delete("/phone-numbers/:id", requireAuth, denyManagedClient, async (req, 
     // WhatsApp numbers are not voice DIDs — the Account unrent API doesn't apply.
     // Mark released locally (stops the 30-day wallet renewals).
     req.log.warn({ number: existing.number }, "Releasing WhatsApp-service number — voice unrent API skipped");
+  } else if (existing.provider !== "vobiz") {
+    // BYO number (user's own carrier account) — nothing to unrent on VoBiz.
+    req.log.info({ number: existing.number, provider: existing.provider }, "Releasing BYO number — carrier unrent skipped");
   } else {
     const { authId, authToken, configured } = getPlatformVobizCreds();
 

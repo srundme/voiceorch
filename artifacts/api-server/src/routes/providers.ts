@@ -12,6 +12,7 @@ import {
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logActivity } from "../lib/activity.js";
 import { encryptKey, decryptKey } from "../lib/crypto.js";
+import { syncByoPlivoNumbers } from "../services/byo-numbers.js";
 
 const router: IRouter = Router();
 
@@ -55,6 +56,8 @@ router.post("/providers", requireAuth, async (req, res): Promise<void> => {
     .values({ ...parsed.data, apiKey: encryptKey(parsed.data.apiKey), userId: clerkId })
     .returning();
   await logActivity({ userId: clerkId, eventType: "provider.added", resourceType: "provider", resourceId: String(provider.id), description: `${provider.providerType.toUpperCase()} provider "${provider.providerName}" added` });
+  // BYO telephony: surface the key's fromNumber on the Numbers page + wire inbound.
+  await syncByoPlivoNumbers(clerkId, { configureAll: true });
   res.status(201).json(toProviderConfig(provider));
 });
 
@@ -81,6 +84,7 @@ router.patch("/providers/:id", requireAuth, async (req, res): Promise<void> => {
     res.status(404).json({ error: "Provider not found" });
     return;
   }
+  await syncByoPlivoNumbers(clerkId, { configureAll: true });
   res.json(UpdateProviderResponse.parse(toProviderConfig(provider)));
 });
 
@@ -100,6 +104,7 @@ router.delete("/providers/:id", requireAuth, async (req, res): Promise<void> => 
     return;
   }
   await logActivity({ userId: clerkId, eventType: "provider.deleted", resourceType: "provider", resourceId: String(deleted.id), description: `${deleted.providerType.toUpperCase()} provider "${deleted.providerName}" deleted` });
+  await syncByoPlivoNumbers(clerkId, { configureAll: true });
   res.sendStatus(204);
 });
 

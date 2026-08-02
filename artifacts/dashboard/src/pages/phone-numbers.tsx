@@ -859,7 +859,9 @@ export default function PhoneNumbersPage() {
   // "fromNumber" from each telephony provider key so users can see it here.
   const { data: providerKeys } = useListProviders({ query: { queryKey: getListProvidersQueryKey() } });
   const importedNumbers = (providerKeys ?? [])
-    .filter((p) => p.providerType === "telephony" && p.isActive)
+    // Plivo BYO numbers are now imported as REAL rows in the numbers list
+    // (assignable to agents like any other number) — don't double-show them.
+    .filter((p) => p.providerType === "telephony" && p.isActive && p.providerName.toLowerCase() !== "plivo")
     .map((p) => {
       let fromNumber = "";
       try { fromNumber = (JSON.parse(p.extraConfig ?? "{}") as Record<string, string>)["fromNumber"] ?? ""; } catch { /* ignore */ }
@@ -1044,9 +1046,13 @@ export default function PhoneNumbersPage() {
                   <p className="text-[11px] text-muted-foreground mt-0.5">{n.countryCode}{n.region ? ` · ${n.region}` : ""}</p>
                 </div>
 
-                <Badge variant="outline" className="text-[10px] capitalize shrink-0">
-                  {n.numberType.replace("_", " ")}
-                </Badge>
+                {(n as { provider?: string }).provider === "plivo" ? (
+                  <Badge variant="secondary" className="text-[10px] shrink-0">Your Plivo number · Free</Badge>
+                ) : (
+                  <Badge variant="outline" className="text-[10px] capitalize shrink-0">
+                    {n.numberType.replace("_", " ")}
+                  </Badge>
+                )}
 
                 <div className="flex-1 min-w-0">
                   {n.agentName ? (
@@ -1077,7 +1083,7 @@ export default function PhoneNumbersPage() {
                       <GitFork className="h-3 w-3" /> Rules
                     </Button>
                   )}
-                  <FixInboundButton number={n} />
+                  {(n as { provider?: string }).provider !== "plivo" && <FixInboundButton number={n} />}
                   <Button
                     variant="ghost"
                     size="sm"
@@ -1086,6 +1092,9 @@ export default function PhoneNumbersPage() {
                   >
                     <Link2 className="h-3 w-3" /> {n.agentId ? "Reassign" : "Assign"}
                   </Button>
+                  {/* BYO Plivo numbers can't be "released" — they disappear when
+                      the Plivo key is removed in Settings. */}
+                  {(n as { provider?: string }).provider !== "plivo" && (
                   <Button
                     variant="ghost"
                     size="sm"
@@ -1094,6 +1103,7 @@ export default function PhoneNumbersPage() {
                   >
                     <Trash2 className="h-3 w-3" />
                   </Button>
+                  )}
                   </>)}
                 </div>
               </div>

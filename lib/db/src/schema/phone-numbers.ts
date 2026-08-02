@@ -16,6 +16,14 @@ export const phoneNumbersTable = pgTable("phone_numbers", {
    * never assignable to a voice agent.
    */
   service:       text("service").notNull().default("voice"),
+  /**
+   * Where this number lives:
+   * 'vobiz' (default) — platform-provisioned DID rented via VoBiz.
+   * 'plivo' — user's OWN Plivo number imported from their telephony provider
+   *   key (BYO). Free (no renewals), released when the key is removed, and
+   *   inbound is routed by To-number lookup on /webhooks/plivo/voice.
+   */
+  provider:      text("provider").notNull().default("vobiz"),
   vobizNumberId: text("vobiz_number_id"),
   agentId:       integer("agent_id").references(() => agentsTable.id, { onDelete: "set null" }),
   /** When set, inbound calls create/join a Squad live run (entry member answers). */

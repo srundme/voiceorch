@@ -7,7 +7,7 @@ import { getVobizAnswerXML } from "../orchestration/telephony/vobiz.js";
 import { resolveAmdConfig } from "../orchestration/telephony/dial.js";
 import { getSessionByCallId, getSessionByExternalCallId } from "../orchestration/session.js";
 import { db, agentsTable, callsTable, phoneNumbersTable, providersTable, scheduledCallbacksTable, campaignLeadsTable, leadTimelineTable, campaignsTable, whatsappByonVerificationsTable, canonicalizeCallerKey, pool } from "@workspace/db";
-import { eq, sql, and, gte, gt, inArray, desc } from "drizzle-orm";
+import { eq, ne, sql, and, gte, gt, inArray, desc } from "drizzle-orm";
 import { decryptKey } from "../lib/crypto.js";
 import { validateTwilioSignature, validatePlivoSignature } from "../lib/webhook-signature.js";
 import { logger } from "../lib/logger.js";
@@ -395,10 +395,45 @@ router.post("/webhooks/twilio/voice", async (req, res): Promise<void> => {
  * Plivo calls this when a call arrives.
  */
 router.post("/webhooks/plivo/voice", async (req, res): Promise<void> => {
-  const agentId = parseInt(String(req.query["agentId"] ?? req.body?.agentId ?? "0"), 10);
+  let agentId = parseInt(String(req.query["agentId"] ?? req.body?.agentId ?? "0"), 10);
+
+  // BYO Plivo inbound: the user's Plivo Application points here WITHOUT an
+  // agentId — resolve the agent from the called number (mirrors the VoBiz
+  // inbound lookup, including the national-form/last-10-digit fallbacks).
+  if (!agentId) {
+    const toRaw = String(req.body?.To ?? req.body?.to ?? "").trim();
+    if (toRaw) {
+      const candidates = new Set<string>([toRaw, `+${toRaw.replace(/[^\d]/g, "")}`]);
+      const canonTo = canonicalizeCallerKey(toRaw);
+      if (canonTo) { candidates.add(canonTo); candidates.add(`+${canonTo.replace(/[^\d]/g, "")}`); }
+      let [pn] = await db
+        .select({ agentId: phoneNumbersTable.agentId })
+        .from(phoneNumbersTable)
+        .where(and(inArray(phoneNumbersTable.number, [...candidates]), ne(phoneNumbersTable.status, "released")));
+      // Suffix fallback ONLY when no exact row exists at all — an exact match
+      // that is simply unassigned must NOT route to another number that shares
+      // the same last 10 digits (cross-tenant misroute risk).
+      if (!pn && toRaw.replace(/[^\d]/g, "").length >= 10) {
+        const last10 = toRaw.replace(/[^\d]/g, "").slice(-10);
+        const [fallbackPn] = await db
+          .select({ agentId: phoneNumbersTable.agentId })
+          .from(phoneNumbersTable)
+          .where(and(
+            sql`RIGHT(REGEXP_REPLACE(${phoneNumbersTable.number}, '[^0-9]', '', 'g'), 10) = ${last10}`,
+            sql`${phoneNumbersTable.agentId} IS NOT NULL`,
+            ne(phoneNumbersTable.status, "released"),
+          ));
+        if (fallbackPn?.agentId) pn = fallbackPn;
+      }
+      if (pn?.agentId) {
+        agentId = pn.agentId;
+        req.log.info({ to: toRaw, agentId }, "Plivo inbound routed by number lookup (BYO)");
+      }
+    }
+  }
 
   if (!agentId) {
-    res.status(400).set("Content-Type", "text/xml").send("<Response><Speak>Agent not configured.</Speak><Hangup/></Response>");
+    res.status(400).set("Content-Type", "text/xml").send("<Response><Speak>This number is not assigned to any agent yet. Please assign an agent on the numbers page.</Speak><Hangup/></Response>");
     return;
   }
 

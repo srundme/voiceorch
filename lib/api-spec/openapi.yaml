@@ -8526,6 +8526,10 @@ components:
           enum: [local, toll_free, mobile]
         vobizNumberId:
           type: ["string", "null"]
+        provider:
+          type: string
+          enum: [vobiz, plivo]
+          description: Where the number lives — 'vobiz' = platform-rented DID; 'plivo' = user's own Plivo number imported from their telephony key (free, BYO).
         agentId:
           type: ["integer", "null"]
         agentName:
