@@ -169,7 +169,14 @@ export async function handleWebcallWebSocket(
       // so caller memory IS captured per authenticated user (not skipped).
       // Guests use webcall-guest-* so they don't collide with the agent owner's memory.
       toNumber: `webcall-agent-${agentId}`,
-      fromNumber: guestKey ? `webcall-${guestKey}` : `webcall-user-${userId}`,
+      // Meeting bots get a per-meeting key: a group meeting is not one caller,
+      // so reusing the owner's webcall memory would greet the room with a
+      // stale personal name (and meeting chatter would pollute that memory).
+      fromNumber: opts?.meetMid
+        ? `meetbot-${opts.meetMid}`
+        : guestKey
+          ? `webcall-${guestKey}`
+          : `webcall-user-${userId}`,
       rawPcmOutput: true,
       // HD mode (negotiated via ?rate=16000): the client receives 16 kHz PCM
       // — the TTS keeps its full bandwidth instead of the 8 kHz carrier rate.
@@ -187,7 +194,12 @@ export async function handleWebcallWebSocket(
     // participant webhooks can feed names into the live conversation.
     if (opts?.meetMid) {
       const pipeline = getSession(sid)?.pipeline;
-      if (pipeline) attachMeetSession(opts.meetMid, pipeline);
+      if (pipeline) {
+        // Meeting etiquette (e.g. no farewell auto-hangup) must apply even if
+        // the roster hasn't formed yet, so mark the mode unconditionally.
+        pipeline.markMeetingMode?.();
+        attachMeetSession(opts.meetMid, pipeline);
+      }
     }
     if (endedBeforeReady) {
       logger.warn({ sessionId, agentId }, "Webcall ended before setup completed — ending immediately");

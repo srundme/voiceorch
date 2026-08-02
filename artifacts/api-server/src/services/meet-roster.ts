@@ -20,6 +20,7 @@ import { logger } from "../lib/logger.js";
 
 /** The subset of pipeline surface the roster drives (all optional on VoiceSession). */
 export interface MeetingAwareSession {
+  markMeetingMode?(): void;
   setMeetingRoster?(line: string | null): void;
   setMeetingSpeaker?(name: string | null): void;
   injectMeetingNote?(note: string): void;

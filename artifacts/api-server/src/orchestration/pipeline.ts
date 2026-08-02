@@ -6332,7 +6332,9 @@ export class OrchestrationPipeline implements VoiceSession {
     // after the opening exchange, skip the LLM entirely and trigger end_call
     // immediately.  Without this, the LLM responds with an acknowledgment
     // ("சரிங்க") and keeps waiting — the caller has to hang up manually.
-    if (this.turnIndex >= 3 && this.isCallerFarewellUtterance(transcript)) {
+    // In group meetings, "thank you"/"bye" is usually participants talking to
+    // EACH OTHER — never auto-leave the meeting on a farewell phrase.
+    if (!this.isMeetingMode && this.turnIndex >= 3 && this.isCallerFarewellUtterance(transcript)) {
       const endCallTool = this.agent.tools.find((t) => t.type === "end_call");
       if (endCallTool) {
         logger.info(
@@ -8839,6 +8841,15 @@ export class OrchestrationPipeline implements VoiceSession {
   }
 
   // ── Meeting speaker identification (services/meet-roster.ts) ──────────────
+  /** True when this session is a meeting bot (Recall) rather than a 1:1 call. */
+  private isMeetingMode = false;
+
+  /** Marks this session as a group-meeting participant (disables 1:1-call
+   *  heuristics like the caller-farewell auto-hangup). */
+  markMeetingMode(): void {
+    this.isMeetingMode = true;
+  }
+
   /** Persistent participant-list context line (null clears it). */
   setMeetingRoster(line: string | null): void {
     this.meetingRosterLine = line ? line.slice(0, 2000) : null;

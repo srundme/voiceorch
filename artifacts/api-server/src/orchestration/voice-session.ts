@@ -49,6 +49,7 @@ export interface VoiceSession {
    * services/meet-roster.ts. Only the classic pipeline implements these; the
    * roster calls them defensively (`?.`) so Live sessions simply lack names.
    */
+  markMeetingMode?(): void;
   setMeetingRoster?(line: string | null): void;
   setMeetingSpeaker?(name: string | null): void;
   injectMeetingNote?(note: string): void;
