@@ -73,10 +73,47 @@ POST `https://api.sarvam.ai/speech-to-text`
 - SttFinalMetadata now carries `mergedSegments` and `pauseCount` — surfaced in utterances table.
 
 ## WS heartbeat / dead-connection detection (June 2026)
-- Sarvam adapter tracks `lastMsgAt` + `inSpeechSegment`; 300ms interval checks for >3s silence during speech.
-- Fires `sttObj.onConnectionDead?.()` → webcall.ts hook → immediate `process()` (batch STT fallback).
+- **SUPERSEDED — see the two sections below.** The original design (`lastMsgAt` + `inSpeechSegment`,
+  300ms interval, >3s silence during speech) was removed in Aug 2026 because it destroyed any
+  utterance longer than three seconds.
+- Fires `sttObj.onConnectionDead?.()` → webcall.ts hook → immediate `process()` (batch STT fallback);
+  on the telephony path it now also schedules lost-turn recovery.
 - StreamSTT interface has `onConnectionDead?: (() => void) | null` — set by caller after creation.
 - Heartbeat interval cleared in `close()` to prevent leaks.
+
+## INBOUND SILENCE IS NOT EVIDENCE OF ANYTHING (calls 5498/5499, Aug 2026)
+The single most important fact about this protocol. Sarvam sends nothing between turns (no speech)
+and **nothing during an utterance** — transcripts arrive only at end-of-speech. A quiet socket is
+the normal case, so "no inbound frame for N seconds" can never, on its own, mean the socket is dead.
+- The old detector terminated the socket after 3s of inbound silence **inside an open speech
+  segment** — i.e. exactly when Sarvam is legitimately quiet. That put a hard ~3s ceiling on how
+  long a caller was allowed to speak. Every utterance past ~3.1s was guillotined mid-sentence and
+  its audio destroyed. Across calls 5498/5499: kills at 3230ms, 3186ms and 3050ms after
+  speech_start, longest survivor 3078ms (and only because speech_end beat the 300ms heartbeat
+  tick). Nothing above 3.1s ever completed. ~20% of turns. **This was the real cause of the
+  long-standing "STT randomly misses a turn" reports.** Do not reinstate it in any form.
+- The three checks that replaced it, all in `sarvam.ts`, are keyed on something that is actually
+  evidence: `isTranscriptOverdue` (speech_end landed, so text is owed and its absence is a fault),
+  `isRecognitionStalled` (repeated speech_start with no transcript), and WebSocket ping/pong.
+- **Only speech_end may arm an inbound-silence timer.** speech_start must never arm one.
+- The ping/pong check SELF-CALIBRATES: it enforces only after seeing at least one pong on that
+  socket, so if Sarvam ever stops answering pings we degrade to not enforcing rather than killing
+  every connection. Keep that property if you touch it.
+
+## Detecting a lost turn is useless unless the audio is recovered (calls 5498/5499)
+`onConnectionDead` fires at the one moment we know an utterance was destroyed, and the caller's
+audio is still in the recovery ring buffer. It used to only write a log line reading "Any audio
+still in flight is lost" — the recovery was never wired to it.
+- The 6s flush backstop cannot cover this case and never fired once across three dead-socket
+  episodes: speech_start arms it for T+6s, the socket dies at ~T+3.1s, the **reconnect's own**
+  speech_start at ~T+4.2s re-arms it, and the speech_end 100ms later clears it outright.
+- Recovery cannot run the instant the socket dies (the caller is usually mid-sentence, and
+  `attemptLostTurnRecovery` rightly refuses a partial utterance) and a single deferred attempt is
+  equally wrong. `scheduleLostTurnRecovery()` polls for caller silence, bounded by a deadline.
+- A reconnect emits a garbage stub ("ஆ.", "ஏ", 8–86ms segments) about a second after the kill.
+  Releasing recovery state on transcript ARRIVAL let that stub wipe the buffer holding the real
+  utterance. Release it only after a transcript survives the quality guards — i.e. at the
+  accepted-turn point in `handleStreamingTranscript`, next to `safetyNet.onFinal()`.
 
 ## The heartbeat only proves the SOCKET is alive, not the ENGINE (call 5439, Aug 2026)
 - Every inbound frame refreshes `lastMsgAt`, and VAD signals are inbound frames. Sarvam can keep

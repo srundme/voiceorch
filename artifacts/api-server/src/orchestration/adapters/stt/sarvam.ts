@@ -134,6 +134,26 @@ export function endOfSpeechFrames(
 }
 
 /**
+ * Has an owed transcript failed to arrive? `transcriptOwedSince` is set ONLY by
+ * speech_end, which is the single point where Sarvam has committed to returning
+ * text and inbound silence therefore means something is wrong.
+ *
+ * It must never be armed by speech_start. Doing so put a hard ~3s ceiling on how
+ * long a caller could speak before their socket was terminated mid-sentence and
+ * their words destroyed (calls 5498/5499) — Sarvam sends nothing at all during an
+ * utterance, so an open segment and a dead socket look identical.
+ */
+export function isTranscriptOverdue(args: {
+  transcriptOwedSince: number;
+  nowMs: number;
+  deadMs: number;
+}): boolean {
+  const { transcriptOwedSince, nowMs, deadMs } = args;
+  if (transcriptOwedSince <= 0) return false;
+  return nowMs - transcriptOwedSince > deadMs;
+}
+
+/**
  * Has Sarvam's recognition engine stopped producing transcripts while its VAD
  * keeps signalling? See the stall-detection notes in createStream() for why the
  * signal is repeated speech_start rather than a plain no-transcript timeout.
@@ -923,21 +943,48 @@ export class SarvamSTT implements STTAdapter {
     };
 
     // ── WebSocket health monitoring ───────────────────────────────────────────
-    // Sarvam sends speech_start / speech_end / transcript on every event. A socket
-    // can go ZOMBIE — readyState OPEN but no traffic — without ever emitting "close".
-    // If >3 s pass with no inbound message WHILE we are actively streaming caller
-    // audio inside a speech segment, treat it as dead and terminate the socket so the
-    // ws.on("close") handler reconnects. The lastAudioSentAt guard prevents false
-    // positives during send gaps — the pipeline feeds caller frames CONTINUOUSLY,
-    // even during agent playback (input gating was removed after calls 772→1320);
-    // real gaps come from the AMD confirmation phase, the pre-greeting window, or
-    // carrier DTX/stream pauses. deadFired latches so we act once per episode.
-    let lastMsgAt = Date.now();
+    // A socket can go ZOMBIE — readyState OPEN but dead — without ever emitting
+    // "close", so it has to be detected actively. The hard part is that on this
+    // protocol INBOUND SILENCE IS NOT EVIDENCE OF ANYTHING: Sarvam emits nothing
+    // between turns (no speech) and nothing during an utterance (transcripts come
+    // only at end-of-speech), so a quiet socket is the normal case.
+    //
+    // We used to terminate after 3s of inbound silence inside an open speech
+    // segment, which is exactly when Sarvam is legitimately quiet. That put a hard
+    // ~3s ceiling on how long a caller could speak: calls 5498/5499 show every
+    // utterance past ~3.1s being guillotined mid-sentence and the words destroyed,
+    // while the longest survivor (3078ms) only made it because speech_end beat the
+    // heartbeat tick. Roughly a fifth of turns, and the true cause of the
+    // long-standing "STT randomly misses a turn" reports. Do not reinstate it.
+    //
+    // What replaces it, in order of how quickly each fires:
+    //   (a) speech_end arrived but no transcript followed — Sarvam has committed to
+    //       returning text, so here silence really is a fault.
+    //   (b) repeated speech_start with no transcript — the engine restarted its VAD
+    //       without recognising anything (call 5439).
+    //   (c) WebSocket ping with no pong — protocol-level liveness, the only check
+    //       that is independent of application traffic and so the only one that can
+    //       catch a socket that dies while nothing is expected of it.
+    // The lastAudioSentAt guard keeps all of them off during send gaps (AMD
+    // confirmation, pre-greeting, carrier DTX). deadFired latches so we act once per
+    // episode.
     let lastAudioSentAt = 0;
     let inSpeechSegment = false;
     let deadFired = false;
     const HEARTBEAT_MS = 300;
     const WS_DEAD_MS = 3_000;
+
+    // Protocol-level liveness. This SELF-CALIBRATES: we only ever terminate on a
+    // missing pong after seeing at least one pong on this socket, so if Sarvam's
+    // server does not answer pings we simply never enforce it rather than killing
+    // every connection. Deliberately slack compared with (a) and (b) — it is the
+    // last-resort net for "died while we expected nothing", where being right
+    // matters far more than being quick.
+    const PING_INTERVAL_MS = 5_000;
+    const PONG_DEAD_MS = 15_000;
+    let lastPingAt = 0;
+    let lastPongAt = 0;
+    let pongSupported = false;
 
     // ── Recognition-engine stall detection (call 5439) ────────────────────────
     // The silence check above only proves the SOCKET is alive, and every inbound
@@ -958,6 +1005,8 @@ export class SarvamSTT implements STTAdapter {
     // means the engine restarted its VAD without ever recognising anything.
     let awaitingTranscriptSince = 0; // first speech_start of the current silent run
     let speechStartsSinceTranscript = 0;
+    /** speech_end arrived and Sarvam owes us text — 0 when nothing is outstanding. */
+    let transcriptOwedSince = 0;
     /** Consecutive flush() calls that found nothing to emit — see flush(). */
     let emptyFlushes = 0;
     /** speech_starts with no transcript that mean the engine, not the line, is stuck. */
@@ -976,6 +1025,7 @@ export class SarvamSTT implements STTAdapter {
     const clearStallState = (): void => {
       awaitingTranscriptSince = 0;
       speechStartsSinceTranscript = 0;
+      transcriptOwedSince = 0;
       emptyFlushes = 0;
       deadFired = false;
     };
@@ -1010,12 +1060,6 @@ export class SarvamSTT implements STTAdapter {
     const sendChunk = (chunk: Buffer) => {
       if (!wsReady || ws.readyState !== WebSocket.OPEN) return;
       const now = Date.now();
-      // Resuming after a send gap (AMD confirmation, pre-greeting, carrier DTX/stream
-      // pause — the feed itself is NOT gated during agent playback):
-      // grant Sarvam a fresh WS_DEAD_MS window before the zombie check can fire. Without
-      // this, a stale lastMsgAt from before the gap would trip a false positive on the
-      // very first chunk after playback and terminate a perfectly healthy socket.
-      if (now - lastAudioSentAt > WS_DEAD_MS) lastMsgAt = now;
       ws.send(
         JSON.stringify({
           audio: {
@@ -1040,7 +1084,10 @@ export class SarvamSTT implements STTAdapter {
         wsReady = true;
         reconnectAttempts = 0;
         clearStallState(); // fresh socket — re-arm the zombie detectors from zero
-        lastMsgAt = Date.now(); // start silence window from now, not dead socket's last frame
+        // Treat the new socket as freshly ponged so its liveness window starts now
+        // rather than inheriting the dead socket's timestamps.
+        lastPongAt = Date.now();
+        lastPingAt = Date.now();
         queueTrimLogged = false; // re-arm queue-trim log for this reconnect episode
         // Reset VAD state: a stale speechEndReceived=true would send post-reconnect
         // transcripts down the 30ms fast-flush path before any fresh speech_end fires.
@@ -1054,6 +1101,14 @@ export class SarvamSTT implements STTAdapter {
         for (const chunk of audioQueue.splice(0)) sendChunk(chunk);
       });
 
+      // A pong is the one inbound frame that means "alive" without meaning anything
+      // about recognition, so it is the only safe liveness signal on this protocol.
+      // Seeing one also switches the liveness check on for good (see pongSupported).
+      ws.on("pong", () => {
+        lastPongAt = Date.now();
+        pongSupported = true;
+      });
+
       ws.on("message", (raw: Buffer | string) => {
         let msg: SarvamMsg;
         try {
@@ -1064,12 +1119,11 @@ export class SarvamSTT implements STTAdapter {
 
         // VAD signals — official type values: "speech_start" / "speech_end"
         // (legacy guessed values "events" + signal_type also handled for safety)
-        // Any inbound frame proves the SOCKET is alive, so it refreshes the silence
-        // window. It does NOT clear deadFired: that latch is cleared only by a
-        // transcript (clearStallState) or a fresh socket. Letting a VAD signal
-        // clear it would re-arm the detector using the very events that were masking
-        // the stall in the first place (call 5439).
-        lastMsgAt = Date.now();
+        //
+        // Note there is deliberately no "any inbound frame proves we are healthy"
+        // bookkeeping here. VAD signals are inbound frames, and treating them as
+        // proof of life is what blinded the detector to a stalled engine in call
+        // 5439. Only a transcript or a pong clears health state now.
 
         // Keep the latest request_id (Sarvam docs: support/debugging requests are
         // resolved fastest when the affected call's request_id can be quoted).
@@ -1108,6 +1162,9 @@ export class SarvamSTT implements STTAdapter {
           inSpeechSegment = false;
           speechEndReceived = true;
           speechEndAt = Date.now();
+          // Sarvam owes us a transcript from here. This is the ONLY point at which
+          // inbound silence is evidence of anything — see the heartbeat check.
+          transcriptOwedSince = Date.now();
           logger.debug({ langCode }, "Sarvam STT: speech end");
           // Fast-path when transcript is ALREADY buffered (multi-segment coalescing):
           // caller has stopped talking — shorten any running timer to the
@@ -1450,8 +1507,8 @@ export class SarvamSTT implements STTAdapter {
     // agent monologue / hold can starve the socket into an idle close + a
     // pointless reconnect cycle. After 15 s with nothing sent, ship a short
     // near-silent PCM frame as a keep-alive (official guidance). Sent RAW — not
-    // via sendChunk — so it never updates lastAudioSentAt/lastMsgAt: keep-alives
-    // must neither arm the zombie detector nor count as "actively streaming".
+    // via sendChunk — so it never updates lastAudioSentAt: keep-alives must not
+    // count as "actively streaming" and arm the zombie detector.
     const KEEPALIVE_IDLE_MS = 15_000;
     const KEEPALIVE_FRAME = Buffer.alloc(Math.floor(sampleRate * 0.2) * 2); // 200 ms silence, s16le mono
     let lastKeepAliveAt = 0;
@@ -1491,18 +1548,37 @@ export class SarvamSTT implements STTAdapter {
       if (ws.readyState !== WebSocket.OPEN) return; // CONNECTING/CLOSING handled elsewhere
       if (Date.now() - lastAudioSentAt > WS_DEAD_MS) return; // not actively streaming
 
-      // (a) Dead socket: no inbound frame at all while we stream caller audio.
-      //     Only meaningful mid-utterance, since Sarvam is legitimately quiet
-      //     between turns.
-      if (inSpeechSegment) {
-        const silenceMs = Date.now() - lastMsgAt;
-        if (silenceMs > WS_DEAD_MS) {
-          killZombie("ws_silent", {
-            silenceMs,
-            reason: "no inbound WS frame while streaming audio",
-          });
-          return;
+      // (c) Protocol-level liveness, independent of anything Sarvam chooses to send.
+      if (Date.now() - lastPingAt > PING_INTERVAL_MS) {
+        lastPingAt = Date.now();
+        try {
+          ws.ping();
+        } catch {
+          /* racing close — the close handler reconnects */
         }
+      }
+      if (pongSupported && Date.now() - lastPongAt > PONG_DEAD_MS) {
+        killZombie("no_pong", {
+          sincePongMs: Date.now() - lastPongAt,
+          reason: "WebSocket ping went unanswered",
+        });
+        return;
+      }
+
+      // (a) Owed transcript never arrived: speech_end was received, so Sarvam has
+      //     committed to returning text and inbound silence is genuinely wrong.
+      if (
+        isTranscriptOverdue({
+          transcriptOwedSince,
+          nowMs: Date.now(),
+          deadMs: WS_DEAD_MS,
+        })
+      ) {
+        killZombie("transcript_never_arrived", {
+          owedForMs: Date.now() - transcriptOwedSince,
+          reason: "speech_end received but no transcript followed",
+        });
+        return;
       }
 
       // (b) Stalled recognition engine: VAD signals keep arriving — so (a) can

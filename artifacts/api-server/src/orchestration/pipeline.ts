@@ -143,6 +143,9 @@ const VAD_FLUSH_COOLDOWN_MS   = 5000;   // min interval between backstop flushes
  *  All of its TIMINGS are resolved per-call in `this.sttTuning` (see stt-tuning.ts)
  *  so they track the agent's own turn-taking settings instead of being fixed here. */
 const LOST_TURN_RECOVERY_ENABLED = process.env.STT_LOST_TURN_RECOVERY !== "0";
+/** How often to re-check whether the caller has stopped talking after a lost turn.
+ *  Fine-grained because every poll interval is added dead air for the caller. */
+const LOST_TURN_RECOVERY_POLL_MS = 200;
 const LLM_TTFT_FALLBACK_MS    = Number(process.env.LLM_TTFT_FALLBACK_MS ?? 1200); // abort slow primary LLM
 const LLM_SLOW_TTFT_MS        = Number(process.env.LLM_SLOW_TTFT_MS ?? 1200);     // warn in execution logs
 const TTS_STREAM_TIMEOUT_MS   = 8000;   // abort TTS streaming fetch if no data within 8 s —
@@ -727,6 +730,8 @@ export class OrchestrationPipeline implements VoiceSession {
    *  says the same thing is recognised as a duplicate rather than a new turn. */
   private _recoveredText: string | null = null;
   private _recoveredAt = 0;
+  /** Polls for the caller to stop talking after the socket lost their utterance. */
+  private _lostTurnRecoveryTimer: ReturnType<typeof setTimeout> | null = null;
   /** Unheard remainder of a reply cut by barge-in — resumed if the "interruption" turns out to be a scrap (call 4839 dead-air). */
   private _bargedReplyRemainder: string | null = null;
   private _bargedReplyAt = 0;
@@ -1498,10 +1503,16 @@ export class OrchestrationPipeline implements VoiceSession {
         provider: this.agent.asrProvider,
         detail: {
           reason:
-            "STT socket went silent mid-utterance — terminating to force reconnect. Any audio still in flight is lost.",
+            "STT socket died mid-utterance — terminating to force reconnect. Replaying buffered caller audio through batch STT.",
           segmentMs: this._vadSpeechStartAt ? Date.now() - this._vadSpeechStartAt : null,
         },
       });
+      // This is the one moment we KNOW an utterance was lost, and the audio is
+      // still sitting in the recovery buffer. The 6s flush backstop cannot cover
+      // it: the reconnect fires its own speech_start within ~1s, which re-arms the
+      // timer, and the speech_end straight after clears it — so in calls 5498/5499
+      // recovery never ran once despite firing on every dead socket.
+      this.scheduleLostTurnRecovery();
     };
     this.streamSTT.onSpeechEnd = () => {
       // Timing instrumentation: records when the STT provider's server-side VAD
@@ -1613,6 +1624,51 @@ export class OrchestrationPipeline implements VoiceSession {
   private clearRecoveryAudio(): void {
     this._recoveryAudio = [];
     this._recoveryBytes = 0;
+  }
+
+  private cancelLostTurnRecovery(): void {
+    if (this._lostTurnRecoveryTimer) {
+      clearTimeout(this._lostTurnRecoveryTimer);
+      this._lostTurnRecoveryTimer = null;
+    }
+  }
+
+  /**
+   * Wait for the caller to stop talking, then recover the utterance the socket lost.
+   *
+   * Recovery cannot run the instant the socket dies: the caller is usually still
+   * mid-sentence, and attemptLostTurnRecovery() rightly refuses to replay a partial
+   * utterance. A single deferred attempt would be just as wrong, since we cannot
+   * know in advance how much longer they will speak. So poll until they actually go
+   * quiet, bounded by a deadline, and stop early if the reconnected socket delivers
+   * the turn on its own (see the accepted-turn path in handleStreamingTranscript).
+   */
+  private scheduleLostTurnRecovery(): void {
+    if (!LOST_TURN_RECOVERY_ENABLED || this.closed) return;
+    this.cancelLostTurnRecovery();
+    const deadline = Date.now() + this.sttTuning.lostTurnBackstopMs;
+
+    const poll = (): void => {
+      this._lostTurnRecoveryTimer = null;
+      if (this.closed) return;
+      // The agent is mid-turn, so either the socket recovered on its own or this is
+      // no longer the caller's turn to recover.
+      if (this.isProcessing || this.isPlaying || this.isSendingTtsAudio) return;
+      if (Date.now() - this.lastCallerActivityAt >= this.sttTuning.recoveryMinSilenceMs) {
+        void this.attemptLostTurnRecovery();
+        return;
+      }
+      if (Date.now() > deadline) {
+        logger.warn(
+          { callId: this.config.callId },
+          "Lost-turn recovery abandoned — caller never paused long enough to replay safely",
+        );
+        return;
+      }
+      this._lostTurnRecoveryTimer = setTimeout(poll, LOST_TURN_RECOVERY_POLL_MS);
+    };
+
+    this._lostTurnRecoveryTimer = setTimeout(poll, LOST_TURN_RECOVERY_POLL_MS);
   }
 
   /**
@@ -2573,10 +2629,6 @@ export class OrchestrationPipeline implements VoiceSession {
       return;
     }
 
-    // Any genuine transcript means the socket is healthy — drop the recovery buffer
-    // so a later recovery can never replay audio from an already-handled turn.
-    this.clearRecoveryAudio();
-
     // Tail-echo guard: a final transcript arriving shortly after the agent
     // stopped speaking — when we did NOT detect a genuine barge-in — used to be
     // discarded on TIME ALONE, which silently ate genuine one-word replies
@@ -2985,6 +3037,14 @@ export class OrchestrationPipeline implements VoiceSession {
 
     // Accepted as a real turn — clear the safety timers now (deferred from the STT
     // callback so the discarded/echo transcripts above can't suppress the stall).
+    //
+    // Recovery state is released HERE rather than on arrival, for the same reason:
+    // a reconnect emits a garbage stub ("ஆ.", "ஏ") about a second after the socket
+    // dies, and releasing on arrival let that stub wipe the buffer holding the real
+    // utterance before recovery could read it (calls 5498/5499). Only a transcript
+    // that survives the quality guards proves the turn is genuinely handled.
+    this.clearRecoveryAudio();
+    this.cancelLostTurnRecovery();
     this.safetyNet.onFinal();
     this.clearEagerPartialTimer();
     this.interruptionMgr.onUserSpeechEnd();
@@ -9283,6 +9343,8 @@ export class OrchestrationPipeline implements VoiceSession {
 
   close(): void {
     this.closed = true;
+    this.clearVadFlushBackstop();
+    this.cancelLostTurnRecovery();
     // Persist the refined full-call voiceprint (fire-and-forget; DB/HTTP only).
     void this.speakerVerifier?.finalize();
     this.tts.close?.();

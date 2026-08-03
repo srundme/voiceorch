@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isRecognitionStalled } from "./sarvam.js";
+import { isRecognitionStalled, isTranscriptOverdue } from "./sarvam.js";
 
 /**
  * Call 5439 died with the zombie detector watching. Sarvam kept emitting
@@ -64,8 +64,39 @@ describe("recognition stall detection", () => {
   });
 
   it("clears as soon as a transcript resets the counters", () => {
-    // noteRecognitionAlive() zeroes both fields; the detector must go quiet even
+    // clearStallState() zeroes both fields; the detector must go quiet even
     // though wall-clock time has advanced far past the threshold.
     expect(stalled(0, 0, 60_000)).toBe(false);
+  });
+});
+
+/**
+ * Calls 5498/5499: the old detector terminated a socket after 3s of inbound
+ * silence inside an OPEN speech segment. Sarvam sends nothing during an utterance,
+ * so that put a hard three-second ceiling on how long a caller was allowed to
+ * speak. Every utterance past ~3.1s was guillotined mid-sentence and its audio
+ * destroyed; the longest survivor across both calls was 3078ms, and only because
+ * speech_end beat the 300ms heartbeat tick.
+ *
+ * The invariant these tests defend: only speech_end may arm this check.
+ */
+describe("overdue transcript detection", () => {
+  const overdue = (transcriptOwedSince: number, nowMs: number): boolean =>
+    isTranscriptOverdue({ transcriptOwedSince, nowMs, deadMs: DEAD_MS });
+
+  it("never fires while nothing is owed, no matter how long the caller talks", () => {
+    // 0 is the state during an open speech segment. These are the real utterance
+    // lengths that used to get their sockets killed.
+    for (const elapsed of [3_050, 3_186, 3_230, 30_000]) {
+      expect(overdue(0, elapsed)).toBe(false);
+    }
+  });
+
+  it("does not fire before the threshold once speech_end lands", () => {
+    expect(overdue(1_000, 1_000 + DEAD_MS)).toBe(false);
+  });
+
+  it("fires when speech_end came but the transcript never did", () => {
+    expect(overdue(1_000, 1_000 + DEAD_MS + 1)).toBe(true);
   });
 });
