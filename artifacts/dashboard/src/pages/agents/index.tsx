@@ -1,7 +1,7 @@
 /**
- * /app/agents — agent list (AgentBuilder)
+ * /app/agents — agent list + builder (AgentBuilder).
  *
- * Squads live at /app/squads (own sidebar entry).
+ * Squads live at /app/squads (under More in Phase 1 shell; later Agents sub-nav).
  * Note: /app/agents/:id continues to route directly to AgentBuilder.
  *
  * Special cases:

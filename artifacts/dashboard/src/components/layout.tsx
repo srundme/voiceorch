@@ -96,40 +96,37 @@ interface NavGroup {
   items: NavItem[];
 }
 
+/**
+ * Agent-centric IA (approved): Agent Builder is the product center.
+ * Phase 1 shell — primary nav is short; everything else stays under MORE so
+ * existing routes keep working until Reach/Channels absorb them inside the
+ * agent (see docs/snapserve-agent-centric-ia.md). Do not remove MORE items
+ * until those surfaces land on the agent.
+ */
 const NAV_GROUPS: NavGroup[] = [
   {
     items: [
-      { name: "Home",   href: "/app/home", icon: Home },
+      { name: "Home",   href: "/app/home",   icon: Home },
+      { name: "Agents", href: "/app/agents", icon: Bot },
     ],
   },
   {
-    group: "BUILD",
+    group: "OPERATE",
     items: [
-      { name: "Agents",    href: "/app/agents",          icon: Bot },
-      { name: "Squads",    href: "/app/squads",          icon: Users },
-      { name: "Knowledge", href: "/app/knowledge-bases", icon: BookOpen },
-    ],
-  },
-  {
-    group: "REACH OUT",
-    items: [
-      { name: "Campaigns", href: "/app/campaigns", icon: Zap },
-      { name: "WhatsApp",  href: "/app/whatsapp",  icon: MessageCircle },
-      { name: "Meetings",  href: "/app/meet",      icon: Video },
-    ],
-  },
-  {
-    group: "CALLS",
-    items: [
-      { name: "Call Logs",     href: "/app/calls",         icon: Phone,       callbackBadge: true },
+      { name: "Calls",         href: "/app/calls",         icon: Phone, callbackBadge: true },
       { name: "Phone Numbers", href: "/app/phone-numbers", icon: Hash },
-      { name: "Scheduling",    href: "/app/scheduling",    icon: CalendarDays },
     ],
   },
   {
-    group: "CUSTOMERS",
+    group: "MORE",
     items: [
-      { name: "Contacts and Memory", href: "/app/memory", icon: Brain },
+      { name: "Campaigns",             href: "/app/campaigns",       icon: Zap },
+      { name: "WhatsApp",              href: "/app/whatsapp",        icon: MessageCircle },
+      { name: "Meetings",              href: "/app/meet",            icon: Video },
+      { name: "Squads",                href: "/app/squads",          icon: Users },
+      { name: "Knowledge",             href: "/app/knowledge-bases", icon: BookOpen },
+      { name: "Scheduling",            href: "/app/scheduling",      icon: CalendarDays },
+      { name: "Contacts and Memory",   href: "/app/memory",          icon: Brain },
     ],
   },
   {
@@ -148,19 +145,14 @@ const NAV_GROUPS: NavGroup[] = [
 const MANAGED_CLIENT_NAV: NavGroup[] = [
   {
     items: [
-      { name: "Home", href: "/app/home", icon: Home },
-    ],
-  },
-  {
-    group: "BUILD",
-    items: [
+      { name: "Home",   href: "/app/home",   icon: Home },
       { name: "Agents", href: "/app/agents", icon: Bot },
     ],
   },
   {
-    group: "CALLS",
+    group: "OPERATE",
     items: [
-      { name: "Call Logs",     href: "/app/calls",         icon: Phone,       callbackBadge: true },
+      { name: "Calls",         href: "/app/calls",         icon: Phone, callbackBadge: true },
       { name: "Phone Numbers", href: "/app/phone-numbers", icon: Hash },
     ],
   },
@@ -188,7 +180,9 @@ const ROUTE_TITLES: [string, string][] = [
   ["/app/whatsapp",        "WhatsApp"],
   ["/app/scheduling",      "Scheduling"],
   ["/app/memory",          "Contacts and Memory"],
-  ["/app/calls",           "Call Logs"],
+  ["/app/calls",           "Calls"],
+  ["/app/meet",            "Meetings"],
+  ["/app/squads",          "Squads"],
   ["/app/phone-numbers",   "Phone Numbers"],
   ["/app/partner-join",    "Accept invitation"],
   ["/app/partner",         "Partner Hub"],

@@ -1,12 +1,13 @@
 /**
- * Business Home — default landing for SnapServe businesses.
- * Answers: how are my calls today, what needs attention, what’s running.
+ * Business Home — agent-first landing (Phase 1 shell).
+ * Primary path: create / open an agent. Existing dial pipelines stay visible
+ * under "Active work" until Reach absorbs them inside the agent builder.
  */
 
 import { Link, useLocation } from "wouter";
 import {
   Phone, Users, Zap, FileSpreadsheet, AlertTriangle, Wallet,
-  ArrowRight, CheckCircle2, Bot, PlugZap, Play, Pause,
+  ArrowRight, CheckCircle2, Bot, PlugZap, Play, Pause, Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -112,7 +113,6 @@ export default function HomePage() {
   const lowWallet = balanceCents != null && balanceCents < 10_000;
   const hasAgent = agents.length > 0;
   const hasPhone = phones.length > 0;
-  const isNew = !stats.isLoading && (stats.data?.totalCalls ?? 0) === 0 && agents.length === 0;
 
   const attention: Array<{ title: string; desc: string; href: string; tone: "amber" | "rose" }> = [];
   for (const p of pausedAuthPipelines) {
@@ -142,7 +142,7 @@ export default function HomePage() {
   if (!hasAgent) {
     attention.push({
       title: "No agent yet",
-      desc: "Create a voice agent to start answering or dialing.",
+      desc: "Create a voice agent — everything else (calls, WhatsApp, meetings) binds to it.",
       href: "/app/vibe",
       tone: "amber",
     });
@@ -159,14 +159,78 @@ export default function HomePage() {
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-6">
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div>
           <h1 className="text-xl sm:text-2xl font-semibold tracking-tight">Home</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            How your voice operation is doing today
+            Your agents are the center — open one to configure voice, channels, and how leads reach it
           </p>
         </div>
+        <div className="flex flex-wrap gap-2 shrink-0">
+          <Button size="sm" onClick={() => navigate("/app/vibe")}>
+            <Sparkles className="h-3.5 w-3.5 mr-1" /> Create agent
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => navigate("/app/agents")}>
+            <Bot className="h-3.5 w-3.5 mr-1" /> Open agents
+          </Button>
+        </div>
       </div>
+
+      {/* Empty / first-run — agent only */}
+      {!hasAgent && !agentsQ.isLoading && (
+        <section className="rounded-xl border border-dashed border-border/70 px-5 py-10 text-center space-y-4">
+          <div className="mx-auto h-12 w-12 rounded-2xl bg-primary/10 flex items-center justify-center">
+            <Bot className="h-6 w-6 text-primary" />
+          </div>
+          <div className="space-y-1.5">
+            <p className="text-base font-semibold">Start with an agent</p>
+            <p className="text-sm text-muted-foreground max-w-md mx-auto">
+              An agent is your voice runtime. After you create one, you’ll connect phone,
+              WhatsApp, meetings, and how leads reach it — all from the agent builder.
+            </p>
+          </div>
+          <div className="flex flex-wrap justify-center gap-2 pt-1">
+            <Button onClick={() => navigate("/app/vibe")}>
+              <Sparkles className="h-3.5 w-3.5 mr-1" /> Create with Vibe
+            </Button>
+            <Button variant="outline" onClick={() => navigate("/app/agents?create=1")}>
+              Manual build
+            </Button>
+          </div>
+        </section>
+      )}
+
+      {/* Your agents */}
+      {hasAgent && (
+        <section className="rounded-xl border border-border/60 overflow-hidden">
+          <div className="px-3 py-2.5 border-b border-border/50 flex items-center justify-between">
+            <h2 className="text-xs font-medium">Your agents</h2>
+            <Link href="/app/agents" className="text-[11px] text-muted-foreground hover:text-foreground underline-offset-2 hover:underline">
+              View all
+            </Link>
+          </div>
+          <div className="divide-y divide-border/40">
+            {agents.slice(0, 6).map((a: any) => (
+              <Link
+                key={a.id}
+                href={`/app/agents/${a.id}`}
+                className="flex items-center gap-3 px-3 py-2.5 hover:bg-muted/30 transition-colors"
+              >
+                <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                  <Bot className="h-3.5 w-3.5 text-primary" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium truncate">{a.name ?? `Agent ${a.id}`}</p>
+                  <p className="text-[11px] text-muted-foreground truncate">
+                    Open builder — prompt, voice, channels, reach
+                  </p>
+                </div>
+                <ArrowRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Today KPIs */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -254,31 +318,13 @@ export default function HomePage() {
         </section>
       )}
 
-      {/* Getting started */}
-      {isNew && attention.length === 0 && (
-        <section className="rounded-xl border border-dashed border-border/70 px-5 py-8 text-center space-y-3">
-          <p className="text-sm font-medium">Welcome — set up your first voice agent</p>
-          <p className="text-xs text-muted-foreground max-w-md mx-auto">
-            Build an agent, connect a number, then dial from Automatic Calls or Campaigns.
-          </p>
-          <div className="flex flex-wrap justify-center gap-2 pt-1">
-            <Button size="sm" onClick={() => navigate("/app/vibe")}>
-              <Bot className="h-3.5 w-3.5 mr-1" /> Create with Vibe
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => navigate("/app/automatic-calls/new")}>
-              <FileSpreadsheet className="h-3.5 w-3.5 mr-1" /> Automatic Calls
-            </Button>
-          </div>
-        </section>
-      )}
-
       <div className="grid lg:grid-cols-2 gap-4">
-        {/* Active work */}
+        {/* Active work — keep until Reach migrates */}
         <section className="rounded-xl border border-border/60 overflow-hidden">
           <div className="px-3 py-2.5 border-b border-border/50 flex items-center justify-between">
-            <h2 className="text-xs font-medium">Active work</h2>
+            <h2 className="text-xs font-medium">Active dialing</h2>
             <span className="text-[10px] text-muted-foreground">
-              {runningPipelines.length} pipelines · {activeCampaigns.length} campaigns
+              {runningPipelines.length} sheets · {activeCampaigns.length} lists
             </span>
           </div>
           <div className="divide-y divide-border/40">
@@ -294,7 +340,7 @@ export default function HomePage() {
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium truncate">{p.name}</p>
                   <p className="text-[11px] text-muted-foreground truncate">
-                    Automatic Calls · {p.dialedCount} dialed · {p.enqueuedCount} queued
+                    Sheet dial · {p.dialedCount} dialed · {p.enqueuedCount} queued
                   </p>
                 </div>
                 <span className={cn("text-[10px] px-1.5 py-0.5 rounded capitalize", statusTone(p.status))}>
@@ -313,7 +359,7 @@ export default function HomePage() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium truncate">{p.name}</p>
-                  <p className="text-[11px] text-muted-foreground truncate">Paused Automatic Calls</p>
+                  <p className="text-[11px] text-muted-foreground truncate">Paused sheet dial</p>
                 </div>
               </Link>
             ))}
@@ -328,7 +374,7 @@ export default function HomePage() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium truncate">{c.name}</p>
-                  <p className="text-[11px] text-muted-foreground truncate">Campaign</p>
+                  <p className="text-[11px] text-muted-foreground truncate">List dial</p>
                 </div>
                 <span className={cn("text-[10px] px-1.5 py-0.5 rounded capitalize", statusTone(c.status ?? "active"))}>
                   {c.status ?? "active"}
@@ -337,25 +383,25 @@ export default function HomePage() {
             ))}
             {runningPipelines.length === 0 && activeCampaigns.length === 0 && pipelines.filter((p) => p.status === "paused").length === 0 && (
               <p className="px-3 py-8 text-xs text-muted-foreground text-center">
-                Nothing running yet. Start Automatic Calls or a campaign.
+                Nothing dialing yet. Open an agent, or use sheet / list dial from More.
               </p>
             )}
           </div>
         </section>
 
-        {/* Quick actions */}
+        {/* Quick actions — agent first */}
         <section className="rounded-xl border border-border/60 overflow-hidden">
           <div className="px-3 py-2.5 border-b border-border/50">
             <h2 className="text-xs font-medium">Quick actions</h2>
           </div>
           <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
             {[
-              { label: "Create agent", desc: "Vibe Build or from scratch", href: "/app/vibe", icon: Bot },
-              { label: "Automatic Calls", desc: "Dial from a Google Sheet", href: "/app/automatic-calls/new", icon: FileSpreadsheet },
-              { label: "Start campaign", desc: "Outbound batch dialing", href: "/app/campaigns", icon: Zap },
-              { label: "Connect Google", desc: "Sheets & Calendar", href: "/app/connections", icon: PlugZap },
-              { label: "Agents", desc: `${agents.length} total`, href: "/app/agents", icon: Users },
-              { label: "Call Logs", desc: "Listen & review", href: "/app/calls", icon: Phone },
+              { label: "Create agent", desc: "Vibe Build or from scratch", href: "/app/vibe", icon: Sparkles },
+              { label: "Open agents", desc: `${agents.length} total — builder`, href: "/app/agents", icon: Bot },
+              { label: "Phone numbers", desc: "Buy or assign to an agent", href: "/app/phone-numbers", icon: Phone },
+              { label: "Integrations", desc: "Sheets, CRM, WhatsApp apps", href: "/app/connections", icon: PlugZap },
+              { label: "Sheet dial", desc: "Dial from Google Sheet", href: "/app/automatic-calls/new", icon: FileSpreadsheet },
+              { label: "Calls", desc: "Listen & review", href: "/app/calls", icon: Users },
             ].map(({ label, desc, href, icon: Icon }) => (
               <Link
                 key={href + label}
