@@ -7,11 +7,13 @@
  * workflow-worker.ts — this keeps execution restart-proof (no reliance on
  * in-memory timers surviving deploys).
  *
- * make_call reuses the campaign dialer: each (user, agent) pair gets a hidden,
- * non-dialable "workflow" campaign, and a lead is inserted + fired via
+ * make_call reuses the campaign dialer: each (user, agent[, squad]) combo gets a
+ * hidden, non-dialable "workflow" campaign, and a lead is inserted + fired via
  * fireCampaignCall. This inherits DNC/TRAI gating, provider-credential
  * resolution, recording, disposition, summary, and Calls-list visibility for
- * free. The run resumes once that lead's call reaches a terminal state.
+ * free. When step.squadId is set, the campaign is stamped with that squad so
+ * createSession attaches a live squad run. The run resumes once that lead's
+ * call reaches a terminal state.
  */
 
 import {
@@ -81,22 +83,51 @@ async function resolveAgentFromNumber(agent: typeof agentsTable.$inferSelect): P
   return assigned?.number ?? null;
 }
 
-async function getOrCreateWorkflowCampaign(userId: string, agentId: number): Promise<typeof campaignsTable.$inferSelect> {
-  const [existing] = await db.select().from(campaignsTable)
+async function getOrCreateWorkflowCampaign(
+  userId: string,
+  agentId: number,
+  squadId?: number | null,
+): Promise<typeof campaignsTable.$inferSelect> {
+  const sid = typeof squadId === "number" && Number.isInteger(squadId) && squadId > 0 ? squadId : null;
+  const name = sid ? `__workflow_agent_${agentId}_sq_${sid}` : `__workflow_agent_${agentId}`;
+
+  const [byName] = await db.select().from(campaignsTable)
     .where(and(
       eq(campaignsTable.userId, userId),
       eq(campaignsTable.agentId, agentId),
       eq(campaignsTable.leadSource, "workflow"),
+      eq(campaignsTable.name, name),
     ))
     .limit(1);
-  if (existing) return existing;
+  if (byName) {
+    if (sid && byName.squadId !== sid) {
+      const [updated] = await db.update(campaignsTable)
+        .set({ squadId: sid })
+        .where(eq(campaignsTable.id, byName.id))
+        .returning();
+      return updated!;
+    }
+    return byName;
+  }
+
+  // Legacy: older rows were created without a unique name filter (one per agent).
+  if (!sid) {
+    const [legacy] = await db.select().from(campaignsTable)
+      .where(and(
+        eq(campaignsTable.userId, userId),
+        eq(campaignsTable.agentId, agentId),
+        eq(campaignsTable.leadSource, "workflow"),
+      ))
+      .limit(1);
+    if (legacy) return legacy;
+  }
 
   const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, agentId)).limit(1);
   const fromNumber = agent ? await resolveAgentFromNumber(agent) : null;
 
   const [created] = await db.insert(campaignsTable).values({
     userId,
-    name: `__workflow_agent_${agentId}`,
+    name,
     agentId,
     // "paused" keeps the batch scheduler + rolling-refill from ever auto-dialing
     // these leads; we only ever dial explicitly via fireCampaignCall().
@@ -107,6 +138,7 @@ async function getOrCreateWorkflowCampaign(userId: string, agentId: number): Pro
     maxAttempts: 1,
     concurrentCallLimit: 1000,
     isActive: false,
+    ...(sid ? { squadId: sid } : {}),
     ...(fromNumber ? { fromNumber } : {}),
   }).returning();
   return created!;
@@ -231,7 +263,11 @@ async function beginCall(runId: number, userId: string, step: WorkflowStep, cont
   const phoneRaw = toStr(getPath(context, step.phoneField ?? "phone") || context["phone"]);
   if (!phoneRaw.trim()) throw new Error("make_call: no phone number in context");
 
-  const campaign = await getOrCreateWorkflowCampaign(userId, step.agentId);
+  const squadId =
+    typeof step.squadId === "number" && Number.isInteger(step.squadId) && step.squadId > 0
+      ? step.squadId
+      : null;
+  const campaign = await getOrCreateWorkflowCampaign(userId, step.agentId, squadId);
   const leadData = flattenPrimitives(context);
   const [lead] = await db.insert(campaignLeadsTable).values({
     campaignId: campaign.id,
@@ -239,7 +275,11 @@ async function beginCall(runId: number, userId: string, step: WorkflowStep, cont
     normalizedPhone: normalizePhone(phoneRaw),
     name: toStr(context["name"]) || null,
     email: toStr(context["email"]) || null,
-    leadData: { ...leadData, __workflowRunId: String(runId) },
+    leadData: {
+      ...leadData,
+      __workflowRunId: String(runId),
+      ...(squadId ? { __squad_id: String(squadId) } : {}),
+    },
     callStatus: "pending",
     source: "workflow",
   }).returning();
@@ -250,7 +290,10 @@ async function beginCall(runId: number, userId: string, step: WorkflowStep, cont
     .where(eq(workflowRunsTable.id, runId));
 
   await fireCampaignCall(lead!, campaign);
-  logger.info({ runId, leadId: lead!.id, agentId: step.agentId }, "workflow: make_call dialed");
+  logger.info(
+    { runId, leadId: lead!.id, agentId: step.agentId, squadId },
+    "workflow: make_call dialed",
+  );
 }
 
 function buildCallResult(call: typeof callsTable.$inferSelect, leadStatus: string): Ctx {

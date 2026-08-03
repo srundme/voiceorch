@@ -1,15 +1,18 @@
 /**
- * Reach → custom sequence step editor (Phase 5).
+ * Reach → custom sequence step editor (Phase 5 + Phase 6 squad on Call).
  *
  * Edits JourneyStep[] in place for journeys with presetId "custom".
  * Execution stays on the existing workflow engine — this is UI only.
  */
 
 import { useState } from "react";
+import { Link } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import {
   ArrowDown, ArrowUp, ChevronDown, ChevronRight, Mail, MessageCircle,
   Phone, Plus, Trash2, Webhook, Clock, GitBranch, PhoneForwarded,
 } from "lucide-react";
+import { customFetch } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,6 +21,16 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+
+const _DASH_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+const DASH_API = `${_DASH_BASE}/api`;
+
+type SquadListItem = {
+  id: number;
+  name: string;
+  status: string;
+  members: Array<{ agentId: number; roleName?: string }>;
+};
 
 export type ReachStepType =
   | "make_call"
@@ -34,6 +47,8 @@ export type ReachStep = {
   label?: string;
   agentId?: number;
   phoneField?: string;
+  /** Optional Agent Squad for make_call — enables live handoffs on the dial. */
+  squadId?: number | null;
   field?: string;
   op?: string;
   value?: string;
@@ -53,7 +68,7 @@ const STEP_CATALOG: Array<{
   desc: string;
   icon: React.ElementType;
 }> = [
-  { type: "make_call", title: "Call", desc: "Dial with this agent", icon: Phone },
+  { type: "make_call", title: "Call", desc: "Dial with this agent (optional squad)", icon: Phone },
   { type: "delay", title: "Wait", desc: "Pause before the next step", icon: Clock },
   { type: "send_whatsapp", title: "WhatsApp", desc: "Send a follow-up message", icon: MessageCircle },
   { type: "send_email", title: "Email", desc: "Send a follow-up email", icon: Mail },
@@ -115,7 +130,8 @@ export function defaultStep(type: ReachStepType, agentId: number): ReachStep {
 export function stepLabel(step: ReachStep): string {
   if (step.label?.trim()) return step.label.trim();
   switch (step.type) {
-    case "make_call": return "Call with this agent";
+    case "make_call":
+      return step.squadId ? "Call with squad handoffs" : "Call with this agent";
     case "send_whatsapp": return "WhatsApp follow-up";
     case "send_email": return "Email follow-up";
     case "schedule_callback":
@@ -260,7 +276,7 @@ export function ReachStepEditor({ steps, agentId, onChange, readOnly = false }: 
               </div>
               {open && (
                 <div className="border-t border-border/40 px-3 py-3 space-y-2.5 bg-card/20">
-                  <StepFields step={step} onPatch={(p) => updateAt(idx, p)} />
+                  <StepFields step={step} agentId={agentId} onPatch={(p) => updateAt(idx, p)} />
                 </div>
               )}
             </li>
@@ -315,12 +331,23 @@ export function ReachStepEditor({ steps, agentId, onChange, readOnly = false }: 
 
 function StepFields({
   step,
+  agentId,
   onPatch,
 }: {
   step: ReachStep;
+  agentId: number;
   onPatch: (patch: Partial<ReachStep>) => void;
 }) {
   const delay = delayToUnit(step.delaySeconds ?? 3600);
+  const squadsQ = useQuery({
+    queryKey: ["reach-squads", agentId],
+    enabled: step.type === "make_call" && agentId > 0,
+    queryFn: () => customFetch<SquadListItem[]>(`${DASH_API}/squads`),
+    staleTime: 30_000,
+  });
+  const squadsForAgent = (squadsQ.data ?? []).filter((s) =>
+    s.members?.some((m) => m.agentId === agentId),
+  );
 
   return (
     <>
@@ -344,6 +371,57 @@ function StepFields({
             value={step.phoneField ?? "phone"}
             onChange={(e) => onPatch({ phoneField: e.target.value || "phone" })}
           />
+        </div>
+      )}
+
+      {step.type === "make_call" && (
+        <div className="space-y-1.5">
+          <Label className="text-[10px] text-muted-foreground">Squad (optional)</Label>
+          <Select
+            value={step.squadId ? String(step.squadId) : "none"}
+            onValueChange={(v) => {
+              if (v === "none") {
+                onPatch({ squadId: null, label: step.label?.includes("squad") ? "Call lead" : step.label });
+              } else {
+                const id = Number(v);
+                const name = squadsForAgent.find((s) => s.id === id)?.name;
+                onPatch({
+                  squadId: id,
+                  label: step.label && !step.label.toLowerCase().includes("call")
+                    ? step.label
+                    : name
+                      ? `Call via ${name}`
+                      : "Call with squad handoffs",
+                });
+              }
+            }}
+          >
+            <SelectTrigger className="h-8 text-xs">
+              <SelectValue placeholder="This agent only" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none" className="text-xs">This agent only (no squad)</SelectItem>
+              {squadsForAgent.map((s) => (
+                <SelectItem key={s.id} value={String(s.id)} className="text-xs">
+                  {s.name}
+                  {s.status !== "active" ? ` · ${s.status}` : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-[10px] text-muted-foreground">
+            {squadsForAgent.length === 0 ? (
+              <>
+                No squads include this agent yet.{" "}
+                <Link href="/app/squads" className="underline underline-offset-2">
+                  Create a squad
+                </Link>{" "}
+                to enable mid-call specialist handoffs.
+              </>
+            ) : (
+              "Squad runs enable mid-call handoffs and shared contact memory between members."
+            )}
+          </p>
         </div>
       )}
 

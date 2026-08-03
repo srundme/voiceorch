@@ -312,6 +312,7 @@ export function ReachPanel({
           <p className="text-[12px] text-muted-foreground max-w-3xl">
             Auto-pilot after a lead arrives or a call ends: WhatsApp, email, callback, wait —
             or <a href="#reach-custom-steps" className="underline underline-offset-2 hover:text-foreground">customize the steps</a>.
+            On a Call step you can attach a <Link href="/app/squads" className="underline underline-offset-2 hover:text-foreground">squad</Link> for mid-call handoffs.
             Channel credentials live under Channels.
           </p>
         </div>

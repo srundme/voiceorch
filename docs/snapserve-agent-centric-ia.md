@@ -1,6 +1,6 @@
 # SnapServe UI Vision — Agent at the Center
 
-**Status:** Phase 1–5 shipped (shell, Reach, Call rules, Channels Meetings, Custom Reach steps). Phases 6–7 pending.  
+**Status:** Phase 1–6 shipped (shell, Reach, Call rules, Channels Meetings, Custom Reach steps, Squad on Call). Phase 7 pending.  
 **Rule:** Agent Builder is the center. Everything binds to the agent.  
 **Constraint:** Do not break or gut the existing Agent Builder. Migrate around it in phases.
 
@@ -65,7 +65,7 @@ Squads = specialist handoffs, not call-vs-meet prompts.
 | **3 Call rules** | Reach → Call rules: agent defaults + per-flow overrides (retry, quiet hours, caps) | Additive panel on Reach |
 | **4 Channels** | Meetings card: meeting prompt, self vs delegate, memory/call-context toggles; WA/Email unchanged | Additive card on Channels |
 | **5 Custom Reach** | Journey step editor on Reach: add/reorder/edit Call, Wait, WA, Email, Callback, Webhook, If…; fork preset → `custom` | Additive on JourneyPanel |
-| **6 Squads runtime** | Pick squad on Call step | Light |
+| **6 Squads runtime** | Call step optional squad picker; workflow dial stamps campaign.squadId for live handoffs | Light (Reach editor + workflow-engine) |
 | **7 Polish** | Onboarding, purge “campaign” copy, remove More | Cleanup |
 
 ---

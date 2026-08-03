@@ -44,6 +44,11 @@ export interface WorkflowStep {
   agentId?: number;
   /** Context key holding the phone number (default: "phone"). */
   phoneField?: string;
+  /**
+   * Optional Agent Squad for this dial. When set, the hidden workflow campaign
+   * carries squadId so createSession opens a live squad run (handoffs + shared memory).
+   */
+  squadId?: number;
 
   // ── condition (continue only if it evaluates true, else the run stops) ────────
   field?: string;                          // context path, e.g. "call.disposition.interested"

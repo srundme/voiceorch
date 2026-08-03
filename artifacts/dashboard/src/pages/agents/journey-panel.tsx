@@ -41,6 +41,7 @@ type JourneyStep = {
   label?: string;
   agentId?: number;
   phoneField?: string;
+  squadId?: number | null;
   field?: string;
   op?: string;
   value?: string;
@@ -282,7 +283,14 @@ export function JourneyPanel({
         body: JSON.stringify({
           presetId: "custom",
           name: selected.presetId === "custom" ? selected.name : `${selected.name} (custom)`,
-          steps: draftSteps,
+          steps: draftSteps.map((s) => {
+            if (s.type !== "make_call") return s;
+            if (s.squadId == null || !(Number(s.squadId) > 0)) {
+              const { squadId: _drop, ...rest } = s;
+              return rest;
+            }
+            return { ...s, squadId: Number(s.squadId) };
+          }),
         }),
       });
     },
