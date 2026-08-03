@@ -17,53 +17,6 @@ function rawSseDebugEnabled(): boolean {
 /** Max chars of the withheld content buffer to include in a diagnostic record. */
 const RAW_SSE_DIAG_MAX_BUFFER = 2000;
 
-/**
- * Sarvam AI — Chat Completions (OpenAI-compatible endpoint)
- * Docs: https://docs.sarvam.ai/api-reference-docs/chat-completion/overview
- *
- * Models:
- *   - sarvam-105b (default) — 128K context, highest quality; measured TTFT 120-220ms
- *     in production (Aug 2026) — fast enough for voice, so it is the sole offering.
- *   (sarvam-m / 24B and sarvam-30b are retired — aliased to sarvam-105b below.)
- *
- * Endpoint: POST https://api.sarvam.ai/v1/chat/completions
- * Auth: `api-subscription-key` header (also accepts `Authorization: Bearer <key>`).
- *
- * Hybrid Thinking Mode:
- *   Thinking is ON BY DEFAULT. For voice agents we DISABLE it by sending
- *   `reasoning_effort: null` to keep latency low (an agent can opt back in).
- *
- * Tool calling — STREAMING with a buffered fallback (Sarvam is unreliable here):
- *   The PRIMARY path is standard OpenAI-style streaming tool calls. With
- *   `stream:true` and `tool_choice:"auto"` Sarvam may return:
- *     • delta.tool_calls[0] = { index, id, function:{ name, arguments:"" } }  (first)
- *     • delta.tool_calls[0] = { index, function:{ arguments:"<fragment>" } }   (rest)
- *       — argument fragments must be CONCATENATED across chunks by index.
- *     • a chunk with finish_reason:"tool_calls"
- *     • a final chunk with empty `choices` carrying `usage`, then `data: [DONE]`.
- *     (Occasionally a whitespace-only delta.content:"\n" is interleaved — ignored.)
- *
- *   BUT Sarvam's streaming endpoint is unreliable: it INTERMITTENTLY emits the
- *   tool call as a plain-text JSON blob inside `delta.content` (e.g.
- *   `{ "name": "transfer_to_human", "arguments": { … } }`, optionally wrapped in a
- *   ```json fence) instead of structured delta.tool_calls. If that text were
- *   forwarded to TTS the caller would HEAR the raw JSON. So when tools are enabled
- *   we buffer-and-sniff: if the first non-whitespace reply content begins with `{`
- *   or a code fence, we WITHHOLD all content from onToken/TTS and resolve it at
- *   end-of-stream — parse it as a tool call (→ onToolCall) or, if parsing fails,
- *   treat it as genuine text (→ onDone) so it is never silently dropped.
- *
- *   So we stream plain replies (not starting with `{`/fence) for low TTFT, while
- *   accumulating either structured tool-call fragments OR a possible serialized
- *   tool-call buffer, and at end-of-stream fire exactly one of onToolCall (a tool
- *   was requested) or onDone (a plain text reply). Reasoning content is never
- *   forwarded to TTS.
- *
- * Streaming framing: each `data:` line is a chat.completion.chunk. SSE events can
- * split across TCP reads, so we buffer and dispatch only complete `\n`-terminated
- * lines, flushing the trailing line after the stream ends.
- */
-
 /** Models that support Sarvam's function-calling interface */
 const TOOL_CAPABLE_MODELS = new Set(["sarvam-30b", "sarvam-105b"]);
 
@@ -98,198 +51,116 @@ function sanitizeForAlternation(messages: ConversationTurn[]): ConversationTurn[
   return merged;
 }
 
-/**
- * Parse a serialized tool call that Sarvam emitted as plain JSON text in
- * delta.content (instead of structured delta.tool_calls). Tolerates an optional
- * ```json (or plain ```) fence and an `arguments` value that is itself a JSON
- * string. Returns null when the text is not a well-formed tool call — the caller
- * then treats the buffer as genuine reply text rather than dropping it.
- *
- * Sarvam does not commit to a single envelope shape. As well as the canonical
- * OpenAI form `{"name": "...", "arguments": {...}}` it also emits variants like
- * `{"tool": "transfer_to_human", "reason": "..."}` — the tool name under `tool`
- * (also seen: `function`/`action`) and the args spread as bare top-level keys
- * with no `arguments` wrapper. We recognise the name under any of these keys and
- * derive args from `arguments`/`parameters`/`args` when present, otherwise from
- * the remaining top-level keys.
- */
-const TOOL_NAME_KEYS = ["name", "tool", "function", "action", "tool_name"] as const;
-const TOOL_ARGS_KEYS = ["arguments", "parameters", "args", "input"] as const;
+export type ToolEnvelopeFormat = "structured" | "json" | "bracket" | "function_tag" | "function_call";
 
-function parseSerializedToolCall(
-  raw: string,
-): { name: string; args: Record<string, unknown> } | null {
+export function parseSerializedToolCall(raw: string): { name: string; args: Record<string, unknown> } | null {
+  if (!raw) return null;
   let text = raw.trim();
-  // Strip an optional ```json … ``` (or bare ```) fence.
-  if (text.startsWith("```")) {
-    text = text.replace(/^```[a-zA-Z]*\s*/, "").replace(/```\s*$/, "").trim();
-  }
-  if (!text.startsWith("{")) return null;
 
-  let obj: unknown;
+  // Strip code fences if present: ```json ... ``` or ``` ... ```
+  const fenceMatch = /^```(?:json)?\s*([\s\S]*?)\s*```$/i.exec(text);
+  if (fenceMatch) text = fenceMatch[1]!.trim();
+
+  // Handle case where model prepends arbitrary text before the JSON object
+  const jsonStart = text.indexOf("{");
+  const jsonEnd = text.lastIndexOf("}");
+  if (jsonStart === -1 || jsonEnd === -1 || jsonEnd <= jsonStart) return null;
+
+  const candidate = text.slice(jsonStart, jsonEnd + 1);
+
   try {
-    obj = JSON.parse(text);
+    const parsed = JSON.parse(candidate) as Record<string, unknown>;
+
+    // Shape 1: { name: "tool_name", arguments: { ... } } or { name: "tool_name", parameters: { ... } }
+    if (typeof parsed["name"] === "string" && parsed["name"].trim().length > 0) {
+      const name = parsed["name"].trim();
+      const rawArgs = parsed["arguments"] ?? parsed["parameters"] ?? {};
+      const args = typeof rawArgs === "object" && rawArgs !== null ? (rawArgs as Record<string, unknown>) : {};
+      return { name, args };
+    }
+
+    // Shape 2: { tool: "tool_name", args: { ... } }
+    if (typeof parsed["tool"] === "string" && parsed["tool"].trim().length > 0) {
+      const name = parsed["tool"].trim();
+      const rawArgs = parsed["args"] ?? {};
+      const args = typeof rawArgs === "object" && rawArgs !== null ? (rawArgs as Record<string, unknown>) : {};
+      return { name, args };
+    }
   } catch {
-    return null;
-  }
-  if (!obj || typeof obj !== "object") return null;
-
-  const rec = obj as Record<string, unknown>;
-
-  // Resolve the tool name under any of the keys Sarvam is known to use.
-  let name: string | null = null;
-  let nameKey: string | null = null;
-  for (const k of TOOL_NAME_KEYS) {
-    const v = rec[k];
-    if (typeof v === "string" && v.length > 0) {
-      name = v;
-      nameKey = k;
-      break;
-    }
-  }
-  if (!name) return null;
-
-  // Resolve args from an explicit wrapper key if present.
-  let args: Record<string, unknown> = {};
-  let argsResolved = false;
-  let argsKey: string | null = null;
-  for (const k of TOOL_ARGS_KEYS) {
-    const rawArgs = rec[k];
-    if (rawArgs && typeof rawArgs === "object" && !Array.isArray(rawArgs)) {
-      args = rawArgs as Record<string, unknown>;
-      argsResolved = true;
-      argsKey = k;
-      break;
-    }
-    if (typeof rawArgs === "string" && rawArgs.trim().length > 0) {
-      try {
-        const parsedArgs = JSON.parse(rawArgs);
-        if (parsedArgs && typeof parsedArgs === "object" && !Array.isArray(parsedArgs)) {
-          args = parsedArgs as Record<string, unknown>;
-          argsResolved = true;
-          argsKey = k;
-          break;
-        }
-      } catch {
-        // malformed nested JSON — keep looking / fall through to bare-keys path
-      }
-    }
+    // Parsing failed
   }
 
-  // No explicit args wrapper: treat the remaining top-level keys (e.g. `reason`)
-  // as the args object so envelopes like {"tool": "...", "reason": "..."} carry
-  // their payload through to the executor.
-  if (!argsResolved) {
-    const rest: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(rec)) {
-      if (k === nameKey || k === argsKey) continue;
-      rest[k] = v;
-    }
-    args = rest;
-  }
-
-  return { name, args };
+  return null;
 }
 
-/**
- * Parse a serialized tool call that Sarvam emitted as a BRACKET / key-value text
- * envelope in delta.content instead of structured delta.tool_calls or a JSON
- * blob. Observed shape (production Call #945):
- *
- *   [transfer_to_human]
- *   reason: Caller requested connection to a senior executive
- *
- * The tool name is the bracketed token on the first line; any following
- * `key: value` (or `key = value`) lines become the args. If there is residual
- * text after the bracket but no key:value pairs are found, the whole remainder
- * is captured under `reason` so the payload still reaches the executor. Returns
- * null when the text is not a bracket envelope.
- */
-function parseBracketToolCall(
+export function parseBracketToolCall(
   raw: string,
   validNames?: Set<string>,
 ): { name: string; args: Record<string, unknown> } | null {
-  let text = raw.trim();
-  // Strip an optional ```…``` fence in case the model wrapped the bracket form.
-  if (text.startsWith("```")) {
-    text = text.replace(/^```[a-zA-Z]*\s*/, "").replace(/```\s*$/, "").trim();
-  }
-  let m = /^\[\s*([a-zA-Z][a-zA-Z0-9_-]*)\s*\]/.exec(text);
-  if (!m) {
-    // Also try matching an embedded or unbracketed tool name line if present in validNames
-    const lines = text.split(/\r?\n/);
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i].trim();
-      const lineMatch = /^\[?\s*([a-zA-Z][a-zA-Z0-9_-]*)\s*\]?$/.exec(line);
-      if (lineMatch && lineMatch[1] && validNames?.has(lineMatch[1])) {
-        const name = lineMatch[1];
-        const rest = lines.slice(i + 1).join("\n").trim();
-        const args: Record<string, unknown> = {};
-        if (rest) {
-          for (const argLine of rest.split(/\r?\n/)) {
-            const kv = /^\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*[:=]\s*["']?(.*?)["']?\s*$/.exec(argLine);
-            if (kv && kv[1]) {
-              args[kv[1]] = (kv[2] ?? "").trim();
-            }
-          }
-          if (Object.keys(args).length === 0 && rest) args["reason"] = rest;
-        }
-        return { name, args };
-      }
-    }
-    return null;
-  }
-  const name = m[1];
+  if (!raw) return null;
+  const text = raw.trim();
 
-  const rest = text.slice(m[0].length).trim();
-  const args: Record<string, unknown> = {};
-  if (rest) {
-    for (const line of rest.split(/\r?\n/)) {
-      const kv = /^\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*[:=]\s*["']?(.*?)["']?\s*$/.exec(line);
-      if (kv && kv[1]) args[kv[1]] = (kv[2] ?? "").trim();
-    }
-    // No structured key:value lines — keep the residual text as the reason so a
-    // bare `[tool_name]\n<free text>` envelope still carries its payload.
-    if (Object.keys(args).length === 0) args["reason"] = rest;
-  }
-  return { name, args };
-}
-
-export type ToolEnvelopeFormat = "json" | "bracket" | "function_call";
-
-/**
- * Parse Python/JS function-call notation emitted by some models (e.g. Groq Llama):
- *   book_appointment(attendee_name="Karthikeyan", attendee_email="karthikeyan@theaitel.com")
- *   transfer_to_human(reason="caller wants a human")
- * The preamble ("I will execute... ") before the call is discarded.
- */
-function parseFunctionCallNotation(
-  raw: string,
-  validNames?: Set<string>,
-): { name: string; args: Record<string, unknown> } | null {
-  const nameOk = (n: string) => !validNames || validNames.size === 0 || validNames.has(n);
-
-  // Match: optional preamble then tool_name(...)
-  const match = /\b([a-zA-Z][a-zA-Z0-9_-]*)\s*\(([^)]*)\)/.exec(raw);
+  const match = /^\[([a-zA-Z0-9_-]+)\][\s\r\n]*([\s\S]*)$/.exec(text);
   if (!match) return null;
-  const name = match[1];
-  if (!nameOk(name)) return null;
 
-  const inner = match[2] ?? "";
+  const name = match[1]!;
+  if (validNames && validNames.size > 0 && !validNames.has(name)) return null;
+
+  const body = match[2]?.trim() ?? "";
   const args: Record<string, unknown> = {};
-  const kvRegex = /([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^,\s\)]+))/g;
-  let kv: RegExpExecArray | null;
-  while ((kv = kvRegex.exec(inner)) !== null) {
-    args[kv[1]] = kv[2] ?? kv[3] ?? kv[4] ?? "";
+
+  if (body.length > 0) {
+    const kvRegex = /([a-zA-Z0-9_-]+)\s*:\s*(?:"([^"]*)"|'([^']*)'|([^,\}\r\n]+))/g;
+    let kv: RegExpExecArray | null;
+    while ((kv = kvRegex.exec(body)) !== null) {
+      const key = kv[1]!;
+      const val = (kv[2] ?? kv[3] ?? kv[4] ?? "").trim();
+      args[key] = val;
+    }
   }
+
   return { name, args };
 }
 
-/**
- * Unified serialized-tool-call parser. Tries JSON, bracket/key-value, and
- * Python/JS function-call notation in turn. When `validNames` is supplied,
- * the resolved name MUST be one of the tools offered this turn.
- */
+export function parseFunctionCallNotation(
+  raw: string,
+  validNames?: Set<string>,
+): { name: string; args: Record<string, unknown> } | null {
+  if (!raw) return null;
+  const text = raw.trim();
+
+  const match = /^([a-zA-Z0-9_-]+)\s*\(([\s\S]*)\)$/.exec(text);
+  if (!match) return null;
+
+  const name = match[1]!;
+  if (validNames && validNames.size > 0 && !validNames.has(name)) return null;
+
+  const body = match[2]?.trim() ?? "";
+  if (body.length === 0) return { name, args: {} };
+
+  try {
+    const wrappedJson = `{${body}}`;
+    const parsed = JSON.parse(wrappedJson) as Record<string, unknown>;
+    if (typeof parsed === "object" && parsed !== null) return { name, args: parsed };
+  } catch {
+    // Fall back to regex parser
+  }
+
+  const args: Record<string, unknown> = {};
+  const kvRegex = /([a-zA-Z0-9_-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^,\s]+))/g;
+  let kv: RegExpExecArray | null;
+  while ((kv = kvRegex.exec(body)) !== null) {
+    const key = kv[1]!;
+    const rawVal = (kv[2] ?? kv[3] ?? kv[4] ?? "").trim();
+    if (rawVal === "true") args[key] = true;
+    else if (rawVal === "false") args[key] = false;
+    else if (!isNaN(Number(rawVal)) && rawVal !== "") args[key] = Number(rawVal);
+    else args[key] = rawVal;
+  }
+
+  return { name, args };
+}
+
 export function parseToolEnvelope(
   raw: string,
   validNames?: Set<string>,
@@ -308,11 +179,14 @@ export function parseToolEnvelope(
   return null;
 }
 
+/**
+ * Sarvam AI LLM Adapter (OpenAI-Compatible endpoint)
+ * Handles retries on rate limits (429/503), reasoning token fallbacks, special token stripping.
+ */
 export class SarvamLLM implements LLMAdapter {
   private key: string;
   private model: string;
   private genParams: LLMGenerationParams;
-  /** Correlation id for diagnostic logging only; never used for request logic. */
   private callId?: number;
 
   constructor(apiKey: string, model: string | null, genParams?: LLMGenerationParams, callId?: number) {
@@ -320,27 +194,18 @@ export class SarvamLLM implements LLMAdapter {
     this.genParams = genParams ?? {};
     this.callId = callId;
     const ALIASES: Record<string, string> = {
-      "sarvam-m":        "sarvam-105b",
-      "sarvam-2b":       "sarvam-105b",
-      "sarvam-2b-v0.5":  "sarvam-105b",
-      "sarvam-m1":       "sarvam-105b",
-      // Retired fixed-context variants — the base models now serve the full window.
-      "sarvam-30b-16k":  "sarvam-105b",
+      "sarvam-m": "sarvam-105b",
+      "sarvam-2b": "sarvam-105b",
+      "sarvam-2b-v0.5": "sarvam-105b",
+      "sarvam-m1": "sarvam-105b",
+      "sarvam-30b-16k": "sarvam-105b",
       "sarvam-105b-32k": "sarvam-105b",
-      // sarvam-30b retired platform-wide (Aug 2026): 105b measured faster TTFT
-      // in production and is the sole offered Sarvam chat model. Existing
-      // agent rows that still say sarvam-30b are served by 105b via this alias.
-      "sarvam-30b":      "sarvam-105b",
+      "sarvam-30b": "sarvam-105b",
     };
     const raw = model ?? "sarvam-105b";
     this.model = ALIASES[raw] ?? raw;
   }
 
-  /**
-   * Build Sarvam generation parameters.
-   * reasoning_effort defaults to null (thinking OFF) for voice latency.
-   * Agent-level reasoningEffort config overrides this.
-   */
   private buildGenerationBody(): Record<string, unknown> {
     const p = this.genParams;
     const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
@@ -381,36 +246,18 @@ export class SarvamLLM implements LLMAdapter {
     options?: {
       tools?: ToolDefinition[];
       onToolCall?: (name: string, args: Record<string, unknown>) => void;
-      onToolDetected?: (info: { format: "structured" | "json" | "bracket" | "function_tag" | "function_call" }) => void;
-      onToolParsed?: (info: { name: string; format: "structured" | "json" | "bracket" | "function_tag" | "function_call"; args: Record<string, unknown> }) => void;
+      onToolDetected?: (info: { format: ToolEnvelopeFormat }) => void;
+      onToolParsed?: (info: { name: string; format: ToolEnvelopeFormat; args: Record<string, unknown> }) => void;
       onUsage?: (usage: LLMUsage) => void;
     }
   ): Promise<void> {
     const supportsTools = TOOL_CAPABLE_MODELS.has(this.model);
     const hasTools = supportsTools && (options?.tools?.length ?? 0) > 0;
-
-    // Names of the tools offered this turn — used to validate a parsed envelope
-    // so ordinary text that merely starts with `{`/`[` is not misfired as a tool.
     const validToolNames = new Set<string>((options?.tools ?? []).map((t) => t.name));
-
     const sanitized = sanitizeForAlternation(messages);
 
     const genBody = this.buildGenerationBody();
 
-    // When tools are present, Sarvam models need their reasoning trace to decide
-    // whether to call a tool vs reply conversationally. With reasoning_effort:null
-    // (thinking off) the model defaults to text replies and skips tool calls.
-    //
-    // Model-specific budget for tool turns (agent-level override still respected):
-    //   sarvam-30b  → "low": keeps the budget small so the model doesn't exhaust
-    //                 all reasoning tokens on conversational turns and return an
-    //                 EMPTY response (silent turn). Previously "medium" but that
-    //                 caused 3+ consecutive silent turns (500+ reasoning tokens,
-    //                 zero output). The TOOL USE — MANDATORY system-prompt injection
-    // Reasoning tokens count toward max_tokens. On tool turns (reasoning active)
-    // a small agent-configured cap can be consumed ENTIRELY by the hidden
-    // reasoning trace, leaving content:null — a silent turn. Enforce the
-    // documented 500-token floor whenever reasoning runs alongside tools.
     if (hasTools) {
       if (genBody["reasoning_effort"] == null) {
         genBody["reasoning_effort"] = "low";
@@ -419,7 +266,6 @@ export class SarvamLLM implements LLMAdapter {
       if (typeof mt === "number" && mt < 500) genBody["max_tokens"] = 500;
     }
 
-    // Sarvam-specific tool guidance prompt injection: placed at the top of system prompt.
     const effectiveSystemPrompt = hasTools
       ? `[TOOL GUIDANCE] You have tools available. Use them naturally:
 1. When you have ALL required information from the caller, call the tool IMMEDIATELY without emitting preambles or spoken confirmations first.
@@ -439,7 +285,6 @@ ${systemPrompt}`
       ],
     };
 
-    // Tools are streamed too — Sarvam emits OpenAI-style delta.tool_calls fragments.
     if (hasTools && options?.tools) {
       body["tools"] = options.tools.map((t) => ({
         type: "function",
@@ -448,41 +293,58 @@ ${systemPrompt}`
       body["tool_choice"] = "auto";
     }
 
-    const resp = await fetch("https://api.sarvam.ai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "api-subscription-key": this.key,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
+    // Fetch with up to 2 retries for transient 429 rate limit or 5xx server errors
+    let resp: Response | null = null;
+    let attempts = 0;
+    const maxAttempts = 3;
+    let lastErr = "";
 
-    if (!resp.ok) {
-      const err = await resp.text();
-      throw new Error(`Sarvam LLM error ${resp.status}: ${err}`);
+    while (attempts < maxAttempts) {
+      attempts++;
+      try {
+        resp = await fetch("https://api.sarvam.ai/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "api-subscription-key": this.key,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(body),
+        });
+
+        if (resp.ok) break;
+
+        lastErr = await resp.text();
+        if ((resp.status === 429 || resp.status >= 500) && attempts < maxAttempts) {
+          const delay = attempts * 300;
+          logger.warn(
+            { status: resp.status, attempt: attempts, delay, evt: "sarvam_llm_retry" },
+            `Sarvam LLM returned ${resp.status}, retrying in ${delay}ms...`
+          );
+          await new Promise((r) => setTimeout(r, delay));
+          continue;
+        }
+        throw new Error(`Sarvam LLM error ${resp.status}: ${lastErr}`);
+      } catch (err) {
+        if (attempts >= maxAttempts) throw err;
+      }
+    }
+
+    if (!resp || !resp.ok) {
+      throw new Error(`Sarvam LLM request failed: ${lastErr}`);
     }
 
     const reader = resp.body!.getReader();
     const decoder = new TextDecoder();
     let full = "";
+    let reasoningBuffer = "";
     let usage: LLMUsage | undefined;
 
-    // Tool-call fragments accumulated by index. The first fragment carries id+name;
-    // later fragments carry only argument string chunks that must be concatenated.
     const toolAcc = new Map<number, { id: string; name: string; args: string }>();
     let sawToolDelta = false;
-    // Tracks whether any non-whitespace reply text has been forwarded, so we can
-    // drop leading whitespace-only tokens (the stray "\n" artifact in tool turns)
-    // without ever swallowing inter-word spaces in a real reply.
     let sawRealContent = false;
-
-    // Buffered serialized-tool-call sniffing (tools-enabled turns only). When the
-    // first non-whitespace reply content begins with `{` or a code fence, the turn
-    // may be a tool call emitted as JSON text (Sarvam streaming is unreliable); we
-    // withhold ALL content from onToken/TTS and resolve it at end-of-stream.
-    let jsonSniffDecided = false; // first-content JSON-vs-text decision made?
-    let bufferingJson = false;    // withholding content as a possible tool call?
-    let jsonBuffer = "";          // accumulated content while buffering
+    let jsonSniffDecided = false;
+    let bufferingJson = false;
+    let jsonBuffer = "";
 
     const handleData = (data: string): void => {
       if (data === "[DONE]") return;
@@ -504,7 +366,6 @@ ${systemPrompt}`
           usage?: { prompt_tokens?: number; completion_tokens?: number };
         };
 
-        // Usage arrives on the final chunk (empty `choices`) — read it first.
         if (parsed.usage) {
           usage = {
             inputTokens: parsed.usage.prompt_tokens ?? 0,
@@ -515,7 +376,11 @@ ${systemPrompt}`
         const delta = parsed.choices[0]?.delta;
         if (!delta) return;
 
-        // Accumulate streaming tool-call fragments.
+        // Collect reasoning trace as fallback
+        if (delta.reasoning_content) {
+          reasoningBuffer += delta.reasoning_content;
+        }
+
         if (delta.tool_calls?.length) {
           for (const tc of delta.tool_calls) {
             const idx = typeof tc.index === "number" ? tc.index : 0;
@@ -529,29 +394,15 @@ ${systemPrompt}`
           return;
         }
 
-        // Once a tool call is in flight, ignore any trailing content artifacts.
         if (sawToolDelta) return;
 
-        // Only forward reply text — reasoning_content is intentionally ignored.
         let token = delta.content ?? "";
         if (!token) return;
 
-        // Strip Sarvam thinking-mode delimiter tokens that leak into delta.content
-        // when reasoning_effort is "low"/"medium"/"high". These are internal model
-        // separators and must never reach TTS or the conversation history.
-        token = token.replace(/<\|(?:message|thinking|endofthinking|endofmessage|im_start|im_end)\|>/g, "");
+        // Comprehensive special token stripping for Sarvam thinking tokens
+        token = token.replace(/<\|(?:message|thinking|endofthinking|endofmessage|im_start|im_end|thought|[a-z_]+)\|>/gi, "");
         if (!token) return;
 
-        // Buffer-and-sniff serialized tool calls (tools-enabled turns only).
-        // Sarvam's streaming endpoint sometimes emits a tool call as plain text in
-        // delta.content instead of structured delta.tool_calls — observed shapes:
-        // a JSON blob (`{…}`, optionally ```json-fenced) and a bracket/key-value
-        // envelope (`[transfer_to_human]\nreason: …`, Call #945). If the FIRST
-        // non-whitespace content of the turn begins with `{`, a code fence, or
-        // `[`, withhold ALL content from onToken/TTS and resolve it at
-        // end-of-stream (parsed by the unified parseToolEnvelope). Replies that
-        // don't start with one of those markers stream normally, preserving TTFT
-        // for ordinary conversation.
         if (hasTools) {
           if (bufferingJson) {
             jsonBuffer += token;
@@ -560,7 +411,6 @@ ${systemPrompt}`
           if (!jsonSniffDecided) {
             const peek = (jsonBuffer + token).replace(/^\s+/, "");
             if (peek === "") {
-              // Only whitespace so far — hold it and wait for real content.
               jsonBuffer += token;
               return;
             }
@@ -571,22 +421,18 @@ ${systemPrompt}`
               jsonBuffer += token;
               return;
             }
-            // Not a serialized tool call — stream normally from the cleaned peek
-            // onward (drops the held leading whitespace, like the check below).
             jsonBuffer = "";
             token = peek;
           }
         }
 
-        // Drop leading whitespace-only tokens (tool-turn "\n" artifact / trimmable
-        // preamble); forward everything once real content has started.
         if (!sawRealContent && /^\s*$/.test(token)) return;
 
         sawRealContent = true;
         full += token;
         onToken(token);
       } catch {
-        // skip malformed chunk
+        // Skip malformed chunk
       }
     };
 
@@ -609,10 +455,8 @@ ${systemPrompt}`
     const tail = buffer.trim();
     if (tail.startsWith("data: ")) handleData(tail.slice(6));
 
-    // Report usage exactly once, before the terminal callback.
     if (usage) options?.onUsage?.(usage);
 
-    // Tool turn (structured path): dispatch the first (lowest-index) tool call.
     if (toolAcc.size > 0 && options?.onToolCall) {
       const picked = [...toolAcc.entries()]
         .sort((a, b) => a[0] - b[0])
@@ -624,86 +468,48 @@ ${systemPrompt}`
         try {
           args = JSON.parse(picked.args || "{}") as Record<string, unknown>;
         } catch {
-          // malformed args — call with empty args
+          // Empty args on JSON parse error
         }
         options.onToolParsed?.({ name: picked.name, format: "structured", args });
         options.onToolCall(picked.name, args);
-        return; // exactly one terminal callback — do NOT also call onDone
+        return;
       }
     }
 
-    // Buffered serialized-tool-call fallback: Sarvam emitted the tool call as
-    // plain text in delta.content instead of structured delta.tool_calls (none of
-    // it was forwarded to TTS). Resolve the withheld buffer through the unified
-    // parser (JSON envelope OR bracket/key-value envelope), validating the name
-    // against the tools offered this turn; on success execute the tool, otherwise
-    // drop it silently — never speak malformed raw JSON to the caller.
     if (bufferingJson) {
       const parsedCall = options?.onToolCall
         ? parseToolEnvelope(jsonBuffer, validToolNames)
         : null;
       if (parsedCall) options?.onToolDetected?.({ format: parsedCall.format });
-      if (rawSseDebugEnabled()) {
-        logger.warn(
-          {
-            evt: "sarvam_raw_sse_json_in_content",
-            callId: this.callId,
-            model: this.model,
-            sawToolDelta,
-            parseSucceeded: parsedCall !== null,
-            resolvedToolName: parsedCall?.name ?? null,
-            resolvedFormat: parsedCall?.format ?? null,
-            fellBackToText: parsedCall === null,
-            jsonBufferLength: jsonBuffer.length,
-            jsonBuffer:
-              jsonBuffer.length > RAW_SSE_DIAG_MAX_BUFFER
-                ? `${jsonBuffer.slice(0, RAW_SSE_DIAG_MAX_BUFFER)}…[truncated]`
-                : jsonBuffer,
-          },
-          "Sarvam raw SSE diagnostic: tool call emitted as text in delta.content",
-        );
-      }
+
       if (parsedCall && options?.onToolCall) {
         options.onToolParsed?.({ name: parsedCall.name, format: parsedCall.format, args: parsedCall.args });
         options.onToolCall(parsedCall.name, parsedCall.args);
-        return; // exactly one terminal callback — do NOT also call onDone
-      }
-      // FIX: If parsing failed, do NOT speak the raw JSON to the caller.
-      // Drop it silently (emit empty string). The pipeline safety net will handle clarification.
-      if (rawSseDebugEnabled()) {
-        logger.warn(
-          {
-            evt: "sarvam_tool_parse_failed_not_spoken",
-            callId: this.callId,
-            model: this.model,
-            jsonBufferLength: jsonBuffer.length,
-            jsonBuffer:
-              jsonBuffer.length > RAW_SSE_DIAG_MAX_BUFFER
-                ? `${jsonBuffer.slice(0, RAW_SSE_DIAG_MAX_BUFFER)}…[truncated]`
-                : jsonBuffer,
-          },
-          "Sarvam LLM: buffered tool call failed to parse — dropping (NOT spoken to caller)",
-        );
+        return;
       }
       onDone("", usage);
       return;
     }
 
-    // Plain text reply — but first check for a trailing <function>name</function> tag.
     if (!sawToolDelta && !bufferingJson && options?.onToolCall && validToolNames.size > 0) {
       const fnTagMatch = /^([\s\S]*?)\s*<function>([^<]+)<\/function>\s*$/.exec(full);
       if (fnTagMatch) {
         const textBefore = fnTagMatch[1] ?? "";
-        const toolName   = (fnTagMatch[2] ?? "").trim();
+        const toolName = (fnTagMatch[2] ?? "").trim();
         if (validToolNames.has(toolName)) {
           options.onToolDetected?.({ format: "function_tag" });
           options.onToolParsed?.({ name: toolName, format: "function_tag", args: {} });
           options.onToolCall(toolName, {});
-          return; // exactly one terminal callback — do NOT also call onDone
+          return;
         }
-        // Tag found but not a recognised tool — strip the tag and speak the clean text.
         full = textBefore.trim();
       }
+    }
+
+    // Fallback: If full is empty because all tokens were spent in reasoning, use reasoningBuffer as output fallback
+    if (!full.trim() && reasoningBuffer.trim()) {
+      logger.warn({ model: this.model, evt: "sarvam_content_null_reasoning_fallback" }, "Sarvam content was null, using reasoning_content fallback");
+      full = reasoningBuffer.trim();
     }
 
     onDone(full, usage);
