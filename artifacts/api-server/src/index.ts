@@ -162,6 +162,10 @@ server.on("upgrade", (request, socket, head) => { void (async () => {
   let webcallGuestKey: string | null = null;
   let webcallShareLinkId: number | null = null;
   let webcallMeetMid: string | null = null;
+  let webcallMeetMemoryPhone: string | null = null;
+  let webcallMeetSourceCallId: number | null = null;
+  let webcallMeetPassMemory: boolean | undefined;
+  let webcallMeetPassCallContext: boolean | undefined;
   if (provider === "webcall") {
     const shareToken = qs.get("share");
     const sessionToken = qs.get("token");
@@ -202,6 +206,13 @@ server.on("upgrade", (request, socket, head) => { void (async () => {
         }
         webcallUserId = payload.userId;
         webcallMeetMid = payload.mid ?? null;
+        webcallMeetMemoryPhone = typeof payload.memoryPhone === "string" ? payload.memoryPhone : null;
+        webcallMeetSourceCallId =
+          typeof payload.sourceCallId === "number" && payload.sourceCallId > 0
+            ? payload.sourceCallId
+            : null;
+        webcallMeetPassMemory = payload.passMemory;
+        webcallMeetPassCallContext = payload.passCallContext;
       } catch (err) {
         logger.error({ err, agentId }, "Meet-bot webcall upgrade failed");
         socket.write("HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\n\r\n");
@@ -320,6 +331,10 @@ server.on("upgrade", (request, socket, head) => { void (async () => {
         void handleWebcallWebSocket(ws, agentId, webcallUserId!, {
           ...(webcallGuestKey ? { guestKey: webcallGuestKey, linkId: webcallShareLinkId } : {}),
           ...(webcallMeetMid ? { meetMid: webcallMeetMid } : {}),
+          ...(webcallMeetMemoryPhone ? { meetingMemoryPhone: webcallMeetMemoryPhone } : {}),
+          ...(webcallMeetSourceCallId ? { meetingSourceCallId: webcallMeetSourceCallId } : {}),
+          ...(webcallMeetPassMemory === false ? { passMemory: false } : {}),
+          ...(webcallMeetPassCallContext === false ? { passCallContext: false } : {}),
           hdAudio,
         });
         break;

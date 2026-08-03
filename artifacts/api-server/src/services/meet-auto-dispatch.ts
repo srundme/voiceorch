@@ -29,6 +29,10 @@ import {
   createMeetRoster,
   RECALL_PARTICIPANT_EVENTS,
 } from "./meet-roster.js";
+import {
+  parseMeetingsConfig,
+  resolveMeetRuntimeAgentId,
+} from "./meeting-runtime.js";
 
 /** In-memory cache of booking IDs for which a meeting bot has already been dispatched */
 const dispatchedBotBookings = new Set<number>();
@@ -72,41 +76,99 @@ export async function dispatchUpcomingMeetingBots(): Promise<void> {
       dispatchedBotBookings.add(b.id);
 
       try {
-        let agentId: number | null = null;
-        let agentName = "SnapServe AI Assistant";
+        let configuredAgentId: number | null = null;
+        let memoryPhone: string | undefined;
+        let sourceCallId: number | undefined;
 
         if (b.callId) {
           const [callRow] = await db
-            .select({ agentId: callsTable.agentId })
+            .select({
+              agentId: callsTable.agentId,
+              toNumber: callsTable.toNumber,
+              fromNumber: callsTable.fromNumber,
+            })
             .from(callsTable)
             .where(eq(callsTable.id, b.callId))
             .limit(1);
-          if (callRow?.agentId) agentId = callRow.agentId;
-        }
-
-        if (!agentId) {
-          const [agentRow] = await db
-            .select({ id: agentsTable.id, name: agentsTable.name })
-            .from(agentsTable)
-            .where(eq(agentsTable.userId, b.userId))
-            .limit(1);
-          if (agentRow) {
-            agentId = agentRow.id;
-            agentName = agentRow.name;
+          if (callRow?.agentId) {
+            configuredAgentId = callRow.agentId;
+            sourceCallId = b.callId;
+            // Prefer the human party number for memory (outbound → toNumber).
+            const candidate = callRow.toNumber || callRow.fromNumber;
+            if (candidate && !candidate.startsWith("webcall-") && !candidate.startsWith("meetbot-")) {
+              memoryPhone = candidate;
+            }
           }
         }
 
-        if (!agentId) {
+        if (!configuredAgentId) {
+          const [agentRow] = await db
+            .select({ id: agentsTable.id, name: agentsTable.name, agentConfig: agentsTable.agentConfig })
+            .from(agentsTable)
+            .where(eq(agentsTable.userId, b.userId))
+            .limit(1);
+          if (agentRow) configuredAgentId = agentRow.id;
+        }
+
+        if (!configuredAgentId) {
           logger.warn({ bookingId: b.id }, "Auto-dispatch meeting bot: no agent found for user");
           continue;
         }
 
+        const [configured] = await db
+          .select({
+            id: agentsTable.id,
+            name: agentsTable.name,
+            agentConfig: agentsTable.agentConfig,
+            userId: agentsTable.userId,
+          })
+          .from(agentsTable)
+          .where(eq(agentsTable.id, configuredAgentId))
+          .limit(1);
+        if (!configured) continue;
+
+        const meetings = parseMeetingsConfig(configured.agentConfig);
+        if (!meetings.enabled) {
+          logger.info(
+            { bookingId: b.id, agentId: configuredAgentId },
+            "Auto-dispatch skipped — meetings channel disabled for agent",
+          );
+          continue;
+        }
+
+        let runtimeAgentId = resolveMeetRuntimeAgentId(configuredAgentId, configured.agentConfig);
+        let agentName = configured.name || "SnapServe AI Assistant";
+        if (runtimeAgentId !== configuredAgentId) {
+          const [delegate] = await db
+            .select({
+              id: agentsTable.id,
+              name: agentsTable.name,
+              userId: agentsTable.userId,
+            })
+            .from(agentsTable)
+            .where(eq(agentsTable.id, runtimeAgentId))
+            .limit(1);
+          if (!delegate || delegate.userId !== b.userId) {
+            logger.warn(
+              { bookingId: b.id, configuredAgentId, runtimeAgentId },
+              "Auto-dispatch: meeting delegate missing — falling back to configured agent",
+            );
+            runtimeAgentId = configuredAgentId;
+          } else {
+            agentName = delegate.name || agentName;
+          }
+        }
+
         const mid = randomUUID();
         const token = signMeetBotToken({
-          agentId,
+          agentId: runtimeAgentId,
           userId: b.userId,
           exp: Date.now() + 2 * 60 * 60 * 1000, // 2 hour TTL for live meeting
           mid,
+          ...(sourceCallId && meetings.passCallContext ? { sourceCallId } : {}),
+          ...(memoryPhone && meetings.passMemory ? { memoryPhone } : {}),
+          passMemory: meetings.passMemory,
+          passCallContext: meetings.passCallContext,
         });
         const base = getSelfBaseUrl();
         const pageUrl = `${base}/api/meet-bots/page?mb=${encodeURIComponent(token)}`;
@@ -119,7 +181,7 @@ export async function dispatchUpcomingMeetingBots(): Promise<void> {
           botName: agentName,
           pageUrl,
           ownerUserId: b.userId,
-          agentId,
+          agentId: runtimeAgentId,
           eventsUrl: `${base}/api/meet-bots/recall-events?mb=${encodeURIComponent(token)}`,
           eventsList: RECALL_PARTICIPANT_EVENTS,
         });
@@ -127,7 +189,8 @@ export async function dispatchUpcomingMeetingBots(): Promise<void> {
         logger.info(
           {
             bookingId: b.id,
-            agentId,
+            agentId: runtimeAgentId,
+            configuredAgentId,
             botId: bot.id,
             meetLink: b.meetLink,
             slotStart: b.slotStart,

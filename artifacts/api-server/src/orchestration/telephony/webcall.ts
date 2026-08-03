@@ -36,7 +36,16 @@ export async function handleWebcallWebSocket(
   ws: WebSocket,
   agentId: number,
   userId: string,
-  opts?: { guestKey?: string; linkId?: number | null; hdAudio?: boolean; meetMid?: string },
+  opts?: {
+    guestKey?: string;
+    linkId?: number | null;
+    hdAudio?: boolean;
+    meetMid?: string;
+    meetingMemoryPhone?: string;
+    meetingSourceCallId?: number;
+    passMemory?: boolean;
+    passCallContext?: boolean;
+  },
 ): Promise<void> {
   let sessionId: string | null = null;
   // The socket can close / error / send "end" while createSession is still
@@ -181,6 +190,16 @@ export async function handleWebcallWebSocket(
       // HD mode (negotiated via ?rate=16000): the client receives 16 kHz PCM
       // — the TTS keeps its full bandwidth instead of the 8 kHz carrier rate.
       rawPcmOutputRate: opts?.hdAudio ? 16000 : 8000,
+      ...(opts?.meetMid
+        ? {
+            ...(opts.meetingMemoryPhone ? { meetingMemoryPhone: opts.meetingMemoryPhone } : {}),
+            ...(typeof opts.meetingSourceCallId === "number"
+              ? { meetingSourceCallId: opts.meetingSourceCallId }
+              : {}),
+            ...(opts.passMemory === false ? { passMemory: false } : {}),
+            ...(opts.passCallContext === false ? { passCallContext: false } : {}),
+          }
+        : {}),
       onAudioOut: sendAudio,
       onCallEnd: () => { detachRoster(); ending = true; sendJson({ type: "call_end" }); ws.close(); },
       onBargeIn: () => sendJson({ type: "clear" }),

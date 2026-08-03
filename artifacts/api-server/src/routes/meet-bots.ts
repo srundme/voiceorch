@@ -23,6 +23,10 @@ import {
   handleRecallParticipantEvent,
   RECALL_PARTICIPANT_EVENTS,
 } from "../services/meet-roster.js";
+import {
+  parseMeetingsConfig,
+  resolveMeetRuntimeAgentId,
+} from "../services/meeting-runtime.js";
 
 const router: IRouter = Router();
 
@@ -92,7 +96,11 @@ router.post("/meet-bots", requireAuth, async (req, res) => {
 
   try {
     const rows = await db
-      .select({ userId: agentsTable.userId, name: agentsTable.name })
+      .select({
+        userId: agentsTable.userId,
+        name: agentsTable.name,
+        agentConfig: agentsTable.agentConfig,
+      })
       .from(agentsTable)
       .where(eq(agentsTable.id, agentId));
     const agent = rows[0];
@@ -101,9 +109,35 @@ router.post("/meet-bots", requireAuth, async (req, res) => {
       return;
     }
 
+    // Channels → Meetings: whoJoins=delegate swaps the runtime agent that enters the room.
+    const meetings = parseMeetingsConfig(agent.agentConfig);
+    let runtimeAgentId = resolveMeetRuntimeAgentId(agentId, agent.agentConfig);
+    let botName = agent.name || "Voice Agent";
+    if (runtimeAgentId !== agentId) {
+      const [delegate] = await db
+        .select({
+          userId: agentsTable.userId,
+          name: agentsTable.name,
+          agentConfig: agentsTable.agentConfig,
+        })
+        .from(agentsTable)
+        .where(eq(agentsTable.id, runtimeAgentId));
+      if (!delegate || delegate.userId !== userId) {
+        res.status(400).json({ error: "Meeting delegate agent not found or not owned by you" });
+        return;
+      }
+      botName = delegate.name || botName;
+    }
+
     const mid = randomUUID();
-    const botName = agent.name || "Voice Agent";
-    const token = signMeetBotToken({ agentId, userId, exp: Date.now() + PAGE_TOKEN_TTL_MS, mid });
+    const token = signMeetBotToken({
+      agentId: runtimeAgentId,
+      userId,
+      exp: Date.now() + PAGE_TOKEN_TTL_MS,
+      mid,
+      passMemory: meetings.passMemory,
+      passCallContext: meetings.passCallContext,
+    });
     const base = getSelfBaseUrl();
     const pageUrl = `${base}/api/meet-bots/page?mb=${encodeURIComponent(token)}`;
     // Speaker identification: register the roster BEFORE the bot exists so the
@@ -114,12 +148,20 @@ router.post("/meet-bots", requireAuth, async (req, res) => {
       botName,
       pageUrl,
       ownerUserId: userId,
-      agentId,
+      agentId: runtimeAgentId,
       eventsUrl: `${base}/api/meet-bots/recall-events?mb=${encodeURIComponent(token)}`,
       eventsList: RECALL_PARTICIPANT_EVENTS,
     });
-    logger.info({ userId, agentId, botId: bot.id }, "Meeting bot created");
-    res.json({ botId: bot.id, status: bot.statusCode ?? "created" });
+    logger.info(
+      { userId, agentId, runtimeAgentId, botId: bot.id, whoJoins: meetings.whoJoins },
+      "Meeting bot created",
+    );
+    res.json({
+      botId: bot.id,
+      status: bot.statusCode ?? "created",
+      agentId: runtimeAgentId,
+      configuredAgentId: agentId,
+    });
   } catch (err) {
     logger.error({ err, userId, agentId }, "Meeting bot creation failed");
     res.status(502).json({ error: err instanceof Error ? err.message : "Failed to create meeting bot" });

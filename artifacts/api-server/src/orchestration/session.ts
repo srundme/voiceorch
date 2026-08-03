@@ -36,6 +36,7 @@ import { resolveMicSensitivity, getMicSensitivityThresholds } from "./mic-sensit
 import { loadPcmLoop, TRACK_PARAMS } from "./ambient.js";
 import type { AgentConfig, AgentTool, TelephonyProvider, SessionTransport, PipelineMetrics } from "./types.js";
 import { logger } from "../lib/logger.js";
+import { parseMeetingsConfig } from "../services/meeting-runtime.js";
 import {
   saveSessionMeta,
   patchSessionMeta,
@@ -216,6 +217,16 @@ export async function createSession(params: {
   rawPcmOutput?: boolean;
   /** 16000 for browser webcall clients that negotiated HD audio; default 8000. */
   rawPcmOutputRate?: 8000 | 16000;
+  /**
+   * Meeting bot (Channels → Meetings): contact phone for caller memory when
+   * passMemory is on. Does not change the call-log fromNumber (still meetbot-*).
+   */
+  meetingMemoryPhone?: string;
+  /** Prior call id whose summary is injected when passCallContext is on. */
+  meetingSourceCallId?: number;
+  /** Snapshot from meet-bot token; default true when omitted. */
+  passMemory?: boolean;
+  passCallContext?: boolean;
   /** When true, the session runs in voicemail-delivery mode instead of the normal
    *  conversation pipeline: it waits for the answering machine's greeting to end
    *  (acoustic VAD cue) then speaks the agent's configured `voicemailMessage` once
@@ -382,6 +393,17 @@ export async function createSession(params: {
     hour: "2-digit", minute: "2-digit", timeZone: agentTimezone,
   });
   let effectiveSystemPrompt = agent.generatedPrompt ?? agent.systemPrompt;
+  // Meeting bots: Channels → Meetings "meeting prompt" replaces the call prompt
+  // when set. Date/time + memory/context blocks still append below.
+  const isMeetBotSession =
+    typeof params.fromNumber === "string" && params.fromNumber.startsWith("meetbot-");
+  if (isMeetBotSession) {
+    const meetingPrompt = parseMeetingsConfig(agentCfg).meetingPrompt.trim();
+    if (meetingPrompt) {
+      effectiveSystemPrompt = meetingPrompt;
+      logger.info({ agentId: params.agentId }, "Using Channels meeting prompt for meet-bot session");
+    }
+  }
   effectiveSystemPrompt += `\n\n[DATE/TIME CONTEXT] Today is ${dateCtxParts}. Current time is ${timeCtxParts} (${agentTimezone}).`;
   // True when the agent is configured to follow the caller's language mid-call
   // (any secondary language set, or explicit languageAutoDetect flag).
@@ -742,9 +764,22 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
   //   shared platform fromNumber, which would collapse every outbound caller onto
   //   one key. Placeholder/sentinel + missing numbers resolve to null (cold start).
   const callDirection: CallDirection = params.callDirection ?? "inbound";
-  const callerPhone = isWebcall
+  // Meeting bots normally key off meetbot-<mid> (no personal memory). When
+  // Channels → Meetings passMemory + memoryPhone are set (e.g. booking auto-join),
+  // load contact memory under that phone while the call log stays on meetbot-*.
+  let callerPhone = isWebcall
     ? canonicalizeCallerKey(params.fromNumber)
     : resolveCallerKey(callDirection, params.fromNumber, params.toNumber);
+  if (
+    isMeetBotSession &&
+    params.passMemory !== false &&
+    typeof params.meetingMemoryPhone === "string" &&
+    params.meetingMemoryPhone.trim()
+  ) {
+    callerPhone = canonicalizeCallerKey(params.meetingMemoryPhone.trim());
+  } else if (isMeetBotSession && params.passMemory === false) {
+    callerPhone = null;
+  }
   // Persona fingerprint for caller-memory whiplash detection: when the agent is
   // repurposed (e.g. real-estate → insurance), stale domain memory keyed on
   // (agentId, phone) must not bleed into the new persona. Derived from the RAW
@@ -1070,6 +1105,47 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     );
     agentConfig.systemPrompt += `\n\n${sections.join("\n\n")}`;
     logger.info({ agentId: params.agentId }, "Resume context injected into system prompt for network-drop callback");
+  }
+
+  // Meeting bot: inject prior phone-call summary when Channels → Meetings
+  // passCallContext is on and the launch token carried a sourceCallId.
+  if (
+    isMeetBotSession &&
+    params.passCallContext !== false &&
+    typeof params.meetingSourceCallId === "number" &&
+    params.meetingSourceCallId > 0
+  ) {
+    try {
+      const [prior] = await db
+        .select({
+          callSummary: callsTable.callSummary,
+          transcript: callsTable.transcript,
+        })
+        .from(callsTable)
+        .where(eq(callsTable.id, params.meetingSourceCallId))
+        .limit(1);
+      const summary =
+        (prior?.callSummary && prior.callSummary.trim()) ||
+        (prior?.transcript
+          ? prior.transcript.trim().slice(0, 1200) + (prior.transcript.length > 1200 ? "…" : "")
+          : "");
+      if (summary) {
+        agentConfig.systemPrompt +=
+          `\n\n=== PRIOR CALL CONTEXT (for this meeting) ===\n` +
+          `This meeting follows a phone call with the same person.\n` +
+          `Summary / notes:\n${summary}\n` +
+          `Use this to continue the conversation — do not re-ask for facts already covered unless confirming.`;
+        logger.info(
+          { agentId: params.agentId, sourceCallId: params.meetingSourceCallId },
+          "Prior call context injected into meet-bot prompt",
+        );
+      }
+    } catch (ctxErr) {
+      logger.warn(
+        { agentId: params.agentId, sourceCallId: params.meetingSourceCallId, ctxErr },
+        "Failed to load prior call context for meet-bot",
+      );
+    }
   }
 
   // ── Resolve dynamic variables in system prompt ─────────────────────────────

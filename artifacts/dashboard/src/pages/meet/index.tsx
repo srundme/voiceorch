@@ -34,15 +34,24 @@ export default function MeetPage() {
 
   const launch = useMutation({
     mutationFn: async () =>
-      customFetch<{ botId: string; status: string }>(`${API}/meet-bots`, {
+      customFetch<{ botId: string; status: string; agentId?: number; configuredAgentId?: number }>(`${API}/meet-bots`, {
         method: "POST",
         body: JSON.stringify({ agentId: Number(agentId), meetingUrl: meetingUrl.trim() }),
       }),
     onSuccess: (data) => {
-      const agentName = agents.find((a) => String(a.id) === agentId)?.name ?? "Agent";
+      const runtimeId = data.agentId != null ? String(data.agentId) : agentId;
+      const agentName = agents.find((a) => String(a.id) === runtimeId)?.name
+        ?? agents.find((a) => String(a.id) === agentId)?.name
+        ?? "Agent";
       setBots((prev) => [...prev, { botId: data.botId, agentName, meetingUrl: meetingUrl.trim() }]);
       setMeetingUrl("");
-      toast({ title: "Bot is joining the meeting", description: "It appears as a participant within ~30 seconds. Admit it from the waiting room if prompted." });
+      const delegated = data.agentId != null && data.configuredAgentId != null && data.agentId !== data.configuredAgentId;
+      toast({
+        title: "Bot is joining the meeting",
+        description: delegated
+          ? `${agentName} is joining (meeting delegate). Admit it from the waiting room if prompted.`
+          : "It appears as a participant within ~30 seconds. Admit it from the waiting room if prompted.",
+      });
     },
     onError: (err: any) =>
       toast({ title: "Could not join meeting", description: err?.message ?? "Unknown error", variant: "destructive" }),
@@ -59,7 +68,7 @@ export default function MeetPage() {
     <div className="space-y-6">
       <AppPageHeader
         title="Meeting Bots"
-        description="Send a voice agent into a Google Meet, Zoom, or Teams meeting as a live participant."
+        description="Send a voice agent into a Google Meet, Zoom, or Teams meeting. Meeting prompt and delegate live on the agent → Channels → Meetings."
       />
 
       <div className="max-w-xl space-y-4 rounded-lg border p-4">
@@ -73,6 +82,15 @@ export default function MeetPage() {
               ))}
             </SelectContent>
           </Select>
+          {agentId ? (
+            <p className="text-[11px] text-muted-foreground">
+              Meeting prompt and delegates: open this agent →{" "}
+              <a className="underline underline-offset-2" href={`/app/agents/${agentId}`}>
+                Channels → Meetings
+              </a>
+              .
+            </p>
+          ) : null}
         </div>
         <div className="space-y-2">
           <Label>Meeting link</Label>

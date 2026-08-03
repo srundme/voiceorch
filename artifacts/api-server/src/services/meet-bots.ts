@@ -68,6 +68,14 @@ export interface MeetBotTokenPayload {
    * Optional for backward compat with tokens minted before this field existed.
    */
   mid?: string;
+  /** Prior phone call to inject summary into the meeting prompt (Channels → Meetings). */
+  sourceCallId?: number;
+  /** E.164 / dialed party for caller memory during the meeting when passMemory is on. */
+  memoryPhone?: string;
+  /** Snapshot of meetings.passMemory at launch (default true). */
+  passMemory?: boolean;
+  /** Snapshot of meetings.passCallContext at launch (default true). */
+  passCallContext?: boolean;
 }
 
 function tokenSecret(): string {

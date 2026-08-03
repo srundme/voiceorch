@@ -93,6 +93,7 @@ import { GeneratePromptSheet } from "./generate-prompt-sheet";
 import { JourneyPanel } from "./journey-panel";
 import { ReachPanel } from "./reach-panel";
 import { EmailChannelCard, useEmailChannelReady } from "./email-channel-card";
+import { MeetingsChannelCard } from "./meetings-channel-card";
 const _DASH_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const DASH_API   = `${_DASH_BASE}/api`;
 
@@ -972,6 +973,8 @@ function ChannelsTab({ form, agent, forceExpandEmail = false }: { form: any; age
         </div>
 
         <EmailChannelCard forceExpanded={forceExpandEmail} />
+
+        {agent?.id ? <MeetingsChannelCard agentId={agent.id} /> : null}
 
         <div className="rounded-xl border border-border/60 bg-card/20 p-4 space-y-3">
           <div className="flex items-center justify-between gap-3">
