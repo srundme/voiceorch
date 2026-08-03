@@ -335,6 +335,7 @@ router.post("/scheduling/public/bookings", schedulingBookingRateLimit, async (re
       meetLink,
       cancelLink,
       rescheduleLink,
+      calendarSyncStatus,
     });
   }
   void dispatchSchedulingWebhooks(calendar.userId, "scheduling.booking.created", {

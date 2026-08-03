@@ -477,7 +477,9 @@ export default function AgentEdit() {
   const schedulingEventTypeId = form.watch("schedulingEventTypeId");
   const agentCalendar = schedulingCalendarId != null
     ? (calendarsData ?? []).find((cal: any) => cal.id === schedulingCalendarId)
-    : id ? (calendarsData ?? []).find((cal: any) => cal.agentId === id) : undefined;
+    : id
+      ? ((calendarsData ?? []).find((cal: any) => cal.agentId === id) ?? (calendarsData ?? [])[0])
+      : (calendarsData ?? [])[0];
   const calendarIdForEt = agentCalendar?.id;
   const { data: agentEventTypes } = useListEventTypes(
     calendarIdForEt ? { calendarId: calendarIdForEt } : undefined,

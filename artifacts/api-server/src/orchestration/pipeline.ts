@@ -135,7 +135,7 @@ const FRAGMENT_COALESCE_MS_DEFAULT = 1000;  // fallback when agentConfig omits p
 /** Listening-side hold for ack fragments ("Yes Ma'am") — was 150ms; call 4856
  *  flushed before the caller finished "…how are you?" → zigzag replies. */
 const FRAGMENT_COALESCE_LISTENING_MS_DEFAULT = 250;
-const VAD_FLUSH_BACKSTOP_MS   = 2000;   // speech_start with no interim/final/speech_end for this long → one-shot STT flush (lost-turn anomaly)
+const VAD_FLUSH_BACKSTOP_MS   = 6000;   // speech_start with no interim/final/speech_end for this long → one-shot STT flush (lost-turn anomaly)
 const VAD_FLUSH_COOLDOWN_MS   = 5000;   // min interval between backstop flushes — keeps the flush strictly anomaly-only
 const LLM_TTFT_FALLBACK_MS    = Number(process.env.LLM_TTFT_FALLBACK_MS ?? 1200); // abort slow primary LLM
 const LLM_SLOW_TTFT_MS        = Number(process.env.LLM_SLOW_TTFT_MS ?? 1200);     // warn in execution logs
@@ -1939,6 +1939,22 @@ export class OrchestrationPipeline implements VoiceSession {
       sttCfg
     );
     this.llm = createLLMAdapter(this.agent.llmProvider, llmKey, this.agent.llmModel, undefined, this.agent.llmGenerationParams, config.callId);
+
+    // Seed currentLang for per-turn LLM language injection.
+    const agentLanguage = this.agent.language ?? null;
+    const seedLang = this.agent.languageAutoDetect
+      ? (this.agent.initialLanguage ?? null)   // returning-caller preference only
+      : agentLanguage;                          // strict mode: always lock from config
+    if (seedLang) this.currentLang = seedLang;
+
+    // Launch greeting LLM prewarm IMMEDIATELY after LLM adapter creation so the 1-3s LLM round-trip
+    // gets maximum overlap with fallback LLM init, TTS setup, and noise cancellation.
+    if (!this.amdConfirm && this.greetingWillNeedLlm()) {
+      const preLang = this.currentLang || this.agent.sttConfig.language || this.agent.language || "en-IN";
+      this._greetingPrewarm = this.generateGreetingLlmText(this.isResumeDroppedCall, preLang).catch(() => "");
+      logger.info({ callId: config.callId }, "Greeting LLM prewarm started (constructor entry)");
+    }
+
     // P0-B: Initialise fallback LLM adapter if the agent has one configured and the key is available
     if (this.agent.fallbackLlmProvider) {
       const fallbackKey = keys.get(this.agent.fallbackLlmProvider);
@@ -1947,31 +1963,7 @@ export class OrchestrationPipeline implements VoiceSession {
         logger.info({ callId: config.callId, fallbackProvider: this.agent.fallbackLlmProvider }, "Fallback LLM adapter initialised");
       }
     }
-    // AgentConfig.language already holds asrLanguage || agent.language
-    // (merged in session.ts). Use it directly for TTS language.
-    const agentLanguage = this.agent.language ?? null;
-    // Seed currentLang for per-turn LLM language injection.
-    //
-    // Strict mode (Auto-detect OFF): seed from agentLanguage so the ABSOLUTE RULE
-    // fires from turn 1 and enforces a single language throughout the call.
-    //
-    // Auto-detect mode (Auto-detect ON): ONLY seed from a returning caller's
-    // remembered language preference (initialLanguage). Do NOT seed from
-    // agentLanguage here — doing so injects e.g. "[LANGUAGE RULE] Respond in English"
-    // on turn 1 when the agent language field is "en-IN", which directly fights a
-    // Tamil/Hindi system prompt and causes the greeting to come out in English instead.
-    // With no seed, currentLang stays "" and buildLangGuard() injects nothing — the
-    // system prompt defines the starting language. currentLang fills in after the
-    // first transcript arrives via script detection, and subsequent turns get the
-    // correct per-caller language rule.
-    const seedLang = this.agent.languageAutoDetect
-      ? (this.agent.initialLanguage ?? null)   // returning-caller preference only
-      : agentLanguage;                          // strict mode: always lock from config
-    if (seedLang) this.currentLang = seedLang;
-    // Prefer the live conversation language (seed / auto-detect memory) over a
-    // stale agent.language so Cartesia/Sarvam start with the right tag — call
-    // 4845 logged language:null on every Tamil synth because agentLanguage was
-    // unset while STT was en-IN.
+
     const ttsLanguage = this.currentLang || agentLanguage;
     const ttsExtraConfig = this.agent.ttsProvider === "sarvam"
       ? JSON.stringify({
@@ -1984,20 +1976,12 @@ export class OrchestrationPipeline implements VoiceSession {
       ttsExtraConfig, ttsLanguage, this.agent.ttsSpeed
     );
     if (ttsLanguage) this.ttsLang = ttsLanguage;
-    // Pre-warm any persistent TTS connections (e.g. Cartesia WebSocket) so the
-    // greeting doesn't pay the TCP+TLS+WS handshake cost on its first synthesis.
-    this.tts.warmup?.();
-
-    // No-AMD greeting prewarm: on calls WITHOUT an AMD confirmation window
-    // (inbound, webcall, outbound with AMD off) the greeting LLM used to start
-    // serially inside greet(), after STT connect + ambient load. Launch it now
-    // so the 1–3s LLM round-trip overlaps that setup instead of following it.
-    // AMD calls keep their existing prewarm inside confirmAmdMachineThenBranch()
-    // (started there so a machine verdict can skip the wasted call less often).
-    if (!this.amdConfirm && this.greetingWillNeedLlm()) {
-      const preLang = this.currentLang || this.agent.sttConfig.language || this.agent.language || "en-IN";
-      this._greetingPrewarm = this.generateGreetingLlmText(this.isResumeDroppedCall, preLang).catch(() => "");
-      logger.info({ callId: config.callId }, "Greeting LLM prewarm started (no-AMD path)");
+    // Pre-warm any persistent TTS connections (e.g. Cartesia / Sarvam WebSocket) with a bounded 500ms wait.
+    if (this.tts.warmup) {
+      void Promise.race([
+        Promise.resolve(this.tts.warmup()),
+        new Promise<void>((resolve) => setTimeout(resolve, 500)),
+      ]).catch(() => { /* ignore warmup error */ });
     }
 
     if (this.agent.noiseCancellationEnabled) {
@@ -2271,7 +2255,7 @@ export class OrchestrationPipeline implements VoiceSession {
                   : this.interruptionMgr.getWordsForInterruption();
                 const langPrefix = (this.currentLang || this.agent.language || "en").split(/[-_]/)[0]?.toLowerCase();
                 const isIndic = ["ta", "hi", "te", "kn", "ml", "mr", "bn", "gu"].includes(langPrefix ?? "");
-                const minChars = isIndic ? 14 : 8;
+                const minChars = 4;
                 if (
                   threshold > 0
                   && this.streamingBargeInWordCount >= threshold
@@ -2483,7 +2467,7 @@ export class OrchestrationPipeline implements VoiceSession {
         const charCount = [...transcript.trim()].length;
         const langPrefix = (this.currentLang || this.agent.language || "en").split(/[-_]/)[0]?.toLowerCase();
         const isIndic = ["ta", "hi", "te", "kn", "ml", "mr", "bn", "gu"].includes(langPrefix ?? "");
-        const minChars = isIndic ? 14 : 8;
+        const minChars = 4;
         if (this.streamingBargeInWordCount >= threshold && charCount >= minChars) {
           this.triggerBargeIn("word_count", transcript, { speculative: true });
           logger.info(
@@ -3144,29 +3128,13 @@ export class OrchestrationPipeline implements VoiceSession {
     const isWebcallStreaming = !respectHoldUntil && this.config.telephonyProvider === "webcall";
 
     const now = Date.now();
-    // Without transcript evidence during live TTS, treat energy like the batch path:
-    // respect the extended bargeInHoldUntil so carrier echo of our own voice cannot
-    // fire a mid-sentence streaming_energy cut (call 4853: "One moment…" self-echo).
-    // Once streaming STT has real words, hold is skipped so callers can still interrupt.
-    const noSttEvidenceHold =
-      !respectHoldUntil
-      && this.isSendingTtsAudio
-      && this.streamingBargeInWordCount === 0
-      && now < this.bargeInHoldUntil;
+    // 600ms per-sentence start grace protects initial spoken words from self-echo false cuts.
+    const startGraceMs = Math.max(600, this.bargeInEchoGraceMs);
     if (
       now < this.greetingEchoHoldUntil ||
-      now < this.bargeInSentenceStartAt + this.bargeInEchoGraceMs ||
-      (respectHoldUntil && now < this.bargeInHoldUntil) ||
-      noSttEvidenceHold
+      now < this.bargeInSentenceStartAt + startGraceMs ||
+      (respectHoldUntil && now < this.bargeInHoldUntil)
     ) {
-      // Echo grace: suppress (and reset) while our own freshly started audio may
-      // still be echoing back. greetingEchoHoldUntil covers the full opening line
-      // on the carrier path; the per-sentence grace covers the start of each reply.
-      // Calibrate the echo floor ONLY in the brief post-start window (see
-      // BARGE_IN_ECHO_CALIBRATION_MS): those frames are near-certainly pure echo
-      // because the caller has not had time to react to THIS line yet. Sampling the
-      // WHOLE grace window would let a caller who barges in early poison the floor
-      // against themselves.
       if (useAdaptive && now <= this.bargeInSentenceStartAt + BARGE_IN_ECHO_CALIBRATION_MS) {
         this.updateEchoFloor(currentRms);
       }
@@ -3174,51 +3142,25 @@ export class OrchestrationPipeline implements VoiceSession {
       return;
     }
 
-    // Adaptive barge-in bar: on the streaming carrier path, sit just ABOVE the echo
-    // floor we measured for THIS line (echoFloor × margin), clamped to
-    // [configuredThreshold, MAX]. A quiet line → bar near the configured threshold →
-    // a normal-volume caller interrupts. A loud/echoey line → bar rises above the echo
-    // → no self-trigger. Before enough echo is seen, fall back to the conservative
-    // cold-start floor so we never self-interrupt on the first frames. The batch path
-    // (respectHoldUntil) and webcall (AEC) keep the configured threshold as-is.
     let effectiveThreshold = this.bargeInEnergyThreshold;
     if (useAdaptive) {
-      // Trust the learned floor only after enough echo samples; until then use the
-      // conservative cold-start fallback so returning echo can't self-trigger while the
-      // estimate is still empty/thin.
       const floorReady = this.playbackEchoFloorSamples >= BARGE_IN_ECHO_FLOOR_MIN_SAMPLES;
       const echoBar = floorReady
         ? this.playbackEchoFloor * BARGE_IN_ADAPTIVE_ECHO_MARGIN
         : BARGE_IN_TELEPHONY_ACTIVE_TTS_ENERGY_FLOOR;
-      // Bar = at least the configured threshold, plus an echo-derived boost that is
-      // itself capped at MAX so a poisoned/loud echo estimate can never lift the bar
-      // beyond MAX. A user-configured threshold ABOVE MAX is still honoured (never
-      // silently lowered).
       effectiveThreshold = Math.max(
         this.bargeInEnergyThreshold,
         Math.min(echoBar, BARGE_IN_ADAPTIVE_MAX_THRESHOLD),
       );
     }
-    // Webcall AEC path: browser already cancelled the echo so the telephony anti-echo
-    // bar (default 1200) is unnecessary. Lower to BARGE_IN_WEBCALL_AEC_THRESHOLD so a
-    // normal-volume browser mic can actually trigger a barge-in. A user-configured
-    // bargeInEnergyThreshold that is already lower than the AEC threshold is honoured.
-    // Mic Sensitivity moves this cap too: "normal" reproduces the env-tunable
-    // BARGE_IN_WEBCALL_AEC_THRESHOLD default exactly; "low"/"high" scale it.
     const webcallAecThreshold = this.micThresholds.webcallAecThreshold;
     if (isWebcallStreaming && effectiveThreshold > webcallAecThreshold) {
       effectiveThreshold = webcallAecThreshold;
     }
-    // Telephony floor: agent configs that set bargeInEnergyThreshold near the VAD
-    // floor (~300) false-fire constantly and leave sticky bargeInRequested → silent
-    // farewells. Never drop the live bar below BARGE_IN_TELEPHONY_MIN_ENERGY on the
-    // carrier path (gaps between sentences included).
     if (streamingCarrier) {
       effectiveThreshold = Math.max(effectiveThreshold, BARGE_IN_TELEPHONY_MIN_ENERGY);
     }
 
-    // Periodic diagnostic so the exact echo/voice/threshold numbers for a line are
-    // visible in the logs (throttled to ~once/700 ms while the agent is playing).
     if (useAdaptive && now - this.lastEnergyMonitorLogAt >= 700) {
       this.lastEnergyMonitorLogAt = now;
       logger.info(
@@ -3231,7 +3173,6 @@ export class OrchestrationPipeline implements VoiceSession {
         "energy barge-in monitor",
       );
     }
-    // Equivalent diagnostic for the webcall (AEC) streaming path.
     if (isWebcallStreaming && now - this.lastEnergyMonitorLogAt >= 700) {
       this.lastEnergyMonitorLogAt = now;
       logger.info(
@@ -3250,31 +3191,9 @@ export class OrchestrationPipeline implements VoiceSession {
 
     if (aboveBar) {
       this.bargeInSpeechFrames++;
-      // When a Stop Speaking Plan is configured, bargeInMinFrames is already derived
-      // from Min Words / Min Voice Duration and is authoritative — don't apply the
-      // non-UI wordsForInterruption×20 floor. Keep BARGE_IN_MIN_FRAMES as a floor so
-      // a single loud frame can't fire.
-      let effectiveMinFrames = this.stopSpeakingPlanConfigured
-        ? Math.max(BARGE_IN_MIN_FRAMES, this.bargeInMinFrames)
-        : Math.max(this.bargeInMinFrames, (this.agent.wordsForInterruption ?? 3) * 20);
-      // Bolna prefers transcript-gated interruption. Pure-energy barge-in without
-      // any interim STT evidence must SUSTAIN longer (~400 ms). Previously we used
-      // Math.min(effective, cap) which left stop-speaking-plan agents at 3 frames
-      // (~60 ms) forever — call 2620 false-cut mid "okay"/overview with mute gap.
-      if (!respectHoldUntil) {
-        const hasSttEvidence = this.streamingBargeInWordCount > 0;
-        const noEvidenceFloor = Math.max(BARGE_IN_STREAMING_MIN_FRAMES * 2, 20); // ~400 ms @ 20 ms/frame
-        if (hasSttEvidence) {
-          // Words confirmed — allow a responsive energy cut (capped near streaming min).
-          effectiveMinFrames = Math.max(
-            BARGE_IN_MIN_FRAMES,
-            Math.min(effectiveMinFrames, BARGE_IN_STREAMING_MIN_FRAMES),
-          );
-        } else {
-          // No STT words yet — raise the floor; never leave agents at 3 frames.
-          effectiveMinFrames = Math.max(effectiveMinFrames, noEvidenceFloor);
-        }
-      }
+      // ~15 frames (300 ms @ 20ms/frame) of sustained caller speech energy required.
+      // Filters out brief mic clicks/breaths while reacting promptly to human interruptions.
+      let effectiveMinFrames = Math.max(15, BARGE_IN_STREAMING_MIN_FRAMES);
       if (this.bargeInSpeechFrames >= effectiveMinFrames) {
         this.triggerBargeIn(source, undefined, {
           speculative: false,
@@ -4331,6 +4250,15 @@ export class OrchestrationPipeline implements VoiceSession {
       }
       this._currentTurnPlayedSentences = [];
       this.isPlaying = true;
+      const bootLatencyMs = Date.now() - (this.config.sessionCreatedAtMs ?? Date.now());
+      logger.info(
+        { callId: this.config.callId, bootLatencyMs, greetingLen: greeting.length },
+        "Call pipeline boot complete — playing opening greeting",
+      );
+      this.logExec("Pipeline", "system", {
+        status: "info",
+        metadata: { bootLatencyMs, greetingLen: greeting.length },
+      });
       try {
         await this.playTextAsSentences(greeting, greetingEmotions);
       } finally {
@@ -5040,6 +4968,10 @@ export class OrchestrationPipeline implements VoiceSession {
     emotions?: string[],
   ): TtsSentenceJob {
     // ── TTS text normalization ────────────────────────────────────────────────
+    // Strip bracketed, starred, or parenthesized non-verbal tags (e.g. [laughter], *laughs*, (sigh), [gasp])
+    // so TTS engines do not read them literally.
+    text = text.replace(/\[[a-zA-Z0-9_\-\s]+\]|\*+[a-zA-Z0-9_\-\s]+\*+|\([a-zA-Z0-9_\-\s]+\)/gi, "");
+
     // Strip the ₹ currency symbol before synthesis. TTS engines (especially
     // Sarvam) expand it to the formal literary word: "ரூபாய்" (Tamil) /
     // "रुपया" (Hindi) / "rupee" (English) — which sounds stiff and unnatural.
@@ -7821,11 +7753,53 @@ export class OrchestrationPipeline implements VoiceSession {
         gu: "એક ક્ષણ…", bn: "একটু অপেক্ষা করুন…", ml: "ഒരു നിമിഷം…",
         es: "Un momento…", fr: "Un instant…", de: "Einen Moment…", ar: "لحظة…",
       };
+      const TOOL_FILLERS_BY_NAME: Record<string, Record<string, string>> = {
+        native_check_availability: {
+          en: "Let me check the available slots real quick…",
+          ta: "இருங்க, ஃப்ரீயா இருக்குற ஸ்லாட்ஸ் செக் பண்ணி பாக்குறேன்…",
+          hi: "एक मिनट, मैं स्लॉट्स चेक करके बताता हूँ…",
+          te: "ఒక్క నిమిషం, అవైలబుల్ స్లాట్స్ చెక్ చేస్తున్నాను…",
+          kn: "ಲಭ್ಯವಿರುವ ಸಮಯವನ್ನು ಪರಿಶೀಲಿಸುತ್ತಿದ್ದೇನೆ…",
+        },
+        native_booking: {
+          en: "Great, booking that in for you right now…",
+          ta: "சரிங்க, உங்க அப்பாயிண்ட்மென்ட் புக் பண்ணிடுறேன்…",
+          hi: "बस आपका अपॉइंटमेंट बुक कर रहा हूँ…",
+          te: "సరేనండి, మీ అపాయింట్‌మెంట్ బుక్ చేస్తున్నాను…",
+          kn: "ನಿಮ್ಮ ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ಬುಕ್ ಮಾಡುತ್ತಿದ್ದೇನೆ…",
+        },
+        native_reschedule: {
+          en: "Got it, updating your appointment time now…",
+          ta: "ஒரு நிமிஷம், டைம் மாத்தி புக் பண்ணிடுறேன்…",
+          hi: "एक मिनट, अपॉइंटमेंट की टाइमिंग चेंज कर देता हूँ…",
+          te: "మీ అపాయింట్‌మెంట్‌ను రీషెడ్యూల్ చేస్తున్నాను…",
+        },
+        native_cancel: {
+          en: "Sure thing, cancelling that booking for you…",
+          ta: "சரிங்க, அந்த அப்பாயிண்ட்மென்ட் கேன்சல் பண்ணிடுறேன்…",
+          hi: "जी, वो अपॉइंटमेंट कैंसिल कर देता हूँ…",
+          te: "మీ అపాయింట్‌మెంట్‌ను రద్దు చేస్తున్నాను…",
+        },
+        native_list_bookings: {
+          en: "Let me pull up your upcoming bookings real quick…",
+          ta: "ஒரு நிமிஷம், உங்க புக் பண்ணுன ஸ்லாட்ஸ் பாக்குறேன்…",
+          hi: "एक मिनट, आपकी बुकिंग्स चेक कर लेता हूँ…",
+        },
+      };
+
+      const toolAliasMap: Record<string, string> = {
+        book_appointment: "native_booking",
+        check_availability: "native_check_availability",
+        reschedule_booking: "native_reschedule",
+        cancel_booking: "native_cancel",
+        list_bookings: "native_list_bookings",
+      };
+      const canonicalName = toolAliasMap[triggeredToolName] ?? triggeredToolName;
       const langPrefix = ((this.currentLang || this.agent.language) ?? "en").split("-")[0] ?? "en";
-      // Strict, language-based fillers only — no English fallback for non-English agents.
-      // Skip entirely for end_call: the call is terminating anyway, so a "One moment…"
-      // filler just plays an awkward extra phrase right before/instead of the goodbye.
-      const filler = triggeredToolName === "end_call" ? undefined : TOOL_FILLERS[langPrefix];
+      const toolSpecific = TOOL_FILLERS_BY_NAME[triggeredToolName] ?? TOOL_FILLERS_BY_NAME[canonicalName];
+      const filler = triggeredToolName === "end_call"
+        ? undefined
+        : (toolSpecific?.[langPrefix] ?? TOOL_FILLERS[langPrefix]);
       if (filler && !this.closed && !this.bargeInRequested) {
         logger.info(
           {

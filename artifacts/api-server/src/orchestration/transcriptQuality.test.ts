@@ -195,5 +195,12 @@ describe("isAccidentalInterruptPhrase", () => {
     it("normalizes Hindi spoken emails into clean email strings", () => {
       expect(normalizeSttPhonetics("user name ऐट जीमेल डॉट कॉम")).toBe("username@gmail.com");
     });
+
+    it("normalizes letter-by-letter dictated emails with symbols into clean email strings", () => {
+      expect(normalizeSttPhonetics("k a r t h i k e y a n 0 1 at gmail dot com")).toBe("karthikeyan01@gmail.com");
+      expect(normalizeSttPhonetics("c o d e m a t e a i at gmail dot com")).toBe("codemateai@gmail.com");
+      expect(normalizeSttPhonetics("k a r t h i k underscore zero one at gmail dot com")).toBe("karthik_01@gmail.com");
+      expect(normalizeSttPhonetics("g o p i n w r k at gmail dot com")).toBe("gopinwrk@gmail.com");
+    });
   });
 });

@@ -109,10 +109,23 @@ export class GroqLLM implements LLMAdapter {
         }))
       : undefined;
 
-    const hasSchedulingTools = options?.tools?.some(
-      (t) => SCHEDULING_TOOL_NAME_PATTERNS.some((pattern) => t.name.includes(pattern)),
-    ) ?? false;
-    const toolChoice = groqTools ? (hasSchedulingTools ? "required" : "auto") : undefined;
+    const toolChoice = groqTools ? "auto" : undefined;
+
+    // Groq-specific tool guidance: explicitly instruct the model to use structured
+    // function calling and NOT emit preamble or text-serialized tool calls.
+    // Some Llama variants ignore the tool schema and fall back to emitting text like:
+    //   "I will execute book_appointment(attendee_name="X", ...)"
+    // This injection strongly discourages that behavior.
+    const effectiveSystemPrompt = groqTools
+      ? `[TOOL CALLING RULES — FOLLOW EXACTLY]
+When you want to call a tool:
+1. Use ONLY the structured function-calling mechanism provided by the API. NEVER write a function call as plain text or describe what you are about to do.
+2. Do NOT say "I will execute", "Let me call", "I'll run" or any similar preamble before calling a tool — just call it directly via the function-calling API.
+3. Do NOT emit tool names or arguments as text in your response (e.g. book_appointment(...) in plain text is FORBIDDEN).
+4. When you have ALL required information, call the tool immediately — do not ask for confirmation again.
+
+${systemPrompt}`
+      : systemPrompt;
 
     const stream = await this.client.chat.completions.create({
       model:          this.model,
@@ -129,7 +142,7 @@ export class GroqLLM implements LLMAdapter {
       ...(this.maxTokens ? { max_tokens: this.maxTokens } : {}),
       ...(this.temperature !== undefined ? { temperature: this.temperature } : {}),
       messages: [
-        { role: "system", content: systemPrompt },
+        { role: "system", content: effectiveSystemPrompt },
         ...toOpenAIMessages(messages),
       ] as any,
       ...(groqTools ? { tools: groqTools, tool_choice: toolChoice } : {}),
@@ -138,3 +151,4 @@ export class GroqLLM implements LLMAdapter {
     await drainOpenAICompatibleStream(stream as any, onToken, onDone, options);
   }
 }
+

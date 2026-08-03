@@ -41,6 +41,8 @@ export function getAllCampaignConcurrency(): Map<number, number> {
 const STUCK_CALLING_TIMEOUT_MS =
   parseInt(process.env["STUCK_CALLING_TIMEOUT_MS"] ?? "0", 10) || 15 * 60 * 1000;
 
+import { startMeetingBotAutoDispatcher } from "./meet-auto-dispatch.js";
+
 export function startBatchScheduler(): void {
   if (started) return;
   started = true;
@@ -51,6 +53,8 @@ export function startBatchScheduler(): void {
     void sweepStuckCallingLeads();
     void sweepStuckInProgressCalls();
   }, 60_000);
+
+  startMeetingBotAutoDispatcher();
 
   logger.info({ campaignWebhookBaseUrl: getSelfBaseUrl() }, "Batch scheduler started");
 }

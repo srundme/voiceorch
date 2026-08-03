@@ -199,13 +199,14 @@ export class SarvamSTT implements STTAdapter {
         })
       : {};
 
-    // Model: saaras:v4 (latest), saaras:v3 (recommended) or saarika:v2.5
-    // (legacy) — the only models the streaming WS endpoint accepts (v3/v2.5
-    // live-verified; v4 per Jul 2026 docs). "saaras:v2.5" was never a valid
-    // streaming model; normalise unknowns to saaras:v3 so a stale stored
-    // value can't 400 the socket into a reconnect loop.
+    // Model: saaras:v3 (recommended) or saarika:v2.5 (legacy) — the only models
+    // the streaming WS endpoint accepts (v3/v2.5 live-verified).
+    // saaras:v4 streaming is UNSTABLE: repeated "2s of speech, zero WS activity"
+    // backstop fires and causes fully lost turns. Force v3 until Sarvam confirms
+    // the fix. If a stored config has v4, silently downgrade.
     const requested = (model ?? "").trim();
-    this.model = ["saaras:v4", "saaras:v3", "saarika:v2.5"].includes(requested)
+    const ALLOWED_MODELS = ["saaras:v3", "saarika:v2.5"];
+    this.model = ALLOWED_MODELS.includes(requested)
       ? requested
       : "saaras:v3";
 
@@ -226,7 +227,7 @@ export class SarvamSTT implements STTAdapter {
       typeof extra.speechEndFlushMs === "number" &&
       Number.isFinite(extra.speechEndFlushMs)
         ? Math.max(0, Math.min(200, Math.round(extra.speechEndFlushMs)))
-        : 30;
+        : 80;
     // Prefer agent UI value; env SARVAM_COALESCE_INCOMPLETE_MS remains a deploy-wide override.
     const envIncomplete = envInt("SARVAM_COALESCE_INCOMPLETE_MS", -1);
     this.incompleteHoldMs =
@@ -235,7 +236,7 @@ export class SarvamSTT implements STTAdapter {
         : typeof extra.incompleteHoldMs === "number" &&
             Number.isFinite(extra.incompleteHoldMs)
           ? Math.max(50, Math.min(1000, Math.round(extra.incompleteHoldMs)))
-          : 220;
+          : 350;
 
     logger.info(
       {
@@ -343,10 +344,10 @@ export class SarvamSTT implements STTAdapter {
     const MAX_RECONNECT = 10;
 
     const audioQueue: Buffer[] = [];
-    // Time-based cap (~8s of audio) so it matches the MAX_RECONNECT backoff
-    // ceiling (8000ms) at BOTH sample rates — a fixed byte cap would buffer
-    // ~16s at 8kHz telephony and replay stale caller audio after reconnect.
-    const MAX_QUEUE_BYTES = sampleRate * 2 * 8; // s16le mono: bytes/sec × 8s (256KB @16k, 128KB @8k)
+    // Increased to 16s to cover the full reconnect backoff ceiling (500ms→8s).
+    // Dropping the oldest 8s meant losing the START of the caller's speech after
+    // a reconnect — the most important part. 16s covers the worst-case backoff.
+    const MAX_QUEUE_BYTES = sampleRate * 2 * 16; // 16s of audio (512KB @16k, 256KB @8k)
     let queueTrimLogged = false; // throttle: log queue trim at most once per reconnect episode
     let speechEndAt = 0; // timestamp of last END_SPEECH event for latency tracking
     let speechEndReceived = false; // true once speech_end fires; reset on speech_start
@@ -746,6 +747,8 @@ export class SarvamSTT implements STTAdapter {
     // carrier DTX/stream pauses. deadFired latches so we act once per episode.
     let lastMsgAt = Date.now();
     let lastAudioSentAt = 0;
+    let socketOpenedAt = Date.now();
+    let lastSpeechStartAt = 0;
     let inSpeechSegment = false;
     let deadFired = false;
     const HEARTBEAT_MS = 300;
@@ -784,6 +787,8 @@ export class SarvamSTT implements STTAdapter {
         wsReady = true;
         reconnectAttempts = 0;
         deadFired = false; // fresh socket — re-arm the zombie detector
+        socketOpenedAt = Date.now();
+        lastSpeechStartAt = 0;
         lastMsgAt = Date.now(); // start silence window from now, not dead socket's last frame
         queueTrimLogged = false; // re-arm queue-trim log for this reconnect episode
         // Reset VAD state: a stale speechEndReceived=true would send post-reconnect
@@ -820,6 +825,7 @@ export class SarvamSTT implements STTAdapter {
           (msg.type === "events" && msg.data?.signal_type === "START_SPEECH")
         ) {
           inSpeechSegment = true;
+          lastSpeechStartAt = Date.now();
           speechEndReceived = false; // caller is speaking again; clear the speech_end flag
           _onSpeechStart?.();
           logger.debug({ langCode }, "Sarvam STT: speech start");
@@ -930,11 +936,12 @@ export class SarvamSTT implements STTAdapter {
           // • complete transcript, speech_end not yet → SPEECH_END_FLUSH_MS.
           if (coalesceTimer) clearTimeout(coalesceTimer);
           const incomplete = looksIncomplete(coalesceBuf);
-          const holdMs = speechEndReceived
-            ? SPEECH_END_FLUSH_MS
-            : incomplete
-              ? COALESCE_INCOMPLETE_MS
-              : SPEECH_END_FLUSH_MS;
+          // Even after speech_end, an incomplete-looking buffer needs the longer hold —
+          // Sarvam's tight VAD (~64ms) fires speech_end on natural thinking pauses.
+          // Without this, "I want" flushes before "to know the pricing" arrives.
+          const holdMs = incomplete
+            ? Math.max(SPEECH_END_FLUSH_MS, COALESCE_INCOMPLETE_MS)
+            : SPEECH_END_FLUSH_MS;
           logger.debug(
             {
               langCode,
@@ -1039,13 +1046,10 @@ export class SarvamSTT implements STTAdapter {
               dropped += len;
               total -= len;
             }
-            if (!queueTrimLogged) {
-              queueTrimLogged = true;
-              logger.warn(
-                { droppedBytes: dropped },
-                "Sarvam STT: audio queue trimmed — dropped stale chunks during reconnect backoff",
-              );
-            }
+            logger.warn(
+              { droppedBytes: dropped, totalQueued: audioQueue.length, reconnectAttempts },
+              "Sarvam STT: audio queue trimmed — dropped stale chunks during reconnect backoff",
+            );
           }
         } else {
           sendChunk(chunk);
@@ -1061,20 +1065,12 @@ export class SarvamSTT implements STTAdapter {
         // handles the edge case where coalesceBuf is non-empty but coalesceTimer is null.
         if (coalesceTimer) clearTimeout(coalesceTimer);
         emitCoalesced();
-        // Ask Sarvam to immediately finalize its internal audio buffer.
-        if (!wsReady || ws.readyState !== WebSocket.OPEN) return;
-        const emptyData = Buffer.alloc(0);
-        ws.send(
-          JSON.stringify({
-            audio: {
-              data: emptyData.toString("base64"),
-              encoding: "audio/wav",
-              sample_rate: sampleRate,
-            },
-            flush: true,
-          }),
-        );
-        logger.debug({ langCode }, "Sarvam STT: flush signal sent");
+        
+        // Note: We deliberately do NOT send the JSON `flush: true` packet to Sarvam's
+        // streaming endpoint here. Manual flushes corrupt Sarvam's internal context window
+        // (causing subsequent audio to be missed or garbage transcripts to be generated).
+        // Clearing the local timers and emitting held transcripts is sufficient.
+        logger.debug({ langCode }, "Sarvam STT: local buffers flushed (socket flush bypassed)");
       },
       setLanguage(lang: string): void {
         const next = normaliseLang(lang, model);
@@ -1204,11 +1200,26 @@ export class SarvamSTT implements STTAdapter {
         }
       }
       if (deadFired) return; // zombie already handled this episode
-      if (!inSpeechSegment) return; // zombie check only meaningful mid-utterance
       if (ws.readyState !== WebSocket.OPEN) return; // CONNECTING/CLOSING handled elsewhere
-      // Suppress false positives: during genuine send gaps (AMD confirmation phase,
-      // pre-greeting window, carrier DTX/stream pauses) we are NOT sending audio and
-      // Sarvam is legitimately silent. Only suspect death while actively streaming.
+
+      // "no speech_start" watchdog — if we've been sending audio for >5s
+      // but Sarvam never said speech_start, the VAD may be stuck. Force a flush
+      // + reconnect. Without this, the caller speaks into a void.
+      const audioSentSinceSpeech = Date.now() - lastAudioSentAt;
+      const noSpeechStartWindow = lastSpeechStartAt === 0 && (Date.now() - socketOpenedAt > 5000);
+
+      if (!inSpeechSegment && noSpeechStartWindow && audioSentSinceSpeech < WS_DEAD_MS) {
+        deadFired = true;
+        logger.warn(
+          { langCode, socketAge: Date.now() - socketOpenedAt },
+          "Sarvam STT: no speech_start after 5s of streaming — VAD stuck, terminating for reconnect",
+        );
+        try { sttObj.onConnectionDead?.(); } catch { /* noop */ }
+        try { ws.terminate(); } catch { try { ws.close(); } catch { /* noop */ } }
+        return;
+      }
+
+      if (!inSpeechSegment) return; // zombie check only meaningful mid-utterance
       if (Date.now() - lastAudioSentAt > WS_DEAD_MS) return;
       const silenceMs = Date.now() - lastMsgAt;
       if (silenceMs > WS_DEAD_MS) {

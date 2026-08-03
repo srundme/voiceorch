@@ -25,13 +25,13 @@ import { logger } from "../../../lib/logger.js";
 const BASE = "https://api.sarvam.ai";
 const WS_BASE = "wss://api.sarvam.ai/text-to-speech/ws";
 const WAV_HEADER_BYTES = 44;
-const WS_CONNECT_TIMEOUT_MS = 8_000;
+const WS_CONNECT_TIMEOUT_MS = 4_000;
 const WS_PING_INTERVAL_MS = 30_000;
 const WS_RETRY_MAX = 3;
 /** After flush, if the WS goes fully idle this long with no message (audio,
  * event, or error), assume "final" was lost and resolve — every armed message
  * re-arms the timer, so slow-but-alive synthesis of long sentences is safe. */
-const FINAL_EVENT_IDLE_MS = Math.max(1000, Number(process.env.SARVAM_TTS_FINAL_IDLE_MS ?? 1500));
+const FINAL_EVENT_IDLE_MS = Math.max(600, Number(process.env.SARVAM_TTS_FINAL_IDLE_MS ?? 800));
 const WS_RETRY_BASE_MS = 400;
 const WS_RETRY_MAX_MS = 4_000;
 
@@ -125,7 +125,13 @@ function resolveSpeaker(voice: string | null, model: string): string {
   if (model === "bulbul:v2") return V2_SPEAKERS.has(trimmed) ? trimmed : fallback;
   // v3: reject known v2-only names; accept catalog speakers AND Creative Studio
   // cloned speaker ids (hyphenated custom ids are allowed — only UUIDs are rejected).
-  if (V2_SPEAKERS.has(trimmed)) return fallback;
+  if (V2_SPEAKERS.has(trimmed)) {
+    logger.warn(
+      { voice: trimmed, model, fallback },
+      "SarvamTTS: speaker is v2-only and not available on v3 — falling back. Update the agent voice to a v3-compatible speaker.",
+    );
+    return fallback;
+  }
   return trimmed;
 }
 
@@ -213,12 +219,30 @@ export class SarvamTTS implements TTSAdapter {
       : null;
   }
 
+  private preprocessingOverride: boolean | null = null;
+
+  /** Disable preprocessing for the next synthesize call only (e.g. for OTP/phone number/digit accuracy). */
+  disablePreprocessingForNextCall(): void {
+    this.preprocessingOverride = this.enablePreprocessing;
+    this.enablePreprocessing = false;
+    setTimeout(() => {
+      if (this.preprocessingOverride !== null) {
+        this.enablePreprocessing = this.preprocessingOverride;
+        this.preprocessingOverride = null;
+      }
+    }, 5000);
+  }
+
   setLanguage(lang: string): void {
     const next = SARVAM_LANG[lang] ?? SARVAM_LANG[lang.split("-")[0]!] ?? "en-IN";
     if (next === this.langCode) return;
     this.langCode = next;
-    // Config on the warm socket is stale — next synth opens a fresh connection.
+    // Drop the warm WS — Sarvam's WS protocol does not support re-configuration on an existing socket.
+    // Eagerly warm up a fresh WS with the new language so the next utterance doesn't pay connect latency.
     this.dropWarmWs();
+    void this.ensureWarmWs().catch((err) => {
+      logger.warn({ err }, "SarvamTTS: proactive warm-up after language change failed");
+    });
   }
 
   warmup(): void {
@@ -249,8 +273,17 @@ export class SarvamTTS implements TTSAdapter {
     const parts: string[] = [];
     let rest = text;
     while (rest.length > maxChars) {
-      let cut = rest.lastIndexOf(" ", maxChars);
-      if (cut < maxChars / 2) cut = maxChars;
+      // Prefer sentence boundaries (period, danda, question, exclamation)
+      // before falling back to space, then hard cut.
+      let cut = -1;
+      for (const sep of [". ", "। ", "? ", "! ", "।", ".", "?", "!"]) {
+        const idx = rest.lastIndexOf(sep, maxChars);
+        if (idx > maxChars / 2) { cut = idx + sep.length; break; }
+      }
+      if (cut === -1) {
+        cut = rest.lastIndexOf(" ", maxChars);
+        if (cut < maxChars / 2) cut = maxChars;
+      }
       parts.push(rest.slice(0, cut).trim());
       rest = rest.slice(cut).trimStart();
     }

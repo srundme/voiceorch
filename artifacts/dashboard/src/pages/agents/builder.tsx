@@ -2660,7 +2660,9 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
   const schedulingEventTypeId = form.watch("schedulingEventTypeId");
   const agentCalendar = schedulingCalendarId != null
     ? (calendarsData ?? []).find((cal: any) => cal.id === schedulingCalendarId)
-    : agentId ? (calendarsData ?? []).find((cal: any) => cal.agentId === agentId) : undefined;
+    : agentId
+      ? ((calendarsData ?? []).find((cal: any) => cal.agentId === agentId) ?? (calendarsData ?? [])[0])
+      : (calendarsData ?? [])[0];
   const calendarIdForEt = agentCalendar?.id;
   const { data: agentEventTypes } = useListEventTypes(
     calendarIdForEt ? { calendarId: calendarIdForEt } : undefined,

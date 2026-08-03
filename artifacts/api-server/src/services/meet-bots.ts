@@ -287,13 +287,9 @@ export function buildMeetBotPageHtml(opts: { agentId: number; token: string; age
     buf.getChannelData(0).set(f32);
     var src = ctx.createBufferSource();
     src.buffer = buf; src.connect(ctx.destination);
+    if (Date.now() < ignoreAudioUntil) return;
     var now = ctx.currentTime;
     framesIn++;
-    // If the cursor fell behind (stream start or underrun), re-anchor with a
-    // jitter lead instead of playing immediately back-to-back. 600ms lead:
-    // Recall's headless browser + the Railway->bot network path can stall
-    // longer than a normal browser tab, and each stall past the lead is an
-    // audible gap ("sticky" voice). Extra latency is fine in a meeting.
     if (nextPlayTime < now + 0.02) {
       if (started) underruns++;
       started = true;
@@ -306,7 +302,9 @@ export function buildMeetBotPageHtml(opts: { agentId: number; token: string; age
       var ix = activeSources.indexOf(src); if (ix>=0) activeSources.splice(ix,1);
     };
   }
+  var ignoreAudioUntil = 0;
   function clearPlayback(){
+    ignoreAudioUntil = Date.now() + 1000;
     activeSources.slice().forEach(function(s){ try{s.stop();}catch(e){} });
     activeSources = []; nextPlayTime = 0; upLast = 0; upFrac = 0;
   }

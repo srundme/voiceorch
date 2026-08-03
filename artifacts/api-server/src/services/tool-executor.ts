@@ -963,6 +963,7 @@ export async function executeNativeBooking(
       bookingId: confirmedBooking.id,
       notes: confirmedBooking.attendeeNotes,
       meetLink,
+      calendarSyncStatus,
     }).then(() => {
       void appendBookingLog(callId, agentId, "Invitation Sent", {
         attendeeEmail,
