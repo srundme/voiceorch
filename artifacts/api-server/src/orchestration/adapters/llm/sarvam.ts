@@ -207,21 +207,45 @@ function parseSerializedToolCall(
  */
 function parseBracketToolCall(
   raw: string,
+  validNames?: Set<string>,
 ): { name: string; args: Record<string, unknown> } | null {
   let text = raw.trim();
   // Strip an optional ```…``` fence in case the model wrapped the bracket form.
   if (text.startsWith("```")) {
     text = text.replace(/^```[a-zA-Z]*\s*/, "").replace(/```\s*$/, "").trim();
   }
-  const m = /^\[\s*([a-zA-Z][a-zA-Z0-9_-]*)\s*\]/.exec(text);
-  if (!m || !m[1]) return null;
+  let m = /^\[\s*([a-zA-Z][a-zA-Z0-9_-]*)\s*\]/.exec(text);
+  if (!m) {
+    // Also try matching an embedded or unbracketed tool name line if present in validNames
+    const lines = text.split(/\r?\n/);
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      const lineMatch = /^\[?\s*([a-zA-Z][a-zA-Z0-9_-]*)\s*\]?$/.exec(line);
+      if (lineMatch && lineMatch[1] && validNames?.has(lineMatch[1])) {
+        const name = lineMatch[1];
+        const rest = lines.slice(i + 1).join("\n").trim();
+        const args: Record<string, unknown> = {};
+        if (rest) {
+          for (const argLine of rest.split(/\r?\n/)) {
+            const kv = /^\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*[:=]\s*["']?(.*?)["']?\s*$/.exec(argLine);
+            if (kv && kv[1]) {
+              args[kv[1]] = (kv[2] ?? "").trim();
+            }
+          }
+          if (Object.keys(args).length === 0 && rest) args["reason"] = rest;
+        }
+        return { name, args };
+      }
+    }
+    return null;
+  }
   const name = m[1];
 
   const rest = text.slice(m[0].length).trim();
   const args: Record<string, unknown> = {};
   if (rest) {
     for (const line of rest.split(/\r?\n/)) {
-      const kv = /^\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*[:=]\s*(.*)$/.exec(line);
+      const kv = /^\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*[:=]\s*["']?(.*?)["']?\s*$/.exec(line);
       if (kv && kv[1]) args[kv[1]] = (kv[2] ?? "").trim();
     }
     // No structured key:value lines — keep the residual text as the reason so a
@@ -252,7 +276,7 @@ export function parseToolEnvelope(
   const json = parseSerializedToolCall(raw);
   if (json && nameOk(json.name)) return { ...json, format: "json" };
 
-  const bracket = parseBracketToolCall(raw);
+  const bracket = parseBracketToolCall(raw, validNames);
   if (bracket && nameOk(bracket.name)) return { ...bracket, format: "bracket" };
 
   return null;

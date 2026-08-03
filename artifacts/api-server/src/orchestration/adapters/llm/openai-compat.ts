@@ -1,4 +1,5 @@
-import type { LLMUsage } from "../../types.js";
+import type { LLMUsage, ToolDefinition } from "../../types.js";
+import { parseToolEnvelope } from "./sarvam.js";
 
 /**
  * Shared streaming-loop for all OpenAI-compatible LLM adapters.
@@ -32,6 +33,7 @@ export async function drainOpenAICompatibleStream(
   onToken: (token: string) => void,
   onDone: (fullText: string, usage?: LLMUsage) => void,
   options?: {
+    tools?: ToolDefinition[];
     onToolCall?: (name: string, args: Record<string, unknown>) => void;
     onUsage?: (usage: LLMUsage) => void;
   },
@@ -75,7 +77,18 @@ export async function drainOpenAICompatibleStream(
     let args: Record<string, unknown> = {};
     try { args = JSON.parse(toolCallArgs || "{}") as Record<string, unknown>; } catch { /* keep {} on malformed */ }
     options.onToolCall(toolCallName, args);
-  } else {
-    onDone(full, usage);
+    return;
   }
+
+  // Fallback: Check if the text output contains a serialized text-envelope tool call
+  if (!isToolCall && options?.onToolCall && options?.tools?.length) {
+    const validNames = new Set(options.tools.map((t) => t.name));
+    const env = parseToolEnvelope(full, validNames);
+    if (env) {
+      options.onToolCall(env.name, env.args);
+      return;
+    }
+  }
+
+  onDone(full, usage);
 }

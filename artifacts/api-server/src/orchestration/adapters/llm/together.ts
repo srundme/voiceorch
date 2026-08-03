@@ -80,10 +80,7 @@ export class TogetherLLM implements LLMAdapter {
         }))
       : undefined;
 
-    const hasSchedulingTools = options?.tools?.some(
-      (t) => SCHEDULING_TOOL_NAME_PATTERNS.some((pattern) => t.name.includes(pattern)),
-    ) ?? false;
-    const toolChoice = togetherTools ? (hasSchedulingTools ? "required" : "auto") : undefined;
+    const toolChoice = togetherTools ? "auto" : undefined;
 
     // Disable reasoning/thinking tokens — they add latency before first spoken word
     // and are never useful for a real-time voice call.

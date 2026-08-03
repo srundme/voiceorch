@@ -109,10 +109,7 @@ export class GroqLLM implements LLMAdapter {
         }))
       : undefined;
 
-    const hasSchedulingTools = options?.tools?.some(
-      (t) => SCHEDULING_TOOL_NAME_PATTERNS.some((pattern) => t.name.includes(pattern)),
-    ) ?? false;
-    const toolChoice = groqTools ? (hasSchedulingTools ? "required" : "auto") : undefined;
+    const toolChoice = groqTools ? "auto" : undefined;
 
     const stream = await this.client.chat.completions.create({
       model:          this.model,
