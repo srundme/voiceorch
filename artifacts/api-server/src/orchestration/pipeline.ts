@@ -1577,15 +1577,18 @@ export class OrchestrationPipeline implements VoiceSession {
         warningFlags: ["lost_turn_force_flush"],
         metadata: { event: "Lost-Turn Force Flush", holdMs: this.sttTuning.lostTurnBackstopMs },
       });
+      let emitted = false;
       try {
-        this.streamSTT.flush();
+        emitted = this.streamSTT.flush() === true;
       } catch (err) {
         logger.warn({ callId: this.config.callId, err }, "Lost-turn backstop flush failed");
       }
-      // flush() can only surface a fragment the adapter is already holding. When the
-      // socket produced nothing at all there is nothing to drain, so replay the
-      // buffered audio through batch STT rather than leaving the caller in dead air.
-      void this.attemptLostTurnRecovery();
+      // flush() can only surface a fragment the adapter is already holding. When it
+      // emitted one, that fragment is now travelling through the normal transcript
+      // path and batch recovery would only race it into a near-duplicate. Replay the
+      // buffered audio only when the socket produced nothing at all, rather than
+      // leaving the caller in dead air.
+      if (!emitted) void this.attemptLostTurnRecovery();
     }, this.sttTuning.lostTurnBackstopMs);
   }
 

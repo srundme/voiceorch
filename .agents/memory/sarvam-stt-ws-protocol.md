@@ -78,13 +78,38 @@ POST `https://api.sarvam.ai/speech-to-text`
 - StreamSTT interface has `onConnectionDead?: (() => void) | null` — set by caller after creation.
 - Heartbeat interval cleared in `close()` to prevent leaks.
 
+## The heartbeat only proves the SOCKET is alive, not the ENGINE (call 5439, Aug 2026)
+- Every inbound frame refreshes `lastMsgAt`, and VAD signals are inbound frames. Sarvam can keep
+  emitting `speech_start` while its recognition engine produces no transcripts at all — inbound
+  traffic never stops, so the >3s silence check can never fire. Call 5439 died exactly there:
+  three `speech_start` events over ~8s, zero transcripts, no termination, then three silence
+  reprompts and a `silence_timeout` hangup. The safety net was neutralised by the events it existed
+  to see through.
+- **Do NOT "fix" this with a plain no-transcript timeout.** Sarvam emits transcripts only at
+  end-of-speech, so a caller talking continuously for 10s is indistinguishable from a stalled
+  engine. That check terminates healthy sockets mid-sentence — worse than the bug.
+- The signature that actually discriminates: **repeated `speech_start` with no transcript in
+  between**. A healthy utterance of any length is one `speech_start` → `speech_end` → transcript.
+  Two `speech_start`s with nothing between them means the engine restarted its VAD without
+  recognising anything. `isRecognitionStalled()` in `sarvam.ts` requires both ≥2 such segments and
+  >3s elapsed, and it times from the FIRST silent `speech_start` — timing from the latest is the
+  same self-resetting-window bug in a new place.
+- `deadFired` is cleared only by a transcript or a fresh socket, never by a VAD signal.
+- Anything that clears stall state must ALSO run on `ws.on("open")`. Counters that justified
+  killing a socket stay armed against its replacement otherwise, and the heartbeat kills every new
+  socket on sight — a reconnect loop.
+- `flush()` returns whether it emitted. It can only drain a buffer the adapter already holds, so it
+  is a silent no-op precisely when the engine produced nothing — the case the lost-turn backstop
+  cares about. Two consecutive empty flushes force a reconnect; the pipeline skips batch recovery
+  when the flush did emit, so the two paths cannot race into a near-duplicate turn.
+
 ## Utterances table (June 2026)
 - `lib/db/src/schema/utterances.ts` — one row per user turn; call_id FK, coalesced bool,
   mergedSegments, pauseCount, provider, latencyMs.
 - Insert is fire-and-forget in `process()` right after `safetyNet.onFinal()`.
 - Enables future analytics: avg pause per language, interruption rate, Tamil/English ratio.
 
-**Two-VAD question (investigated, no race):** the pipeline feeds ALL caller frames to the Sarvam WS unconditionally on the streaming path — client energy VAD only drives barge-in/watchdog/safety-net, never gates the feed, never calls flush(), never finalizes turns; Sarvam server VAD (high_vad_sensitivity=0.5s + vad_signals) owns end-of-speech. Input-level gating existed once and was removed (calls 772→1320: gating starved Sarvam → barge-in impossible) — beware STALE comments claiming frames are gated during playback. Docs-recommended 60s-idle keep-alive already implemented (heartbeat tick, 15s idle → 200ms silence frame, outside speech segments). Turn-taking latency is a legitimate STACK, not a race: 0.5s server VAD + 30ms fast-flush (or 120-1200ms coalesce holds when final looks incomplete) + ≤300ms startSpeakingPlan cap. request_id from every WS response now captured → transcript/error logs + SttFinalMetadata.requestId → dashboard exec-log responsePayload (quote it to Sarvam support). Note: asrEndpointingSilenceMs only affects Azure — for Sarvam agents the dashboard/admin/builder UIs now disable the control with provider-aware copy (value preserved for switching back). COALESCE_INCOMPLETE_MS default is 220 ms (history 1200→800→220, env-overridable) — don't quote 1.2s as the worst-case hold.
+**Two-VAD question (investigated, no race):** the pipeline feeds ALL caller frames to the Sarvam WS unconditionally on the streaming path — client energy VAD only drives barge-in/watchdog/safety-net, never gates the feed, never calls flush(), never finalizes turns; Sarvam server VAD (high_vad_sensitivity=0.5s + vad_signals) owns end-of-speech. Input-level gating existed once and was removed (calls 772→1320: gating starved Sarvam → barge-in impossible) — beware STALE comments claiming frames are gated during playback. Docs-recommended 60s-idle keep-alive already implemented (heartbeat tick, 15s idle → 200ms silence frame, outside speech segments). Turn-taking latency is a legitimate STACK, not a race: 0.5s server VAD + 30ms fast-flush (or 120-1200ms coalesce holds when final looks incomplete) + ≤300ms startSpeakingPlan cap. request_id from every WS response now captured → transcript/error logs + SttFinalMetadata.requestId → dashboard exec-log responsePayload (quote it to Sarvam support). Note: asrEndpointingSilenceMs only affects Azure — for Sarvam agents the dashboard/admin/builder UIs now disable the control with provider-aware copy (value preserved for switching back). COALESCE_INCOMPLETE_MS comes from the agent's `sarvamIncompleteHoldMs`, whose platform default is **700 ms** (`SARVAM_STT_LATENCY_DEFAULTS`; history 1200→800→220→700, env-overridable via SARVAM_COALESCE_INCOMPLETE_MS). The bare 350 ms in the adapter is only the no-config fallback. Stale "default 220" comments were removed from sarvam.ts in Aug 2026 — don't reintroduce them, and don't quote 1.2s as the worst-case hold.
 
 ## VAD boundary facts (from Sarvam Fine VAD Tuning docs, Jul 2026)
 - `high_vad_sensitivity=true` (we always send it) → end-of-speech = 2 silence frames of 512 samples = **~64ms @16kHz / ~128ms @8kHz telephony** — NOT 500ms/1s. The old "fixed 0.5s VAD" belief is wrong for our config; measured endDetectToFinalMs 56–309ms corroborates.

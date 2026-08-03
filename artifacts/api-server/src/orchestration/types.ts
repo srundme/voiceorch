@@ -524,8 +524,15 @@ export interface STTAdapter {
 
 export interface StreamSTT {
   sendAudio(chunk: Buffer): void;
-  /** Provider-specific: force the STT engine to flush its audio buffer and emit a transcript now. */
-  flush?(): void;
+  /**
+   * Provider-specific: emit any transcript the adapter is already holding, now.
+   *
+   * Returns whether anything was actually emitted, so the caller can tell a
+   * recovered fragment apart from "the engine produced nothing at all" — the two
+   * need very different handling, and being unable to distinguish them is why a
+   * stalled recognition engine could be flushed repeatedly with no effect.
+   */
+  flush?(): boolean | void;
   /**
    * Provider-specific (optional): live-switch the stream's language hint
    * mid-call (BCP-47, e.g. "ta-IN"). Used when the caller explicitly requests

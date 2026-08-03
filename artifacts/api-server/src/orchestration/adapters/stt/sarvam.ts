@@ -134,6 +134,37 @@ export function endOfSpeechFrames(
 }
 
 /**
+ * Has Sarvam's recognition engine stopped producing transcripts while its VAD
+ * keeps signalling? See the stall-detection notes in createStream() for why the
+ * signal is repeated speech_start rather than a plain no-transcript timeout.
+ *
+ * Both conditions are required. `minSegments` alone would fire on a fast stutter;
+ * elapsed time alone would fire on any caller who talks longer than the threshold
+ * without pausing, terminating a perfectly healthy socket mid-sentence.
+ *
+ * @param speechStartsSinceTranscript speech_start events with no transcript between them
+ * @param awaitingTranscriptSince timestamp of the FIRST such speech_start, 0 when none pending
+ */
+export function isRecognitionStalled(args: {
+  speechStartsSinceTranscript: number;
+  awaitingTranscriptSince: number;
+  nowMs: number;
+  deadMs: number;
+  minSegments: number;
+}): boolean {
+  const {
+    speechStartsSinceTranscript,
+    awaitingTranscriptSince,
+    nowMs,
+    deadMs,
+    minSegments,
+  } = args;
+  if (awaitingTranscriptSince <= 0) return false;
+  if (speechStartsSinceTranscript < minSegments) return false;
+  return nowMs - awaitingTranscriptSince > deadMs;
+}
+
+/**
  * Resolve a millisecond setting: per-agent config wins, then a deploy-wide env
  * override, then the documented default. Out-of-range values are clamped rather
  * than trusted, so a bad config cannot disable VAD outright.
@@ -514,8 +545,10 @@ export class SarvamSTT implements STTAdapter {
     // ── Transcript coalescing holds ──────────────────────────────────────────
     // Two UI-configurable timers drive coalescing (an older adaptive pause-history
     // system was removed as dead code — it was only ever referenced in logs):
-    // Incomplete mid-thought hold — Latency Tuning UI (default 220). Env
-    // SARVAM_COALESCE_INCOMPLETE_MS overrides when set.
+    // Incomplete mid-thought hold — Latency Tuning UI. Platform default is 700ms
+    // (SARVAM_STT_LATENCY_DEFAULTS.incompleteHoldMs); the adapter falls back to
+    // 350ms only when no agent config is supplied at all. Env
+    // SARVAM_COALESCE_INCOMPLETE_MS overrides both when set.
     const COALESCE_INCOMPLETE_MS = this.incompleteHoldMs;
     const SPEECH_END_FLUSH_MS = this.speechEndFlushMs;
     let transcriptArrivedAt = 0; // wall-clock ms when last transcript buffered
@@ -859,9 +892,10 @@ export class SarvamSTT implements STTAdapter {
       });
     };
 
-    const emitCoalesced = () => {
+    /** @returns true when a transcript was actually emitted (buffer was non-empty). */
+    const emitCoalesced = (): boolean => {
       coalesceTimer = null;
-      if (!coalesceBuf) return;
+      if (!coalesceBuf) return false;
       const text = coalesceBuf;
       const lang = coalesceLang;
       const segments = coalesceMergedSegments;
@@ -885,6 +919,7 @@ export class SarvamSTT implements STTAdapter {
         "Sarvam STT: emitting adaptive-coalesced transcript",
       );
       onTranscript(text, true, lang, meta);
+      return true;
     };
 
     // ── WebSocket health monitoring ───────────────────────────────────────────
@@ -903,6 +938,74 @@ export class SarvamSTT implements STTAdapter {
     let deadFired = false;
     const HEARTBEAT_MS = 300;
     const WS_DEAD_MS = 3_000;
+
+    // ── Recognition-engine stall detection (call 5439) ────────────────────────
+    // The silence check above only proves the SOCKET is alive, and every inbound
+    // frame — including VAD signals — refreshes it. Sarvam can keep emitting
+    // speech_start while its recognition engine has stopped producing transcripts
+    // entirely, which refreshes lastMsgAt forever and makes the zombie detector
+    // blind to the exact failure it exists to catch. Call 5439 died that way: three
+    // speech_start events over ~8s, no transcript, no termination, then the silence
+    // reprompt ladder and a silence_timeout hangup.
+    //
+    // A plain "no transcript for N seconds" timer cannot be used instead: Sarvam
+    // emits transcripts only at end-of-speech, so a caller talking continuously
+    // looks identical to a stall and we would terminate a healthy socket mid-turn.
+    //
+    // The distinguishing signature is REPEATED speech_start with no transcript in
+    // between. A healthy utterance — however long — is one speech_start, then
+    // speech_end, then a transcript. Two speech_starts with nothing in between
+    // means the engine restarted its VAD without ever recognising anything.
+    let awaitingTranscriptSince = 0; // first speech_start of the current silent run
+    let speechStartsSinceTranscript = 0;
+    /** Consecutive flush() calls that found nothing to emit — see flush(). */
+    let emptyFlushes = 0;
+    /** speech_starts with no transcript that mean the engine, not the line, is stuck. */
+    const VAD_STALL_MIN_SEGMENTS = 2;
+    /** Empty flushes tolerated before forcing a reconnect. */
+    const MAX_EMPTY_FLUSHES = 2;
+
+    /**
+     * Drop every "the engine may be stuck" signal and re-arm the detectors.
+     *
+     * Called when recognition demonstrably works (a transcript arrived) and when a
+     * fresh socket opens. The second case is not optional: the counters that
+     * justified terminating a socket would otherwise still be armed against its
+     * replacement, and the heartbeat would kill each new socket on sight.
+     */
+    const clearStallState = (): void => {
+      awaitingTranscriptSince = 0;
+      speechStartsSinceTranscript = 0;
+      emptyFlushes = 0;
+      deadFired = false;
+    };
+
+    /**
+     * Terminate a socket we have judged unusable so ws.on("close") runs the normal
+     * exponential-backoff reconnect (terminate produces 1006, not an auth code).
+     * Latches via deadFired so one episode causes one termination.
+     */
+    const killZombie = (cause: string, detail: Record<string, unknown>): void => {
+      deadFired = true;
+      logger.warn(
+        { langCode, cause, ...detail },
+        "Sarvam STT: terminating zombie socket to force reconnect",
+      );
+      try {
+        sttObj.onConnectionDead?.();
+      } catch {
+        /* optional external consumer hook */
+      }
+      try {
+        ws.terminate();
+      } catch {
+        try {
+          ws.close();
+        } catch {
+          /* noop */
+        }
+      }
+    };
 
     const sendChunk = (chunk: Buffer) => {
       if (!wsReady || ws.readyState !== WebSocket.OPEN) return;
@@ -936,7 +1039,7 @@ export class SarvamSTT implements STTAdapter {
       ws.on("open", () => {
         wsReady = true;
         reconnectAttempts = 0;
-        deadFired = false; // fresh socket — re-arm the zombie detector
+        clearStallState(); // fresh socket — re-arm the zombie detectors from zero
         lastMsgAt = Date.now(); // start silence window from now, not dead socket's last frame
         queueTrimLogged = false; // re-arm queue-trim log for this reconnect episode
         // Reset VAD state: a stale speechEndReceived=true would send post-reconnect
@@ -961,8 +1064,12 @@ export class SarvamSTT implements STTAdapter {
 
         // VAD signals — official type values: "speech_start" / "speech_end"
         // (legacy guessed values "events" + signal_type also handled for safety)
+        // Any inbound frame proves the SOCKET is alive, so it refreshes the silence
+        // window. It does NOT clear deadFired: that latch is cleared only by a
+        // transcript (clearStallState) or a fresh socket. Letting a VAD signal
+        // clear it would re-arm the detector using the very events that were masking
+        // the stall in the first place (call 5439).
         lastMsgAt = Date.now();
-        deadFired = false; // any inbound frame proves the socket is alive — re-arm the detector
 
         // Keep the latest request_id (Sarvam docs: support/debugging requests are
         // resolved fastest when the affected call's request_id can be quoted).
@@ -974,6 +1081,11 @@ export class SarvamSTT implements STTAdapter {
         ) {
           inSpeechSegment = true;
           speechEndReceived = false; // caller is speaking again; clear the speech_end flag
+          // Stall tracking: time the run from the FIRST un-transcribed speech_start,
+          // not the latest. Restarting the clock on every speech_start is precisely
+          // how a stalled engine kept the window open indefinitely (call 5439).
+          speechStartsSinceTranscript++;
+          if (awaitingTranscriptSince === 0) awaitingTranscriptSince = Date.now();
           _onSpeechStart?.();
           logger.debug({ langCode }, "Sarvam STT: speech start");
           // If we are holding a transcript and the user resumed speaking, cancel
@@ -1021,6 +1133,12 @@ export class SarvamSTT implements STTAdapter {
         // Final transcript — official type: "transcript"; legacy: "data"
         if (msg.type === "transcript" || msg.type === "data") {
           inSpeechSegment = false; // segment complete
+          // Clear stall state on ANY transcript message, including an empty one:
+          // the recognition engine answered, which is what the detector is watching
+          // for. A repeatedly-empty transcript is a different failure (the turn is
+          // lost but the engine is healthy) and is handled by the pipeline's
+          // lost-turn recovery, not by terminating a working socket.
+          clearStallState();
           const text = stripDiarizationLabels(msg.data?.transcript ?? "");
           // Capture the language Sarvam identified for this segment (saaras:v3 LID).
           // Last seen language_code wins across coalesced segments; reset in emitCoalesced().
@@ -1079,7 +1197,7 @@ export class SarvamSTT implements STTAdapter {
           // (Re-)arm the emit timer.
           // Timer selection after each transcript segment:
           // • speech_end already received → SPEECH_END_FLUSH_MS (UI, default 30).
-          // • incomplete mid-thought → COALESCE_INCOMPLETE_MS (UI, default 220).
+          // • incomplete mid-thought → COALESCE_INCOMPLETE_MS (UI, default 700).
           // • complete transcript, speech_end not yet → SPEECH_END_FLUSH_MS.
           if (coalesceTimer) clearTimeout(coalesceTimer);
           const incomplete = looksIncomplete(coalesceBuf);
@@ -1207,18 +1325,40 @@ export class SarvamSTT implements STTAdapter {
       // pipeline's lost-turn backstop (armVadFlushBackstop), which is safe only
       // because this drains local buffers rather than endpointing. Do not add call
       // sites that finalize turns.
-      flush(): void {
+      flush(): boolean {
         // Emit any held coalesced transcript immediately (don't wait for the timer).
         // emitCoalesced() is a no-op on an empty buffer, so always call it — this
         // handles the edge case where coalesceBuf is non-empty but coalesceTimer is null.
         if (coalesceTimer) clearTimeout(coalesceTimer);
-        emitCoalesced();
-        
+        const emitted = emitCoalesced();
+
         // Note: We deliberately do NOT send the JSON `flush: true` packet to Sarvam's
         // streaming endpoint here. Manual flushes corrupt Sarvam's internal context window
         // (causing subsequent audio to be missed or garbage transcripts to be generated).
         // Clearing the local timers and emitting held transcripts is sufficient.
-        logger.debug({ langCode }, "Sarvam STT: local buffers flushed (socket flush bypassed)");
+        logger.debug(
+          { langCode, emitted },
+          "Sarvam STT: local buffers flushed (socket flush bypassed)",
+        );
+
+        // An empty flush means the caller's lost-turn backstop fired and there was
+        // nothing held to recover — the engine produced nothing at all. One can be a
+        // timing artefact; repeated ones mean recognition is stuck, so force the
+        // socket to reconnect rather than flushing an empty buffer forever (the
+        // pipeline logged four such flushes while call 5439 died).
+        if (emitted) {
+          emptyFlushes = 0;
+        } else if (
+          ++emptyFlushes >= MAX_EMPTY_FLUSHES &&
+          !deadFired &&
+          ws.readyState === WebSocket.OPEN
+        ) {
+          killZombie("empty_flushes", {
+            emptyFlushes,
+            reason: "repeated lost-turn flushes found nothing to emit",
+          });
+        }
+        return emitted;
       },
       setLanguage(lang: string): void {
         const next = normaliseLang(lang, model);
@@ -1349,32 +1489,40 @@ export class SarvamSTT implements STTAdapter {
       }
       if (deadFired) return; // zombie already handled this episode
       if (ws.readyState !== WebSocket.OPEN) return; // CONNECTING/CLOSING handled elsewhere
+      if (Date.now() - lastAudioSentAt > WS_DEAD_MS) return; // not actively streaming
 
-      if (!inSpeechSegment) return; // zombie check only meaningful mid-utterance
-      if (Date.now() - lastAudioSentAt > WS_DEAD_MS) return;
-      const silenceMs = Date.now() - lastMsgAt;
-      if (silenceMs > WS_DEAD_MS) {
-        deadFired = true; // fire-once latch: reset by any inbound message or a fresh socket
-        logger.warn(
-          { langCode, silenceMs },
-          "Sarvam STT: WS silent while streaming audio — terminating zombie socket to force reconnect",
-        );
-        try {
-          sttObj.onConnectionDead?.();
-        } catch {
-          /* optional external consumer hook */
+      // (a) Dead socket: no inbound frame at all while we stream caller audio.
+      //     Only meaningful mid-utterance, since Sarvam is legitimately quiet
+      //     between turns.
+      if (inSpeechSegment) {
+        const silenceMs = Date.now() - lastMsgAt;
+        if (silenceMs > WS_DEAD_MS) {
+          killZombie("ws_silent", {
+            silenceMs,
+            reason: "no inbound WS frame while streaming audio",
+          });
+          return;
         }
-        // Self-heal: terminate the dead socket so ws.on("close") runs the existing
-        // exponential-backoff reconnect (terminate → 1006, which is not an auth code).
-        try {
-          ws.terminate();
-        } catch {
-          try {
-            ws.close();
-          } catch {
-            /* noop */
-          }
-        }
+      }
+
+      // (b) Stalled recognition engine: VAD signals keep arriving — so (a) can
+      //     never fire — but no transcript has come back across repeated speech
+      //     segments. Requires BOTH repeated speech_starts and elapsed time so a
+      //     single long utterance can never trip it.
+      if (
+        isRecognitionStalled({
+          speechStartsSinceTranscript,
+          awaitingTranscriptSince,
+          nowMs: Date.now(),
+          deadMs: WS_DEAD_MS,
+          minSegments: VAD_STALL_MIN_SEGMENTS,
+        })
+      ) {
+        killZombie("recognition_stalled", {
+          stalledMs: Date.now() - awaitingTranscriptSince,
+          speechStartsSinceTranscript,
+          reason: "VAD active but recognition returned no transcript",
+        });
       }
     }, HEARTBEAT_MS);
 
