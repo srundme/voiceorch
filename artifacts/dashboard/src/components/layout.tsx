@@ -7,7 +7,7 @@ import {
   Settings, Wallet, Mic2, Key,
   Menu, ChevronDown, ChevronLeft, ChevronRight,
   LogOut, Bell, Search, SlidersHorizontal, BookOpen, PlugZap, Sun, Moon, Sparkles,
-  X, Wand2, Wrench,
+  Plus, X, Wand2, Wrench,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -355,8 +355,8 @@ function SidebarUser({ collapsed }: { collapsed: boolean }) {
 /* ─── Topbar (desktop — page title only) ─────────────────────────────────── */
 function Topbar({ location }: { location: string }) {
   return (
-    <div className="shrink-0 h-[50px] flex items-center justify-between px-5 border-b border-border bg-background gap-4">
-      <span className="text-[13px] font-semibold text-foreground/70 truncate">{getPageTitle(location)}</span>
+    <div className="flex h-11 shrink-0 items-center justify-between gap-4 border-b border-border/70 bg-background px-4">
+      <span className="truncate text-[11px] font-medium text-muted-foreground">{getPageTitle(location)}</span>
       <div className="flex items-center gap-1">
         <ThemeToggle />
         <BellButton />
@@ -382,21 +382,21 @@ function NavItemEl({
     <Link href={item.href} onClick={onClick}>
       <div
         className={[
-          "flex items-center gap-2.5 rounded-lg text-[13px] transition-colors duration-100 cursor-pointer select-none",
-          indent ? "px-2.5 py-[5.5px]" : "px-2.5 py-[6.5px]",
+          "relative flex h-8 items-center gap-2 rounded-md px-2 text-[12px] transition-colors duration-100 cursor-pointer select-none",
+          indent ? "pl-2" : "",
           isActive
-            ? "bg-accent text-foreground font-medium"
-            : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+            ? "bg-foreground/[0.065] text-foreground font-medium"
+            : "text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground",
         ].join(" ")}
       >
         <item.icon
-          className={`w-[14px] h-[14px] shrink-0 ${isActive ? "text-foreground/70" : "text-muted-foreground/70"}`}
+          className={`size-3.5 shrink-0 ${isActive ? "text-foreground" : "text-muted-foreground/75"}`}
         />
         {!collapsed && (
           <>
             <span className="truncate flex-1">{item.name}</span>
             {badge > 0 && (
-              <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-amber-500/20 text-amber-500 text-[10px] font-semibold leading-none">
+              <span className="inline-flex min-w-4 items-center justify-center rounded px-1 text-[9px] font-medium leading-4 text-amber-600">
                 {badge > 99 ? "99+" : badge}
               </span>
             )}
@@ -462,11 +462,11 @@ function SidebarContent({
     : NAV_SETTINGS;
 
   return (
-    <div className="flex flex-col h-full bg-sidebar border-r border-sidebar-border">
-      {/* Logo row — SnapServe mark + text “powered by sarvam” */}
+    <div className="flex h-full flex-col border-r border-sidebar-border bg-sidebar">
+      {/* Workspace identity */}
       <div className={cn(
-        "flex items-center px-3 shrink-0 border-b border-sidebar-border gap-1.5",
-        collapsed ? "h-[50px]" : "h-[58px]"
+        "flex h-12 shrink-0 items-center gap-1.5 border-b border-sidebar-border px-2.5",
+        collapsed && "justify-center px-1.5",
       )}>
         <Link href="/app" onClick={onNavClick} className="flex items-center gap-2 flex-1 min-w-0 overflow-hidden">
           {partnerCtx?.branding ? (
@@ -476,16 +476,16 @@ function SidebarContent({
                 <img
                   src={partnerCtx.branding.logoUrl}
                   alt={partnerCtx.branding.companyName}
-                  className="h-6 w-6 rounded-md object-contain shrink-0 bg-elevated"
+                className="size-6 shrink-0 rounded-md bg-elevated object-contain"
                 />
               ) : (
-                <span className="h-6 w-6 rounded-md bg-primary/15 text-primary text-[12px] font-bold flex items-center justify-center shrink-0">
+                <span className="flex size-6 shrink-0 items-center justify-center rounded-md border border-sidebar-border bg-background text-[11px] font-semibold">
                   {partnerCtx.branding.companyName.charAt(0).toUpperCase()}
                 </span>
               )}
               {!collapsed && (
                 <span
-                  className="leading-none text-[14px] font-semibold text-foreground truncate"
+                    className="truncate text-[13px] font-semibold leading-none text-foreground"
                   style={{ fontFamily: "system-ui, sans-serif", letterSpacing: "-0.02em" }}
                 >
                   {partnerCtx.branding.companyName}
@@ -494,11 +494,11 @@ function SidebarContent({
             </>
           ) : (
             <>
-              <SnapServeIcon size={22} className="text-foreground shrink-0 self-center" />
+              <SnapServeIcon size={20} className="shrink-0 self-center text-foreground" />
               {!collapsed && (
-                <span className="flex flex-col min-w-0 gap-0.5 py-0.5">
+                <span className="flex min-w-0 flex-col gap-0.5 py-0.5">
                   <span
-                    className="leading-none text-[14px] text-foreground whitespace-nowrap"
+                    className="whitespace-nowrap text-[13px] leading-none text-foreground"
                     style={{ fontFamily: "system-ui, sans-serif", letterSpacing: "-0.02em" }}
                     aria-label="SnapServe"
                   >
@@ -509,7 +509,7 @@ function SidebarContent({
                 </span>
               )}
               {!collapsed && partnerCtx?.isPartner && (
-                <span className="px-1.5 py-[2px] rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-500 text-[9px] font-semibold uppercase tracking-wider leading-none shrink-0 self-center">
+                <span className="shrink-0 self-center rounded border border-emerald-500/25 px-1 py-0.5 text-[8px] font-semibold uppercase tracking-wider leading-none text-emerald-600">
                   Partner
                 </span>
               )}
@@ -519,7 +519,7 @@ function SidebarContent({
         {onToggleCollapse && (
           <button
             onClick={onToggleCollapse}
-            className="p-1.5 rounded-md text-muted-foreground/55 hover:text-muted-foreground hover:bg-accent/50 transition-colors shrink-0"
+            className="shrink-0 rounded-md p-1 text-muted-foreground/55 transition-colors hover:bg-foreground/[0.04] hover:text-foreground"
             title={collapsed ? "Expand" : "Collapse"}
           >
             {collapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
@@ -528,16 +528,16 @@ function SidebarContent({
       </div>
 
       {/* Search */}
-      <div className="px-2 pt-2.5 pb-1 shrink-0">
+      <div className="shrink-0 px-2 pt-2 pb-1">
         <button
           onClick={onSearchOpen}
-          className="flex items-center gap-2.5 px-2.5 py-[6.5px] rounded-lg text-[13px] text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors w-full"
+          className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-[12px] text-muted-foreground transition-colors hover:bg-foreground/[0.04] hover:text-foreground"
         >
           <Search className="w-[14px] h-[14px] shrink-0 text-muted-foreground/70" />
           {!collapsed && (
             <>
               <span className="flex-1 text-left">Search…</span>
-              <kbd className="text-[9px] font-medium px-1.5 py-0.5 rounded border border-border bg-elevated text-muted-foreground/40">⌘K</kbd>
+              <kbd className="rounded border border-border bg-background px-1 py-0.5 text-[8px] font-medium text-muted-foreground/55">⌘K</kbd>
             </>
           )}
         </button>
@@ -545,31 +545,30 @@ function SidebarContent({
 
       {/* + New agent CTA (hidden for managed clients — the partner builds their agents) */}
       {!isManagedClient && (
-      <div className="px-2 pb-1.5 shrink-0">
+      <div className="shrink-0 px-2 pb-2">
         <button
           type="button"
           onClick={() => { onNavClick?.(); onNewAgent?.(); }}
           className={cn(
-            "w-full flex items-center gap-2 px-2.5 py-2 rounded-lg bg-primary text-primary-foreground text-[13px] font-medium cursor-pointer hover:bg-primary/90 transition-colors select-none",
+            "flex h-8 w-full cursor-pointer select-none items-center gap-2 rounded-md bg-primary px-2 text-[12px] font-medium text-primary-foreground transition-colors hover:bg-primary/90",
             collapsed ? "justify-center" : ""
           )}
         >
-          <Sparkles className="w-[14px] h-[14px] shrink-0" />
-          {!collapsed && <span>+ New agent</span>}
+          <Plus className="size-3.5 shrink-0" />
+          {!collapsed && <span>New agent</span>}
         </button>
       </div>
       )}
 
       {/* Primary nav */}
-      <div className="flex-1 overflow-y-auto px-2 py-1 min-h-0">
+      <div className="min-h-0 flex-1 overflow-y-auto px-2 py-1">
         {navGroups.map((group, gi) => (
           <div key={gi}>
-            {/* Group separator (thin divider before every group after first) */}
-            {gi > 0 && <div className="my-2 border-t border-sidebar-border mx-1" />}
+            {gi > 0 && <div className="h-3" />}
 
             {/* Group label */}
             {group.group && !collapsed && (
-              <p className="px-2.5 mb-1 mt-0.5 text-[9.5px] font-semibold tracking-[0.1em] uppercase text-muted-foreground/45 select-none">
+              <p className="mb-1 px-2 text-[9px] font-semibold uppercase tracking-[0.13em] text-muted-foreground/55 select-none">
                 {group.group}
               </p>
             )}
@@ -589,19 +588,19 @@ function SidebarContent({
         ))}
 
         {/* Settings divider */}
-        <div className="my-2 border-t border-sidebar-border mx-1" />
+        <div className="h-3" />
 
         {/* Settings toggle */}
         <button
           onClick={toggleSettings}
           className={[
-            "flex items-center gap-2.5 px-2.5 py-[6.5px] rounded-lg text-[13px] transition-colors duration-100 cursor-pointer select-none w-full",
+            "flex h-8 w-full cursor-pointer select-none items-center gap-2 rounded-md px-2 text-[12px] transition-colors duration-100",
             isInSettings
               ? "text-foreground font-medium"
-              : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+              : "text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground",
           ].join(" ")}
         >
-          <SlidersHorizontal className={`w-[14px] h-[14px] shrink-0 ${isInSettings ? "text-foreground/70" : "text-muted-foreground/70"}`} />
+          <SlidersHorizontal className={`size-3.5 shrink-0 ${isInSettings ? "text-foreground" : "text-muted-foreground/75"}`} />
           {!collapsed && (
             <>
               <span className="flex-1 text-left">Settings</span>
@@ -612,7 +611,7 @@ function SidebarContent({
 
         {/* Settings items */}
         {settingsOpen && !collapsed && (
-          <div className="mt-0.5 ml-2.5 pl-3 border-l border-sidebar-border flex flex-col gap-px">
+          <div className="ml-2.5 mt-0.5 flex flex-col gap-px border-l border-sidebar-border pl-2.5">
             {settingsItems.map(item => (
               <NavItemEl key={item.href} item={item} collapsed={false} indent onClick={onNavClick} />
             ))}
@@ -627,8 +626,8 @@ function SidebarContent({
         )}
       </div>
 
-      {/* Footer — docs · wallet chip · status · privacy/terms · user */}
-      <div className="px-2 shrink-0 border-t border-sidebar-border">
+      {/* Quiet account footer */}
+      <div className="shrink-0 border-t border-sidebar-border px-2 pt-1">
         {/* Partner white-label branding (clients of a partner).
             Intentionally NOT “Powered by Sarvam” — partner attribution wins. */}
         {partnerCtx?.branding && (
@@ -643,12 +642,11 @@ function SidebarContent({
             )}
           </div>
         )}
-        {/* Documentation */}
-        <div className="pt-1.5 pb-0.5">
+        <div className="pb-0.5">
           <Link
             href="/docs"
             onClick={onNavClick}
-            className="flex items-center gap-2.5 px-2.5 py-[6.5px] rounded-lg text-[13px] text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors duration-100 w-full"
+            className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-[12px] text-muted-foreground transition-colors hover:bg-foreground/[0.04] hover:text-foreground"
           >
             <BookOpen className="w-[14px] h-[14px] shrink-0 text-muted-foreground/70" />
             {!collapsed && <span>Documentation</span>}
@@ -660,25 +658,8 @@ function SidebarContent({
           <WalletChip compact={collapsed} />
         </div>
 
-        {/* Status + Privacy/Terms */}
-        <div className="pb-1">
-          <div className="flex items-center gap-2 px-2.5 py-1">
-            <div className="h-1.5 w-1.5 rounded-full bg-emerald-500/50 shrink-0" />
-            {!collapsed && (
-              <span className="text-[10.5px] text-muted-foreground/55">All systems operational</span>
-            )}
-          </div>
-          {!collapsed && (
-            <div className="flex items-center gap-2 px-2.5 py-0.5">
-              <Link href="/privacy" className="text-[10px] text-muted-foreground/30 hover:text-muted-foreground/50 transition-colors">Privacy</Link>
-              <span className="text-muted-foreground/20">·</span>
-              <Link href="/terms"   className="text-[10px] text-muted-foreground/30 hover:text-muted-foreground/50 transition-colors">Terms</Link>
-            </div>
-          )}
-        </div>
-
         {/* User profile */}
-        <div className="pb-2">
+        <div className="pb-1.5">
           <SidebarUser collapsed={collapsed} />
         </div>
       </div>
@@ -940,7 +921,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     });
   };
 
-  const sidebarW = collapsed ? "w-[52px]" : "w-[220px]";
+  const sidebarW = collapsed ? "w-[52px]" : "w-[216px]";
   const openNewAgent = () => setNewAgentOpen(true);
 
   return (

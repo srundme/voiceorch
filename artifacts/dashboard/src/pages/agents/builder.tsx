@@ -94,6 +94,13 @@ import { JourneyPanel } from "./journey-panel";
 import { ReachPanel } from "./reach-panel";
 import { EmailChannelCard, useEmailChannelReady } from "./email-channel-card";
 import { MeetingsChannelCard } from "./meetings-channel-card";
+import {
+  StatusDot,
+  WorkspaceHeader,
+  WorkspaceInspector,
+  WorkspaceSectionNav,
+  type WorkspaceNavGroup,
+} from "@/components/workspace/workspace";
 const _DASH_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const DASH_API   = `${_DASH_BASE}/api`;
 
@@ -114,6 +121,48 @@ const TABS: TabDef[] = [
   { id: "advanced",    label: "Advanced",    icon: <SlidersHorizontal className="h-3.5 w-3.5" /> },
   { id: "versions",    label: "Versions",    icon: <History className="h-3.5 w-3.5" /> },
 ];
+
+const BUILDER_NAV_GROUPS: WorkspaceNavGroup<TabId>[] = [
+  {
+    label: "Agent",
+    items: [
+      { id: "overview", label: "Overview", icon: Bot },
+      { id: "prompt", label: "Prompt", icon: FileText },
+      { id: "voice", label: "Voice", icon: Mic },
+    ],
+  },
+  {
+    label: "Capabilities",
+    items: [
+      { id: "tools", label: "Tools", icon: Wrench },
+    ],
+  },
+  {
+    label: "Operations",
+    items: [
+      { id: "reach", label: "Reach", icon: Zap },
+      { id: "launch", label: "Channels", icon: Rocket },
+    ],
+  },
+  {
+    label: "Runtime",
+    items: [
+      { id: "voicemail", label: "Voicemail", icon: VoicemailIcon },
+      { id: "advanced", label: "Advanced", icon: SlidersHorizontal },
+    ],
+  },
+  {
+    label: "History",
+    items: [
+      { id: "versions", label: "Versions", icon: History },
+    ],
+  },
+];
+
+function sectionFromSearch(search: string): TabId {
+  const requested = new URLSearchParams(search).get("section");
+  return TABS.some((tab) => tab.id === requested) ? requested as TabId : "overview";
+}
 
 /* ── Small helpers ──────────────────────────────────────────────────────────── */
 
@@ -769,6 +818,15 @@ type BuilderWhatsappResponse = {
   usage: { used24h: number; cap: number } | null;
 };
 
+type BuilderWhatsappConnection = {
+  id: string;
+  name: string;
+  active: boolean;
+  agentId: number | null;
+  metaPhoneNumberId?: string | null;
+  outboundWebhookUrl?: string | null;
+};
+
 function StatusBadge({
   ready,
   readyLabel = "Ready",
@@ -867,8 +925,12 @@ function JourneyReadinessPanel({ form, agent }: { form: any; agent: any }) {
 
 function ChannelsTab({ form, agent, forceExpandEmail = false }: { form: any; agent: any; forceExpandEmail?: boolean }) {
   const [, navigate] = useLocation();
+  const [activeChannel, setActiveChannel] = useState<"phone" | "whatsapp" | "email" | "meetings" | "booking">("phone");
   const schedulingCalendarId = form.watch("schedulingCalendarId");
   const schedulingEventTypeId = form.watch("schedulingEventTypeId");
+  useEffect(() => {
+    if (forceExpandEmail) setActiveChannel("email");
+  }, [forceExpandEmail]);
 
   const { data: waData, isLoading: waLoading } = useQuery({
     queryKey: ["builder-whatsapp-channel", agent?.id],
@@ -882,125 +944,154 @@ function ChannelsTab({ form, agent, forceExpandEmail = false }: { form: any; age
   const { data: waConnections } = useQuery({
     queryKey: ["builder-whatsapp-connections", agent?.id],
     enabled: !!agent?.id,
-    queryFn: () => customFetch<{ connections: Array<{ id: string; name: string; active: boolean; agentId: number | null; metaPhoneNumberId?: string | null; outboundWebhookUrl?: string | null }> }>(`${DASH_API}/whatsapp/connections`),
+    queryFn: () => customFetch<{ connections: BuilderWhatsappConnection[] }>(`${DASH_API}/whatsapp/connections`),
     staleTime: 60_000,
   });
-  const waConnList = Array.isArray(waConnections?.connections) ? waConnections.connections : [];
+  const waConnList: BuilderWhatsappConnection[] = Array.isArray(waConnections?.connections)
+    ? waConnections.connections
+    : [];
   const agentConnection = waConnList.find((c) => c.active && c.agentId === agent?.id)
     ?? waConnList.find((c) => c.active) ?? null;
+  const channelItems = [
+    { id: "phone" as const, label: "Phone", detail: "Inbound & outbound", ready: !!agent?.id },
+    { id: "whatsapp" as const, label: "WhatsApp", detail: "Messages & follow-ups", ready: !!agentConnection || !!waData?.channel?.active },
+    { id: "email" as const, label: "Email", detail: "Managed or Brevo", ready: false },
+    { id: "meetings" as const, label: "Meetings", detail: "Meet, Zoom & Teams", ready: !!agent?.id },
+    { id: "booking" as const, label: "Booking", detail: "Calendar & event type", ready: !!schedulingCalendarId && !!schedulingEventTypeId },
+  ];
 
   return (
-    <div className="p-6 space-y-8">
-      <section className="space-y-2">
-        <h2 className="text-base font-semibold tracking-tight">Communication channels</h2>
-        <p className="text-[12px] text-muted-foreground max-w-3xl">
-          This is where the agent becomes real. Attach the channels customers use to reach you and the channels SnapServe uses for follow-ups.
+    <div className="space-y-5 p-4 sm:p-5">
+      <section>
+        <h2 className="text-sm font-semibold tracking-tight">Channels</h2>
+        <p className="mt-0.5 max-w-2xl text-[11px] text-muted-foreground">
+          Select a channel to configure how this agent communicates.
         </p>
       </section>
 
-      <JourneyReadinessPanel form={form} agent={agent} />
-
-      <section className="grid gap-4 xl:grid-cols-2">
-        <div className="rounded-xl border border-border/60 bg-card/20 p-4 space-y-3">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h3 className="text-sm font-semibold">Phone</h3>
-              <p className="text-[11px] text-muted-foreground">Inbound routing, outbound caller ID, and test calls.</p>
-            </div>
-            <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={() => navigate("/app/phone-numbers")}>
-              Manage numbers
-            </Button>
+      <section className="grid min-h-[420px] overflow-hidden rounded-lg border border-border bg-card md:grid-cols-[190px_minmax(0,1fr)]">
+        <div className="border-b border-border bg-muted/[0.16] p-2 md:border-b-0 md:border-r">
+          <div className="grid grid-cols-2 gap-1 md:grid-cols-1">
+            {channelItems.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setActiveChannel(item.id)}
+                className={cn(
+                  "flex min-h-10 items-center gap-2 rounded-md px-2 text-left transition-colors",
+                  activeChannel === item.id
+                    ? "bg-foreground/[0.065] text-foreground"
+                    : "text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground",
+                )}
+              >
+                <StatusDot tone={item.ready ? "success" : "neutral"} />
+                <div className="min-w-0">
+                  <p className="truncate text-[11px] font-medium">{item.label}</p>
+                  <p className="hidden truncate text-[9px] text-muted-foreground md:block">{item.detail}</p>
+                </div>
+              </button>
+            ))}
           </div>
-          {agent?.id ? (
-            <AgentInboundPanel agentId={agent.id} preferredManagedNumber={form.watch("preferredManagedNumber")} telephonyProvider={form.watch("telephonyProvider")} />
-          ) : (
-            <p className="text-[11px] text-muted-foreground">Save the agent first to attach inbound phone numbers.</p>
-          )}
         </div>
 
-        <div className="rounded-xl border border-border/60 bg-card/20 p-4 space-y-3">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h3 className="text-sm font-semibold">WhatsApp</h3>
-              <p className="text-[11px] text-muted-foreground">
-                SnapServe managed, your own VoBiz number, or BYO BSP — post-call messages and chatbot replies.
-              </p>
-            </div>
-            <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={() => navigate("/app/whatsapp")}>
-              Configure WhatsApp
-            </Button>
-          </div>
-          {waLoading ? (
-            <Skeleton className="h-20 w-full rounded-xl" />
-          ) : agentConnection ? (
-            <div className="rounded-lg border border-border/40 bg-background/40 p-3 space-y-2">
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium truncate">{agentConnection.name || "WhatsApp connection"}</p>
-                  <p className="text-[11px] text-muted-foreground">
-                    {agentConnection.metaPhoneNumberId ? "Your WhatsApp Business number (Meta API)" : "BSP webhook connection"}
-                  </p>
+        <div className="min-w-0 p-4 sm:p-5">
+          {activeChannel === "phone" && (
+            <div className="space-y-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-[12px] font-semibold">Phone</h3>
+                  <p className="mt-0.5 text-[10px] text-muted-foreground">Inbound routing, outbound caller ID, and test calls.</p>
                 </div>
-                <StatusBadge ready readyLabel="Active" emptyLabel="Inactive" />
+                <Button type="button" variant="outline" size="sm" className="h-7 text-[10px]" onClick={() => navigate("/app/phone-numbers")}>
+                  Manage numbers
+                </Button>
               </div>
-            </div>
-          ) : waData?.channel ? (
-            <div className="rounded-lg border border-border/40 bg-background/40 p-3 space-y-2">
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium truncate">{waData.channel.businessName || "WhatsApp channel"}</p>
-                  <p className="text-[11px] text-muted-foreground">
-                    {waData.channel.mode === "own" ? "Own number" : "Shared SnapServe channel"}
-                    {waData.channel.phoneE164 ? ` · ${waData.channel.phoneE164}` : ""}
-                  </p>
-                </div>
-                <StatusBadge ready={waData.channel.active} readyLabel={waData.channel.status || "Active"} emptyLabel="Inactive" />
-              </div>
-              {waData.usage && (
-                <p className="text-[11px] text-muted-foreground">
-                  Usage: {waData.usage.used24h}/{waData.usage.cap} messages in the last 24h.
-                </p>
+              {agent?.id ? (
+                <AgentInboundPanel agentId={agent.id} preferredManagedNumber={form.watch("preferredManagedNumber")} telephonyProvider={form.watch("telephonyProvider")} />
+              ) : (
+                <p className="text-[11px] text-muted-foreground">Save the agent first to attach inbound phone numbers.</p>
               )}
             </div>
-          ) : (
-            <div className="rounded-lg border border-dashed border-border/50 p-4">
-              <p className="text-sm font-medium">No WhatsApp channel yet</p>
-              <p className="text-[11px] text-muted-foreground mt-1">
-                Connect WhatsApp if this agent should send summaries, callback reminders, or chat with leads after calls.
-              </p>
+          )}
+
+          {activeChannel === "whatsapp" && (
+            <div className="space-y-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-[12px] font-semibold">WhatsApp</h3>
+                  <p className="mt-0.5 text-[10px] text-muted-foreground">Managed, VoBiz, or BYO BSP messages and follow-ups.</p>
+                </div>
+                <Button type="button" variant="outline" size="sm" className="h-7 text-[10px]" onClick={() => navigate("/app/whatsapp")}>
+                  Configure
+                </Button>
+              </div>
+              {waLoading ? (
+                <Skeleton className="h-20 w-full rounded-md" />
+              ) : agentConnection ? (
+                <div className="flex items-center justify-between border-y border-border py-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-[11px] font-medium">{agentConnection.name || "WhatsApp connection"}</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {agentConnection.metaPhoneNumberId ? "WhatsApp Business · Meta API" : "BSP webhook connection"}
+                    </p>
+                  </div>
+                  <StatusBadge ready readyLabel="Active" emptyLabel="Inactive" />
+                </div>
+              ) : waData?.channel ? (
+                <div className="flex items-center justify-between border-y border-border py-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-[11px] font-medium">{waData.channel.businessName || "WhatsApp channel"}</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {waData.channel.mode === "own" ? "Own number" : "Shared SnapServe channel"}
+                      {waData.channel.phoneE164 ? ` · ${waData.channel.phoneE164}` : ""}
+                    </p>
+                  </div>
+                  <StatusBadge ready={waData.channel.active} readyLabel={waData.channel.status || "Active"} emptyLabel="Inactive" />
+                </div>
+              ) : (
+                <div className="border-y border-border py-5">
+                  <p className="text-[11px] font-medium">No WhatsApp channel</p>
+                  <p className="mt-1 text-[10px] text-muted-foreground">Connect one for summaries, reminders, and chat replies.</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeChannel === "email" && <EmailChannelCard forceExpanded />}
+          {activeChannel === "meetings" && agent?.id && <MeetingsChannelCard agentId={agent.id} />}
+          {activeChannel === "booking" && (
+            <div className="space-y-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-[12px] font-semibold">Booking</h3>
+                  <p className="mt-0.5 text-[10px] text-muted-foreground">Calendar, event type, meeting links, and notifications.</p>
+                </div>
+                <Button type="button" variant="outline" size="sm" className="h-7 text-[10px]" onClick={() => navigate("/app/scheduling")}>
+                  Open scheduling
+                </Button>
+              </div>
+              <div className="flex items-center justify-between border-y border-border py-3">
+                <div>
+                  <p className="text-[11px] font-medium">Calendar + event type</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    {schedulingCalendarId && schedulingEventTypeId
+                      ? "Booking tools and notifications are linked."
+                      : "Link scheduling before the agent promises bookings."}
+                  </p>
+                </div>
+                <StatusBadge ready={!!schedulingCalendarId && !!schedulingEventTypeId} readyLabel="Linked" emptyLabel="Unlinked" />
+              </div>
             </div>
           )}
         </div>
-
-        <EmailChannelCard forceExpanded={forceExpandEmail} />
-
-        {agent?.id ? <MeetingsChannelCard agentId={agent.id} /> : null}
-
-        <div className="rounded-xl border border-border/60 bg-card/20 p-4 space-y-3">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h3 className="text-sm font-semibold">Booking</h3>
-              <p className="text-[11px] text-muted-foreground">Calendar, event type, meeting links, and booking notifications.</p>
-            </div>
-            <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={() => navigate("/app/scheduling")}>
-              Open scheduling
-            </Button>
-          </div>
-          <div className="rounded-lg border border-border/40 bg-background/40 p-3 space-y-2">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-medium">Calendar + event type</p>
-                <p className="text-[11px] text-muted-foreground">
-                  {schedulingCalendarId && schedulingEventTypeId
-                    ? "Booking tools and notifications are linked."
-                    : "Link scheduling before promising bookings over voice or WhatsApp."}
-                </p>
-              </div>
-              <StatusBadge ready={!!schedulingCalendarId && !!schedulingEventTypeId} readyLabel="Linked" emptyLabel="Unlinked" />
-            </div>
-          </div>
-        </div>
       </section>
+
+      <details className="rounded-lg border border-border bg-card">
+        <summary className="cursor-pointer px-3.5 py-3 text-[11px] font-medium">Channel readiness</summary>
+        <div className="border-t border-border p-3.5">
+          <JourneyReadinessPanel form={form} agent={agent} />
+        </div>
+      </details>
     </div>
   );
 }
@@ -5996,11 +6087,17 @@ function VersionsTab({ agentId }: { agentId: number }) {
 /* ── Agent editor panel ─────────────────────────────────────────────────────── */
 
 function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAgents?: () => void }) {
-  const [activeTab, setActiveTab] = useState<TabId>("overview");
+  const [, navigate] = useLocation();
+  const search = useSearch();
+  const [activeTab, setActiveTab] = useState<TabId>(() => sectionFromSearch(search));
   const [forceExpandEmail, setForceExpandEmail] = useState(false);
   const tabContentRef = useRef<HTMLDivElement>(null);
   const scrollPositions = useRef<Partial<Record<TabId, number>>>({});
   const agentResetSigRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    setActiveTab(sectionFromSearch(search));
+  }, [agentId, search]);
 
   const handleTabClick = (tabId: TabId) => {
     if (tabContentRef.current) {
@@ -6008,6 +6105,9 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
     }
     if (tabId !== "launch") setForceExpandEmail(false);
     setActiveTab(tabId);
+    const next = new URL(window.location.href);
+    next.searchParams.set("section", tabId);
+    window.history.replaceState(window.history.state, "", `${next.pathname}${next.search}${next.hash}`);
   };
 
   const openEmailChannel = () => {
@@ -6034,7 +6134,6 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const rateMap = useMinuteRatesMap();
-  const [, navigate] = useLocation();
 
   // Auto-open webcall when navigated from the guided wizard (?webcall=1)
   const _autoWebcall = useMemo(() => {
@@ -6399,7 +6498,15 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
   const [savedFlash, setSavedFlash] = useState(false);
   const isDirty   = form.formState.isDirty;
 
-  const visibleTabs = TABS;
+  useEffect(() => {
+    if (!isDirty) return;
+    const warnBeforeLeave = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+    };
+    window.addEventListener("beforeunload", warnBeforeLeave);
+    return () => window.removeEventListener("beforeunload", warnBeforeLeave);
+  }, [isDirty]);
+
   const webTestLabel = "Live Test";
 
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
@@ -6424,107 +6531,92 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
   if (!agent) return null;
 
   return (
-    <div className="relative flex-1 flex flex-col min-h-0 overflow-hidden">
-      {/* Header — identity + cost strip */}
-      <motion.div
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.25, ease: "easeOut" }}
-        className="flex flex-col gap-3 px-5 sm:px-6 py-3.5 border-b border-border/40 shrink-0"
-      >
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex flex-col min-w-0 gap-1.5 flex-1">
-            <div className="flex items-center gap-2 min-w-0">
-              {onOpenAgents && (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="md:hidden h-10 min-h-10 shrink-0 gap-1.5 rounded-lg text-xs px-3"
-                  onClick={onOpenAgents}
-                >
-                  <List className="h-3.5 w-3.5" />
-                  Agents
-                </Button>
-              )}
-              <h1
-                className="text-xl sm:text-2xl font-semibold leading-tight tracking-tight truncate max-w-[420px]"
-                title={agent.name}
-              >
-                {agent.name}
-              </h1>
-              <button
-                type="button"
-                onClick={() => { setRenameValue(agent.name ?? ""); setRenameDialogOpen(true); }}
-                className="shrink-0 rounded-full p-1.5 text-muted-foreground/60 hover:text-foreground hover:bg-muted/50 transition-colors"
-                title="Rename agent"
-                aria-label="Rename agent"
-              >
-                <Pencil className="h-3.5 w-3.5" />
-              </button>
-              <span className={cn(
-                "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] shrink-0",
-                agent.status === "active"
-                  ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-400"
-                  : "border-border/50 bg-muted/30 text-muted-foreground",
-              )}>
-                <span className={cn("h-1.5 w-1.5 rounded-full", agent.status === "active" ? "bg-emerald-400" : "bg-muted-foreground/50")} />
-                {agent.status === "active" ? "Live" : "Draft"}
+    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
+      <WorkspaceHeader
+        title={
+          <button
+            type="button"
+            onClick={() => { setRenameValue(agent.name ?? ""); setRenameDialogOpen(true); }}
+            className="inline-flex max-w-[360px] items-center gap-1.5 truncate text-left hover:text-foreground/75"
+            title="Rename agent"
+          >
+            <span className="truncate">{agent.name}</span>
+            <Pencil className="size-3 shrink-0 text-muted-foreground" />
+          </button>
+        }
+        description={agent.description || "Configure behavior, capabilities, operations, and runtime."}
+        meta={
+          <>
+            <span className="inline-flex items-center gap-1 text-[9px] capitalize text-muted-foreground">
+              <StatusDot tone={agent.status === "active" ? "success" : "neutral"} />
+              {agent.status === "active" ? "live" : "draft"}
+            </span>
+            {isDirty && (
+              <span className="inline-flex items-center gap-1 text-[9px] text-amber-600">
+                <StatusDot tone="warning" />
+                unsaved
               </span>
-              <span className="inline-flex items-center gap-1 rounded-full border border-border/50 bg-muted/30 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground shrink-0">
-                <Mic className="h-3 w-3" />
-                Voice
-              </span>
-              <span className="text-[11px] text-muted-foreground/50 tabular-nums shrink-0">#{String(agent.id).padStart(4, "0")}</span>
-            </div>
-            <p className="text-[12px] text-muted-foreground/80 max-w-3xl">
-              Build the agent, connect its channels, and shape the journey it should run across calls, WhatsApp, booking, follow-ups, and memory.
-            </p>
-            <AgentCostSummary form={form} rateMap={rateMap} agent={agent} />
-          </div>
-
-          {/* Compact header actions when rail is hidden — desktop tablet only; phone uses sticky bar */}
-          <div className="hidden sm:flex xl:hidden items-center gap-1.5 shrink-0">
-            <Button size="sm" variant="outline" className="h-10 min-h-10 text-xs gap-1 rounded-lg" onClick={() => setCallDialog(true)}>
-              <Phone className="h-3.5 w-3.5" /> Call
-            </Button>
-            <div className="relative">
+            )}
+          </>
+        }
+        actions={
+          <>
+            {onOpenAgents && (
               <Button
+                type="button"
                 size="sm"
-                className={cn("h-10 min-h-10 text-xs gap-1 rounded-lg px-3", savedFlash && "bg-green-600 hover:bg-green-700 text-white")}
-                onClick={onSave}
-                disabled={updateAgent.isPending}
+                variant="ghost"
+                className="h-8 gap-1.5 px-2 text-[11px] md:hidden"
+                onClick={onOpenAgents}
               >
-                {savedFlash ? <Check className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}
-                {updateAgent.isPending ? "…" : savedFlash ? "Saved" : "Save"}
+                <List className="size-3.5" />
+                Agents
               </Button>
-              {isDirty && !updateAgent.isPending && !savedFlash && (
-                <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-amber-400 pointer-events-none" />
-              )}
-            </div>
+            )}
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-8 gap-1.5 px-2.5 text-[11px] xl:hidden"
+              onClick={() => setShowWebcall(v => !v)}
+            >
+              <Play className="size-3" />
+              Test
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              className={cn("h-8 gap-1.5 px-3 text-[11px]", savedFlash && "bg-emerald-600 text-white hover:bg-emerald-600")}
+              onClick={onSave}
+              disabled={updateAgent.isPending}
+            >
+              {savedFlash ? <Check className="size-3" /> : <Save className="size-3" />}
+              {updateAgent.isPending ? "Saving…" : savedFlash ? "Saved" : "Save"}
+            </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button size="icon" variant="ghost" className="h-10 w-10 rounded-lg"><MoreHorizontal className="h-4 w-4" /></Button>
+                <Button type="button" size="icon" variant="ghost" className="size-8">
+                  <MoreHorizontal className="size-4" />
+                </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => setShowWebcall(v => !v)}>
-                  <Mic className="h-3.5 w-3.5 mr-2" />
-                  {webTestLabel}
+                <DropdownMenuItem onClick={() => setCallDialog(true)}>
+                  <Phone className="mr-2 size-3.5" /> Phone test
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setPublishModalOpen(true)}>
-                  <Upload className="h-3.5 w-3.5 mr-2" /> Publish
+                  <Upload className="mr-2 size-3.5" /> Publish version
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => navigate(`/app/vibe?refine=${agentId}`)}>
-                  <Sparkles className="h-3.5 w-3.5 mr-2" /> Refine
+                  <Sparkles className="mr-2 size-3.5" /> Refine with AI
                 </DropdownMenuItem>
                 <DropdownMenuItem className="text-destructive" onClick={handleDelete}>
-                  <Trash2 className="h-3.5 w-3.5 mr-2" /> Delete
+                  <Trash2 className="mr-2 size-3.5" /> Delete agent
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-          </div>
-        </div>
-      </motion.div>
+          </>
+        }
+      />
 
       {/* Rename Agent dialog */}
       <Dialog open={renameDialogOpen} onOpenChange={setRenameDialogOpen}>
@@ -6568,27 +6660,47 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
         </div>
       )}
 
-      {/* Main + right action rail */}
-      <div className="flex flex-1 min-h-0">
+      {/* Three-pane builder workspace */}
+      <div className="flex min-h-0 flex-1">
+        <WorkspaceSectionNav
+          groups={BUILDER_NAV_GROUPS}
+          activeId={activeTab}
+          onSelect={handleTabClick}
+          className="hidden lg:flex"
+          footer={
+            <div className="flex items-center justify-between px-1 text-[9px] text-muted-foreground">
+              <span>Agent ID</span>
+              <span className="font-mono">#{String(agent.id).padStart(4, "0")}</span>
+            </div>
+          }
+        />
         <Form {...form}>
           <div className="flex-1 flex flex-col min-w-0 min-h-0">
-            <div className="flex items-center px-5 sm:px-6 border-b border-border/40 shrink-0 bg-background/80 backdrop-blur-sm">
-              <div className="flex items-center gap-1 overflow-x-auto min-w-0 flex-1">
-                {visibleTabs.map(tab => (
-                  <button key={tab.id} onClick={() => handleTabClick(tab.id)}
-                    className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium whitespace-nowrap border-b-2 -mb-px transition-colors ${
-                      activeTab === tab.id
-                        ? "border-foreground text-foreground"
-                        : "border-transparent text-muted-foreground hover:text-foreground"
-                    }`}>
-                    {tab.icon}{tab.label}
-                  </button>
-                ))}
-              </div>
+            <div className="flex h-10 shrink-0 items-center border-b border-border/70 bg-background px-3 lg:hidden">
+              <Select value={activeTab} onValueChange={(value) => handleTabClick(value as TabId)}>
+                <SelectTrigger className="h-7 w-full border-0 bg-transparent px-1 text-[11px] font-medium shadow-none focus:ring-0">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {TABS.map((tab) => (
+                    <SelectItem key={tab.id} value={tab.id} className="text-xs">
+                      {tab.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div ref={tabContentRef} className="flex-1 min-h-0 overflow-y-auto">
-              <form onSubmit={e => e.preventDefault()}>
+              <form
+                onSubmit={e => e.preventDefault()}
+                className={cn(
+                  "builder-workspace-content mx-auto min-h-full w-full",
+                  activeTab === "reach" || activeTab === "launch"
+                    ? "max-w-[1080px]"
+                    : "max-w-[920px]",
+                )}
+              >
                 {activeTab === "overview"  && <OverviewTab form={form} agent={agent} />}
                 {activeTab === "prompt"    && <PromptTab form={form} />}
                 {activeTab === "voice"     && <VoiceTab form={form} />}
@@ -6632,13 +6744,13 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
               </form>
             </div>
 
-            {/* Sticky Phone / Web / Save — below xl (rail hidden) */}
-            <div className="xl:hidden shrink-0 border-t border-border/40 bg-background/95 backdrop-blur-md px-3 py-2.5 pb-safe">
-              <div className="grid grid-cols-3 gap-2">
+            {/* One mobile action bar; larger screens use header actions. */}
+            <div className="shrink-0 border-t border-border/70 bg-background/95 px-3 py-2 pb-safe backdrop-blur-md sm:hidden">
+              <div className="grid grid-cols-3 gap-1.5">
                 <Button
                   type="button"
                   variant="outline"
-                  className="h-11 min-h-11 text-xs font-medium gap-1.5 rounded-xl"
+                  className="h-10 gap-1.5 text-xs font-medium"
                   onClick={() => setCallDialog(true)}
                 >
                   <Phone className="h-4 w-4 shrink-0" />
@@ -6647,7 +6759,7 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
                 <Button
                   type="button"
                   variant={showWebcall ? "default" : "outline"}
-                  className="h-11 min-h-11 text-xs font-medium gap-1.5 rounded-xl"
+                  className="h-10 gap-1.5 text-xs font-medium"
                   onClick={() => setShowWebcall(v => !v)}
                 >
                   <Mic className="h-4 w-4 shrink-0" />
@@ -6655,7 +6767,7 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
                 </Button>
                 <Button
                   type="button"
-                  className={cn("h-11 min-h-11 text-xs font-medium gap-1.5 rounded-xl relative", savedFlash && "bg-green-600 hover:bg-green-700")}
+                  className={cn("relative h-10 gap-1.5 text-xs font-medium", savedFlash && "bg-emerald-600 hover:bg-emerald-600")}
                   onClick={onSave}
                   disabled={updateAgent.isPending}
                 >
@@ -6670,16 +6782,15 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
           </div>
         </Form>
 
-        {/* Studio action rail — Test vs Publish */}
-        <aside className="hidden xl:flex w-[272px] shrink-0 flex-col border-l border-border/40 bg-muted/[0.15] overflow-y-auto">
-          <div className="flex flex-col gap-4 px-3.5 py-4 flex-1">
+        <WorkspaceInspector title="Test & deploy" className="hidden xl:flex">
+          <div className="flex min-h-full flex-col gap-5">
             {/* Test — phone + web; soft save hint when dirty */}
             <div className="space-y-2">
               <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/55 px-0.5">
                 Test
               </p>
               {isDirty && (
-                <p className="text-[10px] text-amber-400/90 leading-snug rounded-md border border-amber-500/20 bg-amber-500/5 px-2 py-1.5">
+                <p className="rounded-md border border-amber-500/20 bg-amber-500/5 px-2 py-1.5 text-[10px] leading-snug text-amber-600">
                   Unsaved changes — save before testing so the call uses the latest config.
                 </p>
               )}
@@ -6687,7 +6798,7 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
                 <Button
                   type="button"
                   variant="outline"
-                  className="h-10 text-[12px] font-medium gap-1.5 rounded-xl border-border/60 bg-card/40 hover:bg-card/70"
+                  className="h-8 gap-1.5 border-border/70 bg-background text-[11px] font-medium"
                   onClick={() => setCallDialog(true)}
                 >
                   <Phone className="h-3.5 w-3.5 shrink-0" />
@@ -6697,8 +6808,8 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
                   type="button"
                   variant={showWebcall ? "default" : "outline"}
                   className={cn(
-                    "h-10 text-[12px] font-medium gap-1.5 rounded-xl",
-                    !showWebcall && "border-border/60 bg-card/40 hover:bg-card/70",
+                    "h-8 gap-1.5 text-[11px] font-medium",
+                    !showWebcall && "border-border/70 bg-background",
                   )}
                   onClick={() => setShowWebcall(v => !v)}
                 >
@@ -6721,9 +6832,9 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
               <button
                 type="button"
                 onClick={() => navigate("/app/calls")}
-                className="text-left text-[12px] text-sky-500/90 hover:text-sky-400 transition-colors px-0.5"
+                className="px-0.5 text-left text-[10px] text-muted-foreground transition-colors hover:text-foreground"
               >
-                See all call logs →
+                Open Activity →
               </button>
             </div>
 
@@ -6738,8 +6849,8 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
                 <Button
                   type="button"
                   className={cn(
-                    "w-full h-10 text-[12.5px] font-semibold gap-2 rounded-xl",
-                    savedFlash && "bg-green-600 hover:bg-green-700 text-white",
+                    "h-8 w-full gap-2 text-[11px] font-semibold",
+                    savedFlash && "bg-emerald-600 text-white hover:bg-emerald-600",
                   )}
                   onClick={onSave}
                   disabled={updateAgent.isPending}
@@ -6754,7 +6865,7 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
               <Button
                 type="button"
                 variant="outline"
-                className="w-full h-9 text-[12px] font-medium gap-2 rounded-xl border-border/60"
+                className="h-8 w-full gap-2 border-border/70 text-[11px] font-medium"
                 onClick={() => navigate(`/app/vibe?refine=${agentId}`)}
               >
                 <Sparkles className="h-3.5 w-3.5" />
@@ -6763,20 +6874,11 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
               <button
                 type="button"
                 onClick={() => setPublishModalOpen(true)}
-                className="w-full flex items-center justify-center gap-1.5 rounded-lg py-2 text-[11.5px] text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
+                className="flex h-8 w-full items-center justify-center gap-1.5 rounded-md text-[10px] text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
               >
                 <Upload className="h-3 w-3" />
                 Publish version
               </button>
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full h-9 text-[12px] font-medium gap-2 rounded-xl border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive transition-colors mt-1"
-                onClick={handleDelete}
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                Delete Agent
-              </Button>
             </div>
 
             <div className="mt-auto space-y-2.5 pt-2">
@@ -6790,7 +6892,7 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
               </button>
             </div>
           </div>
-        </aside>
+        </WorkspaceInspector>
       </div>
 
       {/* Outbound call dialog */}

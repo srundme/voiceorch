@@ -35,11 +35,13 @@ describe("mobile responsiveness smoke", () => {
     expect(layout).toMatch(/touch-target/);
   });
 
-  it("agent builder hides list below md and uses a sheet + sticky test bar", () => {
+  it("agent builder collapses panes and keeps one mobile action bar", () => {
     const builder = src("src/pages/agents/builder.tsx");
-    expect(builder).toMatch(/hidden md:flex/);
+    expect(builder).toMatch(/WorkspaceSectionNav/);
+    expect(builder).toMatch(/hidden lg:flex/);
     expect(builder).toMatch(/agentsSheetOpen/);
-    expect(builder).toMatch(/xl:hidden shrink-0 border-t/);
+    expect(builder).toMatch(/sm:hidden/);
+    expect(builder).toMatch(/One mobile action bar/);
     expect(builder).toMatch(/inset-0 rounded-none/);
     expect(builder).toMatch(/md:w-\[420px\]/);
   });
@@ -51,12 +53,12 @@ describe("mobile responsiveness smoke", () => {
     expect(vibe).toMatch(/pb-safe/);
   });
 
-  it("home page stacks KPIs and action grids for mobile", () => {
+  it("home page uses a responsive command-center layout", () => {
     const home = src("src/pages/home/index.tsx");
-    expect(home).toMatch(/grid-cols-2 sm:grid-cols-4/);
-    expect(home).toMatch(/grid lg:grid-cols-2/);
-    expect(home).toMatch(/Needs attention/);
-    expect(home).toMatch(/Quick actions/);
+    expect(home).toMatch(/lg:grid-cols-\[minmax\(0,1fr\)_300px\]/);
+    expect(home).toMatch(/Workspace health/);
+    expect(home).toMatch(/Finish setup/);
+    expect(home).toMatch(/Recent activity/);
   });
 
   it("outbound / OTP dialogs use large touch CTAs", () => {

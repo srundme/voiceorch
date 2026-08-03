@@ -69,14 +69,14 @@
 
 /* ── Design tokens — light mode ──────────────────────────────────────────── */
 :root {
-  --background:         220 20% 96%;
+  --background:         220 14% 98%;
   --foreground:         220 14% 10%;
-  --border:             220 14% 88%;
+  --border:             220 10% 89%;
 
   --card:               0 0% 100%;
   --card-foreground:    220 14% 10%;
 
-  --elevated:           220 14% 94%;
+  --elevated:           220 12% 96%;
 
   --popover:            0 0% 100%;
   --popover-foreground: 220 14% 10%;
@@ -84,27 +84,27 @@
   --primary:            220 14% 12%;
   --primary-foreground: 0 0% 100%;
 
-  --secondary:          220 14% 93%;
+  --secondary:          220 12% 95%;
   --secondary-foreground: 220 14% 20%;
 
-  --muted:              220 14% 93%;
-  --muted-foreground:   220 10% 36%;
+  --muted:              220 12% 95%;
+  --muted-foreground:   220 8% 40%;
 
-  --accent:             220 14% 91%;
+  --accent:             220 12% 93%;
   --accent-foreground:  220 14% 10%;
 
   --destructive:        0 84% 60%;
   --destructive-foreground: 0 0% 98%;
 
-  --input:              220 14% 90%;
+  --input:              220 10% 88%;
   --ring:               220 9% 45%;
 
-  --sidebar:              220 20% 98%;
+  --sidebar:              220 12% 97%;
   --sidebar-foreground:   220 14% 10%;
-  --sidebar-border:       220 14% 88%;
+  --sidebar-border:       220 10% 89%;
   --sidebar-primary:      220 14% 12%;
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent:       220 14% 91%;
+  --sidebar-accent:       220 12% 93%;
   --sidebar-accent-foreground: 220 14% 10%;
   --sidebar-ring:         220 9% 55%;
 
@@ -121,13 +121,13 @@
   --app-font-display: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
   --app-font-serif:   Georgia, serif;
   --app-font-mono:    'JetBrains Mono', 'SF Mono', 'Menlo', monospace;
-  --radius: 1rem;
+  --radius: 0.625rem;
 
-  --shadow-card: 0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04);
-  --shadow-card-hover: 0 4px 12px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.05), 0 0 0 1px rgba(0,0,0,0.06);
+  --shadow-card: 0 1px 2px rgba(0,0,0,0.025);
+  --shadow-card-hover: 0 2px 8px rgba(0,0,0,0.06);
   --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
   --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.05);
-  --shadow-popover: 0 12px 40px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.06);
+  --shadow-popover: 0 12px 32px rgba(0,0,0,0.10), 0 0 0 1px rgba(0,0,0,0.05);
 
   --button-outline:       rgba(0,0,0,0.10);
   --badge-outline:        rgba(0,0,0,0.06);
@@ -621,5 +621,34 @@
   .touch-target {
     min-height: 44px;
     min-width: 44px;
+  }
+}
+
+/* Older builder panels keep their behavior while inheriting the workspace's
+   flatter visual language. The scope avoids changing dialogs elsewhere. */
+.builder-workspace-content :where(.rounded-2xl, .rounded-xl) {
+  border-radius: 0.5rem;
+}
+.builder-workspace-content :where(.shadow-lg, .shadow-xl, .shadow-2xl) {
+  box-shadow: none;
+}
+.builder-workspace-content :where(input, textarea, button, [role="combobox"]):focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+@media (max-width: 639px) {
+  .builder-workspace-content :where(button, [role="button"], [role="combobox"]) {
+    min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

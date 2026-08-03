@@ -1,31 +1,35 @@
-/**
- * Business Home — agent-first landing (Phase 1 shell).
- * Primary path: create / open an agent. Existing dial pipelines stay visible
- * under "Active work" until Reach absorbs them inside the agent builder.
- */
-
 import { Link, useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import {
-  Phone, Users, Zap, FileSpreadsheet, AlertTriangle, Wallet,
-  ArrowRight, CheckCircle2, Bot, PlugZap, Play, Pause, Sparkles,
+  ArrowRight,
+  Bot,
+  Check,
+  CircleAlert,
+  FileSpreadsheet,
+  Phone,
+  Plus,
+  Sparkles,
+  Wallet,
+  Zap,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
 import {
+  customFetch,
+  getGetDashboardStatsQueryKey,
+  getListAgentsQueryKey,
+  getListCallsQueryKey,
+  getListCampaignsQueryKey,
   useGetDashboardStats,
-  useListCalls,
+  useGetWallet,
   useListAgents,
+  useListCalls,
   useListCampaigns,
   useListPhoneNumbers,
-  useGetWallet,
-  getGetDashboardStatsQueryKey,
-  getListCallsQueryKey,
-  getListAgentsQueryKey,
-  getListCampaignsQueryKey,
-  customFetch,
 } from "@workspace/api-client-react";
-import { useQuery } from "@tanstack/react-query";
+import { Button } from "@/components/ui/button";
+import { StatusDot } from "@/components/workspace/workspace";
 import { useMinuteRatesMap, useUserProviderNames } from "@/hooks/use-minute-rates";
+import { usePartnerContext } from "@/hooks/use-partner";
+import { cn } from "@/lib/utils";
 
 type AutoPipeline = {
   id: string;
@@ -38,42 +42,41 @@ type AutoPipeline = {
   spreadsheetTitle: string | null;
 };
 
-function relativeTime(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-  if (s < 60) return `${s}s ago`;
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  return `${Math.floor(h / 24)}d ago`;
+function relativeTime(value: string | null | undefined): string {
+  if (!value) return "—";
+  const seconds = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 1000));
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
 }
 
-function fmtDuration(s: number | null | undefined): string {
-  if (s == null) return "—";
-  if (s < 60) return `${s}s`;
-  return `${Math.floor(s / 60)}m ${s % 60}s`;
+function durationLabel(seconds: number | null | undefined): string {
+  if (seconds == null) return "—";
+  if (seconds < 60) return `${seconds}s`;
+  return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 }
 
-function statusTone(status: string) {
-  const s = status.toLowerCase();
-  if (s === "completed" || s === "active" || s === "running") return "text-emerald-600 bg-emerald-500/10";
-  if (s === "failed" || s === "error") return "text-rose-600 bg-rose-500/10";
-  if (s === "calling" || s === "connected" || s === "ringing") return "text-sky-600 bg-sky-500/10";
-  if (s === "paused") return "text-amber-700 bg-amber-500/10";
-  return "text-muted-foreground bg-muted";
+function statusTone(status: string): "neutral" | "success" | "warning" | "danger" {
+  const value = status.toLowerCase();
+  if (["completed", "active", "running", "connected"].includes(value)) return "success";
+  if (["failed", "error"].includes(value)) return "danger";
+  if (["paused", "pending", "ringing", "calling"].includes(value)) return "warning";
+  return "neutral";
 }
 
 export default function HomePage() {
   const [, navigate] = useLocation();
-
-  const stats = useGetDashboardStats({
+  const { data: partnerContext } = usePartnerContext();
+  const isManagedClient = partnerContext?.isManagedClient === true;
+  const statsQ = useGetDashboardStats({
     query: { queryKey: getGetDashboardStatsQueryKey(), refetchInterval: 30_000, staleTime: 20_000 },
   });
-  const callsQ = useListCalls(
-    undefined,
-    { query: { queryKey: [...getListCallsQueryKey(), "home"], refetchInterval: 30_000 } },
-  );
+  const callsQ = useListCalls(undefined, {
+    query: { queryKey: [...getListCallsQueryKey(), "home"], refetchInterval: 30_000 },
+  });
   const agentsQ = useListAgents({
     query: { queryKey: getListAgentsQueryKey(), staleTime: 30_000 },
   });
@@ -81,14 +84,7 @@ export default function HomePage() {
     query: { queryKey: getListCampaignsQueryKey(), staleTime: 30_000 },
   });
   const phonesQ = useListPhoneNumbers();
-  const { data: wallet } = useGetWallet();
-  const rateMap = useMinuteRatesMap();
-  const userProviders = useUserProviderNames();
-  const rateCentsPerMin = wallet?.effectiveRateCentsPerMin
-    ?? rateMap.get(userProviders.size > 0 ? "byop" : "managed") ?? 500;
-  const balanceCents = wallet?.balanceCents ?? null;
-  const availMins = balanceCents != null ? Math.floor(balanceCents / rateCentsPerMin) : null;
-
+  const walletQ = useGetWallet();
   const pipelinesQ = useQuery({
     queryKey: ["automatic-calls"],
     queryFn: () => customFetch<AutoPipeline[]>("/api/automatic-calls"),
@@ -96,420 +92,364 @@ export default function HomePage() {
   });
 
   const agents = Array.isArray(agentsQ.data) ? agentsQ.data : (agentsQ.data as any)?.agents ?? [];
-  const campaigns = Array.isArray(campaignsQ.data) ? campaignsQ.data : [];
   const calls = Array.isArray(callsQ.data) ? callsQ.data : (callsQ.data as any)?.calls ?? [];
+  const campaigns = Array.isArray(campaignsQ.data) ? campaignsQ.data : [];
   const phones = Array.isArray(phonesQ.data) ? phonesQ.data : [];
-  const pipelines = pipelinesQ.data ?? [];
-
-  const runningPipelines = pipelines.filter((p) => p.status === "running");
-  const activeCampaigns = campaigns.filter((c: any) => c.status === "active" || c.isActive);
-  const pausedAuthPipelines = pipelines.filter(
-    (p) => p.status === "paused" && p.lastError && /reconnect google/i.test(p.lastError),
+  const pipelines: AutoPipeline[] = pipelinesQ.data ?? [];
+  const activeCampaigns = campaigns.filter((campaign: any) => campaign.status === "active" || campaign.isActive);
+  const activePipelines = pipelines.filter((pipeline) => pipeline.status === "running");
+  const failedCalls = calls.filter((call: any) =>
+    ["failed", "error"].includes(String(call.status ?? "").toLowerCase()),
   );
-  const failedRecent = calls.filter((c: any) =>
-    ["failed", "error"].includes(String(c.status ?? "").toLowerCase()),
-  ).length;
 
-  const lowWallet = balanceCents != null && balanceCents < 10_000;
+  const rateMap = useMinuteRatesMap();
+  const providers = useUserProviderNames();
+  const wallet = walletQ.data;
+  const rate = wallet?.effectiveRateCentsPerMin
+    ?? rateMap.get(providers.size > 0 ? "byop" : "managed")
+    ?? 500;
+  const balanceCents = wallet?.balanceCents ?? null;
+  const availableMinutes = balanceCents == null ? null : Math.floor(balanceCents / rate);
+  const lowBalance = balanceCents != null && balanceCents < 10_000;
+
   const hasAgent = agents.length > 0;
   const hasPhone = phones.length > 0;
+  const hasReach = activeCampaigns.length > 0 || pipelines.length > 0;
+  const firstAgentId = agents[0]?.id;
+  const setup = [
+    { label: "Create an agent", done: hasAgent, href: "/app/agents?create=1" },
+    { label: "Connect a phone number", done: hasPhone, href: "/app/phone-numbers" },
+    {
+      label: "Configure how leads reach it",
+      done: hasReach,
+      href: firstAgentId ? `/app/agents/${firstAgentId}?section=reach` : "/app/agents",
+    },
+  ];
+  const setupDone = setup.every((item) => item.done);
 
-  const attention: Array<{ title: string; desc: string; href: string; tone: "amber" | "rose" }> = [];
-  for (const p of pausedAuthPipelines) {
-    attention.push({
-      title: "Google Sheets disconnected",
-      desc: `${p.name} is paused — reconnect Google, then Resume.`,
-      href: "/app/connections",
-      tone: "amber",
+  const issues: Array<{ title: string; detail: string; href: string; tone: "warning" | "danger" }> = [];
+  pipelines
+    .filter((pipeline) => pipeline.status === "paused" && /reconnect google/i.test(pipeline.lastError ?? ""))
+    .forEach((pipeline) => {
+      issues.push({
+        title: "Google Sheets disconnected",
+        detail: `${pipeline.name} is paused`,
+        href: "/app/connections",
+        tone: "warning",
+      });
     });
-  }
-  if (lowWallet) {
-    attention.push({
+  if (lowBalance) {
+    issues.push({
       title: "Low wallet balance",
-      desc: availMins != null ? `About ${availMins} minutes left. Top up to keep dialing.` : "Top up to keep dialing.",
+      detail: availableMinutes == null ? "Top up to keep dialing" : `About ${availableMinutes} minutes remain`,
       href: "/app/wallet",
-      tone: "rose",
+      tone: "danger",
     });
   }
-  if (failedRecent > 0) {
-    attention.push({
-      title: `${failedRecent} failed call${failedRecent === 1 ? "" : "s"} in recent list`,
-      desc: "Review Activity for dial or telephony errors.",
+  if (failedCalls.length > 0) {
+    issues.push({
+      title: `${failedCalls.length} recent failed call${failedCalls.length === 1 ? "" : "s"}`,
+      detail: "Review provider and dial errors",
       href: "/app/calls",
-      tone: "rose",
-    });
-  }
-  if (!hasAgent) {
-    attention.push({
-      title: "No agent yet",
-      desc: "Create a voice agent — everything else (calls, WhatsApp, meetings) binds to it.",
-      href: "/app/vibe",
-      tone: "amber",
-    });
-  } else if (!hasPhone) {
-    attention.push({
-      title: "No phone number",
-      desc: "Assign or buy a number so your agent can place calls.",
-      href: "/app/phone-numbers",
-      tone: "amber",
+      tone: "danger",
     });
   }
 
-  const onboardSteps = hasAgent
-    ? [
-        { done: true, label: "Create an agent", href: "/app/agents" },
-        { done: hasPhone, label: "Connect a phone number", href: "/app/phone-numbers" },
-        {
-          done: activeCampaigns.length > 0 || pipelines.length > 0,
-          label: "Attach how leads reach it",
-          href: agents[0]?.id ? `/app/agents/${agents[0].id}` : "/app/agents",
-        },
-      ]
-    : [];
-  const onboardIncomplete = onboardSteps.some((s) => !s.done);
-  const s = stats.data;
+  const recentReach = [
+    ...activePipelines.map((pipeline) => ({
+      id: `sheet-${pipeline.id}`,
+      name: pipeline.name,
+      detail: `Sheet dial · ${pipeline.dialedCount} dialed · ${pipeline.enqueuedCount} queued`,
+      href: `/app/automatic-calls/${pipeline.id}`,
+      status: pipeline.status,
+      icon: FileSpreadsheet,
+    })),
+    ...activeCampaigns.map((campaign: any) => ({
+      id: `flow-${campaign.id}`,
+      name: campaign.name,
+      detail: "List / source dial",
+      href: `/app/campaigns/${campaign.id}`,
+      status: campaign.status ?? "active",
+      icon: Zap,
+    })),
+  ].slice(0, 5);
+
+  if (!hasAgent && !agentsQ.isLoading) {
+    if (isManagedClient) {
+      return (
+        <main className="flex min-h-full items-center justify-center px-5 py-12">
+          <div className="w-full max-w-md text-center">
+            <div className="mx-auto mb-5 flex size-9 items-center justify-center rounded-lg border border-border bg-card">
+              <Bot className="size-4" />
+            </div>
+            <h1 className="text-lg font-semibold tracking-[-0.02em]">No agents assigned</h1>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              Your managed workspace does not have an agent yet. Contact your workspace provider
+              to configure and assign one.
+            </p>
+          </div>
+        </main>
+      );
+    }
+    return (
+      <main className="flex min-h-full items-center justify-center px-5 py-12">
+        <div className="w-full max-w-lg">
+          <div className="mb-8">
+            <div className="mb-5 flex size-9 items-center justify-center rounded-lg border border-border bg-card">
+              <Bot className="size-4" />
+            </div>
+            <h1 className="text-2xl font-semibold tracking-[-0.03em]">Create your first agent</h1>
+            <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
+              Start with the voice runtime. Phone numbers, channels, meetings, Reach flows,
+              memory, and squads connect to the agent after it exists.
+            </p>
+          </div>
+          <div className="grid gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={() => navigate("/app/vibe")}
+              className="group bg-background p-5 text-left transition-colors hover:bg-muted/45"
+            >
+              <Sparkles className="mb-7 size-4 text-muted-foreground group-hover:text-foreground" />
+              <p className="text-sm font-medium">Build with AI</p>
+              <p className="mt-1 text-[11px] leading-5 text-muted-foreground">
+                Describe the job and generate a configured agent.
+              </p>
+              <span className="mt-4 inline-flex items-center gap-1 text-[11px] font-medium">
+                Start building <ArrowRight className="size-3" />
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate("/app/agents?create=1")}
+              className="group bg-background p-5 text-left transition-colors hover:bg-muted/45"
+            >
+              <Plus className="mb-7 size-4 text-muted-foreground group-hover:text-foreground" />
+              <p className="text-sm font-medium">Configure manually</p>
+              <p className="mt-1 text-[11px] leading-5 text-muted-foreground">
+                Choose every provider, voice, prompt, and runtime setting.
+              </p>
+              <span className="mt-4 inline-flex items-center gap-1 text-[11px] font-medium">
+                Open builder <ArrowRight className="size-3" />
+              </span>
+            </button>
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+    <main className="mx-auto w-full max-w-[1180px] px-4 py-5 sm:px-6 sm:py-7">
+      <header className="mb-6 flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight">Home</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Your agents are the center — open one to configure voice, channels, and how leads reach it
+          <h1 className="text-lg font-semibold tracking-[-0.025em]">Workspace</h1>
+          <p className="mt-0.5 text-[11px] text-muted-foreground">
+            {statsQ.data?.callsToday ?? "—"} calls today
+            {statsQ.data?.successRate != null ? ` · ${statsQ.data.successRate}% success` : ""}
+            {balanceCents != null ? ` · ₹${(balanceCents / 100).toFixed(0)} balance` : ""}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2 shrink-0">
-          <Button size="sm" onClick={() => navigate("/app/vibe")}>
-            <Sparkles className="h-3.5 w-3.5 mr-1" /> Create agent
+        {!isManagedClient && (
+          <Button size="sm" className="h-8 gap-1.5 px-3 text-xs" onClick={() => navigate("/app/vibe")}>
+            <Plus className="size-3.5" />
+            New agent
           </Button>
-          <Button size="sm" variant="outline" onClick={() => navigate("/app/agents")}>
-            <Bot className="h-3.5 w-3.5 mr-1" /> Open agents
-          </Button>
-        </div>
-      </div>
+        )}
+      </header>
 
-      {/* Empty / first-run — agent only */}
-      {!hasAgent && !agentsQ.isLoading && (
-        <section className="rounded-xl border border-dashed border-border/70 px-5 py-10 text-center space-y-4">
-          <div className="mx-auto h-12 w-12 rounded-2xl bg-primary/10 flex items-center justify-center">
-            <Bot className="h-6 w-6 text-primary" />
-          </div>
-          <div className="space-y-1.5">
-            <p className="text-base font-semibold">Start with an agent</p>
-            <p className="text-sm text-muted-foreground max-w-md mx-auto">
-              An agent is your voice runtime. After you create one, you’ll connect phone,
-              WhatsApp, meetings, and how leads reach it — all from the agent builder.
-            </p>
-          </div>
-          <div className="flex flex-wrap justify-center gap-2 pt-1">
-            <Button onClick={() => navigate("/app/vibe")}>
-              <Sparkles className="h-3.5 w-3.5 mr-1" /> Create with Vibe
-            </Button>
-            <Button variant="outline" onClick={() => navigate("/app/agents?create=1")}>
-              Manual build
-            </Button>
-          </div>
-        </section>
-      )}
-
-      {/* Setup checklist — once they have an agent */}
-      {hasAgent && onboardIncomplete && (
-        <section className="rounded-xl border border-border/60 bg-card/30 px-4 py-3.5 space-y-2.5">
-          <div>
-            <h2 className="text-xs font-medium">Finish setup</h2>
-            <p className="text-[11px] text-muted-foreground mt-0.5">
-              Three steps so leads can reach your agent.
-            </p>
-          </div>
-          <ol className="space-y-1.5">
-            {onboardSteps.map((step, i) => (
-              <li key={step.label}>
-                <Link
-                  href={step.href}
-                  className={cn(
-                    "flex items-center gap-2.5 rounded-lg border px-3 py-2 text-xs transition-colors",
-                    step.done
-                      ? "border-emerald-500/20 bg-emerald-500/5 text-muted-foreground"
-                      : "border-border/50 hover:bg-muted/30",
-                  )}
-                >
-                  {step.done ? (
-                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
-                  ) : (
-                    <span className="h-3.5 w-3.5 rounded-full border border-border text-[9px] flex items-center justify-center shrink-0 text-muted-foreground">
-                      {i + 1}
-                    </span>
-                  )}
-                  <span className={cn("font-medium", step.done && "line-through decoration-muted-foreground/40")}>
-                    {step.label}
-                  </span>
-                  {!step.done && <ArrowRight className="h-3 w-3 text-muted-foreground ml-auto shrink-0" />}
-                </Link>
-              </li>
-            ))}
-          </ol>
-        </section>
-      )}
-
-      {/* Your agents */}
-      {hasAgent && (
-        <section className="rounded-xl border border-border/60 overflow-hidden">
-          <div className="px-3 py-2.5 border-b border-border/50 flex items-center justify-between">
-            <h2 className="text-xs font-medium">Your agents</h2>
-            <Link href="/app/agents" className="text-[11px] text-muted-foreground hover:text-foreground underline-offset-2 hover:underline">
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="min-w-0 overflow-hidden rounded-lg border border-border bg-card">
+          <div className="flex h-10 items-center justify-between border-b border-border px-3.5">
+            <h2 className="text-[11px] font-semibold">Agents</h2>
+            <Link href="/app/agents" className="text-[10px] text-muted-foreground hover:text-foreground">
               View all
             </Link>
           </div>
-          <div className="divide-y divide-border/40">
-            {agents.slice(0, 6).map((a: any) => (
+          <div className="divide-y divide-border/70">
+            {agents.slice(0, 8).map((agent: any) => (
               <Link
-                key={a.id}
-                href={`/app/agents/${a.id}`}
-                className="flex items-center gap-3 px-3 py-2.5 hover:bg-muted/30 transition-colors"
+                key={agent.id}
+                href={`/app/agents/${agent.id}`}
+                className="group grid min-h-14 grid-cols-[minmax(0,1fr)_auto] items-center gap-4 px-3.5 transition-colors hover:bg-muted/35"
               >
-                <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                  <Bot className="h-3.5 w-3.5 text-primary" />
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="flex size-7 shrink-0 items-center justify-center rounded-md border border-border bg-background">
+                    <Bot className="size-3.5 text-muted-foreground" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="truncate text-[12px] font-medium">{agent.name ?? `Agent ${agent.id}`}</p>
+                      <span className="inline-flex items-center gap-1 text-[9px] capitalize text-muted-foreground">
+                        <StatusDot tone={agent.status === "active" ? "success" : "neutral"} />
+                        {agent.status ?? "draft"}
+                      </span>
+                    </div>
+                    <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
+                      {agent.description || "Prompt · Voice · Tools · Reach · Channels"}
+                    </p>
+                  </div>
                 </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium truncate">{a.name ?? `Agent ${a.id}`}</p>
-                  <p className="text-[11px] text-muted-foreground truncate">
-                    Open builder — prompt, voice, channels, reach
-                  </p>
-                </div>
-                <ArrowRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <ArrowRight className="size-3 text-muted-foreground/50 opacity-0 transition-opacity group-hover:opacity-100" />
               </Link>
             ))}
           </div>
-        </section>
-      )}
+        </div>
 
-      {/* Today KPIs */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {[
-          {
-            label: "Calls today",
-            value: s?.callsToday ?? "—",
-            sub: s?.callsThisWeek != null ? `${s.callsThisWeek} this week` : undefined,
-            href: "/app/calls",
-            icon: Phone,
-          },
-          {
-            label: "Success rate",
-            value: s != null ? `${s.successRate}%` : "—",
-            sub: "Completed calls",
-            href: "/app/calls",
-            icon: CheckCircle2,
-          },
-          {
-            label: "Avg duration",
-            value: s != null ? fmtDuration(s.avgDurationSeconds) : "—",
-            sub: "Per call",
-            href: "/app/calls",
-            icon: Zap,
-          },
-          {
-            label: "Wallet",
-            value: balanceCents != null ? `₹${(balanceCents / 100).toFixed(0)}` : "—",
-            sub: availMins != null ? `~${availMins} min` : undefined,
-            href: "/app/wallet",
-            icon: Wallet,
-          },
-        ].map(({ label, value, sub, href, icon: Icon }) => (
-          <button
-            key={label}
-            type="button"
-            onClick={() => navigate(href)}
-            className="rounded-xl border border-border/60 bg-card/40 px-3 py-3 text-left hover:border-border transition-colors min-h-[88px]"
-          >
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</span>
-              <Icon className="h-3.5 w-3.5 text-muted-foreground/50" />
+        <aside className="space-y-5">
+          {!isManagedClient && !setupDone && (
+            <section className="rounded-lg border border-border bg-card">
+              <div className="border-b border-border px-3.5 py-3">
+                <h2 className="text-[11px] font-semibold">Finish setup</h2>
+                <p className="mt-0.5 text-[10px] text-muted-foreground">Make the first agent operational.</p>
+              </div>
+              <div className="p-2">
+                {setup.map((item, index) => (
+                  <Link
+                    key={item.label}
+                    href={item.href}
+                    className="flex min-h-9 items-center gap-2 rounded-md px-2 text-[11px] transition-colors hover:bg-muted/40"
+                  >
+                    <span
+                      className={cn(
+                        "flex size-4 shrink-0 items-center justify-center rounded-full border text-[8px]",
+                        item.done
+                          ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600"
+                          : "border-border text-muted-foreground",
+                      )}
+                    >
+                      {item.done ? <Check className="size-2.5" /> : index + 1}
+                    </span>
+                    <span className={cn("min-w-0 flex-1 truncate", item.done && "text-muted-foreground")}>
+                      {item.label}
+                    </span>
+                    {!item.done && <ArrowRight className="size-3 text-muted-foreground" />}
+                  </Link>
+                ))}
+              </div>
+            </section>
+          )}
+
+          <section className="rounded-lg border border-border bg-card">
+            <div className="flex h-10 items-center justify-between border-b border-border px-3.5">
+              <h2 className="text-[11px] font-semibold">Workspace health</h2>
+              {issues.length === 0 && <StatusDot tone="success" />}
             </div>
-            {stats.isLoading && label !== "Wallet" ? (
-              <div className="mt-2 h-7 w-16 rounded animate-pulse bg-muted" />
+            {issues.length === 0 ? (
+              <p className="px-3.5 py-4 text-[10px] text-muted-foreground">No action needed.</p>
             ) : (
-              <>
-                <p className="mt-1.5 text-2xl font-semibold tabular-nums tracking-tight">{value}</p>
-                {sub && <p className="text-[11px] text-muted-foreground mt-0.5">{sub}</p>}
-              </>
+              <div className="divide-y divide-border/70">
+                {issues.slice(0, 4).map((issue) => (
+                  <Link
+                    key={`${issue.title}-${issue.href}`}
+                    href={issue.href}
+                    className="flex gap-2.5 px-3.5 py-3 hover:bg-muted/35"
+                  >
+                    <CircleAlert
+                      className={cn(
+                        "mt-0.5 size-3.5 shrink-0",
+                        issue.tone === "danger" ? "text-rose-500" : "text-amber-500",
+                      )}
+                    />
+                    <div className="min-w-0">
+                      <p className="truncate text-[11px] font-medium">{issue.title}</p>
+                      <p className="mt-0.5 truncate text-[10px] text-muted-foreground">{issue.detail}</p>
+                    </div>
+                  </Link>
+                ))}
+              </div>
             )}
-          </button>
-        ))}
+          </section>
+        </aside>
       </div>
 
-      {/* Needs attention */}
-      {attention.length > 0 && (
-        <section className="space-y-2">
-          <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Needs attention</h2>
-          <ul className="space-y-2">
-            {attention.map((a) => (
-              <li key={a.title + a.href}>
+      <div className="mt-5 grid gap-5 lg:grid-cols-2">
+        <section className="overflow-hidden rounded-lg border border-border bg-card">
+          <div className="flex h-10 items-center justify-between border-b border-border px-3.5">
+            <h2 className="text-[11px] font-semibold">Recent activity</h2>
+            <Link href="/app/calls" className="text-[10px] text-muted-foreground hover:text-foreground">
+              Open Activity
+            </Link>
+          </div>
+          {callsQ.isLoading ? (
+            <p className="px-3.5 py-8 text-center text-[10px] text-muted-foreground">Loading…</p>
+          ) : calls.length === 0 ? (
+            <p className="px-3.5 py-8 text-center text-[10px] text-muted-foreground">No calls yet.</p>
+          ) : (
+            <div className="divide-y divide-border/70">
+              {calls.slice(0, 6).map((call: any) => (
                 <Link
-                  href={a.href}
-                  className={cn(
-                    "flex items-start gap-3 rounded-xl border px-3 py-2.5 transition-colors",
-                    a.tone === "rose"
-                      ? "border-rose-500/30 bg-rose-500/5 hover:bg-rose-500/10"
-                      : "border-amber-500/30 bg-amber-500/5 hover:bg-amber-500/10",
-                  )}
+                  key={call.id}
+                  href={`/app/calls/${call.id}`}
+                  className="grid min-h-11 grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 px-3.5 text-[10px] hover:bg-muted/35"
                 >
-                  <AlertTriangle className={cn(
-                    "h-4 w-4 mt-0.5 shrink-0",
-                    a.tone === "rose" ? "text-rose-600" : "text-amber-600",
-                  )} />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium">{a.title}</p>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">{a.desc}</p>
+                  <div className="flex min-w-0 items-center gap-2">
+                    <StatusDot tone={statusTone(String(call.status ?? ""))} />
+                    <span className="truncate font-mono text-[10px]">
+                      {call.direction === "outbound" ? call.toNumber : call.fromNumber}
+                    </span>
                   </div>
-                  <ArrowRight className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-1" />
+                  <span className="text-muted-foreground">{durationLabel(call.durationSeconds)}</span>
+                  <span className="w-12 text-right text-muted-foreground">{relativeTime(call.createdAt)}</span>
                 </Link>
-              </li>
-            ))}
-          </ul>
+              ))}
+            </div>
+          )}
         </section>
-      )}
 
-      <div className="grid lg:grid-cols-2 gap-4">
-        {/* Active work — keep until Reach migrates */}
-        <section className="rounded-xl border border-border/60 overflow-hidden">
-          <div className="px-3 py-2.5 border-b border-border/50 flex items-center justify-between">
-            <h2 className="text-xs font-medium">Active dialing</h2>
-            <span className="text-[10px] text-muted-foreground">
-              {runningPipelines.length} sheets · {activeCampaigns.length} lists
+        <section className="overflow-hidden rounded-lg border border-border bg-card">
+          <div className="flex h-10 items-center justify-between border-b border-border px-3.5">
+            <h2 className="text-[11px] font-semibold">Active Reach</h2>
+            <span className="text-[9px] text-muted-foreground">
+              {activePipelines.length} sheet · {activeCampaigns.length} list
             </span>
           </div>
-          <div className="divide-y divide-border/40">
-            {runningPipelines.slice(0, 4).map((p) => (
-              <Link
-                key={p.id}
-                href={`/app/automatic-calls/${p.id}`}
-                className="flex items-center gap-3 px-3 py-2.5 hover:bg-muted/30 transition-colors"
-              >
-                <div className="h-8 w-8 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
-                  <Play className="h-3.5 w-3.5 text-emerald-600" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium truncate">{p.name}</p>
-                  <p className="text-[11px] text-muted-foreground truncate">
-                    Sheet dial · {p.dialedCount} dialed · {p.enqueuedCount} queued
-                  </p>
-                </div>
-                <span className={cn("text-[10px] px-1.5 py-0.5 rounded capitalize", statusTone(p.status))}>
-                  {p.status}
-                </span>
-              </Link>
-            ))}
-            {pipelines.filter((p) => p.status === "paused").slice(0, 2).map((p) => (
-              <Link
-                key={p.id}
-                href={`/app/automatic-calls/${p.id}`}
-                className="flex items-center gap-3 px-3 py-2.5 hover:bg-muted/30 transition-colors"
-              >
-                <div className="h-8 w-8 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0">
-                  <Pause className="h-3.5 w-3.5 text-amber-600" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium truncate">{p.name}</p>
-                  <p className="text-[11px] text-muted-foreground truncate">Paused sheet dial</p>
-                </div>
-              </Link>
-            ))}
-            {activeCampaigns.slice(0, 4).map((c: any) => (
-              <Link
-                key={c.id}
-                href={`/app/campaigns/${c.id}`}
-                className="flex items-center gap-3 px-3 py-2.5 hover:bg-muted/30 transition-colors"
-              >
-                <div className="h-8 w-8 rounded-lg bg-sky-500/10 flex items-center justify-center shrink-0">
-                  <Zap className="h-3.5 w-3.5 text-sky-600" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium truncate">{c.name}</p>
-                  <p className="text-[11px] text-muted-foreground truncate">List dial</p>
-                </div>
-                <span className={cn("text-[10px] px-1.5 py-0.5 rounded capitalize", statusTone(c.status ?? "active"))}>
-                  {c.status ?? "active"}
-                </span>
-              </Link>
-            ))}
-            {runningPipelines.length === 0 && activeCampaigns.length === 0 && pipelines.filter((p) => p.status === "paused").length === 0 && (
-              <p className="px-3 py-8 text-xs text-muted-foreground text-center">
-                Nothing dialing yet. Open an agent → Reach to attach sheet or list dial.
-              </p>
-            )}
-          </div>
-        </section>
-
-        {/* Quick actions — agent first */}
-        <section className="rounded-xl border border-border/60 overflow-hidden">
-          <div className="px-3 py-2.5 border-b border-border/50">
-            <h2 className="text-xs font-medium">Quick actions</h2>
-          </div>
-          <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {[
-              { label: "Create agent", desc: "Vibe Build or from scratch", href: "/app/vibe", icon: Sparkles },
-              { label: "Open agents", desc: `${agents.length} total — builder`, href: "/app/agents", icon: Bot },
-              { label: "Phone numbers", desc: "Buy or assign to an agent", href: "/app/phone-numbers", icon: Phone },
-              { label: "Integrations", desc: "Sheets, CRM, WhatsApp apps", href: "/app/connections", icon: PlugZap },
-              { label: "Sheet dial", desc: "Dial from Google Sheet", href: "/app/automatic-calls/new", icon: FileSpreadsheet },
-              { label: "Calls", desc: "Listen & review", href: "/app/calls", icon: Users },
-            ].map(({ label, desc, href, icon: Icon }) => (
-              <Link
-                key={href + label}
-                href={href}
-                className="flex items-start gap-2.5 rounded-lg border border-border/50 px-3 py-2.5 hover:bg-muted/30 transition-colors min-h-[52px]"
-              >
-                <div className="mt-0.5 rounded-md bg-muted/60 p-1.5 shrink-0">
-                  <Icon className="h-3.5 w-3.5 text-muted-foreground" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-medium leading-tight">{label}</p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">{desc}</p>
-                </div>
-              </Link>
-            ))}
-          </div>
+          {recentReach.length === 0 ? (
+            <div className="px-3.5 py-8 text-center">
+              <p className="text-[10px] text-muted-foreground">No active lead sources.</p>
+              {firstAgentId && (
+                <Link
+                  href={`/app/agents/${firstAgentId}?section=reach`}
+                  className="mt-2 inline-flex items-center gap-1 text-[10px] font-medium"
+                >
+                  Configure Reach <ArrowRight className="size-3" />
+                </Link>
+              )}
+            </div>
+          ) : (
+            <div className="divide-y divide-border/70">
+              {recentReach.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <Link
+                    key={item.id}
+                    href={item.href}
+                    className="flex min-h-11 items-center gap-2.5 px-3.5 hover:bg-muted/35"
+                  >
+                    <Icon className="size-3.5 shrink-0 text-muted-foreground" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[11px] font-medium">{item.name}</p>
+                      <p className="truncate text-[9px] text-muted-foreground">{item.detail}</p>
+                    </div>
+                    <span className="inline-flex items-center gap-1 text-[9px] capitalize text-muted-foreground">
+                      <StatusDot tone={statusTone(item.status)} />
+                      {item.status}
+                    </span>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
         </section>
       </div>
 
-      {/* Recent calls */}
-      <section className="rounded-xl border border-border/60 overflow-hidden">
-        <div className="px-3 py-2.5 border-b border-border/50 flex items-center justify-between">
-          <h2 className="text-xs font-medium">Recent calls</h2>
-          <Link href="/app/calls" className="text-[11px] text-muted-foreground hover:text-foreground underline-offset-2 hover:underline">
-            View all
-          </Link>
-        </div>
-        {callsQ.isLoading ? (
-          <p className="px-3 py-8 text-xs text-muted-foreground text-center">Loading…</p>
-        ) : calls.length === 0 ? (
-          <p className="px-3 py-8 text-xs text-muted-foreground text-center">No calls yet</p>
-        ) : (
-          <ul className="divide-y divide-border/40">
-            {calls.slice(0, 8).map((c: any) => (
-              <li key={c.id}>
-                <Link
-                  href={`/app/calls/${c.id}`}
-                  className="flex items-center gap-3 px-3 py-2.5 text-xs hover:bg-muted/30 transition-colors"
-                >
-                  <span className={cn("capitalize px-1.5 py-0.5 rounded shrink-0", statusTone(c.status ?? ""))}>
-                    {String(c.status ?? "—").replace(/_/g, " ")}
-                  </span>
-                  <span className="font-mono truncate flex-1">
-                    {c.direction === "outbound" ? c.toNumber : c.fromNumber}
-                  </span>
-                  <span className="text-muted-foreground shrink-0 hidden sm:inline">
-                    {fmtDuration(c.durationSeconds)}
-                  </span>
-                  <span className="text-muted-foreground shrink-0">
-                    {relativeTime(c.createdAt)}
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-    </div>
+      <footer className="mt-5 flex items-center justify-between border-t border-border/70 pt-4 text-[10px] text-muted-foreground">
+        <span>{agents.length} agent{agents.length === 1 ? "" : "s"} in this workspace</span>
+        <Link href="/app/wallet" className="inline-flex items-center gap-1.5 hover:text-foreground">
+          <Wallet className="size-3" />
+          {availableMinutes == null ? "Billing" : `~${availableMinutes} minutes available`}
+        </Link>
+      </footer>
+    </main>
   );
 }
