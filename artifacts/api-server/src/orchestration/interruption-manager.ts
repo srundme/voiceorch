@@ -36,7 +36,7 @@ export class InterruptionManager {
     this.incrementalDelayMs = opts.incrementalDelayMs ?? 500;
     this.wordsForInterruption = opts.wordsForInterruption ?? 3;
     this.accidentalInterruptionPhrases = new Set(
-      (opts.accidentalInterruptionPhrases ?? ["stop", "wait", "hold on", "hang up", "cancel", "pause", "shut up", " Listen", "வேண்டாம்", "நிறுத்து", "இருங்க", "ரூக்", "रुक", "रुको", "बस", "सुनो"])
+      (opts.accidentalInterruptionPhrases ?? ["stop", "wait", "hold on", "hang up", "cancel", "pause", "shut up", "listen", "hello", "hey", "வேண்டாம்", "நிறுத்து", "இருங்க", "இல்ல", "ஹலோ", "சொல்லுங்க", "ரூக்", "ரुक", "रुको", "बस", "सुनो", "अरे", "सुनिए", "एक मिनट"])
         .map((p) => p.trim().toLowerCase()),
     );
   }

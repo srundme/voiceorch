@@ -2255,7 +2255,7 @@ export class OrchestrationPipeline implements VoiceSession {
                   : this.interruptionMgr.getWordsForInterruption();
                 const langPrefix = (this.currentLang || this.agent.language || "en").split(/[-_]/)[0]?.toLowerCase();
                 const isIndic = ["ta", "hi", "te", "kn", "ml", "mr", "bn", "gu"].includes(langPrefix ?? "");
-                const minChars = isIndic ? 14 : 8;
+                const minChars = 4;
                 if (
                   threshold > 0
                   && this.streamingBargeInWordCount >= threshold
@@ -2467,7 +2467,7 @@ export class OrchestrationPipeline implements VoiceSession {
         const charCount = [...transcript.trim()].length;
         const langPrefix = (this.currentLang || this.agent.language || "en").split(/[-_]/)[0]?.toLowerCase();
         const isIndic = ["ta", "hi", "te", "kn", "ml", "mr", "bn", "gu"].includes(langPrefix ?? "");
-        const minChars = isIndic ? 14 : 8;
+        const minChars = 4;
         if (this.streamingBargeInWordCount >= threshold && charCount >= minChars) {
           this.triggerBargeIn("word_count", transcript, { speculative: true });
           logger.info(
