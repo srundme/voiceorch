@@ -361,7 +361,10 @@ export class SarvamLLM implements LLMAdapter {
     // a small agent-configured cap can be consumed ENTIRELY by the hidden
     // reasoning trace, leaving content:null — a silent turn. Enforce the
     // documented 500-token floor whenever reasoning runs alongside tools.
-    if (hasTools && genBody["reasoning_effort"] != null) {
+    if (hasTools) {
+      if (genBody["reasoning_effort"] == null) {
+        genBody["reasoning_effort"] = "low";
+      }
       const mt = genBody["max_tokens"];
       if (typeof mt === "number" && mt < 500) genBody["max_tokens"] = 500;
     }
@@ -369,7 +372,7 @@ export class SarvamLLM implements LLMAdapter {
     // Sarvam-specific tool guidance prompt injection: placed at the top of system prompt.
     const effectiveSystemPrompt = hasTools
       ? `[TOOL GUIDANCE] You have tools available. Use them naturally:
-1. When you have ALL required information from the caller, call the tool. You may give a brief spoken confirmation ("Booking your appointment…") before the tool call.
+1. When you have ALL required information from the caller, call the tool IMMEDIATELY without emitting preambles or spoken confirmations first.
 2. If the caller says yes/ok/confirm and you already have their details, call the tool — don't ask for confirmation again.
 3. If you're MISSING required information, ask for it conversationally. Don't call a tool with incomplete data.
 

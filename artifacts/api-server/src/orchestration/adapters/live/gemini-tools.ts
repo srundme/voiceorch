@@ -14,7 +14,7 @@ export function toGeminiLiveTools(tools: ToolDefinition[]): Tool[] | undefined {
           Object.entries(t.parameters.properties).map(([key, val]) => [
             key,
             {
-              type: (Type as Record<string, Type>)[val.type.toUpperCase()] ?? Type.STRING,
+              type: (Type as Record<string, Type>)[(val.type || "string").toUpperCase()] ?? Type.STRING,
               description: val.description,
               ...(val.enum ? { enum: val.enum } : {}),
             },
