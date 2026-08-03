@@ -3128,29 +3128,14 @@ export class OrchestrationPipeline implements VoiceSession {
     const isWebcallStreaming = !respectHoldUntil && this.config.telephonyProvider === "webcall";
 
     const now = Date.now();
-    // Without transcript evidence during live TTS, treat energy like the batch path:
-    // respect the extended bargeInHoldUntil so carrier echo of our own voice cannot
-    // fire a mid-sentence streaming_energy cut (call 4853: "One moment…" self-echo).
-    // Once streaming STT has real words, hold is skipped so callers can still interrupt.
-    const noSttEvidenceHold =
-      !respectHoldUntil
-      && this.isSendingTtsAudio
-      && this.streamingBargeInWordCount === 0
-      && now < this.bargeInHoldUntil;
     if (
       now < this.greetingEchoHoldUntil ||
       now < this.bargeInSentenceStartAt + this.bargeInEchoGraceMs ||
-      (respectHoldUntil && now < this.bargeInHoldUntil) ||
-      noSttEvidenceHold
+      (respectHoldUntil && now < this.bargeInHoldUntil)
     ) {
       // Echo grace: suppress (and reset) while our own freshly started audio may
       // still be echoing back. greetingEchoHoldUntil covers the full opening line
       // on the carrier path; the per-sentence grace covers the start of each reply.
-      // Calibrate the echo floor ONLY in the brief post-start window (see
-      // BARGE_IN_ECHO_CALIBRATION_MS): those frames are near-certainly pure echo
-      // because the caller has not had time to react to THIS line yet. Sampling the
-      // WHOLE grace window would let a caller who barges in early poison the floor
-      // against themselves.
       if (useAdaptive && now <= this.bargeInSentenceStartAt + BARGE_IN_ECHO_CALIBRATION_MS) {
         this.updateEchoFloor(currentRms);
       }
@@ -3158,51 +3143,25 @@ export class OrchestrationPipeline implements VoiceSession {
       return;
     }
 
-    // Adaptive barge-in bar: on the streaming carrier path, sit just ABOVE the echo
-    // floor we measured for THIS line (echoFloor × margin), clamped to
-    // [configuredThreshold, MAX]. A quiet line → bar near the configured threshold →
-    // a normal-volume caller interrupts. A loud/echoey line → bar rises above the echo
-    // → no self-trigger. Before enough echo is seen, fall back to the conservative
-    // cold-start floor so we never self-interrupt on the first frames. The batch path
-    // (respectHoldUntil) and webcall (AEC) keep the configured threshold as-is.
     let effectiveThreshold = this.bargeInEnergyThreshold;
     if (useAdaptive) {
-      // Trust the learned floor only after enough echo samples; until then use the
-      // conservative cold-start fallback so returning echo can't self-trigger while the
-      // estimate is still empty/thin.
       const floorReady = this.playbackEchoFloorSamples >= BARGE_IN_ECHO_FLOOR_MIN_SAMPLES;
       const echoBar = floorReady
         ? this.playbackEchoFloor * BARGE_IN_ADAPTIVE_ECHO_MARGIN
         : BARGE_IN_TELEPHONY_ACTIVE_TTS_ENERGY_FLOOR;
-      // Bar = at least the configured threshold, plus an echo-derived boost that is
-      // itself capped at MAX so a poisoned/loud echo estimate can never lift the bar
-      // beyond MAX. A user-configured threshold ABOVE MAX is still honoured (never
-      // silently lowered).
       effectiveThreshold = Math.max(
         this.bargeInEnergyThreshold,
         Math.min(echoBar, BARGE_IN_ADAPTIVE_MAX_THRESHOLD),
       );
     }
-    // Webcall AEC path: browser already cancelled the echo so the telephony anti-echo
-    // bar (default 1200) is unnecessary. Lower to BARGE_IN_WEBCALL_AEC_THRESHOLD so a
-    // normal-volume browser mic can actually trigger a barge-in. A user-configured
-    // bargeInEnergyThreshold that is already lower than the AEC threshold is honoured.
-    // Mic Sensitivity moves this cap too: "normal" reproduces the env-tunable
-    // BARGE_IN_WEBCALL_AEC_THRESHOLD default exactly; "low"/"high" scale it.
     const webcallAecThreshold = this.micThresholds.webcallAecThreshold;
     if (isWebcallStreaming && effectiveThreshold > webcallAecThreshold) {
       effectiveThreshold = webcallAecThreshold;
     }
-    // Telephony floor: agent configs that set bargeInEnergyThreshold near the VAD
-    // floor (~300) false-fire constantly and leave sticky bargeInRequested → silent
-    // farewells. Never drop the live bar below BARGE_IN_TELEPHONY_MIN_ENERGY on the
-    // carrier path (gaps between sentences included).
     if (streamingCarrier) {
       effectiveThreshold = Math.max(effectiveThreshold, BARGE_IN_TELEPHONY_MIN_ENERGY);
     }
 
-    // Periodic diagnostic so the exact echo/voice/threshold numbers for a line are
-    // visible in the logs (throttled to ~once/700 ms while the agent is playing).
     if (useAdaptive && now - this.lastEnergyMonitorLogAt >= 700) {
       this.lastEnergyMonitorLogAt = now;
       logger.info(
@@ -3215,7 +3174,6 @@ export class OrchestrationPipeline implements VoiceSession {
         "energy barge-in monitor",
       );
     }
-    // Equivalent diagnostic for the webcall (AEC) streaming path.
     if (isWebcallStreaming && now - this.lastEnergyMonitorLogAt >= 700) {
       this.lastEnergyMonitorLogAt = now;
       logger.info(
@@ -3234,30 +3192,14 @@ export class OrchestrationPipeline implements VoiceSession {
 
     if (aboveBar) {
       this.bargeInSpeechFrames++;
-      // When a Stop Speaking Plan is configured, bargeInMinFrames is already derived
-      // from Min Words / Min Voice Duration and is authoritative — don't apply the
-      // non-UI wordsForInterruption×20 floor. Keep BARGE_IN_MIN_FRAMES as a floor so
-      // a single loud frame can't fire.
       let effectiveMinFrames = this.stopSpeakingPlanConfigured
         ? Math.max(BARGE_IN_MIN_FRAMES, this.bargeInMinFrames)
         : Math.max(this.bargeInMinFrames, (this.agent.wordsForInterruption ?? 3) * 20);
-      // Bolna prefers transcript-gated interruption. Pure-energy barge-in without
-      // any interim STT evidence must SUSTAIN longer (~400 ms). Previously we used
-      // Math.min(effective, cap) which left stop-speaking-plan agents at 3 frames
-      // (~60 ms) forever — call 2620 false-cut mid "okay"/overview with mute gap.
+
       if (!respectHoldUntil) {
-        const hasSttEvidence = this.streamingBargeInWordCount > 0;
-        const noEvidenceFloor = Math.max(BARGE_IN_STREAMING_MIN_FRAMES * 2, 20); // ~400 ms @ 20 ms/frame
-        if (hasSttEvidence) {
-          // Words confirmed — allow a responsive energy cut (capped near streaming min).
-          effectiveMinFrames = Math.max(
-            BARGE_IN_MIN_FRAMES,
-            Math.min(effectiveMinFrames, BARGE_IN_STREAMING_MIN_FRAMES),
-          );
-        } else {
-          // No STT words yet — raise the floor; never leave agents at 3 frames.
-          effectiveMinFrames = Math.max(effectiveMinFrames, noEvidenceFloor);
-        }
+        // On streaming path (webcall / streaming telephony), mic is cancelled (AEC)
+        // or adaptive energy checked. Allow responsive cut on ~6-10 frames (~120-200 ms).
+        effectiveMinFrames = isWebcallStreaming ? 6 : BARGE_IN_STREAMING_MIN_FRAMES;
       }
       if (this.bargeInSpeechFrames >= effectiveMinFrames) {
         this.triggerBargeIn(source, undefined, {
