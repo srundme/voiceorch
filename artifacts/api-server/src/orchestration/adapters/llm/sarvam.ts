@@ -255,17 +255,40 @@ function parseBracketToolCall(
   return { name, args };
 }
 
-export type ToolEnvelopeFormat = "json" | "bracket";
+export type ToolEnvelopeFormat = "json" | "bracket" | "function_call";
 
 /**
- * Unified serialized-tool-call parser. Sarvam does not commit to a single
- * envelope shape, so we try each known textual form in turn (JSON content
- * envelope, then bracket/key-value envelope) and return the first that yields a
- * tool name. When `validNames` is supplied, the resolved name MUST be one of the
- * tools offered this turn — this prevents ordinary text that merely starts with
- * `{`/`[` from being misclassified as a tool call (false positives are spoken as
- * text instead). New textual shapes can be added by appending another parser to
- * the chain below.
+ * Parse Python/JS function-call notation emitted by some models (e.g. Groq Llama):
+ *   book_appointment(attendee_name="Karthikeyan", attendee_email="karthikeyan@theaitel.com")
+ *   transfer_to_human(reason="caller wants a human")
+ * The preamble ("I will execute... ") before the call is discarded.
+ */
+function parseFunctionCallNotation(
+  raw: string,
+  validNames?: Set<string>,
+): { name: string; args: Record<string, unknown> } | null {
+  const nameOk = (n: string) => !validNames || validNames.size === 0 || validNames.has(n);
+
+  // Match: optional preamble then tool_name(...)
+  const match = /\b([a-zA-Z][a-zA-Z0-9_-]*)\s*\(([^)]*)\)/.exec(raw);
+  if (!match) return null;
+  const name = match[1];
+  if (!nameOk(name)) return null;
+
+  const inner = match[2] ?? "";
+  const args: Record<string, unknown> = {};
+  const kvRegex = /([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^,\s\)]+))/g;
+  let kv: RegExpExecArray | null;
+  while ((kv = kvRegex.exec(inner)) !== null) {
+    args[kv[1]] = kv[2] ?? kv[3] ?? kv[4] ?? "";
+  }
+  return { name, args };
+}
+
+/**
+ * Unified serialized-tool-call parser. Tries JSON, bracket/key-value, and
+ * Python/JS function-call notation in turn. When `validNames` is supplied,
+ * the resolved name MUST be one of the tools offered this turn.
  */
 export function parseToolEnvelope(
   raw: string,
@@ -278,6 +301,9 @@ export function parseToolEnvelope(
 
   const bracket = parseBracketToolCall(raw, validNames);
   if (bracket && nameOk(bracket.name)) return { ...bracket, format: "bracket" };
+
+  const fnCall = parseFunctionCallNotation(raw, validNames);
+  if (fnCall && nameOk(fnCall.name)) return { ...fnCall, format: "function_call" };
 
   return null;
 }
@@ -355,8 +381,8 @@ export class SarvamLLM implements LLMAdapter {
     options?: {
       tools?: ToolDefinition[];
       onToolCall?: (name: string, args: Record<string, unknown>) => void;
-      onToolDetected?: (info: { format: "structured" | "json" | "bracket" | "function_tag" }) => void;
-      onToolParsed?: (info: { name: string; format: "structured" | "json" | "bracket" | "function_tag"; args: Record<string, unknown> }) => void;
+      onToolDetected?: (info: { format: "structured" | "json" | "bracket" | "function_tag" | "function_call" }) => void;
+      onToolParsed?: (info: { name: string; format: "structured" | "json" | "bracket" | "function_tag" | "function_call"; args: Record<string, unknown> }) => void;
       onUsage?: (usage: LLMUsage) => void;
     }
   ): Promise<void> {
