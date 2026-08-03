@@ -111,7 +111,7 @@ export function isCallerAudioDifficulty(text: string): boolean {
  */
 export function isFalseInterruptionScrap(
   text: string,
-  wordsForInterruption: number,
+  _wordsForInterruption: number,
 ): boolean {
   const t = text.trim();
   if (!t) return true;
@@ -122,19 +122,14 @@ export function isFalseInterruptionScrap(
   if (/[?？]/.test(t)) return false;
   if (/(முடியுமா|கேளுங்க|சொல்லுங்க|விளக்க|explain|tell me|என்ன|எப்படி)\b/iu.test(t)) return false;
   if (isUltraShortNoiseFragment(t)) return true;
+
+  // If a phrase has 2 or more words and is not an ultra-short noise fragment, it is a valid substantive speech.
   const words = t.split(/\s+/).filter(Boolean);
-  if (words.length === 0) return true;
-  if (words.length > Math.max(1, wordsForInterruption)) return false;
-  // Keep genuine flow-control acks ("okay", "சரி", "ஆமா சார் ஆமா") — those still
-  // go to the LLM. Everything else at ≤threshold words is scrap.
-  if (VALID_COMPLETE_SHORT_UTTERANCE_RE.test(t)) return false;
-  if (REDUPLICATED_ACK_RE.test(t)) return false;
-  if (/^(சரி|சரிங்க|ஆமா|ஆம்|இல்ல|இல்லை|हां|हाँ|ठीक|जी)[\s,.!]*$/iu.test(t)) return false;
-  // Tamil/Hinglish ack + vocative ("ஆமா சார் ஆமா.", "हाँ जी हाँ")
-  if (/^(ஆமா|ஆம்|சரி|हां|हाँ|haan|ok(?:ay)?)([\s,.!]+(சார்|sir|जी|ji|madam|மா.?ம்|ஆமா|ஆம்|சரி|हां|हाँ|haan|ok(?:ay)?)){0,4}[\s,.!]*$/iu.test(t)) {
-    return false;
-  }
-  return true;
+  if (words.length >= 2) return false;
+
+  // Single word turns that are not ultra-short noise stubs (like "Members", "Tomorrow", "Keerthi")
+  // are valid and should not be discarded.
+  return false;
 }
 
 /**
