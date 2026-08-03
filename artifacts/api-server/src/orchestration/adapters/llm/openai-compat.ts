@@ -17,7 +17,7 @@ const OPENAI_COMPAT_PREAMBLE_RE =
 function looksLikeFunctionCallNotation(text: string, validNames: Set<string>): boolean {
   if (validNames.size === 0) return false;
   for (const name of validNames) {
-    if (new RegExp(`\\b${name}\\s*\\(`).test(text)) return true;
+    if (new RegExp(`\\b${name}\\b`).test(text)) return true;
   }
   return false;
 }

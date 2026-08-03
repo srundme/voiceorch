@@ -129,33 +129,67 @@ export function parseFunctionCallNotation(
   if (!raw) return null;
   const text = raw.trim();
 
-  const match = /^([a-zA-Z0-9_-]+)\s*\(([\s\S]*)\)$/.exec(text);
+  // Find tool_name(...) anywhere in the string
+  const namesPattern = validNames && validNames.size > 0
+    ? Array.from(validNames).map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")
+    : "[a-zA-Z0-9_-]+";
+
+  const fnRegex = new RegExp(`\\b(${namesPattern})\\s*\\(([\\s\\S]*?)\\)`, "i");
+  const match = fnRegex.exec(text);
   if (!match) return null;
 
-  const name = match[1]!;
-  if (validNames && validNames.size > 0 && !validNames.has(name)) return null;
-
+  const name = match[1]!.trim();
   const body = match[2]?.trim() ?? "";
   if (body.length === 0) return { name, args: {} };
 
-  try {
-    const wrappedJson = `{${body}}`;
-    const parsed = JSON.parse(wrappedJson) as Record<string, unknown>;
-    if (typeof parsed === "object" && parsed !== null) return { name, args: parsed };
-  } catch {
-    // Fall back to regex parser
-  }
-
+  // 1. Try key=value format (e.g. email="foo@bar.com", date="today")
   const args: Record<string, unknown> = {};
   const kvRegex = /([a-zA-Z0-9_-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^,\s]+))/g;
   let kv: RegExpExecArray | null;
+  let hasKv = false;
   while ((kv = kvRegex.exec(body)) !== null) {
+    hasKv = true;
     const key = kv[1]!;
     const rawVal = (kv[2] ?? kv[3] ?? kv[4] ?? "").trim();
     if (rawVal === "true") args[key] = true;
     else if (rawVal === "false") args[key] = false;
     else if (!isNaN(Number(rawVal)) && rawVal !== "") args[key] = Number(rawVal);
     else args[key] = rawVal;
+  }
+
+  if (hasKv) return { name, args };
+
+  // 2. Try JSON format inside parens (e.g. {"email": "foo@bar.com"})
+  try {
+    const wrappedJson = `{${body}}`;
+    const parsed = JSON.parse(wrappedJson) as Record<string, unknown>;
+    if (typeof parsed === "object" && parsed !== null) return { name, args: parsed };
+  } catch {
+    // Fall back to positional comma-separated parsing
+  }
+
+  // 3. Positional comma-separated values (e.g. karthikeyan@theaitel.com, Karthikeyan, today)
+  const posValues = body.split(",").map((s) => s.trim().replace(/^["']|["']$/g, "")).filter(Boolean);
+  if (posValues.length > 0) {
+    if (name.includes("book") || name.includes("appointment")) {
+      for (const val of posValues) {
+        if (val.includes("@")) {
+          args["attendee_email"] = val;
+          args["email"] = val;
+        } else if (/\b(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday|pm|am|\d{1,2}:\d{2})\b/i.test(val)) {
+          args["date_time"] = val;
+          args["start_time"] = val;
+          args["slot"] = val;
+        } else {
+          args["attendee_name"] = val;
+          args["name"] = val;
+        }
+      }
+    } else {
+      posValues.forEach((val, idx) => {
+        args[`arg${idx + 1}`] = val;
+      });
+    }
   }
 
   return { name, args };
