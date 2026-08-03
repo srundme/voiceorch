@@ -7816,35 +7816,35 @@ export class OrchestrationPipeline implements VoiceSession {
       };
       const TOOL_FILLERS_BY_NAME: Record<string, Record<string, string>> = {
         native_check_availability: {
-          en: "Checking available slots for you…",
-          ta: "உங்களுக்கான கிடைக்கக்கூடிய நேரங்களைப் பார்க்கிறேன்…",
-          hi: "आपके लिए उपलब्ध समय देख रहा हूँ…",
-          te: "అందుబాటులో ఉన్న సమయాలను చూస్తున్నాను…",
+          en: "Let me check the available slots real quick…",
+          ta: "இருங்க, ஃப்ரீயா இருக்குற ஸ்லாட்ஸ் செக் பண்ணி பாக்குறேன்…",
+          hi: "एक मिनट, मैं स्लॉट्स चेक करके बताता हूँ…",
+          te: "ఒక్క నిమిషం, అవైలబుల్ స్లాట్స్ చెక్ చేస్తున్నాను…",
           kn: "ಲಭ್ಯವಿರುವ ಸಮಯವನ್ನು ಪರಿಶೀಲಿಸುತ್ತಿದ್ದೇನೆ…",
         },
         native_booking: {
-          en: "Booking your appointment now…",
-          ta: "உங்கள் அப்பாயிண்ட்மென்ட்டை புக் செய்கிறேன்…",
-          hi: "आपका अपॉइंटमेंट बुक कर रहा हूँ…",
-          te: "మీ అపాయింట్‌మెంట్‌ను బుక్ చేస్తున్నాను…",
+          en: "Great, booking that in for you right now…",
+          ta: "சரிங்க, உங்க அப்பாயிண்ட்மென்ட் புக் பண்ணிடுறேன்…",
+          hi: "बस आपका अपॉइंटमेंट बुक कर रहा हूँ…",
+          te: "సరేనండి, మీ అపాయింట్‌మెంట్ బుక్ చేస్తున్నాను…",
           kn: "ನಿಮ್ಮ ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ಬುಕ್ ಮಾಡುತ್ತಿದ್ದೇನೆ…",
         },
         native_reschedule: {
-          en: "Rescheduling your appointment…",
-          ta: "உங்கள் அப்பாயிண்ட்மென்ட்டை மாற்றி அமைக்கிறேன்…",
-          hi: "आपका अपॉइंटमेंट रीशेड्यूल कर रहा हूँ…",
+          en: "Got it, updating your appointment time now…",
+          ta: "ஒரு நிமிஷம், டைம் மாத்தி புக் பண்ணிடுறேன்…",
+          hi: "एक मिनट, अपॉइंटमेंट की टाइमिंग चेंज कर देता हूँ…",
           te: "మీ అపాయింట్‌మెంట్‌ను రీషెడ్యూల్ చేస్తున్నాను…",
         },
         native_cancel: {
-          en: "Cancelling your appointment…",
-          ta: "உங்கள் அப்பாயிண்ட்மென்ட்டை ரத்து செய்கிறேன்…",
-          hi: "आपका अपॉइंटमेंट रद्द कर रहा हूँ…",
+          en: "Sure thing, cancelling that booking for you…",
+          ta: "சரிங்க, அந்த அப்பாயிண்ட்மென்ட் கேன்சல் பண்ணிடுறேன்…",
+          hi: "जी, वो अपॉइंटमेंट कैंसिल कर देता हूँ…",
           te: "మీ అపాయింట్‌మెంట్‌ను రద్దు చేస్తున్నాను…",
         },
         native_list_bookings: {
-          en: "Fetching your upcoming bookings…",
-          ta: "உங்கள் அப்பாயிண்ட்மென்ட்களைப் பார்க்கிறேன்…",
-          hi: "आपके अपॉइंटमेंट देख रहा हूँ…",
+          en: "Let me pull up your upcoming bookings real quick…",
+          ta: "ஒரு நிமிஷம், உங்க புக் பண்ணுன ஸ்லாட்ஸ் பாக்குறேன்…",
+          hi: "एक मिनट, आपकी बुकिंग्स चेक कर लेता हूँ…",
         },
       };
 
