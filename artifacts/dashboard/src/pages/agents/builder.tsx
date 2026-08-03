@@ -10,7 +10,7 @@ import {
   Play, Pause,
   Timer, ShieldCheck, Layers, Gauge, MicOff, HelpCircle, PhoneOff, Mail, MessageCircle,
   History, GitBranch, Eye, RotateCcw, ChevronUp, AlertTriangle, ArrowLeftRight,
-  Upload, Archive, Info, AlertCircle, Calendar, Star, Rocket,
+  Upload, Archive, Info, AlertCircle, Calendar, Star, Rocket, Zap,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { motion } from "framer-motion";
@@ -91,13 +91,14 @@ import { RecentNumbersList } from "@/components/recent-numbers-list";
 import { useRecentNumbers } from "@/hooks/use-recent-numbers";
 import { GeneratePromptSheet } from "./generate-prompt-sheet";
 import { JourneyPanel } from "./journey-panel";
+import { ReachPanel } from "./reach-panel";
 import { EmailChannelCard, useEmailChannelReady } from "./email-channel-card";
 const _DASH_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const DASH_API   = `${_DASH_BASE}/api`;
 
 /* ── Types ──────────────────────────────────────────────────────────────────── */
 
-type TabId = "overview" | "prompt" | "voice" | "tools" | "launch" | "voicemail" | "advanced" | "versions";
+type TabId = "overview" | "prompt" | "voice" | "tools" | "reach" | "launch" | "voicemail" | "advanced" | "versions";
 
 interface TabDef { id: TabId; label: string; icon: React.ReactNode }
 
@@ -106,6 +107,7 @@ const TABS: TabDef[] = [
   { id: "prompt",      label: "Prompt",      icon: <FileText className="h-3.5 w-3.5" /> },
   { id: "voice",       label: "Voice",       icon: <Mic className="h-3.5 w-3.5" /> },
   { id: "tools",       label: "Tools",       icon: <Wrench className="h-3.5 w-3.5" /> },
+  { id: "reach",       label: "Reach",       icon: <Zap className="h-3.5 w-3.5" /> },
   { id: "launch",      label: "Channels",    icon: <Rocket className="h-3.5 w-3.5" /> },
   { id: "voicemail",   label: "Voicemail",   icon: <VoicemailIcon className="h-3.5 w-3.5" /> },
   { id: "advanced",    label: "Advanced",    icon: <SlidersHorizontal className="h-3.5 w-3.5" /> },
@@ -6588,11 +6590,37 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
                 {activeTab === "prompt"    && <PromptTab form={form} />}
                 {activeTab === "voice"     && <VoiceTab form={form} />}
                 {activeTab === "tools"     && <ToolsTab form={form} agentId={agentId} />}
+                {activeTab === "reach"     && (
+                  <ReachPanel
+                    agentId={agentId}
+                    agentName={agent?.name}
+                    webhookUrl={form.watch("webhookUrl")}
+                    onConfigureEmail={openEmailChannel}
+                    onOpenChannels={openChannels}
+                  />
+                )}
                 {activeTab === "launch"    && (
                   <div>
                     <ChannelsTab form={form} agent={agent} forceExpandEmail={forceExpandEmail} />
-                    <div className="border-t border-border/40 mt-2" />
-                    <AnalysisTab form={form} agentId={agentId} onConfigureEmail={openEmailChannel} onOpenChannels={openChannels} />
+                    <div className="border-t border-border/40 mx-6 my-4" />
+                    <div className="px-6 pb-6">
+                      <button
+                        type="button"
+                        onClick={() => handleTabClick("reach")}
+                        className="w-full flex items-start gap-3 rounded-xl border border-border/60 bg-muted/20 px-3 py-3 text-left hover:bg-muted/35 transition-colors"
+                      >
+                        <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                          <Zap className="h-4 w-4 text-primary" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium">How leads reach this agent</p>
+                          <p className="text-[11px] text-muted-foreground mt-0.5">
+                            Form, sheet, list dial, meetings, and after-call journey live under the Reach tab.
+                          </p>
+                        </div>
+                        <span className="text-[11px] text-primary font-medium shrink-0 mt-1">Open Reach →</span>
+                      </button>
+                    </div>
                   </div>
                 )}
                 {activeTab === "voicemail" && <VoicemailTab form={form} />}

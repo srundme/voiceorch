@@ -484,7 +484,15 @@ function CampaignWizard({
   const activeSteps = (leadSource === "crm"
     ? WIZARD_STEPS
     : WIZARD_STEPS.filter(s => s !== "crm_mode")) as readonly WizardStep[];
-  const [agentId, setAgentId] = useState<number | null>(null);
+  const [agentId, setAgentId] = useState<number | null>(() => {
+    try {
+      const raw = new URLSearchParams(window.location.search).get("agentId");
+      const n = raw ? Number(raw) : NaN;
+      return Number.isFinite(n) && n > 0 ? n : null;
+    } catch {
+      return null;
+    }
+  });
   const [fromNumber, setFromNumber] = useState<string | null>(null);
   const [concurrentCallLimit, setConcurrentCallLimit] = useState<number | null>(null);
   // Resolved value: user-chosen (if within limit) or clamped to limit.

@@ -1,6 +1,6 @@
 # SnapServe UI Vision — Agent at the Center
 
-**Status:** Approved 2026-08-04  
+**Status:** Phase 1 + Phase 2 shipped (Reach tab). Phases 3–7 pending.  
 **Rule:** Agent Builder is the center. Everything binds to the agent.  
 **Constraint:** Do not break or gut the existing Agent Builder. Migrate around it in phases.
 
@@ -61,7 +61,7 @@ Squads = specialist handoffs, not call-vs-meet prompts.
 | Phase | Ship | Touch builder? |
 |-------|------|----------------|
 | **1 Shell** | Sidebar, agent-first Home, Create agent CTA, keep all routes | **No** |
-| **2 Reach presets** | Move website/sheet/list/journey UX into agent Reach | Additive tab/panel only |
+| **2 Reach presets** | Reach tab on agent + presets deep-link to existing engines; journey moved under Reach | Additive tab — existing tabs kept |
 | **3 Call rules** | Retry, quiet hours, caps on Call steps | Additive |
 | **4 Channels** | WA / Email / Meetings mode+delegate on agent | Additive |
 | **5 Custom Reach** | Step editor | Additive |

@@ -50,7 +50,15 @@ export default function AutomaticCallsWizardPage() {
   const [phoneCol, setPhoneCol] = useState("Phone");
   const [nameCol, setNameCol] = useState("Name");
   const [emailCol, setEmailCol] = useState("Email");
-  const [agentId, setAgentId] = useState<number | null>(null);
+  const [agentId, setAgentId] = useState<number | null>(() => {
+    try {
+      const raw = new URLSearchParams(window.location.search).get("agentId");
+      const n = raw ? Number(raw) : NaN;
+      return Number.isFinite(n) && n > 0 ? n : null;
+    } catch {
+      return null;
+    }
+  });
   const [startMode, setStartMode] = useState<"new_only" | "backfill_then_watch">("backfill_then_watch");
   const [writebackMode, setWritebackMode] = useState<"same_sheet" | "call_log" | "both">("both");
   /** Where Call Log rows go when writeback includes call_log */

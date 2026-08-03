@@ -267,9 +267,20 @@ const DEFAULTS: WizForm = {
   emailField:   "email",
 };
 
-function Wizard({ open, onClose }: { open: boolean; onClose: () => void }) {
+function Wizard({
+  open,
+  onClose,
+  initialAgentId,
+}: {
+  open: boolean;
+  onClose: () => void;
+  initialAgentId?: string;
+}) {
   const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [f, setF] = useState<WizForm>(DEFAULTS);
+  const [f, setF] = useState<WizForm>(() => ({
+    ...DEFAULTS,
+    agentId: initialAgentId && /^\d+$/.test(initialAgentId) ? initialAgentId : "",
+  }));
   const { toast } = useToast();
   const qc = useQueryClient();
 
@@ -494,7 +505,14 @@ function Wizard({ open, onClose }: { open: boolean; onClose: () => void }) {
 
 /* ─── Page ─────────────────────────────────────────────────────────────── */
 export default function FromWebsitePage() {
-  const [wizardOpen, setWizardOpen] = useState(false);
+  const initialAgentId = (() => {
+    try {
+      return new URLSearchParams(window.location.search).get("agentId") ?? "";
+    } catch {
+      return "";
+    }
+  })();
+  const [wizardOpen, setWizardOpen] = useState(() => Boolean(initialAgentId));
 
   const { data: campaignsRaw } = useListCampaigns();
   const { data: agentsRaw }    = useListAgents();
@@ -552,7 +570,11 @@ export default function FromWebsitePage() {
       <MetaLeadsPage />
 
       {/* ── Wizard ── */}
-      <Wizard open={wizardOpen} onClose={() => setWizardOpen(false)} />
+      <Wizard
+        open={wizardOpen}
+        onClose={() => setWizardOpen(false)}
+        initialAgentId={initialAgentId || undefined}
+      />
     </div>
   );
 }

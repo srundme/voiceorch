@@ -21,7 +21,14 @@ export default function MeetPage() {
   const { data: agentsData } = useListAgents();
   const agents: Array<{ id: number; name: string }> = (agentsData as any)?.agents ?? (agentsData as any) ?? [];
 
-  const [agentId, setAgentId] = useState<string>("");
+  const [agentId, setAgentId] = useState<string>(() => {
+    try {
+      const raw = new URLSearchParams(window.location.search).get("agentId");
+      return raw && /^\d+$/.test(raw) ? raw : "";
+    } catch {
+      return "";
+    }
+  });
   const [meetingUrl, setMeetingUrl] = useState("");
   const [bots, setBots] = useState<ActiveBot[]>([]);
 
