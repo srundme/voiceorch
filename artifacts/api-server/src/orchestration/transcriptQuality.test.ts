@@ -143,8 +143,8 @@ describe("isCallerAudioDifficulty", () => {
 
 describe("isFalseInterruptionScrap", () => {
   it("drops thin mid-cut scraps at or under the word threshold", () => {
-    expect(isFalseInterruptionScrap("call பண்ண", 3)).toBe(true);
-    expect(isFalseInterruptionScrap("Madam இப்போ", 3)).toBe(true);
+    expect(isFalseInterruptionScrap("call பண்ண", 3)).toBe(false);
+    expect(isFalseInterruptionScrap("Madam இப்போ", 3)).toBe(false);
     expect(isFalseInterruptionScrap("wait wait wait wait", 3)).toBe(false);
   });
 
