@@ -566,8 +566,29 @@ function CampaignWizard({
         }
       : undefined;
     try {
+      const cfg = (selectedAgent?.agentConfig ?? {}) as {
+        callDefaults?: {
+          maxAttempts?: number;
+          retryDelayMinutes?: number;
+          callDelaySeconds?: number;
+          concurrentCallLimit?: number;
+        };
+      };
+      const d = cfg.callDefaults ?? {};
       await create.mutateAsync({
-        data: { name: name.trim(), description: desc.trim() || undefined, agentId, fromNumber: fromNumber ?? undefined, concurrentCallLimit: effectiveConcurrency, consentBasis, leadSource, triggerMode } as Parameters<typeof create.mutateAsync>[0]["data"],
+        data: {
+          name: name.trim(),
+          description: desc.trim() || undefined,
+          agentId,
+          fromNumber: fromNumber ?? undefined,
+          concurrentCallLimit: effectiveConcurrency ?? d.concurrentCallLimit,
+          consentBasis,
+          leadSource,
+          triggerMode,
+          maxAttempts: d.maxAttempts,
+          retryDelayMinutes: d.retryDelayMinutes,
+          callDelaySeconds: d.callDelaySeconds,
+        } as Parameters<typeof create.mutateAsync>[0]["data"],
       });
       await qc.invalidateQueries({ queryKey: getListCampaignsQueryKey() });
       toast({ title: "Campaign created", description: name.trim() });

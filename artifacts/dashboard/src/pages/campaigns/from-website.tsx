@@ -303,6 +303,10 @@ function Wizard({
     if (f.emailField.trim()) fm["email"] = f.emailField.trim();
 
     try {
+      const agent = (agents ?? []).find(a => String(a.id) === f.agentId) as
+        | { id: number; agentConfig?: { callDefaults?: Record<string, number | boolean | string | null> } }
+        | undefined;
+      const d = agent?.agentConfig?.callDefaults ?? {};
       const campaign = await createMut.mutateAsync({
         data: {
           name:         f.name.trim(),
@@ -310,6 +314,10 @@ function Wizard({
           leadSource:   "webhook",
           triggerMode:  "instant",
           fieldMappings: fm,
+          maxAttempts: typeof d.maxAttempts === "number" ? d.maxAttempts : undefined,
+          retryDelayMinutes: typeof d.retryDelayMinutes === "number" ? d.retryDelayMinutes : undefined,
+          callDelaySeconds: typeof d.callDelaySeconds === "number" ? d.callDelaySeconds : undefined,
+          concurrentCallLimit: typeof d.concurrentCallLimit === "number" ? d.concurrentCallLimit : undefined,
         },
       });
 
@@ -317,8 +325,8 @@ function Wizard({
         id:   campaign.id,
         data: {
           isCallingHoursEnabled: f.hoursEnabled,
-          businessHoursStart:    f.hoursEnabled ? f.startMin : null,
-          businessHoursEnd:      f.hoursEnabled ? f.endMin   : null,
+          businessHoursStart:    f.hoursEnabled ? Math.floor(f.startMin / 60) : null,
+          businessHoursEnd:      f.hoursEnabled ? Math.floor(f.endMin / 60)   : null,
           timezone:              f.hoursEnabled ? f.timezone  : null,
         },
       });

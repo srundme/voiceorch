@@ -9,18 +9,20 @@
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import {
-  ArrowRight, FileSpreadsheet, Globe, List, Loader2, MessageCircle,
+  ArrowRight, Clock, FileSpreadsheet, Globe, List, Loader2, MessageCircle,
   Phone, Video, Zap,
 } from "lucide-react";
 import {
   customFetch,
   useListCampaigns,
   getListCampaignsQueryKey,
+  type Campaign,
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { JourneyPanel } from "./journey-panel";
+import { CallRulesPanel } from "./call-rules-panel";
 
 type AutoPipeline = {
   id: string;
@@ -72,15 +74,15 @@ export function ReachPanel({
   });
 
   const campaigns = (Array.isArray(campaignsQ.data) ? campaignsQ.data : []).filter(
-    (c: any) => c.agentId === agentId,
-  );
+    (c: Campaign) => c.agentId === agentId,
+  ) as Campaign[];
   const pipelines = (pipelinesQ.data ?? []).filter((p) => p.agentId === agentId);
 
   const websiteCampaigns = campaigns.filter(
-    (c: any) => c.leadSource === "webhook" || c.leadSource === "meta_ads" || c.triggerMode === "instant",
+    (c) => c.leadSource === "webhook" || c.leadSource === "meta_ads" || c.triggerMode === "instant",
   );
   const listCampaigns = campaigns.filter(
-    (c: any) => c.leadSource === "csv" || c.leadSource === "crm" || c.triggerMode === "batch",
+    (c) => c.leadSource === "csv" || c.leadSource === "crm" || c.triggerMode === "batch",
   );
 
   const presets: Preset[] = [
@@ -115,6 +117,14 @@ export function ReachPanel({
       href: `/app/meet?agentId=${agentId}`,
       icon: Video,
       tone: "bg-rose-500/10 text-rose-600",
+    },
+    {
+      id: "rules",
+      title: "Call rules",
+      desc: "Retries, quiet hours, parallel caps",
+      href: "#reach-call-rules",
+      icon: Clock,
+      tone: "bg-slate-500/10 text-slate-600",
     },
     {
       id: "journey",
@@ -227,7 +237,7 @@ export function ReachPanel({
             </Link>
           ))}
 
-          {websiteCampaigns.map((c: any) => (
+          {websiteCampaigns.map((c) => (
             <Link
               key={`web-${c.id}`}
               href={`/app/campaigns/${c.id}`}
@@ -249,8 +259,8 @@ export function ReachPanel({
           ))}
 
           {listCampaigns
-            .filter((c: any) => !websiteCampaigns.some((w: any) => w.id === c.id))
-            .map((c: any) => (
+            .filter((c) => !websiteCampaigns.some((w) => w.id === c.id))
+            .map((c) => (
               <Link
                 key={`list-${c.id}`}
                 href={`/app/campaigns/${c.id}`}
@@ -283,6 +293,9 @@ export function ReachPanel({
           </div>
         )}
       </section>
+
+      {/* Call rules — retries, quiet hours, caps */}
+      <CallRulesPanel agentId={agentId} campaigns={campaigns} />
 
       {/* Journey stays the in-agent sequence engine */}
       <section id="reach-journey" className="scroll-mt-4 space-y-2 border-t border-border/40 pt-6">
