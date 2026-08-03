@@ -1065,20 +1065,12 @@ export class SarvamSTT implements STTAdapter {
         // handles the edge case where coalesceBuf is non-empty but coalesceTimer is null.
         if (coalesceTimer) clearTimeout(coalesceTimer);
         emitCoalesced();
-        // Ask Sarvam to immediately finalize its internal audio buffer.
-        if (!wsReady || ws.readyState !== WebSocket.OPEN) return;
-        const emptyData = Buffer.alloc(0);
-        ws.send(
-          JSON.stringify({
-            audio: {
-              data: emptyData.toString("base64"),
-              encoding: "audio/wav",
-              sample_rate: sampleRate,
-            },
-            flush: true,
-          }),
-        );
-        logger.debug({ langCode }, "Sarvam STT: flush signal sent");
+        
+        // Note: We deliberately do NOT send the JSON `flush: true` packet to Sarvam's
+        // streaming endpoint here. Manual flushes corrupt Sarvam's internal context window
+        // (causing subsequent audio to be missed or garbage transcripts to be generated).
+        // Clearing the local timers and emitting held transcripts is sufficient.
+        logger.debug({ langCode }, "Sarvam STT: local buffers flushed (socket flush bypassed)");
       },
       setLanguage(lang: string): void {
         const next = normaliseLang(lang, model);
