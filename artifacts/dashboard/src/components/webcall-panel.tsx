@@ -70,6 +70,7 @@ export function WebcallPanel({
   const callIdRef      = useRef<number | null>(null);
   const doneRef        = useRef(false);
   const scrollEndRef   = useRef<HTMLDivElement | null>(null);
+  const ignoreAudioUntilRef = useRef(0);
 
   const teardown = useCallback(() => {
     try { wsRef.current?.close(); } catch { /* noop */ }
@@ -88,9 +89,11 @@ export function WebcallPanel({
     playbackCtxRef.current = null;
     nextStartRef.current = 0;
     callIdRef.current = null;
+    ignoreAudioUntilRef.current = 0;
   }, []);
 
   const enqueueAudio = useCallback((buf: ArrayBuffer) => {
+    if (Date.now() < ignoreAudioUntilRef.current) return;
     const ctx = playbackCtxRef.current;
     if (!ctx) return;
     const pcm = new Int16Array(buf);
@@ -111,6 +114,7 @@ export function WebcallPanel({
   }, []);
 
   const clearPlayback = useCallback(() => {
+    ignoreAudioUntilRef.current = Date.now() + 1000;
     for (const s of activeSources.current) { try { s.stop(); } catch { /* noop */ } }
     activeSources.current = [];
     nextStartRef.current = playbackCtxRef.current?.currentTime ?? 0;
