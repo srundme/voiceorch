@@ -16,8 +16,13 @@
  *   input_audio_codec   "pcm_s16le" | "wav"
  *   high_vad_sensitivity true → silence boundary = 2 VAD frames (~64ms @16kHz, ~128ms @8kHz);
  *                        default (false) is 18-of-24 frames ≈ 1s+. Fine-tune params
- *                        (negative_frames_count etc.) can override — see Sarvam Fine VAD Tuning doyescs.
+ *                        (negative_frames_count etc.) can override — see Sarvam Fine VAD Tuning docs.
  *   vad_signals         true → emits START_SPEECH / END_SPEECH events
+ *   first_turn_min_speech_frames  consecutive speech frames needed to open the FIRST
+ *                        segment of a connection. Server default 8 — and a VAD frame is
+ *                        512 samples, i.e. 64ms at 8kHz, so the default silently demands
+ *                        512ms of speech on telephony and swallows short first replies.
+ *                        We send a sample-rate-compensated value.
  *
  * ── Auth ─────────────────────────────────────────────────────────────────────
  *   Header: api-subscription-key: <key>
@@ -58,6 +63,32 @@ function envInt(name: string, def: number): number {
 
 const BATCH_URL = "https://api.sarvam.ai/speech-to-text";
 const WS_BASE = "wss://api.sarvam.ai/speech-to-text/ws";
+
+/** Sarvam's VAD frame size. Fixed in SAMPLES, so its duration varies with sample rate. */
+const VAD_FRAME_SAMPLES = 512;
+
+/**
+ * Sarvam VAD counts in frames of a FIXED 512 samples, so a frame is 32ms at
+ * 16kHz but 64ms at 8kHz — every frame-count default is worth double the
+ * wall-clock time on telephony audio.
+ *
+ * `first_turn_min_speech_frames` (server default 8, unchanged by
+ * high_vad_sensitivity) is the consecutive-speech requirement before the FIRST
+ * speech segment of a connection opens. At 8kHz the default demands 512ms of
+ * continuous speech, so short first replies ("Yes", "Okay", "ஆமா") never open a
+ * segment and are lost with no transcript and no speech_start. "First turn"
+ * resets on every socket, so each reconnect / live language switch re-arms it.
+ *
+ * Scale the frame count by sample rate to hold Sarvam's intended 256ms window.
+ */
+export function firstTurnMinSpeechFrames(sampleRate: 8000 | 16000): number {
+  return sampleRate === 8000 ? 4 : 8;
+}
+
+/** Wall-clock duration of one Sarvam VAD frame (fixed 512 samples) at a given rate. */
+export function vadFrameMs(sampleRate: 8000 | 16000): number {
+  return (VAD_FRAME_SAMPLES / sampleRate) * 1000;
+}
 
 /** Only saaras:v3/v4 support the `mode` parameter. */
 const MODE_CAPABLE = new Set(["saaras:v3", "saaras:v4"]);
@@ -328,6 +359,9 @@ export class SarvamSTT implements STTAdapter {
         high_vad_sensitivity: this.highVadSensitivity ? "true" : "false",
         vad_signals: "true", // emit speech_start / speech_end events
         flush_signal: "true", // allow manual buffer flush via flush() call
+        // Sample-rate-compensated so 8kHz telephony keeps the same 256ms
+        // first-turn window as 16kHz — see firstTurnMinSpeechFrames().
+        first_turn_min_speech_frames: String(firstTurnMinSpeechFrames(sampleRate)),
       });
       if (MODE_CAPABLE.has(model)) {
         params.set("mode", mode);
@@ -1050,10 +1084,11 @@ export class SarvamSTT implements STTAdapter {
           sendChunk(chunk);
         }
       },
-      // INVARIANT: the live pipeline never calls flush() — Sarvam's server VAD owns
-      // end-of-speech (see the DO-NOT-GATE feed comment in pipeline.ts). Adding a
-      // pipeline call site would reintroduce client-side endpointing racing Sarvam
-      // (the calls-772→1320 regression class). flush() exists for teardown/tooling.
+      // Sarvam's server VAD owns end-of-speech; client code must never finalize a
+      // turn (the calls-772→1320 regression class). The one live call site is the
+      // pipeline's lost-turn backstop (armVadFlushBackstop), which is safe only
+      // because this drains local buffers rather than endpointing. Do not add call
+      // sites that finalize turns.
       flush(): void {
         // Emit any held coalesced transcript immediately (don't wait for the timer).
         // emitCoalesced() is a no-op on an empty buffer, so always call it — this
