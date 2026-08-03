@@ -134,6 +134,14 @@ export function ReachPanel({
       icon: MessageCircle,
       tone: "bg-amber-500/10 text-amber-700",
     },
+    {
+      id: "custom",
+      title: "Custom sequence",
+      desc: "Build your own steps on this agent",
+      href: "#reach-custom-steps",
+      icon: Zap,
+      tone: "bg-indigo-500/10 text-indigo-600",
+    },
   ];
 
   const loading = campaignsQ.isLoading || pipelinesQ.isLoading;
@@ -302,7 +310,8 @@ export function ReachPanel({
         <div className="space-y-1 mb-2">
           <h3 className="text-sm font-semibold tracking-tight">After-call journey</h3>
           <p className="text-[12px] text-muted-foreground max-w-3xl">
-            Auto-pilot after a lead arrives or a call ends: WhatsApp, email, callback, wait.
+            Auto-pilot after a lead arrives or a call ends: WhatsApp, email, callback, wait —
+            or <a href="#reach-custom-steps" className="underline underline-offset-2 hover:text-foreground">customize the steps</a>.
             Channel credentials live under Channels.
           </p>
         </div>

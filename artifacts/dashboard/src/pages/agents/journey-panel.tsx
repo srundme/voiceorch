@@ -2,7 +2,7 @@ import React, { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import {
-  CheckCircle2, Copy, GitBranch, Loader2, Pause, Phone, Play, Plus, RefreshCw, Webhook,
+  CheckCircle2, Copy, GitBranch, Loader2, Pause, Phone, Play, Plus, RefreshCw, Save, Webhook, Wrench,
 } from "lucide-react";
 import { customFetch } from "@workspace/api-client-react";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +16,11 @@ import { useToast } from "@/hooks/use-toast";
 import { formatApiError } from "@/lib/format-api-error";
 import { cn } from "@/lib/utils";
 import { useEmailChannelReady } from "./email-channel-card";
+import {
+  ReachStepEditor,
+  defaultStep,
+  type ReachStep,
+} from "./reach-step-editor";
 
 const _DASH_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const DASH_API = `${_DASH_BASE}/api`;
@@ -109,20 +114,6 @@ function statusClass(status: string) {
   return "border-border/50 bg-muted/30 text-muted-foreground";
 }
 
-function stepLabel(step: JourneyStep): string {
-  if (step.label) return step.label;
-  switch (step.type) {
-    case "make_call": return "Call with this agent";
-    case "send_whatsapp": return "WhatsApp follow-up";
-    case "send_email": return "Email follow-up";
-    case "schedule_callback": return "Schedule callback";
-    case "send_webhook": return "Notify your CRM webhook";
-    case "wait": return "Wait";
-    case "condition": return "Branch";
-    default: return step.type;
-  }
-}
-
 export function JourneyPanel({
   agentId,
   webhookUrl,
@@ -148,6 +139,9 @@ export function JourneyPanel({
   const [emailBody, setEmailBody] = useState("");
   const [showPresets, setShowPresets] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [editingSteps, setEditingSteps] = useState(false);
+  const [draftSteps, setDraftSteps] = useState<ReachStep[]>([]);
+  const [draftDirty, setDraftDirty] = useState(false);
 
   const { data: presets = [], isLoading: presetsLoading } = useQuery({
     queryKey: ["journey-presets"],
@@ -231,6 +225,7 @@ export function JourneyPanel({
       queryClient.invalidateQueries({ queryKey: ["journeys", agentId] });
       setSelectedId(j.id);
       setShowPresets(false);
+      setEditingSteps(false);
       toast({
         title: "Journey attached to this agent",
         description: "Next: turn it live and copy the lead intake URL.",
@@ -238,6 +233,82 @@ export function JourneyPanel({
     },
     onError: (err) => toast({ title: "Could not create journey", description: formatApiError(err), variant: "destructive" }),
   });
+
+  const createBlankCustom = useMutation({
+    mutationFn: async () =>
+      customFetch<Journey>(`${DASH_API}/journeys`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          agentId,
+          presetId: "custom",
+          name: "Custom sequence",
+          description: "Editable Reach sequence for this agent",
+          trigger: { type: "form_lead", fieldMap: { phone: "phone", name: "name", email: "email" } },
+          settings: settingsPayload(),
+          steps: [defaultStep("make_call", agentId)],
+        }),
+      }),
+    onSuccess: (j) => {
+      queryClient.invalidateQueries({ queryKey: ["journeys", agentId] });
+      setSelectedId(j.id);
+      setShowPresets(false);
+      setDraftSteps((j.steps ?? []) as ReachStep[]);
+      setEditingSteps(true);
+      setDraftDirty(false);
+      toast({
+        title: "Custom sequence attached",
+        description: "Add WhatsApp, email, waits, or callbacks — then Go live.",
+      });
+    },
+    onError: (err) => toast({ title: "Could not create sequence", description: formatApiError(err), variant: "destructive" }),
+  });
+
+  const saveCustomSteps = useMutation({
+    mutationFn: async () => {
+      if (!selected) throw new Error("No journey selected");
+      if (draftSteps.length === 0) throw new Error("Add at least one step");
+      if (!draftSteps.some((s) => s.type === "make_call")) {
+        throw new Error("Sequence needs a Call step");
+      }
+      for (const s of draftSteps) {
+        if (s.type === "send_webhook" && !(s.url ?? "").trim()) {
+          throw new Error("Webhook step needs a URL");
+        }
+      }
+      return customFetch<Journey>(`${DASH_API}/journeys/${selected.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          presetId: "custom",
+          name: selected.presetId === "custom" ? selected.name : `${selected.name} (custom)`,
+          steps: draftSteps,
+        }),
+      });
+    },
+    onSuccess: (j) => {
+      queryClient.invalidateQueries({ queryKey: ["journeys", agentId] });
+      setSelectedId(j.id);
+      setDraftSteps((j.steps ?? []) as ReachStep[]);
+      setDraftDirty(false);
+      setEditingSteps(true);
+      toast({ title: "Custom sequence saved", description: "This journey is now custom — template knobs won’t rewrite steps." });
+    },
+    onError: (err) => toast({ title: "Could not save steps", description: formatApiError(err), variant: "destructive" }),
+  });
+
+  const beginCustomize = () => {
+    if (!selected) return;
+    setDraftSteps((selected.steps ?? []).map((s) => ({ ...s })) as ReachStep[]);
+    setDraftDirty(false);
+    setEditingSteps(true);
+  };
+
+  const cancelCustomize = () => {
+    setEditingSteps(false);
+    setDraftDirty(false);
+    setDraftSteps((selected?.steps ?? []) as ReachStep[]);
+  };
 
   const applyPreset = useMutation({
     mutationFn: async (presetId: string) =>
@@ -249,6 +320,9 @@ export function JourneyPanel({
     onSuccess: (j) => {
       queryClient.invalidateQueries({ queryKey: ["journeys", agentId] });
       setSelectedId(j.id);
+      setEditingSteps(false);
+      setDraftDirty(false);
+      setDraftSteps((j.steps ?? []).map((s) => ({ ...s })) as ReachStep[]);
       toast({ title: "Template replaced", description: `${j.name} is draft again — turn it live when ready.` });
     },
     onError: (err) => toast({ title: "Replace failed", description: formatApiError(err), variant: "destructive" }),
@@ -349,6 +423,9 @@ export function JourneyPanel({
     setFollowNoAnswer(selected.settings?.followUpOnNoAnswer ?? true);
     setEmailSubject(selected.settings?.emailSubject ?? "");
     setEmailBody(selected.settings?.emailBody ?? "");
+    setDraftSteps((selected.steps ?? []).map((s) => ({ ...s })) as ReachStep[]);
+    setDraftDirty(false);
+    setEditingSteps(selected.presetId === "custom");
   }, [selected?.id]);
 
   const fullHookUrl = fullHookUrlFor(selected);
@@ -443,6 +520,14 @@ export function JourneyPanel({
           >
             Or choose a different template
           </button>
+          <button
+            type="button"
+            className="block mx-auto text-[11px] text-muted-foreground underline underline-offset-2"
+            disabled={createBlankCustom.isPending}
+            onClick={() => createBlankCustom.mutate()}
+          >
+            Or start a blank custom sequence
+          </button>
         </section>
       )}
 
@@ -502,6 +587,23 @@ export function JourneyPanel({
                   </div>
                 </div>
               ))}
+              <div className="rounded-xl border border-dashed border-border/60 bg-background/20 p-4 space-y-2">
+                <h4 className="text-sm font-semibold">Custom sequence</h4>
+                <p className="text-[11px] text-muted-foreground line-clamp-2">
+                  Build your own steps: call → wait → WhatsApp → email → callback → webhook.
+                </p>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs"
+                  disabled={createBlankCustom.isPending}
+                  onClick={() => createBlankCustom.mutate()}
+                >
+                  {createBlankCustom.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Wrench className="h-3.5 w-3.5 mr-1" />}
+                  Start blank
+                </Button>
+              </div>
             </div>
           )}
         </section>
@@ -521,7 +623,7 @@ export function JourneyPanel({
                 </span>
               </div>
               <p className="text-[11px] text-muted-foreground mt-0.5">
-                Bound to this agent · {selected.totalRuns} runs
+                Bound to this agent · {selected.presetId === "custom" ? "custom sequence" : selected.presetId.replace(/_/g, " ")} · {selected.totalRuns} runs
                 {selected.lastRunAt ? ` · last ${new Date(selected.lastRunAt).toLocaleString()}` : ""}
               </p>
             </div>
@@ -571,10 +673,16 @@ export function JourneyPanel({
             </div>
           )}
 
-          {/* Follow-ups */}
+          {/* Follow-ups — template knobs (rebuild steps unless custom) */}
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-2">After the call</p>
-            <div className="grid gap-2 sm:grid-cols-2">
+            {selected.presetId === "custom" ? (
+              <p className="text-[11px] text-muted-foreground mb-2 rounded-lg border border-border/40 bg-background/30 px-3 py-2">
+                This is a <span className="font-medium text-foreground/80">custom sequence</span> — edit steps below.
+                Template toggles won’t rewrite the list.
+              </p>
+            ) : null}
+            <div className={cn("grid gap-2 sm:grid-cols-2", selected.presetId === "custom" && "opacity-60")}>
               <div className="flex items-center justify-between rounded-lg border border-border/40 bg-background/40 px-3 py-2">
                 <div>
                   <p className="text-xs font-medium">WhatsApp after call</p>
@@ -584,7 +692,7 @@ export function JourneyPanel({
                     )}
                   </p>
                 </div>
-                <Switch checked={sendWa} onCheckedChange={setSendWa} />
+                <Switch checked={sendWa} onCheckedChange={setSendWa} disabled={selected.presetId === "custom"} />
               </div>
               <div className="flex items-center justify-between rounded-lg border border-border/40 bg-background/40 px-3 py-2">
                 <div>
@@ -595,14 +703,14 @@ export function JourneyPanel({
                     )}
                   </p>
                 </div>
-                <Switch checked={sendEmail} onCheckedChange={setSendEmail} />
+                <Switch checked={sendEmail} onCheckedChange={setSendEmail} disabled={selected.presetId === "custom"} />
               </div>
               <div className="flex items-center justify-between rounded-lg border border-border/40 bg-background/40 px-3 py-2">
                 <div>
                   <p className="text-xs font-medium">Callback if no answer</p>
                   <p className="text-[10px] text-muted-foreground">Auto-dial again later</p>
                 </div>
-                <Switch checked={followNoAnswer} onCheckedChange={setFollowNoAnswer} />
+                <Switch checked={followNoAnswer} onCheckedChange={setFollowNoAnswer} disabled={selected.presetId === "custom"} />
               </div>
               <div className="space-y-1 rounded-lg border border-border/40 bg-background/40 px-3 py-2">
                 <Label className="text-[10px] text-muted-foreground">Callback delay (days)</Label>
@@ -612,42 +720,89 @@ export function JourneyPanel({
                   max={30}
                   className="h-7 text-xs"
                   value={callbackDays}
+                  disabled={selected.presetId === "custom"}
                   onChange={(e) => setCallbackDays(Math.max(1, Number(e.target.value) || 1))}
                 />
               </div>
             </div>
-            {sendEmail && (
+            {sendEmail && selected.presetId !== "custom" && (
               <div className="mt-2 rounded-lg border border-border/40 bg-background/40 p-3 space-y-2">
                 <p className="text-xs font-medium">Optional email override</p>
                 <Input className="h-8 text-xs" placeholder="Subject override" value={emailSubject} onChange={(e) => setEmailSubject(e.target.value)} />
                 <Textarea className="min-h-[72px] text-xs font-mono" placeholder="Body override" value={emailBody} onChange={(e) => setEmailBody(e.target.value)} />
               </div>
             )}
-            <div className="flex flex-wrap gap-2 mt-3">
-              <Button type="button" variant="outline" size="sm" className="h-8 text-xs" disabled={saveSettings.isPending} onClick={() => saveSettings.mutate()}>
-                {saveSettings.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
-                Save follow-ups
-              </Button>
-              <Button type="button" variant="ghost" size="sm" className="h-8 text-xs" onClick={() => navigate("/app/whatsapp")}>
-                WhatsApp page
-              </Button>
-              <Button type="button" variant="ghost" size="sm" className="h-8 text-xs" onClick={() => navigate("/app/callbacks")}>
-                <Phone className="h-3.5 w-3.5 mr-1" /> Callbacks
-              </Button>
-            </div>
+            {selected.presetId !== "custom" && (
+              <div className="flex flex-wrap gap-2 mt-3">
+                <Button type="button" variant="outline" size="sm" className="h-8 text-xs" disabled={saveSettings.isPending} onClick={() => saveSettings.mutate()}>
+                  {saveSettings.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+                  Save follow-ups
+                </Button>
+                <Button type="button" variant="ghost" size="sm" className="h-8 text-xs" onClick={() => navigate("/app/whatsapp")}>
+                  WhatsApp page
+                </Button>
+                <Button type="button" variant="ghost" size="sm" className="h-8 text-xs" onClick={() => navigate("/app/callbacks")}>
+                  <Phone className="h-3.5 w-3.5 mr-1" /> Callbacks
+                </Button>
+              </div>
+            )}
           </div>
 
-          {/* Sequence */}
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-2">What this agent will do</p>
-            <ol className="space-y-1.5">
-              {(selected.steps ?? []).map((step, idx) => (
-                <li key={step.id} className="flex items-start gap-2 rounded-lg border border-border/40 bg-background/30 px-3 py-2">
-                  <span className="text-[10px] font-mono text-muted-foreground mt-0.5">{idx + 1}</span>
-                  <p className="text-xs font-medium">{stepLabel(step)}</p>
-                </li>
-              ))}
-            </ol>
+          {/* Sequence — read-only for presets, editor for custom / customize mode */}
+          <div id="reach-custom-steps" className="scroll-mt-4 space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  What this agent will do
+                </p>
+                {selected.presetId === "custom" && (
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Custom sequence · edit freely</p>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {!editingSteps ? (
+                  <Button type="button" variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={beginCustomize}>
+                    <Wrench className="h-3.5 w-3.5" />
+                    Customize sequence
+                  </Button>
+                ) : (
+                  <>
+                    {selected.presetId !== "custom" && (
+                      <Button type="button" variant="ghost" size="sm" className="h-8 text-xs" onClick={cancelCustomize}>
+                        Cancel
+                      </Button>
+                    )}
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="h-8 text-xs gap-1.5"
+                      disabled={saveCustomSteps.isPending || (selected.presetId === "custom" && !draftDirty)}
+                      onClick={() => saveCustomSteps.mutate()}
+                    >
+                      {saveCustomSteps.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                      {selected.presetId === "custom" ? "Save steps" : "Save as custom"}
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
+            {editingSteps ? (
+              <ReachStepEditor
+                steps={draftSteps}
+                agentId={agentId}
+                onChange={(next) => {
+                  setDraftSteps(next);
+                  setDraftDirty(true);
+                }}
+              />
+            ) : (
+              <ReachStepEditor steps={(selected.steps ?? []) as ReachStep[]} agentId={agentId} onChange={() => {}} readOnly />
+            )}
+            {editingSteps && selected.presetId !== "custom" && (
+              <p className="text-[10px] text-muted-foreground">
+                Saving forks this template into a custom sequence. You can replace from a template later.
+              </p>
+            )}
           </div>
 
           {/* Test + multi-journey */}
