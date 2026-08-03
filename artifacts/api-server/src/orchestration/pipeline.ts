@@ -4968,6 +4968,10 @@ export class OrchestrationPipeline implements VoiceSession {
     emotions?: string[],
   ): TtsSentenceJob {
     // ── TTS text normalization ────────────────────────────────────────────────
+    // Strip bracketed, starred, or parenthesized non-verbal tags (e.g. [laughter], *laughs*, (sigh), [gasp])
+    // so TTS engines do not read them literally.
+    text = text.replace(/\[[a-zA-Z0-9_\-\s]+\]|\*+[a-zA-Z0-9_\-\s]+\*+|\([a-zA-Z0-9_\-\s]+\)/gi, "");
+
     // Strip the ₹ currency symbol before synthesis. TTS engines (especially
     // Sarvam) expand it to the formal literary word: "ரூபாய்" (Tamil) /
     // "रुपया" (Hindi) / "rupee" (English) — which sounds stiff and unnatural.
