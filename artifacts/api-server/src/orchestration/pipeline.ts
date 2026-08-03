@@ -137,6 +137,9 @@ const FRAGMENT_COALESCE_MS_DEFAULT = 1000;  // fallback when agentConfig omits p
 const FRAGMENT_COALESCE_LISTENING_MS_DEFAULT = 250;
 const VAD_FLUSH_BACKSTOP_MS   = 6000;   // speech_start with no interim/final/speech_end for this long → one-shot STT flush (lost-turn anomaly)
 const VAD_FLUSH_COOLDOWN_MS   = 5000;   // min interval between backstop flushes — keeps the flush strictly anomaly-only
+/** VAD speech long enough that a one-syllable transcript means STT mis-heard a real
+ *  utterance rather than picked up line noise (call 5490: 1.36s of speech → "Hmm"). */
+const SUBSTANTIVE_SPEECH_MS   = 700;
 const LLM_TTFT_FALLBACK_MS    = Number(process.env.LLM_TTFT_FALLBACK_MS ?? 1200); // abort slow primary LLM
 const LLM_SLOW_TTFT_MS        = Number(process.env.LLM_SLOW_TTFT_MS ?? 1200);     // warn in execution logs
 const TTS_STREAM_TIMEOUT_MS   = 8000;   // abort TTS streaming fetch if no data within 8 s —
@@ -706,6 +709,11 @@ export class OrchestrationPipeline implements VoiceSession {
   /** Lost-turn backstop: one-shot force-flush timer armed on VAD speech_start (calls 4831/4833). */
   private _vadFlushTimer: ReturnType<typeof setTimeout> | null = null;
   private _lastVadFlushAt = 0;
+  /** VAD speech_start wall-clock, 0 when not mid-segment. */
+  private _vadSpeechStartAt = 0;
+  /** Duration of the last completed VAD speech segment — distinguishes a real
+   *  utterance that STT mis-heard from an actual noise blip (call 5490). */
+  private _lastVadSegmentMs = 0;
   /** Unheard remainder of a reply cut by barge-in — resumed if the "interruption" turns out to be a scrap (call 4839 dead-air). */
   private _bargedReplyRemainder: string | null = null;
   private _bargedReplyAt = 0;
@@ -1470,18 +1478,35 @@ export class OrchestrationPipeline implements VoiceSession {
 
   private wireStreamSttCallbacks(): void {
     if (!this.streamSTT) return;
+    // Zombie-socket kills and reconnects are invisible from the dashboard otherwise,
+    // which makes a lost turn look like STT "randomly dying" (call 5490).
+    this.streamSTT.onConnectionDead = () => {
+      logWarningEvent(this.logFn, EXEC_COMPONENTS.STT, "Connection Dead", ["stt_connection_dead"], {
+        provider: this.agent.asrProvider,
+        detail: {
+          reason:
+            "STT socket went silent mid-utterance — terminating to force reconnect. Any audio still in flight is lost.",
+          segmentMs: this._vadSpeechStartAt ? Date.now() - this._vadSpeechStartAt : null,
+        },
+      });
+    };
     this.streamSTT.onSpeechEnd = () => {
       // Timing instrumentation: records when the STT provider's server-side VAD
       // declared end-of-speech, so exec logs expose the caller-silence→VAD gap.
       this.clearVadFlushBackstop();
+      if (this._vadSpeechStartAt) {
+        this._lastVadSegmentMs = Date.now() - this._vadSpeechStartAt;
+        this._vadSpeechStartAt = 0;
+      }
       this.logExec("STT", "system", {
         status: "info",
         turnNumber: this._activeTurnIndex,
-        metadata: { event: "VAD Speech End" },
+        metadata: { event: "VAD Speech End", segmentMs: this._lastVadSegmentMs || null },
       });
       this.handleSttSpeechEnd();
     };
     this.streamSTT.onSpeechStart = () => {
+      this._vadSpeechStartAt = Date.now();
       this.logExec("STT", "system", {
         status: "info",
         turnNumber: this._activeTurnIndex,
@@ -1505,13 +1530,13 @@ export class OrchestrationPipeline implements VoiceSession {
   // Sarvam occasionally emits VAD speech_start but then NO interim, NO final and
   // NO speech_end — the caller's utterance is silently lost until the 10s stall
   // reprompt. Backstop: if nothing arrives within VAD_FLUSH_BACKSTOP_MS of
-  // speech_start, send ONE flush() to force Sarvam to finalize its buffer.
+  // speech_start, drain whatever the adapter is holding locally.
   //
-  // This deliberately narrows the adapter's "pipeline never calls flush()"
-  // invariant (calls-772→1320 regression class = flush racing Sarvam's VAD on
-  // NORMAL turns). Here flush fires only when Sarvam has been silent for 2s+
-  // after its own speech_start — i.e. only in the anomaly, never racing a live
-  // turn — and is rate-limited to one shot per VAD_FLUSH_COOLDOWN_MS.
+  // Scope note: since the socket-level `flush:true` bypass (manual flushes corrupt
+  // Sarvam's context window), flush() only emits a held coalesce buffer — it can
+  // NOT make Sarvam finalize audio it never transcribed. So this recovers a
+  // stranded held fragment, and nothing else; a genuinely empty buffer still falls
+  // through to the stall reprompt. Rate-limited to one shot per VAD_FLUSH_COOLDOWN_MS.
   private clearVadFlushBackstop(): void {
     if (this._vadFlushTimer) {
       clearTimeout(this._vadFlushTimer);
@@ -1545,6 +1570,30 @@ export class OrchestrationPipeline implements VoiceSession {
         logger.warn({ callId: this.config.callId, err }, "Lost-turn backstop flush failed");
       }
     }, VAD_FLUSH_BACKSTOP_MS);
+  }
+
+  /**
+   * Speak an in-language "sorry, didn't catch that" and hand the turn back to the
+   * caller. Used when a transcript reaches us but is unusable — garbled content, or
+   * a noise-stub transcript from a substantial stretch of speech.
+   */
+  private async respondWithClarification(sttLang: string | null | undefined): Promise<void> {
+    const clarification = pickClarificationPhrase(sttLang, String(this.config.callId));
+    this.bargeInHoldUntil = Date.now() + this.bargeInEchoGraceMs;
+    this._currentTurnPlayedSentences = [];
+    this.isPlaying = true;
+    try { await this.playSentence(clarification); } finally { this.isPlaying = false; this.armTailEchoGrace(); }
+    const heard = this.getHeardAgentText();
+    if (heard) {
+      this.conversationHistory.appendAssistant(heard);
+      this.lastAssistantSpokenRaw = heard;
+      this.config.onTranscript("agent", heard);
+      this.config.onConversationUpdate?.(this.conversationHistory.messages);
+    }
+    // Drain the carrier's jitter buffer before returning to listening so the
+    // last word of the clarification isn't clipped. This short branch bypasses
+    // playTask's drain, so it must replicate it (see drainPlaybackTail).
+    await this.drainPlaybackTail();
   }
 
   /** Poll until post-utterance WAIT clears or timeout (Bolna incremental_delay grace). */
@@ -6203,8 +6252,33 @@ export class OrchestrationPipeline implements VoiceSession {
 
     // Drop ultra-short STT stubs before history / LLM — they restart consent loops.
     if (isUltraShortNoiseFragment(transcript)) {
+      // A stub only means "noise" if the caller barely spoke. When the VAD segment
+      // was substantial, STT mis-heard a real utterance, and dropping it silently
+      // leaves the caller waiting through dead air (call 5490: 1.36s → "Hmm").
+      const segmentMs = this._lastVadSegmentMs;
+      if (segmentMs >= SUBSTANTIVE_SPEECH_MS) {
+        logger.warn(
+          { callId: this.config.callId, transcript: transcript.slice(0, 80), segmentMs },
+          "Noise-stub transcript from substantial speech — asking caller to repeat",
+        );
+        this.logExec(EXEC_COMPONENTS.STT, "system", {
+          status: "info",
+          provider: this.agent.asrProvider,
+          turnNumber: this._activeTurnIndex,
+          warningFlags: ["stt_misheard"],
+          metadata: {
+            event: "Utterance Misheard",
+            reason: "substantial speech transcribed as a noise stub — requesting repeat instead of dropping",
+            transcript: transcript.slice(0, 300),
+            segmentMs,
+          },
+        });
+        this._lastVadSegmentMs = 0;
+        await this.respondWithClarification(this.currentLang || this.agent.sttConfig.language);
+        return;
+      }
       logger.info(
-        { callId: this.config.callId, transcript: transcript.slice(0, 80) },
+        { callId: this.config.callId, transcript: transcript.slice(0, 80), segmentMs },
         "Dropping ultra-short STT fragment — waiting for more speech",
       );
       this.logDiscardedTranscript(transcript, "ultra_short_fragment");
@@ -6212,6 +6286,8 @@ export class OrchestrationPipeline implements VoiceSession {
       this.safetyNet.beginListening();
       return;
     }
+    // Consume the segment measurement so it can't leak into a later turn.
+    this._lastVadSegmentMs = 0;
 
     // STT execution-log row — the recognized caller utterance for this turn.
     const _sttMeta = this._pendingSttMeta;
@@ -6299,23 +6375,8 @@ export class OrchestrationPipeline implements VoiceSession {
     const sttLang = this.currentLang || this.agent.sttConfig.language;
     const { isGarbled, reason: garbledReason } = checkTranscriptQuality(transcript, { expectedLang: sttLang });
     if (isGarbled) {
-      const clarification = pickClarificationPhrase(sttLang, String(this.config.callId));
       logger.warn({ callId: this.config.callId, transcript, garbledReason }, "Garbled transcript — responding with clarification");
-      this.bargeInHoldUntil = Date.now() + this.bargeInEchoGraceMs;
-      this._currentTurnPlayedSentences = [];
-      this.isPlaying = true;
-      try { await this.playSentence(clarification); } finally { this.isPlaying = false; this.armTailEchoGrace(); }
-      const heard = this.getHeardAgentText();
-      if (heard) {
-        this.conversationHistory.appendAssistant(heard);
-        this.lastAssistantSpokenRaw = heard;
-        this.config.onTranscript("agent", heard);
-        this.config.onConversationUpdate?.(this.conversationHistory.messages);
-      }
-      // Drain the carrier's jitter buffer before returning to listening so the
-      // last word of the clarification isn't clipped. This short branch bypasses
-      // playTask's drain, so it must replicate it (see drainPlaybackTail).
-      await this.drainPlaybackTail();
+      await this.respondWithClarification(sttLang);
       return;
     }
 

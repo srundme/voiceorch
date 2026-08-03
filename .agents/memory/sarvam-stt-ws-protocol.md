@@ -53,7 +53,7 @@ POST `https://api.sarvam.ai/speech-to-text`
 
 ## Best practices for voice agents
 - Use `saaras:v3` + `mode=codemix` for Tamil+English mixed speech
-- `high_vad_sensitivity=true` gives 0.5s silence boundary vs default ~1s — **use this; do NOT replace with fine-grained params**
+- `high_vad_sensitivity=true` gives 0.5s silence boundary vs default ~1s — **use this instead of hand-tuning the silence-boundary params** (`negative_frames_count`/`window`). This does NOT extend to `first_turn_min_speech_frames`, which the preset leaves at 8 — see below.
 - No partials emitted — force-finalize safety net relies only on END_SPEECH timing
 
 ## VAD tuning lessons (June 2026)
@@ -91,3 +91,29 @@ POST `https://api.sarvam.ai/speech-to-text`
 - Default (`false`) = 18-of-24 frames ≈ 1s+ silence.
 - Fine-tune overrides exist as WS query params: `negative_frames_count/window`, `interrupt_min_speech_frames`, `first_turn_min_speech_frames` (8), `start_speech_volume_threshold` (dB floor, useful for noisy lines), `pre_speech_pad_frames` (9).
 - Consequence: per-turn perceived latency is dominated by our pacing delay (linearDelayMs) + LLM TTFT, not Sarvam VAD.
+
+## first_turn_min_speech_frames — lost first turns on 8kHz telephony (Aug 2026)
+A VAD frame is a fixed **512 samples**, so its duration depends on sample rate: 32ms @16kHz, **64ms @8kHz**. Every frame-count default is therefore worth DOUBLE the wall-clock time on our telephony path (which streams native 8kHz).
+
+`first_turn_min_speech_frames` defaults to **8** and is NOT touched by `high_vad_sensitivity`. At 8kHz that demands **512ms of continuous speech** before the first speech segment of a connection will open. Short first replies ("Yes", "Okay", "Members", "ஆமா" — typically 200–400ms) never open a segment: no `speech_start`, no transcript, turn lost entirely upstream of every orchestration guard. Symptom looks like "STT completely missed the turn" and is NOT caused by transcriptQuality filters.
+
+"First turn" resets **per connection**, so every reconnect (backoff, zombie-WS terminate) and every live `setLanguage()` switch re-arms the 512ms gate mid-call.
+
+Fix: `buildWsUrl()` now sends a sample-rate-compensated value — **4 frames @8kHz, 8 @16kHz** — holding Sarvam's intended ~256ms window on both paths. Don't "simplify" this back to a constant.
+
+Related: `pre_speech_pad_frames` (9) is also doubled at 8kHz (~576ms of pre-roll), but that only pads a segment that already opened — harmless, not a fix for the above.
+
+## Stuck-open VAD segments — the real dead-air cause (call 5490, Aug 2026)
+Sarvam emits a transcript **only at end-of-speech** (no partials). So if its VAD opens a segment and never closes it, that audio is never transcribed — the turn is gone. Call 5490 hit this twice in ~60s, producing **15.3s and 14.7s of dead air**; in the second window the caller spoke three times and only the third utterance reached the LLM.
+
+Signature in the exec log: `VAD Speech Start` with no matching `VAD Speech End` and no transcript, followed ~6s later by `Lost-Turn Force Flush`.
+
+Recovery today is destructive and partly missing:
+- The zombie detector (`WS_DEAD_MS` 3s mid-segment) terminates the socket to force a reconnect, which **discards the in-flight utterance** — Sarvam never transcribes it.
+- `onConnectionDead` had NO consumer anywhere in the codebase (the old note claiming webcall.ts handled it → batch STT was wrong). It is now wired in `wireStreamSttCallbacks` to log a `Connection Dead` exec row, so the kill is at least visible. **There is still no batch-STT recovery** — the streaming path returns before `audioBuffer.push()`, so no local audio is retained to re-transcribe.
+- Each zombie reconnect also re-arms `first_turn_min_speech_frames` on the fresh socket (see above).
+
+Not yet attempted: `start_speech_volume_threshold` (dB floor) to stop line noise holding a segment open — the most likely true fix, needs live tuning.
+
+## Do not drop a noise stub from a long utterance (call 5490)
+`isUltraShortNoiseFragment` judges TEXT only. In call 5490 a **1.36s** utterance transcribed as `"Hmm"` and was silently discarded, so the agent said nothing at all. `processTurn` now compares the transcript against the measured VAD segment (`_lastVadSegmentMs`): below `SUBSTANTIVE_SPEECH_MS` (700ms) it is still dropped as noise, at or above it the caller is asked to repeat via `respondWithClarification`. Logged as `Utterance Misheard` / `stt_misheard`.
