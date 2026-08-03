@@ -3128,14 +3128,13 @@ export class OrchestrationPipeline implements VoiceSession {
     const isWebcallStreaming = !respectHoldUntil && this.config.telephonyProvider === "webcall";
 
     const now = Date.now();
+    // 600ms per-sentence start grace protects initial spoken words from self-echo false cuts.
+    const startGraceMs = Math.max(600, this.bargeInEchoGraceMs);
     if (
       now < this.greetingEchoHoldUntil ||
-      now < this.bargeInSentenceStartAt + this.bargeInEchoGraceMs ||
+      now < this.bargeInSentenceStartAt + startGraceMs ||
       (respectHoldUntil && now < this.bargeInHoldUntil)
     ) {
-      // Echo grace: suppress (and reset) while our own freshly started audio may
-      // still be echoing back. greetingEchoHoldUntil covers the full opening line
-      // on the carrier path; the per-sentence grace covers the start of each reply.
       if (useAdaptive && now <= this.bargeInSentenceStartAt + BARGE_IN_ECHO_CALIBRATION_MS) {
         this.updateEchoFloor(currentRms);
       }
@@ -3192,15 +3191,9 @@ export class OrchestrationPipeline implements VoiceSession {
 
     if (aboveBar) {
       this.bargeInSpeechFrames++;
-      let effectiveMinFrames = this.stopSpeakingPlanConfigured
-        ? Math.max(BARGE_IN_MIN_FRAMES, this.bargeInMinFrames)
-        : Math.max(this.bargeInMinFrames, (this.agent.wordsForInterruption ?? 3) * 20);
-
-      if (!respectHoldUntil) {
-        // On streaming path (webcall / streaming telephony), mic is cancelled (AEC)
-        // or adaptive energy checked. Allow responsive cut on ~6-10 frames (~120-200 ms).
-        effectiveMinFrames = isWebcallStreaming ? 6 : BARGE_IN_STREAMING_MIN_FRAMES;
-      }
+      // ~15 frames (300 ms @ 20ms/frame) of sustained caller speech energy required.
+      // Filters out brief mic clicks/breaths while reacting promptly to human interruptions.
+      let effectiveMinFrames = Math.max(15, BARGE_IN_STREAMING_MIN_FRAMES);
       if (this.bargeInSpeechFrames >= effectiveMinFrames) {
         this.triggerBargeIn(source, undefined, {
           speculative: false,
