@@ -7814,11 +7814,45 @@ export class OrchestrationPipeline implements VoiceSession {
         gu: "એક ક્ષણ…", bn: "একটু অপেক্ষা করুন…", ml: "ഒരു നിമിഷം…",
         es: "Un momento…", fr: "Un instant…", de: "Einen Moment…", ar: "لحظة…",
       };
+      const TOOL_FILLERS_BY_NAME: Record<string, Record<string, string>> = {
+        native_check_availability: {
+          en: "Checking available slots for you…",
+          ta: "உங்களுக்கான கிடைக்கக்கூடிய நேரங்களைப் பார்க்கிறேன்…",
+          hi: "आपके लिए उपलब्ध समय देख रहा हूँ…",
+          te: "అందుబాటులో ఉన్న సమయాలను చూస్తున్నాను…",
+          kn: "ಲಭ್ಯವಿರುವ ಸಮಯವನ್ನು ಪರಿಶೀಲಿಸುತ್ತಿದ್ದೇನೆ…",
+        },
+        native_booking: {
+          en: "Booking your appointment now…",
+          ta: "உங்கள் அப்பாயிண்ட்மென்ட்டை புக் செய்கிறேன்…",
+          hi: "आपका अपॉइंटमेंट बुक कर रहा हूँ…",
+          te: "మీ అపాయింట్‌మెంట్‌ను బుక్ చేస్తున్నాను…",
+          kn: "ನಿಮ್ಮ ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ಬುಕ್ ಮಾಡುತ್ತಿದ್ದೇನೆ…",
+        },
+        native_reschedule: {
+          en: "Rescheduling your appointment…",
+          ta: "உங்கள் அப்பாயிண்ட்மென்ட்டை மாற்றி அமைக்கிறேன்…",
+          hi: "आपका अपॉइंटमेंट रीशेड्यूल कर रहा हूँ…",
+          te: "మీ అపాయింట్‌మెంట్‌ను రీషెడ్యూల్ చేస్తున్నాను…",
+        },
+        native_cancel: {
+          en: "Cancelling your appointment…",
+          ta: "உங்கள் அப்பாயிண்ட்மென்ட்டை ரத்து செய்கிறேன்…",
+          hi: "आपका अपॉइंटमेंट रद्द कर रहा हूँ…",
+          te: "మీ అపాయింట్‌మెంట్‌ను రద్దు చేస్తున్నాను…",
+        },
+        native_list_bookings: {
+          en: "Fetching your upcoming bookings…",
+          ta: "உங்கள் அப்பாயிண்ட்மென்ட்களைப் பார்க்கிறேன்…",
+          hi: "आपके अपॉइंटमेंट देख रहा हूँ…",
+        },
+      };
+
       const langPrefix = ((this.currentLang || this.agent.language) ?? "en").split("-")[0] ?? "en";
-      // Strict, language-based fillers only — no English fallback for non-English agents.
-      // Skip entirely for end_call: the call is terminating anyway, so a "One moment…"
-      // filler just plays an awkward extra phrase right before/instead of the goodbye.
-      const filler = triggeredToolName === "end_call" ? undefined : TOOL_FILLERS[langPrefix];
+      const toolSpecific = TOOL_FILLERS_BY_NAME[triggeredToolName];
+      const filler = triggeredToolName === "end_call"
+        ? undefined
+        : (toolSpecific?.[langPrefix] ?? TOOL_FILLERS[langPrefix]);
       if (filler && !this.closed && !this.bargeInRequested) {
         logger.info(
           {
