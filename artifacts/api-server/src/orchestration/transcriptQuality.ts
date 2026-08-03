@@ -514,18 +514,32 @@ export function normalizeSpokenEmail(text: string): string {
   let s = text;
 
   // Only apply email transformation if email-related tokens are present
-  const hasEmailToken = /(@|அட்|ऐट|at\s*the\s*rate|at\s*rate|டாட்|டட்காம்|डॉट|dot\s*com|dotcom|ஜிமெயில்|ஜிமெல்|जीमेल|gmail)/iu.test(s);
+  const hasEmailToken = /(@|அட்|ऐट|\bat\b|at\s*the\s*rate|at\s*rate|டாட்|டட்காம்|डॉट|\bdot\b|dot\s*com|dotcom|ஜிமெயில்|ஜிமெல்|जीमेल|gmail)/iu.test(s);
   if (!hasEmailToken) return s;
 
-  // Convert spoken email domain tokens
-  s = s.replace(/(அட்ட\s*ரைட்|அட்\s*ரைட்|அட்|ऐट|at\s*the\s*rate|at\s*rate)/giu, "@");
-  s = s.replace(/(டாட்\s*காம்|டட்காம்|डॉट\s*कॉम|dot\s*com|dotcom)/giu, ".com");
-  s = s.replace(/(டாட்\s*இன்|डॉट\s*इन|dot\s*in)/giu, ".in");
-  s = s.replace(/(டாட்\s*ஆர்க்|डॉट\s*ऑर्ग|dot\s*org)/giu, ".org");
-  s = s.replace(/(டாட்|डॉट)/giu, ".");
-  s = s.replace(/(ஜிமெயில்|ஜிமெல்|जीमेल|jmail|g\s*mail)/giu, "gmail");
-  s = s.replace(/(யாகூ|याहू)/giu, "yahoo");
-  s = s.replace(/(ஹாட்மெயில்|हॉटमेल)/giu, "hotmail");
+  // Spoken email symbols & punctuation
+  s = s.replace(/\b(under\s*score|underbar|அண்டர்ஸ்கோர்|அண்டர்\s*ஸ்கோர்|अंडरस्कोर)\b/giu, "_");
+  s = s.replace(/\b(hyphen|dash|minus|டாஷ்|ஹைபன்|டேஷ்|माइनस)\b/giu, "-");
+  s = s.replace(/(அட்ட\s*ரைட்|அட்\s*ரைட்|அட்|ऐट|\bat\s*the\s*rate\b|\bat\s*rate\b|\bat\b)/giu, "@");
+  s = s.replace(/(டாட்\s*காம்|டட்காம்|डॉट\s*कॉम|\bdot\s*com\b|\bdotcom\b)/giu, ".com");
+  s = s.replace(/(டாட்\s*இன்|டட்இன்|डॉट\s*इन|\bdot\s*in\b)/giu, ".in");
+  s = s.replace(/(டாட்\s*ஆர்க்|डॉट\s*ऑर्ग|\bdot\s*org\b)/giu, ".org");
+  s = s.replace(/(டாட்|டட்|डॉट|\bdot\b|\bperiod\b|\bpoint\b)/giu, ".");
+  s = s.replace(/(ஜிமெயில்|ஜிமெல்|जीमेल|jmail|g\s*mail|g\s*m\s*a\s*i\s*l)/giu, "gmail");
+  s = s.replace(/(யாகூ|याहू|y\s*a\s*h\s*o\s*o)/giu, "yahoo");
+  s = s.replace(/(ஹாட்மெயில்|हॉटमेल|h\s*o\s*t\s*m\s*a\s*i\s*l)/giu, "hotmail");
+
+  // Spoken number words inside email contexts
+  s = s.replace(/\bzero\b/gi, "0")
+       .replace(/\bone\b/gi, "1")
+       .replace(/\btwo\b/gi, "2")
+       .replace(/\bthree\b/gi, "3")
+       .replace(/\bfour\b/gi, "4")
+       .replace(/\bfive\b/gi, "5")
+       .replace(/\bsix\b/gi, "6")
+       .replace(/\bseven\b/gi, "7")
+       .replace(/\beight\b/gi, "8")
+       .replace(/\bnine\b/gi, "9");
 
   // Convert spoken digits inside Tamil/Hindi email contexts
   s = s.replace(/\bஒன்று\b/giu, "1")
@@ -541,15 +555,30 @@ export function normalizeSpokenEmail(text: string): string {
        .replace(/\bज़ीरो\b/giu, "0")
        .replace(/\bजीरो\b/giu, "0");
 
+  // NATO / Phonetic alphabet or "X as in X" (e.g. "k as in karthik" -> "k")
+  s = s.replace(/\b([a-z0-9])\s+(?:as\s+in|for)\s+[a-z0-9]+\b/gi, "$1");
+
   // Convert standalone space-separated single digits "1 2 3" -> "123"
   s = s.replace(/(\d)\s+(?=\d)/g, "$1");
 
-  // If text now contains '@', clean up whitespace around email characters
+  // If text now contains '@', clean up whitespace & coalesce letter-by-letter dictation
   if (s.includes("@")) {
     s = s.replace(/\s*@\s*/g, "@");
     s = s.replace(/\s*\.\s*/g, ".");
-    // Remove spaces in username before '@'
+
+    // Remove spaces between dictated single letters / numbers before '@'
+    // E.g., "k a r t h i k e y a n 0 1@gmail.com" -> "karthikeyansru01@gmail.com"
+    s = s.replace(/((?:^|\s)(?:[a-zA-Z0-9._-]\s+)+[a-zA-Z0-9._-])@/g, (match, prefix) => {
+      return prefix.replace(/\s+/g, "") + "@";
+    });
+
+    // Remove remaining spaces in username before '@'
     s = s.replace(/(\b[a-zA-Z0-9.\-_]+(?:\s+[a-zA-Z0-9.\-_]+)+)@/, (m, p1) => p1.replace(/\s+/g, "") + "@");
+
+    // Remove spaces in domain after '@' (e.g. "@ g m a i l . c o m" -> "@gmail.com")
+    s = s.replace(/@([a-zA-Z0-9.\-_]+)/g, (match, domainPart) => {
+      return "@" + domainPart.replace(/\s+/g, "");
+    });
   }
 
   return s;
