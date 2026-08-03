@@ -1470,7 +1470,7 @@ export default function CampaignDetailPage() {
         <p className="text-sm font-medium text-foreground/40">Campaign not found</p>
         <Link href="/app/campaigns">
           <Button variant="outline" size="sm" className="mt-4 gap-1.5">
-            <ArrowLeft className="h-3.5 w-3.5" /> Back to Campaigns
+            <ArrowLeft className="h-3.5 w-3.5" /> Back to dial flows
           </Button>
         </Link>
       </div>
@@ -1485,9 +1485,9 @@ export default function CampaignDetailPage() {
         <DetailNav
           className="mb-2"
           backTo="/app/campaigns"
-          backLabel="Back to Campaigns"
+          backLabel="Back to dial flows"
           crumbs={[
-            { label: "Campaigns", href: "/app/campaigns" },
+            { label: "Dial flows", href: "/app/campaigns" },
             { label: campaign.name },
           ]}
         />

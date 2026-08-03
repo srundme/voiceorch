@@ -604,7 +604,7 @@ function CampaignWizard({
     <Dialog open={open} onOpenChange={v => { if (!v) close(); }}>
       <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col gap-0 p-0 overflow-hidden">
         <div className="px-6 pt-5 pb-4 border-b border-border shrink-0">
-          <div className="text-base font-semibold">New Campaign</div>
+          <div className="text-base font-semibold">New dial flow</div>
           <p className="text-xs text-muted-foreground/60 mt-0.5">Set up an AI voice calling campaign in a few steps</p>
           {/* Step indicator */}
           <div className="flex items-center gap-1.5 mt-4">
@@ -1096,7 +1096,7 @@ function CampaignFormDialog({
     <Dialog open={open} onOpenChange={v => { if (!v) { reset(); onClose(); } }}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle className="text-base">{editing ? "Edit Campaign" : "New Campaign"}</DialogTitle>
+          <DialogTitle className="text-base">{editing ? "Edit dial flow" : "New dial flow"}</DialogTitle>
           <DialogDescription className="text-xs">
             {editing ? "Update campaign settings." : "Set up a new outbound calling campaign."}
           </DialogDescription>
@@ -1252,19 +1252,19 @@ export default function CampaignsPage() {
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden">
       <AppPageHeader
-        eyebrow="Campaign Operations"
-        title="Campaigns"
+        eyebrow="Reach · account view"
+        title="Dial flows"
         description={
           isFetching && !isLoading
-            ? "Live overview · refreshing…"
-            : "Live overview · auto-refreshes every 10 seconds"
+            ? "Live overview · refreshing… Prefer Agent → Reach for new setups."
+            : "Live overview of list and source dials. Prefer Agent → Reach for new setups."
         }
         actions={
           <>
             <button
               onClick={() => setHelpOpen(true)}
               className="h-8 w-8 rounded-lg border border-border/60 bg-muted/40 hover:bg-muted/70 flex items-center justify-center text-muted-foreground/50 hover:text-foreground transition-all"
-              title="Campaign guide"
+              title="Dial flow guide"
             >
               <HelpCircle className="h-3.5 w-3.5" />
             </button>
@@ -1281,14 +1281,14 @@ export default function CampaignsPage() {
               <FileText className="h-3.5 w-3.5" /> Export
             </Button>
             <Button size="sm" className="h-8 text-xs gap-1.5 rounded-lg" onClick={() => setCreateOpen(true)}>
-              <Plus className="h-3.5 w-3.5" /> New Campaign
+              <Plus className="h-3.5 w-3.5" /> New dial flow
             </Button>
           </>
         }
       >
         <MetricStrip cols={6}>
           <MetricCard
-            label="Active Campaigns"
+            label="Active flows"
             value={stats?.activeCampaigns ?? 0}
             icon={<Megaphone className="h-4 w-4 text-emerald-500" />}
             accent={(stats?.activeCampaigns ?? 0) > 0 ? "text-emerald-500" : undefined}
@@ -1413,10 +1413,10 @@ export default function CampaignsPage() {
                   <div className="h-14 w-14 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mx-auto mb-4">
                     <Megaphone className="h-6 w-6 text-primary/60" />
                   </div>
-                  <h3 className="text-base font-semibold text-foreground mb-1.5">Start your first campaign</h3>
+                  <h3 className="text-base font-semibold text-foreground mb-1.5">Set up how leads reach an agent</h3>
                   <p className="text-xs text-muted-foreground/60 max-w-sm mx-auto leading-relaxed">
-                    A campaign auto-calls leads the moment they arrive — from ads, forms, spreadsheets, or your own CRM.
-                    Your AI voice agent handles the conversation.
+                    Prefer Agent → Reach for new setups. This page lists account-wide list and source dials —
+                    form, sheet, CSV, or CRM — that fire your voice agent.
                   </p>
                 </div>
 
@@ -1470,7 +1470,10 @@ export default function CampaignsPage() {
                 {/* CTA */}
                 <div className="text-center flex items-center justify-center gap-3">
                   <Button className="h-8 text-xs gap-2" onClick={() => setCreateOpen(true)}>
-                    <Plus className="h-3.5 w-3.5" /> Create first campaign
+                    <Plus className="h-3.5 w-3.5" /> Create dial flow
+                  </Button>
+                  <Button asChild variant="outline" className="h-8 text-xs gap-2">
+                    <Link href="/app/agents">Open an agent → Reach</Link>
                   </Button>
                   <button
                     className="text-xs text-muted-foreground/50 hover:text-foreground underline underline-offset-4 transition-colors"
@@ -1482,7 +1485,7 @@ export default function CampaignsPage() {
               </div>
             ) : (
               <div className="py-12 text-center">
-                <p className="text-sm text-muted-foreground/40">No campaigns match your filters.</p>
+                <p className="text-sm text-muted-foreground/40">No dial flows match your filters.</p>
                 <button className="text-xs text-muted-foreground/50 hover:text-foreground mt-2 underline underline-offset-2"
                   onClick={() => { setSearch(""); setFilterSource("__all__"); setFilterStatus("__all__"); }}>
                   Clear filters
@@ -1522,19 +1525,19 @@ export default function CampaignsPage() {
               Campaign Guide
             </SheetTitle>
             <p className="text-[11px] text-muted-foreground/60 leading-relaxed mt-1">
-              Everything you need to set up and run your first AI voice campaign.
+              How list and source dials bind leads to a voice agent.
             </p>
           </SheetHeader>
 
           <div className="py-5 space-y-7">
 
-            {/* What is a Campaign */}
+            {/* What is a dial flow */}
             <section>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/40 mb-3">What is a Campaign?</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/40 mb-3">What is a dial flow?</p>
               <div className="rounded-xl border border-border/60 bg-card/60 p-4 text-[11px] text-muted-foreground/70 leading-relaxed space-y-2">
-                <p>A campaign ties together a <strong className="text-foreground/80">voice agent</strong>, a <strong className="text-foreground/80">phone number</strong>, and a <strong className="text-foreground/80">lead source</strong>.</p>
+                <p>A dial flow ties together a <strong className="text-foreground/80">voice agent</strong>, a <strong className="text-foreground/80">phone number</strong>, and a <strong className="text-foreground/80">lead source</strong>.</p>
                 <p>When a new lead arrives, the platform dials them automatically. The agent handles the full conversation — qualifying, booking, or transferring — without any human in the loop.</p>
-                <p>You stay in control: set call hours, retry rules, and concurrency limits. Every call is logged with a full transcript and outcome.</p>
+                <p>New setups start from <strong className="text-foreground/80">Agent → Reach</strong>. This page remains the account-wide list of armed dials.</p>
               </div>
             </section>
 
@@ -1588,11 +1591,11 @@ export default function CampaignsPage() {
 
             {/* Batches */}
             <section>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/40 mb-3">Campaigns vs. Batches</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/40 mb-3">Flows vs. Batches</p>
               <div className="rounded-xl border border-border/60 bg-card/60 p-4 space-y-3">
                 {[
-                  { icon: <Megaphone className="h-3.5 w-3.5 text-primary/50" />, term: "Campaign", def: "The top-level container. Defines the agent, number, calling hours, and retry rules. Lives forever." },
-                  { icon: <Layers className="h-3.5 w-3.5 text-amber-400" />, term: "Batch", def: "One group of leads added at a particular time. A campaign can have unlimited batches — each is tracked independently." },
+                  { icon: <Megaphone className="h-3.5 w-3.5 text-primary/50" />, term: "Dial flow", def: "The top-level container. Defines the agent, number, calling hours, and retry rules." },
+                  { icon: <Layers className="h-3.5 w-3.5 text-amber-400" />, term: "Batch", def: "One group of leads added at a particular time. A flow can have unlimited batches — each is tracked independently." },
                 ].map(item => (
                   <div key={item.term} className="flex gap-3">
                     <div className="h-5 w-5 rounded-md bg-muted/60 flex items-center justify-center shrink-0 mt-0.5">{item.icon}</div>

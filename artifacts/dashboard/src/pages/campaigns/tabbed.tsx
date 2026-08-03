@@ -1,9 +1,9 @@
 /**
- * /app/campaigns — tabbed page
- * Tabs: Active | Automatic Calls (Google Sheets) | From Website (webhook + Meta/Instagram)
+ * /app/campaigns — tabbed page (account-wide dial flows)
+ * Tabs: Active | Sheet dial | From Website
  *
- * Deep-link routes like /app/campaigns/:id, /app/campaigns/:id/batches/* are handled
- * separately in App.tsx and do NOT use this tabbed wrapper.
+ * Prefer Agent → Reach for new setups. Deep-link routes like /app/campaigns/:id
+ * are handled separately in App.tsx and do NOT use this tabbed wrapper.
  */
 import { PageTabs } from "@/components/page-tabs";
 import CampaignsPage from "./index";
@@ -17,12 +17,12 @@ export default function CampaignsTabPage() {
       tabs={[
         {
           key: "active",
-          label: "Active",
+          label: "List dials",
           content: <CampaignsPage />,
         },
         {
           key: "scheduled",
-          label: "Automatic Calls",
+          label: "Sheet dial",
           content: <AutomaticCallsPage />,
         },
         {

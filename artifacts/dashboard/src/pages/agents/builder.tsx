@@ -229,7 +229,7 @@ function KnowledgeSourceMultiSelect({ value, onChange }: {
               {isLoading ? (
                 <div className="py-6 text-center text-xs text-muted-foreground">Loading…</div>
               ) : list.length === 0 ? (
-                <CommandEmpty>No knowledge sources yet. Create one in Agent Knowledge.</CommandEmpty>
+                <CommandEmpty>No knowledge sources yet. Create one under Knowledge.</CommandEmpty>
               ) : (
                 <>
                   <CommandEmpty>No matches.</CommandEmpty>
@@ -3965,7 +3965,7 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                         <li>A <span className="font-medium text-foreground">data-purpose disclosure</span> is added to the agent's prompt.</li>
                         <li>Personal data in transcripts is <span className="font-medium text-foreground">flagged for redaction</span> in analytics.</li>
                         <li>Call data is <span className="font-medium text-foreground">automatically anonymized</span> after the retention period (default 180 days).</li>
-                        <li>Campaigns using this agent require a <span className="font-medium text-foreground">documented consent basis</span> before launch.</li>
+                        <li>Dial flows using this agent require a <span className="font-medium text-foreground">documented consent basis</span> before launch.</li>
                       </ul>
                       <p className="text-[11px] text-muted-foreground/80">
                         These are audit and privacy safeguards only — they never block or delay calls from dialing.

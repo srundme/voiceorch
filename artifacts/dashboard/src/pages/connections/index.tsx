@@ -885,7 +885,7 @@ function WebhookTable({
         {/* Table header */}
         <div className="flex items-center gap-3 px-4 py-2 border-b border-border/50 bg-muted/30">
           <div className="w-7 shrink-0" />
-          <div className="flex-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Campaign</div>
+          <div className="flex-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Dial flow</div>
           <div className="hidden sm:block flex-1 max-w-[220px] text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Webhook URL</div>
           <div className="hidden md:block w-28 text-right text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Last Event</div>
           {/* Date sort toggle */}
@@ -901,7 +901,7 @@ function WebhookTable({
 
         {pageRows.length === 0 ? (
           <div className="flex items-center justify-center py-8 text-xs text-muted-foreground">
-            {search ? `No campaigns match "${search}"` : "No webhook connections yet"}
+            {search ? `No dial flows match "${search}"` : "No webhook connections yet"}
           </div>
         ) : (
           pageRows.map(c => (
@@ -1474,7 +1474,7 @@ export function CrmImportDialog({
 
             {!defaultCampaignId && (
               <div className="space-y-1.5">
-                <Label className="text-xs">Destination Campaign</Label>
+                <Label className="text-xs">Destination dial flow</Label>
                 <select
                   value={campaignId ?? ""}
                   onChange={e => setCampaignId(e.target.value ? Number(e.target.value) : null)}
@@ -2123,7 +2123,7 @@ function CrmConnectorSection() {
                       {isConnected && (
                         <p className="mt-2 text-[10px] text-muted-foreground/60 flex items-center gap-1">
                           <Activity className="w-3 h-3" />
-                          To set up instant webhook triggers, open the Campaign and use its CRM Integration section.
+                          To set up instant webhook triggers, open the dial flow and use its CRM Integration section.
                         </p>
                       )}
                     </div>
@@ -2365,7 +2365,7 @@ export default function ConnectionsPage() {
           <section className="space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/55">
-                Campaign Webhooks
+                Dial-flow webhooks
               </h2>
               <span className="text-[10px] text-muted-foreground/60">
                 {webhookConnections.length} webhook{webhookConnections.length !== 1 ? "s" : ""}
@@ -2381,9 +2381,9 @@ export default function ConnectionsPage() {
                 variant="panel"
                 icon={<Webhook />}
                 title="No webhook connections"
-                description="Create a campaign to get a webhook URL for receiving leads automatically."
+                description="Create a dial flow (or use Agent → Reach) to get a webhook URL for receiving leads."
                 action={{
-                  label: "Go to campaigns",
+                  label: "Go to dial flows",
                   onClick: () => navigate("/app/campaigns"),
                   icon: <Zap className="w-3.5 h-3.5" />,
                 }}

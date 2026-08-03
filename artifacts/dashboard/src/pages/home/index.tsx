@@ -134,7 +134,7 @@ export default function HomePage() {
   if (failedRecent > 0) {
     attention.push({
       title: `${failedRecent} failed call${failedRecent === 1 ? "" : "s"} in recent list`,
-      desc: "Review Call Logs for dial or telephony errors.",
+      desc: "Review Activity for dial or telephony errors.",
       href: "/app/calls",
       tone: "rose",
     });
@@ -155,6 +155,18 @@ export default function HomePage() {
     });
   }
 
+  const onboardSteps = hasAgent
+    ? [
+        { done: true, label: "Create an agent", href: "/app/agents" },
+        { done: hasPhone, label: "Connect a phone number", href: "/app/phone-numbers" },
+        {
+          done: activeCampaigns.length > 0 || pipelines.length > 0,
+          label: "Attach how leads reach it",
+          href: agents[0]?.id ? `/app/agents/${agents[0].id}` : "/app/agents",
+        },
+      ]
+    : [];
+  const onboardIncomplete = onboardSteps.some((s) => !s.done);
   const s = stats.data;
 
   return (
@@ -197,6 +209,45 @@ export default function HomePage() {
               Manual build
             </Button>
           </div>
+        </section>
+      )}
+
+      {/* Setup checklist — once they have an agent */}
+      {hasAgent && onboardIncomplete && (
+        <section className="rounded-xl border border-border/60 bg-card/30 px-4 py-3.5 space-y-2.5">
+          <div>
+            <h2 className="text-xs font-medium">Finish setup</h2>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              Three steps so leads can reach your agent.
+            </p>
+          </div>
+          <ol className="space-y-1.5">
+            {onboardSteps.map((step, i) => (
+              <li key={step.label}>
+                <Link
+                  href={step.href}
+                  className={cn(
+                    "flex items-center gap-2.5 rounded-lg border px-3 py-2 text-xs transition-colors",
+                    step.done
+                      ? "border-emerald-500/20 bg-emerald-500/5 text-muted-foreground"
+                      : "border-border/50 hover:bg-muted/30",
+                  )}
+                >
+                  {step.done ? (
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                  ) : (
+                    <span className="h-3.5 w-3.5 rounded-full border border-border text-[9px] flex items-center justify-center shrink-0 text-muted-foreground">
+                      {i + 1}
+                    </span>
+                  )}
+                  <span className={cn("font-medium", step.done && "line-through decoration-muted-foreground/40")}>
+                    {step.label}
+                  </span>
+                  {!step.done && <ArrowRight className="h-3 w-3 text-muted-foreground ml-auto shrink-0" />}
+                </Link>
+              </li>
+            ))}
+          </ol>
         </section>
       )}
 
@@ -383,7 +434,7 @@ export default function HomePage() {
             ))}
             {runningPipelines.length === 0 && activeCampaigns.length === 0 && pipelines.filter((p) => p.status === "paused").length === 0 && (
               <p className="px-3 py-8 text-xs text-muted-foreground text-center">
-                Nothing dialing yet. Open an agent, or use sheet / list dial from More.
+                Nothing dialing yet. Open an agent → Reach to attach sheet or list dial.
               </p>
             )}
           </div>

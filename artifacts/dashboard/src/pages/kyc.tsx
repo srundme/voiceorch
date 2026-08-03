@@ -444,7 +444,7 @@ export default function KycPage() {
               <p className="text-sm font-medium">What verification unlocks</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <UnlockItem icon={Phone} label="Purchase & port phone numbers" />
-                <UnlockItem icon={Zap} label="Outbound calling campaigns" />
+                <UnlockItem icon={Zap} label="Outbound dialing" />
                 <UnlockItem icon={Building2} label="Twilio, Plivo & Vonage integrations" />
                 <UnlockItem icon={ShieldCheck} label="Higher concurrent call limits" />
               </div>

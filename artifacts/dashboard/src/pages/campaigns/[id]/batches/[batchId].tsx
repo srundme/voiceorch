@@ -823,9 +823,9 @@ export default function BatchWorkspacePage() {
               <DetailNav
                 className="mb-0.5"
                 backTo={`/app/campaigns/${campaignId}`}
-                backLabel="Back to Campaign"
+                backLabel="Back to dial flow"
                 crumbs={[
-                  { label: "Campaigns", href: "/app/campaigns" },
+                  { label: "Dial flows", href: "/app/campaigns" },
                   { label: header?.campaign.name ?? "…", href: `/app/campaigns/${campaignId}` },
                   { label: header?.batch.name ?? "Batch" },
                 ]}

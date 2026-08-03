@@ -3,11 +3,11 @@ import { Link, useLocation } from "wouter";
 import { useTheme } from "@/components/theme-provider";
 import { GlobalSearch, useGlobalSearchTrigger } from "@/components/GlobalSearch";
 import {
-  Home, Bot, Users, Zap, CalendarDays, Brain, Phone, Hash,
+  Home, Bot, Phone, Hash,
   Settings, Wallet, Mic2, Key,
   Menu, ChevronDown, ChevronLeft, ChevronRight,
   LogOut, Bell, Search, SlidersHorizontal, BookOpen, PlugZap, Sun, Moon, Sparkles,
-  MessageCircle, X, Wand2, Wrench, Video,
+  X, Wand2, Wrench,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -97,11 +97,9 @@ interface NavGroup {
 }
 
 /**
- * Agent-centric IA (approved): Agent Builder is the product center.
- * Phase 1 shell — primary nav is short; everything else stays under MORE so
- * existing routes keep working until Reach/Channels absorb them inside the
- * agent (see docs/snapserve-agent-centric-ia.md). Do not remove MORE items
- * until those surfaces land on the agent.
+ * Agent-centric IA (see docs/snapserve-agent-centric-ia.md).
+ * Phase 7: MORE is gone — Campaigns / WhatsApp / Meet / Squads / KB /
+ * Scheduling / Memory stay reachable via agent Reach & Channels (and old URLs).
  */
 const NAV_GROUPS: NavGroup[] = [
   {
@@ -113,20 +111,8 @@ const NAV_GROUPS: NavGroup[] = [
   {
     group: "OPERATE",
     items: [
-      { name: "Calls",         href: "/app/calls",         icon: Phone, callbackBadge: true },
+      { name: "Activity",      href: "/app/calls",         icon: Phone, callbackBadge: true },
       { name: "Phone Numbers", href: "/app/phone-numbers", icon: Hash },
-    ],
-  },
-  {
-    group: "MORE",
-    items: [
-      { name: "Campaigns",             href: "/app/campaigns",       icon: Zap },
-      { name: "WhatsApp",              href: "/app/whatsapp",        icon: MessageCircle },
-      { name: "Meetings",              href: "/app/meet",            icon: Video },
-      { name: "Squads",                href: "/app/squads",          icon: Users },
-      { name: "Knowledge",             href: "/app/knowledge-bases", icon: BookOpen },
-      { name: "Scheduling",            href: "/app/scheduling",      icon: CalendarDays },
-      { name: "Contacts and Memory",   href: "/app/memory",          icon: Brain },
     ],
   },
   {
@@ -152,7 +138,7 @@ const MANAGED_CLIENT_NAV: NavGroup[] = [
   {
     group: "OPERATE",
     items: [
-      { name: "Calls",         href: "/app/calls",         icon: Phone, callbackBadge: true },
+      { name: "Activity",      href: "/app/calls",         icon: Phone, callbackBadge: true },
       { name: "Phone Numbers", href: "/app/phone-numbers", icon: Hash },
     ],
   },
@@ -161,10 +147,10 @@ const MANAGED_CLIENT_NAV: NavGroup[] = [
 const MANAGED_CLIENT_SETTINGS_HREFS = ["/app/settings", "/app/wallet"];
 
 const NAV_SETTINGS: NavItem[] = [
-  { name: "General",               href: "/app/settings", icon: Settings },
-  { name: "Voices and Providers",  href: "/app/providers", icon: Mic2 },
-  { name: "Developers",            href: "/app/api-keys",  icon: Key },
-  { name: "Billing",               href: "/app/wallet",    icon: Wallet },
+  { name: "Workspace",  href: "/app/settings",  icon: Settings },
+  { name: "Providers",  href: "/app/providers", icon: Mic2 },
+  { name: "Developers", href: "/app/api-keys",  icon: Key },
+  { name: "Billing",    href: "/app/wallet",    icon: Wallet },
 ];
 
 const SETTINGS_HREFS = NAV_SETTINGS.map(s => s.href);
@@ -175,33 +161,31 @@ const ROUTE_TITLES: [string, string][] = [
   ["/app/vibe",            "New agent"],
   ["/app/agents",          "Agents"],
   ["/app/knowledge-bases", "Knowledge"],
-  ["/app/campaigns",       "Campaigns"],
+  ["/app/campaigns",       "Dial flows"],
   ["/app/connections",     "Integrations"],
   ["/app/whatsapp",        "WhatsApp"],
   ["/app/scheduling",      "Scheduling"],
   ["/app/memory",          "Contacts and Memory"],
-  ["/app/calls",           "Calls"],
+  ["/app/calls",           "Activity"],
   ["/app/meet",            "Meetings"],
   ["/app/squads",          "Squads"],
   ["/app/phone-numbers",   "Phone Numbers"],
   ["/app/partner-join",    "Accept invitation"],
   ["/app/partner",         "Partner Hub"],
-  ["/app/providers",       "Voices and Providers"],
+  ["/app/providers",       "Providers"],
   ["/app/api-keys",        "Developers"],
   ["/app/wallet",          "Billing"],
-  ["/app/settings",        "General"],
+  ["/app/settings",        "Workspace"],
   ["/app/test-simulator",  "Test Simulator"],
   ["/app/analytics",       "Analytics"],
-  ["/app/squads",          "Squads"],
-  ["/app/meet",            "Meetings"],
   // Legacy routes (redirect targets still render briefly)
-  ["/app/team",            "General"],
-  ["/app/automatic-calls", "Campaigns"],
-  ["/app/meta-leads",      "Campaigns"],
-  ["/app/callbacks",       "Call Logs"],
-  ["/app/transfers",       "Call Logs"],
+  ["/app/team",            "Workspace"],
+  ["/app/automatic-calls", "Sheet dial"],
+  ["/app/meta-leads",      "Dial flows"],
+  ["/app/callbacks",       "Activity"],
+  ["/app/transfers",       "Activity"],
   ["/app/kyc",             "Phone Numbers"],
-  ["/app/voices",          "Voices and Providers"],
+  ["/app/voices",          "Providers"],
   ["/app/webhooks",        "Developers"],
   ["/app/usage",           "Billing"],
 ];
@@ -707,7 +691,7 @@ const MOBILE_BOTTOM_NAV_ITEMS = [
   { name: "Home",   href: "/app/home",   icon: Home },
   { name: "Create", href: null,          icon: Sparkles }, // opens modal
   { name: "Agents", href: "/app/agents", icon: Bot },
-  { name: "Calls",  href: "/app/calls",  icon: Phone },
+  { name: "Activity", href: "/app/calls",  icon: Phone },
   { name: "Wallet", href: "/app/wallet", icon: Wallet },
 ] as const;
 

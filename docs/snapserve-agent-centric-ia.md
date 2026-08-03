@@ -1,6 +1,6 @@
 # SnapServe UI Vision — Agent at the Center
 
-**Status:** Phase 1–6 shipped (shell, Reach, Call rules, Channels Meetings, Custom Reach steps, Squad on Call). Phase 7 pending.  
+**Status:** Phases 1–7 shipped.  
 **Rule:** Agent Builder is the center. Everything binds to the agent.  
 **Constraint:** Do not break or gut the existing Agent Builder. Migrate around it in phases.
 
@@ -13,15 +13,15 @@
 > You attach **how work reaches it** and **which channels it can use**.  
 > SnapServe runs the rest.
 
-No top-level Campaigns product long-term. No Workflows kingdom. Campaigns/WhatsApp/Meet stay available until moved into the agent.
+No top-level Campaigns product. Dial flows, WhatsApp, Meet, Squads, Knowledge, Scheduling, and Memory stay reachable via **Agent → Reach / Channels** (and legacy URLs).
 
 ---
 
-## Sidebar (target)
+## Sidebar (shipped)
 
 ```
 Home
-Agents              ← main (Squads as Agents sub-nav later)
+Agents
 
 OPERATE
   Activity
@@ -33,11 +33,11 @@ Integrations
 Workspace · Providers · Developers · Billing
 ```
 
-**Phase 1:** Primary nav above + a temporary **More** group (Campaigns, WhatsApp, Meetings, Squads, Knowledge, Scheduling, Memory) so nothing is stranded while Reach/Channels land inside the builder.
+Former **More** items are not in the sidebar. Open them from the agent, Integrations, or direct URL (`/app/campaigns`, `/app/whatsapp`, `/app/meet`, `/app/squads`, `/app/knowledge-bases`, `/app/scheduling`, `/app/memory`).
 
 ---
 
-## Agent Builder tabs (future — do not rewrite overnight)
+## Agent Builder tabs
 
 | Tab | Purpose |
 |-----|---------|
@@ -52,7 +52,7 @@ Workspace · Providers · Developers · Billing
 | Versions | History |
 
 Meeting prompt + delegate live under **Channels → Meetings**.  
-Squads = specialist handoffs, not call-vs-meet prompts.
+Squads = specialist handoffs on the Call step (and `/app/squads`).
 
 ---
 
@@ -66,15 +66,15 @@ Squads = specialist handoffs, not call-vs-meet prompts.
 | **4 Channels** | Meetings card: meeting prompt, self vs delegate, memory/call-context toggles; WA/Email unchanged | Additive card on Channels |
 | **5 Custom Reach** | Journey step editor on Reach: add/reorder/edit Call, Wait, WA, Email, Callback, Webhook, If…; fork preset → `custom` | Additive on JourneyPanel |
 | **6 Squads runtime** | Call step optional squad picker; workflow dial stamps campaign.squadId for live handoffs | Light (Reach editor + workflow-engine) |
-| **7 Polish** | Onboarding, purge “campaign” copy, remove More | Cleanup |
+| **7 Polish** | Home checklist; remove More; Calls→Activity; campaign→dial-flow copy; Settings labels | Cleanup |
 
 ---
 
 ## Safety
 
-- Never delete Agent Builder tabs or rewrite `builder.tsx` wholesale in Phase 1.
-- Old URLs (`/app/campaigns`, `/app/whatsapp`, `/app/meet`, …) keep working until their UI is absorbed into the agent.
+- Old URLs (`/app/campaigns`, `/app/whatsapp`, `/app/meet`, …) keep working.
 - Partner / managed-client nav stays trimmed and functional.
+- Internal API / DB field names (`campaign`, `campaignId`) are unchanged.
 
 ---
 
@@ -82,5 +82,5 @@ Squads = specialist handoffs, not call-vs-meet prompts.
 
 1. New user finds **Create agent** in under a minute.  
 2. Existing agent builder still opens every current tab.  
-3. Campaigns / WhatsApp / Meet still reachable during migration.  
-4. Later: form→call without leaving the agent; meeting mode/delegate; custom Reach steps.
+3. Dial flows / WhatsApp / Meet still reachable via agent or URL.  
+4. Form→call, meeting mode/delegate, custom Reach steps, and squad on Call all work from the agent.
