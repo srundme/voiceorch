@@ -67,27 +67,105 @@ const WS_BASE = "wss://api.sarvam.ai/speech-to-text/ws";
 /** Sarvam's VAD frame size. Fixed in SAMPLES, so its duration varies with sample rate. */
 const VAD_FRAME_SAMPLES = 512;
 
-/**
- * Sarvam VAD counts in frames of a FIXED 512 samples, so a frame is 32ms at
- * 16kHz but 64ms at 8kHz — every frame-count default is worth double the
- * wall-clock time on telephony audio.
- *
- * `first_turn_min_speech_frames` (server default 8, unchanged by
- * high_vad_sensitivity) is the consecutive-speech requirement before the FIRST
- * speech segment of a connection opens. At 8kHz the default demands 512ms of
- * continuous speech, so short first replies ("Yes", "Okay", "ஆமா") never open a
- * segment and are lost with no transcript and no speech_start. "First turn"
- * resets on every socket, so each reconnect / live language switch re-arms it.
- *
- * Scale the frame count by sample rate to hold Sarvam's intended 256ms window.
- */
-export function firstTurnMinSpeechFrames(sampleRate: 8000 | 16000): number {
-  return sampleRate === 8000 ? 4 : 8;
-}
-
 /** Wall-clock duration of one Sarvam VAD frame (fixed 512 samples) at a given rate. */
 export function vadFrameMs(sampleRate: 8000 | 16000): number {
   return (VAD_FRAME_SAMPLES / sampleRate) * 1000;
+}
+
+/**
+ * Convert a wall-clock window into Sarvam VAD frames at the rate we are actually
+ * streaming.
+ *
+ * Every Sarvam VAD parameter is a FRAME COUNT, and a frame is a fixed 512 samples
+ * — 32ms at 16kHz but 64ms at 8kHz. So any hardcoded frame count silently means
+ * TWICE as long on telephony as it does on a webcall. That is not a hypothetical:
+ * it is exactly how first-turn replies were being lost (see below). Express every
+ * VAD setting in milliseconds and derive the frame count here, and the same
+ * configured value means the same thing on both paths by construction.
+ */
+export function msToVadFrames(ms: number, sampleRate: 8000 | 16000): number {
+  return Math.max(1, Math.round(ms / vadFrameMs(sampleRate)));
+}
+
+/**
+ * Consecutive speech required before the FIRST speech segment of a connection
+ * opens. Sarvam's server default is 8 frames and `high_vad_sensitivity` does not
+ * touch it, so at 8kHz it demands 512ms of continuous speech: short first replies
+ * ("Yes", "Okay", "ஆமா" — typically 200-400ms) never open a segment and are lost
+ * with no transcript and no speech_start. "First turn" resets per connection, so
+ * every reconnect and live language switch re-arms it.
+ *
+ * 256ms is Sarvam's intended window — the frame default read at 16kHz.
+ */
+export const DEFAULT_FIRST_TURN_MIN_SPEECH_MS = 256;
+
+/**
+ * Silence required to close a speech segment — the single biggest contributor to
+ * turn latency, because Sarvam emits a transcript ONLY at end-of-speech.
+ *
+ * `high_vad_sensitivity` is a coarse two-position switch over this value, and at
+ * 8kHz both positions are bad: ON is 2 frames (~128ms, which chopped callers
+ * mid-utterance on PSTN — call 4940) and OFF is 18-of-24 frames (~1150-1550ms of
+ * dead air on every single turn). Sending the underlying frame counts explicitly
+ * gives the whole range in between, in real milliseconds, at any sample rate.
+ *
+ * Left null by default so behaviour is unchanged until an operator opts in.
+ */
+export const DEFAULT_END_OF_SPEECH_SILENCE_MS: number | null = null;
+
+/**
+ * Sarvam tolerates a stray non-silent blip inside the silence window rather than
+ * demanding a strictly consecutive run — its own default is 18 silent frames out
+ * of a 24-frame window. Mirror that ratio so a click or breath late in the pause
+ * does not reset the countdown and stall the turn.
+ */
+const NEGATIVE_FRAMES_TOLERANCE_RATIO = 18 / 24;
+
+/**
+ * Frame counts for the end-of-speech silence boundary, derived from a wall-clock
+ * target. Returns the `negative_frames_count` / `negative_frames_window` pair.
+ */
+export function endOfSpeechFrames(
+  silenceMs: number,
+  sampleRate: 8000 | 16000,
+): { count: number; window: number } {
+  const count = msToVadFrames(silenceMs, sampleRate);
+  return { count, window: Math.ceil(count / NEGATIVE_FRAMES_TOLERANCE_RATIO) };
+}
+
+/**
+ * Resolve a millisecond setting: per-agent config wins, then a deploy-wide env
+ * override, then the documented default. Out-of-range values are clamped rather
+ * than trusted, so a bad config cannot disable VAD outright.
+ *
+ * `null` and `undefined` both mean "not configured" — agent config carries null
+ * for an unset field, and it must still fall through to the env override.
+ */
+export function resolveMsSetting(
+  configured: number | null | undefined,
+  envVar: string,
+  fallback: number,
+  bounds: { min: number; max: number },
+): number {
+  return resolveOptionalMsSetting(configured, envVar, fallback, bounds) ?? fallback;
+}
+
+/**
+ * As resolveMsSetting, but a null fallback means the setting stays absent so the
+ * provider's own default applies — used where we deliberately do not want to
+ * impose a value of our own.
+ */
+export function resolveOptionalMsSetting(
+  configured: number | null | undefined,
+  envVar: string,
+  fallback: number | null,
+  bounds: { min: number; max: number },
+): number | null {
+  const clamp = (n: number): number => Math.max(bounds.min, Math.min(bounds.max, Math.round(n)));
+  if (typeof configured === "number" && Number.isFinite(configured)) return clamp(configured);
+  const fromEnv = envInt(envVar, Number.NaN);
+  if (Number.isFinite(fromEnv)) return clamp(fromEnv);
+  return fallback === null ? null : clamp(fallback);
 }
 
 /** Only saaras:v3/v4 support the `mode` parameter. */
@@ -207,6 +285,9 @@ export class SarvamSTT implements STTAdapter {
   private readonly highVadSensitivity: boolean;
   private readonly speechEndFlushMs: number;
   private readonly incompleteHoldMs: number;
+  /** Wall-clock VAD windows; converted to frames at connect time (see msToVadFrames). */
+  private readonly firstTurnMinSpeechMs: number;
+  private readonly endOfSpeechSilenceMs: number | null;
   private readonly cfg: STTConfig;
   /** Native sample rate to actually stream to Sarvam — 8000 for telephony, 16000 for webcall. */
   private readonly sampleRate: 8000 | 16000;
@@ -227,6 +308,8 @@ export class SarvamSTT implements STTAdapter {
           highVadSensitivity?: boolean;
           speechEndFlushMs?: number;
           incompleteHoldMs?: number;
+          firstTurnMinSpeechMs?: number | null;
+          endOfSpeechSilenceMs?: number | null;
         })
       : {};
 
@@ -269,6 +352,22 @@ export class SarvamSTT implements STTAdapter {
           ? Math.max(50, Math.min(1000, Math.round(extra.incompleteHoldMs)))
           : 350;
 
+    // VAD windows are configured in milliseconds and converted to frames against
+    // the live sample rate, so one value behaves identically on 8kHz telephony and
+    // 16kHz webcall. Agent config wins; env is the deploy-wide override.
+    this.firstTurnMinSpeechMs = resolveMsSetting(
+      extra.firstTurnMinSpeechMs,
+      "SARVAM_FIRST_TURN_MIN_SPEECH_MS",
+      DEFAULT_FIRST_TURN_MIN_SPEECH_MS,
+      { min: 32, max: 2000 },
+    );
+    this.endOfSpeechSilenceMs = resolveOptionalMsSetting(
+      extra.endOfSpeechSilenceMs,
+      "SARVAM_END_OF_SPEECH_SILENCE_MS",
+      DEFAULT_END_OF_SPEECH_SILENCE_MS,
+      { min: 64, max: 2000 },
+    );
+
     logger.info(
       {
         langCode: this.langCode,
@@ -278,6 +377,14 @@ export class SarvamSTT implements STTAdapter {
         highVadSensitivity: this.highVadSensitivity,
         speechEndFlushMs: this.speechEndFlushMs,
         incompleteHoldMs: this.incompleteHoldMs,
+        sampleRate: this.sampleRate,
+        vadFrameMs: vadFrameMs(this.sampleRate),
+        firstTurnMinSpeechMs: this.firstTurnMinSpeechMs,
+        firstTurnMinSpeechFrames: msToVadFrames(this.firstTurnMinSpeechMs, this.sampleRate),
+        endOfSpeechSilenceMs: this.endOfSpeechSilenceMs,
+        endOfSpeechFrames: this.endOfSpeechSilenceMs
+          ? endOfSpeechFrames(this.endOfSpeechSilenceMs, this.sampleRate)
+          : null,
       },
       "Sarvam STT: mode resolved",
     );
@@ -359,10 +466,21 @@ export class SarvamSTT implements STTAdapter {
         high_vad_sensitivity: this.highVadSensitivity ? "true" : "false",
         vad_signals: "true", // emit speech_start / speech_end events
         flush_signal: "true", // allow manual buffer flush via flush() call
-        // Sample-rate-compensated so 8kHz telephony keeps the same 256ms
-        // first-turn window as 16kHz — see firstTurnMinSpeechFrames().
-        first_turn_min_speech_frames: String(firstTurnMinSpeechFrames(sampleRate)),
+        // Converted from milliseconds at the live sample rate, so the window is the
+        // same wall-clock length on 8kHz telephony as on 16kHz — a raw frame count
+        // here would mean twice as long on telephony (lost short first replies).
+        first_turn_min_speech_frames: String(
+          msToVadFrames(this.firstTurnMinSpeechMs, sampleRate),
+        ),
       });
+      // Explicit end-of-speech boundary. Unset by default, which leaves Sarvam on
+      // whichever preset high_vad_sensitivity selects; set it to escape that
+      // two-position switch and choose a real silence window in milliseconds.
+      if (this.endOfSpeechSilenceMs !== null) {
+        const { count, window } = endOfSpeechFrames(this.endOfSpeechSilenceMs, sampleRate);
+        params.set("negative_frames_count", String(count));
+        params.set("negative_frames_window", String(window));
+      }
       if (MODE_CAPABLE.has(model)) {
         params.set("mode", mode);
       }

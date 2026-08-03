@@ -22,6 +22,7 @@ import {
   resolveSarvamHighVadSensitivity,
 } from "@workspace/db/call-engine-defaults";
 import { resolveMicSensitivity, getMicSensitivityThresholds } from "../orchestration/mic-sensitivity.js";
+import { optionalMs } from "../orchestration/stt-tuning.js";
 import { getAttachedSourceIds } from "../orchestration/kb-retrieval.js";
 import type { AgentConfig, AgentTool, SessionTransport } from "../orchestration/types.js";
 import type { VoiceSession } from "../orchestration/voice-session.js";
@@ -285,6 +286,10 @@ async function buildTargetAgentConfig(
     sarvamHighVadSensitivity: resolveSarvamHighVadSensitivity(agentCfg["sarvamHighVadSensitivity"]),
     sarvamSpeechEndFlushMs: clampSarvamSpeechEndFlushMs(agentCfg["sarvamSpeechEndFlushMs"] as number | undefined),
     sarvamIncompleteHoldMs: clampSarvamIncompleteHoldMs(agentCfg["sarvamIncompleteHoldMs"] as number | undefined),
+    // Wall-clock VAD windows; the adapter converts them to frames at the live
+    // sample rate. Null means "leave the provider default alone".
+    sarvamFirstTurnMinSpeechMs: optionalMs(agentCfg["sarvamFirstTurnMinSpeechMs"]),
+    sarvamEndOfSpeechSilenceMs: optionalMs(agentCfg["sarvamEndOfSpeechSilenceMs"]),
     kbBakedOnly: (agentCfg["kbBakedOnly"] as boolean | undefined) ?? false,
     voiceStack,
     geminiLive: voiceStack === "gemini_live"

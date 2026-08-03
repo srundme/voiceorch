@@ -53,6 +53,7 @@ import {
 } from "./endpointing.js";
 import { checkTranscriptQuality, pickClarificationPhrase, isSemanticInterrupt, isAccidentalInterruptPhrase, shouldHoldFragmentForCoalesce, isUltraShortNoiseFragment, isCallerAudioDifficulty, isFalseInterruptionScrap, isTopicClarificationAsk, isBackchannelOnlyUtterance, normalizeSttPhonetics, isNearDuplicateUtterance } from "./transcriptQuality.js";
 import { buildInterruptionHint, joinHeardSentences, resolveSpokenForHistory, estimateHeardPrefix, composeHeardWithMid } from "./bargeHeard.js";
+import { resolveSttTuning, type SttTuning } from "./stt-tuning.js";
 import { getCachedFillerPcm, setCachedFillerPcm } from "./fillerPcmCache.js";
 import { FILLER_SEQUENCE_ID, InterruptionManager } from "./interruption-manager.js";
 import { logger } from "../lib/logger.js";
@@ -135,24 +136,13 @@ const FRAGMENT_COALESCE_MS_DEFAULT = 1000;  // fallback when agentConfig omits p
 /** Listening-side hold for ack fragments ("Yes Ma'am") — was 150ms; call 4856
  *  flushed before the caller finished "…how are you?" → zigzag replies. */
 const FRAGMENT_COALESCE_LISTENING_MS_DEFAULT = 250;
-const VAD_FLUSH_BACKSTOP_MS   = 6000;   // speech_start with no interim/final/speech_end for this long → one-shot STT flush (lost-turn anomaly)
 const VAD_FLUSH_COOLDOWN_MS   = 5000;   // min interval between backstop flushes — keeps the flush strictly anomaly-only
-/** VAD speech long enough that a one-syllable transcript means STT mis-heard a real
- *  utterance rather than picked up line noise (call 5490: 1.36s of speech → "Hmm"). */
-const SUBSTANTIVE_SPEECH_MS   = 700;
 /** Lost-turn recovery: when the streaming socket loses an utterance entirely, re-run
  *  the buffered caller audio through batch STT rather than leaving dead air.
- *  Set STT_LOST_TURN_RECOVERY=0 to disable without a redeploy. */
+ *  Set STT_LOST_TURN_RECOVERY=0 to disable without a redeploy.
+ *  All of its TIMINGS are resolved per-call in `this.sttTuning` (see stt-tuning.ts)
+ *  so they track the agent's own turn-taking settings instead of being fixed here. */
 const LOST_TURN_RECOVERY_ENABLED = process.env.STT_LOST_TURN_RECOVERY !== "0";
-/** Local silence required before recovery runs — proof the caller actually finished,
- *  so we never re-transcribe the middle of a live utterance and cut them off. */
-const RECOVERY_MIN_SILENCE_MS = 700;
-/** Cap on buffered caller audio. Sarvam's batch endpoint rejects audio over 30s. */
-const RECOVERY_MAX_AUDIO_MS   = 20_000;
-/** Below this there is no utterance worth recovering, and some adapters reject it. */
-const RECOVERY_MIN_AUDIO_MS   = 400;
-/** Window after a recovery in which a matching streaming final is the same turn. */
-const RECOVERY_DEDUP_MS       = 10_000;
 const LLM_TTFT_FALLBACK_MS    = Number(process.env.LLM_TTFT_FALLBACK_MS ?? 1200); // abort slow primary LLM
 const LLM_SLOW_TTFT_MS        = Number(process.env.LLM_SLOW_TTFT_MS ?? 1200);     // warn in execution logs
 const TTS_STREAM_TIMEOUT_MS   = 8000;   // abort TTS streaming fetch if no data within 8 s —
@@ -727,8 +717,10 @@ export class OrchestrationPipeline implements VoiceSession {
   /** Duration of the last completed VAD speech segment — distinguishes a real
    *  utterance that STT mis-heard from an actual noise blip (call 5490). */
   private _lastVadSegmentMs = 0;
+  /** Resolved turn-path timings for lost-turn detection and recovery. */
+  private readonly sttTuning: SttTuning;
   /** Rolling window of caller-only audio, replayed through batch STT when the
-   *  streaming socket loses a turn. Holds at most RECOVERY_MAX_AUDIO_MS. */
+   *  streaming socket loses a turn. Bounded by sttTuning.recoveryMaxAudioMs. */
   private _recoveryAudio: Buffer[] = [];
   private _recoveryBytes = 0;
   /** Text recovered via batch STT, kept briefly so a late streaming final that
@@ -1550,7 +1542,7 @@ export class OrchestrationPipeline implements VoiceSession {
   // ── Lost-turn backstop (calls 4831/4833) ────────────────────────────────────
   // Sarvam occasionally emits VAD speech_start but then NO interim, NO final and
   // NO speech_end — the caller's utterance is silently lost until the 10s stall
-  // reprompt. Backstop: if nothing arrives within VAD_FLUSH_BACKSTOP_MS of
+  // reprompt. Backstop: if nothing arrives within sttTuning.lostTurnBackstopMs of
   // speech_start, drain whatever the adapter is holding locally.
   //
   // Scope note: since the socket-level `flush:true` bypass (manual flushes corrupt
@@ -1583,7 +1575,7 @@ export class OrchestrationPipeline implements VoiceSession {
         status: "info",
         turnNumber: this._activeTurnIndex,
         warningFlags: ["lost_turn_force_flush"],
-        metadata: { event: "Lost-Turn Force Flush", holdMs: VAD_FLUSH_BACKSTOP_MS },
+        metadata: { event: "Lost-Turn Force Flush", holdMs: this.sttTuning.lostTurnBackstopMs },
       });
       try {
         this.streamSTT.flush();
@@ -1594,7 +1586,7 @@ export class OrchestrationPipeline implements VoiceSession {
       // socket produced nothing at all there is nothing to drain, so replay the
       // buffered audio through batch STT rather than leaving the caller in dead air.
       void this.attemptLostTurnRecovery();
-    }, VAD_FLUSH_BACKSTOP_MS);
+    }, this.sttTuning.lostTurnBackstopMs);
   }
 
   /**
@@ -1607,7 +1599,7 @@ export class OrchestrationPipeline implements VoiceSession {
   private captureRecoveryAudio(frame: Buffer): void {
     if (!LOST_TURN_RECOVERY_ENABLED) return;
     if (this.isPlaying || this.isSendingTtsAudio || Date.now() < this.bargeInHoldUntil) return;
-    const maxBytes = this.sttSampleRate * 2 * (RECOVERY_MAX_AUDIO_MS / 1000);
+    const maxBytes = this.sttSampleRate * 2 * (this.sttTuning.recoveryMaxAudioMs / 1000);
     this._recoveryAudio.push(frame);
     this._recoveryBytes += frame.length;
     while (this._recoveryBytes > maxBytes && this._recoveryAudio.length > 1) {
@@ -1636,7 +1628,7 @@ export class OrchestrationPipeline implements VoiceSession {
     if (this.closed || this.isProcessing || this.isPlaying || this.isSendingTtsAudio) return;
 
     const silentForMs = Date.now() - this.lastCallerActivityAt;
-    if (silentForMs < RECOVERY_MIN_SILENCE_MS) {
+    if (silentForMs < this.sttTuning.recoveryMinSilenceMs) {
       logger.info(
         { callId: this.config.callId, silentForMs },
         "Lost-turn recovery skipped — caller still speaking",
@@ -1645,7 +1637,7 @@ export class OrchestrationPipeline implements VoiceSession {
     }
     // Too little audio to be a real utterance — some adapters reject it outright.
     const bufferedMs = Math.round((this._recoveryBytes / 2 / this.sttSampleRate) * 1000);
-    if (bufferedMs < RECOVERY_MIN_AUDIO_MS) return;
+    if (bufferedMs < this.sttTuning.recoveryMinAudioMs) return;
 
     const audio = Buffer.concat(this._recoveryAudio);
     const audioMs = bufferedMs;
@@ -1960,6 +1952,13 @@ export class OrchestrationPipeline implements VoiceSession {
     this.callDirection = config.callDirection ?? "inbound";
     this.isResumeDroppedCall = config.isResumeDroppedCall === true;
     this.agent = config.agentConfig;
+    // Recovery/backstop timings track this agent's own turn-taking settings, so a
+    // patiently-tuned agent gets a patient recovery without a second set of knobs.
+    this.sttTuning = resolveSttTuning({
+      vadSilenceMs: this.agent.vadSilenceMs,
+      endpointingSilenceMs: this.agent.asrEndpointingSilenceMs,
+      stallBackstopMs: STALL_BACKSTOP_MS,
+    });
     this.recording = new RecordingBuffer(
       8000,
       config.telephonyProvider === "webcall" ? WEBCALL_GAP_RESYNC_MS : undefined,
@@ -2099,6 +2098,8 @@ export class OrchestrationPipeline implements VoiceSession {
           highVadSensitivity: this.agent.sarvamHighVadSensitivity,
           speechEndFlushMs: this.agent.sarvamSpeechEndFlushMs,
           incompleteHoldMs: this.agent.sarvamIncompleteHoldMs,
+          firstTurnMinSpeechMs: this.agent.sarvamFirstTurnMinSpeechMs,
+          endOfSpeechSilenceMs: this.agent.sarvamEndOfSpeechSilenceMs,
         })
       : providerExtraConfig;
     this.stt = createSTTAdapter(
@@ -2547,7 +2548,7 @@ export class OrchestrationPipeline implements VoiceSession {
     if (
       this._recoveredText &&
       closeReason !== "force_finalized" &&
-      Date.now() - this._recoveredAt < RECOVERY_DEDUP_MS &&
+      Date.now() - this._recoveredAt < this.sttTuning.recoveryDedupMs &&
       isNearDuplicateUtterance(transcript, this._recoveredText)
     ) {
       logger.info(
@@ -6411,7 +6412,7 @@ export class OrchestrationPipeline implements VoiceSession {
       // was substantial, STT mis-heard a real utterance, and dropping it silently
       // leaves the caller waiting through dead air (call 5490: 1.36s → "Hmm").
       const segmentMs = this._lastVadSegmentMs;
-      if (segmentMs >= SUBSTANTIVE_SPEECH_MS) {
+      if (segmentMs >= this.sttTuning.substantiveSpeechMs) {
         logger.warn(
           { callId: this.config.callId, transcript: transcript.slice(0, 80), segmentMs },
           "Noise-stub transcript from substantial speech — asking caller to repeat",

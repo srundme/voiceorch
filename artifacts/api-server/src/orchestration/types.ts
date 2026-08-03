@@ -449,6 +449,22 @@ export interface AgentConfig {
    */
   sarvamIncompleteHoldMs: number;
   /**
+   * Consecutive speech (ms) required before the FIRST speech segment of a Sarvam
+   * connection opens. Configured in milliseconds rather than VAD frames because a
+   * frame is a fixed 512 samples — a frame count means twice as long on 8kHz
+   * telephony as on a 16kHz webcall, which silently dropped short first replies.
+   * Null uses the adapter default (256ms, Sarvam's intended window).
+   */
+  sarvamFirstTurnMinSpeechMs: number | null;
+  /**
+   * Silence (ms) required to close a speech segment — the dominant term in turn
+   * latency, since Sarvam emits a transcript only at end-of-speech. Null leaves
+   * Sarvam on whichever preset `sarvamHighVadSensitivity` selects, which on
+   * telephony is a choice between ~128ms (chops callers) and ~1150ms+ (dead air).
+   * Set a value to pick a real window in between.
+   */
+  sarvamEndOfSpeechSilenceMs: number | null;
+  /**
    * When true, skip per-turn pgvector retrieval entirely — the KB is already baked into
    * the system prompt (see KB_INJECT_MAX_CHARS). Saves ~150-200ms per turn by eliminating
    * the embed+vector-search round-trip before each LLM call. Use when the KB is small/stable

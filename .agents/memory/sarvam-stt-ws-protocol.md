@@ -92,6 +92,26 @@ POST `https://api.sarvam.ai/speech-to-text`
 - Fine-tune overrides exist as WS query params: `negative_frames_count/window`, `interrupt_min_speech_frames`, `first_turn_min_speech_frames` (8), `start_speech_volume_threshold` (dB floor, useful for noisy lines), `pre_speech_pad_frames` (9).
 - Consequence: per-turn perceived latency is dominated by our pacing delay (linearDelayMs) + LLM TTFT, not Sarvam VAD.
 
+## Configure VAD in MILLISECONDS, never in frames (Aug 2026)
+Every Sarvam VAD parameter is a count of frames, and a frame is a fixed **512 samples** — 32ms @16kHz but **64ms @8kHz**. So any frame count hardcoded in our source means twice as long on telephony as the docs imply. That is not theoretical: it is the whole cause of the lost-first-turn bug below.
+
+The adapter therefore stores these settings as wall-clock ms and converts at connect time against the live sample rate:
+- `msToVadFrames(ms, sampleRate)` — the single conversion point.
+- `first_turn_min_speech_frames` ← `firstTurnMinSpeechMs` (default `DEFAULT_FIRST_TURN_MIN_SPEECH_MS` = 256ms, i.e. Sarvam's intent read at 16kHz).
+- `negative_frames_count` / `negative_frames_window` ← `endOfSpeechSilenceMs` via `endOfSpeechFrames()`, which mirrors Sarvam's own 18-of-24 tolerance ratio so a stray blip late in the pause does not reset the countdown.
+
+Resolution order for each, via `resolveMsSetting` / `resolveOptionalMsSetting`: **per-agent config → env override → documented default**, always clamped so a bad value cannot disable VAD. Per-agent keys are `sarvamFirstTurnMinSpeechMs` and `sarvamEndOfSpeechSilenceMs`; env keys are `SARVAM_FIRST_TURN_MIN_SPEECH_MS` and `SARVAM_END_OF_SPEECH_SILENCE_MS`. Agent config carries `null` for an unset field, so null must fall through to env rather than short-circuit.
+
+Frames are indivisible, so a requested window is met to the nearest frame (at worst 32ms out at 8kHz). Windows that are multiples of 64ms land exactly on both paths. Covered by `sarvam-vad-frames.test.ts`.
+
+## high_vad_sensitivity is a two-position switch, and on telephony both positions are bad
+- ON  = 2 silence frames = **~128ms @8kHz**. Cuts callers mid-utterance on PSTN (call 4940), which is why the platform default was set to OFF.
+- OFF = 18-of-24 frames = **~1150–1550ms @8kHz**. Over a second of dead air on *every* turn, since Sarvam emits a transcript only at end-of-speech.
+
+`SARVAM_STT_LATENCY_DEFAULTS.highVadSensitivity` is `false`, so production agents are on the slow end of that switch. Setting `endOfSpeechSilenceMs` sends the underlying frame counts explicitly and unlocks the whole range in between (e.g. 400ms) instead of choosing between two extremes. Left unset by default so behaviour is unchanged until someone opts in.
+
+**Verify before enabling:** `SARVAM_API_KEY=... pnpm tsx src/scripts/probe-sarvam-vad.ts speech.wav` measures the real boundary per setting and proves Sarvam accepts the params rather than rejecting the socket. The probe imports the same helpers the adapter uses, so a pass is evidence about production.
+
 ## first_turn_min_speech_frames — lost first turns on 8kHz telephony (Aug 2026)
 A VAD frame is a fixed **512 samples**, so its duration depends on sample rate: 32ms @16kHz, **64ms @8kHz**. Every frame-count default is therefore worth DOUBLE the wall-clock time on our telephony path (which streams native 8kHz).
 
@@ -99,7 +119,7 @@ A VAD frame is a fixed **512 samples**, so its duration depends on sample rate: 
 
 "First turn" resets **per connection**, so every reconnect (backoff, zombie-WS terminate) and every live `setLanguage()` switch re-arms the 512ms gate mid-call.
 
-Fix: `buildWsUrl()` now sends a sample-rate-compensated value — **4 frames @8kHz, 8 @16kHz** — holding Sarvam's intended ~256ms window on both paths. Don't "simplify" this back to a constant.
+Fix: `buildWsUrl()` derives the frame count from a millisecond window at the live sample rate — **4 frames @8kHz, 8 @16kHz** for the 256ms default. Don't "simplify" this back to a frame constant; that is the bug, not the fix.
 
 Related: `pre_speech_pad_frames` (9) is also doubled at 8kHz (~576ms of pre-roll), but that only pads a segment that already opened — harmless, not a fix for the above.
 
@@ -118,12 +138,14 @@ Not yet attempted: `start_speech_volume_threshold` (dB floor) to stop line noise
 ## Lost-turn recovery via batch STT (call 5490 dead zones)
 When Sarvam opens a VAD segment and never closes it, no transcript is ever emitted — Sarvam only produces text at end-of-speech — so the caller's words are gone and the line sits dead until the 10s stall reprompt. `flush()` cannot help: it only drains a fragment the adapter is already holding, and in this failure there is nothing to drain.
 
-The pipeline now keeps a rolling `RECOVERY_MAX_AUDIO_MS` (20s) window of **caller-only** audio (capture pauses during playback and the echo grace, so agent TTS echo can never be recovered and answered). When the lost-turn backstop fires, `attemptLostTurnRecovery()` replays that buffer through the batch endpoint and feeds any text back in as a `force_finalized` turn.
+All of its timings are resolved per-call in `stt-tuning.ts` rather than fixed in the pipeline: `recoveryMinSilenceMs` is **twice the agent's own longest turn-closing silence** (so a patiently-tuned agent gets a patient recovery, with a 400ms floor), `recoveryMaxAudioMs` is twice the stall-reprompt window, and `recoveryDedupMs` is twice the backstop. Each also takes an env override (`STT_RECOVERY_*`, `STT_LOST_TURN_BACKSTOP_MS`) for tuning a live call without a redeploy. With platform defaults these derive to exactly the previous fixed values.
+
+The pipeline keeps a rolling `recoveryMaxAudioMs` (20s at defaults) window of **caller-only** audio (capture pauses during playback and the echo grace, so agent TTS echo can never be recovered and answered). When the lost-turn backstop fires, `attemptLostTurnRecovery()` replays that buffer through the batch endpoint and feeds any text back in as a `force_finalized` turn.
 
 Safety properties, all of which matter:
-- **Never fires mid-utterance.** Requires `RECOVERY_MIN_SILENCE_MS` (700ms) of local energy-VAD silence first, so a caller who is still talking is never cut off.
+- **Never fires mid-utterance.** Requires `recoveryMinSilenceMs` (700ms at defaults) of local energy-VAD silence first, so a caller who is still talking is never cut off.
 - **Never gates the streaming feed.** It buffers a *copy* of the frames; the DO-NOT-GATE invariant is intact.
-- **Duplicate suppression.** The socket re-queues buffered audio across a reconnect, so the same utterance can arrive as a streaming final afterwards. `isNearDuplicateUtterance()` drops it within `RECOVERY_DEDUP_MS` (10s). One-word replies dedupe only on an exact match — processing a stray "yes" twice mid-booking is worse than reprompting.
+- **Duplicate suppression.** The socket re-queues buffered audio across a reconnect, so the same utterance can arrive as a streaming final afterwards. `isNearDuplicateUtterance()` drops it within `recoveryDedupMs` (12s at defaults). One-word replies dedupe only on an exact match — processing a stray "yes" twice mid-booking is worse than reprompting.
 - **Kill switch:** `STT_LOST_TURN_RECOVERY=0` disables it without a redeploy.
 
 Still unverified against a live call — the trigger only occurs during a real Sarvam stall. Watch for `stt_lost_turn_recovered` in the exec log; if duplicate turns appear, set the env var to 0 and re-tune the dedup window.
@@ -141,4 +163,4 @@ For a booking agent ("book at 11", "meet at 3") this hit a large share of turns.
 Known limitation (pre-existing, untouched): a fully letter-by-letter DOMAIN (`"@g m a i l . c o m"`) is only partly merged, because that regex's character class excludes whitespace.
 
 ## Do not drop a noise stub from a long utterance (call 5490)
-`isUltraShortNoiseFragment` judges TEXT only. In call 5490 a **1.36s** utterance transcribed as `"Hmm"` and was silently discarded, so the agent said nothing at all. `processTurn` now compares the transcript against the measured VAD segment (`_lastVadSegmentMs`): below `SUBSTANTIVE_SPEECH_MS` (700ms) it is still dropped as noise, at or above it the caller is asked to repeat via `respondWithClarification`. Logged as `Utterance Misheard` / `stt_misheard`.
+`isUltraShortNoiseFragment` judges TEXT only. In call 5490 a **1.36s** utterance transcribed as `"Hmm"` and was silently discarded, so the agent said nothing at all. `processTurn` now compares the transcript against the measured VAD segment (`_lastVadSegmentMs`): below `substantiveSpeechMs` (700ms, `STT_SUBSTANTIVE_SPEECH_MS`) it is still dropped as noise, at or above it the caller is asked to repeat via `respondWithClarification`. Logged as `Utterance Misheard` / `stt_misheard`.
