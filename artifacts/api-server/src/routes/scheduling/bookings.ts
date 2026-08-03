@@ -289,6 +289,7 @@ router.post("/scheduling/bookings", requireAuth, async (req, res): Promise<void>
       bookingId: booking.id,
       notes: booking.attendeeNotes,
       meetLink,
+      calendarSyncStatus,
     });
   }
   void dispatchSchedulingWebhooks(clerkId, "scheduling.booking.created", { booking: formatBooking(booking) });

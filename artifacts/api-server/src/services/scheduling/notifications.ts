@@ -16,6 +16,7 @@ interface BookingEmailData {
   meetLink?: string | null;
   cancelLink?: string | null;
   rescheduleLink?: string | null;
+  calendarSyncStatus?: string | null;
 }
 
 function getTransporter() {
@@ -149,6 +150,14 @@ We look forward to speaking with you!`;
 }
 
 export async function sendBookingCreatedEmail(data: BookingEmailData): Promise<void> {
+  if (data.calendarSyncStatus === "synced") {
+    logger.info(
+      { bookingId: data.bookingId, attendeeEmail: data.attendeeEmail },
+      "Skipping system SMTP booking email: Google Calendar invitation was sent from the connected Google account",
+    );
+    return;
+  }
+
   const transporter = getTransporter();
   if (!transporter) {
     logger.warn("GMAIL_USER or GMAIL_APP_PASSWORD not set — skipping email notification");

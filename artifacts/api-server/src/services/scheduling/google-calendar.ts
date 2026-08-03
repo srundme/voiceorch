@@ -686,7 +686,7 @@ export async function deleteCalendarEvent(connectionId: string, eventId: string,
   client.setCredentials({ access_token: tokens.accessToken });
   const calendar = google.calendar({ version: "v3", auth: client });
   try {
-    await calendar.events.delete({ calendarId: googleCalendarId ?? "primary", eventId });
+    await calendar.events.delete({ calendarId: googleCalendarId ?? "primary", eventId, sendUpdates: "all" });
     logger.info({ connectionId, eventId }, "Google Calendar event deleted");
   } catch (err) {
     logger.warn({ err, connectionId, eventId }, "Failed to delete Google Calendar event");
