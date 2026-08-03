@@ -222,6 +222,14 @@ See you then!`;
 }
 
 export async function sendBookingCancelledEmail(data: BookingEmailData): Promise<void> {
+  if (data.calendarSyncStatus === "synced") {
+    logger.info(
+      { bookingId: data.bookingId, attendeeEmail: data.attendeeEmail },
+      "Skipping system SMTP booking cancel email: Google Calendar cancellation was sent from the connected Google account",
+    );
+    return;
+  }
+
   const transporter = getTransporter();
   if (!transporter) return;
 
@@ -253,6 +261,14 @@ Booking Reference: #${data.bookingId}`;
 }
 
 export async function sendBookingRescheduledEmail(data: BookingEmailData & { oldSlotStart?: Date }): Promise<void> {
+  if (data.calendarSyncStatus === "synced") {
+    logger.info(
+      { bookingId: data.bookingId, attendeeEmail: data.attendeeEmail },
+      "Skipping system SMTP booking reschedule email: Google Calendar notification was sent from the connected Google account",
+    );
+    return;
+  }
+
   const transporter = getTransporter();
   if (!transporter) return;
 
