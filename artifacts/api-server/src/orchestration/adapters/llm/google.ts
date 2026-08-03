@@ -101,7 +101,7 @@ const CACHE_MIN_CHARS = Number(process.env.GEMINI_CACHE_MIN_CHARS) || 1024;
 const CACHE_TTL_SECONDS = Number(process.env.GEMINI_CACHE_TTL_SECONDS) || 900;
 const CACHE_MAX_WARMS = Number(process.env.GEMINI_CACHE_MAX_WARMS) || 3;
 const CACHE_WARM_WAIT_MS = 3000;
-const REQUEST_TIMEOUT_MS = Number(process.env.GEMINI_REQUEST_TIMEOUT_MS) || 8000;
+const REQUEST_TIMEOUT_MS = Math.max(10000, Number(process.env.GEMINI_REQUEST_TIMEOUT_MS) || 12000);
 const GEMINI3_THINKING_HEADROOM = Number(process.env.GEMINI3_THINKING_HEADROOM) || 256;
 
 /** Model-aware thinking config.
