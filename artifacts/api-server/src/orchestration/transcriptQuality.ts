@@ -504,18 +504,42 @@ export function isSemanticInterrupt(text: string): boolean {
  * E.g., "karthik 1 2 3 அட் ஜிமெல் டாட் காம்" -> "karthik123@gmail.com"
  * "user name ऐट जीमेल डॉट कॉम" -> "username@gmail.com"
  */
+/** Words that introduce an address rather than form part of it — the username join stops here. */
+const USERNAME_CARRIER_WORDS = new Set([
+  "my", "the", "this", "that", "it", "its", "it's", "is", "are", "was", "be",
+  "email", "e-mail", "mail", "id", "address", "please", "send", "to", "and",
+  "ஈமெயில்", "மெயில்", "ஐடி", "முகவரி", "ईमेल", "मेल", "आईडी", "पता",
+]);
+/** A username said as whole words ("user name") is short — anything longer is speech. */
+const MAX_USERNAME_WORDS = 2;
+/** Upper bound for letter-by-letter dictation ("k a r t h i k e y a n 0 1"). */
+const MAX_USERNAME_TOKENS = 40;
+
 export function normalizeSpokenEmail(text: string): string {
   if (!text) return text;
   let s = text;
 
-  // Only apply email transformation if email-related tokens are present
-  const hasEmailToken = /(@|அட்|ऐट|\bat\b|at\s*the\s*rate|at\s*rate|டாட்|டட்காம்|डॉट|\bdot\b|dot\s*com|dotcom|ஜிமெயில்|ஜிமெல்|जीमेल|gmail)/iu.test(s);
-  if (!hasEmailToken) return s;
+  // Only apply email transformation when the text is CONFIDENTLY an email.
+  // A bare "at" or "dot" is far too common in ordinary speech: "book an appointment
+  // tomorrow at 11" once tripped this gate, "at" became "@", and the username
+  // de-spacing below then collapsed the whole sentence into
+  // "Iwanttobookanappointmenttomorrow@11:00 AM" (call 5490). Require either an
+  // explicit address marker or a mail-domain token before touching anything.
+  const hasAddressMarker = /(@|at\s*the\s*rate|at\s*rate|அட்ட\s*ரைட்|அட்\s*ரைட்|அட்|ऐट)/iu.test(s);
+  const hasDomainMarker =
+    /(ஜிமெயில்|ஜிமெல்|जीमेल|jmail|g\s*mail|gmail|யாகூ|याहू|yahoo|ஹாட்மெயில்|हॉटमेल|hotmail|டாட்\s*காம்|டட்காம்|डॉट\s*कॉम|dot\s*com|dotcom|dot\s*in|dot\s*org|\.com|\.in\b|\.org)/iu.test(s);
+  if (!hasDomainMarker && !hasAddressMarker) return s;
 
   // Spoken email symbols & punctuation
   s = s.replace(/\b(under\s*score|underbar|அண்டர்ஸ்கோர்|அண்டர்\s*ஸ்கோர்|अंडरस्कोर)\b/giu, "_");
   s = s.replace(/\b(hyphen|dash|minus|டாஷ்|ஹைபன்|டேஷ்|माइनस)\b/giu, "-");
-  s = s.replace(/(அட்ட\s*ரைட்|அட்\s*ரைட்|அட்|ऐट|\bat\s*the\s*rate\b|\bat\s*rate\b|\bat\b)/giu, "@");
+  // Unambiguous address markers always convert.
+  s = s.replace(/(அட்ட\s*ரைட்|அட்\s*ரைட்|அட்|ऐट|\bat\s*the\s*rate\b|\bat\s*rate\b)/giu, "@");
+  // A bare "at" only means "@" when a mail domain is also present ("karthik at
+  // gmail dot com"). Otherwise it is ordinary speech — "call me at 11".
+  if (hasDomainMarker) {
+    s = s.replace(/\bat\b/giu, "@");
+  }
   s = s.replace(/(டாட்\s*காம்|டட்காம்|डॉट\s*कॉम|\bdot\s*com\b|\bdotcom\b)/giu, ".com");
   s = s.replace(/(டாட்\s*இன்|டட்இன்|डॉट\s*इन|\bdot\s*in\b)/giu, ".in");
   s = s.replace(/(டாட்\s*ஆர்க்|डॉट\s*ऑर्ग|\bdot\s*org\b)/giu, ".org");
@@ -567,8 +591,30 @@ export function normalizeSpokenEmail(text: string): string {
       return prefix.replace(/\s+/g, "") + "@";
     });
 
-    // Remove remaining spaces in username before '@'
-    s = s.replace(/(\b[a-zA-Z0-9.\-_]+(?:\s+[a-zA-Z0-9.\-_]+)+)@/, (m, p1) => p1.replace(/\s+/g, "") + "@");
+    // Join a username dictated as separate words ("user name@" -> "username@")
+    // WITHOUT swallowing the carrier phrase that introduces it. The previous
+    // unbounded version joined everything before the '@', so
+    // "my email is karthik@gmail.com" became "myemailiskarthik@gmail.com" and a
+    // whole sentence collapsed into one token (call 5490). Walk back from the '@'
+    // and stop at the first carrier word or after MAX_USERNAME_WORDS.
+    s = s.replace(/([^\s@]+(?:\s+[^\s@]+)*)@/, (match, prefix: string) => {
+      const tokens = prefix.split(/\s+/).filter(Boolean);
+      const username: string[] = [];
+      for (let i = tokens.length - 1; i >= 0; i--) {
+        if (username.length >= MAX_USERNAME_TOKENS) break;
+        if (USERNAME_CARRIER_WORDS.has(tokens[i].toLowerCase())) break;
+        username.unshift(tokens[i]);
+      }
+      if (username.length < 2) return match; // single token — nothing to join
+      // Join only what actually looks like a username: either letter-by-letter
+      // dictation ("k a r t h i k 0 1"), or a name said as a couple of words
+      // ("user name"). A longer run of real words is ordinary speech, not an
+      // address, and joining it is how a whole sentence once became one token.
+      const isDictation = username.every((t) => t.length <= 2);
+      if (!isDictation && username.length > MAX_USERNAME_WORDS) return match;
+      const carrier = tokens.slice(0, tokens.length - username.length);
+      return (carrier.length ? carrier.join(" ") + " " : "") + username.join("") + "@";
+    });
 
     // Remove spaces in domain after '@' (e.g. "@ g m a i l . c o m" -> "@gmail.com")
     s = s.replace(/@([a-zA-Z0-9.\-_]+)/g, (match, domainPart) => {

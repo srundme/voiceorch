@@ -115,5 +115,17 @@ Recovery today is destructive and partly missing:
 
 Not yet attempted: `start_speech_volume_threshold` (dB floor) to stop line noise holding a segment open — the most likely true fix, needs live tuning.
 
+## Email normalizer was corrupting ordinary speech (call 5490)
+`normalizeSpokenEmail` (transcriptQuality.ts) runs on EVERY transcript via `normalizeSttPhonetics`. Its trigger included a bare `\bat\b`, so any sentence containing "at" entered email mode: "at" became "@", then an unbounded username join stripped the spaces from everything before it.
+
+Real damage seen on live transcripts:
+- `"I want to book an appointment tomorrow at 11:00 AM."` → `"Iwanttobookanappointmenttomorrow@11:00 AM."`
+- `"Call me at 5 in the evening"` → `"Callme@5 in the evening"`
+- `"my email is karthik@gmail.com"` → `"myemailiskarthik@gmail.com"`
+
+For a booking agent ("book at 11", "meet at 3") this hit a large share of turns. Fixed by (a) requiring an explicit address marker or a mail-domain token before entering email mode — a bare "at"/"dot" no longer qualifies, (b) converting bare "at" → "@" only when a domain token is present, (c) bounding the username join: letter-by-letter dictation joins freely, whole words join at most `MAX_USERNAME_WORDS` (2), and it stops at carrier words ("my", "email", "is", "to", …). Covered by `spoken-email.test.ts`; the legacy dictation cases in `transcriptQuality.test.ts` still pass unchanged.
+
+Known limitation (pre-existing, untouched): a fully letter-by-letter DOMAIN (`"@g m a i l . c o m"`) is only partly merged, because that regex's character class excludes whitespace.
+
 ## Do not drop a noise stub from a long utterance (call 5490)
 `isUltraShortNoiseFragment` judges TEXT only. In call 5490 a **1.36s** utterance transcribed as `"Hmm"` and was silently discarded, so the agent said nothing at all. `processTurn` now compares the transcript against the measured VAD segment (`_lastVadSegmentMs`): below `SUBSTANTIVE_SPEECH_MS` (700ms) it is still dropped as noise, at or above it the caller is asked to repeat via `respondWithClarification`. Logged as `Utterance Misheard` / `stt_misheard`.
