@@ -7848,8 +7848,16 @@ export class OrchestrationPipeline implements VoiceSession {
         },
       };
 
+      const toolAliasMap: Record<string, string> = {
+        book_appointment: "native_booking",
+        check_availability: "native_check_availability",
+        reschedule_booking: "native_reschedule",
+        cancel_booking: "native_cancel",
+        list_bookings: "native_list_bookings",
+      };
+      const canonicalName = toolAliasMap[triggeredToolName] ?? triggeredToolName;
       const langPrefix = ((this.currentLang || this.agent.language) ?? "en").split("-")[0] ?? "en";
-      const toolSpecific = TOOL_FILLERS_BY_NAME[triggeredToolName];
+      const toolSpecific = TOOL_FILLERS_BY_NAME[triggeredToolName] ?? TOOL_FILLERS_BY_NAME[canonicalName];
       const filler = triggeredToolName === "end_call"
         ? undefined
         : (toolSpecific?.[langPrefix] ?? TOOL_FILLERS[langPrefix]);
