@@ -25,6 +25,33 @@ const GEMINI_PLANNING_CUE_RE =
   /\b(the user|the caller|i should|i will|i'?ll|let me|based on|acknowledge|i need to|i'?m going to)\b/i;
 
 /**
+ * Parses serialized <tool_call>tool_name{key: "val"}</tool_call> tags from Gemini plain text responses.
+ */
+export function parseGeminiTagToolCall(raw: string): { name: string; args: Record<string, unknown> } | null {
+  if (!raw) return null;
+  const match = /<tool_call>\s*([a-zA-Z0-9_-]+)\s*(\{[\s\S]*?\})\s*<\/tool_call>/i.exec(raw);
+  if (!match) return null;
+  const name = match[1];
+  const body = match[2];
+
+  try {
+    const args = JSON.parse(body);
+    if (typeof args === "object" && args !== null) return { name, args: args as Record<string, unknown> };
+  } catch { /* proceed to key: val parser */ }
+
+  const args: Record<string, unknown> = {};
+  const kvRegex = /([a-zA-Z0-9_-]+)\s*:\s*(?:"([^"]*)"|'([^']*)'|([^,\}\s]+))/g;
+  let kv: RegExpExecArray | null;
+  while ((kv = kvRegex.exec(body)) !== null) {
+    const key = kv[1];
+    const val = kv[2] ?? kv[3] ?? kv[4];
+    args[key] = val;
+  }
+
+  return { name, args };
+}
+
+/**
  * Whole-string strip used for the final assembled reply (transcript/history). Removes
  * leading bracketed state/context lines and, when planning narration precedes it, cuts
  * everything up to and including a "New response …:" handoff. Conservative: a bracketed
@@ -321,7 +348,6 @@ export class GoogleLLM implements LLMAdapter {
     const history = firstUser === -1 ? [] : rawHistory.slice(firstUser);
 
     // Build the "current" message — tool results become plain text (same
-    // reasoning as above: functionResponse in user role is now rejected).
     const lastTurn = messages[messages.length - 1];
     const lastIsTool = lastTurn?.role === "tool";
     const lastMessage: string | Part[] = lastIsTool
@@ -331,7 +357,6 @@ export class GoogleLLM implements LLMAdapter {
     return { history, lastMessage, lastIsTool };
   }
 
-  /** Drain the streaming response — identical for cached and uncached paths. */
   private async drainResult(
     result: { stream: AsyncGenerator<import("@google/generative-ai").EnhancedGenerateContentResponse>; response: Promise<import("@google/generative-ai").EnhancedGenerateContentResponse> },
     onToken: (token: string) => void,
@@ -346,37 +371,34 @@ export class GoogleLLM implements LLMAdapter {
     for await (const chunk of result.stream) {
       const parts = chunk.candidates?.[0]?.content?.parts ?? [];
       for (const part of parts) {
-        // Gemini returns reasoning as parts flagged `thought:true`. They are NOT
-        // reply text — never accumulate them and never forward them to onToken, or
-        // the model's chain-of-thought gets spoken and shown in the transcript.
-        // (The SDK type omits `thought`, so read it defensively.)
         if ((part as { thought?: boolean }).thought === true) continue;
         if (part.text) {
           full += part.text;
-          // Gemini-scoped backstop for untagged planning narration leaking as plain
-          // content. Yields nothing while suppressing a leading preamble.
-          const visible = preambleGuard(part.text);
-          if (visible) onToken(visible);
+          if (!/<tool_call>/i.test(full)) {
+            const visible = preambleGuard(part.text);
+            if (visible) onToken(visible);
+          }
         }
-        // part.functionCall is handled below via response.functionCalls()
       }
     }
 
-    // After stream, resolve the final response and check for function calls
     const response = await result.response;
     const functionCalls = response.functionCalls();
 
+    let targetToolName = functionCalls?.[0]?.name;
+    let targetToolArgs = (functionCalls?.[0]?.args ?? {}) as Record<string, unknown>;
+
+    if (!targetToolName) {
+      const parsed = parseGeminiTagToolCall(full);
+      if (parsed) {
+        targetToolName = parsed.name;
+        targetToolArgs = parsed.args;
+      }
+    }
+
     const meta = response.usageMetadata;
     const metaAny = meta as Record<string, number | undefined> | undefined;
-    // On 2.x, thoughtsTokenCount > 0 means the model thought despite thinkingBudget:0 —
-    // most commonly seen on Gemini 2.5 Flash-Lite for Tamil/Indic inputs where the model
-    // ignores the budget and adds ~5–7 s of silent reasoning to the TTFT. Log it so the
-    // caller can detect and alert on this condition. On 3.x, "minimal" cannot fully
-    // disable thinking, so a small non-zero count is EXPECTED — no warn there.
     const thoughtTokens = metaAny?.thoughtsTokenCount ?? 0;
-    // Surface cap truncation explicitly — a MAX_TOKENS finish means the caller
-    // heard the reply cut mid-sentence. If this fires regularly, raise the
-    // agent's "LLM Max Output Tokens" (dashboard → Advanced Settings).
     const finishReason = (response.candidates?.[0] as { finishReason?: string } | undefined)?.finishReason;
     if (finishReason === "MAX_TOKENS") {
       logger.warn(
@@ -400,20 +422,15 @@ export class GoogleLLM implements LLMAdapter {
       ? {
           inputTokens: meta.promptTokenCount ?? 0,
           outputTokens: meta.candidatesTokenCount ?? 0,
-          // Populated on both the explicit-cache path and Gemini implicit caching,
-          // so the pipeline's "LLM prompt cache" instrumentation reflects hits.
           cachedTokens: metaAny?.cachedContentTokenCount ?? 0,
         }
       : undefined;
 
     if (usage) options?.onUsage?.(usage);
 
-    if (functionCalls?.length && options?.onToolCall) {
-      const fc = functionCalls[0];
-      options.onToolCall(fc.name, (fc.args ?? {}) as Record<string, unknown>);
+    if (targetToolName && options?.onToolCall) {
+      options.onToolCall(targetToolName, targetToolArgs);
     } else {
-      // Strip any leading planning preamble from the final assembled reply so the
-      // stored transcript/history matches the (already-guarded) spoken stream.
       onDone(stripGeminiThinkingPreamble(full), usage);
     }
   }
