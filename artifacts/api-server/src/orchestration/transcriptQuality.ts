@@ -504,6 +504,45 @@ export function isSemanticInterrupt(text: string): boolean {
  * E.g., "karthik 1 2 3 அட் ஜிமெல் டாட் காம்" -> "karthik123@gmail.com"
  * "user name ऐट जीमेल डॉट कॉम" -> "username@gmail.com"
  */
+/**
+ * True when two transcripts are the same utterance heard twice. Used to suppress a
+ * streaming final that arrives after the same audio was already recovered through
+ * batch STT — otherwise the caller's turn is processed twice.
+ *
+ * Compares on a punctuation-stripped, case-folded token basis and accepts either an
+ * exact match or a high containment ratio, since the two engines routinely differ on
+ * filler words and trailing punctuation for identical audio.
+ */
+export function isNearDuplicateUtterance(a: string, b: string): boolean {
+  const tokenize = (s: string): string[] =>
+    s
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}\s]/gu, " ")
+      .split(/\s+/)
+      .filter(Boolean);
+
+  const ta = tokenize(a);
+  const tb = tokenize(b);
+  if (!ta.length || !tb.length) return false;
+  if (ta.join(" ") === tb.join(" ")) return true;
+
+  const [shorter, longer] = ta.length <= tb.length ? [ta, tb] : [tb, ta];
+  // Single-token utterances are too common ("yes", "okay") to match loosely — a
+  // caller really can say "yes" twice in a row.
+  if (shorter.length < 2) return false;
+  const pool = new Map<string, number>();
+  for (const t of longer) pool.set(t, (pool.get(t) ?? 0) + 1);
+  let shared = 0;
+  for (const t of shorter) {
+    const left = pool.get(t) ?? 0;
+    if (left > 0) {
+      shared++;
+      pool.set(t, left - 1);
+    }
+  }
+  return shared / shorter.length >= 0.8;
+}
+
 /** Words that introduce an address rather than form part of it — the username join stops here. */
 const USERNAME_CARRIER_WORDS = new Set([
   "my", "the", "this", "that", "it", "its", "it's", "is", "are", "was", "be",

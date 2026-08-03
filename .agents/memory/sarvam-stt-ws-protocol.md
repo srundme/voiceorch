@@ -115,6 +115,19 @@ Recovery today is destructive and partly missing:
 
 Not yet attempted: `start_speech_volume_threshold` (dB floor) to stop line noise holding a segment open — the most likely true fix, needs live tuning.
 
+## Lost-turn recovery via batch STT (call 5490 dead zones)
+When Sarvam opens a VAD segment and never closes it, no transcript is ever emitted — Sarvam only produces text at end-of-speech — so the caller's words are gone and the line sits dead until the 10s stall reprompt. `flush()` cannot help: it only drains a fragment the adapter is already holding, and in this failure there is nothing to drain.
+
+The pipeline now keeps a rolling `RECOVERY_MAX_AUDIO_MS` (20s) window of **caller-only** audio (capture pauses during playback and the echo grace, so agent TTS echo can never be recovered and answered). When the lost-turn backstop fires, `attemptLostTurnRecovery()` replays that buffer through the batch endpoint and feeds any text back in as a `force_finalized` turn.
+
+Safety properties, all of which matter:
+- **Never fires mid-utterance.** Requires `RECOVERY_MIN_SILENCE_MS` (700ms) of local energy-VAD silence first, so a caller who is still talking is never cut off.
+- **Never gates the streaming feed.** It buffers a *copy* of the frames; the DO-NOT-GATE invariant is intact.
+- **Duplicate suppression.** The socket re-queues buffered audio across a reconnect, so the same utterance can arrive as a streaming final afterwards. `isNearDuplicateUtterance()` drops it within `RECOVERY_DEDUP_MS` (10s). One-word replies dedupe only on an exact match — processing a stray "yes" twice mid-booking is worse than reprompting.
+- **Kill switch:** `STT_LOST_TURN_RECOVERY=0` disables it without a redeploy.
+
+Still unverified against a live call — the trigger only occurs during a real Sarvam stall. Watch for `stt_lost_turn_recovered` in the exec log; if duplicate turns appear, set the env var to 0 and re-tune the dedup window.
+
 ## Email normalizer was corrupting ordinary speech (call 5490)
 `normalizeSpokenEmail` (transcriptQuality.ts) runs on EVERY transcript via `normalizeSttPhonetics`. Its trigger included a bare `\bat\b`, so any sentence containing "at" entered email mode: "at" became "@", then an unbounded username join stripped the spaces from everything before it.
 
