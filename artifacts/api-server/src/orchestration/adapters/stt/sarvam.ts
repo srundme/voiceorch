@@ -747,8 +747,6 @@ export class SarvamSTT implements STTAdapter {
     // carrier DTX/stream pauses. deadFired latches so we act once per episode.
     let lastMsgAt = Date.now();
     let lastAudioSentAt = 0;
-    let socketOpenedAt = Date.now();
-    let lastSpeechStartAt = 0;
     let inSpeechSegment = false;
     let deadFired = false;
     const HEARTBEAT_MS = 300;
@@ -787,8 +785,6 @@ export class SarvamSTT implements STTAdapter {
         wsReady = true;
         reconnectAttempts = 0;
         deadFired = false; // fresh socket — re-arm the zombie detector
-        socketOpenedAt = Date.now();
-        lastSpeechStartAt = 0;
         lastMsgAt = Date.now(); // start silence window from now, not dead socket's last frame
         queueTrimLogged = false; // re-arm queue-trim log for this reconnect episode
         // Reset VAD state: a stale speechEndReceived=true would send post-reconnect
@@ -825,7 +821,6 @@ export class SarvamSTT implements STTAdapter {
           (msg.type === "events" && msg.data?.signal_type === "START_SPEECH")
         ) {
           inSpeechSegment = true;
-          lastSpeechStartAt = Date.now();
           speechEndReceived = false; // caller is speaking again; clear the speech_end flag
           _onSpeechStart?.();
           logger.debug({ langCode }, "Sarvam STT: speech start");
@@ -1201,23 +1196,6 @@ export class SarvamSTT implements STTAdapter {
       }
       if (deadFired) return; // zombie already handled this episode
       if (ws.readyState !== WebSocket.OPEN) return; // CONNECTING/CLOSING handled elsewhere
-
-      // "no speech_start" watchdog — if we've been sending audio for >5s
-      // but Sarvam never said speech_start, the VAD may be stuck. Force a flush
-      // + reconnect. Without this, the caller speaks into a void.
-      const audioSentSinceSpeech = Date.now() - lastAudioSentAt;
-      const noSpeechStartWindow = lastSpeechStartAt === 0 && (Date.now() - socketOpenedAt > 5000);
-
-      if (!inSpeechSegment && noSpeechStartWindow && audioSentSinceSpeech < WS_DEAD_MS) {
-        deadFired = true;
-        logger.warn(
-          { langCode, socketAge: Date.now() - socketOpenedAt },
-          "Sarvam STT: no speech_start after 5s of streaming — VAD stuck, terminating for reconnect",
-        );
-        try { sttObj.onConnectionDead?.(); } catch { /* noop */ }
-        try { ws.terminate(); } catch { try { ws.close(); } catch { /* noop */ } }
-        return;
-      }
 
       if (!inSpeechSegment) return; // zombie check only meaningful mid-utterance
       if (Date.now() - lastAudioSentAt > WS_DEAD_MS) return;
