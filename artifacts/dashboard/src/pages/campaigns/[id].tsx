@@ -1443,8 +1443,8 @@ export default function CampaignDetailPage() {
     setDeletingCamp(true);
     try {
       await deleteCampaign.mutateAsync({ id: campaignId });
-      toast({ title: "Campaign deleted" });
-      setLocation("/app/campaigns");
+      toast({ title: "List deleted" });
+      setLocation("/app/people");
     } catch {
       toast({ title: "Failed to delete campaign", variant: "destructive" });
       setDeletingCamp(false);
@@ -1468,9 +1468,9 @@ export default function CampaignDetailPage() {
           <Megaphone className="h-6 w-6 text-muted-foreground/30" />
         </div>
         <p className="text-sm font-medium text-foreground/40">Campaign not found</p>
-        <Link href="/app/campaigns">
+        <Link href="/app/people">
           <Button variant="outline" size="sm" className="mt-4 gap-1.5">
-            <ArrowLeft className="h-3.5 w-3.5" /> Back to dial flows
+            <ArrowLeft className="h-3.5 w-3.5" /> Back to People
           </Button>
         </Link>
       </div>
@@ -1484,10 +1484,10 @@ export default function CampaignDetailPage() {
         {/* Breadcrumb */}
         <DetailNav
           className="mb-2"
-          backTo="/app/campaigns"
-          backLabel="Back to dial flows"
+          backTo="/app/people"
+          backLabel="Back to People"
           crumbs={[
-            { label: "Dial flows", href: "/app/campaigns" },
+            { label: "People", href: "/app/people" },
             { label: campaign.name },
           ]}
         />

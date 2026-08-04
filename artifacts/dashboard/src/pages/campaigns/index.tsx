@@ -590,12 +590,12 @@ function CampaignWizard({
         } as Parameters<typeof create.mutateAsync>[0]["data"],
       });
       await qc.invalidateQueries({ queryKey: getListCampaignsQueryKey() });
-      toast({ title: "Campaign created", description: name.trim() });
+      toast({ title: "List created", description: name.trim() });
       close();
     } catch (err) {
       const msg = (err instanceof Error ? err.message : null)
-        ?? "Failed to create campaign";
-      toast({ title: "Failed to create campaign", description: msg, variant: "destructive" });
+        ?? "Failed to create list";
+      toast({ title: "Failed to create list", description: msg, variant: "destructive" });
     }
   }
 
@@ -603,8 +603,8 @@ function CampaignWizard({
     <Dialog open={open} onOpenChange={v => { if (!v) close(); }}>
       <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col gap-0 p-0 overflow-hidden">
         <div className="px-6 pt-5 pb-4 border-b border-border shrink-0">
-          <div className="text-base font-semibold">New dial flow</div>
-          <p className="text-xs text-muted-foreground/60 mt-0.5">Set up an AI voice calling campaign in a few steps</p>
+          <div className="text-base font-semibold">New list</div>
+          <p className="text-xs text-muted-foreground/60 mt-0.5">Upload a CSV or connect a source, then attach it to a call plan</p>
           {/* Step indicator */}
           <div className="flex items-center gap-1.5 mt-4">
             {activeSteps.map((s, i) => (
@@ -628,11 +628,11 @@ function CampaignWizard({
           {step === "info" && (
             <div className="space-y-4">
               <div>
-                <h3 className="text-sm font-semibold mb-0.5">Campaign Details</h3>
-                <p className="text-xs text-muted-foreground/60">Give your campaign a name and an optional description</p>
+                <h3 className="text-sm font-semibold mb-0.5">List details</h3>
+                <p className="text-xs text-muted-foreground/60">Name this people list</p>
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs">Campaign Name <span className="text-destructive">*</span></Label>
+                <Label className="text-xs">List name <span className="text-destructive">*</span></Label>
                 <Input placeholder="e.g. Q3 Summer Leads" value={name} onChange={e => setName(e.target.value)}
                   className="h-9 text-sm" autoFocus onKeyDown={e => e.key === "Enter" && canNext() && next()} />
               </div>
@@ -900,7 +900,7 @@ function CampaignWizard({
               </div>
               <div className="bg-card border border-border rounded-xl divide-y divide-border overflow-hidden">
                 {[
-                  { label: "Campaign Name", value: name, mono: false },
+                  { label: "List name", value: name, mono: false },
                   { label: "Description",   value: desc || "—", mono: false },
                   { label: "Lead Source",   value: sourceLabel(leadSource), mono: false },
                   { label: "Trigger",       value: triggerMode === "instant" ? "Instant — auto-dial on arrival" : "Batch-wise — manual batch management", mono: false },
@@ -1004,7 +1004,7 @@ function CampaignWizard({
           </div>
           {isLast ? (
             <Button size="sm" className="h-9 min-h-10 text-xs gap-1.5" onClick={() => void handleCreate()} disabled={create.isPending || !consentComplete()}>
-              {create.isPending ? "Creating…" : "Create Campaign"}
+              {create.isPending ? "Creating…" : "Create list"}
             </Button>
           ) : (
             <Button size="sm" className="h-9 min-h-10 text-xs" onClick={next} disabled={!canNext()}>Next →</Button>
@@ -1078,16 +1078,16 @@ function CampaignFormDialog({
     try {
       if (editing) {
         await update.mutateAsync({ id: editing.id, data: body });
-        toast({ title: "Campaign updated" });
+        toast({ title: "List updated" });
       } else {
         await create.mutateAsync({ data: body });
-        toast({ title: "Campaign created" });
+        toast({ title: "List created" });
       }
       await qc.invalidateQueries({ queryKey: getListCampaignsQueryKey() });
       reset();
       onClose();
     } catch {
-      toast({ title: "Error", description: "Failed to save campaign", variant: "destructive" });
+      toast({ title: "Error", description: "Failed to save list", variant: "destructive" });
     }
   }
 
@@ -1095,14 +1095,14 @@ function CampaignFormDialog({
     <Dialog open={open} onOpenChange={v => { if (!v) { reset(); onClose(); } }}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle className="text-base">{editing ? "Edit dial flow" : "New dial flow"}</DialogTitle>
+          <DialogTitle className="text-base">{editing ? "Edit list" : "New list"}</DialogTitle>
           <DialogDescription className="text-xs">
-            {editing ? "Update campaign settings." : "Set up a new outbound calling campaign."}
+            {editing ? "Update this list’s settings." : "Create a people list for call plans."}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={e => void handleSubmit(e)} className="space-y-4 mt-1">
           <div className="space-y-1.5">
-            <Label className="text-xs">Campaign Name <span className="text-destructive">*</span></Label>
+            <Label className="text-xs">List name <span className="text-destructive">*</span></Label>
             <Input placeholder="e.g. Summer Leads Q3" value={name} onChange={e => setName(e.target.value)} className="h-9 text-xs" required />
           </div>
           <div className="space-y-1.5">
@@ -1157,7 +1157,7 @@ function CampaignFormDialog({
           <DialogFooter>
             <Button type="button" variant="outline" className="h-8 text-xs" onClick={() => { reset(); onClose(); }}>Cancel</Button>
             <Button type="submit" className="h-8 text-xs" disabled={create.isPending || update.isPending}>
-              {create.isPending || update.isPending ? "Saving…" : editing ? "Save Changes" : "Create Campaign"}
+              {create.isPending || update.isPending ? "Saving…" : editing ? "Save Changes" : "Create list"}
             </Button>
           </DialogFooter>
         </form>
@@ -1238,9 +1238,9 @@ export default function CampaignsPage() {
       await deleteMutation.mutateAsync({ id: deleting.id });
       await qc.invalidateQueries({ queryKey: ["campaigns-dashboard"] });
       await qc.invalidateQueries({ queryKey: getListCampaignsQueryKey() });
-      toast({ title: "Campaign deleted" });
+      toast({ title: "List deleted" });
     } catch {
-      toast({ title: "Failed to delete campaign", variant: "destructive" });
+      toast({ title: "Failed to delete list", variant: "destructive" });
     } finally {
       setDeletingCamp(false);
       setDeleting(null);
@@ -1260,7 +1260,7 @@ export default function CampaignsPage() {
             type="button"
             onClick={() => setHelpOpen(true)}
             className="h-8 w-8 rounded-lg border border-border/60 bg-muted/40 hover:bg-muted/70 flex items-center justify-center text-muted-foreground/50 hover:text-foreground transition-all"
-            title="Dial flow guide"
+            title="People list guide"
           >
             <HelpCircle className="h-3.5 w-3.5" />
           </button>
@@ -1277,12 +1277,12 @@ export default function CampaignsPage() {
             <FileText className="h-3.5 w-3.5" /> Export
           </Button>
           <Button size="sm" className="h-8 text-xs gap-1.5 rounded-lg" onClick={() => setCreateOpen(true)}>
-            <Plus className="h-3.5 w-3.5" /> New dial flow
+            <Plus className="h-3.5 w-3.5" /> New list
           </Button>
         </div>
         <MetricStrip cols={6}>
           <MetricCard
-            label="Active flows"
+            label="Active lists"
             value={stats?.activeCampaigns ?? 0}
             icon={<Megaphone className="h-4 w-4 text-emerald-500" />}
             accent={(stats?.activeCampaigns ?? 0) > 0 ? "text-emerald-500" : undefined}
@@ -1464,10 +1464,10 @@ export default function CampaignsPage() {
                 {/* CTA */}
                 <div className="text-center flex items-center justify-center gap-3">
                   <Button className="h-8 text-xs gap-2" onClick={() => setCreateOpen(true)}>
-                    <Plus className="h-3.5 w-3.5" /> Create dial flow
+                    <Plus className="h-3.5 w-3.5" /> Create list
                   </Button>
                   <Button asChild variant="outline" className="h-8 text-xs gap-2">
-                    <Link href="/app/agents">Open an agent → Reach</Link>
+                    <Link href="/app/call-plans">Make a call plan</Link>
                   </Button>
                   <button
                     className="text-xs text-muted-foreground/50 hover:text-foreground underline underline-offset-4 transition-colors"
@@ -1479,7 +1479,7 @@ export default function CampaignsPage() {
               </div>
             ) : (
               <div className="py-12 text-center">
-                <p className="text-sm text-muted-foreground/40">No dial flows match your filters.</p>
+                <p className="text-sm text-muted-foreground/40">No lists match your filters.</p>
                 <button className="text-xs text-muted-foreground/50 hover:text-foreground mt-2 underline underline-offset-2"
                   onClick={() => { setSearch(""); setFilterSource("__all__"); setFilterStatus("__all__"); }}>
                   Clear filters
@@ -1510,28 +1510,28 @@ export default function CampaignsPage() {
         </div>
       </div>
 
-      {/* ── Campaign Guide Slide-over ── */}
+      {/* ── People list guide Slide-over ── */}
       <Sheet open={helpOpen} onOpenChange={setHelpOpen}>
         <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
           <SheetHeader className="pb-4 border-b border-border/60">
             <SheetTitle className="flex items-center gap-2 text-base">
               <Megaphone className="h-4 w-4 text-primary/60" />
-              Campaign Guide
+              People list guide
             </SheetTitle>
             <p className="text-[11px] text-muted-foreground/60 leading-relaxed mt-1">
-              How list and source dials bind leads to a voice agent.
+              How lists bind people to an agent and a call plan.
             </p>
           </SheetHeader>
 
           <div className="py-5 space-y-7">
 
-            {/* What is a dial flow */}
+            {/* What is a people list */}
             <section>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/40 mb-3">What is a dial flow?</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/40 mb-3">What is a people list?</p>
               <div className="rounded-xl border border-border/60 bg-card/60 p-4 text-[11px] text-muted-foreground/70 leading-relaxed space-y-2">
-                <p>A dial flow ties together a <strong className="text-foreground/80">voice agent</strong>, a <strong className="text-foreground/80">phone number</strong>, and a <strong className="text-foreground/80">lead source</strong>.</p>
+                <p>A people list ties together a <strong className="text-foreground/80">voice agent</strong>, a <strong className="text-foreground/80">phone number</strong>, and who to reach.</p>
                 <p>When a new lead arrives, the platform dials them automatically. The agent handles the full conversation — qualifying, booking, or transferring — without any human in the loop.</p>
-                <p>New setups start from <strong className="text-foreground/80">Agent → Reach</strong>. This page remains the account-wide list of armed dials.</p>
+                <p>Attach a list to a <strong className="text-foreground/80">Call plan</strong> to Start. This page is where you manage who you reach.</p>
               </div>
             </section>
 
@@ -1585,11 +1585,11 @@ export default function CampaignsPage() {
 
             {/* Batches */}
             <section>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/40 mb-3">Flows vs. Batches</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/40 mb-3">Lists vs. Batches</p>
               <div className="rounded-xl border border-border/60 bg-card/60 p-4 space-y-3">
                 {[
-                  { icon: <Megaphone className="h-3.5 w-3.5 text-primary/50" />, term: "Dial flow", def: "The top-level container. Defines the agent, number, calling hours, and retry rules." },
-                  { icon: <Layers className="h-3.5 w-3.5 text-amber-400" />, term: "Batch", def: "One group of leads added at a particular time. A flow can have unlimited batches — each is tracked independently." },
+                  { icon: <Megaphone className="h-3.5 w-3.5 text-primary/50" />, term: "People list", def: "Who you reach. Defines the agent, number, calling hours, and retry rules." },
+                  { icon: <Layers className="h-3.5 w-3.5 text-amber-400" />, term: "Batch", def: "One group of leads added at a particular time. A list can have unlimited batches — each is tracked independently." },
                 ].map(item => (
                   <div key={item.term} className="flex gap-3">
                     <div className="h-5 w-5 rounded-md bg-muted/60 flex items-center justify-center shrink-0 mt-0.5">{item.icon}</div>
@@ -1624,7 +1624,7 @@ export default function CampaignsPage() {
             {/* CTA */}
             <div className="pt-2">
               <Button className="w-full h-9 text-xs gap-2" onClick={() => { setHelpOpen(false); setCreateOpen(true); }}>
-                <Plus className="h-3.5 w-3.5" /> Create a Campaign
+                <Plus className="h-3.5 w-3.5" /> Create a list
               </Button>
             </div>
           </div>
@@ -1649,7 +1649,7 @@ export default function CampaignsPage() {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-red-500">
-              <Trash2 className="h-4 w-4" /> Delete Campaign
+              <Trash2 className="h-4 w-4" /> Delete list
             </DialogTitle>
             <DialogDescription className="text-left pt-1">
               This will permanently delete <strong className="text-foreground">{deleting?.name}</strong> along
@@ -1692,7 +1692,7 @@ export default function CampaignsPage() {
             >
               {deletingCamp
                 ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Deleting…</>
-                : <><Trash2 className="h-3.5 w-3.5" /> Delete Campaign</>}
+                : <><Trash2 className="h-3.5 w-3.5" /> Delete list</>}
             </Button>
           </div>
         </DialogContent>

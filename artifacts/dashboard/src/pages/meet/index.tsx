@@ -58,6 +58,7 @@ export default function MeetPage() {
     <StripePage
       title="Meeting Bots"
       description="Send a voice agent into a Google Meet, Zoom, or Teams meeting. Meeting prompt lives on the agent; join settings are under Agent channels → Meetings."
+      back={{ href: "/app/connections", label: "Connections" }}
       actions={
         <AgentContextBar agents={agents} selectedId={selectedId} onChange={setAgentId} />
       }

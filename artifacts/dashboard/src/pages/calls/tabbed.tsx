@@ -30,6 +30,7 @@ export default function CallsTabPage() {
     <StripePage
       title="History"
       description="Calls, callbacks, and transfers — what happened for each person."
+      back={{ href: "/app/home", label: "Home" }}
       fullBleed
       contentClassName="!px-0 !py-0 max-w-none"
       tabs={

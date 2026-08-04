@@ -46,12 +46,12 @@ export default function AutomaticCallsPage() {
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
-      {/* Toolbar — parent StripePage owns the Dial flows title */}
+      {/* Toolbar — parent People page owns the title */}
       <div className="flex items-center justify-end gap-2">
         <Button asChild className="h-9">
           <Link href="/app/automatic-calls/new">
             <Plus className="h-4 w-4 mr-1.5" />
-            Create
+            Connect sheet
           </Link>
         </Button>
       </div>
@@ -65,12 +65,12 @@ export default function AutomaticCallsPage() {
       {!q.isLoading && rows.length === 0 && (
         <div className="rounded-xl border border-dashed border-border/70 px-6 py-14 text-center space-y-3">
           <Sheet className="h-8 w-8 mx-auto text-muted-foreground/60" />
-          <p className="text-sm font-medium">No automatic call pipelines yet</p>
+          <p className="text-sm font-medium">No Google Sheets yet</p>
           <p className="text-xs text-muted-foreground max-w-md mx-auto">
-            Connect a Google Sheet, pick an agent, and SnapServe will dial new leads as they appear.
+            Connect a sheet under Connections, map columns, then attach it to a call plan (Keep live).
           </p>
           <Button asChild size="sm" className="mt-2">
-            <Link href="/app/automatic-calls/new">Create pipeline</Link>
+            <Link href="/app/automatic-calls/new">Connect sheet</Link>
           </Button>
         </div>
       )}

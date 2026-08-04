@@ -1330,6 +1330,7 @@ export default function WhatsAppPage() {
     <StripePage
       title="WhatsApp"
       description="Automatic WhatsApp follow-ups after every AI call — booking confirmations, summaries and callback alerts. Customers can reply to get a call back."
+      back={{ href: "/app/connections", label: "Connections" }}
     >
       <div className="space-y-6">
       <NativeSection agents={agents} onChooseBsp={() => openBspCreate("webhook")} onChooseMeta={() => openBspCreate("meta")} metaConnected={connections.some((c) => c.active && c.metaPhoneNumberId)} />

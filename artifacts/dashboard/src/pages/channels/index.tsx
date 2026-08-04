@@ -44,6 +44,7 @@ export default function ChannelsPage() {
       <StripePage
         title="Agent channels"
         description="Create an agent first, then attach phone, WhatsApp, email, meetings, and booking."
+        back={{ href: "/app/connections", label: "Connections" }}
       >
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <Radio className="mb-3 size-5 text-muted-foreground" />
@@ -65,6 +66,7 @@ export default function ChannelsPage() {
     <StripePage
       title="Agent channels"
       description={`${agentLabel} · WhatsApp, email, meetings join · workspace wiring under Connections`}
+      back={{ href: "/app/connections", label: "Connections" }}
       actions={
         <AgentContextBar agents={agents} selectedId={selectedId} onChange={setAgentId} />
       }

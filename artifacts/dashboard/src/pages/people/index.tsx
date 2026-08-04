@@ -1,6 +1,5 @@
 /**
  * People — lists you reach (CSV / Sheet / website forms).
- * Reuses Dial flows engines; product label is People (Phase 4 IA).
  */
 
 import { useLocation, useSearch } from "wouter";
@@ -31,7 +30,8 @@ export default function PeoplePage() {
   return (
     <StripePage
       title="People"
-      description="Who you reach — upload a list, sync a sheet, or catch website forms. Attach a list to a call plan to Start."
+      description="Who you reach — lists, sheets, or website forms. Attach them to a call plan, then Start."
+      back={{ href: "/app/home", label: "Home" }}
       fullBleed
       contentClassName="!px-0 !py-0 max-w-none"
       tabs={

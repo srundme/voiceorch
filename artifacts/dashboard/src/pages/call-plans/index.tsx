@@ -105,6 +105,7 @@ export default function CallPlansPage() {
     <StripePage
       title="Call plans"
       description="Who to reach, what happens next, then Start. Ordered steps — not a flowchart."
+      back={{ href: "/app/home", label: "Home" }}
       actions={
         <Button
           className="h-9 gap-1.5"

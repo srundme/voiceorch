@@ -2257,7 +2257,8 @@ export default function ConnectionsPage() {
   return (
     <StripePage
       title="Connections"
-      description="Wire phone, WhatsApp, email, Meet, and Sheets once — call plans and agents use what’s connected."
+      description="Connect phone, WhatsApp, Sheets, and CRM once. Call plans and agents use what’s here."
+      back={{ href: "/app/home", label: "Home" }}
       actions={
         <Button
           size="sm"
@@ -2271,14 +2272,13 @@ export default function ConnectionsPage() {
       }
       contentClassName="space-y-4"
     >
-      {/* Channel shortcuts (Phase 4 — folded peers) */}
-      <section className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+      {/* Channel shortcuts — stay on Connections job: wires, not People */}
+      <section className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         {[
           { label: "Phone numbers", href: "/app/phone-numbers", hint: "DIDs & caller ID" },
           { label: "WhatsApp", href: "/app/whatsapp", hint: "Templates & channel" },
-          { label: "Meetings", href: "/app/meet", hint: "Meet / Zoom / Teams" },
-          { label: "Agent channels", href: "/app/channels", hint: "Email, Meet join" },
-          { label: "People lists", href: "/app/people", hint: "CSV & sheets" },
+          { label: "Meetings", href: "/app/meet", hint: "Join Meet / Zoom / Teams" },
+          { label: "Agent channels", href: "/app/channels", hint: "Email & meeting join" },
         ].map((card) => (
           <button
             key={card.href}
@@ -2321,7 +2321,7 @@ export default function ConnectionsPage() {
                 <div className="min-w-0 flex-1">
                   <p className="text-[13px] font-medium">Google Sheets</p>
                   <p className="truncate text-[11px] text-muted-foreground">
-                    Watch a sheet, dial leads, write results back
+                    Connect once — use under People → Google Sheet
                   </p>
                 </div>
                 <Button size="sm" className="h-8 px-2.5 text-[11px]" onClick={() => void connectSheets()}>
@@ -2358,14 +2358,21 @@ export default function ConnectionsPage() {
         </div>
       </section>
 
-      {/* Dial-flow webhooks */}
+      {/* Lead webhooks (advanced — website forms live under People) */}
       <section className="space-y-2">
         <div className="flex items-center justify-between px-0.5">
-      <h2 className="text-[11px] font-semibold">Lead webhooks</h2>
+          <h2 className="text-[11px] font-semibold">Lead webhooks</h2>
           <span className="text-[10px] text-muted-foreground">
             {webhookConnections.length} webhook{webhookConnections.length !== 1 ? "s" : ""}
           </span>
         </div>
+        <p className="px-0.5 text-[11px] text-muted-foreground">
+          Advanced intake URLs. For most setups use{" "}
+          <button type="button" className="underline underline-offset-2" onClick={() => navigate("/app/people?tab=lead-sources")}>
+            People → Website forms
+          </button>
+          .
+        </p>
 
         <div className="overflow-hidden rounded-lg border border-border bg-card">
           {isLoading ? (

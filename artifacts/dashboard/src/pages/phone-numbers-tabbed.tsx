@@ -29,6 +29,7 @@ export default function PhoneNumbersTabPage() {
     <StripePage
       title="Phone Numbers"
       description="Buy numbers, assign them to agents, and complete verification."
+      back={{ href: "/app/connections", label: "Connections" }}
       fullBleed
       contentClassName="!px-0 !py-0 max-w-none"
       tabs={
