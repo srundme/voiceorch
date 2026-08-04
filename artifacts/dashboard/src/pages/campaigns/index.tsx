@@ -512,6 +512,31 @@ function CampaignWizard({
   const [retryDelayMinutes, setRetryDelayMinutes] = useState<number>(15);
   const [callingWindow, setCallingWindow] = useState<string>("09:00 AM - 07:00 PM");
 
+  const csvInputRef = useRef<HTMLInputElement>(null);
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [parsedLeadsCount, setParsedLeadsCount] = useState<number>(0);
+
+  function handleCsvFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setCsvFile(file);
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      const text = evt.target?.result as string;
+      if (text) {
+        const lines = text.split("\n").filter(l => l.trim().length > 0);
+        const leadCount = Math.max(0, lines.length - 1);
+        setParsedLeadsCount(leadCount);
+        toast({
+          title: "CSV File Uploaded!",
+          description: `Loaded ${file.name} (${leadCount} leads parsed).`,
+        });
+      }
+    };
+    reader.readAsText(file);
+  }
+
   const liveAgentIds = new Set(
     activeCampaigns.filter(c => c.status === "active").map(c => c.agentId).filter(Boolean)
   );
@@ -813,14 +838,39 @@ function CampaignWizard({
                     </p>
                   </div>
 
-                  <div className="border-2 border-dashed border-border/80 rounded-xl p-6 text-center hover:bg-muted/20 transition-all cursor-pointer relative bg-muted/5">
-                    <Upload className="h-7 w-7 text-purple-500 mx-auto mb-2" />
-                    <p className="text-xs font-semibold text-foreground">
-                      Click to upload or drag & drop CSV file
-                    </p>
-                    <p className="text-[11px] text-muted-foreground/70 mt-1">
-                      Supported columns: <code className="bg-muted px-1.5 py-0.5 rounded text-[10px]">phone</code> (required), <code className="bg-muted px-1.5 py-0.5 rounded text-[10px]">name</code>, <code className="bg-muted px-1.5 py-0.5 rounded text-[10px]">city</code>
-                    </p>
+                  <input
+                    type="file"
+                    ref={csvInputRef}
+                    accept=".csv"
+                    onChange={handleCsvFileChange}
+                    className="hidden"
+                  />
+
+                  <div
+                    onClick={() => csvInputRef.current?.click()}
+                    className="border-2 border-dashed border-purple-500/40 rounded-xl p-6 text-center hover:bg-purple-500/10 transition-all cursor-pointer relative bg-purple-500/5 group"
+                  >
+                    {csvFile ? (
+                      <div className="space-y-1.5">
+                        <div className="h-9 w-9 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto">
+                          <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                        </div>
+                        <p className="text-xs font-bold text-foreground">{csvFile.name}</p>
+                        <p className="text-[11px] text-emerald-400 font-medium">
+                          🟢 {parsedLeadsCount} Leads ready to dial • Click to change file
+                        </p>
+                      </div>
+                    ) : (
+                      <>
+                        <Upload className="h-7 w-7 text-purple-400 mx-auto mb-2 group-hover:scale-110 transition-transform" />
+                        <p className="text-xs font-semibold text-foreground">
+                          Click to upload or drag & drop CSV file
+                        </p>
+                        <p className="text-[11px] text-muted-foreground/70 mt-1">
+                          Supported columns: <code className="bg-muted px-1.5 py-0.5 rounded text-[10px]">phone</code> (required), <code className="bg-muted px-1.5 py-0.5 rounded text-[10px]">name</code>, <code className="bg-muted px-1.5 py-0.5 rounded text-[10px]">city</code>
+                        </p>
+                      </>
+                    )}
                   </div>
 
                   <div className="space-y-2 pt-2 border-t border-border/50">
