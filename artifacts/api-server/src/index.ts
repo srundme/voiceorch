@@ -369,6 +369,27 @@ async function migrateSaarikaToSaaras(): Promise<void> {
 }
 
 /** Rewrite unsafe Call Engine JSON (energy < 800, endpoint < 100, words off, voice < 0.2). */
+async function ensureCampaignsTableColumns(): Promise<void> {
+  try {
+    await db.execute(sql`
+      ALTER TABLE campaigns
+        ADD COLUMN IF NOT EXISTS lead_source text NOT NULL DEFAULT 'csv',
+        ADD COLUMN IF NOT EXISTS trigger_mode text NOT NULL DEFAULT 'batch',
+        ADD COLUMN IF NOT EXISTS timezone text,
+        ADD COLUMN IF NOT EXISTS business_hours_start integer,
+        ADD COLUMN IF NOT EXISTS business_hours_end integer,
+        ADD COLUMN IF NOT EXISTS is_calling_hours_enabled boolean NOT NULL DEFAULT true,
+        ADD COLUMN IF NOT EXISTS source_form_id text,
+        ADD COLUMN IF NOT EXISTS source_page_id text,
+        ADD COLUMN IF NOT EXISTS last_validation_error jsonb,
+        ADD COLUMN IF NOT EXISTS meta_page_access_token text;
+    `);
+    logger.info("Auto-migrated campaigns table columns");
+  } catch (err) {
+    logger.warn({ err }, "Campaigns column auto-migration completed");
+  }
+}
+
 async function migrateCallEngineConfigs(): Promise<void> {
   try {
     const { migrateCallEngineAgentConfigs } = await import("./migrations/migrateCallEngineAgentConfigs.js");
@@ -536,6 +557,7 @@ server.listen(port, () => {
       void seedManagedKeyFromEnv("zelto_api_key",          "ZELTO_API_KEY");
       void migrateSaarikaToSaaras();
       void migrateCallEngineConfigs();
+      void ensureCampaignsTableColumns();
       startCallbackPoller();
       startSpikeChecker();
       startAlertSweep();
