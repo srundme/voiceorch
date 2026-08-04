@@ -197,7 +197,7 @@ export function SequenceRulesPanel({ agentId, agentName }: { agentId: number; ag
                   </span>
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-medium">Auto-Sync</span>
-                    <Switch checked={autoSync} onCheckedChange={setAutoSync} size="sm" />
+                    <Switch checked={autoSync} onCheckedChange={setAutoSync} />
                   </div>
                 </div>
               </div>
