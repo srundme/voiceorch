@@ -303,15 +303,18 @@ router.post("/campaigns", async (req, res): Promise<void> => {
 
     // ── Hard platform ceiling on concurrent calls (max 10) ──
     // ── Verify selected agent exists ──
+    let validAgentId: number | null = null;
     if (parsed.data.agentId) {
       const [agentExists] = await db
         .select({ id: agentsTable.id })
         .from(agentsTable)
         .where(eq(agentsTable.id, parsed.data.agentId));
 
-      if (!agentExists) {
+      if (agentExists) {
+        validAgentId = agentExists.id;
+      } else {
         res.status(400).json({
-          error: "Selected agent was not found. Please pick an active agent.",
+          error: "The selected agent was not found. Please pick an active agent from the list.",
           code: "INVALID_AGENT",
         });
         return;
@@ -325,7 +328,7 @@ router.post("/campaigns", async (req, res): Promise<void> => {
       userId,
       name:                parsed.data.name,
       description:         parsed.data.description,
-      agentId:             parsed.data.agentId,
+      agentId:             validAgentId,
       fieldMappings,
       fromNumber:          parsed.data.fromNumber,
       concurrentCallLimit: parsed.data.concurrentCallLimit ?? MAX_CONCURRENT_CALLS,
@@ -358,6 +361,13 @@ router.post("/campaigns", async (req, res): Promise<void> => {
     res.status(201).json(toCampaign(campaign!));
   } catch (err: any) {
     req.log.error({ err }, "POST /campaigns failed");
+    const isFkError = String(err?.message || "").includes("foreign key") || String(err?.message || "").includes("campaigns_agent_id_fkey");
+    if (isFkError) {
+      res.status(400).json({ error: "The selected agent or phone number is invalid. Please select an active agent." });
+      return;
+    }
+    res.status(500).json({ error: err.message || "Failed to create campaign" });
+  }
     res.status(500).json({ error: err?.message || "Internal server error creating campaign" });
   }
 });
