@@ -11,6 +11,12 @@ import {
   Sparkles,
   Wallet,
   Zap,
+  PhoneCall,
+  TrendingUp,
+  ShieldCheck,
+  Activity,
+  Layers,
+  Sparkle,
 } from "lucide-react";
 import {
   customFetch,
@@ -26,7 +32,6 @@ import {
   useListPhoneNumbers,
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
-import { StripePage } from "@/components/stripe-page";
 import { StatusDot } from "@/components/workspace/workspace";
 import { useMinuteRatesMap, useUserProviderNames } from "@/hooks/use-minute-rates";
 import { usePartnerContext } from "@/hooks/use-partner";
@@ -72,24 +77,25 @@ export default function HomePage() {
   const [, navigate] = useLocation();
   const { data: partnerContext } = usePartnerContext();
   const isManagedClient = partnerContext?.isManagedClient === true;
+
   const statsQ = useGetDashboardStats({
-    query: { queryKey: getGetDashboardStatsQueryKey(), refetchInterval: 30_000, staleTime: 20_000 },
+    query: { queryKey: getGetDashboardStatsQueryKey(), refetchInterval: 15_000, staleTime: 10_000 },
   });
   const callsQ = useListCalls(undefined, {
-    query: { queryKey: [...getListCallsQueryKey(), "home"], refetchInterval: 30_000 },
+    query: { queryKey: [...getListCallsQueryKey(), "home"], refetchInterval: 15_000 },
   });
   const agentsQ = useListAgents({
-    query: { queryKey: getListAgentsQueryKey(), staleTime: 30_000 },
+    query: { queryKey: getListAgentsQueryKey(), staleTime: 20_000 },
   });
   const campaignsQ = useListCampaigns({
-    query: { queryKey: getListCampaignsQueryKey(), staleTime: 30_000 },
+    query: { queryKey: getListCampaignsQueryKey(), staleTime: 20_000 },
   });
   const phonesQ = useListPhoneNumbers();
   const walletQ = useGetWallet();
   const pipelinesQ = useQuery({
     queryKey: ["automatic-calls"],
     queryFn: () => customFetch<AutoPipeline[]>("/api/automatic-calls"),
-    refetchInterval: 30_000,
+    refetchInterval: 20_000,
   });
 
   const agents = Array.isArray(agentsQ.data) ? agentsQ.data : (agentsQ.data as any)?.agents ?? [];
@@ -97,36 +103,33 @@ export default function HomePage() {
   const campaigns = Array.isArray(campaignsQ.data) ? campaignsQ.data : [];
   const phones = Array.isArray(phonesQ.data) ? phonesQ.data : [];
   const pipelines: AutoPipeline[] = pipelinesQ.data ?? [];
-  const activeCampaigns = campaigns.filter((campaign: any) => campaign.status === "active" || campaign.isActive);
-  const activePipelines = pipelines.filter((pipeline) => pipeline.status === "running");
-  const failedCalls = calls.filter((call: any) =>
-    ["failed", "error"].includes(String(call.status ?? "").toLowerCase()),
+  const activeCampaigns = campaigns.filter((c: any) => c.status === "active" || c.isActive);
+  const activePipelines = pipelines.filter((p) => p.status === "running");
+  const failedCalls = calls.filter((c: any) =>
+    ["failed", "error"].includes(String(c.status ?? "").toLowerCase()),
   );
 
-  const rateMap = useMinuteRatesMap();
-  const providers = useUserProviderNames();
   const wallet = walletQ.data;
-  const rate = wallet?.effectiveRateCentsPerMin
-    ?? rateMap.get(providers.size > 0 ? "byop" : "managed")
-    ?? 500;
-  const balanceCents = wallet?.balanceCents ?? null;
-  const availableMinutes = balanceCents == null ? null : Math.floor(balanceCents / rate);
-  const lowBalance = balanceCents != null && balanceCents < 10_000;
+  const balanceCents = wallet?.balanceCents ?? 0;
+  const balanceInr = (balanceCents / 100).toFixed(2);
+  const lowBalance = balanceCents < 10_000;
 
   const hasAgent = agents.length > 0;
   const hasPhone = phones.length > 0;
   const hasReach = activeCampaigns.length > 0 || pipelines.length > 0;
   const firstAgentId = agents[0]?.id;
+
   const setup = [
-    { label: "Create an agent", done: hasAgent, href: "/app/agents?create=1" },
-    { label: "Connect a phone number", done: hasPhone, href: "/app/phone-numbers" },
+    { label: "Create AI Agent", done: hasAgent, href: "/app/agents?create=1" },
+    { label: "Connect Phone Number", done: hasPhone, href: "/app/phone-numbers" },
     {
-      label: "Configure how leads reach it",
+      label: "Setup Lead Automation / Studio",
       done: hasReach,
       href: firstAgentId ? `/app/automation?agentId=${firstAgentId}` : "/app/automation",
     },
   ];
-  const setupDone = setup.every((item) => item.done);
+  const completedSetupCount = setup.filter(s => s.done).length;
+  const setupPercent = Math.round((completedSetupCount / setup.length) * 100);
 
   const issues: Array<{ title: string; detail: string; href: string; tone: "warning" | "danger" }> = [];
   pipelines
@@ -142,7 +145,7 @@ export default function HomePage() {
   if (lowBalance) {
     issues.push({
       title: "Low wallet balance",
-      detail: availableMinutes == null ? "Top up to keep dialing" : `About ${availableMinutes} minutes remain`,
+      detail: `Balance ₹${balanceInr}. Top up to ensure continuous dialing.`,
       href: "/app/wallet",
       tone: "danger",
     });
@@ -150,7 +153,7 @@ export default function HomePage() {
   if (failedCalls.length > 0) {
     issues.push({
       title: `${failedCalls.length} recent failed call${failedCalls.length === 1 ? "" : "s"}`,
-      detail: "Review provider and dial errors",
+      detail: "Review provider logs and dial errors",
       href: "/app/calls",
       tone: "danger",
     });
@@ -168,7 +171,7 @@ export default function HomePage() {
     ...activeCampaigns.map((campaign: any) => ({
       id: `flow-${campaign.id}`,
       name: campaign.name,
-      detail: "List / source dial",
+      detail: "List / Studio dial",
       href: `/app/campaigns/${campaign.id}`,
       status: campaign.status ?? "active",
       icon: Zap,
@@ -176,62 +179,39 @@ export default function HomePage() {
   ].slice(0, 5);
 
   if (!hasAgent && !agentsQ.isLoading) {
-    if (isManagedClient) {
-      return (
-        <main className="flex min-h-full items-center justify-center px-5 py-12">
-          <div className="w-full max-w-md text-center">
-            <div className="mx-auto mb-5 flex size-9 items-center justify-center rounded-lg border border-border bg-card">
-              <Bot className="size-4" />
-            </div>
-            <h1 className="text-lg font-semibold tracking-[-0.02em]">No agents assigned</h1>
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              Your managed workspace does not have an agent yet. Contact your workspace provider
-              to configure and assign one.
-            </p>
-          </div>
-        </main>
-      );
-    }
     return (
-      <main className="flex min-h-full items-center justify-center px-5 py-12">
-        <div className="w-full max-w-lg">
-          <div className="mb-8">
-            <div className="mb-5 flex size-9 items-center justify-center rounded-lg border border-border bg-card">
-              <Bot className="size-4" />
-            </div>
-            <h1 className="text-2xl font-semibold tracking-[-0.03em]">Create your first agent</h1>
-            <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
-              Start with the voice runtime. Phone numbers, channels, meetings, automation,
-              memory, and squads connect to the agent after it exists.
-            </p>
+      <main className="flex min-h-full items-center justify-center px-5 py-16">
+        <div className="w-full max-w-lg text-center">
+          <div className="mx-auto mb-6 flex size-14 items-center justify-center rounded-2xl border border-primary/30 bg-primary/10 shadow-lg shadow-primary/5">
+            <Bot className="size-7 text-primary" />
           </div>
-          <div className="grid gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-2">
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Welcome to VoiceOrch AI</h1>
+          <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
+            Deploy hyper-realistic voice agents that make and take calls, schedule appointments, and connect seamlessly to your CRM.
+          </p>
+          <div className="mt-8 grid gap-4 sm:grid-cols-2">
             <button
               type="button"
               onClick={() => navigate("/app/vibe")}
-              className="group bg-background p-5 text-left transition-colors hover:bg-muted/45"
+              className="group relative flex flex-col items-start p-5 rounded-xl border border-primary/40 bg-gradient-to-b from-primary/10 to-transparent hover:border-primary transition-all text-left"
             >
-              <Sparkles className="mb-7 size-4 text-muted-foreground group-hover:text-foreground" />
-              <p className="text-sm font-medium">Build with AI</p>
-              <p className="mt-1 text-[11px] leading-5 text-muted-foreground">
-                Describe the job and generate a configured agent.
-              </p>
-              <span className="mt-4 inline-flex items-center gap-1 text-[11px] font-medium">
-                Start building <ArrowRight className="size-3" />
+              <Sparkles className="size-6 text-primary mb-3 group-hover:scale-110 transition-transform" />
+              <p className="text-sm font-semibold text-foreground">Build with AI</p>
+              <p className="mt-1 text-xs text-muted-foreground">Describe your business and auto-generate an agent.</p>
+              <span className="mt-4 text-xs font-semibold text-primary flex items-center gap-1">
+                Start Now <ArrowRight className="size-3" />
               </span>
             </button>
             <button
               type="button"
               onClick={() => navigate("/app/agents?create=1")}
-              className="group bg-background p-5 text-left transition-colors hover:bg-muted/45"
+              className="group flex flex-col items-start p-5 rounded-xl border border-border bg-card hover:bg-muted/40 transition-all text-left"
             >
-              <Plus className="mb-7 size-4 text-muted-foreground group-hover:text-foreground" />
-              <p className="text-sm font-medium">Configure manually</p>
-              <p className="mt-1 text-[11px] leading-5 text-muted-foreground">
-                Choose every provider, voice, prompt, and runtime setting.
-              </p>
-              <span className="mt-4 inline-flex items-center gap-1 text-[11px] font-medium">
-                Open builder <ArrowRight className="size-3" />
+              <Plus className="size-6 text-muted-foreground mb-3 group-hover:text-foreground transition-colors" />
+              <p className="text-sm font-semibold text-foreground">Manual Config</p>
+              <p className="mt-1 text-xs text-muted-foreground">Configure voices, prompts, tools and numbers.</p>
+              <span className="mt-4 text-xs font-semibold text-muted-foreground group-hover:text-foreground flex items-center gap-1">
+                Open Builder <ArrowRight className="size-3" />
               </span>
             </button>
           </div>
@@ -241,191 +221,324 @@ export default function HomePage() {
   }
 
   return (
-    <StripePage
-      title="Home"
-      description={`${statsQ.data?.callsToday ?? "—"} calls today${statsQ.data?.successRate != null ? ` · ${statsQ.data.successRate}% success` : ""}${balanceCents != null ? ` · ₹${(balanceCents / 100).toFixed(0)} balance` : ""}`}
-      actions={
-        !isManagedClient ? (
-          <Button size="sm" className="h-8 gap-1.5 px-3 text-xs" onClick={() => navigate("/app/vibe")}>
-            <Plus className="size-3.5" />
-            New agent
+    <div className="p-6 max-w-7xl mx-auto space-y-6">
+      {/* ── Top Header & Actions ── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-border/60">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
+            Dashboard
+            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-400 border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 rounded-full">
+              <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" /> Live
+            </span>
+          </h1>
+          <p className="text-xs text-muted-foreground/70 mt-1">
+            Real-time voice orchestration, active agents, and outbound lead performance.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button size="sm" variant="outline" className="h-9 text-xs gap-1.5" onClick={() => navigate("/app/campaigns")}>
+            <Layers className="size-3.5" /> Campaign Studios
           </Button>
-        ) : undefined
-      }
-      contentClassName="!pt-4"
-    >
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
-        <div className="min-w-0 overflow-hidden rounded-lg border border-border">
-          <div className="flex h-10 items-center justify-between border-b border-border px-3.5">
-            <h2 className="text-[13px] font-semibold">Agents</h2>
-            <Link href="/app/agents" className="text-[11px] text-muted-foreground hover:text-foreground">
-              View all
+          {!isManagedClient && (
+            <Button size="sm" className="h-9 text-xs gap-1.5 bg-primary text-primary-foreground hover:opacity-90 shadow-md shadow-primary/10" onClick={() => navigate("/app/vibe")}>
+              <Plus className="size-3.5" /> New AI Agent
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* ── Executive KPI Cards Grid ── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Card 1: Today's Calls */}
+        <div className="p-4 rounded-xl border border-border/80 bg-card/80 shadow-sm flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground">Calls Today</span>
+            <div className="p-2 rounded-lg bg-blue-500/10 text-blue-400">
+              <PhoneCall className="size-4" />
+            </div>
+          </div>
+          <div className="mt-3">
+            <p className="text-2xl font-bold tracking-tight text-foreground">{statsQ.data?.callsToday ?? 0}</p>
+            <p className="text-[11px] text-muted-foreground/70 mt-0.5 flex items-center gap-1">
+              <Activity className="size-3 text-emerald-400" /> Active voice engine
+            </p>
+          </div>
+        </div>
+
+        {/* Card 2: Success Rate */}
+        <div className="p-4 rounded-xl border border-border/80 bg-card/80 shadow-sm flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground">Success Rate</span>
+            <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400">
+              <TrendingUp className="size-4" />
+            </div>
+          </div>
+          <div className="mt-3">
+            <p className="text-2xl font-bold tracking-tight text-foreground">
+              {statsQ.data?.successRate != null ? `${statsQ.data.successRate}%` : "100%"}
+            </p>
+            <p className="text-[11px] text-muted-foreground/70 mt-0.5 flex items-center gap-1">
+              <ShieldCheck className="size-3 text-emerald-400" /> Call completion quality
+            </p>
+          </div>
+        </div>
+
+        {/* Card 3: Active Agents */}
+        <div className="p-4 rounded-xl border border-border/80 bg-card/80 shadow-sm flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground">AI Agents</span>
+            <div className="p-2 rounded-lg bg-purple-500/10 text-purple-400">
+              <Bot className="size-4" />
+            </div>
+          </div>
+          <div className="mt-3">
+            <p className="text-2xl font-bold tracking-tight text-foreground">{agents.length}</p>
+            <p className="text-[11px] text-muted-foreground/70 mt-0.5">
+              {agents.filter((a: any) => a.status === "active").length} active, {agents.filter((a: any) => a.status !== "active").length} draft
+            </p>
+          </div>
+        </div>
+
+        {/* Card 4: Wallet Balance */}
+        <div className="p-4 rounded-xl border border-border/80 bg-card/80 shadow-sm flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground">Wallet Balance</span>
+            <Link href="/app/wallet" className="p-2 rounded-lg bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 transition-colors">
+              <Wallet className="size-4" />
             </Link>
           </div>
-          <div className="divide-y divide-border/70">
-            {agents.slice(0, 8).map((agent: any) => (
+          <div className="mt-3 flex items-baseline justify-between">
+            <div>
+              <p className="text-2xl font-bold tracking-tight text-foreground">₹{balanceInr}</p>
+              <p className="text-[11px] text-muted-foreground/70 mt-0.5">
+                {lowBalance ? "⚠️ Low balance" : "Sufficient balance"}
+              </p>
+            </div>
+            <Link href="/app/wallet" className="text-xs font-semibold text-primary hover:underline">
+              Top Up →
+            </Link>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Main Layout (Agents & Sidebar) ── */}
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+        {/* Agents Card */}
+        <div className="rounded-xl border border-border/80 bg-card/80 shadow-sm overflow-hidden flex flex-col">
+          <div className="flex h-12 items-center justify-between border-b border-border/60 px-4">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+              <Bot className="size-4 text-primary" /> Active AI Agents ({agents.length})
+            </h2>
+            <Link href="/app/agents" className="text-xs font-semibold text-primary hover:underline">
+              View All Agents →
+            </Link>
+          </div>
+
+          <div className="divide-y divide-border/60">
+            {agents.slice(0, 6).map((agent: any) => (
               <Link
                 key={agent.id}
                 href={`/app/agents/${agent.id}`}
-                className="group grid min-h-14 grid-cols-[minmax(0,1fr)_auto] items-center gap-4 px-3.5 transition-colors hover:bg-muted/35"
+                className="group grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 px-4 py-3.5 transition-colors hover:bg-muted/30"
               >
-                <div className="flex min-w-0 items-center gap-3">
-                  <div className="flex size-7 shrink-0 items-center justify-center rounded-md border border-border bg-background">
-                    <Bot className="size-3.5 text-muted-foreground" />
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <div className="size-9 rounded-xl border border-border/80 bg-background flex items-center justify-center shrink-0 group-hover:border-primary/50 transition-colors">
+                    <Bot className="size-4 text-muted-foreground group-hover:text-primary transition-colors" />
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <p className="truncate text-[13px] font-medium">{agent.name ?? `Agent ${agent.id}`}</p>
-                      <span className="inline-flex items-center gap-1 text-[10px] capitalize text-muted-foreground">
+                      <p className="truncate text-sm font-semibold text-foreground group-hover:text-primary transition-colors">
+                        {agent.name ?? `Agent #${agent.id}`}
+                      </p>
+                      <span className={cn(
+                        "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium capitalize",
+                        agent.status === "active" ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "bg-muted/60 text-muted-foreground border border-border"
+                      )}>
                         <StatusDot tone={agent.status === "active" ? "success" : "neutral"} />
                         {agent.status ?? "draft"}
                       </span>
                     </div>
-                    <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
-                      {agent.description || "Prompt · Voice · Tools"}
+                    <p className="mt-0.5 truncate text-xs text-muted-foreground/70">
+                      {agent.description || "Prompt • Voice Runtime • Tool Orchestration"}
                     </p>
                   </div>
                 </div>
-                <ArrowRight className="size-3 text-muted-foreground/50 opacity-0 transition-opacity group-hover:opacity-100" />
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-xs text-muted-foreground/60 hidden sm:inline font-mono">Agent #{agent.id}</span>
+                  <ArrowRight className="size-4 text-muted-foreground/50 opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" />
+                </div>
               </Link>
             ))}
           </div>
         </div>
 
-        <aside className="space-y-5">
+        {/* Sidebar (Setup Progress + Health Issues) ── */}
+        <aside className="space-y-6">
+          {/* Setup Progress Card */}
           {!isManagedClient && !setupDone && (
-            <section className="rounded-lg border border-border bg-card">
-              <div className="border-b border-border px-3.5 py-3">
-                <h2 className="text-[11px] font-semibold">Finish setup</h2>
-                <p className="mt-0.5 text-[10px] text-muted-foreground">Make the first agent operational.</p>
+            <div className="rounded-xl border border-border/80 bg-card/80 p-4 shadow-sm space-y-3">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Setup Progress</h2>
+                <span className="text-xs font-bold text-primary">{setupPercent}%</span>
               </div>
-              <div className="p-2">
+
+              {/* Progress Bar */}
+              <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-primary transition-all duration-500 rounded-full"
+                  style={{ width: `${setupPercent}%` }}
+                />
+              </div>
+
+              <div className="space-y-2 pt-1">
                 {setup.map((item, index) => (
                   <Link
                     key={item.label}
                     href={item.href}
-                    className="flex min-h-9 items-center gap-2 rounded-md px-2 text-[11px] transition-colors hover:bg-muted/40"
+                    className="flex items-center gap-2.5 p-2 rounded-lg text-xs font-medium transition-colors hover:bg-muted/40"
                   >
                     <span
                       className={cn(
-                        "flex size-4 shrink-0 items-center justify-center rounded-full border text-[8px]",
+                        "size-4 shrink-0 rounded-full flex items-center justify-center text-[9px] font-bold border",
                         item.done
-                          ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600"
-                          : "border-border text-muted-foreground",
+                          ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400"
+                          : "border-border text-muted-foreground bg-background"
                       )}
                     >
                       {item.done ? <Check className="size-2.5" /> : index + 1}
                     </span>
-                    <span className={cn("min-w-0 flex-1 truncate", item.done && "text-muted-foreground")}>
+                    <span className={cn("min-w-0 flex-1 truncate", item.done ? "text-muted-foreground line-through" : "text-foreground")}>
                       {item.label}
                     </span>
                     {!item.done && <ArrowRight className="size-3 text-muted-foreground" />}
                   </Link>
                 ))}
               </div>
-            </section>
+            </div>
           )}
 
-          <section className="rounded-lg border border-border bg-card">
-            <div className="flex h-10 items-center justify-between border-b border-border px-3.5">
-              <h2 className="text-[11px] font-semibold">Workspace health</h2>
-              {issues.length === 0 && <StatusDot tone="success" />}
+          {/* Workspace Health Section */}
+          <div className="rounded-xl border border-border/80 bg-card/80 p-4 shadow-sm space-y-3">
+            <div className="flex items-center justify-between border-b border-border/60 pb-2.5">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Workspace Health</h2>
+              {issues.length === 0 ? (
+                <span className="text-[10px] font-semibold text-emerald-400 border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 rounded-full flex items-center gap-1">
+                  <Check className="size-3" /> Healthy
+                </span>
+              ) : (
+                <span className="text-[10px] font-semibold text-rose-400 border border-rose-500/30 bg-rose-500/10 px-2 py-0.5 rounded-full">
+                  {issues.length} Issue{issues.length === 1 ? "" : "s"}
+                </span>
+              )}
             </div>
+
             {issues.length === 0 ? (
-              <p className="px-3.5 py-4 text-[10px] text-muted-foreground">No action needed.</p>
+              <p className="text-xs text-muted-foreground/70 py-2">All voice pipelines and webhooks operational.</p>
             ) : (
-              <div className="divide-y divide-border/70">
-                {issues.slice(0, 4).map((issue) => (
+              <div className="space-y-2">
+                {issues.map((issue) => (
                   <Link
                     key={`${issue.title}-${issue.href}`}
                     href={issue.href}
-                    className="flex gap-2.5 px-3.5 py-3 hover:bg-muted/35"
+                    className="flex items-start gap-2.5 p-2.5 rounded-lg border border-border/60 bg-background/50 hover:bg-muted/40 transition-colors"
                   >
                     <CircleAlert
                       className={cn(
-                        "mt-0.5 size-3.5 shrink-0",
-                        issue.tone === "danger" ? "text-rose-500" : "text-amber-500",
+                        "size-4 shrink-0 mt-0.5",
+                        issue.tone === "danger" ? "text-rose-400" : "text-amber-400"
                       )}
                     />
                     <div className="min-w-0">
-                      <p className="truncate text-[11px] font-medium">{issue.title}</p>
-                      <p className="mt-0.5 truncate text-[10px] text-muted-foreground">{issue.detail}</p>
+                      <p className="text-xs font-medium text-foreground truncate">{issue.title}</p>
+                      <p className="text-[11px] text-muted-foreground/70 truncate mt-0.5">{issue.detail}</p>
                     </div>
                   </Link>
                 ))}
               </div>
             )}
-          </section>
+          </div>
         </aside>
       </div>
 
-      <div className="mt-5 grid gap-5 lg:grid-cols-2">
-        <section className="overflow-hidden rounded-lg border border-border bg-card">
-          <div className="flex h-10 items-center justify-between border-b border-border px-3.5">
-            <h2 className="text-[11px] font-semibold">Recent activity</h2>
-            <Link href="/app/calls" className="text-[10px] text-muted-foreground hover:text-foreground">
-              Open Activity
+      {/* ── Lower Section (Recent Activity & Active Automation) ── */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Recent Call Activity */}
+        <div className="rounded-xl border border-border/80 bg-card/80 shadow-sm overflow-hidden flex flex-col">
+          <div className="flex h-12 items-center justify-between border-b border-border/60 px-4">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+              <Activity className="size-4 text-blue-400" /> Recent Call Activity
+            </h2>
+            <Link href="/app/calls" className="text-xs font-semibold text-primary hover:underline">
+              View Call Logs →
             </Link>
           </div>
+
           {callsQ.isLoading ? (
-            <p className="px-3.5 py-8 text-center text-[10px] text-muted-foreground">Loading…</p>
+            <p className="p-8 text-center text-xs text-muted-foreground">Loading recent call activity…</p>
           ) : calls.length === 0 ? (
-            <p className="px-3.5 py-8 text-center text-[10px] text-muted-foreground">No calls yet.</p>
+            <p className="p-8 text-center text-xs text-muted-foreground">No call activity recorded yet.</p>
           ) : (
-            <div className="divide-y divide-border/70">
+            <div className="divide-y divide-border/60">
               {calls.slice(0, 6).map((call: any) => (
                 <Link
                   key={call.id}
                   href={`/app/calls/${call.id}`}
-                  className="grid min-h-11 grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 px-3.5 text-[10px] hover:bg-muted/35"
+                  className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-4 px-4 py-3 text-xs hover:bg-muted/30 transition-colors"
                 >
-                  <div className="flex min-w-0 items-center gap-2">
+                  <div className="flex items-center gap-2.5 min-w-0">
                     <StatusDot tone={statusTone(String(call.status ?? ""))} />
-                    <span className="truncate font-mono text-[10px]">
+                    <span className="font-mono font-medium text-foreground truncate">
                       {call.direction === "outbound" ? call.toNumber : call.fromNumber}
                     </span>
                   </div>
-                  <span className="text-muted-foreground">{durationLabel(call.durationSeconds)}</span>
-                  <span className="w-12 text-right text-muted-foreground">{relativeTime(call.createdAt)}</span>
+                  <span className="text-muted-foreground font-mono text-[11px]">{durationLabel(call.durationSeconds)}</span>
+                  <span className="text-muted-foreground/70 text-[11px] font-mono text-right w-16">{relativeTime(call.createdAt)}</span>
                 </Link>
               ))}
             </div>
           )}
-        </section>
+        </div>
 
-        <section className="overflow-hidden rounded-lg border border-border bg-card">
-          <div className="flex h-10 items-center justify-between border-b border-border px-3.5">
-            <h2 className="text-[11px] font-semibold">Active automation</h2>
-            <span className="text-[9px] text-muted-foreground">
-              {activePipelines.length} sheet · {activeCampaigns.length} list
+        {/* Active Automation / Campaign Pipelines */}
+        <div className="rounded-xl border border-border/80 bg-card/80 shadow-sm overflow-hidden flex flex-col">
+          <div className="flex h-12 items-center justify-between border-b border-border/60 px-4">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+              <Zap className="size-4 text-amber-400" /> Active Lead Pipelines
+            </h2>
+            <span className="text-[10px] font-semibold text-muted-foreground">
+              {activePipelines.length} Sheets · {activeCampaigns.length} Studios
             </span>
           </div>
+
           {recentReach.length === 0 ? (
-            <div className="px-3.5 py-8 text-center">
-              <p className="text-[10px] text-muted-foreground">No active lead sources.</p>
+            <div className="p-8 text-center">
+              <p className="text-xs text-muted-foreground">No active lead sources or campaign pipelines currently running.</p>
               <Link
-                href={firstAgentId ? `/app/automation?agentId=${firstAgentId}` : "/app/automation"}
-                className="mt-2 inline-flex items-center gap-1 text-[10px] font-medium"
+                href="/app/campaigns"
+                className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
               >
-                Build automation <ArrowRight className="size-3" />
+                Create Campaign Studio <ArrowRight className="size-3" />
               </Link>
             </div>
           ) : (
-            <div className="divide-y divide-border/70">
+            <div className="divide-y divide-border/60">
               {recentReach.map((item) => {
                 const Icon = item.icon;
                 return (
                   <Link
                     key={item.id}
                     href={item.href}
-                    className="flex min-h-11 items-center gap-2.5 px-3.5 hover:bg-muted/35"
+                    className="flex items-center gap-3 px-4 py-3 text-xs hover:bg-muted/30 transition-colors"
                   >
-                    <Icon className="size-3.5 shrink-0 text-muted-foreground" />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-[11px] font-medium">{item.name}</p>
-                      <p className="truncate text-[9px] text-muted-foreground">{item.detail}</p>
+                    <div className="p-2 rounded-lg bg-muted/60 text-muted-foreground shrink-0">
+                      <Icon className="size-4" />
                     </div>
-                    <span className="inline-flex items-center gap-1 text-[9px] capitalize text-muted-foreground">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold text-foreground truncate">{item.name}</p>
+                      <p className="text-[11px] text-muted-foreground/70 truncate mt-0.5">{item.detail}</p>
+                    </div>
+                    <span className="inline-flex items-center gap-1 text-[10px] font-medium capitalize text-muted-foreground shrink-0">
                       <StatusDot tone={statusTone(item.status)} />
                       {item.status}
                     </span>
@@ -434,16 +547,8 @@ export default function HomePage() {
               })}
             </div>
           )}
-        </section>
+        </div>
       </div>
-
-      <footer className="mt-5 flex items-center justify-between border-t border-border/70 pt-4 text-[11px] text-muted-foreground">
-        <span>{agents.length} agent{agents.length === 1 ? "" : "s"} in this workspace</span>
-        <Link href="/app/wallet" className="inline-flex items-center gap-1.5 hover:text-foreground">
-          <Wallet className="size-3" />
-          {availableMinutes == null ? "Billing" : `~${availableMinutes} minutes available`}
-        </Link>
-      </footer>
-    </StripePage>
+    </div>
   );
 }
