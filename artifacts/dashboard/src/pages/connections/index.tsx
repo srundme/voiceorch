@@ -2335,6 +2335,28 @@ export default function ConnectionsPage() {
             )}
           </div>
 
+          {/* Meta Lead Ads row */}
+          <div className="border-t border-border/70">
+            <div className="flex min-h-12 items-center gap-3 px-3.5 py-2.5">
+              <BrandLogoBadge brand="meta" size={18} />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <p className="text-[13px] font-medium">Meta Lead Ads (Facebook & Instagram)</p>
+                  <span className="inline-flex items-center gap-1 text-[10px] text-emerald-500">
+                    <span className="size-1.5 rounded-full bg-emerald-500" />
+                    Live Ready
+                  </span>
+                </div>
+                <p className="truncate text-[11px] text-muted-foreground">
+                  Auto-call leads submitted on Facebook/Instagram Lead Forms in real-time
+                </p>
+              </div>
+              <Button size="sm" variant="outline" className="h-8 px-2.5 text-[11px]" asChild>
+                <Link href="/app/campaigns">Configure Meta Ads</Link>
+              </Button>
+            </div>
+          </div>
+
           {/* WhatsApp link row */}
           <div className="border-t border-border/70">
             <div className="flex min-h-12 items-center gap-3 px-3.5 py-2.5">
