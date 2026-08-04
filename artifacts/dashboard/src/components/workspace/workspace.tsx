@@ -164,7 +164,7 @@ export function WorkspaceSegmentNav<T extends string>({
     <nav
       aria-label="Editor sections"
       className={cn(
-        "flex h-11 shrink-0 items-stretch gap-0.5 overflow-x-auto border-b border-border/70 bg-muted/[0.18] px-2 sm:px-4",
+        "flex h-11 shrink-0 items-stretch overflow-x-auto border-b border-border/70 bg-background px-2 sm:px-4",
         className,
       )}
     >
@@ -177,10 +177,11 @@ export function WorkspaceSegmentNav<T extends string>({
             onClick={() => onSelect(item.id)}
             aria-current={active ? "page" : undefined}
             className={cn(
-              "relative my-1.5 shrink-0 rounded-md px-3 text-[12px] transition-colors",
+              "relative shrink-0 px-3.5 text-[12.5px] font-medium transition-colors duration-150",
+              "after:absolute after:bottom-0 after:left-2 after:right-2 after:h-[2px] after:rounded-full after:transition-all after:duration-150",
               active
-                ? "bg-background font-medium text-foreground shadow-sm ring-1 ring-border/80"
-                : "text-muted-foreground hover:bg-background/50 hover:text-foreground",
+                ? "text-foreground after:bg-foreground"
+                : "text-muted-foreground hover:text-foreground after:bg-transparent",
             )}
           >
             {item.label}

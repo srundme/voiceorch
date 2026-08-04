@@ -728,16 +728,21 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
 
           {/* Welcome / first message */}
           <section className="space-y-3">
-            <div className="space-y-0.5">
-              <h3 className="text-base font-semibold tracking-tight text-foreground">Agent Welcome Message</h3>
-              <p className="text-[12px] text-muted-foreground">What callers hear at the start of the call.</p>
+            <div className="flex items-center gap-2">
+              <div className="flex size-5 shrink-0 items-center justify-center rounded-md border border-border bg-background shadow-[inset_0_1px_1px_rgba(0,0,0,0.04)]">
+                <span className="text-[9px]">👋</span>
+              </div>
+              <div>
+                <h3 className="text-[13px] font-semibold tracking-[-0.01em] text-foreground leading-none">Agent Welcome Message</h3>
+                <p className="text-[11px] text-muted-foreground mt-0.5">What callers hear at the start of the call.</p>
+              </div>
             </div>
-            <div className="space-y-3 rounded-xl border border-border/50 bg-card/30 p-4">
+            <div className="space-y-3 rounded-xl border border-border/60 bg-card/50 p-4 shadow-sm">
               <div className="flex items-center justify-between gap-3">
                 <Label className="text-[12px] font-medium text-foreground/90">Who speaks first</Label>
                 <FormField control={form.control} name="firstSpeaker" render={({ field }) => (
                   <Select value={field.value === "user" ? "user" : "assistant"} onValueChange={field.onChange}>
-                    <SelectTrigger className="h-8 w-48 rounded-lg text-[12px] shrink-0 border-border/50">
+                    <SelectTrigger className="h-8 w-48 rounded-lg text-[12px] shrink-0 border-border/60 shadow-sm">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent position="popper">
@@ -751,7 +756,7 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
                 <FormItem className="space-y-0">
                   <FormControl>
                     <Textarea
-                      className="min-h-[64px] max-h-[88px] text-[13px] leading-relaxed resize-none rounded-lg border-border/40 bg-background/50 px-3.5 py-2.5 shadow-none focus-visible:ring-0 focus-visible:border-foreground/20"
+                      className="min-h-[72px] max-h-[100px] text-[13px] leading-relaxed resize-none rounded-lg border-border/50 bg-background/70 px-3.5 py-2.5 shadow-none focus-visible:ring-0 focus-visible:border-foreground/25"
                       placeholder="Hello, how can I help?"
                       {...field}
                     />
@@ -764,17 +769,22 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
 
           {/* Canvas — system prompt */}
           <section className="space-y-3">
-            <div className="flex items-start justify-between gap-3">
-              <div className="space-y-0.5">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-base font-semibold tracking-tight text-foreground">Canvas</h3>
-                  <Badge variant="secondary" className="text-[10px] font-medium px-1.5 py-0 h-5 rounded-md">
-                    {langLabel}
-                  </Badge>
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <div className="flex size-5 shrink-0 items-center justify-center rounded-md border border-border bg-background shadow-[inset_0_1px_1px_rgba(0,0,0,0.04)]">
+                  <span className="text-[9px]">📝</span>
                 </div>
-                <p className="text-[12px] text-muted-foreground max-w-lg">
-                  How the agent talks, what it sells, and the rules it never breaks.
-                </p>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-[13px] font-semibold tracking-[-0.01em] text-foreground leading-none">Canvas</h3>
+                    <Badge variant="secondary" className="text-[10px] font-medium px-1.5 py-0 h-5 rounded-md">
+                      {langLabel}
+                    </Badge>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-0.5 max-w-lg">
+                    How the agent talks, what it sells, and the rules it never breaks.
+                  </p>
+                </div>
               </div>
               <Button
                 type="button"
@@ -787,7 +797,13 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
                 Generate
               </Button>
             </div>
-            <div className="rounded-xl border border-border/50 bg-card/40 overflow-hidden shadow-sm">
+            <div className="rounded-xl border border-border/60 bg-card/50 overflow-hidden shadow-sm">
+              <div className="flex items-center justify-between border-b border-border/50 px-4 py-2">
+                <span className="text-[10px] font-medium text-muted-foreground/70 uppercase tracking-[0.1em]">System Prompt</span>
+                <span className="text-[10px] tabular-nums text-muted-foreground/50">
+                  {(form.watch("systemPrompt") ?? "").length} chars
+                </span>
+              </div>
               <FormField control={form.control} name="systemPrompt" render={({ field }) => (
                 <FormItem className="space-y-0">
                   <FormControl>
