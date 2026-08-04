@@ -46,7 +46,7 @@ export default function AutomaticCallsPage() {
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
-      {/* Toolbar — parent StripePage owns the Dial flows title */}
+      {/* Toolbar — parent StripePage owns the Campaign Studios title */}
       <div className="flex items-center justify-end gap-2">
         <Button asChild className="h-9">
           <Link href="/app/automatic-calls/new">

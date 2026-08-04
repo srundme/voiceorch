@@ -603,7 +603,7 @@ function CampaignWizard({
     <Dialog open={open} onOpenChange={v => { if (!v) close(); }}>
       <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col gap-0 p-0 overflow-hidden">
         <div className="px-6 pt-5 pb-4 border-b border-border shrink-0">
-          <div className="text-base font-semibold">New dial flow</div>
+          <div className="text-base font-semibold">New campaign studio</div>
           <p className="text-xs text-muted-foreground/60 mt-0.5">Set up an AI voice calling campaign in a few steps</p>
           {/* Step indicator */}
           <div className="flex items-center gap-1.5 mt-4">
@@ -1095,7 +1095,7 @@ function CampaignFormDialog({
     <Dialog open={open} onOpenChange={v => { if (!v) { reset(); onClose(); } }}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle className="text-base">{editing ? "Edit dial flow" : "New dial flow"}</DialogTitle>
+          <DialogTitle className="text-base">{editing ? "Edit campaign studio" : "New campaign studio"}</DialogTitle>
           <DialogDescription className="text-xs">
             {editing ? "Update campaign settings." : "Set up a new outbound calling campaign."}
           </DialogDescription>
@@ -1260,7 +1260,7 @@ export default function CampaignsPage() {
             type="button"
             onClick={() => setHelpOpen(true)}
             className="h-8 w-8 rounded-lg border border-border/60 bg-muted/40 hover:bg-muted/70 flex items-center justify-center text-muted-foreground/50 hover:text-foreground transition-all"
-            title="Dial flow guide"
+            title="Campaign Studio guide"
           >
             <HelpCircle className="h-3.5 w-3.5" />
           </button>
@@ -1277,7 +1277,7 @@ export default function CampaignsPage() {
             <FileText className="h-3.5 w-3.5" /> Export
           </Button>
           <Button size="sm" className="h-8 text-xs gap-1.5 rounded-lg" onClick={() => setCreateOpen(true)}>
-            <Plus className="h-3.5 w-3.5" /> New dial flow
+            <Plus className="h-3.5 w-3.5" /> New campaign studio
           </Button>
         </div>
         <MetricStrip cols={6}>
@@ -1464,7 +1464,7 @@ export default function CampaignsPage() {
                 {/* CTA */}
                 <div className="text-center flex items-center justify-center gap-3">
                   <Button className="h-8 text-xs gap-2" onClick={() => setCreateOpen(true)}>
-                    <Plus className="h-3.5 w-3.5" /> Create dial flow
+                    <Plus className="h-3.5 w-3.5" /> Create campaign studio
                   </Button>
                   <Button asChild variant="outline" className="h-8 text-xs gap-2">
                     <Link href="/app/agents">Open an agent → Reach</Link>
@@ -1479,7 +1479,7 @@ export default function CampaignsPage() {
               </div>
             ) : (
               <div className="py-12 text-center">
-                <p className="text-sm text-muted-foreground/40">No dial flows match your filters.</p>
+                <p className="text-sm text-muted-foreground/40">No campaign studios match your filters.</p>
                 <button className="text-xs text-muted-foreground/50 hover:text-foreground mt-2 underline underline-offset-2"
                   onClick={() => { setSearch(""); setFilterSource("__all__"); setFilterStatus("__all__"); }}>
                   Clear filters
@@ -1525,11 +1525,11 @@ export default function CampaignsPage() {
 
           <div className="py-5 space-y-7">
 
-            {/* What is a dial flow */}
+            {/* What is a campaign studio */}
             <section>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/40 mb-3">What is a dial flow?</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/40 mb-3">What is a campaign studio?</p>
               <div className="rounded-xl border border-border/60 bg-card/60 p-4 text-[11px] text-muted-foreground/70 leading-relaxed space-y-2">
-                <p>A dial flow ties together a <strong className="text-foreground/80">voice agent</strong>, a <strong className="text-foreground/80">phone number</strong>, and a <strong className="text-foreground/80">lead source</strong>.</p>
+                <p>A campaign studio ties together a <strong className="text-foreground/80">voice agent</strong>, a <strong className="text-foreground/80">phone number</strong>, and a <strong className="text-foreground/80">lead source</strong>.</p>
                 <p>When a new lead arrives, the platform dials them automatically. The agent handles the full conversation — qualifying, booking, or transferring — without any human in the loop.</p>
                 <p>New setups start from <strong className="text-foreground/80">Agent → Reach</strong>. This page remains the account-wide list of armed dials.</p>
               </div>
@@ -1588,7 +1588,7 @@ export default function CampaignsPage() {
               <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/40 mb-3">Flows vs. Batches</p>
               <div className="rounded-xl border border-border/60 bg-card/60 p-4 space-y-3">
                 {[
-                  { icon: <Megaphone className="h-3.5 w-3.5 text-primary/50" />, term: "Dial flow", def: "The top-level container. Defines the agent, number, calling hours, and retry rules." },
+                  { icon: <Megaphone className="h-3.5 w-3.5 text-primary/50" />, term: "Campaign Studio", def: "The top-level container. Defines the agent, number, calling hours, and retry rules." },
                   { icon: <Layers className="h-3.5 w-3.5 text-amber-400" />, term: "Batch", def: "One group of leads added at a particular time. A flow can have unlimited batches — each is tracked independently." },
                 ].map(item => (
                   <div key={item.term} className="flex gap-3">

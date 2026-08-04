@@ -29,7 +29,7 @@ export function StripePage({
   children: ReactNode;
   className?: string;
   contentClassName?: string;
-  /** Skip max-width for dense tables (Activity, Dial flows, etc.). */
+  /** Skip max-width for dense tables (Activity, Campaign Studios, etc.). */
   fullBleed?: boolean;
 }) {
   const [, navigate] = useLocation();

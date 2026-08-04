@@ -890,7 +890,7 @@ function WebhookTable({
         {/* Table header */}
         <div className="flex items-center gap-3 border-b border-border/50 bg-muted/30 px-3.5 py-2">
           <div className="w-7 shrink-0" />
-          <div className="flex-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Dial flow</div>
+          <div className="flex-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Campaign Studio</div>
           <div className="hidden max-w-[220px] flex-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground sm:block">Webhook URL</div>
           <div className="hidden w-28 text-right text-[10px] font-semibold uppercase tracking-widest text-muted-foreground md:block">Last Event</div>
           {/* Date sort toggle */}
@@ -906,7 +906,7 @@ function WebhookTable({
 
         {pageRows.length === 0 ? (
           <div className="flex items-center justify-center py-8 text-xs text-muted-foreground">
-            {search ? `No dial flows match "${search}"` : "No webhook connections yet"}
+            {search ? `No campaign studios match "${search}"` : "No webhook connections yet"}
           </div>
         ) : (
           pageRows.map(c => (
@@ -1479,7 +1479,7 @@ export function CrmImportDialog({
 
             {!defaultCampaignId && (
               <div className="space-y-1.5">
-                <Label className="text-xs">Destination dial flow</Label>
+                <Label className="text-xs">Destination campaign studio</Label>
                 <select
                   value={campaignId ?? ""}
                   onChange={e => setCampaignId(e.target.value ? Number(e.target.value) : null)}
@@ -2356,14 +2356,14 @@ export default function ConnectionsPage() {
           ) : webhookConnections.length === 0 ? (
             <div className="px-3.5 py-6 text-center">
               <p className="text-[12px] text-muted-foreground">
-                No webhook connections yet. Create a dial flow or open Automation to get a lead intake URL.
+                No webhook connections yet. Create a campaign studio or open Automation to get a lead intake URL.
               </p>
               <div className="mt-3 flex justify-center gap-2">
                 <Button size="sm" variant="outline" className="h-8 text-[11px]" onClick={() => navigate("/app/automation")}>
                   Open Automation
                 </Button>
                 <Button size="sm" className="h-8 text-[11px]" onClick={() => navigate("/app/campaigns")}>
-                  Dial flows
+                  Campaign Studios
                 </Button>
               </div>
             </div>

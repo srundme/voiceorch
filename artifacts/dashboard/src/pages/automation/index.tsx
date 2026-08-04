@@ -1,5 +1,5 @@
 /**
- * Automation — lead sources, dial flows, call rules, and after-call journeys.
+ * Automation — lead sources, campaign studios, call rules, and after-call journeys.
  */
 
 import { Link, useLocation } from "wouter";

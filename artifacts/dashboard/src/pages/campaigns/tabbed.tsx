@@ -1,5 +1,5 @@
 /**
- * /app/campaigns — Dial flows (account-wide)
+ * /app/campaigns — Campaign Studios (account-wide)
  * Tabs: List dials | Sheet dial | From Website
  *
  * Prefer Agent → Reach for new setups. Deep-link routes like /app/campaigns/:id
@@ -32,7 +32,7 @@ export default function CampaignsTabPage() {
 
   return (
     <StripePage
-      title="Dial flows"
+      title="Campaign Studios"
       description="Live overview of list and source dials. Prefer Agent → Reach for new setups."
       fullBleed
       contentClassName="!px-0 !py-0 max-w-none"

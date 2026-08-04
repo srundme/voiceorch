@@ -999,7 +999,7 @@ export default function LeadCrmWorkspacePage() {
           backTo={ws?.batch ? `/app/campaigns/${campaignId}/batches/${ws.batch.id}` : `/app/campaigns/${campaignId}`}
           backLabel="Back"
           crumbs={[
-            { label: "Dial flows", href: "/app/campaigns" },
+            { label: "Campaign Studios", href: "/app/campaigns" },
             { label: campaign.name, href: `/app/campaigns/${campaignId}` },
             ...(ws?.batch
               ? [{ label: ws.batch.name, href: `/app/campaigns/${campaignId}/batches/${ws.batch.id}` }]

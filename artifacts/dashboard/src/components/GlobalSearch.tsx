@@ -1,6 +1,6 @@
 /**
  * Global Search — ⌘K / Ctrl+K command palette
- * Searches across Leads, Dial flows, Batches, Bookings, Callbacks.
+ * Searches across Leads, Campaign Studios, Batches, Bookings, Callbacks.
  */
 import React, { useState, useEffect, useCallback, useRef } from "react";
 export { useGlobalSearchTrigger } from "@/hooks/useGlobalSearch";
@@ -50,7 +50,7 @@ const ICONS: Record<ResultType, React.ElementType> = {
 };
 
 const LABELS: Record<ResultType, string> = {
-  campaign: "Dial flows",
+  campaign: "Campaign Studios",
   lead:     "Leads",
   batch:    "Batches",
   booking:  "Bookings",
@@ -164,7 +164,7 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
   return (
     <CommandDialog open={open} onOpenChange={o => { if (!o) onClose(); }}>
       <CommandInput
-        placeholder="Search dial flows, leads, batches, bookings…"
+        placeholder="Search campaign studios, leads, batches, bookings…"
         value={query}
         onValueChange={setQuery}
       />
@@ -174,7 +174,7 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
             <Search className="w-8 h-8 text-muted-foreground/30 mx-auto mb-3" />
             <p className="text-sm text-muted-foreground">Type at least 2 characters to search</p>
             <p className="text-xs text-muted-foreground/60 mt-1">
-              Search across dial flows, leads, batches, bookings, and callbacks
+              Search across campaign studios, leads, batches, bookings, and callbacks
             </p>
           </div>
         )}

@@ -375,7 +375,7 @@ export function CallRulesPanel({
 
   const applyToAll = async () => {
     if (campaigns.length === 0) {
-      toast({ title: "No dial flows yet", description: "Create a form, sheet, or list flow first." });
+      toast({ title: "No campaign studios yet", description: "Create a form, sheet, or list flow first." });
       return;
     }
     try {
@@ -400,7 +400,7 @@ export function CallRulesPanel({
       qc.invalidateQueries({ queryKey: getListCampaignsQueryKey() });
       toast({
         title: "Applied to all flows",
-        description: `Updated ${campaigns.length} dial flow${campaigns.length === 1 ? "" : "s"}.`,
+        description: `Updated ${campaigns.length} campaign studio${campaigns.length === 1 ? "" : "s"}.`,
       });
     } catch (err) {
       toast({ title: "Apply failed", description: formatApiError(err), variant: "destructive" });
@@ -467,7 +467,7 @@ export function CallRulesPanel({
         </p>
         {campaigns.length === 0 ? (
           <p className="text-[12px] text-muted-foreground rounded-xl border border-dashed border-border/60 px-3 py-6 text-center">
-            No form / list dial flows on this agent yet. Create one from the presets above, then tune rules here.
+            No form / list campaign studios on this agent yet. Create one from the presets above, then tune rules here.
           </p>
         ) : (
           campaigns.map((c) => <FlowRulesCard key={c.id} campaign={c} />)
