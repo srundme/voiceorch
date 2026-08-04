@@ -128,13 +128,15 @@ export default function ClientAgentsView() {
 
       {/* Browser Live Test overlay */}
       {webcallAgent && (
-        <div className="fixed bottom-4 right-4 z-50 w-[min(92vw,380px)] shadow-2xl rounded-xl">
-          <WebcallPanel
-            agentId={webcallAgent.id}
-            agentName={webcallAgent.name ?? "Agent"}
-            compact
-            onClose={() => setWebcallAgent(null)}
-          />
+        <div className="pointer-events-none fixed bottom-6 right-6 z-50 h-[520px] w-[min(92vw,380px)] bg-transparent">
+          <div className="pointer-events-auto h-full">
+            <WebcallPanel
+              agentId={webcallAgent.id}
+              agentName={webcallAgent.name ?? "Agent"}
+              compact
+              onClose={() => setWebcallAgent(null)}
+            />
+          </div>
         </div>
       )}
 

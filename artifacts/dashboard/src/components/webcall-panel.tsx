@@ -71,7 +71,6 @@ export function WebcallPanel({
   const mutedRef       = useRef(false);
   const callIdRef      = useRef<number | null>(null);
   const doneRef        = useRef(false);
-  const scrollEndRef   = useRef<HTMLDivElement | null>(null);
   const ignoreAudioUntilRef = useRef(0);
 
   const teardown = useCallback(() => {
@@ -322,189 +321,166 @@ export function WebcallPanel({
   }, [autoStart, state, start]);
 
   useEffect(() => () => { doneRef.current = true; teardown(); }, [teardown]);
-  useEffect(() => { scrollEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [lines]);
 
   const active = state === "live" || state === "connecting" || state === "ending";
   /** Wave while speaking / live; fluid dots while idle or connecting. */
   const waveVariant = state === "live" ? "wave" : "fluid-dots";
-  const waveSize = compact ? 280 : 360;
+  const waveSize = compact ? 300 : 380;
+  /** Live captions only — latest few lines, no chat history UI. */
+  const captions = lines.slice(-3);
 
   return (
-    <div className={compact ? "h-full flex flex-col" : "p-5 max-w-3xl"}>
-      <div
-        className={cn(
-          "relative overflow-hidden flex flex-col rounded-2xl border border-border",
-          "bg-[#050508]",
-          compact ? "flex-1" : "",
-        )}
-        style={compact ? undefined : { height: "calc(100dvh - 9rem)" }}
-      >
-        {/* Soft vignette so the WebGL stage reads as one composition */}
-        <div
-          className="pointer-events-none absolute inset-0 z-0"
-          aria-hidden
-          style={{
-            background:
-              "radial-gradient(ellipse 70% 55% at 50% 42%, rgba(30,40,70,0.45) 0%, transparent 70%), linear-gradient(180deg, #07070c 0%, #050508 55%, #030306 100%)",
-          }}
+    <div
+      className={cn(
+        "relative flex h-full min-h-0 flex-col bg-transparent",
+        !compact && "mx-auto max-w-md p-4",
+      )}
+      style={!compact ? { height: "calc(100dvh - 6rem)" } : undefined}
+    >
+      {/* Minimal top chrome — no card */}
+      <div className="relative z-20 flex shrink-0 items-center gap-2.5 px-1 py-2">
+        <span
+          className={cn(
+            "h-1.5 w-1.5 rounded-full",
+            state === "live"
+              ? "bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.7)]"
+              : state === "connecting" || state === "ending"
+                ? "bg-amber-400 animate-pulse"
+                : state === "error"
+                  ? "bg-red-400"
+                  : "bg-foreground/25",
+          )}
         />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[12px] font-medium text-foreground/80">
+            {agentName}
+          </p>
+          <p className="text-[10px] text-muted-foreground/70">
+            {state === "idle" && "Live test"}
+            {state === "connecting" && "Connecting…"}
+            {state === "live" && "Listening"}
+            {state === "ending" && "Ending…"}
+            {state === "error" && "Error"}
+          </p>
+        </div>
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="shrink-0 rounded-full p-1.5 text-muted-foreground/60 transition-colors hover:bg-foreground/5 hover:text-foreground"
+            title="Close"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
 
-        {/* Header — glass strip */}
-        <div className="relative z-20 flex items-center gap-3 px-4 h-12 shrink-0 border-b border-white/5 bg-black/30 backdrop-blur-md">
-          <span
+      {/* Frameless stage: wave + fade-in captions only */}
+      <div className="relative z-10 min-h-0 flex-1">
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+          <div
             className={cn(
-              "h-2 w-2 rounded-full",
-              state === "live"
-                ? "bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.7)]"
-                : state === "connecting" || state === "ending"
-                  ? "bg-amber-400 animate-pulse"
-                  : state === "error"
-                    ? "bg-red-400"
-                    : "bg-white/25",
+              "transition-all duration-700 ease-out",
+              active ? "scale-100 opacity-100" : "scale-95 opacity-70",
             )}
-          />
-          <div className="min-w-0 flex-1">
-            <p className="text-[13px] font-semibold text-white/95 truncate">
-              {shareToken ? agentName : `Live Test — ${agentName}`}
-            </p>
-            <p className="text-[10.5px] text-white/45">
-              {state === "idle" && "Talk to your agent right in the browser"}
-              {state === "connecting" && "Connecting…"}
-              {state === "live" && "Connected — start speaking"}
-              {state === "ending" && "Ending call…"}
-              {state === "error" && "Call ended with an error"}
-            </p>
+          >
+            <SiriWave
+              variant={waveVariant}
+              size={waveSize}
+              renderScale={compact ? 0.7 : 0.8}
+              className="rounded-full"
+              aria-hidden
+            />
           </div>
-          {onClose && (
-            <button
-              onClick={onClose}
-              className="ml-auto shrink-0 p-1 rounded hover:bg-white/10 text-white/50 hover:text-white transition-colors"
-              title="Close"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          )}
         </div>
 
-        {/* Stage: Siri effect + transparent transcript overlay */}
-        <div className="relative z-10 flex-1 min-h-0">
-          {/* Centered WebGL orb */}
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div
-              className={cn(
-                "transition-all duration-700 ease-out",
-                active ? "scale-100 opacity-100" : "scale-95 opacity-80",
-                state === "live" && "drop-shadow-[0_0_40px_rgba(100,140,255,0.25)]",
-              )}
-            >
-              <SiriWave
-                variant={waveVariant}
-                size={waveSize}
-                renderScale={compact ? 0.65 : 0.75}
-                className="rounded-full bg-transparent shadow-[0_20px_80px_rgba(0,0,0,0.55)]"
-                aria-hidden
-              />
-            </div>
-          </div>
-
-          {/* Transparent transcript layer over the effect */}
-          <div className="absolute inset-0 overflow-y-auto px-4 py-5 space-y-2.5 [mask-image:linear-gradient(to_bottom,transparent_0%,black_8%,black_88%,transparent_100%)]">
-            {lines.length === 0 && (
-              <div className="h-full flex flex-col items-center justify-center text-center gap-3 text-white/40">
-                {!active && (
-                  <>
-                    <Phone className="h-6 w-6 opacity-50" />
-                    <p className="text-[12px] max-w-[16rem] leading-relaxed">
-                      Press Start call to begin a live voice test.
-                    </p>
-                  </>
-                )}
-                {active && state !== "live" && (
-                  <p className="text-[12px] tracking-wide text-white/50 animate-pulse">
-                    Connecting…
-                  </p>
-                )}
-                {state === "live" && (
-                  <p className="text-[11px] tracking-[0.18em] uppercase text-white/35">
-                    Listening
-                  </p>
-                )}
-              </div>
-            )}
-            {lines.map((l) => (
-              <div
-                key={l.id}
-                className={cn(
-                  "flex",
-                  l.speaker === "user" ? "justify-end" : "justify-start",
-                )}
-              >
-                <div
+        {/* Live captions — fade in on screen, no bubbles / speakers / chat layout */}
+        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-end px-5 pb-4 pt-20">
+          {captions.length === 0 && state === "idle" && (
+            <p className="text-center text-[12px] text-muted-foreground/50">
+              Press Start to talk
+            </p>
+          )}
+          {captions.length === 0 && state === "live" && (
+            <p className="text-center text-[11px] uppercase tracking-[0.22em] text-foreground/25">
+              Listening
+            </p>
+          )}
+          <div className="flex w-full max-w-[22rem] flex-col items-center gap-2.5">
+            {captions.map((l, i) => {
+              const age = captions.length - 1 - i;
+              return (
+                <p
+                  key={l.id}
                   className={cn(
-                    "max-w-[85%] rounded-2xl px-3.5 py-2 text-[12.5px] leading-relaxed backdrop-blur-xl border shadow-[0_8px_32px_rgba(0,0,0,0.35)]",
-                    l.speaker === "user"
-                      ? "bg-white/15 border-white/20 text-white rounded-br-sm"
-                      : "bg-black/35 border-white/10 text-white/90 rounded-bl-sm",
+                    "w-full text-center text-pretty leading-relaxed tracking-tight",
+                    "webcall-caption-in",
+                    age === 0
+                      ? "text-[15px] font-medium text-foreground/90"
+                      : age === 1
+                        ? "text-[13px] text-foreground/40"
+                        : "text-[12px] text-foreground/20",
                   )}
+                  style={{ animationDelay: age === 0 ? "0ms" : undefined }}
                 >
-                  <span className="block text-[9px] uppercase tracking-wide text-white/40 mb-0.5">
-                    {l.speaker === "user" ? "You" : agentName}
-                  </span>
                   {l.text}
-                </div>
-              </div>
-            ))}
-            <div ref={scrollEndRef} />
+                </p>
+              );
+            })}
           </div>
         </div>
+      </div>
 
-        {notice && !error && (
-          <div className="relative z-20 px-4 py-2 border-t border-white/5 flex items-center gap-2 text-[11.5px] text-amber-300 bg-amber-500/10 backdrop-blur-md">
-            <AlertCircle className="h-3.5 w-3.5 shrink-0" /> {notice}
-          </div>
-        )}
-
-        {error && (
-          <div className="relative z-20 px-4 py-2 border-t border-white/5 flex items-center gap-2 text-[11.5px] text-red-300 bg-red-500/10 backdrop-blur-md">
-            <AlertCircle className="h-3.5 w-3.5 shrink-0" /> {error}
-          </div>
-        )}
-
-        {/* Controls — floating glass bar */}
-        <div className="relative z-20 shrink-0 border-t border-white/5 p-3 flex items-center justify-center gap-2.5 bg-black/40 backdrop-blur-md">
-          {state === "idle" || state === "error" ? (
-            <Button onClick={() => void start()} className="h-10 px-5 gap-2 rounded-full text-[13px]">
-              <Phone className="h-4 w-4" /> Start call
-            </Button>
-          ) : (
-            <>
-              <Button
-                onClick={toggleMute}
-                variant="outline"
-                disabled={state !== "live"}
-                className={cn(
-                  "h-10 w-10 p-0 rounded-full border-white/15 bg-white/5 text-white/80 hover:bg-white/10",
-                  muted && "bg-amber-500/15 text-amber-300 border-amber-400/30",
-                )}
-                title={muted ? "Unmute" : "Mute"}
-              >
-                {muted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-              </Button>
-              <Button
-                onClick={end}
-                disabled={state === "ending"}
-                className="h-10 px-5 gap-2 rounded-full text-[13px] bg-red-500 hover:bg-red-600 text-white"
-              >
-                {state === "ending" ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <PhoneOff className="h-4 w-4" />
-                )}
-                {state === "connecting" ? "Connecting…" : "End call"}
-              </Button>
-            </>
+      {(notice || error) && (
+        <div
+          className={cn(
+            "relative z-20 mx-2 mb-1 flex items-center gap-2 rounded-xl px-3 py-2 text-[11.5px] backdrop-blur-md",
+            error
+              ? "bg-red-500/10 text-red-400"
+              : "bg-amber-500/10 text-amber-400",
           )}
+        >
+          <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+          {error ?? notice}
         </div>
+      )}
+
+      {/* Floating controls — no bar / border */}
+      <div className="relative z-20 flex shrink-0 items-center justify-center gap-3 px-2 py-3">
+        {state === "idle" || state === "error" ? (
+          <Button
+            onClick={() => void start()}
+            className="h-11 gap-2 rounded-full px-6 text-[13px] shadow-lg"
+          >
+            <Phone className="h-4 w-4" /> Start call
+          </Button>
+        ) : (
+          <>
+            <Button
+              onClick={toggleMute}
+              variant="outline"
+              disabled={state !== "live"}
+              className={cn(
+                "h-11 w-11 rounded-full border-border/40 bg-background/40 p-0 text-foreground/80 shadow-md backdrop-blur-md hover:bg-background/70",
+                muted && "border-amber-400/40 bg-amber-500/15 text-amber-500",
+              )}
+              title={muted ? "Unmute" : "Mute"}
+            >
+              {muted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+            </Button>
+            <Button
+              onClick={end}
+              disabled={state === "ending"}
+              className="h-11 gap-2 rounded-full bg-red-500 px-5 text-[13px] text-white shadow-lg hover:bg-red-600"
+            >
+              {state === "ending" ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <PhoneOff className="h-4 w-4" />
+              )}
+              {state === "connecting" ? "Connecting…" : "End call"}
+            </Button>
+          </>
+        )}
       </div>
     </div>
   );
