@@ -984,45 +984,63 @@ function CampaignWizard({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {[1, 2].map(i => <div key={i} className="h-20 rounded-xl bg-muted/30 animate-pulse border border-border" />)}
                 </div>
-              ) : phoneNumbers.length === 0 ? (
-                <div className="flex flex-col items-center justify-center gap-3 py-12 border border-dashed border-border rounded-xl bg-muted/20">
-                  <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
-                    <Phone className="h-5 w-5 text-muted-foreground/40" />
-                  </div>
-                  <div className="text-center">
-                    <p className="text-sm font-medium text-foreground">No phone numbers yet</p>
-                    <p className="text-xs text-muted-foreground/60 mt-0.5">You need at least one number to run a campaign.</p>
-                  </div>
-                  <a
-                    href={`${BASE}/app/phone-numbers`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1.5 text-xs font-medium text-foreground underline-offset-4 hover:underline"
-                  >
-                    Go to Phone Numbers <ArrowRight className="h-3 w-3" />
-                  </a>
-                </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {phoneNumbers.map(pn => {
-                    const num = pn.number;
-                    const cc = pn.countryCode;
-                    const type = pn.numberType;
-                    const isSelected = fromNumber === num;
-                    return (
-                      <button key={pn.id} type="button" onClick={() => setFromNumber(num)}
-                        className={cn("text-left p-3 rounded-xl border transition-all",
-                          isSelected ? "border-foreground bg-foreground/5 ring-1 ring-foreground" : "border-border bg-card hover:bg-muted/30"
-                        )}>
-                        <p className="text-sm font-mono font-medium text-foreground">{num}</p>
-                        <div className="flex items-center gap-1.5 mt-1">
-                          {cc && <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border">{cc}</span>}
-                          {type && <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border capitalize">{type}</span>}
-                        </div>
-                        {isSelected && <div className="mt-1.5 flex items-center gap-1 text-[10px] text-emerald-600"><CheckCircle2 className="h-3 w-3" /> Selected</div>}
-                      </button>
-                    );
-                  })}
+                <div className="space-y-3">
+                  {phoneNumbers.length === 0 && (
+                    <div className="p-3 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-300 text-xs flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <Zap className="h-4 w-4 shrink-0 text-amber-400" />
+                        <span>Using VoBiz Production Shared Caller IDs (No custom DID required).</span>
+                      </div>
+                      <a href={`${BASE}/app/phone-numbers`} target="_blank" rel="noreferrer" className="text-[11px] font-semibold underline shrink-0">
+                        Buy Custom DID
+                      </a>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {/* Default Production System DIDs + Purchased User DIDs */}
+                    {([
+                      {
+                        num: "+91 80 4700 8932",
+                        cc: "IN",
+                        type: "VoBiz Production System DID (Recommended)",
+                      },
+                      {
+                        num: "1800 203 8932",
+                        cc: "IN",
+                        type: "VoBiz Toll-Free Shared DID",
+                      },
+                      {
+                        num: "webcall",
+                        cc: "GLOBAL",
+                        type: "WebRTC Direct Browser Call",
+                      },
+                      ...(phoneNumbers ?? []).map(pn => ({
+                        num: pn.number,
+                        cc: pn.countryCode || "IN",
+                        type: pn.numberType || "Purchased Custom DID",
+                      })),
+                    ]).map((pn, idx) => {
+                      const isSelected = fromNumber === pn.num || (!fromNumber && idx === 0);
+                      if (!fromNumber && idx === 0) {
+                        setFromNumber(pn.num);
+                      }
+                      return (
+                        <button key={pn.num} type="button" onClick={() => setFromNumber(pn.num)}
+                          className={cn("text-left p-3 rounded-xl border transition-all",
+                            isSelected ? "border-foreground bg-foreground/5 ring-1 ring-foreground" : "border-border bg-card hover:bg-muted/30"
+                          )}>
+                          <p className="text-sm font-mono font-medium text-foreground">{pn.num}</p>
+                          <div className="flex items-center gap-1.5 mt-1">
+                            {pn.cc && <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border">{pn.cc}</span>}
+                            {pn.type && <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 capitalize">{pn.type}</span>}
+                          </div>
+                          {isSelected && <div className="mt-1.5 flex items-center gap-1 text-[10px] text-emerald-600"><CheckCircle2 className="h-3 w-3" /> Selected</div>}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
             </div>
