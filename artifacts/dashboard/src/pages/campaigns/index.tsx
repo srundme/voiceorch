@@ -396,11 +396,11 @@ function CampaignRow({
 
 // ── Campaign Creation Wizard ──────────────────────────────────────────────
 
-const WIZARD_STEPS = ["info", "source", "crm_mode", "agent", "phone", "settings", "review"] as const;
+const WIZARD_STEPS = ["info", "source", "source_setup", "crm_mode", "agent", "phone", "settings", "review"] as const;
 type WizardStep = (typeof WIZARD_STEPS)[number];
 
 const STEP_LABELS: Record<WizardStep, string> = {
-  info: "Details", source: "Source", crm_mode: "CRM Mode", agent: "Agent", phone: "Phone", settings: "Settings", review: "Review",
+  info: "Details", source: "Source", source_setup: "Configure Source", crm_mode: "CRM Mode", agent: "Agent", phone: "Phone", settings: "Settings", review: "Review",
 };
 
 type CampaignLeadSource = "csv" | "webhook" | "meta_ads" | "crm";
@@ -758,6 +758,172 @@ function CampaignWizard({
                   );
                 })}
               </div>
+            </div>
+          )}
+
+          {step === "source_setup" && (
+            <div className="space-y-4">
+              {/* Option A: CSV / Bulk Upload */}
+              {leadSource === "csv" && (
+                <div className="space-y-4">
+                  <div>
+                    <h3 className="text-sm font-semibold flex items-center gap-2 mb-0.5">
+                      <Upload className="h-4 w-4 text-purple-500" />
+                      Spreadsheet & CSV File Setup
+                    </h3>
+                    <p className="text-xs text-muted-foreground/60">
+                      Upload a CSV file or connect a Google Sheet link to import leads.
+                    </p>
+                  </div>
+
+                  <div className="border-2 border-dashed border-border/80 rounded-xl p-6 text-center hover:bg-muted/20 transition-all cursor-pointer relative bg-muted/5">
+                    <Upload className="h-7 w-7 text-purple-500 mx-auto mb-2" />
+                    <p className="text-xs font-semibold text-foreground">
+                      Click to upload or drag & drop CSV file
+                    </p>
+                    <p className="text-[11px] text-muted-foreground/70 mt-1">
+                      Supported columns: <code className="bg-muted px-1.5 py-0.5 rounded text-[10px]">phone</code> (required), <code className="bg-muted px-1.5 py-0.5 rounded text-[10px]">name</code>, <code className="bg-muted px-1.5 py-0.5 rounded text-[10px]">city</code>
+                    </p>
+                  </div>
+
+                  <div className="space-y-2 pt-2 border-t border-border/50">
+                    <Label className="text-xs font-semibold">Or Live Google Sheet Link</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="https://docs.google.com/spreadsheets/d/..."
+                        className="h-9 text-xs"
+                      />
+                      <Button size="sm" className="h-9 text-xs shrink-0">
+                        Connect Sheet
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Option B: Website / Form */}
+              {leadSource === "webhook" && (
+                <div className="space-y-4">
+                  <div>
+                    <h3 className="text-sm font-semibold flex items-center gap-2 mb-0.5">
+                      <Globe className="h-4 w-4 text-emerald-500" />
+                      Website Form & Webhook Setup
+                    </h3>
+                    <p className="text-xs text-muted-foreground/60">
+                      Leads submitting enquiry forms on your website will trigger an instant AI call.
+                    </p>
+                  </div>
+
+                  <div className="space-y-3 bg-muted/20 border border-border/70 p-4 rounded-xl">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold">Webhook Endpoint URL</Label>
+                      <div className="flex gap-2">
+                        <Input
+                          readOnly
+                          value="https://voiceorch-development.up.railway.app/api/webhooks/form-trigger"
+                          className="h-9 text-xs font-mono bg-muted/40"
+                        />
+                        <Button size="sm" variant="outline" className="h-9 text-xs shrink-0" onClick={() => toast({ title: "Copied!", description: "Webhook URL copied to clipboard" })}>
+                          Copy URL
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-2 border-t border-border/50">
+                      <div className="space-y-0.5">
+                        <p className="text-xs font-medium text-foreground">Webhook Secret Key</p>
+                        <p className="text-[10px] text-muted-foreground">whsec_voiceorch_demo_8932</p>
+                      </div>
+                      <Button size="sm" variant="secondary" className="h-8 text-xs gap-1.5" onClick={() => toast({ title: "Test Webhook Sent!", description: "Simulated lead +91 98765 43210 trigger sent." })}>
+                        <Zap className="h-3 w-3 text-amber-500" />
+                        Send Test Submission
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Option C: Meta Ads */}
+              {leadSource === "meta_ads" && (
+                <div className="space-y-4">
+                  <div>
+                    <h3 className="text-sm font-semibold flex items-center gap-2 mb-0.5">
+                      <BrandLogoBadge brand="meta" size={16} />
+                      Meta Ads Integration (Facebook & Instagram)
+                    </h3>
+                    <p className="text-xs text-muted-foreground/60">
+                      Connect your Meta Business Account to auto-dial leads submitted on Facebook/Instagram Lead Forms.
+                    </p>
+                  </div>
+
+                  <div className="p-4 rounded-xl border border-blue-500/20 bg-blue-500/5 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <BrandLogoBadge brand="meta" size={24} />
+                        <div>
+                          <p className="text-xs font-bold text-foreground">Meta Business Account</p>
+                          <p className="text-[10px] text-emerald-500 font-medium">🟢 Connected & Authorized</p>
+                        </div>
+                      </div>
+                      <Button size="sm" variant="outline" className="h-8 text-xs">
+                        Reconnect Meta
+                      </Button>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-border/50">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Select Facebook Page</Label>
+                        <Input readOnly value="Departmental Store Official Page" className="h-9 text-xs bg-muted/40" />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Select Lead Form</Label>
+                        <Input readOnly value="Q3 Wholesale Grocery Lead Form #802" className="h-9 text-xs bg-muted/40" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Option D: CRM */}
+              {leadSource === "crm" && (
+                <div className="space-y-4">
+                  <div>
+                    <h3 className="text-sm font-semibold flex items-center gap-2 mb-0.5">
+                      <Zap className="h-4 w-4 text-blue-500" />
+                      CRM Connection Setup
+                    </h3>
+                    <p className="text-xs text-muted-foreground/60">
+                      Connect your CRM platform to sync contact lists and trigger automated AI calls.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="p-3 rounded-xl border border-foreground bg-foreground/5 text-center space-y-1 cursor-pointer">
+                      <BrandLogoBadge brand="hubspot" size={20} className="mx-auto" />
+                      <p className="text-xs font-semibold">HubSpot</p>
+                      <span className="text-[10px] text-emerald-500 font-medium">Connected</span>
+                    </div>
+
+                    <div className="p-3 rounded-xl border border-border bg-card hover:bg-muted/20 text-center space-y-1 cursor-pointer">
+                      <BrandLogoBadge brand="zoho" size={20} className="mx-auto" />
+                      <p className="text-xs font-medium">Zoho CRM</p>
+                      <span className="text-[10px] text-muted-foreground">Click to connect</span>
+                    </div>
+
+                    <div className="p-3 rounded-xl border border-border bg-card hover:bg-muted/20 text-center space-y-1 cursor-pointer">
+                      <Globe className="h-5 w-5 text-blue-400 mx-auto" />
+                      <p className="text-xs font-medium">Salesforce</p>
+                      <span className="text-[10px] text-muted-foreground">Click to connect</span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5 pt-2">
+                    <Label className="text-xs">HubSpot API Access Key / Private Token</Label>
+                    <Input placeholder="pat-na1-8932-xxxx-xxxx" className="h-9 text-xs font-mono" />
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
