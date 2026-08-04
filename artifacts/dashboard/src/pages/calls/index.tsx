@@ -9,7 +9,7 @@ import {
   ChevronDown, ChevronUp, ChevronLeft, ChevronRight, RefreshCw, Clock, AlertTriangle,
   CheckCircle2, PauseCircle, PlayCircle, XCircle, Voicemail,
   UserCheck, Users, TrendingUp, Globe, Eye,
-  PhoneOff, PhoneMissed, Megaphone, ArrowUpRight, ArrowDownLeft,
+  PhoneOff, PhoneMissed, Megaphone, ArrowUpRight, ArrowDownLeft, Sparkles
 } from "lucide-react";
 import {
   useListCalls,
