@@ -37,7 +37,7 @@ import {
   Phone, Globe, Building2, Zap, ListFilter, Plus,
   PhoneIncoming, ArrowRightLeft, Radio, Ban,
   TrendingUp, DollarSign, Target, MoreVertical, Eye,
-  KeyRound, Link2, Link2Off, Loader2, Instagram,
+  KeyRound, Link2, Link2Off, Loader2, Instagram, RefreshCw,
 } from "lucide-react";
 import { CallDetailDrawer } from "@/components/call-detail-drawer";
 import { TablePagination } from "@/components/table-pagination";
