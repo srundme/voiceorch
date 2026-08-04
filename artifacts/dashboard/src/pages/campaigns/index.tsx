@@ -512,9 +512,11 @@ function CampaignWizard({
   const [retryDelayMinutes, setRetryDelayMinutes] = useState<number>(15);
   const [callingWindow, setCallingWindow] = useState<string>("09:00 AM - 07:00 PM");
 
+  const [, setLocation] = useLocation();
   const csvInputRef = useRef<HTMLInputElement>(null);
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [parsedLeadsCount, setParsedLeadsCount] = useState<number>(0);
+  const [parsedLeadRows, setParsedLeadRows] = useState<Record<string, string>[]>([]);
 
   function handleCsvFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -525,13 +527,30 @@ function CampaignWizard({
     reader.onload = (evt) => {
       const text = evt.target?.result as string;
       if (text) {
-        const lines = text.split("\n").filter(l => l.trim().length > 0);
-        const leadCount = Math.max(0, lines.length - 1);
-        setParsedLeadsCount(leadCount);
-        toast({
-          title: "CSV File Uploaded!",
-          description: `Loaded ${file.name} (${leadCount} leads parsed).`,
-        });
+        const lines = text.split("\n").map(l => l.trim()).filter(l => l.length > 0);
+        if (lines.length > 1) {
+          const rawHeaders = lines[0]!.split(",").map(h => h.trim().replace(/^["']|["']$/g, '').toLowerCase());
+          const rows: Record<string, string>[] = [];
+          for (let i = 1; i < lines.length; i++) {
+            const vals = lines[i]!.split(",").map(v => v.trim().replace(/^["']|["']$/g, ''));
+            if (vals.length === 0 || !vals.some(v => v.length > 0)) continue;
+            const rowObj: Record<string, string> = {};
+            rawHeaders.forEach((h, idx) => {
+              rowObj[h] = vals[idx] ?? "";
+            });
+            const phoneVal = rowObj["phone"] || rowObj["mobile"] || rowObj["number"] || vals[0] || "";
+            if (phoneVal) {
+              rowObj["phone"] = phoneVal;
+              rows.push(rowObj);
+            }
+          }
+          setParsedLeadRows(rows);
+          setParsedLeadsCount(rows.length);
+          toast({
+            title: "CSV File Uploaded!",
+            description: `Loaded ${file.name} (${rows.length} leads parsed ready to dial).`,
+          });
+        }
       }
     };
     reader.readAsText(file);
@@ -628,28 +647,15 @@ function CampaignWizard({
     if (!name.trim() || !agentId) return;
     if (!consentComplete()) return;
     try {
+      let targetCampaignId: number | null = null;
+      let isExistingStudio = false;
+
       // ── Smart Agent Studio Auto-Grouping ──
-      // If a campaign studio already exists for this agent, attach the new batch/run
-      // under the existing studio instead of creating duplicate separate campaign studios.
       const existing = activeCampaigns.find(c => c.agentId === agentId);
       
       if (existing) {
-        // If CSV leads or settings were passed, create batch under existing studio
-        try {
-          await fetch(`${BASE}/api/campaigns/${existing.id}/batches`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              name: name.trim() || `Run Batch #${(existing.totalLeads || 0) + 1}`,
-            }),
-          });
-        } catch {
-          // ignore if batch endpoint fails, studio is still reused cleanly
-        }
-        toast({ 
-          title: "Added to Agent Studio", 
-          description: `Grouped under existing campaign "${existing.name}"` 
-        });
+        targetCampaignId = existing.id;
+        isExistingStudio = true;
       } else {
         const consentBasis = agentDpdpEnabled && consentBasisType
           ? {
@@ -669,7 +675,7 @@ function CampaignWizard({
           };
         };
         const d = cfg.callDefaults ?? {};
-        await create.mutateAsync({
+        const createdCampaign = await create.mutateAsync({
           data: {
             name: name.trim(),
             description: desc.trim() || undefined,
@@ -684,11 +690,39 @@ function CampaignWizard({
             callDelaySeconds: d.callDelaySeconds,
           } as Parameters<typeof create.mutateAsync>[0]["data"],
         });
-        toast({ title: "Campaign studio created", description: name.trim() });
+        targetCampaignId = createdCampaign.id;
       }
+
+      // ── Automatically Upload Parsed CSV Batch Leads ──
+      if (targetCampaignId && parsedLeadRows.length > 0) {
+        try {
+          await fetch(`/api/campaigns/${targetCampaignId}/batches`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: `Batch #${new Date().toLocaleDateString()} (${parsedLeadRows.length} leads)`,
+              leadSource: "csv",
+              leads: parsedLeadRows,
+              autoStart: true,
+            }),
+          });
+        } catch (err) {
+          console.error("Batch leads auto-upload failed:", err);
+        }
+      }
+
+      toast({ 
+        title: isExistingStudio ? "Added to Agent Studio" : "Campaign studio created", 
+        description: `Active for agent "${selectedAgent?.name || 'Agent'}"` 
+      });
 
       await qc.invalidateQueries({ queryKey: getListCampaignsQueryKey() });
       close();
+
+      // ── Auto-Navigate to the Campaign Studio Page ──
+      if (targetCampaignId) {
+        setLocation(`/app/campaigns/${targetCampaignId}`);
+      }
     } catch (err) {
       const msg = (err instanceof Error ? err.message : null)
         ?? "Failed to create campaign";
