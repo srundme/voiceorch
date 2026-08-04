@@ -1912,35 +1912,6 @@ export default function CampaignDetailPage() {
               </div>
             )}
           </div>
-            ) : (() => {
-              // Group batches by their date label (extracted from "Live — Jun 30" names)
-              const groups: { dateLabel: string; items: CampaignBatch[] }[] = [];
-              const seen = new Map<string, CampaignBatch[]>();
-              [...batches].sort((a, b) => b.id - a.id).forEach(batch => {
-                const match = batch.name.match(/Live — (.+)/);
-                const label = match ? match[1]! : batch.name;
-                if (!seen.has(label)) { seen.set(label, []); groups.push({ dateLabel: label, items: seen.get(label)! }); }
-                seen.get(label)!.push(batch);
-              });
-              return (
-                <div className="space-y-4">
-                  {groups.map(({ dateLabel, items }) => (
-                    <div key={dateLabel}>
-                      <div className="flex items-center gap-2 mb-2">
-                        <Calendar className="h-3 w-3 text-muted-foreground/40" />
-                        <span className="text-xs font-semibold text-muted-foreground/50 uppercase tracking-wider">{dateLabel}</span>
-                        <div className="flex-1 h-px bg-border/40" />
-                      </div>
-                      <div className="grid grid-cols-1 gap-3">
-                        {items.map((batch, i) => <BatchKpiCard key={batch.id} batch={batch} index={i} campaignId={campaignId} />)}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              );
-            })()}
-          </div>
-          )}
 
           </>)}
 
