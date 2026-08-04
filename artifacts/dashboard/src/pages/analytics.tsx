@@ -54,18 +54,23 @@ function presetToRange(p: Preset): DateRange {
 // ── Sub-components ────────────────────────────────────────────────────────────
 
 function KpiCard({
-  label, value, sub, icon: Icon, highlight = false,
-}: { label: string; value: string | number; sub?: string; icon: React.ElementType; highlight?: boolean }) {
+  label, value, sub, icon: Icon, highlight = false, color = "bg-muted", iconColor = "text-muted-foreground",
+}: { label: string; value: string | number; sub?: string; icon: React.ElementType; highlight?: boolean; color?: string; iconColor?: string }) {
   return (
-    <div className={cn("p-4 rounded-lg border bg-card", highlight && "border-primary/30 bg-primary/5")}>
-      <div className="flex items-start justify-between mb-3">
-        <p className="text-xs text-muted-foreground leading-tight">{label}</p>
-        <div className="h-6 w-6 rounded-md bg-muted flex items-center justify-center">
-          <Icon className="h-3 w-3 text-muted-foreground" />
+    <div className={cn(
+      "p-4 rounded-xl border bg-card shadow-sm hover:shadow-md transition-shadow flex flex-col gap-3",
+      highlight ? "border-primary/20 bg-primary/5" : "border-border/80"
+    )}>
+      <div className="flex items-center justify-between">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/60">{label}</p>
+        <div className={cn("h-8 w-8 rounded-xl flex items-center justify-center", color)}>
+          <Icon className={cn("h-4 w-4", iconColor)} />
         </div>
       </div>
-      <p className="text-xl font-bold tabular-nums">{value}</p>
-      {sub && <p className="text-[10px] text-muted-foreground mt-1">{sub}</p>}
+      <div>
+        <p className={cn("text-2xl font-bold tabular-nums tracking-tight", highlight ? "text-primary" : "text-foreground")}>{value}</p>
+        {sub && <p className="text-[11px] text-muted-foreground/60 mt-1">{sub}</p>}
+      </div>
     </div>
   );
 }
@@ -103,15 +108,15 @@ function OverviewTab({ range, campaignId }: { range: DateRange; campaignId?: num
   const d = data as OverviewData | undefined;
 
   const kpis = [
-    { label: "Total Leads",           value: (d?.totalLeads       ?? 0).toLocaleString(), icon: Users,          sub: "imported in range" },
-    { label: "Connected Leads",        value: (d?.connected        ?? 0).toLocaleString(), icon: PhoneIncoming,  sub: `${d?.connectionRate ?? 0}% connection rate` },
-    { label: "Connection Rate",        value: `${d?.connectionRate ?? 0}%`,                icon: TrendingUp,     sub: "connected / called", highlight: true },
-    { label: "Interested",             value: (d?.interested       ?? 0).toLocaleString(), icon: BarChart2,      sub: "interested or better" },
-    { label: "Booked",                 value: (d?.booked           ?? 0).toLocaleString(), icon: CalendarCheck,  sub: `${d?.bookingRate ?? 0}% booking rate` },
-    { label: "Transferred",            value: (d?.transferred      ?? 0).toLocaleString(), icon: ArrowRightLeft, sub: `${d?.transferRate ?? 0}% transfer rate` },
-    { label: "Booking Rate",           value: `${d?.bookingRate    ?? 0}%`,                icon: TrendingUp,     sub: "booked / called", highlight: true },
-    { label: "Callback Success Rate",  value: `${d?.callbackSuccessRate ?? 0}%`,           icon: PhoneCall,      sub: "completed callbacks" },
-    { label: "Avg Call Duration",      value: fmtDur(d?.avgDurationSeconds),               icon: Clock,          sub: "across connected calls" },
+    { label: "Total Leads",          value: (d?.totalLeads      ?? 0).toLocaleString(), icon: Users,          sub: "imported in range",         color: "bg-sky-500/15",    iconColor: "text-sky-400" },
+    { label: "Connected",            value: (d?.connected       ?? 0).toLocaleString(), icon: PhoneIncoming,  sub: `${d?.connectionRate ?? 0}% connection rate`, color: "bg-emerald-500/15", iconColor: "text-emerald-400" },
+    { label: "Connection Rate",      value: `${d?.connectionRate ?? 0}%`,               icon: TrendingUp,     sub: "connected / called",        highlight: true, color: "bg-primary/15",    iconColor: "text-primary" },
+    { label: "Interested",           value: (d?.interested      ?? 0).toLocaleString(), icon: BarChart2,      sub: "interested or better",      color: "bg-amber-500/15",  iconColor: "text-amber-400" },
+    { label: "Booked",               value: (d?.booked          ?? 0).toLocaleString(), icon: CalendarCheck,  sub: `${d?.bookingRate ?? 0}% booking rate`,   color: "bg-violet-500/15", iconColor: "text-violet-400" },
+    { label: "Transferred",          value: (d?.transferred     ?? 0).toLocaleString(), icon: ArrowRightLeft, sub: `${d?.transferRate ?? 0}% transfer rate`,  color: "bg-blue-500/15",   iconColor: "text-blue-400" },
+    { label: "Booking Rate",         value: `${d?.bookingRate   ?? 0}%`,                icon: TrendingUp,     sub: "booked / called",           highlight: true, color: "bg-primary/15",    iconColor: "text-primary" },
+    { label: "Callback Success",     value: `${d?.callbackSuccessRate ?? 0}%`,          icon: PhoneCall,      sub: "completed callbacks",       color: "bg-rose-500/15",   iconColor: "text-rose-400" },
+    { label: "Avg Call Duration",    value: fmtDur(d?.avgDurationSeconds),              icon: Clock,          sub: "across connected calls",    color: "bg-muted",         iconColor: "text-muted-foreground" },
   ];
 
   const trend = d?.dailyTrend ?? [];
@@ -121,11 +126,16 @@ function OverviewTab({ range, campaignId }: { range: DateRange; campaignId?: num
       {/* KPI Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
         {kpis.map(k => (
-          <KpiCard key={k.label} label={k.label} value={isLoading ? "—" : k.value} sub={k.sub} icon={k.icon} highlight={k.highlight} />
+          <KpiCard key={k.label} label={k.label} value={isLoading ? "—" : k.value} sub={k.sub} icon={k.icon} highlight={k.highlight} color={k.color} iconColor={k.iconColor} />
         ))}
         {/* Rate bars card */}
-        <div className="p-4 rounded-lg border bg-card col-span-2 sm:col-span-1 xl:col-span-1">
-          <p className="text-xs text-muted-foreground mb-3">Conversion Rates</p>
+        <div className="p-4 rounded-xl border border-border/80 bg-card shadow-sm col-span-2 sm:col-span-1 xl:col-span-1">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="h-8 w-8 rounded-xl bg-muted/60 flex items-center justify-center">
+              <BarChart2 className="h-4 w-4 text-muted-foreground" />
+            </div>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/60">Conversion Rates</p>
+          </div>
           <div className="space-y-3">
             <RateBar label="Connection" value={d?.connectionRate ?? 0} color="bg-blue-500" />
             <RateBar label="Booking"    value={d?.bookingRate    ?? 0} color="bg-emerald-500" />
@@ -137,21 +147,26 @@ function OverviewTab({ range, campaignId }: { range: DateRange; campaignId?: num
 
       {/* Daily trend chart */}
       {trend.length > 0 && (
-        <div className="rounded-lg border bg-card p-5">
-          <h3 className="text-sm font-semibold mb-4">Daily Trend</h3>
-          <ResponsiveContainer width="100%" height={220}>
+        <div className="rounded-xl border border-border/80 bg-card shadow-sm p-6">
+          <div className="flex items-center justify-between mb-5">
+            <div>
+              <h3 className="text-sm font-semibold text-foreground">Daily Trend</h3>
+              <p className="text-[11px] text-muted-foreground/60 mt-0.5">Calls connected, booked, and transferred per day</p>
+            </div>
+          </div>
+          <ResponsiveContainer width="100%" height={240}>
             <AreaChart data={trend} margin={{ top: 4, right: 12, bottom: 0, left: -16 }}>
               <defs>
                 <linearGradient id="gConn" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%"  stopColor="#3b82f6" stopOpacity={0.3} />
+                  <stop offset="5%"  stopColor="#3b82f6" stopOpacity={0.25} />
                   <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
                 </linearGradient>
                 <linearGradient id="gBook" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%"  stopColor="#10b981" stopOpacity={0.3} />
+                  <stop offset="5%"  stopColor="#10b981" stopOpacity={0.25} />
                   <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
                 </linearGradient>
                 <linearGradient id="gTran" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%"  stopColor="#8b5cf6" stopOpacity={0.3} />
+                  <stop offset="5%"  stopColor="#8b5cf6" stopOpacity={0.25} />
                   <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
                 </linearGradient>
               </defs>
@@ -160,20 +175,22 @@ function OverviewTab({ range, campaignId }: { range: DateRange; campaignId?: num
                 tickFormatter={v => { try { return format(parseISO(v), "MMM d"); } catch { return v; } }} />
               <YAxis tick={{ fontSize: 10, fill: ct.tickColor }} allowDecimals={false} />
               <Tooltip
-                contentStyle={{ background: ct.tooltipBg, border: `1px solid ${ct.tooltipBorder}`, borderRadius: 6, fontSize: 11 }}
+                contentStyle={{ background: ct.tooltipBg, border: `1px solid ${ct.tooltipBorder}`, borderRadius: 8, fontSize: 11 }}
                 labelFormatter={v => { try { return format(parseISO(v as string), "MMM d, yyyy"); } catch { return v; } }}
               />
               <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Area type="monotone" dataKey="connected"   name="Connected"   stroke="#3b82f6" fill="url(#gConn)" strokeWidth={1.5} dot={false} />
-              <Area type="monotone" dataKey="booked"      name="Booked"      stroke="#10b981" fill="url(#gBook)" strokeWidth={1.5} dot={false} />
-              <Area type="monotone" dataKey="transferred" name="Transferred" stroke="#8b5cf6" fill="url(#gTran)" strokeWidth={1.5} dot={false} />
+              <Area type="monotone" dataKey="connected"   name="Connected"   stroke="#3b82f6" fill="url(#gConn)" strokeWidth={2} dot={false} />
+              <Area type="monotone" dataKey="booked"      name="Booked"      stroke="#10b981" fill="url(#gBook)" strokeWidth={2} dot={false} />
+              <Area type="monotone" dataKey="transferred" name="Transferred" stroke="#8b5cf6" fill="url(#gTran)" strokeWidth={2} dot={false} />
             </AreaChart>
           </ResponsiveContainer>
         </div>
       )}
       {trend.length === 0 && !isLoading && (
-        <div className="rounded-lg border bg-card p-8 text-center text-muted-foreground text-sm">
-          No daily trend data for this range.
+        <div className="rounded-xl border border-border/80 bg-card shadow-sm p-10 text-center">
+          <BarChart2 className="h-8 w-8 text-muted-foreground/20 mx-auto mb-3" />
+          <p className="text-sm text-muted-foreground/50">No daily trend data for this range.</p>
+          <p className="text-xs text-muted-foreground/30 mt-1">Try selecting a wider date range above.</p>
         </div>
       )}
     </div>
@@ -216,14 +233,14 @@ export default function AnalyticsPage() {
           : undefined
       }
       actions={
-        <div className="flex items-center gap-1 bg-muted/40 rounded-lg p-1">
+        <div className="flex items-center gap-1 bg-muted/40 rounded-xl p-1">
           {PRESETS.map(p => (
             <button
               key={p.key}
               type="button"
               onClick={() => setPreset(p.key)}
               className={cn(
-                "px-3 py-1.5 rounded-md text-xs font-medium transition-all",
+                "px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all",
                 preset === p.key
                   ? "bg-background shadow-sm text-foreground"
                   : "text-muted-foreground hover:text-foreground",
@@ -235,10 +252,12 @@ export default function AnalyticsPage() {
         </div>
       }
     >
-      <p className="mb-5 text-[11px] text-muted-foreground">
-        Showing data from <span className="font-medium text-foreground">{range.from}</span> to{" "}
-        <span className="font-medium text-foreground">{range.to}</span>
-      </p>
+      <div className="mb-5 flex items-center gap-2">
+        <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground bg-muted/40 px-3 py-1.5 rounded-lg">
+          <Clock className="h-3 w-3" />
+          {range.from} → {range.to}
+        </span>
+      </div>
       <OverviewTab range={range} campaignId={campaignId} />
     </StripePage>
   );

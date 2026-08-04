@@ -251,67 +251,67 @@ export default function HomePage() {
       {/* ── Executive KPI Cards Grid ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Card 1: Today's Calls */}
-        <div className="p-4 rounded-xl border border-border/80 bg-card/80 shadow-sm flex flex-col justify-between">
+        <div className="p-4 rounded-xl border border-border/80 bg-card/80 shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-muted-foreground">Calls Today</span>
-            <div className="p-2 rounded-lg bg-blue-500/10 text-blue-400">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50">Calls Today</span>
+            <div className="p-2.5 rounded-xl bg-blue-500/10 text-blue-400">
               <PhoneCall className="size-4" />
             </div>
           </div>
           <div className="mt-3">
-            <p className="text-2xl font-bold tracking-tight text-foreground">{statsQ.data?.callsToday ?? 0}</p>
-            <p className="text-[11px] text-muted-foreground/70 mt-0.5 flex items-center gap-1">
+            <p className="text-3xl font-bold tracking-tight text-foreground">{statsQ.data?.callsToday ?? 0}</p>
+            <p className="text-[11px] text-muted-foreground/60 mt-1 flex items-center gap-1">
               <Activity className="size-3 text-emerald-400" /> Active voice engine
             </p>
           </div>
         </div>
 
         {/* Card 2: Success Rate */}
-        <div className="p-4 rounded-xl border border-border/80 bg-card/80 shadow-sm flex flex-col justify-between">
+        <div className="p-4 rounded-xl border border-border/80 bg-card/80 shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-muted-foreground">Success Rate</span>
-            <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50">Success Rate</span>
+            <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-400">
               <TrendingUp className="size-4" />
             </div>
           </div>
           <div className="mt-3">
-            <p className="text-2xl font-bold tracking-tight text-foreground">
+            <p className="text-3xl font-bold tracking-tight text-foreground">
               {statsQ.data?.successRate != null ? `${statsQ.data.successRate}%` : "100%"}
             </p>
-            <p className="text-[11px] text-muted-foreground/70 mt-0.5 flex items-center gap-1">
+            <p className="text-[11px] text-muted-foreground/60 mt-1 flex items-center gap-1">
               <ShieldCheck className="size-3 text-emerald-400" /> Call completion quality
             </p>
           </div>
         </div>
 
         {/* Card 3: Active Agents */}
-        <div className="p-4 rounded-xl border border-border/80 bg-card/80 shadow-sm flex flex-col justify-between">
+        <div className="p-4 rounded-xl border border-border/80 bg-card/80 shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-muted-foreground">AI Agents</span>
-            <div className="p-2 rounded-lg bg-purple-500/10 text-purple-400">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50">AI Agents</span>
+            <div className="p-2.5 rounded-xl bg-purple-500/10 text-purple-400">
               <Bot className="size-4" />
             </div>
           </div>
           <div className="mt-3">
-            <p className="text-2xl font-bold tracking-tight text-foreground">{agents.length}</p>
-            <p className="text-[11px] text-muted-foreground/70 mt-0.5">
+            <p className="text-3xl font-bold tracking-tight text-foreground">{agents.length}</p>
+            <p className="text-[11px] text-muted-foreground/60 mt-1">
               {agents.filter((a: any) => a.status === "active").length} active, {agents.filter((a: any) => a.status !== "active").length} draft
             </p>
           </div>
         </div>
 
         {/* Card 4: Wallet Balance */}
-        <div className="p-4 rounded-xl border border-border/80 bg-card/80 shadow-sm flex flex-col justify-between">
+        <div className="p-4 rounded-xl border border-border/80 bg-card/80 shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-muted-foreground">Wallet Balance</span>
-            <Link href="/app/wallet" className="p-2 rounded-lg bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 transition-colors">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50">Wallet Balance</span>
+            <Link href="/app/wallet" className="p-2.5 rounded-xl bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 transition-colors">
               <Wallet className="size-4" />
             </Link>
           </div>
           <div className="mt-3 flex items-baseline justify-between">
             <div>
-              <p className="text-2xl font-bold tracking-tight text-foreground">₹{balanceInr}</p>
-              <p className="text-[11px] text-muted-foreground/70 mt-0.5">
+              <p className="text-3xl font-bold tracking-tight text-foreground">₹{balanceInr}</p>
+              <p className={cn("text-[11px] mt-1 font-medium", lowBalance ? "text-rose-400" : "text-muted-foreground/60")}>
                 {lowBalance ? "⚠️ Low balance" : "Sufficient balance"}
               </p>
             </div>
@@ -327,11 +327,12 @@ export default function HomePage() {
         {/* Agents Card */}
         <div className="rounded-xl border border-border/80 bg-card/80 shadow-sm overflow-hidden flex flex-col">
           <div className="flex h-12 items-center justify-between border-b border-border/60 px-4">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-              <Bot className="size-4 text-primary" /> Active AI Agents ({agents.length})
+            <h2 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 flex items-center gap-2">
+              <Bot className="size-4 text-primary" /> Active AI Agents
+              <span className="text-muted-foreground/30 font-normal">({agents.length})</span>
             </h2>
             <Link href="/app/agents" className="text-xs font-semibold text-primary hover:underline">
-              View All Agents →
+              View All →
             </Link>
           </div>
 

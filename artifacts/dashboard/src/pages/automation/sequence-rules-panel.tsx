@@ -178,61 +178,71 @@ export function SequenceRulesPanel({
       {viewMode === "list" && (
         <div className="space-y-6">
           {/* Header Action Bar */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-card border border-border/80 p-5 rounded-xl shadow-sm">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-card border border-border/80 p-5 rounded-xl shadow-sm">
             <div>
-              <h2 className="text-base font-semibold flex items-center gap-2">
-                <Sparkles className="size-4.5 text-amber-500" />
-                Active Automation Sequences
+              <h2 className="text-base font-bold flex items-center gap-2 tracking-tight">
+                <div className="h-8 w-8 rounded-xl bg-amber-500/15 flex items-center justify-center">
+                  <Sparkles className="size-4 text-amber-500" />
+                </div>
+                Automation Sequences
               </h2>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Manage your scheduled AI call sequences, Google Sheet integrations, and execution logs.
+              <p className="text-xs text-muted-foreground mt-1">
+                Schedule AI call sequences with Google Sheet sync, exact calendar dates, and retry logic.
               </p>
             </div>
 
-            <Button onClick={() => { setStep(1); setViewMode("create"); }} className="gap-2 text-xs h-9 px-4">
-              <Plus className="size-4" />
-              + New Automation
+            <Button onClick={() => { setStep(1); setViewMode("create"); }} className="gap-2 text-xs h-9 px-5 shrink-0">
+              <Plus className="size-3.5" />
+              New Automation
             </Button>
           </div>
 
           {/* Stat Summary Cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
-            <div className="p-4 rounded-xl border border-border/80 bg-card/60 backdrop-blur-sm shadow-sm space-y-1">
-              <div className="flex items-center justify-between text-muted-foreground">
-                <span className="text-[11px] font-medium uppercase tracking-wider">Total Enrolled Leads</span>
-                <Users className="size-3.5 text-blue-500" />
+            <div className="p-4 rounded-xl border border-sky-500/20 bg-sky-500/5 shadow-sm space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60">Enrolled Leads</span>
+                <div className="h-7 w-7 rounded-lg bg-sky-500/15 flex items-center justify-center">
+                  <Users className="size-3.5 text-sky-400" />
+                </div>
               </div>
-              <p className="text-xl font-bold tracking-tight">1,668</p>
-              <p className="text-[10px] text-emerald-500 font-medium flex items-center gap-1">
+              <p className="text-2xl font-bold tracking-tight">1,668</p>
+              <p className="text-[10px] text-emerald-500 font-semibold flex items-center gap-1">
                 <CheckCircle2 className="size-2.5" /> Live Sync Active
               </p>
             </div>
 
-            <div className="p-4 rounded-xl border border-border/80 bg-card/60 backdrop-blur-sm shadow-sm space-y-1">
-              <div className="flex items-center justify-between text-muted-foreground">
-                <span className="text-[11px] font-medium uppercase tracking-wider">Active Automations</span>
-                <Zap className="size-3.5 text-amber-500" />
+            <div className="p-4 rounded-xl border border-amber-500/20 bg-amber-500/5 shadow-sm space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60">Active Sequences</span>
+                <div className="h-7 w-7 rounded-lg bg-amber-500/15 flex items-center justify-center">
+                  <Zap className="size-3.5 text-amber-400" />
+                </div>
               </div>
-              <p className="text-xl font-bold tracking-tight">{automations.length} Active</p>
-              <p className="text-[10px] text-muted-foreground font-medium">Running Sequences</p>
+              <p className="text-2xl font-bold tracking-tight">{automations.length}</p>
+              <p className="text-[10px] text-muted-foreground/60 font-medium">Running Sequences</p>
             </div>
 
-            <div className="p-4 rounded-xl border border-border/80 bg-card/60 backdrop-blur-sm shadow-sm space-y-1">
-              <div className="flex items-center justify-between text-muted-foreground">
-                <span className="text-[11px] font-medium uppercase tracking-wider">Next Scheduled Call</span>
-                <Clock className="size-3.5 text-purple-500" />
+            <div className="p-4 rounded-xl border border-purple-500/20 bg-purple-500/5 shadow-sm space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60">Next Trigger</span>
+                <div className="h-7 w-7 rounded-lg bg-purple-500/15 flex items-center justify-center">
+                  <Clock className="size-3.5 text-purple-400" />
+                </div>
               </div>
-              <p className="text-xl font-bold tracking-tight">Aug 21 @ 10:00 AM</p>
-              <p className="text-[10px] text-purple-400 font-medium">Rule #1 Trigger</p>
+              <p className="text-lg font-bold tracking-tight">Aug 21</p>
+              <p className="text-[10px] text-purple-400 font-semibold">@ 10:00 AM · Rule #1</p>
             </div>
 
-            <div className="p-4 rounded-xl border border-border/80 bg-card/60 backdrop-blur-sm shadow-sm space-y-1">
-              <div className="flex items-center justify-between text-muted-foreground">
-                <span className="text-[11px] font-medium uppercase tracking-wider">Assigned Agent</span>
-                <Bot className="size-3.5 text-emerald-500" />
+            <div className="p-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5 shadow-sm space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60">Assigned Agent</span>
+                <div className="h-7 w-7 rounded-lg bg-emerald-500/15 flex items-center justify-center">
+                  <Bot className="size-3.5 text-emerald-400" />
+                </div>
               </div>
               <p className="text-sm font-bold truncate">{agentName || `Agent #${agentId}`}</p>
-              <span className="inline-flex items-center gap-1 text-[10px] text-emerald-500 font-medium">
+              <span className="inline-flex items-center gap-1 text-[10px] text-emerald-500 font-semibold">
                 <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" /> Ready & Live
               </span>
             </div>
@@ -241,88 +251,108 @@ export function SequenceRulesPanel({
           {/* Automations Table (Matching User's 2nd Screenshot) */}
           <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
             <div className="p-4 border-b border-border/70 bg-muted/20 flex items-center justify-between">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Deployed Automations & Execution History
+              <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground/50">
+                Deployed Automations &amp; Execution History
               </h3>
-              <Badge variant="outline" className="text-[10px] text-emerald-500 border-emerald-500/20 bg-emerald-500/10">
-                Live Auto-Dialing Engine
-              </Badge>
+              <div className="flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="text-[10px] font-semibold text-emerald-500">Auto-Dialing Engine</span>
+              </div>
             </div>
 
-            <div className="divide-y divide-border/60">
-              {automations.map((item) => (
-                <div
-                  key={item.id}
-                  className="flex flex-col md:flex-row items-start md:items-center justify-between p-4 gap-3 hover:bg-muted/10 transition-colors text-xs"
+            {automations.length === 0 ? (
+              <div className="py-14 px-6 text-center flex flex-col items-center">
+                <div className="h-12 w-12 rounded-2xl bg-muted/40 flex items-center justify-center mb-4">
+                  <Zap className="size-6 text-muted-foreground/30" />
+                </div>
+                <p className="text-sm font-semibold text-foreground/60">No automations yet</p>
+                <p className="text-xs text-muted-foreground/40 mt-1 max-w-xs">
+                  Create your first automation sequence to start scheduling AI voice calls to your leads.
+                </p>
+                <Button
+                  size="sm"
+                  className="mt-5 gap-2 text-xs h-8 px-4"
+                  onClick={() => { setStep(1); setViewMode("create"); }}
                 >
-                  {/* Left Info: Date & Automation Name */}
-                  <div className="flex items-center gap-3 shrink-0">
-                    <div className="space-y-0.5">
-                      <p className="font-semibold text-foreground">{item.createdDate}</p>
-                      <p className="text-[11px] text-muted-foreground flex items-center gap-1">
-                        <Users className="size-3 text-blue-400" /> {item.name}
-                      </p>
+                  <Plus className="size-3.5" /> Create First Automation
+                </Button>
+              </div>
+            ) : (
+              <div className="divide-y divide-border/60">
+                {automations.map((item) => (
+                  <div
+                    key={item.id}
+                    className="flex flex-col md:flex-row items-start md:items-center justify-between p-4 gap-3 hover:bg-muted/10 transition-colors text-xs"
+                  >
+                    {/* Left Info: Date & Automation Name */}
+                    <div className="flex items-center gap-3 shrink-0">
+                      <div className="space-y-0.5">
+                        <p className="font-semibold text-foreground">{item.createdDate}</p>
+                        <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+                          <Users className="size-3 text-blue-400" /> {item.name}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Agent Tag */}
+                    <div className="shrink-0 flex items-center gap-1.5 bg-muted/30 px-2.5 py-1 rounded-md border border-border/50">
+                      <Bot className="size-3.5 text-emerald-500" />
+                      <span className="font-medium text-foreground">{item.agentName}</span>
+                    </div>
+
+                    {/* Channel Tag */}
+                    <div className="shrink-0 flex items-center gap-1.5 bg-muted/30 px-2.5 py-1 rounded-md border border-border/50">
+                      <ExternalLink className="size-3 text-purple-400" />
+                      <span className="text-muted-foreground">{item.channel}</span>
+                    </div>
+
+                    {/* Status Badge */}
+                    <div className="shrink-0">
+                      <span
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border ${
+                          item.status === "completed"
+                            ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
+                            : "bg-blue-500/10 text-blue-500 border-blue-500/20 animate-pulse"
+                        }`}
+                      >
+                        <span
+                          className={`size-1.5 rounded-full ${
+                            item.status === "completed" ? "bg-emerald-500" : "bg-blue-500"
+                          }`}
+                        />
+                        {item.status === "completed" ? "Completed" : "Active Running"}
+                      </span>
+                    </div>
+
+                    {/* Duration & Cost */}
+                    <div className="shrink-0 text-right space-y-0.5">
+                      <p className="font-medium text-foreground">{item.duration}</p>
+                      <p className="text-[11px] text-muted-foreground font-medium">{item.cost}</p>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="size-8 text-muted-foreground hover:text-foreground"
+                        onClick={() => { setStep(1); setViewMode("create"); }}
+                      >
+                        <Edit2 className="size-3.5" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="size-8 text-muted-foreground hover:text-destructive"
+                        onClick={() => setAutomations(automations.filter((a) => a.id !== item.id))}
+                      >
+                        <Trash2 className="size-3.5" />
+                      </Button>
                     </div>
                   </div>
-
-                  {/* Agent Tag */}
-                  <div className="shrink-0 flex items-center gap-1.5 bg-muted/30 px-2.5 py-1 rounded-md border border-border/50">
-                    <Bot className="size-3.5 text-emerald-500" />
-                    <span className="font-medium text-foreground">{item.agentName}</span>
-                  </div>
-
-                  {/* Channel Tag */}
-                  <div className="shrink-0 flex items-center gap-1.5 bg-muted/30 px-2.5 py-1 rounded-md border border-border/50">
-                    <ExternalLink className="size-3 text-purple-400" />
-                    <span className="text-muted-foreground">{item.channel}</span>
-                  </div>
-
-                  {/* Status Badge */}
-                  <div className="shrink-0">
-                    <span
-                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border ${
-                        item.status === "completed"
-                          ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
-                          : "bg-blue-500/10 text-blue-500 border-blue-500/20 animate-pulse"
-                      }`}
-                    >
-                      <span
-                        className={`size-1.5 rounded-full ${
-                          item.status === "completed" ? "bg-emerald-500" : "bg-blue-500"
-                        }`}
-                      />
-                      {item.status === "completed" ? "Completed" : "Active Running"}
-                    </span>
-                  </div>
-
-                  {/* Duration & Cost */}
-                  <div className="shrink-0 text-right space-y-0.5">
-                    <p className="font-medium text-foreground">{item.duration}</p>
-                    <p className="text-[11px] text-muted-foreground font-medium">{item.cost}</p>
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="size-8 text-muted-foreground hover:text-foreground"
-                      onClick={() => { setStep(1); setViewMode("create"); }}
-                    >
-                      <Edit2 className="size-3.5" />
-                    </Button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="size-8 text-muted-foreground hover:text-destructive"
-                      onClick={() => setAutomations(automations.filter((a) => a.id !== item.id))}
-                    >
-                      <Trash2 className="size-3.5" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
