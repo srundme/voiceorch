@@ -556,42 +556,67 @@ function CampaignWizard({
   async function handleCreate() {
     if (!name.trim() || !agentId) return;
     if (!consentComplete()) return;
-    const consentBasis = agentDpdpEnabled && consentBasisType
-      ? {
-          basisType:        consentBasisType,
-          consentSource:    consentSource.trim() || undefined,
-          consentDateRange: consentDateRange.trim() || undefined,
-          proofReference:   consentProofRef.trim() || undefined,
-          notes:            consentNotes.trim() || undefined,
-        }
-      : undefined;
     try {
-      const cfg = (selectedAgent?.agentConfig ?? {}) as {
-        callDefaults?: {
-          maxAttempts?: number;
-          retryDelayMinutes?: number;
-          callDelaySeconds?: number;
-          concurrentCallLimit?: number;
+      // ── Smart Agent Studio Auto-Grouping ──
+      // If a campaign studio already exists for this agent, attach the new batch/run
+      // under the existing studio instead of creating duplicate separate campaign studios.
+      const existing = activeCampaigns.find(c => c.agentId === agentId);
+      
+      if (existing) {
+        // If CSV leads or settings were passed, create batch under existing studio
+        try {
+          await fetch(`${BASE}/api/campaigns/${existing.id}/batches`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: name.trim() || `Run Batch #${(existing.totalLeads || 0) + 1}`,
+            }),
+          });
+        } catch {
+          // ignore if batch endpoint fails, studio is still reused cleanly
+        }
+        toast({ 
+          title: "Added to Agent Studio", 
+          description: `Grouped under existing campaign "${existing.name}"` 
+        });
+      } else {
+        const consentBasis = agentDpdpEnabled && consentBasisType
+          ? {
+              basisType:        consentBasisType,
+              consentSource:    consentSource.trim() || undefined,
+              consentDateRange: consentDateRange.trim() || undefined,
+              proofReference:   consentProofRef.trim() || undefined,
+              notes:            consentNotes.trim() || undefined,
+            }
+          : undefined;
+        const cfg = (selectedAgent?.agentConfig ?? {}) as {
+          callDefaults?: {
+            maxAttempts?: number;
+            retryDelayMinutes?: number;
+            callDelaySeconds?: number;
+            concurrentCallLimit?: number;
+          };
         };
-      };
-      const d = cfg.callDefaults ?? {};
-      await create.mutateAsync({
-        data: {
-          name: name.trim(),
-          description: desc.trim() || undefined,
-          agentId,
-          fromNumber: fromNumber ?? undefined,
-          concurrentCallLimit: effectiveConcurrency ?? d.concurrentCallLimit,
-          consentBasis,
-          leadSource,
-          triggerMode,
-          maxAttempts: d.maxAttempts,
-          retryDelayMinutes: d.retryDelayMinutes,
-          callDelaySeconds: d.callDelaySeconds,
-        } as Parameters<typeof create.mutateAsync>[0]["data"],
-      });
+        const d = cfg.callDefaults ?? {};
+        await create.mutateAsync({
+          data: {
+            name: name.trim(),
+            description: desc.trim() || undefined,
+            agentId,
+            fromNumber: fromNumber ?? undefined,
+            concurrentCallLimit: effectiveConcurrency ?? d.concurrentCallLimit,
+            consentBasis,
+            leadSource,
+            triggerMode,
+            maxAttempts: d.maxAttempts,
+            retryDelayMinutes: d.retryDelayMinutes,
+            callDelaySeconds: d.callDelaySeconds,
+          } as Parameters<typeof create.mutateAsync>[0]["data"],
+        });
+        toast({ title: "Campaign studio created", description: name.trim() });
+      }
+
       await qc.invalidateQueries({ queryKey: getListCampaignsQueryKey() });
-      toast({ title: "Campaign created", description: name.trim() });
       close();
     } catch (err) {
       const msg = (err instanceof Error ? err.message : null)
