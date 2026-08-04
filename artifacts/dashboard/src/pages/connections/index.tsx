@@ -39,8 +39,7 @@ import {
   Activity, KeyRound, ChevronLeft, ArrowUp, ArrowDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { AppPageHeader } from "@/components/app-page-header";
-import { EmptyState } from "@/components/empty-state";
+import { OperateShell } from "@/components/operate-shell";
 import { BrandLogo, BrandLogoBadge } from "@/components/brand-logos";
 import { format } from "date-fns";
 
@@ -830,10 +829,13 @@ function WebhookTable({
   connections,
   onRefresh,
   newEventIds,
+  flat = false,
 }: {
   connections: Connection[];
   onRefresh: () => void;
   newEventIds: Set<number>;
+  /** Skip outer card chrome when nested in a parent panel. */
+  flat?: boolean;
 }) {
   const [search,   setSearch]   = useState("");
   // "asc" = oldest first, "desc" = newest first (default)
@@ -881,22 +883,25 @@ function WebhookTable({
         </div>
       )}
 
-      <div className="bg-card border border-border rounded-xl overflow-hidden">
+      <div className={cn(
+        "overflow-hidden",
+        flat ? "" : "rounded-xl border border-border bg-card",
+      )}>
         {/* Table header */}
-        <div className="flex items-center gap-3 px-4 py-2 border-b border-border/50 bg-muted/30">
+        <div className="flex items-center gap-3 border-b border-border/50 bg-muted/30 px-3.5 py-2">
           <div className="w-7 shrink-0" />
           <div className="flex-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Dial flow</div>
-          <div className="hidden sm:block flex-1 max-w-[220px] text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Webhook URL</div>
-          <div className="hidden md:block w-28 text-right text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Last Event</div>
+          <div className="hidden max-w-[220px] flex-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground sm:block">Webhook URL</div>
+          <div className="hidden w-28 text-right text-[10px] font-semibold uppercase tracking-widest text-muted-foreground md:block">Last Event</div>
           {/* Date sort toggle */}
           <button
             onClick={() => setDateSort(d => d === "desc" ? "asc" : "desc")}
-            className="hidden md:flex items-center gap-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground hover:text-foreground transition-colors"
+            className="hidden items-center gap-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground transition-colors hover:text-foreground md:flex"
             title={dateSort === "desc" ? "Newest first — click for oldest first" : "Oldest first — click for newest first"}
           >
             {dateSort === "desc" ? <ArrowDown className="w-3 h-3" /> : <ArrowUp className="w-3 h-3" />}
           </button>
-          <div className="w-[100px] text-[10px] font-semibold uppercase tracking-widest text-muted-foreground text-right">Actions</div>
+          <div className="w-[100px] text-right text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Actions</div>
         </div>
 
         {pageRows.length === 0 ? (
@@ -2048,135 +2053,104 @@ function CrmConnectorSection() {
 
   return (
     <>
-    <section className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-          CRM Connectors
-        </h2>
-        <span className="text-[10px] text-muted-foreground">
-          Import contacts • Push call outcomes
-        </span>
-      </div>
-
       {isLoading ? (
-        <div className="space-y-3">
-          {[1, 2].map(i => <div key={i} className="h-20 rounded-xl bg-card border border-border animate-pulse" />)}
+        <div className="divide-y divide-border/70">
+          {[1, 2].map((i) => (
+            <div key={i} className="h-12 animate-pulse bg-muted/20" />
+          ))}
         </div>
       ) : (
-        <div className="space-y-3">
-          {CRM_PROVIDERS.map(provider => {
-            const activeConns = connections.filter(c => c.provider === provider.id);
+        <div className="divide-y divide-border/70">
+          {CRM_PROVIDERS.map((provider) => {
+            const activeConns = connections.filter((c) => c.provider === provider.id);
             const isConnected = activeConns.length > 0;
+            const primary = activeConns[0];
 
             return (
               <div
                 key={provider.id}
-                className={provider.comingSoon ? "cursor-not-allowed" : undefined}
+                className={cn(
+                  "flex min-h-12 items-center gap-3 px-3.5 py-2.5",
+                  provider.comingSoon && "opacity-55",
+                )}
               >
-              <div
-                className={`bg-card border border-border rounded-xl p-4${provider.comingSoon ? " opacity-50 pointer-events-none" : ""}`}
-              >
-                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-                  <div className="flex items-start gap-3 min-w-0 flex-1">
-                    <div className="mt-0.5 shrink-0">
-                      {provider.logo}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="text-sm font-semibold text-foreground">{provider.name}</h3>
-                        {isConnected && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium border bg-emerald-500/15 text-emerald-400 border-emerald-500/20">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                            Connected
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-0.5">{provider.description}</p>
-
-                      {/* Show connected accounts with import action */}
-                      {activeConns.map(conn => (
-                        <div key={conn.id} className="mt-2 flex items-center gap-2 flex-wrap">
-                          <Building2 className="w-3 h-3 text-muted-foreground shrink-0" />
-                          <span className="text-xs text-foreground">{conn.accountName ?? conn.accountId}</span>
-                          {conn.lastSyncAt && (
-                            <span className="text-[10px] text-muted-foreground">
-                              · Synced {format(new Date(conn.lastSyncAt), "MMM d, HH:mm")}
-                            </span>
-                          )}
-                          {conn.lastError && (
-                            <span className="inline-flex items-center gap-1 text-[10px] text-red-400">
-                              <AlertCircle className="w-2.5 h-2.5" />
-                              {conn.lastError.slice(0, 60)}
-                            </span>
-                          )}
-                          {conn.provider !== "zoho" && (
-                            <Button
-                              size="sm" variant="outline"
-                              className="h-6 px-2 text-[10px] ml-auto"
-                              onClick={() => setImportConn(conn)}
-                            >
-                              Import Contacts
-                            </Button>
-                          )}
-                        </div>
-                      ))}
-                      {isConnected && (
-                        <p className="mt-2 text-[10px] text-muted-foreground/60 flex items-center gap-1">
-                          <Activity className="w-3 h-3" />
-                          To set up instant webhook triggers, open the dial flow and use its CRM Integration section.
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col items-stretch sm:items-end gap-2 shrink-0 w-full sm:w-auto">
-                    {!provider.comingSoon && activeConns.map(conn => (
-                      <div key={conn.id} className="flex items-center gap-1.5">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => handleDisconnect(conn)}
-                          className="h-7 px-2 text-muted-foreground hover:text-red-400"
-                          title={`Disconnect ${conn.accountName ?? provider.name}`}
-                        >
-                          <Link2Off className="w-3.5 h-3.5" />
-                        </Button>
-                      </div>
-                    ))}
-                    {provider.comingSoon ? (
-                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-medium bg-muted text-muted-foreground border border-border">
-                        Coming Soon
+                <div className="shrink-0">{provider.logo}</div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="truncate text-[13px] font-medium">{provider.name}</p>
+                    {isConnected && (
+                      <span className="inline-flex items-center gap-1 text-[10px] text-emerald-500">
+                        <span className="size-1.5 rounded-full bg-emerald-500" />
+                        Connected
                       </span>
-                    ) : (
-                      <Button
-                        size="sm"
-                        variant={isConnected ? "ghost" : "default"}
-                        onClick={() => handleConnect(provider.id)}
-                        className="h-10 min-h-10 px-3 text-xs w-full sm:w-auto"
-                      >
-                        <Link2 className="w-3 h-3 mr-1.5" />
-                        {isConnected ? "Connect another" : "Connect"}
-                      </Button>
+                    )}
+                    {provider.comingSoon && (
+                      <span className="rounded border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                        Coming soon
+                      </span>
                     )}
                   </div>
+                  <p className="truncate text-[11px] text-muted-foreground">
+                    {primary
+                      ? (primary.accountName ?? primary.accountId)
+                      : provider.description}
+                    {primary?.lastSyncAt
+                      ? ` · Synced ${format(new Date(primary.lastSyncAt), "MMM d, HH:mm")}`
+                      : ""}
+                  </p>
+                  {primary?.lastError && (
+                    <p className="mt-0.5 truncate text-[10px] text-red-400">{primary.lastError}</p>
+                  )}
                 </div>
-              </div>
+                <div className="flex shrink-0 items-center gap-1">
+                  {!provider.comingSoon && primary && provider.id !== "zoho" && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 px-2 text-[11px]"
+                      onClick={() => setImportConn(primary)}
+                    >
+                      Import
+                    </Button>
+                  )}
+                  {!provider.comingSoon && activeConns.map((conn) => (
+                    <Button
+                      key={conn.id}
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 px-2 text-muted-foreground hover:text-destructive"
+                      title={`Disconnect ${conn.accountName ?? provider.name}`}
+                      onClick={() => handleDisconnect(conn)}
+                    >
+                      <Link2Off className="size-3.5" />
+                    </Button>
+                  ))}
+                  {!provider.comingSoon && (
+                    <Button
+                      size="sm"
+                      variant={isConnected ? "outline" : "default"}
+                      className="h-8 px-2.5 text-[11px]"
+                      onClick={() => handleConnect(provider.id)}
+                    >
+                      <Link2 className="mr-1 size-3" />
+                      {isConnected ? "Add" : "Connect"}
+                    </Button>
+                  )}
+                </div>
               </div>
             );
           })}
         </div>
       )}
 
-    </section>
-
-    {importConn && (
-      <CrmImportDialog
-        connection={importConn}
-        open={true}
-        onClose={() => setImportConn(null)}
-      />
-    )}
-  </>
+      {importConn && (
+        <CrmImportDialog
+          connection={importConn}
+          open={true}
+          onClose={() => setImportConn(null)}
+        />
+      )}
+    </>
   );
 }
 
@@ -2281,188 +2255,188 @@ export default function ConnectionsPage() {
   }, [qc, refetch]);
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
-      <AppPageHeader
-        eyebrow="Integrations"
-        title="Connections"
-        description="Connect your CRM, automate lead intake, and manage campaign webhooks."
-        actions={
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleRefresh}
-              className="h-8 text-xs gap-1.5 rounded-lg"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              Refresh
-            </Button>
-          </div>
-        }
-      />
+    <OperateShell
+      title="Integrations"
+      description="CRM, Google Sheets, and dial-flow webhooks — credentials for Automation to use."
+      back={{ href: "/app/home", label: "Back" }}
+      actions={
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={handleRefresh}
+          className="h-8 gap-1.5 text-xs"
+        >
+          <RefreshCw className="size-3.5" />
+          Refresh
+        </Button>
+      }
+      contentClassName="space-y-4"
+    >
+      {/* Connected accounts — CRM + Sheets as dense rows */}
+      <section className="space-y-2">
+        <div className="flex items-center justify-between gap-2 px-0.5">
+          <h2 className="text-[11px] font-semibold">Connected accounts</h2>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 gap-1.5 px-2 text-[11px]"
+            onClick={() => void connectSheets()}
+          >
+            <BrandLogo brand="googleSheets" size={12} />
+            {(sheetsQ.data?.length ?? 0) > 0 ? "Add Sheets" : "Connect Sheets"}
+          </Button>
+        </div>
 
-      <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-4xl px-4 sm:px-6 py-6 space-y-8">
-
-          {/* 1. CRM Connectors — primary integrations */}
+        <div className="overflow-hidden rounded-lg border border-border bg-card">
+          {/* CRM rows rendered without their own outer border — flatten by embedding CrmConnectorSection rows */}
           <CrmConnectorSection />
 
-          {/* 1b. Google Sheets */}
-          <section className="space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <h2 className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/55">
-                  Google Sheets
-                </h2>
-                <p className="text-xs text-muted-foreground/60 mt-0.5">
-                  Connect Google for Automatic Calls — watch a sheet, dial leads, write results back
-                </p>
-              </div>
-              <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 rounded-lg" onClick={() => void connectSheets()}>
-                <BrandLogo brand="googleSheets" size={14} />
-                {(sheetsQ.data?.length ?? 0) > 0 ? "Connect another" : "Connect Google"}
-              </Button>
-            </div>
+          {/* Google Sheets rows */}
+          <div className="border-t border-border/70">
             {sheetsQ.isLoading ? (
-              <div className="h-14 rounded-xl border border-border/50 bg-card/20 animate-pulse" />
+              <div className="h-12 animate-pulse bg-muted/20" />
             ) : (sheetsQ.data?.length ?? 0) === 0 ? (
-              <div className="rounded-xl border border-dashed border-border/50 bg-card/20 px-4 py-5 flex items-center gap-3">
-                <div className="h-9 w-9 rounded-lg bg-muted/40 flex items-center justify-center shrink-0">
-                  <BrandLogo brand="googleSheets" size={18} />
-                </div>
+              <div className="flex min-h-12 items-center gap-3 px-3.5 py-2.5">
+                <BrandLogo brand="googleSheets" size={18} />
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium">No Google Sheets account connected</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    After connecting, open Automatic Calls to create a sheet → dial pipeline.
+                  <p className="text-[13px] font-medium">Google Sheets</p>
+                  <p className="truncate text-[11px] text-muted-foreground">
+                    Watch a sheet, dial leads, write results back
                   </p>
                 </div>
+                <Button size="sm" className="h-8 px-2.5 text-[11px]" onClick={() => void connectSheets()}>
+                  Connect
+                </Button>
               </div>
             ) : (
-              <div className="space-y-2">
-                {(sheetsQ.data ?? []).map((c) => (
-                  <div key={c.id} className="rounded-xl border border-border/50 bg-card/30 px-4 py-3 flex items-center gap-3">
-                    <BrandLogo brand="googleSheets" size={18} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{c.email}</p>
-                      <p className="text-[11px] text-muted-foreground">Google Sheets connected</p>
+              (sheetsQ.data ?? []).map((c) => (
+                <div key={c.id} className="flex min-h-12 items-center gap-3 border-b border-border/70 px-3.5 py-2.5 last:border-b-0">
+                  <BrandLogo brand="googleSheets" size={18} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="truncate text-[13px] font-medium">{c.email}</p>
+                      <span className="inline-flex items-center gap-1 text-[10px] text-emerald-500">
+                        <span className="size-1.5 rounded-full bg-emerald-500" />
+                        Connected
+                      </span>
                     </div>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-8 text-xs text-muted-foreground hover:text-destructive"
-                      disabled={disconnectSheets.isPending}
-                      onClick={() => disconnectSheets.mutate(c.id)}
-                    >
-                      Disconnect
-                    </Button>
+                    <p className="text-[11px] text-muted-foreground">Google Sheets</p>
                   </div>
-                ))}
-              </div>
-            )}
-          </section>
-
-          {/* 2. Campaign Webhooks — compact searchable table */}
-          <section className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/55">
-                Dial-flow webhooks
-              </h2>
-              <span className="text-[10px] text-muted-foreground/60">
-                {webhookConnections.length} webhook{webhookConnections.length !== 1 ? "s" : ""}
-              </span>
-            </div>
-
-            {isLoading ? (
-              <div className="space-y-1">
-                {[1, 2, 3].map(i => <div key={i} className="h-10 rounded-lg bg-card border border-border animate-pulse" />)}
-              </div>
-            ) : webhookConnections.length === 0 ? (
-              <EmptyState
-                variant="panel"
-                icon={<Webhook />}
-                title="No webhook connections"
-                description="Create a dial flow (or use Agent → Reach) to get a webhook URL for receiving leads."
-                action={{
-                  label: "Go to dial flows",
-                  onClick: () => navigate("/app/campaigns"),
-                  icon: <Zap className="w-3.5 h-3.5" />,
-                }}
-              />
-            ) : (
-              <WebhookTable
-                connections={webhookConnections}
-                onRefresh={handleRefresh}
-                newEventIds={newEventIds}
-              />
-            )}
-          </section>
-
-          {/* 3. Meta Lead Ads — only shown if connected */}
-          {metaConnections.length > 0 && (
-            <section className="space-y-3">
-              <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                Meta Lead Ads
-              </h2>
-              <div className="space-y-3">
-                {metaConnections.map(c => (
-                  <ConnectionCard key={`meta-${c.id}`} connection={c} onRefresh={handleRefresh} hasNewEvent={newEventIds.has(c.id)} />
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* 4. Setup Recipes — collapsed so Coming Soon doesn't dominate */}
-          <details className="group rounded-xl border border-border/50 bg-card/20 open:bg-card/30 [&_summary::-webkit-details-marker]:hidden">
-            <summary className="cursor-pointer list-none flex items-center justify-between gap-3 px-4 py-3.5 select-none">
-              <div className="min-w-0">
-                <h2 className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/55">
-                  More ways to connect
-                </h2>
-                <p className="text-xs text-muted-foreground/55 mt-0.5">
-                  Zapier, Make, and generic webhooks — coming soon
-                </p>
-              </div>
-              <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground/40 transition-transform group-open:rotate-180" />
-            </summary>
-            <div className="px-4 pb-4 space-y-2.5 border-t border-border/40 pt-3">
-              <RecipeCard
-                comingSoon
-                icon={<BrandLogo brand="zapier" size={15} />}
-                title="Zapier & Make"
-                description="Connect any app that supports Zapier or Make to your webhook"
-              >
-                <ZapierMakeRecipe firstWebhookUrl={firstWebhookUrl} />
-              </RecipeCard>
-              <RecipeCard
-                comingSoon
-                icon={<Globe className="w-4 h-4 text-blue-400" />}
-                title="Generic Webhook"
-                description="Any platform that can POST JSON — n8n, custom servers, CRMs"
-                badge="Universal"
-              >
-                <div className="space-y-3">
-                  <p className="text-xs text-muted-foreground">
-                    Send a POST request with a JSON body to your webhook URL. Include a{" "}
-                    <code className="font-mono">phone</code> field (and optionally{" "}
-                    <code className="font-mono">name</code>, <code className="font-mono">email</code>)
-                    or configure custom field mappings using the "Listen" feature.
-                  </p>
-                  <div className="bg-muted rounded-lg p-3 font-mono text-[11px] text-muted-foreground space-y-0.5">
-                    <p><span className="text-blue-400">POST</span> {firstWebhookUrl || "https://…/api/webhooks/lead/TOKEN"}</p>
-                    <p><span className="text-violet-400">Content-Type</span>: application/json</p>
-                    <p>{`{`}</p>
-                    <p className="pl-4"><span className="text-amber-400">"phone"</span>: <span className="text-emerald-400">"+919876543210"</span>,</p>
-                    <p className="pl-4"><span className="text-amber-400">"name"</span>: <span className="text-emerald-400">"Priya Sharma"</span>,</p>
-                    <p className="pl-4"><span className="text-amber-400">"email"</span>: <span className="text-emerald-400">"priya@example.com"</span></p>
-                    <p>{`}`}</p>
-                  </div>
-                  {firstWebhookUrl && <CopyButton text={firstWebhookUrl} label="Copy webhook URL" />}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 px-2 text-[11px] text-muted-foreground hover:text-destructive"
+                    disabled={disconnectSheets.isPending}
+                    onClick={() => disconnectSheets.mutate(c.id)}
+                  >
+                    Disconnect
+                  </Button>
                 </div>
-              </RecipeCard>
-            </div>
-          </details>
+              ))
+            )}
+          </div>
         </div>
-      </div>
-    </div>
+      </section>
+
+      {/* Dial-flow webhooks */}
+      <section className="space-y-2">
+        <div className="flex items-center justify-between px-0.5">
+          <h2 className="text-[11px] font-semibold">Dial-flow webhooks</h2>
+          <span className="text-[10px] text-muted-foreground">
+            {webhookConnections.length} webhook{webhookConnections.length !== 1 ? "s" : ""}
+          </span>
+        </div>
+
+        <div className="overflow-hidden rounded-lg border border-border bg-card">
+          {isLoading ? (
+            <div className="space-y-0 divide-y divide-border/70">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-10 animate-pulse bg-muted/20" />
+              ))}
+            </div>
+          ) : webhookConnections.length === 0 ? (
+            <div className="px-3.5 py-6 text-center">
+              <p className="text-[12px] text-muted-foreground">
+                No webhook connections yet. Create a dial flow or open Automation to get a lead intake URL.
+              </p>
+              <div className="mt-3 flex justify-center gap-2">
+                <Button size="sm" variant="outline" className="h-8 text-[11px]" onClick={() => navigate("/app/automation")}>
+                  Open Automation
+                </Button>
+                <Button size="sm" className="h-8 text-[11px]" onClick={() => navigate("/app/campaigns")}>
+                  Dial flows
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <WebhookTable
+              connections={webhookConnections}
+              onRefresh={handleRefresh}
+              newEventIds={newEventIds}
+              flat
+            />
+          )}
+        </div>
+      </section>
+
+      {/* Meta Lead Ads — only if connected */}
+      {metaConnections.length > 0 && (
+        <section className="space-y-2">
+          <h2 className="px-0.5 text-[11px] font-semibold">Meta Lead Ads</h2>
+          <div className="space-y-2">
+            {metaConnections.map((c) => (
+              <ConnectionCard key={`meta-${c.id}`} connection={c} onRefresh={handleRefresh} hasNewEvent={newEventIds.has(c.id)} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* More — collapsed */}
+      <details className="group rounded-lg border border-border bg-card [&_summary::-webkit-details-marker]:hidden">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3.5 py-3 select-none">
+          <div className="min-w-0">
+            <p className="text-[12px] font-medium">More ways to connect</p>
+            <p className="text-[11px] text-muted-foreground">Zapier, Make, generic webhooks — coming soon</p>
+          </div>
+          <ChevronDown className="size-4 shrink-0 text-muted-foreground/50 transition-transform group-open:rotate-180" />
+        </summary>
+        <div className="space-y-2.5 border-t border-border/70 px-3.5 py-3">
+          <RecipeCard
+            comingSoon
+            icon={<BrandLogo brand="zapier" size={15} />}
+            title="Zapier & Make"
+            description="Connect any app that supports Zapier or Make to your webhook"
+          >
+            <ZapierMakeRecipe firstWebhookUrl={firstWebhookUrl} />
+          </RecipeCard>
+          <RecipeCard
+            comingSoon
+            icon={<Globe className="h-4 w-4 text-blue-400" />}
+            title="Generic Webhook"
+            description="Any platform that can POST JSON — n8n, custom servers, CRMs"
+            badge="Universal"
+          >
+            <div className="space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Send a POST request with a JSON body to your webhook URL. Include a{" "}
+                <code className="font-mono">phone</code> field (and optionally{" "}
+                <code className="font-mono">name</code>, <code className="font-mono">email</code>)
+                or configure custom field mappings using the "Listen" feature.
+              </p>
+              <div className="space-y-0.5 rounded-lg bg-muted p-3 font-mono text-[11px] text-muted-foreground">
+                <p><span className="text-blue-400">POST</span> {firstWebhookUrl || "https://…/api/webhooks/lead/TOKEN"}</p>
+                <p><span className="text-violet-400">Content-Type</span>: application/json</p>
+                <p>{`{`}</p>
+                <p className="pl-4"><span className="text-amber-400">"phone"</span>: <span className="text-emerald-400">"+919876543210"</span>,</p>
+                <p className="pl-4"><span className="text-amber-400">"name"</span>: <span className="text-emerald-400">"Priya Sharma"</span>,</p>
+                <p className="pl-4"><span className="text-amber-400">"email"</span>: <span className="text-emerald-400">"priya@example.com"</span></p>
+                <p>{`}`}</p>
+              </div>
+              {firstWebhookUrl && <CopyButton text={firstWebhookUrl} label="Copy webhook URL" />}
+            </div>
+          </RecipeCard>
+        </div>
+      </details>
+    </OperateShell>
   );
 }

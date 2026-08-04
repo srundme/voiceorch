@@ -220,7 +220,7 @@ export function ChannelsPanel({
   ];
 
   return (
-    <div className={cn("space-y-5", !embedded && "px-4 py-5 sm:px-6 lg:px-8")}>
+    <div className={cn("space-y-4", !embedded && "px-4 py-5 sm:px-6 lg:px-8")}>
       {!embedded && (
         <section>
           <h2 className="text-[15px] font-semibold tracking-[-0.02em]">Channels</h2>
@@ -232,16 +232,16 @@ export function ChannelsPanel({
         </section>
       )}
 
-      <section className="grid min-h-[480px] overflow-hidden rounded-lg border border-border bg-card md:grid-cols-[220px_minmax(0,1fr)]">
-        <div className="border-b border-border bg-muted/[0.16] p-2.5 md:border-b-0 md:border-r">
-          <div className="grid grid-cols-2 gap-1 md:grid-cols-1">
+      <section className="grid min-h-[400px] overflow-hidden rounded-lg border border-border bg-card md:grid-cols-[200px_minmax(0,1fr)]">
+        <div className="border-b border-border bg-muted/[0.16] p-2 md:border-b-0 md:border-r">
+          <div className="grid grid-cols-2 gap-0.5 md:grid-cols-1">
             {channelItems.map((item) => (
               <button
                 key={item.id}
                 type="button"
                 onClick={() => setActiveChannel(item.id)}
                 className={cn(
-                  "flex min-h-11 items-center gap-2.5 rounded-md px-2.5 text-left transition-colors",
+                  "flex min-h-10 items-center gap-2.5 rounded-md px-2.5 text-left transition-colors",
                   activeChannel === item.id
                     ? "bg-foreground/[0.08] text-foreground"
                     : "text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground",

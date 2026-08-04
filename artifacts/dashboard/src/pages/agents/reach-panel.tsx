@@ -202,7 +202,7 @@ export function ReachPanel({
   const armedCount = campaigns.length + pipelines.length;
 
   return (
-    <div className={cn("space-y-6", !embedded && "px-4 py-5 sm:px-6 lg:px-8")}>
+    <div className={cn("space-y-4", !embedded && "px-4 py-5 sm:px-6 lg:px-8")}>
       {!embedded ? (
         <header className="flex items-end justify-between gap-4">
           <div>
