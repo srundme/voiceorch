@@ -2,12 +2,12 @@
  * Automation — lead sources, campaign studios, call rules, and after-call journeys.
  */
 
-import { Link, useLocation } from "wouter";
+import { useLocation } from "wouter";
 import { Loader2, Plus, Workflow } from "lucide-react";
 import { getGetAgentQueryKey, useGetAgent } from "@workspace/api-client-react";
 import { AgentContextBar, useAgentFromSearch } from "@/components/agent-context-bar";
 import { StripePage } from "@/components/stripe-page";
-import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/empty-state";
 import { SequenceRulesPanel } from "./sequence-rules-panel";
 
 export default function AutomationPage() {
@@ -39,17 +39,20 @@ export default function AutomationPage() {
     return (
       <StripePage
         title="Automation"
-        description="Create an agent first, then wire forms, sheets, lists, call rules, and journeys."
+        description="Connect forms, spreadsheets, and call rules once you have an agent."
       >
-        <div className="flex flex-col items-center justify-center py-16 text-center">
-          <Workflow className="mb-3 size-5 text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">No agents yet.</p>
-          <Button asChild className="mt-5 gap-1.5">
-            <Link href="/app/agents?create=1">
-              <Plus className="size-4" />
-              Create agent
-            </Link>
-          </Button>
+        <div className="flex min-h-[50vh] items-center justify-center">
+          <EmptyState
+            variant="hero"
+            icon={<Workflow />}
+            title="Create an agent first"
+            description="Automation runs on top of an agent — build one, then connect lead sources and call sequences."
+            action={{
+              label: "Create agent",
+              onClick: () => navigate("/app/vibe"),
+              icon: <Plus className="w-3.5 h-3.5" />,
+            }}
+          />
         </div>
       </StripePage>
     );

@@ -13,9 +13,9 @@ import AutomaticCallsPage from "@/pages/automatic-calls/index";
 import FromWebsitePage from "./from-website";
 
 const TABS = [
-  { key: "active", label: "List dials" },
-  { key: "scheduled", label: "Sheet dial" },
-  { key: "lead-sources", label: "From Website" },
+  { key: "active", label: "From list" },
+  { key: "scheduled", label: "From spreadsheet" },
+  { key: "lead-sources", label: "From website" },
 ] as const;
 
 export default function CampaignsTabPage() {
@@ -32,8 +32,8 @@ export default function CampaignsTabPage() {
 
   return (
     <StripePage
-      title="Campaign Studios"
-      description="Live overview of list and source dials. Prefer Agent → Reach for new setups."
+      title="Campaigns"
+      description="Run outbound calling from lists, spreadsheets, or website leads."
       fullBleed
       contentClassName="!px-0 !py-0 max-w-none"
       tabs={

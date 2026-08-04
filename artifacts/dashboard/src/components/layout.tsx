@@ -112,10 +112,10 @@ const NAV_GROUPS: NavGroup[] = [
   {
     group: "OPERATE",
     items: [
-      { name: "Campaign Studios",    href: "/app/campaigns",     icon: Megaphone },
+      { name: "Campaigns",     href: "/app/campaigns",     icon: Megaphone },
       { name: "Automation",    href: "/app/automation",    icon: Workflow },
       { name: "Phone Numbers", href: "/app/phone-numbers", icon: Hash },
-      { name: "Activity",       href: "/app/calls",         icon: Phone, callbackBadge: true },
+      { name: "Calls",         href: "/app/calls",         icon: Phone, callbackBadge: true },
     ],
   },
   {
@@ -153,7 +153,7 @@ const MANAGED_CLIENT_NAV: NavGroup[] = [
   {
     group: "OPERATE",
     items: [
-      { name: "Activity",      href: "/app/calls",         icon: Phone, callbackBadge: true },
+      { name: "Calls",         href: "/app/calls",         icon: Phone, callbackBadge: true },
       { name: "Phone Numbers", href: "/app/phone-numbers", icon: Hash },
     ],
   },
@@ -646,7 +646,7 @@ const MOBILE_BOTTOM_NAV_ITEMS = [
   { name: "Home",     href: "/app/home",   icon: Home },
   { name: "Create",   href: null,          icon: Sparkles },
   { name: "Agents",   href: "/app/agents", icon: Bot },
-  { name: "Activity", href: "/app/calls",  icon: Phone },
+  { name: "Calls",    href: "/app/calls",  icon: Phone },
   { name: "Wallet",   href: "/app/wallet", icon: Wallet },
 ] as const;
 

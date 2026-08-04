@@ -2,12 +2,12 @@
  * Channels — how an agent communicates (phone, WhatsApp, email, meetings, booking).
  */
 
-import { Link, useSearch } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { Loader2, Plus, Radio } from "lucide-react";
 import { getGetAgentQueryKey, useGetAgent } from "@workspace/api-client-react";
 import { AgentContextBar, useAgentFromSearch } from "@/components/agent-context-bar";
 import { StripePage } from "@/components/stripe-page";
-import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/empty-state";
 import { ChannelsPanel, type ChannelId } from "@/pages/agents/channels-panel";
 
 const CHANNEL_IDS: ChannelId[] = ["phone", "whatsapp", "email", "meetings", "booking"];
@@ -19,6 +19,7 @@ function channelFromSearch(search: string): ChannelId {
 
 export default function ChannelsPage() {
   const search = useSearch();
+  const [, navigate] = useLocation();
   const { agents, isLoading, selectedId, selectedAgent, setAgentId } = useAgentFromSearch();
   const initialChannel = channelFromSearch(search);
 
@@ -43,17 +44,20 @@ export default function ChannelsPage() {
     return (
       <StripePage
         title="Channels"
-        description="Create an agent first, then attach phone, WhatsApp, email, meetings, and booking."
+        description="Phone, WhatsApp, email, meetings, and booking — all in one place."
       >
-        <div className="flex flex-col items-center justify-center py-16 text-center">
-          <Radio className="mb-3 size-5 text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">No agents yet.</p>
-          <Button asChild className="mt-5 gap-1.5">
-            <Link href="/app/agents?create=1">
-              <Plus className="size-4" />
-              Create agent
-            </Link>
-          </Button>
+        <div className="flex min-h-[50vh] items-center justify-center">
+          <EmptyState
+            variant="hero"
+            icon={<Radio />}
+            title="Create an agent first"
+            description="Channels belong to an agent. Build one, then connect how customers reach you."
+            action={{
+              label: "Create agent",
+              onClick: () => navigate("/app/vibe"),
+              icon: <Plus className="w-3.5 h-3.5" />,
+            }}
+          />
         </div>
       </StripePage>
     );
