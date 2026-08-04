@@ -1126,14 +1126,104 @@ function CampaignWizard({
                 </div>
 
                 {scheduleMode === "scheduled" && (
-                  <div className="space-y-1.5 pt-2 border-t border-border/50">
-                    <Label className="text-xs">Select Start Date & Time Timer</Label>
-                    <Input
-                      type="datetime-local"
-                      value={scheduleTime}
-                      onChange={e => setScheduleTime(e.target.value)}
-                      className="h-9 text-xs"
-                    />
+                  <div className="space-y-3 pt-3 border-t border-border/50">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs font-semibold">Scheduled Launch Time</Label>
+                      <span className="text-[11px] font-mono font-medium text-amber-400">
+                        {scheduleTime || "Select a time below"}
+                      </span>
+                    </div>
+
+                    {/* 1-Click Quick Preset Buttons */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      {[
+                        { 
+                          label: "⚡ In 15 mins", 
+                          getVal: () => {
+                            const d = new Date(Date.now() + 15 * 60000);
+                            return `${d.toLocaleDateString()} ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+                          }
+                        },
+                        { 
+                          label: "🕒 In 1 hour", 
+                          getVal: () => {
+                            const d = new Date(Date.now() + 60 * 60000);
+                            return `${d.toLocaleDateString()} ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+                          }
+                        },
+                        { 
+                          label: "🌅 Tomorrow 9 AM", 
+                          getVal: () => {
+                            const d = new Date();
+                            d.setDate(d.getDate() + 1);
+                            return `${d.toLocaleDateString()} 09:00 AM`;
+                          }
+                        },
+                        { 
+                          label: "🌙 Tomorrow 2 PM", 
+                          getVal: () => {
+                            const d = new Date();
+                            d.setDate(d.getDate() + 1);
+                            return `${d.toLocaleDateString()} 02:00 PM`;
+                          }
+                        },
+                      ].map(preset => {
+                        const val = preset.getVal();
+                        const isSelected = scheduleTime === val;
+                        return (
+                          <button
+                            key={preset.label}
+                            type="button"
+                            onClick={() => setScheduleTime(val)}
+                            className={cn(
+                              "px-2 py-2 rounded-lg border text-center transition-all text-xs font-medium",
+                              isSelected ? "border-amber-400 bg-amber-500/10 text-amber-300 font-bold ring-1 ring-amber-400/40" : "border-border bg-card hover:bg-muted/30 text-muted-foreground"
+                            )}
+                          >
+                            {preset.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Custom Date & Time Slot Dropdowns */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                      <div className="space-y-1">
+                        <Label className="text-[11px] text-muted-foreground">Select Target Date</Label>
+                        <Select
+                          value={scheduleTime.split(" ")[0] || new Date().toLocaleDateString()}
+                          onValueChange={d => {
+                            const timePart = scheduleTime.split(" ").slice(1).join(" ") || "09:00 AM";
+                            setScheduleTime(`${d} ${timePart}`);
+                          }}
+                        >
+                          <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Select Date" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value={new Date().toLocaleDateString()} className="text-xs">Today ({new Date().toLocaleDateString()})</SelectItem>
+                            <SelectItem value={new Date(Date.now() + 86400000).toLocaleDateString()} className="text-xs">Tomorrow ({new Date(Date.now() + 86400000).toLocaleDateString()})</SelectItem>
+                            <SelectItem value={new Date(Date.now() + 172800000).toLocaleDateString()} className="text-xs">Day After ({new Date(Date.now() + 172800000).toLocaleDateString()})</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-1">
+                        <Label className="text-[11px] text-muted-foreground">Select Target Time Slot</Label>
+                        <Select
+                          value={scheduleTime.split(" ").slice(1).join(" ") || "09:00 AM"}
+                          onValueChange={t => {
+                            const datePart = scheduleTime.split(" ")[0] || new Date(Date.now() + 86400000).toLocaleDateString();
+                            setScheduleTime(`${datePart} ${t}`);
+                          }}
+                        >
+                          <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Select Time Slot" /></SelectTrigger>
+                          <SelectContent>
+                            {["09:00 AM", "10:00 AM", "11:00 AM", "12:00 PM", "02:00 PM", "04:00 PM", "06:00 PM", "08:00 PM"].map(slot => (
+                              <SelectItem key={slot} value={slot} className="text-xs font-mono">{slot}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
