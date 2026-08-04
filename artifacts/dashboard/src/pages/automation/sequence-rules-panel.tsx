@@ -34,11 +34,11 @@ import { useToast } from "@/hooks/use-toast";
 export type RuleStep = {
   id: string;
   actionType: "call" | "whatsapp" | "meet";
-  triggerType: "day_of_month" | "delay_days" | "specific_date";
-  dayValue: number | string;
-  timeOfDay: string;
+  triggerType: "specific_date" | "delay_days";
+  dayValue: string; // e.g. "2026-08-21" or "3"
+  timeOfDay: string; // e.g. "10:00 AM", "04:00 AM"
   promptNote: string;
-  selectedAgentId?: number; // Selected agent for this call
+  selectedAgentId?: number;
 };
 
 function getOrdinalSuffix(i: number) {
@@ -65,13 +65,13 @@ export function SequenceRulesPanel({
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [activeTab, setActiveTab] = useState("sheet");
 
-  // Preset default rules matching user request: 21st call, 30th call, 4th mrg wake up call
+  // Preset default rules with exact calendar dates as requested
   const [rules, setRules] = useState<RuleStep[]>([
     {
       id: "rule-1",
       actionType: "call",
-      triggerType: "day_of_month",
-      dayValue: 21,
+      triggerType: "specific_date",
+      dayValue: "2026-08-21",
       timeOfDay: "10:00 AM",
       promptNote: "1st Follow-up Call (Sales Pitch)",
       selectedAgentId: agentId,
@@ -79,8 +79,8 @@ export function SequenceRulesPanel({
     {
       id: "rule-2",
       actionType: "call",
-      triggerType: "day_of_month",
-      dayValue: 30,
+      triggerType: "specific_date",
+      dayValue: "2026-08-30",
       timeOfDay: "11:30 AM",
       promptNote: "2nd Follow-up Call (Monthly Offer)",
       selectedAgentId: agentId,
@@ -88,8 +88,8 @@ export function SequenceRulesPanel({
     {
       id: "rule-3",
       actionType: "meet",
-      triggerType: "day_of_month",
-      dayValue: 4,
+      triggerType: "specific_date",
+      dayValue: "2026-09-04",
       timeOfDay: "04:00 AM",
       promptNote: "3rd Call: Wake-up Call + Google Meet Invite",
       selectedAgentId: agentId,
@@ -98,11 +98,12 @@ export function SequenceRulesPanel({
 
   const addRule = () => {
     const nextCallNum = rules.length + 1;
+    const today = new Date().toISOString().split("T")[0];
     const newRule: RuleStep = {
       id: `rule-${Date.now()}`,
       actionType: "call",
-      triggerType: "delay_days",
-      dayValue: 3,
+      triggerType: "specific_date",
+      dayValue: today,
       timeOfDay: "09:00 AM",
       promptNote: `${getOrdinalSuffix(nextCallNum)} Call Follow-up`,
       selectedAgentId: agentId,
@@ -121,7 +122,7 @@ export function SequenceRulesPanel({
   const handleSaveAutomation = () => {
     toast({
       title: "Automation Sequence Deployed! 🚀",
-      description: `Configured ${rules.length} calls across your selected agents. Leads will be called automatically on configured dates.`,
+      description: `Configured ${rules.length} scheduled calls across your selected agents. Leads will be called automatically on configured dates.`,
     });
   };
 
@@ -147,7 +148,7 @@ export function SequenceRulesPanel({
             }`}
           >
             <span className="size-4 rounded-full bg-background/20 text-current text-[10px] flex items-center justify-center font-bold">2</span>
-            Step 2: Assign Agent, Date & Time
+            Step 2: Pick Exact Dates & Times
           </button>
         </div>
 
@@ -175,20 +176,20 @@ export function SequenceRulesPanel({
 
             <div className="p-4 rounded-xl border border-border/80 bg-card/60 backdrop-blur-sm shadow-sm space-y-1">
               <div className="flex items-center justify-between text-muted-foreground">
-                <span className="text-[11px] font-medium uppercase tracking-wider">Configured Calls</span>
+                <span className="text-[11px] font-medium uppercase tracking-wider">Scheduled Calls</span>
                 <Sparkles className="size-3.5 text-amber-500" />
               </div>
               <p className="text-xl font-bold tracking-tight">{rules.length} Calls</p>
-              <p className="text-[10px] text-muted-foreground font-medium">Automatic Multi-Agent Drip</p>
+              <p className="text-[10px] text-muted-foreground font-medium">Automatic Sequence</p>
             </div>
 
             <div className="p-4 rounded-xl border border-border/80 bg-card/60 backdrop-blur-sm shadow-sm space-y-1">
               <div className="flex items-center justify-between text-muted-foreground">
-                <span className="text-[11px] font-medium uppercase tracking-wider">Next Trigger</span>
+                <span className="text-[11px] font-medium uppercase tracking-wider">Next Date Trigger</span>
                 <Clock className="size-3.5 text-purple-500" />
               </div>
-              <p className="text-xl font-bold tracking-tight">4th @ 04:00 AM</p>
-              <p className="text-[10px] text-purple-400 font-medium">Wake-up & Google Meet</p>
+              <p className="text-xl font-bold tracking-tight">Aug 21 @ 10:00 AM</p>
+              <p className="text-[10px] text-purple-400 font-medium">1st Scheduled Call</p>
             </div>
 
             <div className="p-4 rounded-xl border border-border/80 bg-card/60 backdrop-blur-sm shadow-sm space-y-1">
@@ -212,7 +213,7 @@ export function SequenceRulesPanel({
                   Lead Source (Google Sheet / CSV File)
                 </h3>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Upload your lead list once. You can choose different AI agents for the 1st call, 2nd call, and 3rd call.
+                  Upload your lead list once. You can pick exact calendar dates for the 1st call, 2nd call, and 3rd call.
                 </p>
               </div>
               <Badge variant="outline" className="text-[10px] gap-1 bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
@@ -280,7 +281,7 @@ export function SequenceRulesPanel({
             {/* Next Button */}
             <div className="flex justify-end pt-3 border-t border-border/60">
               <Button onClick={() => setStep(2)} className="gap-2 text-xs h-9 px-5">
-                Next: Choose Agents & Set Call Schedule
+                Next: Pick Exact Call Dates & Times
                 <ArrowRight className="size-3.5" />
               </Button>
             </div>
@@ -288,17 +289,17 @@ export function SequenceRulesPanel({
         </div>
       )}
 
-      {/* STEP 2: Flexible Multi-Agent Date & Time Call Schedule Builder */}
+      {/* STEP 2: Exact Calendar Date & Time Picker Schedule Builder */}
       {step === 2 && (
         <div className="rounded-xl border border-border bg-card p-5 space-y-5 shadow-sm">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-border/60 pb-3">
             <div>
               <h3 className="text-sm font-semibold flex items-center gap-2">
                 <CalendarDays className="size-4 text-emerald-500" />
-                Call Schedule (Assign Agent, Date & Time for Each Call)
+                Call Dates & Times (1st Call, 2nd Call, 3rd Call...)
               </h3>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Assign specific AI agents to call your leads on 1st, 2nd, 3rd calls.
+                Select exact calendar dates or days delay for each call.
               </p>
             </div>
             <Button size="sm" variant="outline" onClick={addRule} className="gap-1.5 text-xs h-8">
@@ -307,7 +308,7 @@ export function SequenceRulesPanel({
             </Button>
           </div>
 
-          {/* Flexible Call Rules List with Agent Selector */}
+          {/* Call Rules List with Direct Calendar Date Picker */}
           <div className="space-y-3">
             {rules.map((rule, index) => {
               const callOrdinal = getOrdinalSuffix(index + 1);
@@ -387,7 +388,7 @@ export function SequenceRulesPanel({
                     </Select>
                   </div>
 
-                  {/* Date Mode Dropdown */}
+                  {/* Date Mode Dropdown (Specific Date vs Days Delay) */}
                   <div className="w-full md:w-40 shrink-0">
                     <Select
                       value={rule.triggerType}
@@ -397,26 +398,35 @@ export function SequenceRulesPanel({
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="day_of_month" className="text-xs">Day of Month (21st, 30th...)</SelectItem>
-                        <SelectItem value="delay_days" className="text-xs">Days After Upload</SelectItem>
-                        <SelectItem value="specific_date" className="text-xs">Specific Date (YYYY-MM-DD)</SelectItem>
+                        <SelectItem value="specific_date" className="text-xs">🗓️ Exact Calendar Date</SelectItem>
+                        <SelectItem value="delay_days" className="text-xs">⏱️ Days After Upload</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
 
-                  {/* Day or Date Value */}
-                  <div className="w-full md:w-24 shrink-0">
-                    <Input
-                      type={rule.triggerType === "specific_date" ? "text" : "number"}
-                      value={rule.dayValue}
-                      onChange={(e) => updateRule(rule.id, { dayValue: e.target.value })}
-                      placeholder={rule.triggerType === "day_of_month" ? "e.g. 21" : rule.triggerType === "delay_days" ? "Days (e.g. 3)" : "2026-08-25"}
-                      className="h-8 text-xs text-center"
-                    />
+                  {/* Interactive Calendar Date Picker or Number Input */}
+                  <div className="w-full md:w-36 shrink-0">
+                    {rule.triggerType === "specific_date" ? (
+                      <Input
+                        type="date"
+                        value={rule.dayValue}
+                        onChange={(e) => updateRule(rule.id, { dayValue: e.target.value })}
+                        className="h-8 text-xs"
+                      />
+                    ) : (
+                      <Input
+                        type="number"
+                        min={1}
+                        value={rule.dayValue}
+                        onChange={(e) => updateRule(rule.id, { dayValue: e.target.value })}
+                        placeholder="Days (e.g. 3)"
+                        className="h-8 text-xs text-center"
+                      />
+                    )}
                   </div>
 
                   {/* Time Value */}
-                  <div className="w-full md:w-24 shrink-0">
+                  <div className="w-full md:w-28 shrink-0">
                     <Input
                       type="text"
                       value={rule.timeOfDay}
@@ -468,7 +478,7 @@ export function SequenceRulesPanel({
                     <strong className="text-foreground">{getOrdinalSuffix(i + 1)} Call:</strong>{" "}
                     Assigned Agent: <strong className="text-emerald-500 font-semibold">{targetAgentName}</strong> —{" "}
                     {r.actionType === "call" ? "AI Voice Call" : r.actionType === "meet" ? "Google Meet Audio Call" : "WhatsApp Message"}{" "}
-                    {r.triggerType === "day_of_month" ? `on the ${r.dayValue}st/th of every month` : r.triggerType === "delay_days" ? `${r.dayValue} days after lead upload` : `on date ${r.dayValue}`}{" "}
+                    {r.triggerType === "specific_date" ? `on date ${r.dayValue}` : `${r.dayValue} days after lead upload`}{" "}
                     at <strong className="text-foreground">{r.timeOfDay}</strong> ({r.promptNote || "No note"}).
                   </li>
                 );
