@@ -14,7 +14,17 @@ import {
   Zap,
   Users,
   Play,
-  X
+  Pause,
+  X,
+  Link2,
+  Copy,
+  Sparkles,
+  Volume2,
+  Share2,
+  Check,
+  TrendingUp,
+  FileCheck,
+  User
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,6 +35,26 @@ import {
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
 } from "@/components/ui/sheet";
+import { useToast } from "@/hooks/use-toast";
+
+export type CallLogDetail = {
+  id: string;
+  leadName: string;
+  phone: string;
+  stepName: string;
+  channel: "call" | "meet" | "whatsapp";
+  status: "completed" | "voicemail" | "transferred" | "no_pickup";
+  duration: string;
+  timestamp: string;
+  meetUrl?: string;
+  audioUrl?: string;
+  transcriptSummary?: string;
+  keyTakeaways?: string[];
+  actionItems?: string[];
+  fullTranscript?: Array<{ speaker: "agent" | "user"; text: string; time: string }>;
+  sentiment?: "positive" | "neutral" | "negative";
+  sentimentScore?: number;
+};
 
 export type AutomationRun = {
   id: string;
@@ -36,24 +66,18 @@ export type AutomationRun = {
   status: "completed" | "active" | "failed";
   duration: string;
   cost: string;
-  logs: Array<{
-    id: string;
-    leadName: string;
-    phone: string;
-    stepName: string;
-    channel: "call" | "meet" | "whatsapp";
-    status: "completed" | "voicemail" | "transferred" | "no_pickup";
-    duration: string;
-    timestamp: string;
-    transcriptSummary?: string;
-  }>;
+  logs: CallLogDetail[];
 };
 
 export function AutomationHistoryLogs({ agentId }: { agentId?: number }) {
+  const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedRun, setSelectedRun] = useState<AutomationRun | null>(null);
+  const [expandedLogId, setExpandedLogId] = useState<string | null>("log-2"); // Default expand Google Meet log
+  const [isPlayingAudio, setIsPlayingAudio] = useState<string | null>(null);
+  const [copiedLink, setCopiedLink] = useState(false);
 
-  // Sample Execution History Runs
+  // Sample Execution History Runs with Full Google Meet & AI Call Summaries
   const [runs] = useState<AutomationRun[]>([
     {
       id: "run-101",
@@ -75,18 +99,46 @@ export function AutomationHistoryLogs({ agentId }: { agentId?: number }) {
           status: "completed",
           duration: "2m 14s",
           timestamp: "20:55:50",
-          transcriptSummary: "Lead showed high interest in wholesale pricing. Agreed for follow-up.",
+          sentiment: "positive",
+          sentimentScore: 94,
+          transcriptSummary: "Lead showed high interest in wholesale grocery pricing. Requested rate list.",
+          fullTranscript: [
+            { speaker: "agent", text: "Hello Anand! Calling from Departmental Store AI. Are you looking for wholesale grocery supplies today?", time: "0:02" },
+            { speaker: "user", text: "Yes, I am looking for bulk rice and edible oil rates for my retail shop.", time: "0:14" },
+            { speaker: "agent", text: "Great! Our bulk rice starts at ₹42/kg with free delivery. Should I send the full catalog to your WhatsApp?", time: "0:30" },
+            { speaker: "user", text: "Yes please, send it right away. Thank you!", time: "0:45" },
+          ],
+          actionItems: ["Send catalog PDF to +91 98765 43210", "Set follow-up reminder for Aug 10"],
         },
         {
           id: "log-2",
           leadName: "Priya Sharma",
           phone: "+91 98123 45678",
-          stepName: "1st Call: Sales Pitch",
+          stepName: "1st Call: Google Meet Demo",
           channel: "meet",
           status: "completed",
           duration: "3m 45s",
           timestamp: "20:58:10",
-          transcriptSummary: "Connected on Google Meet. Sent catalog PDF via WhatsApp.",
+          meetUrl: "https://meet.google.com/abc-xyz-demo",
+          sentiment: "positive",
+          sentimentScore: 98,
+          transcriptSummary: "Connected live on Google Meet. Walked through product catalog & pricing calculator. Agreed to start pilot order.",
+          keyTakeaways: [
+            "Joined Google Meet room on time via web browser.",
+            "AI Agent demonstrated store management software & wholesale pricing dashboard.",
+            "Client requested custom invoice template for monthly billing.",
+          ],
+          actionItems: [
+            "WhatsApp catalog PDF sent successfully.",
+            "Pilot order agreement generated & sent to priya.sharma@example.com.",
+            "Schedule follow-up onboarding call for Friday 3 PM.",
+          ],
+          fullTranscript: [
+            { speaker: "agent", text: "Welcome to the Google Meet demo Priya! Can you see my shared screen?", time: "0:05" },
+            { speaker: "user", text: "Yes, I can see the wholesale pricing dashboard clearly.", time: "0:12" },
+            { speaker: "agent", text: "Awesome. Here is how our automated replenishment works for your store inventory...", time: "0:25" },
+            { speaker: "user", text: "That looks really fast! Send me the contract so we can start this week.", time: "3:30" },
+          ],
         },
         {
           id: "log-3",
@@ -97,7 +149,7 @@ export function AutomationHistoryLogs({ agentId }: { agentId?: number }) {
           status: "voicemail",
           duration: "0m 45s",
           timestamp: "21:02:15",
-          transcriptSummary: "Voicemail detected. Left automated voice message.",
+          transcriptSummary: "Voicemail detected. Automated voice message left on answering machine.",
         },
       ],
     },
@@ -121,7 +173,7 @@ export function AutomationHistoryLogs({ agentId }: { agentId?: number }) {
           status: "transferred",
           duration: "4m 12s",
           timestamp: "14:10:20",
-          transcriptSummary: "Requested human manager transfer. Warm handoff completed.",
+          transcriptSummary: "Requested human manager transfer. Warm handoff completed successfully.",
         },
         {
           id: "log-5",
@@ -137,6 +189,13 @@ export function AutomationHistoryLogs({ agentId }: { agentId?: number }) {
       ],
     },
   ]);
+
+  const handleCopyLink = (link: string) => {
+    navigator.clipboard.writeText(link);
+    setCopiedLink(true);
+    toast({ title: "Link Copied!", description: link });
+    setTimeout(() => setCopiedLink(false), 2000);
+  };
 
   const filteredRuns = runs.filter(
     (r) =>
@@ -155,14 +214,14 @@ export function AutomationHistoryLogs({ agentId }: { agentId?: number }) {
             Automation & Meet Execution History
           </h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Click any row or date to inspect detailed call logs, transcripts, and Google Meet records.
+            Click any batch date to view detailed Google Meet summaries, AI Call audio transcripts, and action items.
           </p>
         </div>
 
         <div className="relative w-full sm:w-72">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground/50" />
           <Input
-            placeholder="Search by date or name..."
+            placeholder="Search by date or sequence..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-9 h-8.5 text-xs"
@@ -174,7 +233,7 @@ export function AutomationHistoryLogs({ agentId }: { agentId?: number }) {
       <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
         <div className="p-4 border-b border-border/70 bg-muted/20 flex items-center justify-between">
           <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Execution Log Batches
+            Execution History Logs
           </h3>
           <Badge variant="outline" className="text-[10px] text-emerald-500 border-emerald-500/20 bg-emerald-500/10">
             Live History Engine
@@ -185,7 +244,7 @@ export function AutomationHistoryLogs({ agentId }: { agentId?: number }) {
           {filteredRuns.map((run) => (
             <div
               key={run.id}
-              onClick={() => setSelectedRun(run)}
+              onClick={() => { setSelectedRun(run); setExpandedLogId(run.logs[1]?.id || run.logs[0]?.id || null); }}
               className="flex flex-col md:flex-row items-start md:items-center justify-between p-4 gap-3 hover:bg-muted/30 transition-all cursor-pointer group text-xs"
             >
               {/* Date & Automation Name */}
@@ -239,28 +298,30 @@ export function AutomationHistoryLogs({ agentId }: { agentId?: number }) {
         </div>
       </div>
 
-      {/* Detailed Call Logs Drawer / Modal */}
+      {/* Detailed Call & Google Meet Summary Drawer */}
       <Sheet open={selectedRun != null} onOpenChange={(o) => !o && setSelectedRun(null)}>
-        <SheetContent className="sm:max-w-2xl overflow-y-auto p-6 space-y-5">
+        <SheetContent className="sm:max-w-3xl overflow-y-auto p-6 space-y-6">
           {selectedRun && (
             <>
               <SheetHeader className="border-b border-border/60 pb-4">
                 <div className="flex items-center justify-between">
                   <Badge className="bg-primary/10 text-primary border-primary/20 text-xs">
-                    Execution Log #{selectedRun.id}
+                    Execution Batch #{selectedRun.id}
                   </Badge>
                   <span className="text-xs text-muted-foreground">{selectedRun.createdDate}</span>
                 </div>
-                <SheetTitle className="text-lg font-bold pt-1">{selectedRun.name}</SheetTitle>
+                <SheetTitle className="text-lg font-bold pt-1 flex items-center gap-2">
+                  {selectedRun.name}
+                </SheetTitle>
                 <SheetDescription className="text-xs">
-                  Showing individual lead call logs for agent <strong className="text-foreground">{selectedRun.agentName}</strong>.
+                  Full AI call transcripts, Google Meet notes, and action item logs.
                 </SheetDescription>
               </SheetHeader>
 
-              {/* Run Metrics Strip */}
-              <div className="grid grid-cols-3 gap-3 p-3 bg-muted/20 border border-border/60 rounded-lg text-center text-xs">
+              {/* Run Metrics Banner */}
+              <div className="grid grid-cols-3 gap-3 p-3 bg-muted/20 border border-border/60 rounded-xl text-center text-xs">
                 <div>
-                  <span className="text-[10px] text-muted-foreground">Leads Dialed</span>
+                  <span className="text-[10px] text-muted-foreground">Leads Contacted</span>
                   <p className="font-bold text-foreground">{selectedRun.leadCount}</p>
                 </div>
                 <div>
@@ -268,63 +329,225 @@ export function AutomationHistoryLogs({ agentId }: { agentId?: number }) {
                   <p className="font-bold text-foreground">{selectedRun.duration}</p>
                 </div>
                 <div>
-                  <span className="text-[10px] text-muted-foreground">Total Cost</span>
+                  <span className="text-[10px] text-muted-foreground">Execution Cost</span>
                   <p className="font-bold text-emerald-500">{selectedRun.cost}</p>
                 </div>
               </div>
 
-              {/* Individual Lead Call Logs List */}
-              <div className="space-y-3">
+              {/* List of Individual Lead Logs */}
+              <div className="space-y-4">
                 <h4 className="text-xs font-semibold text-foreground uppercase tracking-wider">
-                  Lead Call Records ({selectedRun.logs.length})
+                  Lead Interaction Records ({selectedRun.logs.length})
                 </h4>
 
-                {selectedRun.logs.map((log) => (
-                  <div
-                    key={log.id}
-                    className="p-3.5 rounded-lg border border-border/70 bg-background space-y-2 text-xs hover:border-primary/40 transition-all"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        {log.channel === "meet" ? (
-                          <Video className="size-3.5 text-blue-500" />
-                        ) : (
-                          <Phone className="size-3.5 text-emerald-500" />
-                        )}
-                        <span className="font-bold text-foreground">{log.leadName}</span>
-                        <span className="text-muted-foreground font-mono text-[11px]">{log.phone}</span>
+                {selectedRun.logs.map((log) => {
+                  const isExpanded = expandedLogId === log.id;
+                  const isMeet = log.channel === "meet";
+
+                  return (
+                    <div
+                      key={log.id}
+                      className={`rounded-xl border transition-all ${
+                        isExpanded
+                          ? "border-primary/50 bg-background shadow-md"
+                          : "border-border/70 bg-card/60 hover:border-border"
+                      }`}
+                    >
+                      {/* Card Header Bar */}
+                      <div
+                        onClick={() => setExpandedLogId(isExpanded ? null : log.id)}
+                        className="p-4 flex items-center justify-between cursor-pointer select-none"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`p-2 rounded-lg ${isMeet ? "bg-blue-500/10 text-blue-500" : "bg-emerald-500/10 text-emerald-500"}`}>
+                            {isMeet ? <Video className="size-4" /> : <Phone className="size-4" />}
+                          </div>
+
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-foreground text-sm">{log.leadName}</span>
+                              <span className="text-muted-foreground font-mono text-xs">{log.phone}</span>
+                            </div>
+                            <p className="text-[11px] text-muted-foreground mt-0.5">
+                              {log.stepName} · {log.duration} @ {log.timestamp}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <Badge
+                            variant="outline"
+                            className={`text-[10px] ${
+                              isMeet
+                                ? "bg-blue-500/10 text-blue-500 border-blue-500/20"
+                                : log.status === "completed"
+                                ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
+                                : "bg-amber-500/10 text-amber-500 border-amber-500/20"
+                            }`}
+                          >
+                            {isMeet ? "🎥 Google Meet Joined" : log.status === "completed" ? "Completed" : "Voicemail"}
+                          </Badge>
+
+                          <ChevronRight
+                            className={`size-4 text-muted-foreground transition-transform ${isExpanded ? "rotate-90 text-foreground" : ""}`}
+                          />
+                        </div>
                       </div>
 
-                      <Badge
-                        variant="outline"
-                        className={`text-[10px] ${
-                          log.status === "completed"
-                            ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
-                            : log.status === "transferred"
-                            ? "bg-purple-500/10 text-purple-500 border-purple-500/20"
-                            : "bg-amber-500/10 text-amber-500 border-amber-500/20"
-                        }`}
-                      >
-                        {log.status === "completed"
-                          ? "Completed"
-                          : log.status === "transferred"
-                          ? "Transferred"
-                          : "Voicemail"}
-                      </Badge>
-                    </div>
+                      {/* EXPANDED CONTENT: GOOGLE MEET OR AI CALL DETAILS */}
+                      {isExpanded && (
+                        <div className="p-4 pt-0 border-t border-border/50 space-y-4 text-xs">
+                          {/* GOOGLE MEET SPECIFIC VIEW */}
+                          {isMeet && (
+                            <div className="space-y-3.5 pt-3">
+                              {/* Meeting Link Banner */}
+                              <div className="flex items-center justify-between p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                                <div className="flex items-center gap-2">
+                                  <Video className="size-4 text-blue-400 shrink-0" />
+                                  <div>
+                                    <p className="font-semibold text-blue-400">Google Meet Conference Room</p>
+                                    <p className="text-[11px] text-muted-foreground font-mono">{log.meetUrl}</p>
+                                  </div>
+                                </div>
 
-                    <div className="flex items-center justify-between text-[11px] text-muted-foreground bg-muted/20 p-2 rounded">
-                      <span>Step: <strong className="text-foreground">{log.stepName}</strong></span>
-                      <span>{log.duration} @ {log.timestamp}</span>
-                    </div>
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 text-[11px] gap-1"
+                                    onClick={() => handleCopyLink(log.meetUrl || "")}
+                                  >
+                                    {copiedLink ? <Check className="size-3 text-emerald-500" /> : <Copy className="size-3" />}
+                                    Copy Link
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    className="h-7 text-[11px] gap-1 bg-blue-600 hover:bg-blue-700 text-white"
+                                    onClick={() => window.open(log.meetUrl, "_blank")}
+                                  >
+                                    <ExternalLink className="size-3" />
+                                    Open Replay
+                                  </Button>
+                                </div>
+                              </div>
 
-                    {log.transcriptSummary && (
-                      <p className="text-[11px] text-muted-foreground italic pt-1 border-t border-border/40">
-                        "{log.transcriptSummary}"
-                      </p>
-                    )}
-                  </div>
-                ))}
+                              {/* Google Meet AI Executive Summary */}
+                              <div className="p-3.5 rounded-lg bg-card border border-border/80 space-y-2">
+                                <h5 className="font-semibold text-foreground flex items-center gap-1.5 text-xs">
+                                  <Sparkles className="size-3.5 text-amber-400" />
+                                  Google Meet AI Executive Summary
+                                </h5>
+                                <p className="text-muted-foreground text-[11px] leading-relaxed">
+                                  {log.transcriptSummary}
+                                </p>
+
+                                {log.keyTakeaways && (
+                                  <div className="pt-2 space-y-1">
+                                    <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                                      📌 Key Meeting Highlights
+                                    </span>
+                                    <ul className="list-disc list-inside text-[11px] text-foreground/90 space-y-1">
+                                      {log.keyTakeaways.map((item, idx) => (
+                                        <li key={idx}>{item}</li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
+
+                                {log.actionItems && (
+                                  <div className="pt-2 space-y-1">
+                                    <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                                      📝 Follow-up Action Items
+                                    </span>
+                                    <ul className="space-y-1">
+                                      {log.actionItems.map((action, idx) => (
+                                        <li key={idx} className="flex items-center gap-1.5 text-[11px] text-emerald-400">
+                                          <FileCheck className="size-3 shrink-0" />
+                                          {action}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* AI VOICE CALL SPECIFIC VIEW */}
+                          {!isMeet && (
+                            <div className="space-y-3.5 pt-3">
+                              {/* Audio Player Widget */}
+                              <div className="p-3 bg-muted/20 border border-border/60 rounded-lg flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                  <Button
+                                    size="icon"
+                                    className="size-8 rounded-full bg-emerald-500 hover:bg-emerald-600 text-black shrink-0"
+                                    onClick={() => setIsPlayingAudio(isPlayingAudio === log.id ? null : log.id)}
+                                  >
+                                    {isPlayingAudio === log.id ? <Pause className="size-4 fill-current" /> : <Play className="size-4 fill-current ml-0.5" />}
+                                  </Button>
+
+                                  <div className="space-y-0.5">
+                                    <p className="font-semibold text-foreground">AI Call Recording</p>
+                                    <p className="text-[10px] text-muted-foreground">
+                                      {isPlayingAudio === log.id ? "Playing audio recording..." : `Duration: ${log.duration}`}
+                                    </p>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                  <Volume2 className="size-4 text-muted-foreground" />
+                                  <span className="text-[11px] text-emerald-500 font-mono font-medium">98kbps stereo</span>
+                                </div>
+                              </div>
+
+                              {/* AI Call Summary */}
+                              <div className="p-3 rounded-lg bg-card border border-border/80 space-y-1">
+                                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                                  Call Sentiment & Outcome
+                                </span>
+                                <div className="flex items-center justify-between pt-1">
+                                  <p className="text-[11px] text-foreground">{log.transcriptSummary}</p>
+                                  {log.sentimentScore && (
+                                    <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 text-[10px] shrink-0">
+                                      {log.sentimentScore}% Positive
+                                    </Badge>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* FULL TURN-BY-TURN TRANSCRIPT */}
+                          {log.fullTranscript && log.fullTranscript.length > 0 && (
+                            <div className="pt-2 space-y-2">
+                              <h6 className="font-semibold text-muted-foreground text-[10px] uppercase tracking-wider">
+                                Full Call / Meet Conversation Transcript
+                              </h6>
+
+                              <div className="space-y-2 bg-muted/10 border border-border/50 rounded-lg p-3 max-h-48 overflow-y-auto">
+                                {log.fullTranscript.map((t, idx) => (
+                                  <div
+                                    key={idx}
+                                    className={`flex items-start gap-2 ${
+                                      t.speaker === "agent" ? "text-primary" : "text-foreground"
+                                    }`}
+                                  >
+                                    <span className="font-bold text-[10px] uppercase shrink-0 min-w-[45px]">
+                                      {t.speaker === "agent" ? "🤖 AI" : "👤 Lead"}:
+                                    </span>
+                                    <p className="text-[11px] leading-relaxed flex-1">{t.text}</p>
+                                    <span className="text-[9px] text-muted-foreground font-mono">{t.time}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </>
           )}
