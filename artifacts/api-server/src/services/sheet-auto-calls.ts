@@ -193,18 +193,20 @@ export async function createPipeline(userId: string, input: CreatePipelineInput)
     } else if (callLogSpreadsheetId) {
       // Existing spreadsheet (or same file with explicit tab) — ensure call-log headers
       callLogSheetName = callLogSheetName || "Call Log";
-      await ensureHeaders(userId, input.connectionId, callLogSpreadsheetId, callLogSheetName, [
+      const ensured = await ensureHeaders(userId, input.connectionId, callLogSpreadsheetId, callLogSheetName, [
         "Call ID", "Started At (IST)", "Duration (sec)", "Direction", "Phone",
         "Caller Name", "Disposition", "Summary", "Recording", "Agent", "Cost (₹)",
       ]);
+      callLogSheetName = ensured.sheetName;
     } else {
-      // Default: same spreadsheet, Call Log tab
+      // Default: same spreadsheet, Call Log tab (created automatically if missing)
       callLogSpreadsheetId = input.spreadsheetId;
       callLogSheetName = callLogSheetName || "Call Log";
-      await ensureHeaders(userId, input.connectionId, callLogSpreadsheetId, callLogSheetName, [
+      const ensured = await ensureHeaders(userId, input.connectionId, callLogSpreadsheetId, callLogSheetName, [
         "Call ID", "Started At (IST)", "Duration (sec)", "Direction", "Phone",
         "Caller Name", "Disposition", "Summary", "Recording", "Agent", "Cost (₹)",
       ]);
+      callLogSheetName = ensured.sheetName;
     }
   }
 

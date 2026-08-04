@@ -267,6 +267,47 @@ export async function listSheetTabs(
     .filter((s) => !!s.title);
 }
 
+/**
+ * Ensure a worksheet tab exists. Google returns "Unable to parse range:
+ * 'Call Log'!A1:…" when the tab is missing — Automatic Calls hit that on
+ * create when writeback=both and the leads file has no Call Log tab yet.
+ */
+export async function ensureSheetTab(
+  userId: string,
+  connectionId: string,
+  spreadsheetId: string,
+  sheetName: string,
+): Promise<{ title: string; created: boolean }> {
+  const wanted = String(sheetName ?? "").trim() || "Sheet1";
+  const tabs = await listSheetTabs(userId, connectionId, spreadsheetId);
+  const existing = tabs.find((t) => t.title.trim().toLowerCase() === wanted.toLowerCase());
+  if (existing) {
+    return { title: existing.title, created: false };
+  }
+
+  const auth = await getAuthedClient(connectionId, userId);
+  const sheets = google.sheets({ version: "v4", auth });
+  try {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId,
+      requestBody: {
+        requests: [{ addSheet: { properties: { title: wanted } } }],
+      },
+    });
+  } catch (err) {
+    // Race / already exists — re-check tabs before failing.
+    const again = await listSheetTabs(userId, connectionId, spreadsheetId);
+    const found = again.find((t) => t.title.trim().toLowerCase() === wanted.toLowerCase());
+    if (found) return { title: found.title, created: false };
+    throw err;
+  }
+  logger.info(
+    { userId, connectionId, spreadsheetId, sheetName: wanted },
+    "sheets: created missing tab",
+  );
+  return { title: wanted, created: true };
+}
+
 export type SheetTemplate = "blank" | "call_log" | "lead_pipeline";
 
 const TEMPLATES: Record<SheetTemplate, {
@@ -328,11 +369,15 @@ export async function ensureHeaders(
   spreadsheetId: string,
   sheetName: string,
   headers: string[],
-): Promise<{ headers: string[]; wrote: boolean }> {
-  if (headers.length === 0) return { headers: [], wrote: false };
+): Promise<{ headers: string[]; wrote: boolean; sheetName: string }> {
+  if (headers.length === 0) return { headers: [], wrote: false, sheetName: String(sheetName ?? "").trim() || "Sheet1" };
+  // Create the tab if missing — otherwise values.get fails with
+  // "Unable to parse range: 'Call Log'!A1:…".
+  const tab = await ensureSheetTab(userId, connectionId, spreadsheetId, sheetName);
   const auth = await getAuthedClient(connectionId, userId);
   const sheets = google.sheets({ version: "v4", auth });
-  const range = sheetRange(sheetName, "A1:ZZ1");
+  // Header row only needs a modest width (call-log / status cols << 26).
+  const range = sheetRange(tab.title, "A1:Z1");
   const existing = await sheets.spreadsheets.values.get({
     spreadsheetId,
     range,
@@ -342,22 +387,22 @@ export async function ensureHeaders(
   if (current.length === 0 || current.every((h) => !h)) {
     await sheets.spreadsheets.values.update({
       spreadsheetId,
-      range: sheetRange(sheetName, "A1"),
+      range: sheetRange(tab.title, "A1"),
       valueInputOption: "RAW",
       requestBody: { values: [headers] },
     });
-    return { headers, wrote: true };
+    return { headers, wrote: true, sheetName: tab.title };
   }
   const missing = headers.filter((h) => !current.some((c) => c.toLowerCase() === h.toLowerCase()));
-  if (missing.length === 0) return { headers: current, wrote: false };
+  if (missing.length === 0) return { headers: current, wrote: false, sheetName: tab.title };
   const merged = [...current, ...missing];
   await sheets.spreadsheets.values.update({
     spreadsheetId,
-    range: sheetRange(sheetName, "A1"),
+    range: sheetRange(tab.title, "A1"),
     valueInputOption: "RAW",
     requestBody: { values: [merged] },
   });
-  return { headers: merged, wrote: true };
+  return { headers: merged, wrote: true, sheetName: tab.title };
 }
 
 export async function readSheetGrid(
