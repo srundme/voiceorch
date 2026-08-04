@@ -35,15 +35,16 @@ describe("mobile responsiveness smoke", () => {
     expect(layout).toMatch(/touch-target/);
   });
 
-  it("agent builder collapses panes and keeps one mobile action bar", () => {
+  it("agent builder uses a switcher sheet and single-column editor", () => {
     const builder = src("src/pages/agents/builder.tsx");
-    expect(builder).toMatch(/WorkspaceSectionNav/);
-    expect(builder).toMatch(/hidden lg:flex/);
+    expect(builder).toMatch(/WorkspaceSegmentNav/);
     expect(builder).toMatch(/agentsSheetOpen/);
     expect(builder).toMatch(/sm:hidden/);
-    expect(builder).toMatch(/One mobile action bar/);
+    expect(builder).toMatch(/Mobile-only sticky actions/);
     expect(builder).toMatch(/inset-0 rounded-none/);
     expect(builder).toMatch(/md:w-\[420px\]/);
+    expect(builder).not.toMatch(/WorkspaceSectionNav/);
+    expect(builder).not.toMatch(/WorkspaceInspector/);
   });
 
   it("vibe history uses a sheet on mobile", () => {

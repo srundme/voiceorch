@@ -96,10 +96,8 @@ import { EmailChannelCard, useEmailChannelReady } from "./email-channel-card";
 import { MeetingsChannelCard } from "./meetings-channel-card";
 import {
   StatusDot,
-  WorkspaceHeader,
-  WorkspaceInspector,
-  WorkspaceSectionNav,
-  type WorkspaceNavGroup,
+  WorkspaceSegmentNav,
+  type WorkspaceNavItem,
 } from "@/components/workspace/workspace";
 const _DASH_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const DASH_API   = `${_DASH_BASE}/api`;
@@ -111,7 +109,7 @@ type TabId = "overview" | "prompt" | "voice" | "tools" | "reach" | "launch" | "v
 interface TabDef { id: TabId; label: string; icon: React.ReactNode }
 
 const TABS: TabDef[] = [
-  { id: "overview",    label: "Agent",       icon: <Bot className="h-3.5 w-3.5" /> },
+  { id: "overview",    label: "Overview",    icon: <Bot className="h-3.5 w-3.5" /> },
   { id: "prompt",      label: "Prompt",      icon: <FileText className="h-3.5 w-3.5" /> },
   { id: "voice",       label: "Voice",       icon: <Mic className="h-3.5 w-3.5" /> },
   { id: "tools",       label: "Tools",       icon: <Wrench className="h-3.5 w-3.5" /> },
@@ -122,42 +120,10 @@ const TABS: TabDef[] = [
   { id: "versions",    label: "Versions",    icon: <History className="h-3.5 w-3.5" /> },
 ];
 
-const BUILDER_NAV_GROUPS: WorkspaceNavGroup<TabId>[] = [
-  {
-    label: "Agent",
-    items: [
-      { id: "overview", label: "Overview", icon: Bot },
-      { id: "prompt", label: "Prompt", icon: FileText },
-      { id: "voice", label: "Voice", icon: Mic },
-    ],
-  },
-  {
-    label: "Capabilities",
-    items: [
-      { id: "tools", label: "Tools", icon: Wrench },
-    ],
-  },
-  {
-    label: "Operations",
-    items: [
-      { id: "reach", label: "Reach", icon: Zap },
-      { id: "launch", label: "Channels", icon: Rocket },
-    ],
-  },
-  {
-    label: "Runtime",
-    items: [
-      { id: "voicemail", label: "Voicemail", icon: VoicemailIcon },
-      { id: "advanced", label: "Advanced", icon: SlidersHorizontal },
-    ],
-  },
-  {
-    label: "History",
-    items: [
-      { id: "versions", label: "Versions", icon: History },
-    ],
-  },
-];
+const BUILDER_SEGMENTS: WorkspaceNavItem<TabId>[] = TABS.map((tab) => ({
+  id: tab.id,
+  label: tab.label,
+}));
 
 function sectionFromSearch(search: string): TabId {
   const requested = new URLSearchParams(search).get("section");
@@ -961,10 +927,10 @@ function ChannelsTab({ form, agent, forceExpandEmail = false }: { form: any; age
   ];
 
   return (
-    <div className="space-y-5 p-4 sm:p-5">
+    <div className="space-y-5 px-4 py-6 sm:px-6">
       <section>
-        <h2 className="text-sm font-semibold tracking-tight">Channels</h2>
-        <p className="mt-0.5 max-w-2xl text-[11px] text-muted-foreground">
+        <h2 className="text-[15px] font-semibold tracking-[-0.02em]">Channels</h2>
+        <p className="mt-1 max-w-xl text-[12px] leading-5 text-muted-foreground">
           Select a channel to configure how this agent communicates.
         </p>
       </section>
@@ -1900,7 +1866,13 @@ function PromptTab({ form }: { form: any }) {
   const agentLang  = form.watch("language") as string | undefined;
 
   return (
-    <div className="relative flex flex-col p-6 gap-4">
+    <div className="relative flex flex-col gap-4 px-4 py-6 sm:px-6">
+      <div>
+        <h2 className="text-[15px] font-semibold tracking-[-0.02em]">Prompt</h2>
+        <p className="mt-1 text-[12px] text-muted-foreground">
+          Instructions the agent follows on every turn.
+        </p>
+      </div>
       <GeneratePromptSheet
         open={generateOpen}
         onOpenChange={setGenerateOpen}
@@ -1913,18 +1885,18 @@ function PromptTab({ form }: { form: any }) {
         }}
       />
       <FormField control={form.control} name="systemPrompt" render={({ field }) => (
-        <FormItem className="flex-1 flex flex-col space-y-2">
+        <FormItem className="flex flex-1 flex-col space-y-2">
           <div className="flex items-center justify-between">
-            <FormLabel className="text-sm font-semibold">System Prompt</FormLabel>
+            <FormLabel className="text-[12px] font-medium">System prompt</FormLabel>
             <Button
               type="button"
               variant="outline"
               size="sm"
-              className="h-7 text-xs gap-1.5 border-primary/40 text-primary hover:bg-primary/5 hover:text-primary"
+              className="h-7 gap-1.5 text-xs"
               onClick={() => setGenerateOpen(true)}
             >
-              <Sparkles className="w-3 h-3" />
-              Generate with AI
+              <Sparkles className="size-3" />
+              Generate
             </Button>
           </div>
           <FormControl>
@@ -3436,10 +3408,12 @@ function VoicemailTab({ form }: { form: any }) {
   const mode   = form.watch("machineDetectionMode");
   const action = form.watch("voicemailAction");
   return (
-    <div className="relative p-6 space-y-5 max-w-xl">
+    <div className="relative max-w-xl space-y-5 px-4 py-6 sm:px-6">
       <div>
-        <h3 className="text-sm font-semibold">Voicemail Detection (AMD)</h3>
-        <p className="text-xs text-muted-foreground mt-1">Outbound calls only — detects answering machines and takes action.</p>
+        <h3 className="text-[15px] font-semibold tracking-[-0.02em]">Voicemail</h3>
+        <p className="mt-1 text-[12px] text-muted-foreground">
+          Outbound only — detect answering machines and take action.
+        </p>
       </div>
       <FormField control={form.control} name="machineDetectionMode" render={({ field }) => (
         <FormItem>
@@ -4189,10 +4163,10 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
 
 /* ── Agent list panel ───────────────────────────────────────────────────────── */
 
-function AgentListPanel({ selectedId, onSelect, rateMap, className }: {
+function AgentListPanel({ selectedId, onSelect, className }: {
   selectedId: number | null;
   onSelect: (id: number) => void;
-  rateMap: Map<string, number>;
+  rateMap?: Map<string, number>;
   className?: string;
 }) {
   const [search, setSearch] = useState("");
@@ -4200,7 +4174,6 @@ function AgentListPanel({ selectedId, onSelect, rateMap, className }: {
   const { toast } = useToast();
   const { data: agents, isLoading } = useListAgents({ query: { queryKey: getListAgentsQueryKey() } });
   const deleteAgent = useDeleteAgent();
-  const userProviderNames = useUserProviderNames();
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
   const handleDeleteItem = async (e: React.MouseEvent, agentId: number, name: string) => {
@@ -4235,109 +4208,84 @@ function AgentListPanel({ selectedId, onSelect, rateMap, className }: {
   const totalCount = agents?.length ?? 0;
 
   return (
-    <div className={cn("w-[260px] shrink-0 border-r border-border/40 flex flex-col h-full bg-background/30 backdrop-blur-sm", className)}>
-      <div className="p-4 border-b border-border/40 space-y-3">
+    <div className={cn("flex h-full flex-col overflow-hidden bg-background", className)}>
+      <div className="space-y-3 border-b border-border/70 p-3">
         <div className="flex items-center justify-between gap-2">
-          <div className="text-left min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/60">Agents</p>
-            <p className="text-sm font-semibold text-foreground truncate">
-              {isLoading ? "…" : `${totalCount} agent${totalCount === 1 ? "" : "s"}`}
-              {!isLoading && totalCount > 0 && (
-                <span className="text-muted-foreground font-normal"> · {liveCount} live</span>
-              )}
+          <div className="min-w-0">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Agents</p>
+            <p className="text-[12px] text-muted-foreground">
+              {isLoading ? "…" : `${totalCount} total · ${liveCount} live`}
             </p>
           </div>
         </div>
         <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/60" />
-          <Input value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="Search agents…" className="h-8 pl-8 text-xs rounded-full bg-muted/20 border-border/40" />
+          <Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/60" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search…"
+            className="h-8 border-border/60 bg-background pl-8 text-xs"
+          />
         </div>
       </div>
-      <div className="flex-1 overflow-y-auto p-2 space-y-1">
+      <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto p-2">
         {isLoading && Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="px-3 py-3 rounded-xl"><Skeleton className="h-4 w-3/4 mb-1.5" /><Skeleton className="h-3 w-1/2" /></div>
+          <div key={i} className="px-2 py-2"><Skeleton className="mb-1.5 h-4 w-3/4" /><Skeleton className="h-3 w-1/2" /></div>
         ))}
         {!isLoading && filtered.length === 0 && (
-          <div className="px-3 py-10 text-center space-y-2">
-            {search ? (
-              <>
-                <p className="text-xs font-medium text-foreground">No matches</p>
-                <p className="text-[11px] text-muted-foreground leading-relaxed">Try a different filter or clear the search.</p>
-              </>
-            ) : (
-              <>
-                <p className="text-xs font-medium text-foreground">No agents yet</p>
-                <p className="text-[11px] text-muted-foreground leading-relaxed mb-2">Create one manually or build with Vibe.</p>
-                <Button size="sm" className="h-8 rounded-full text-xs gap-1" onClick={() => navigate("/app/vibe")}>
-                  <Sparkles className="h-3 w-3" /> Build with AI
-                </Button>
-              </>
+          <div className="px-2 py-8 text-center">
+            <p className="text-xs font-medium">{search ? "No matches" : "No agents yet"}</p>
+            {!search && (
+              <Button size="sm" className="mt-3 h-8 gap-1 text-xs" onClick={() => navigate("/app/vibe")}>
+                <Sparkles className="size-3" /> Build with AI
+              </Button>
             )}
           </div>
         )}
-        {filtered.map(agent => {
+        {filtered.map((agent) => {
           const isSelected = agent.id === selectedId;
           const isLive = agent.status === "active";
-          const costCents = computeAgentRateCents(rateMap, agent as any, userProviderNames);
           return (
-            <div
+            <button
               key={agent.id}
+              type="button"
               onClick={() => onSelect(agent.id)}
               className={cn(
-                "group relative w-full text-left rounded-xl px-3 py-2.5 transition-all border cursor-pointer",
-                isSelected
-                  ? "bg-card/80 border-border/60 shadow-sm"
-                  : "border-transparent hover:bg-muted/30 hover:border-border/30",
+                "group flex w-full items-center gap-2 rounded-md px-2 py-2 text-left transition-colors",
+                isSelected ? "bg-foreground/[0.06]" : "hover:bg-foreground/[0.04]",
               )}
             >
-              <div className="flex items-center justify-between gap-1.5">
-                <span className="text-[13px] font-medium truncate flex items-center gap-1.5 min-w-0 flex-1">
-                  <span className="truncate">{agent.name}</span>
-                </span>
-                <div className="flex items-center gap-1 shrink-0">
-                  <span className={cn(
-                    "rounded-md px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide border",
-                    isLive
-                      ? "bg-emerald-500/12 text-emerald-400 border-emerald-500/25"
-                      : "bg-muted/40 text-muted-foreground border-border/50",
-                  )}>
-                    {isLive ? "Live" : "Draft"}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={(e) => handleDeleteItem(e, agent.id, agent.name)}
-                    disabled={deletingId === agent.id}
-                    className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-destructive/15 text-muted-foreground hover:text-destructive transition-all"
-                    title={`Delete ${agent.name}`}
-                    aria-label={`Delete ${agent.name}`}
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </button>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="truncate text-[12px] font-medium">{agent.name}</span>
+                  <StatusDot tone={isLive ? "success" : "neutral"} />
                 </div>
+                <p className="truncate text-[10px] text-muted-foreground">
+                  {agent.asrProvider} · {agent.ttsProvider}
+                </p>
               </div>
-              <div className="flex items-center gap-1.5 mt-1">
-                <span className="text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded border shrink-0 bg-muted/30 text-muted-foreground border-border/40">
-                  Voice
-                </span>
-                <span className="text-[10px] text-muted-foreground/75 truncate">{agent.asrProvider} · {agent.ttsProvider}</span>
-                {costCents ? <span className="text-[10px] text-muted-foreground/55 ml-auto shrink-0">₹{(costCents / 100).toFixed(2)}</span> : null}
-              </div>
-            </div>
+              <button
+                type="button"
+                onClick={(e) => handleDeleteItem(e, agent.id, agent.name)}
+                disabled={deletingId === agent.id}
+                className="rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
+                title={`Delete ${agent.name}`}
+                aria-label={`Delete ${agent.name}`}
+              >
+                <Trash2 className="size-3" />
+              </button>
+            </button>
           );
         })}
       </div>
-      <div className="p-3 border-t border-border/40">
+      <div className="border-t border-border/70 p-2">
         <button
           type="button"
           onClick={() => navigate("/app/vibe")}
-          className="w-full flex items-center gap-2 rounded-xl border border-border/40 bg-primary/5 hover:bg-primary/10 px-3 py-2.5 text-left transition-colors"
+          className="flex h-9 w-full items-center gap-2 rounded-md px-2 text-left text-[11px] text-muted-foreground transition-colors hover:bg-foreground/[0.04] hover:text-foreground"
         >
-          <Sparkles className="h-3.5 w-3.5 text-primary shrink-0" />
-          <div className="min-w-0">
-            <p className="text-[11px] font-semibold text-foreground">Vibe Build</p>
-            <p className="text-[10px] text-muted-foreground truncate">Create with AI in minutes</p>
-          </div>
+          <Sparkles className="size-3.5 shrink-0" />
+          Create with Vibe
         </button>
       </div>
     </div>
@@ -6507,8 +6455,6 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
     return () => window.removeEventListener("beforeunload", warnBeforeLeave);
   }, [isDirty]);
 
-  const webTestLabel = "Live Test";
-
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
   const [renameValue, setRenameValue] = useState("");
   const handleRenameSave = () => {
@@ -6532,91 +6478,106 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
-      <WorkspaceHeader
-        title={
+      {/* Single toolbar — agent identity + actions (no nested side rails) */}
+      <header className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border/70 px-3 sm:px-5">
+        <div className="flex min-w-0 items-center gap-2">
+          {onOpenAgents && (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-8 gap-1.5 px-2 text-[11px]"
+              onClick={onOpenAgents}
+            >
+              <List className="size-3.5" />
+              <span className="hidden sm:inline">Switch</span>
+              <ChevronDown className="size-3 text-muted-foreground" />
+            </Button>
+          )}
           <button
             type="button"
             onClick={() => { setRenameValue(agent.name ?? ""); setRenameDialogOpen(true); }}
-            className="inline-flex max-w-[360px] items-center gap-1.5 truncate text-left hover:text-foreground/75"
+            className="inline-flex max-w-[280px] items-center gap-1.5 truncate text-left"
             title="Rename agent"
           >
-            <span className="truncate">{agent.name}</span>
+            <span className="truncate text-[13px] font-semibold tracking-[-0.02em]">{agent.name}</span>
             <Pencil className="size-3 shrink-0 text-muted-foreground" />
           </button>
-        }
-        description={agent.description || "Configure behavior, capabilities, operations, and runtime."}
-        meta={
-          <>
-            <span className="inline-flex items-center gap-1 text-[9px] capitalize text-muted-foreground">
-              <StatusDot tone={agent.status === "active" ? "success" : "neutral"} />
-              {agent.status === "active" ? "live" : "draft"}
+          <span className="inline-flex items-center gap-1 text-[10px] capitalize text-muted-foreground">
+            <StatusDot tone={agent.status === "active" ? "success" : "neutral"} />
+            {agent.status === "active" ? "live" : "draft"}
+          </span>
+          {isDirty && (
+            <span className="inline-flex items-center gap-1 text-[10px] text-amber-600">
+              <StatusDot tone="warning" />
+              unsaved
             </span>
-            {isDirty && (
-              <span className="inline-flex items-center gap-1 text-[9px] text-amber-600">
-                <StatusDot tone="warning" />
-                unsaved
-              </span>
-            )}
-          </>
-        }
-        actions={
-          <>
-            {onOpenAgents && (
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                className="h-8 gap-1.5 px-2 text-[11px] md:hidden"
-                onClick={onOpenAgents}
-              >
-                <List className="size-3.5" />
-                Agents
+          )}
+          <span className="hidden font-mono text-[10px] text-muted-foreground/50 sm:inline">
+            #{String(agent.id).padStart(4, "0")}
+          </span>
+        </div>
+
+        <div className="flex shrink-0 items-center gap-1.5">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="hidden h-8 gap-1.5 px-2.5 text-[11px] sm:inline-flex"
+            onClick={() => setCallDialog(true)}
+          >
+            <Phone className="size-3" />
+            Phone
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={showWebcall ? "default" : "outline"}
+            className="hidden h-8 gap-1.5 px-2.5 text-[11px] sm:inline-flex"
+            onClick={() => setShowWebcall((v) => !v)}
+          >
+            <Play className="size-3" />
+            {showWebcall ? "Close test" : "Live test"}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            className={cn("h-8 gap-1.5 px-3 text-[11px]", savedFlash && "bg-emerald-600 text-white hover:bg-emerald-600")}
+            onClick={onSave}
+            disabled={updateAgent.isPending}
+          >
+            {savedFlash ? <Check className="size-3" /> : <Save className="size-3" />}
+            {updateAgent.isPending ? "Saving…" : savedFlash ? "Saved" : "Save"}
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button type="button" size="icon" variant="ghost" className="size-8">
+                <MoreHorizontal className="size-4" />
               </Button>
-            )}
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="h-8 gap-1.5 px-2.5 text-[11px] xl:hidden"
-              onClick={() => setShowWebcall(v => !v)}
-            >
-              <Play className="size-3" />
-              Test
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              className={cn("h-8 gap-1.5 px-3 text-[11px]", savedFlash && "bg-emerald-600 text-white hover:bg-emerald-600")}
-              onClick={onSave}
-              disabled={updateAgent.isPending}
-            >
-              {savedFlash ? <Check className="size-3" /> : <Save className="size-3" />}
-              {updateAgent.isPending ? "Saving…" : savedFlash ? "Saved" : "Save"}
-            </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button type="button" size="icon" variant="ghost" className="size-8">
-                  <MoreHorizontal className="size-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => setCallDialog(true)}>
-                  <Phone className="mr-2 size-3.5" /> Phone test
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setPublishModalOpen(true)}>
-                  <Upload className="mr-2 size-3.5" /> Publish version
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => navigate(`/app/vibe?refine=${agentId}`)}>
-                  <Sparkles className="mr-2 size-3.5" /> Refine with AI
-                </DropdownMenuItem>
-                <DropdownMenuItem className="text-destructive" onClick={handleDelete}>
-                  <Trash2 className="mr-2 size-3.5" /> Delete agent
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </>
-        }
-      />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem className="sm:hidden" onClick={() => setCallDialog(true)}>
+                <Phone className="mr-2 size-3.5" /> Phone test
+              </DropdownMenuItem>
+              <DropdownMenuItem className="sm:hidden" onClick={() => setShowWebcall((v) => !v)}>
+                <Mic className="mr-2 size-3.5" /> Live test
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setPublishModalOpen(true)}>
+                <Upload className="mr-2 size-3.5" /> Publish version
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate(`/app/vibe?refine=${agentId}`)}>
+                <Sparkles className="mr-2 size-3.5" /> Refine with AI
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate("/app/providers")}>
+                <Star className="mr-2 size-3.5" /> API keys
+              </DropdownMenuItem>
+              <DropdownMenuItem className="text-destructive" onClick={handleDelete}>
+                <Trash2 className="mr-2 size-3.5" /> Delete agent
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </header>
 
       {/* Rename Agent dialog */}
       <Dialog open={renameDialogOpen} onOpenChange={setRenameDialogOpen}>
@@ -6646,9 +6607,9 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
       {showWebcall && (
         <div
           className={cn(
-            "fixed z-50 flex flex-col shadow-2xl overflow-hidden bg-background",
+            "fixed z-50 flex flex-col overflow-hidden bg-background shadow-2xl",
             "inset-0 rounded-none",
-            "md:inset-auto md:bottom-4 md:right-4 md:w-[420px] md:h-[560px] md:rounded-2xl",
+            "md:inset-auto md:bottom-4 md:right-4 md:h-[560px] md:w-[420px] md:rounded-xl",
           )}
         >
           <WebcallPanel
@@ -6660,240 +6621,79 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
         </div>
       )}
 
-      {/* Three-pane builder workspace */}
-      <div className="flex min-h-0 flex-1">
-        <WorkspaceSectionNav
-          groups={BUILDER_NAV_GROUPS}
-          activeId={activeTab}
-          onSelect={handleTabClick}
-          className="hidden lg:flex"
-          footer={
-            <div className="flex items-center justify-between px-1 text-[9px] text-muted-foreground">
-              <span>Agent ID</span>
-              <span className="font-mono">#{String(agent.id).padStart(4, "0")}</span>
-            </div>
-          }
-        />
-        <Form {...form}>
-          <div className="flex-1 flex flex-col min-w-0 min-h-0">
-            <div className="flex h-10 shrink-0 items-center border-b border-border/70 bg-background px-3 lg:hidden">
-              <Select value={activeTab} onValueChange={(value) => handleTabClick(value as TabId)}>
-                <SelectTrigger className="h-7 w-full border-0 bg-transparent px-1 text-[11px] font-medium shadow-none focus:ring-0">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {TABS.map((tab) => (
-                    <SelectItem key={tab.id} value={tab.id} className="text-xs">
-                      {tab.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+      {/* Focused single-column editor */}
+      <Form {...form}>
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <WorkspaceSegmentNav
+            items={BUILDER_SEGMENTS}
+            activeId={activeTab}
+            onSelect={handleTabClick}
+          />
 
-            <div ref={tabContentRef} className="flex-1 min-h-0 overflow-y-auto">
-              <form
-                onSubmit={e => e.preventDefault()}
-                className={cn(
-                  "builder-workspace-content mx-auto min-h-full w-full",
-                  activeTab === "reach" || activeTab === "launch"
-                    ? "max-w-[1080px]"
-                    : "max-w-[920px]",
-                )}
-              >
-                {activeTab === "overview"  && <OverviewTab form={form} agent={agent} />}
-                {activeTab === "prompt"    && <PromptTab form={form} />}
-                {activeTab === "voice"     && <VoiceTab form={form} />}
-                {activeTab === "tools"     && <ToolsTab form={form} agentId={agentId} />}
-                {activeTab === "reach"     && (
-                  <ReachPanel
-                    agentId={agentId}
-                    agentName={agent?.name}
-                    webhookUrl={form.watch("webhookUrl")}
-                    onConfigureEmail={openEmailChannel}
-                    onOpenChannels={openChannels}
-                  />
-                )}
-                {activeTab === "launch"    && (
-                  <div>
-                    <ChannelsTab form={form} agent={agent} forceExpandEmail={forceExpandEmail} />
-                    <div className="border-t border-border/40 mx-6 my-4" />
-                    <div className="px-6 pb-6">
-                      <button
-                        type="button"
-                        onClick={() => handleTabClick("reach")}
-                        className="w-full flex items-start gap-3 rounded-xl border border-border/60 bg-muted/20 px-3 py-3 text-left hover:bg-muted/35 transition-colors"
-                      >
-                        <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                          <Zap className="h-4 w-4 text-primary" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-medium">How leads reach this agent</p>
-                          <p className="text-[11px] text-muted-foreground mt-0.5">
-                            Form, sheet, list dial, meetings, and after-call journey live under the Reach tab.
-                          </p>
-                        </div>
-                        <span className="text-[11px] text-primary font-medium shrink-0 mt-1">Open Reach →</span>
-                      </button>
-                    </div>
-                  </div>
-                )}
-                {activeTab === "voicemail" && <VoicemailTab form={form} />}
-                {activeTab === "advanced"  && <AdvancedTab form={form} agent={agent} />}
-                {activeTab === "versions"  && <VersionsTab agentId={agent.id} />}
-              </form>
-            </div>
-
-            {/* One mobile action bar; larger screens use header actions. */}
-            <div className="shrink-0 border-t border-border/70 bg-background/95 px-3 py-2 pb-safe backdrop-blur-md sm:hidden">
-              <div className="grid grid-cols-3 gap-1.5">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-10 gap-1.5 text-xs font-medium"
-                  onClick={() => setCallDialog(true)}
-                >
-                  <Phone className="h-4 w-4 shrink-0" />
-                  Phone
-                </Button>
-                <Button
-                  type="button"
-                  variant={showWebcall ? "default" : "outline"}
-                  className="h-10 gap-1.5 text-xs font-medium"
-                  onClick={() => setShowWebcall(v => !v)}
-                >
-                  <Mic className="h-4 w-4 shrink-0" />
-                  {showWebcall ? "Close" : "Web"}
-                </Button>
-                <Button
-                  type="button"
-                  className={cn("relative h-10 gap-1.5 text-xs font-medium", savedFlash && "bg-emerald-600 hover:bg-emerald-600")}
-                  onClick={onSave}
-                  disabled={updateAgent.isPending}
-                >
-                  {savedFlash ? <Check className="h-4 w-4" /> : <Save className="h-4 w-4" />}
-                  {updateAgent.isPending ? "…" : savedFlash ? "Saved" : "Save"}
-                  {isDirty && !updateAgent.isPending && !savedFlash && (
-                    <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-amber-400" />
-                  )}
-                </Button>
-              </div>
-            </div>
-          </div>
-        </Form>
-
-        <WorkspaceInspector title="Test & deploy" className="hidden xl:flex">
-          <div className="flex min-h-full flex-col gap-5">
-            {/* Test — phone + web; soft save hint when dirty */}
-            <div className="space-y-2">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/55 px-0.5">
-                Test
-              </p>
-              {isDirty && (
-                <p className="rounded-md border border-amber-500/20 bg-amber-500/5 px-2 py-1.5 text-[10px] leading-snug text-amber-600">
-                  Unsaved changes — save before testing so the call uses the latest config.
-                </p>
+          <div ref={tabContentRef} className="min-h-0 flex-1 overflow-y-auto">
+            <form
+              onSubmit={(e) => e.preventDefault()}
+              className="builder-workspace-content mx-auto min-h-full w-full max-w-[720px]"
+            >
+              {activeTab === "overview"  && <OverviewTab form={form} agent={agent} />}
+              {activeTab === "prompt"    && <PromptTab form={form} />}
+              {activeTab === "voice"     && <VoiceTab form={form} />}
+              {activeTab === "tools"     && <ToolsTab form={form} agentId={agentId} />}
+              {activeTab === "reach"     && (
+                <ReachPanel
+                  agentId={agentId}
+                  agentName={agent?.name}
+                  webhookUrl={form.watch("webhookUrl")}
+                  onConfigureEmail={openEmailChannel}
+                  onOpenChannels={openChannels}
+                />
               )}
-              <div className="grid grid-cols-2 gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-8 gap-1.5 border-border/70 bg-background text-[11px] font-medium"
-                  onClick={() => setCallDialog(true)}
-                >
-                  <Phone className="h-3.5 w-3.5 shrink-0" />
-                  Phone
-                </Button>
-                <Button
-                  type="button"
-                  variant={showWebcall ? "default" : "outline"}
-                  className={cn(
-                    "h-8 gap-1.5 text-[11px] font-medium",
-                    !showWebcall && "border-border/70 bg-background",
-                  )}
-                  onClick={() => setShowWebcall(v => !v)}
-                >
-                  <Mic className="h-3.5 w-3.5 shrink-0" />
-                  {showWebcall ? "Close" : webTestLabel}
-                </Button>
-              </div>
-              <p className="text-[10px] text-muted-foreground/65 leading-snug px-0.5">
-                Phone uses your number when assigned — otherwise a capped trial line ({3} calls/day). Live Test = in-browser.
-              </p>
-            </div>
+              {activeTab === "launch" && (
+                <ChannelsTab form={form} agent={agent} forceExpandEmail={forceExpandEmail} />
+              )}
+              {activeTab === "voicemail" && <VoicemailTab form={form} />}
+              {activeTab === "advanced"  && <AdvancedTab form={form} agent={agent} />}
+              {activeTab === "versions"  && <VersionsTab agentId={agent.id} />}
+            </form>
+          </div>
 
-            {/* Inbound assign — same APIs as Phone Numbers */}
-            <div className="space-y-2">
-              <AgentInboundPanel
-                agentId={agentId}
-                preferredManagedNumber={form.watch("preferredManagedNumber")}
-                telephonyProvider={form.watch("telephonyProvider")}
-              />
-              <button
-                type="button"
-                onClick={() => navigate("/app/calls")}
-                className="px-0.5 text-left text-[10px] text-muted-foreground transition-colors hover:text-foreground"
-              >
-                Open Activity →
-              </button>
-            </div>
-
-            <div className="h-px bg-border/40" />
-
-            {/* Publish — Save primary, Refine next, Publish version */}
-            <div className="space-y-2">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/55 px-0.5">
-                Publish
-              </p>
-              <div className="relative">
-                <Button
-                  type="button"
-                  className={cn(
-                    "h-8 w-full gap-2 text-[11px] font-semibold",
-                    savedFlash && "bg-emerald-600 text-white hover:bg-emerald-600",
-                  )}
-                  onClick={onSave}
-                  disabled={updateAgent.isPending}
-                >
-                  {savedFlash ? <Check className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}
-                  {updateAgent.isPending ? "Saving…" : savedFlash ? "Saved" : isDirty ? "Save changes" : "Save agent"}
-                </Button>
-                {isDirty && !updateAgent.isPending && !savedFlash && (
-                  <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-amber-400 pointer-events-none" />
-                )}
-              </div>
+          {/* Mobile-only sticky actions */}
+          <div className="shrink-0 border-t border-border/70 bg-background/95 px-3 py-2 pb-safe backdrop-blur-md sm:hidden">
+            <div className="grid grid-cols-3 gap-1.5">
               <Button
                 type="button"
                 variant="outline"
-                className="h-8 w-full gap-2 border-border/70 text-[11px] font-medium"
-                onClick={() => navigate(`/app/vibe?refine=${agentId}`)}
+                className="h-10 gap-1.5 text-xs font-medium"
+                onClick={() => setCallDialog(true)}
               >
-                <Sparkles className="h-3.5 w-3.5" />
-                Refine with AI
+                <Phone className="h-4 w-4 shrink-0" />
+                Phone
               </Button>
-              <button
+              <Button
                 type="button"
-                onClick={() => setPublishModalOpen(true)}
-                className="flex h-8 w-full items-center justify-center gap-1.5 rounded-md text-[10px] text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+                variant={showWebcall ? "default" : "outline"}
+                className="h-10 gap-1.5 text-xs font-medium"
+                onClick={() => setShowWebcall((v) => !v)}
               >
-                <Upload className="h-3 w-3" />
-                Publish version
-              </button>
-            </div>
-
-            <div className="mt-auto space-y-2.5 pt-2">
-              <button
+                <Mic className="h-4 w-4 shrink-0" />
+                {showWebcall ? "Close" : "Web"}
+              </Button>
+              <Button
                 type="button"
-                onClick={() => navigate("/app/providers")}
-                className="flex items-center gap-2 w-full text-left text-[11px] text-muted-foreground/80 hover:text-foreground transition-colors"
+                className={cn("relative h-10 gap-1.5 text-xs font-medium", savedFlash && "bg-emerald-600 hover:bg-emerald-600")}
+                onClick={onSave}
+                disabled={updateAgent.isPending}
               >
-                <Star className="h-3 w-3 shrink-0 opacity-70" />
-                <span>Add your own API keys</span>
-              </button>
+                {savedFlash ? <Check className="h-4 w-4" /> : <Save className="h-4 w-4" />}
+                {updateAgent.isPending ? "…" : savedFlash ? "Saved" : "Save"}
+                {isDirty && !updateAgent.isPending && !savedFlash && (
+                  <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-amber-400" />
+                )}
+              </Button>
             </div>
           </div>
-        </WorkspaceInspector>
-      </div>
+        </div>
+      </Form>
 
       {/* Outbound call dialog */}
       <Dialog open={callDialog} onOpenChange={setCallDialog}>
@@ -7202,22 +7002,16 @@ export default function AgentBuilder() {
   }, [isMobile, selectedId, agentsLoading, agents, showCreate]);
 
   return (
-    <div className="flex h-full overflow-hidden">
+    <div className="flex h-full overflow-hidden bg-background">
       <CreateAgentDialog open={showCreate} onClose={() => setShowCreate(false)} />
-      <AgentListPanel
-        selectedId={selectedId}
-        onSelect={handleSelect}
-        rateMap={rateMap}
-        className="hidden md:flex"
-      />
       <Sheet open={agentsSheetOpen} onOpenChange={setAgentsSheetOpen}>
-        <SheetContent side="left" className="p-0 w-[min(100vw,280px)] md:hidden [&>button]:hidden">
+        <SheetContent side="left" className="w-[min(100vw,300px)] p-0 [&>button]:hidden">
           <SheetTitle className="sr-only">Agents</SheetTitle>
           <AgentListPanel
             selectedId={selectedId}
             onSelect={handleSelect}
             rateMap={rateMap}
-            className="w-full border-0"
+            className="h-full"
           />
         </SheetContent>
       </Sheet>

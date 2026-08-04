@@ -148,6 +148,52 @@ export function WorkspaceSectionNav<T extends string>({
   );
 }
 
+/** Flat horizontal section strip — one row, no nested side rail. */
+export function WorkspaceSegmentNav<T extends string>({
+  items,
+  activeId,
+  onSelect,
+  className,
+}: {
+  items: WorkspaceNavItem<T>[];
+  activeId: T;
+  onSelect: (id: T) => void;
+  className?: string;
+}) {
+  return (
+    <nav
+      aria-label="Editor sections"
+      className={cn(
+        "flex h-10 shrink-0 items-stretch gap-0 overflow-x-auto border-b border-border/70 px-3 sm:px-5",
+        className,
+      )}
+    >
+      {items.map((item) => {
+        const active = item.id === activeId;
+        return (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => onSelect(item.id)}
+            aria-current={active ? "page" : undefined}
+            className={cn(
+              "relative shrink-0 px-3 text-[12px] transition-colors",
+              active
+                ? "font-medium text-foreground"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {item.label}
+            {active && (
+              <span className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-foreground" />
+            )}
+          </button>
+        );
+      })}
+    </nav>
+  );
+}
+
 export function WorkspaceInspector({
   title,
   children,

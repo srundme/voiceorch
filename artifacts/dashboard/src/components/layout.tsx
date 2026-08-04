@@ -1007,10 +1007,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
         {/* Voice-a-thon top notification */}
         <VoiceathonTopBanner />
 
-        {/* Topbar — desktop only */}
-        <div className="hidden md:block">
-          <Topbar location={location} />
-        </div>
+        {/* Topbar — desktop only; hide on full-bleed builder surfaces */}
+        {!location.startsWith("/app/agents") && !location.startsWith("/app/vibe") && (
+          <div className="hidden md:block">
+            <Topbar location={location} />
+          </div>
+        )}
 
         {/* Scrollable content */}
         <div className="flex-1 overflow-y-auto min-h-0 overscroll-y-contain">
