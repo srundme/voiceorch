@@ -1,5 +1,5 @@
 /**
- * Call plan detail — people + timeline + Start once + results.
+ * Call plan detail — people + timeline + Start once + activity/call log.
  * Backed by journeys / workflow engine.
  */
 
@@ -33,6 +33,7 @@ import { useToast } from "@/hooks/use-toast";
 import { formatApiError } from "@/lib/format-api-error";
 import { cn } from "@/lib/utils";
 import { CallPlanStepEditor, type CallPlanStep } from "./step-editor";
+import { CallPlanActivityPanel, type PlanRun } from "./activity-panel";
 
 const _DASH_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const DASH_API = `${_DASH_BASE}/api`;
@@ -55,17 +56,6 @@ type CallPlan = {
   lastRunAt: string | null;
 };
 
-type PlanRun = {
-  id: number;
-  status: string;
-  context: Record<string, unknown> | null;
-  currentStepIndex: number;
-  error: string | null;
-  triggeredBy: string | null;
-  createdAt: string;
-  updatedAt: string;
-};
-
 function statusClass(status: string) {
   if (status === "active" || status === "completed") {
     return "border-emerald-500/25 bg-emerald-500/10 text-emerald-400";
@@ -77,14 +67,6 @@ function statusClass(status: string) {
     return "border-destructive/30 bg-destructive/10 text-destructive";
   }
   return "border-border/50 bg-muted/30 text-muted-foreground";
-}
-
-function personFromContext(ctx: Record<string, unknown> | null): string {
-  if (!ctx) return "—";
-  const phone = typeof ctx.phone === "string" ? ctx.phone : "";
-  const name = typeof ctx.name === "string" ? ctx.name : "";
-  if (name && phone) return `${name} · ${phone}`;
-  return name || phone || "—";
 }
 
 export default function CallPlanDetailPage() {
@@ -313,337 +295,265 @@ export default function CallPlanDetailPage() {
         </div>
       }
     >
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.95fr)] lg:items-start">
-        {/* Left: meta + people + steps */}
-        <div className="space-y-5 min-w-0">
-          <section className="space-y-3 rounded-xl border border-border/60 bg-card/30 p-4">
-            <div className="space-y-1.5">
-              <Label className="text-[11px]">Plan name</Label>
-              <Input
-                className="h-9"
-                value={name}
-                onChange={(e) => { setName(e.target.value); setDirty(true); }}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-[11px]">Agent who talks</Label>
-              <Select
-                value={agentId != null ? String(agentId) : undefined}
-                onValueChange={(v) => {
-                  setAgentId(Number(v));
-                  setDirty(true);
-                }}
-              >
-                <SelectTrigger className="h-9">
-                  <SelectValue placeholder="Choose agent…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {agents.map((a) => (
-                    <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {agentId != null && (
-                <Link
-                  href={`/app/agents/${agentId}`}
-                  className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
-                >
-                  Edit agent <ExternalLink className="h-3 w-3" />
-                </Link>
-              )}
-            </div>
-          </section>
-
-          <section className="space-y-3 rounded-xl border border-border/60 bg-card/30 p-4">
-            <div className="flex items-center gap-2">
-              <Users className="h-4 w-4 text-muted-foreground" />
-              <h2 className="text-sm font-semibold">People</h2>
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={() => { setPeopleMode("campaign"); setRunMode("once"); setDirty(true); }}
-                className={cn(
-                  "rounded-lg border px-2.5 py-2.5 text-left text-[11px]",
-                  peopleMode === "campaign"
-                    ? "border-primary/40 bg-primary/5 font-medium"
-                    : "border-border/50 hover:bg-muted/30",
-                )}
-              >
-                List / CSV
-              </button>
-              <button
-                type="button"
-                onClick={() => { setPeopleMode("sheet"); setDirty(true); }}
-                className={cn(
-                  "rounded-lg border px-2.5 py-2.5 text-left text-[11px]",
-                  peopleMode === "sheet"
-                    ? "border-primary/40 bg-primary/5 font-medium"
-                    : "border-border/50 hover:bg-muted/30",
-                )}
-              >
-                Google Sheet
-              </button>
-              <button
-                type="button"
-                onClick={() => { setPeopleMode("manual"); setRunMode("once"); setDirty(true); }}
-                className={cn(
-                  "rounded-lg border px-2.5 py-2.5 text-left text-[11px]",
-                  peopleMode === "manual"
-                    ? "border-primary/40 bg-primary/5 font-medium"
-                    : "border-border/50 hover:bg-muted/30",
-                )}
-              >
-                Paste phones
-              </button>
-            </div>
-
-            {peopleMode === "campaign" ? (
-              <div className="space-y-2">
+      <div className="space-y-6">
+        <div className="grid gap-5 lg:grid-cols-2 lg:items-start">
+          {/* Meta + people */}
+          <div className="space-y-5 min-w-0">
+            <section className="space-y-3 rounded-xl border border-border/60 bg-card/30 p-4">
+              <div className="space-y-1.5">
+                <Label className="text-[11px]">Plan name</Label>
+                <Input
+                  className="h-9"
+                  value={name}
+                  onChange={(e) => { setName(e.target.value); setDirty(true); }}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[11px]">Agent who talks</Label>
                 <Select
-                  value={campaignId || undefined}
-                  onValueChange={(v) => { setCampaignId(v); setDirty(true); }}
+                  value={agentId != null ? String(agentId) : undefined}
+                  onValueChange={(v) => {
+                    setAgentId(Number(v));
+                    setDirty(true);
+                  }}
                 >
-                  <SelectTrigger className="h-9 text-xs">
-                    <SelectValue placeholder={campaigns.length ? "Choose a list…" : "Upload a list in People first"} />
+                  <SelectTrigger className="h-9">
+                    <SelectValue placeholder="Choose agent…" />
                   </SelectTrigger>
                   <SelectContent>
-                    {campaigns.map((c) => (
-                      <SelectItem key={c.id} value={String(c.id)} className="text-xs">
-                        {c.name}
-                        {typeof c.totalLeads === "number" ? ` · ${c.totalLeads}` : ""}
-                      </SelectItem>
+                    {agents.map((a) => (
+                      <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                <p className="text-[10px] text-muted-foreground">
-                  {selectedCampaign
-                    ? `Start once walks up to 100 people from this list.`
-                    : (
-                      <>
-                        No list yet?{" "}
-                        <Link href="/app/people" className="underline underline-offset-2">
-                          Upload CSV under People
-                        </Link>
-                        .
-                      </>
-                    )}
-                </p>
+                {agentId != null && (
+                  <Link
+                    href={`/app/agents/${agentId}`}
+                    className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
+                  >
+                    Edit agent <ExternalLink className="h-3 w-3" />
+                  </Link>
+                )}
               </div>
-            ) : peopleMode === "sheet" ? (
-              <div className="space-y-3">
-                {sheetsQ.isLoading ? (
-                  <div className="flex h-9 items-center gap-2 text-[11px] text-muted-foreground">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading sheets…
-                  </div>
-                ) : sheetsQ.isError ? (
-                  <p className="text-[11px] text-destructive">
-                    Could not load sheet pipelines. Try Refresh or reconnect Google Sheets.
-                  </p>
-                ) : sheetPipelines.length === 0 ? (
-                  <div className="space-y-2 rounded-lg border border-dashed border-border/70 bg-muted/20 p-3">
-                    <p className="text-[11px] text-muted-foreground leading-relaxed">
-                      Connect Google under Connections, then create a sheet pipeline to use here.
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      <Button asChild size="sm" className="h-8 text-xs">
-                        <Link href="/app/automatic-calls/new">Set up Google Sheet</Link>
-                      </Button>
-                      <Button asChild size="sm" variant="outline" className="h-8 text-xs">
-                        <Link href="/app/connections?setup=sheets">Connections</Link>
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
+            </section>
+
+            <section className="space-y-3 rounded-xl border border-border/60 bg-card/30 p-4">
+              <div className="flex items-center gap-2">
+                <Users className="h-4 w-4 text-muted-foreground" />
+                <h2 className="text-sm font-semibold">People</h2>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => { setPeopleMode("campaign"); setRunMode("once"); setDirty(true); }}
+                  className={cn(
+                    "rounded-lg border px-2.5 py-2.5 text-left text-[11px]",
+                    peopleMode === "campaign"
+                      ? "border-primary/40 bg-primary/5 font-medium"
+                      : "border-border/50 hover:bg-muted/30",
+                  )}
+                >
+                  List / CSV
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setPeopleMode("sheet"); setDirty(true); }}
+                  className={cn(
+                    "rounded-lg border px-2.5 py-2.5 text-left text-[11px]",
+                    peopleMode === "sheet"
+                      ? "border-primary/40 bg-primary/5 font-medium"
+                      : "border-border/50 hover:bg-muted/30",
+                  )}
+                >
+                  Google Sheet
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setPeopleMode("manual"); setRunMode("once"); setDirty(true); }}
+                  className={cn(
+                    "rounded-lg border px-2.5 py-2.5 text-left text-[11px]",
+                    peopleMode === "manual"
+                      ? "border-primary/40 bg-primary/5 font-medium"
+                      : "border-border/50 hover:bg-muted/30",
+                  )}
+                >
+                  Paste phones
+                </button>
+              </div>
+
+              {peopleMode === "campaign" ? (
+                <div className="space-y-2">
                   <Select
-                    value={sheetPipelineId || undefined}
-                    onValueChange={(v) => { setSheetPipelineId(v); setDirty(true); }}
+                    value={campaignId || undefined}
+                    onValueChange={(v) => { setCampaignId(v); setDirty(true); }}
                   >
                     <SelectTrigger className="h-9 text-xs">
-                      <SelectValue placeholder="Choose a sheet…" />
+                      <SelectValue placeholder={campaigns.length ? "Choose a list…" : "Upload a list in People first"} />
                     </SelectTrigger>
                     <SelectContent>
-                      {sheetPipelines.map((p) => (
-                        <SelectItem key={p.id} value={p.id} className="text-xs">
-                          {p.name}
-                          {p.spreadsheetTitle ? ` · ${p.spreadsheetTitle}` : ""}
+                      {campaigns.map((c) => (
+                        <SelectItem key={c.id} value={String(c.id)} className="text-xs">
+                          {c.name}
+                          {typeof c.totalLeads === "number" ? ` · ${c.totalLeads}` : ""}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                )}
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => { setRunMode("once"); setDirty(true); }}
-                    className={cn(
-                      "rounded-lg border px-3 py-2 text-left text-[11px]",
-                      runMode === "once"
-                        ? "border-primary/40 bg-primary/5 font-medium"
-                        : "border-border/50 hover:bg-muted/30",
-                    )}
-                  >
-                    <p className="font-medium">Start once</p>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">Current rows only</p>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setRunMode("live"); setDirty(true); }}
-                    className={cn(
-                      "rounded-lg border px-3 py-2 text-left text-[11px]",
-                      runMode === "live"
-                        ? "border-primary/40 bg-primary/5 font-medium"
-                        : "border-border/50 hover:bg-muted/30",
-                    )}
-                  >
-                    <p className="font-medium">Keep live</p>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">New rows keep entering</p>
-                  </button>
-                </div>
-                {sheetPipelines.length > 0 && (
                   <p className="text-[10px] text-muted-foreground">
-                    {runMode === "live"
-                      ? "Press Start to arm — new sheet rows walk this plan from step 1."
-                      : "Start once walks up to 100 current rows."}
-                    {" "}
-                    <Link href="/app/automatic-calls/new" className="underline underline-offset-2">
-                      Add another sheet
-                    </Link>
+                    {selectedCampaign
+                      ? `Start once walks up to 100 people from this list.`
+                      : (
+                        <>
+                          No list yet?{" "}
+                          <Link href="/app/people" className="underline underline-offset-2">
+                            Upload CSV under People
+                          </Link>
+                          .
+                        </>
+                      )}
                   </p>
-                )}
-              </div>
-            ) : (
-              <div className="space-y-1.5">
-                <Textarea
-                  rows={4}
-                  className="text-xs font-mono"
-                  placeholder={"+9198…\n+9180…"}
-                  value={manualPhones}
-                  onChange={(e) => setManualPhones(e.target.value)}
-                />
-                <p className="text-[10px] text-muted-foreground">
-                  One phone per line. Used only for this Start — not saved as a list.
-                </p>
-              </div>
-            )}
-          </section>
-
-          <section className="space-y-3 rounded-xl border border-border/60 bg-card/30 p-4">
-            <div>
-              <h2 className="text-sm font-semibold">What happens next</h2>
-              <p className="text-[11px] text-muted-foreground mt-0.5">
-                Ordered steps. Drag with the arrows. No flowchart.
-              </p>
-            </div>
-            {agentId != null ? (
-              <CallPlanStepEditor
-                steps={steps}
-                agentId={agentId}
-                onChange={(next) => { setSteps(next); setDirty(true); }}
-              />
-            ) : (
-              <p className="text-[12px] text-muted-foreground">Pick an agent first.</p>
-            )}
-          </section>
-
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-8 text-xs text-destructive gap-1.5"
-            onClick={() => setDeleteOpen(true)}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-            Delete plan
-          </Button>
-        </div>
-
-        {/* Right sidebar: Results — campaign-style per-person table */}
-        <aside className="lg:sticky lg:top-4 min-w-0">
-          <section className="flex min-h-[420px] flex-col overflow-hidden rounded-xl border border-border/60 bg-card/40">
-            <div className="flex items-start justify-between gap-2 border-b border-border/50 px-4 py-3">
-              <div>
-                <h2 className="text-sm font-semibold">Results</h2>
-                <p className="text-[11px] text-muted-foreground mt-0.5">
-                  Per person — step progress and outcomes.
-                </p>
-              </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-7 shrink-0 text-[11px]"
-                onClick={() => runsQ.refetch()}
-              >
-                Refresh
-              </Button>
-            </div>
-
-            <div className="flex items-center gap-3 border-b border-border/40 bg-muted/20 px-4 py-2 text-[10px] uppercase tracking-wide text-muted-foreground/70">
-              <span className="min-w-0 flex-1">Person</span>
-              <span className="w-14 text-center shrink-0">Step</span>
-              <span className="w-[72px] text-right shrink-0">Status</span>
-            </div>
-
-            <div className="min-h-0 flex-1 overflow-y-auto">
-              {runsQ.isLoading ? (
-                <div className="space-y-2 p-4">
-                  {[0, 1, 2].map((i) => (
-                    <div key={i} className="h-10 animate-pulse rounded-md bg-muted/40" />
-                  ))}
                 </div>
-              ) : runs.length === 0 ? (
-                <div className="flex h-full min-h-[200px] flex-col items-center justify-center gap-2 px-6 py-10 text-center">
-                  <p className="text-[13px] font-medium text-foreground/80">Nothing started yet</p>
-                  <p className="text-[11px] text-muted-foreground max-w-[16rem] leading-relaxed">
-                    Press Start once. Each person appears here with step progress — like the campaign live queue.
-                  </p>
+              ) : peopleMode === "sheet" ? (
+                <div className="space-y-3">
+                  {sheetsQ.isLoading ? (
+                    <div className="flex h-9 items-center gap-2 text-[11px] text-muted-foreground">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading sheets…
+                    </div>
+                  ) : sheetsQ.isError ? (
+                    <p className="text-[11px] text-destructive">
+                      Could not load sheet pipelines. Try Refresh or reconnect Google Sheets.
+                    </p>
+                  ) : sheetPipelines.length === 0 ? (
+                    <div className="space-y-2 rounded-lg border border-dashed border-border/70 bg-muted/20 p-3">
+                      <p className="text-[11px] text-muted-foreground leading-relaxed">
+                        Connect Google under Connections, then create a sheet pipeline to use here.
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        <Button asChild size="sm" className="h-8 text-xs">
+                          <Link href="/app/automatic-calls/new">Set up Google Sheet</Link>
+                        </Button>
+                        <Button asChild size="sm" variant="outline" className="h-8 text-xs">
+                          <Link href="/app/connections?setup=sheets">Connections</Link>
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <Select
+                      value={sheetPipelineId || undefined}
+                      onValueChange={(v) => { setSheetPipelineId(v); setDirty(true); }}
+                    >
+                      <SelectTrigger className="h-9 text-xs">
+                        <SelectValue placeholder="Choose a sheet…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {sheetPipelines.map((p) => (
+                          <SelectItem key={p.id} value={p.id} className="text-xs">
+                            {p.name}
+                            {p.spreadsheetTitle ? ` · ${p.spreadsheetTitle}` : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => { setRunMode("once"); setDirty(true); }}
+                      className={cn(
+                        "rounded-lg border px-3 py-2 text-left text-[11px]",
+                        runMode === "once"
+                          ? "border-primary/40 bg-primary/5 font-medium"
+                          : "border-border/50 hover:bg-muted/30",
+                      )}
+                    >
+                      <p className="font-medium">Start once</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">Current rows only</p>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setRunMode("live"); setDirty(true); }}
+                      className={cn(
+                        "rounded-lg border px-3 py-2 text-left text-[11px]",
+                        runMode === "live"
+                          ? "border-primary/40 bg-primary/5 font-medium"
+                          : "border-border/50 hover:bg-muted/30",
+                      )}
+                    >
+                      <p className="font-medium">Keep live</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">New rows keep entering</p>
+                    </button>
+                  </div>
+                  {sheetPipelines.length > 0 && (
+                    <p className="text-[10px] text-muted-foreground">
+                      {runMode === "live"
+                        ? "Press Start to arm — new sheet rows walk this plan from step 1."
+                        : "Start once walks up to 100 current rows."}
+                      {" "}
+                      <Link href="/app/automatic-calls/new" className="underline underline-offset-2">
+                        Add another sheet
+                      </Link>
+                    </p>
+                  )}
                 </div>
               ) : (
-                <ul className="divide-y divide-border/40">
-                  {runs.map((run) => {
-                    const stepN = Math.min(run.currentStepIndex + 1, Math.max(steps.length, 1));
-                    const stepLabel = steps[run.currentStepIndex]?.type?.replace(/_/g, " ");
-                    return (
-                      <li
-                        key={run.id}
-                        className="flex items-center gap-3 px-4 py-2.5 text-[12px] hover:bg-muted/25 transition-colors"
-                      >
-                        <div className="min-w-0 flex-1">
-                          <p className="font-medium truncate">{personFromContext(run.context)}</p>
-                          {run.error ? (
-                            <p className="text-[10px] text-destructive/80 mt-0.5 truncate">{run.error}</p>
-                          ) : stepLabel ? (
-                            <p className="text-[10px] text-muted-foreground mt-0.5 truncate capitalize">{stepLabel}</p>
-                          ) : null}
-                        </div>
-                        <span className="w-14 shrink-0 text-center tabular-nums text-[11px] text-muted-foreground">
-                          {stepN}/{Math.max(steps.length, 1)}
-                        </span>
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            "w-[72px] justify-center text-[10px] h-5 px-1 capitalize shrink-0",
-                            statusClass(run.status),
-                          )}
-                        >
-                          {run.status.replace(/_/g, " ")}
-                        </Badge>
-                      </li>
-                    );
-                  })}
-                </ul>
+                <div className="space-y-1.5">
+                  <Textarea
+                    rows={4}
+                    className="text-xs font-mono"
+                    placeholder={"+9198…\n+9180…"}
+                    value={manualPhones}
+                    onChange={(e) => setManualPhones(e.target.value)}
+                  />
+                  <p className="text-[10px] text-muted-foreground">
+                    One phone per line. Used only for this Start — not saved as a list.
+                  </p>
+                </div>
               )}
-            </div>
+            </section>
+          </div>
 
-            <div className="border-t border-border/50 px-4 py-2.5">
-              <p className="text-[10px] text-muted-foreground">
-                Call recordings and transcripts stay in{" "}
-                <Link href="/app/history" className="underline underline-offset-2">History</Link>.
-              </p>
-            </div>
-          </section>
-        </aside>
+          {/* Steps */}
+          <div className="space-y-5 min-w-0">
+            <section className="space-y-3 rounded-xl border border-border/60 bg-card/30 p-4">
+              <div>
+                <h2 className="text-sm font-semibold">What happens next</h2>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Ordered steps. Drag with the arrows. No flowchart.
+                </p>
+              </div>
+              {agentId != null ? (
+                <CallPlanStepEditor
+                  steps={steps}
+                  agentId={agentId}
+                  onChange={(next) => { setSteps(next); setDirty(true); }}
+                />
+              ) : (
+                <p className="text-[12px] text-muted-foreground">Pick an agent first.</p>
+              )}
+            </section>
+
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 text-xs text-destructive gap-1.5"
+              onClick={() => setDeleteOpen(true)}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Delete plan
+            </Button>
+          </div>
+        </div>
+
+        {/* Full-width activity log — campaign-style progress + call detail */}
+        <CallPlanActivityPanel
+          runs={runs}
+          steps={steps}
+          totalRuns={plan.totalRuns}
+          loading={runsQ.isLoading}
+          refreshing={runsQ.isFetching && !runsQ.isLoading}
+          onRefresh={() => { void runsQ.refetch(); }}
+        />
       </div>
 
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>

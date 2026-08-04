@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Mic, MicOff, PhoneOff, Phone, Loader2, AlertCircle, X } from "lucide-react";
+import { Mic, MicOff, PhoneOff, Phone, Loader2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SiriWave } from "@/components/ui/siri-wave";
 import { cn } from "@/lib/utils";
@@ -343,105 +343,96 @@ export function WebcallPanel({
 
   useEffect(() => () => { doneRef.current = true; teardown(); }, [teardown]);
 
+  // Esc dismisses the floating shell (parent owns chrome — no X / agent title here).
+  useEffect(() => {
+    if (!onClose) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (state === "live" || state === "connecting" || state === "ending") {
+        end();
+        return;
+      }
+      onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose, state, end]);
+
   const active = state === "live" || state === "connecting" || state === "ending";
   /** Wave while speaking / live; fluid dots while idle or connecting. */
   const waveVariant = state === "live" ? "wave" : "fluid-dots";
-  const waveSize = compact ? 260 : 320;
+  const waveSize = compact ? 280 : 340;
   /** Single live caption — latest speakable line only (no chat stack). */
   const caption = [...lines].reverse().find((l) => isSpeakableCaption(l.text)) ?? null;
+
+  const statusHint =
+    state === "connecting" ? "Connecting…"
+      : state === "ending" ? "Ending…"
+        : state === "live" && !caption ? "Listening"
+          : state === "idle" ? "Press Start to talk"
+            : null;
 
   return (
     <div
       className={cn(
-        "relative flex h-full min-h-0 flex-col bg-transparent",
-        !compact && "mx-auto max-w-sm p-2",
+        "relative flex min-h-0 flex-col items-center justify-center bg-transparent",
+        compact ? "h-auto w-auto" : "mx-auto h-full max-w-sm",
       )}
       style={!compact ? { height: "calc(100dvh - 6rem)" } : undefined}
+      role="region"
+      aria-label={agentName ? `Live test — ${agentName}` : "Live test"}
     >
-      <div className="relative z-20 flex shrink-0 items-center gap-2 px-1 py-1.5">
-        <span
-          className={cn(
-            "h-1.5 w-1.5 rounded-full",
-            state === "live"
-              ? "bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.7)]"
-              : state === "connecting" || state === "ending"
-                ? "bg-amber-400 animate-pulse"
-                : state === "error"
-                  ? "bg-red-400"
-                  : "bg-foreground/25",
-          )}
-        />
-        <p className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground/70">
-          {state === "idle" && agentName}
-          {state === "connecting" && "Connecting…"}
-          {state === "live" && "Listening"}
-          {state === "ending" && "Ending…"}
-          {state === "error" && "Error"}
-        </p>
-        {onClose && (
-          <button
-            onClick={onClose}
-            className="shrink-0 rounded-full p-1.5 text-muted-foreground/50 transition-colors hover:bg-foreground/5 hover:text-foreground"
-            title="Close"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
-        )}
-      </div>
-
-      <div className="relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center gap-5 px-3">
+      <div className="relative z-10 flex flex-col items-center justify-center gap-6 px-2">
         <div
           className={cn(
             "pointer-events-none transition-all duration-700 ease-out",
-            active ? "scale-100 opacity-100" : "scale-95 opacity-70",
+            active ? "scale-100 opacity-100" : "scale-95 opacity-80",
           )}
         >
           <SiriWave
             variant={waveVariant}
             size={waveSize}
-            renderScale={compact ? 0.7 : 0.8}
-            className="rounded-full"
+            renderScale={compact ? 0.75 : 0.85}
             aria-hidden
           />
         </div>
 
-        <div className="pointer-events-none flex min-h-[3.5rem] w-full max-w-[18rem] items-center justify-center px-2">
-          {!caption && state === "idle" && (
-            <p className="text-center text-[12px] text-muted-foreground/45">
-              Press Start to talk
-            </p>
-          )}
-          {!caption && state === "live" && (
-            <p className="text-center text-[10px] uppercase tracking-[0.2em] text-foreground/25">
-              Listening
-            </p>
-          )}
-          {caption && (
+        <div className="pointer-events-none flex min-h-[2.75rem] w-full max-w-[17rem] items-center justify-center px-1">
+          {caption ? (
             <p
               key={caption.id}
               className="webcall-caption-in w-full text-center text-[14px] font-medium leading-snug tracking-tight text-foreground/90 text-pretty"
             >
               {caption.text}
             </p>
-          )}
+          ) : statusHint ? (
+            <p
+              className={cn(
+                "text-center",
+                state === "live"
+                  ? "text-[10px] uppercase tracking-[0.2em] text-foreground/25"
+                  : "text-[12px] text-muted-foreground/45",
+              )}
+            >
+              {statusHint}
+            </p>
+          ) : null}
         </div>
       </div>
 
       {(notice || error) && (
         <div
           className={cn(
-            "relative z-20 mx-2 mb-1 flex items-center gap-2 rounded-xl px-3 py-2 text-[11.5px] backdrop-blur-md",
-            error
-              ? "bg-red-500/10 text-red-400"
-              : "bg-amber-500/10 text-amber-400",
+            "relative z-20 mt-3 flex max-w-[17rem] items-center gap-2 px-1 text-[11.5px]",
+            error ? "text-red-400" : "text-amber-400",
           )}
         >
           <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-          {error ?? notice}
+          <span className="text-pretty">{error ?? notice}</span>
         </div>
       )}
 
-      <div className="relative z-20 flex shrink-0 items-center justify-center gap-3 px-2 py-3">
+      <div className="relative z-20 mt-5 flex items-center justify-center gap-3">
         {state === "idle" || state === "error" ? (
           <Button
             onClick={() => void start()}

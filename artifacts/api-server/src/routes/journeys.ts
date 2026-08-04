@@ -604,7 +604,7 @@ router.get("/journeys/:id/runs", requireAuth, async (req, res): Promise<void> =>
       eq(workflowRunsTable.userId, clerkId),
     ))
     .orderBy(desc(workflowRunsTable.createdAt))
-    .limit(50);
+    .limit(200);
 
   res.json(runs.map((r) => ({
     id: r.id,
