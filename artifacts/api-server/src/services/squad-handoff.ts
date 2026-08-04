@@ -137,6 +137,7 @@ async function buildTargetAgentConfig(
   const voiceStack = resolveVoiceStack(agentCfg["voiceStack"] as string | undefined);
   const micSensitivity = resolveMicSensitivity(agentCfg["micSensitivity"] as string | undefined);
 
+  const isSarvamLlm = (agent.llmProvider ?? "").toLowerCase() === "sarvam";
   const agentConfig: AgentConfig = {
     id: agent.id,
     name: agent.name,
@@ -151,10 +152,16 @@ async function buildTargetAgentConfig(
       // cap identical across a mid-call squad handoff for legacy-config agents.
       maxTokens: (() => {
         const v = "llmMaxTokens" in agentCfg ? agentCfg["llmMaxTokens"] : agentCfg["maxTokens"];
-        return typeof v === "number" && v > 0 ? v : 200;
+        if (typeof v === "number" && v > 0) return v;
+        return isSarvamLlm ? 500 : 200;
       })(),
       presencePenalty: 0.3,
       frequencyPenalty: 0.3,
+      ...(agentCfg["reasoningEffort"] === null || ["low", "medium", "high"].includes(agentCfg["reasoningEffort"] as string)
+        ? { reasoningEffort: agentCfg["reasoningEffort"] as "low" | "medium" | "high" | null }
+        : isSarvamLlm
+          ? { reasoningEffort: "low" as const }
+          : {}),
     },
     maxDuration: agent.maxDuration ?? 600,
     asrProvider: agent.asrProvider,

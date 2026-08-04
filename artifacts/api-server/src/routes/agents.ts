@@ -204,7 +204,13 @@ router.post("/agents", requireAuth, clientContext, denyManagedClient, async (req
   if (insertAgentConfig["incrementalDelay"] == null) {
     insertAgentConfig["incrementalDelay"] = engineDefaults["incrementalDelay"];
   }
-  if (insertAgentConfig["llmMaxTokens"] == null) insertAgentConfig["llmMaxTokens"] = 200;
+  if (insertAgentConfig["llmMaxTokens"] == null) {
+    const llmProv = String(insertData["llmProvider"] ?? "").toLowerCase();
+    insertAgentConfig["llmMaxTokens"] = llmProv === "sarvam" ? 500 : 200;
+  }
+  if (insertAgentConfig["reasoningEffort"] === undefined && String(insertData["llmProvider"] ?? "").toLowerCase() === "sarvam") {
+    insertAgentConfig["reasoningEffort"] = "low";
+  }
   if (insertAgentConfig["bargeInEnergyThreshold"] == null) {
     insertAgentConfig["bargeInEnergyThreshold"] = engineDefaults["bargeInEnergyThreshold"];
   }

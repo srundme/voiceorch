@@ -244,8 +244,17 @@ export class SarvamLLM implements LLMAdapter {
     const p = this.genParams;
     const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
-    const reasoningEffort: unknown = p.reasoningEffort !== undefined ? p.reasoningEffort : null;
-    const body: Record<string, unknown> = { reasoning_effort: reasoningEffort };
+    // Sarvam API default is reasoning_effort "low" (thinking on). We used to
+    // force null on every voice turn, which made 105B answers weaker than
+    // Sarvam's own product with the same model. Explicit null still disables.
+    const body: Record<string, unknown> = {};
+    if (p.reasoningEffort === null) {
+      body["reasoning_effort"] = null;
+    } else if (p.reasoningEffort === "low" || p.reasoningEffort === "medium" || p.reasoningEffort === "high") {
+      body["reasoning_effort"] = p.reasoningEffort;
+    } else {
+      body["reasoning_effort"] = "low";
+    }
 
     if (typeof p.temperature === "number" && Number.isFinite(p.temperature))
       body["temperature"] = clamp(p.temperature, 0, 2);
@@ -292,12 +301,19 @@ export class SarvamLLM implements LLMAdapter {
 
     const genBody = this.buildGenerationBody();
 
+    // Reasoning tokens count toward max_tokens. Floor the budget whenever
+    // thinking is on so content is not empty after the hidden trace (Sarvam gotcha).
+    if (genBody["reasoning_effort"] != null) {
+      const mt = genBody["max_tokens"];
+      if (typeof mt !== "number" || mt < 500) genBody["max_tokens"] = 500;
+    }
+
     if (hasTools) {
       if (genBody["reasoning_effort"] == null) {
         genBody["reasoning_effort"] = "low";
+        const mt = genBody["max_tokens"];
+        if (typeof mt !== "number" || mt < 500) genBody["max_tokens"] = 500;
       }
-      const mt = genBody["max_tokens"];
-      if (typeof mt === "number" && mt < 500) genBody["max_tokens"] = 500;
     }
 
     const effectiveSystemPrompt = hasTools

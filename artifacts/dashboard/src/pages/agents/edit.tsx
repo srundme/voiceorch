@@ -1608,7 +1608,7 @@ export default function AgentEdit() {
                         }} />
                     </FormControl>
                     <FormDescription className="text-[11px]">
-                      Cap on reply length per turn. <strong>Too low cuts sentences mid-word.</strong> Blank = voice default (200). Tamil/Hindi/Indic scripts use 2–4× more tokens than English — use 200–300 there. Gemini 3.x "thinking" overhead is compensated automatically.
+                      Cap on reply length per turn. <strong>Too low cuts sentences mid-word.</strong> Blank = voice default (200; <strong>500 for Sarvam</strong> — reasoning needs headroom). Tamil/Hindi use more tokens than English.
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
