@@ -181,42 +181,54 @@ function CampaignMobileCard({
   const totalCallable = campaign.totalLeads;
   const completed = campaign.completedLeads;
   const pct = totalCallable > 0 ? Math.round((completed / totalCallable) * 100) : 0;
+  const isLive = campaign.callingLeads > 0;
 
   return (
     <div
-      className="md:hidden px-4 py-3.5 border-b border-border/40 last:border-0 hover:bg-muted/20 transition-colors cursor-pointer"
+      className="md:hidden px-4 py-4 border-b border-border/40 last:border-0 hover:bg-muted/20 transition-colors cursor-pointer"
       onClick={() => navigate(`${BASE}/app/campaigns/${campaign.id}`)}
     >
-      <div className="flex items-start justify-between gap-2">
+      <div className="flex items-start justify-between gap-2 mb-3">
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="shrink-0">{SOURCE_ICON[(campaign as unknown as Record<string, string>)["leadSource"] ?? "csv"] ?? <Megaphone className="h-3.5 w-3.5 text-muted-foreground/40" />}</span>
-            <span className="text-sm font-medium text-foreground truncate">{campaign.name}</span>
+          <div className="flex items-center gap-2 min-w-0 mb-1">
+            {isLive && <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />}
+            <span className="text-sm font-semibold text-foreground truncate">{campaign.name}</span>
           </div>
-          <p className="text-[10px] text-muted-foreground/40 mt-0.5">
-            {formatDistanceToNow(new Date(campaign.createdAt), { addSuffix: true })}
-            {campaign.agentName ? ` · ${campaign.agentName}` : ""}
+          <p className="text-[11px] text-muted-foreground/50 ml-4">
+            {campaign.agentName ?? "No agent"} · {formatDistanceToNow(new Date(campaign.createdAt), { addSuffix: true })}
           </p>
         </div>
         <CampaignStatusBadge status={campaign.status} />
       </div>
-      <div className="mt-2.5 flex items-center gap-3 text-xs tabular-nums">
-        {campaign.callingLeads > 0 && (
-          <span className="text-emerald-500 font-semibold">{campaign.callingLeads} live</span>
-        )}
-        {campaign.queuedLeads > 0 && (
-          <span className="text-amber-500 font-semibold">{campaign.queuedLeads} queued</span>
-        )}
-        <span className="text-muted-foreground/50 ml-auto">{completed}/{totalCallable} · {pct}%</span>
+
+      <div className="space-y-2">
+        <div className="flex items-center justify-between text-xs">
+          <div className="flex items-center gap-3">
+            {campaign.callingLeads > 0 && (
+              <span className="text-emerald-500 font-semibold">{campaign.callingLeads} live</span>
+            )}
+            {campaign.queuedLeads > 0 && (
+              <span className="text-amber-500 font-semibold">{campaign.queuedLeads} queued</span>
+            )}
+            {campaign.bookedToday > 0 && (
+              <span className="text-violet-500 font-semibold">{campaign.bookedToday} booked</span>
+            )}
+          </div>
+          <span className="text-muted-foreground/40 tabular-nums">{completed}/{totalCallable} · {pct}%</span>
+        </div>
+        <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+          <div
+            className={cn("h-full rounded-full transition-all duration-500", isLive ? "bg-emerald-500" : "bg-foreground/20")}
+            style={{ width: `${pct}%` }}
+          />
+        </div>
       </div>
-      <div className="mt-2 h-1 bg-muted rounded-full overflow-hidden">
-        <div className="h-full bg-foreground/25 rounded-full transition-all" style={{ width: `${pct}%` }} />
-      </div>
-      <div className="mt-2.5 flex items-center gap-1.5 justify-end" onClick={e => e.stopPropagation()}>
+
+      <div className="mt-3 flex items-center gap-1.5 justify-end" onClick={e => e.stopPropagation()}>
         <Button
           size="sm"
           variant="outline"
-          className="h-8 min-h-10 text-xs gap-1 flex-1 sm:flex-none"
+          className="h-8 text-xs gap-1 flex-1 sm:flex-none"
           onClick={e => { e.stopPropagation(); navigate(`${BASE}/app/campaigns/${campaign.id}`); }}
         >
           Open <ChevronRight className="h-3 w-3" />
@@ -224,7 +236,7 @@ function CampaignMobileCard({
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
-              className="h-8 w-8 min-h-10 flex items-center justify-center rounded-lg hover:bg-muted transition-colors"
+              className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-muted transition-colors"
               onClick={e => e.stopPropagation()}
             >
               <MoreHorizontal className="h-3.5 w-3.5 text-muted-foreground/50" />
@@ -258,122 +270,108 @@ function CampaignRow({
   const totalCallable = campaign.totalLeads;
   const completed     = campaign.completedLeads;
   const pct           = totalCallable > 0 ? Math.round((completed / totalCallable) * 100) : 0;
-  const healthCfg     = HEALTH_CFG[campaign.campaignHealth];
-  const healthDotCls  = campaign.campaignHealth === "healthy"
-    ? "bg-emerald-500"
-    : campaign.campaignHealth === "outside_hours"
-      ? "bg-muted-foreground/40"
-      : campaign.campaignHealth === "validation_error" || campaign.campaignHealth === "webhook_offline"
-        ? "bg-red-500"
-        : "bg-amber-500";
+  const isLive        = campaign.callingLeads > 0;
+  const leadSource    = (campaign as unknown as Record<string,string>)["leadSource"] ?? "csv";
 
   return (
     <div
-      className="group hidden md:grid items-center gap-3 px-4 py-3.5 hover:bg-muted/20 transition-colors cursor-pointer border-b border-border/40 last:border-0"
-      style={{ gridTemplateColumns: "2fr 1fr 1fr 80px 70px 100px 56px 80px 100px" }}
+      className="group hidden md:flex items-center gap-4 px-5 py-4 hover:bg-muted/20 transition-colors cursor-pointer border-b border-border/40 last:border-0"
       onClick={() => navigate(`${BASE}/app/campaigns/${campaign.id}`)}
     >
-      {/* Campaign name + source */}
-      <div className="min-w-0">
-        <div className="flex items-center gap-2 min-w-0">
-          <span
-            className={cn("h-1.5 w-1.5 rounded-full shrink-0", healthDotCls)}
-            title={healthCfg.label}
-          />
-          <span className="shrink-0">{SOURCE_ICON[(campaign as unknown as Record<string,string>)["leadSource"] ?? "csv"] ?? <Megaphone className="h-3.5 w-3.5 text-muted-foreground/40" />}</span>
-          <span className="text-sm font-medium text-foreground truncate">{campaign.name}</span>
-          {((campaign as unknown as Record<string,string>)["triggerMode"] === "instant") && (
-            <Zap className="h-2.5 w-2.5 text-emerald-500 shrink-0" />
-          )}
+      {/* Source icon + name */}
+      <div className="flex items-center gap-3 min-w-0 flex-1">
+        <div className={cn(
+          "h-9 w-9 rounded-xl flex items-center justify-center shrink-0 border transition-all group-hover:scale-105",
+          leadSource === "csv" ? "bg-blue-500/10 border-blue-500/20" :
+          leadSource === "meta_ads" ? "bg-purple-500/10 border-purple-500/20" :
+          leadSource === "webhook" ? "bg-emerald-500/10 border-emerald-500/20" :
+          "bg-muted/40 border-border"
+        )}>
+          {SOURCE_ICON[leadSource] ?? <Megaphone className="h-4 w-4 text-muted-foreground/40" />}
         </div>
-        <p className="text-[10px] text-muted-foreground/40 mt-0.5 truncate ml-6.5">
-          {formatDistanceToNow(new Date(campaign.createdAt), { addSuffix: true })}
-        </p>
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            {isLive && <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse shrink-0" title="Live calls active" />}
+            <span className="text-sm font-semibold text-foreground truncate">{campaign.name}</span>
+            {(campaign as unknown as Record<string,string>)["triggerMode"] === "instant" && (
+              <span className="inline-flex items-center gap-1 text-[9px] font-bold text-emerald-600 bg-emerald-500/10 px-1.5 py-0.5 rounded-full border border-emerald-500/20 shrink-0">LIVE</span>
+            )}
+          </div>
+          <p className="text-[11px] text-muted-foreground/40 mt-0.5 truncate">
+            {campaign.agentName ?? "No agent"} · {formatDistanceToNow(new Date(campaign.createdAt), { addSuffix: true })}
+          </p>
+        </div>
       </div>
 
       {/* Status */}
-      <div><CampaignStatusBadge status={campaign.status} /></div>
-
-      {/* Agent + number */}
-      <div className="min-w-0">
-        {campaign.agentName ? (
-          <>
-            <p className="text-xs font-medium text-foreground truncate">{campaign.agentName}</p>
-            {campaign.fromNumber && (
-              <p className="text-[10px] text-muted-foreground/40 font-mono truncate">{campaign.fromNumber}</p>
-            )}
-          </>
-        ) : (
-          <span className="text-[10px] text-muted-foreground/30 italic">None</span>
-        )}
+      <div className="w-24 shrink-0">
+        <CampaignStatusBadge status={campaign.status} />
       </div>
 
       {/* Live calls */}
-      <div className="text-center">
+      <div className="w-16 text-center shrink-0">
         {campaign.callingLeads > 0 ? (
-          <p className="text-sm font-semibold tabular-nums text-emerald-500 flex items-center justify-center gap-1">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+          <span className="inline-flex items-center gap-1 text-sm font-bold tabular-nums text-emerald-500">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
             {campaign.callingLeads}
-          </p>
+          </span>
         ) : (
-          <p className="text-xs text-muted-foreground/25">—</p>
+          <span className="text-xs text-muted-foreground/20">—</span>
         )}
       </div>
 
-      {/* Batch count */}
-      <div className="text-center">
-        <p className="text-sm font-semibold tabular-nums text-foreground">{campaign.batchCount}</p>
+      {/* Queued */}
+      <div className="w-16 text-center shrink-0">
+        {campaign.queuedLeads > 0 ? (
+          <span className="text-sm font-bold tabular-nums text-amber-500">{campaign.queuedLeads}</span>
+        ) : (
+          <span className="text-xs text-muted-foreground/20">—</span>
+        )}
       </div>
 
-      {/* Call progress */}
-      <div>
-        <div className="flex items-center justify-between mb-1">
-          <span className="text-[10px] text-muted-foreground/50 tabular-nums">{completed}/{totalCallable}</span>
-          <span className="text-[10px] font-mono text-muted-foreground/40">{pct}%</span>
+      {/* Progress */}
+      <div className="w-32 shrink-0">
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="text-[10px] text-muted-foreground/40 tabular-nums">{completed}/{totalCallable}</span>
+          <span className="text-[10px] font-mono font-semibold text-muted-foreground/50">{pct}%</span>
         </div>
-        <div className="h-1 bg-muted rounded-full overflow-hidden">
+        <div className="h-1.5 bg-muted rounded-full overflow-hidden">
           <div
-            className="h-full bg-foreground/25 rounded-full transition-all duration-500"
+            className={cn("h-full rounded-full transition-all duration-700", isLive ? "bg-emerald-500" : "bg-foreground/20")}
             style={{ width: `${pct}%` }}
           />
         </div>
       </div>
 
-      {/* Queued */}
-      <div className="text-center">
-        {campaign.queuedLeads > 0 ? (
-          <>
-            <p className="text-sm font-semibold tabular-nums text-amber-500">{campaign.queuedLeads}</p>
-            <p className="text-[9px] text-muted-foreground/40">Queued</p>
-          </>
+      {/* Booked today */}
+      <div className="w-16 text-center shrink-0">
+        {campaign.bookedToday > 0 ? (
+          <span className="text-sm font-bold tabular-nums text-violet-500">{campaign.bookedToday}</span>
         ) : (
-          <p className="text-xs text-muted-foreground/25">—</p>
+          <span className="text-xs text-muted-foreground/20">—</span>
         )}
       </div>
 
-      {/* Booked today */}
-      <div className="text-center">
-        {campaign.bookedToday > 0 ? (
-          <p className="text-sm font-semibold tabular-nums text-violet-500">{campaign.bookedToday}</p>
-        ) : (
-          <p className="text-xs text-muted-foreground/25">—</p>
-        )}
+      {/* Health */}
+      <div className="w-24 shrink-0">
+        <HealthBadge health={campaign.campaignHealth} />
       </div>
 
       {/* Actions */}
-      <div className="flex items-center gap-1.5 justify-end" onClick={e => e.stopPropagation()}>
+      <div className="flex items-center gap-1.5 shrink-0" onClick={e => e.stopPropagation()}>
         <Button
           size="sm"
-          variant="outline"
-          className="h-7 text-xs gap-1"
+          variant="ghost"
+          className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
           onClick={e => { e.stopPropagation(); navigate(`${BASE}/app/campaigns/${campaign.id}`); }}
+          title="Open"
         >
-          Open <ChevronRight className="h-3 w-3" />
+          <ArrowRight className="h-4 w-4" />
         </Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
-              className="h-7 w-7 flex items-center justify-center rounded-lg hover:bg-muted transition-colors"
+              className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-muted transition-colors opacity-0 group-hover:opacity-100"
               onClick={e => e.stopPropagation()}
             >
               <MoreHorizontal className="h-3.5 w-3.5 text-muted-foreground/50" />
@@ -1710,19 +1708,15 @@ function CampaignFormDialog({
 
 function TableHeader() {
   return (
-    <div
-      className="hidden md:grid items-center gap-3 px-4 py-2.5 border-b border-border/60 bg-muted/30"
-      style={{ gridTemplateColumns: "2fr 1fr 1fr 80px 70px 100px 56px 80px 100px" }}
-    >
-      {[
-        "Campaign", "Status", "Agent / Number",
-        "Live", "Batches", "Progress",
-        "Queued", "Booked", "",
-      ].map((h, i) => (
-        <span key={i} className={cn("text-[9px] font-semibold uppercase tracking-widest text-muted-foreground/40", i >= 3 && i <= 7 ? "text-center" : "")}>
-          {h}
-        </span>
-      ))}
+    <div className="hidden md:flex items-center gap-4 px-5 py-2.5 border-b border-border/60 bg-muted/20">
+      <div className="flex-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/40">Campaign</div>
+      <div className="w-24 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/40">Status</div>
+      <div className="w-16 text-center text-[10px] font-bold uppercase tracking-widest text-muted-foreground/40">Live</div>
+      <div className="w-16 text-center text-[10px] font-bold uppercase tracking-widest text-muted-foreground/40">Queued</div>
+      <div className="w-32 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/40">Progress</div>
+      <div className="w-16 text-center text-[10px] font-bold uppercase tracking-widest text-muted-foreground/40">Booked</div>
+      <div className="w-24 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/40">Health</div>
+      <div className="w-16"></div>
     </div>
   );
 }

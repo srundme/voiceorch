@@ -1477,114 +1477,142 @@ export default function CampaignDetailPage() {
 
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden">
-      {/* Header */}
-      <div className="px-6 pt-5 pb-0 border-b border-border shrink-0">
-        {/* Breadcrumb */}
-        <DetailNav
-          className="mb-2"
-          backTo="/app/campaigns"
-          backLabel="Back to campaign studios"
-          crumbs={[
-            { label: "Campaign Studios", href: "/app/campaigns" },
-            { label: campaign.name },
-          ]}
-        />
-        {/* Title row */}
-        <div className="flex items-start justify-between gap-4 mb-3">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2.5 flex-wrap">
-              <h2 className="text-xl font-semibold tracking-tight">{campaign.name}</h2>
-              <StatusBadge status={
-                // Only instant-trigger CRM/webhook campaigns "listen" for leads.
-                // Batch CRM campaigns wait for a manual import — show plain Active.
-                isContinuous && isInstantTrigger && activeBatches === 0 && campaign.status === "active"
-                  ? "listening"
-                  : batches?.some(b => b.status === "running")
-                    ? "active"
-                    : campaign.status
-              } />
-            </div>
-            <div className="flex items-center gap-3 mt-1 flex-wrap">
-              <span className="text-xs text-muted-foreground/50 flex items-center gap-1">
-                <Users className="h-3 w-3" /> Agent #{campaign.agentId ?? "—"}
-              </span>
-              {campaign.fromNumber && (
-                <span className="text-xs text-muted-foreground/50 font-mono flex items-center gap-1">
-                  <Phone className="h-3 w-3" /> {campaign.fromNumber}
-                </span>
-              )}
-              {hasCsvSource && (
-                <span className="text-xs text-muted-foreground/50 flex items-center gap-1">
-                  <FileText className="h-3 w-3" /> csv
-                </span>
-              )}
-              {(campaign as any).leadSource === "meta_ads" && (
-                <span className="inline-flex items-center gap-1 text-xs font-medium text-purple-400 border border-purple-500/30 bg-purple-500/10 px-1.5 py-0.5 rounded-md">
-                  <Instagram className="h-3 w-3" /> Meta Ads
-                </span>
-              )}
-            </div>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            {/* Delete campaign — always visible */}
-            <Button
-              size="icon" variant="ghost"
-              className="h-8 w-8 text-foreground/70 hover:text-red-500 hover:bg-red-500/10"
-              title="Delete campaign"
-              onClick={() => { setDeleteNameInput(""); setShowDeleteCamp(true); }}
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-            {/* Continuous campaigns never show "finished" badge — they are always-on pipelines */}
-            {!isContinuous && campaignFinished && (
-              <span className="inline-flex items-center gap-1.5 h-8 px-3 text-xs font-semibold rounded-md border bg-emerald-500/10 text-emerald-600 border-emerald-500/30 select-none">
-                <CheckCircle2 className="h-3.5 w-3.5" /> Campaign Completed
-              </span>
-            )}
+      {/* ── Page Header ──────────────────────────────────────────────────── */}
+      <div className="shrink-0 border-b border-border bg-card/50">
+        {/* Breadcrumb + top actions */}
+        <div className="px-6 pt-4 pb-0">
+          <DetailNav
+            className="mb-3"
+            backTo="/app/campaigns"
+            backLabel="Campaigns"
+            crumbs={[
+              { label: "Campaigns", href: "/app/campaigns" },
+              { label: campaign.name },
+            ]}
+          />
 
-            {/* Stopped continuous campaign → Activate button */}
-            {isContinuous && campaign.status === "stopped" && (
-              <Button size="sm" className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
-                onClick={() => void handleStatusChange("active")}>
-                <Zap className="h-3.5 w-3.5" /> Activate
-              </Button>
-            )}
-            {/* Pause / Resume / Stop for all campaigns */}
-            {(campaign.status === "active" || campaign.status === "paused") && (
-              <div className="flex items-center gap-1.5">
-                {campaign.status === "active" && (
-                  <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 text-amber-600 border-amber-500/40 hover:bg-amber-500/10"
-                    onClick={() => void handleStatusChange("paused")}>
-                    <PauseCircle className="h-3.5 w-3.5" /> Pause
-                  </Button>
+          {/* Title row */}
+          <div className="flex items-start justify-between gap-4 pb-4">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-3 flex-wrap mb-2">
+                {/* Source pill */}
+                <div className={cn(
+                  "h-9 w-9 rounded-xl flex items-center justify-center shrink-0 border",
+                  (campaign as any).leadSource === "csv" ? "bg-blue-500/10 border-blue-500/20" :
+                  (campaign as any).leadSource === "meta_ads" ? "bg-purple-500/10 border-purple-500/20" :
+                  (campaign as any).leadSource === "webhook" ? "bg-emerald-500/10 border-emerald-500/20" :
+                  "bg-muted border-border"
+                )}>
+                  {(campaign as any).leadSource === "csv" ? <FileText className="h-4 w-4 text-blue-400" /> :
+                   (campaign as any).leadSource === "meta_ads" ? <Instagram className="h-4 w-4 text-purple-400" /> :
+                   (campaign as any).leadSource === "webhook" ? <Globe className="h-4 w-4 text-emerald-400" /> :
+                   <Building2 className="h-4 w-4 text-muted-foreground" />}
+                </div>
+                <div className="min-w-0">
+                  <h1 className="text-lg font-bold tracking-tight text-foreground truncate">{campaign.name}</h1>
+                </div>
+                <StatusBadge status={
+                  isContinuous && isInstantTrigger && activeBatches === 0 && campaign.status === "active"
+                    ? "listening"
+                    : batches?.some(b => b.status === "running")
+                      ? "active"
+                      : campaign.status
+                } />
+                {!isContinuous && campaignFinished && (
+                  <span className="inline-flex items-center gap-1.5 h-6 px-2.5 text-[10px] font-semibold rounded-full border bg-emerald-500/10 text-emerald-600 border-emerald-500/30 select-none">
+                    <CheckCircle2 className="h-3 w-3" /> Completed
+                  </span>
                 )}
-                {campaign.status === "paused" && (
-                  <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 text-emerald-600 border-emerald-500/40 hover:bg-emerald-500/10"
-                    onClick={() => void handleStatusChange("active")}>
-                    <PlayCircle className="h-3.5 w-3.5" /> Resume
-                  </Button>
-                )}
-                <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 text-red-500 border-red-500/40 hover:bg-red-500/10"
-                  onClick={() => void handleStatusChange("stopped")}>
-                  <XCircle className="h-3.5 w-3.5" /> Stop
-                </Button>
               </div>
-            )}
+
+              {/* Meta info chips */}
+              <div className="flex items-center gap-3 flex-wrap">
+                {campaign.agentId && (
+                  <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground/60 bg-muted/40 px-2 py-1 rounded-md">
+                    <Users className="h-3 w-3" />
+                    Agent #{campaign.agentId}
+                  </span>
+                )}
+                {campaign.fromNumber && (
+                  <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground/60 bg-muted/40 px-2 py-1 rounded-md font-mono">
+                    <Phone className="h-3 w-3" />
+                    {campaign.fromNumber}
+                  </span>
+                )}
+                <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground/60 bg-muted/40 px-2 py-1 rounded-md">
+                  <Calendar className="h-3 w-3" />
+                  {formatDistanceToNow(new Date(campaign.createdAt), { addSuffix: true })}
+                </span>
+                {(campaign as any).leadSource && (
+                  <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground/60 bg-muted/40 px-2 py-1 rounded-md capitalize">
+                    {(campaign as any).leadSource === "csv" ? "CSV Upload" :
+                     (campaign as any).leadSource === "meta_ads" ? "Meta Ads" :
+                     (campaign as any).leadSource === "webhook" ? "Website / Form" : "CRM"}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex items-center gap-2 shrink-0">
+              <Button
+                size="sm" variant="outline"
+                className="h-8 text-xs gap-1.5"
+                onClick={() => setLocation(`/app/analytics?campaignId=${campaignId}`)}
+              >
+                <BarChart3 className="h-3.5 w-3.5" /> Analytics
+              </Button>
+
+              {isContinuous && campaign.status === "stopped" && (
+                <Button size="sm" className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+                  onClick={() => void handleStatusChange("active")}>
+                  <Zap className="h-3.5 w-3.5" /> Activate
+                </Button>
+              )}
+              {(campaign.status === "active" || campaign.status === "paused") && (
+                <div className="flex items-center gap-1.5">
+                  {campaign.status === "active" ? (
+                    <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 text-amber-600 border-amber-500/40 hover:bg-amber-500/10"
+                      onClick={() => void handleStatusChange("paused")}>
+                      <PauseCircle className="h-3.5 w-3.5" /> Pause
+                    </Button>
+                  ) : (
+                    <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 text-emerald-600 border-emerald-500/40 hover:bg-emerald-500/10"
+                      onClick={() => void handleStatusChange("active")}>
+                      <PlayCircle className="h-3.5 w-3.5" /> Resume
+                    </Button>
+                  )}
+                  <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 text-red-500 border-red-500/40 hover:bg-red-500/10"
+                    onClick={() => void handleStatusChange("stopped")}>
+                    <XCircle className="h-3.5 w-3.5" /> Stop
+                  </Button>
+                </div>
+              )}
+
+              <Button
+                size="icon" variant="ghost"
+                className="h-8 w-8 text-muted-foreground/40 hover:text-red-500 hover:bg-red-500/10"
+                title="Delete campaign"
+                onClick={() => { setDeleteNameInput(""); setShowDeleteCamp(true); }}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         </div>
 
-        {/* Tab bar */}
-        <div className="flex items-center px-4 border-b border-border/60 overflow-x-auto scrollbar-hide">
+        {/* Tab navigation */}
+        <div className="flex items-center gap-0 px-6 overflow-x-auto scrollbar-hide">
           {CAMPAIGN_TABS.map(tab => (
             <button
               key={tab.id}
               type="button"
               onClick={() => setActiveTab(tab.id)}
               className={cn(
-                "flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium border-b-2 -mb-px transition-colors whitespace-nowrap shrink-0",
+                "flex items-center gap-2 px-4 py-3 text-[13px] font-medium border-b-2 -mb-px transition-all whitespace-nowrap shrink-0",
                 activeTab === tab.id
                   ? "border-primary text-foreground"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
+                  : "border-transparent text-muted-foreground/60 hover:text-foreground hover:border-border"
               )}
             >
               {tab.icon}
@@ -1593,21 +1621,13 @@ export default function CampaignDetailPage() {
           ))}
         </div>
 
-        {/* Content */}
-        <div className="overflow-y-auto px-6 py-5 space-y-5" style={{ maxHeight: "calc(100vh - 248px)" }}>
+        {/* ── Tab Content ─────────────────────────────────────────── */}
+        <div className="overflow-y-auto px-6 py-6 space-y-5" style={{ maxHeight: "calc(100vh - 220px)" }}>
 
           {/* ── OVERVIEW tab ─────────────────────────────────────────────── */}
           {activeTab === "overview" && (<>
 
-          {/* View Analytics */}
-          <div className="flex items-center justify-end">
-            <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5"
-              onClick={() => setLocation(`/app/analytics?campaignId=${campaignId}`)}>
-              <BarChart3 className="h-3 w-3" /> View Analytics
-            </Button>
-          </div>
-
-          {/* Queued leads banner — fallback: leads without a batch (auto-dial failed or pre-existing) */}
+          {/* Queued leads banner */}
           {(() => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const queued: number = (campaign as any).queuedLeadsCount ?? 0;
@@ -1615,24 +1635,24 @@ export default function CampaignDetailPage() {
             const isWebhook = (campaign as any).leadSource === "webhook";
             if (queued === 0) return null;
             return (
-              <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-amber-500/30 bg-amber-500/8">
-                <div className="h-8 w-8 rounded-lg bg-amber-500/15 flex items-center justify-center shrink-0">
-                  <Clock className="h-4 w-4 text-amber-500" />
+              <div className="flex items-center gap-4 px-5 py-4 rounded-xl border border-amber-500/30 bg-amber-500/5">
+                <div className="h-10 w-10 rounded-xl bg-amber-500/15 flex items-center justify-center shrink-0">
+                  <Clock className="h-5 w-5 text-amber-500" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-foreground">
-                    {queued} lead{queued !== 1 ? "s" : ""} pending dial
+                  <p className="text-sm font-semibold text-foreground">
+                    {queued} lead{queued !== 1 ? "s" : ""} waiting to be dialled
                   </p>
-                  <p className="text-xs text-muted-foreground/70 mt-0.5">
+                  <p className="text-xs text-muted-foreground/60 mt-0.5">
                     {isWebhook
                       ? "These leads are queued and will be dialled as soon as a live batch is active."
                       : "These arrived while no batch was running. Start a batch to begin dialling them."}
                   </p>
                 </div>
                 {!isWebhook && (
-                  <Button size="sm" className="h-8 text-xs gap-1.5 shrink-0"
+                  <Button size="sm" className="h-9 text-xs gap-1.5 shrink-0 font-semibold"
                     onClick={() => setLocation(`/app/campaigns/${campaignId}/batches/new`)}>
-                    <Zap className="h-3.5 w-3.5" /> Start batch
+                    <Zap className="h-3.5 w-3.5" /> Start Batch
                   </Button>
                 )}
               </div>

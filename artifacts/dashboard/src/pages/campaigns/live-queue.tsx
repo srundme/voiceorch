@@ -189,7 +189,7 @@ function MetricsStrip({
   onTabChange: (tab: QueueTab) => void;
 }) {
   return (
-    <div className="grid grid-cols-4 sm:grid-cols-7 gap-2 mb-4">
+    <div className="grid grid-cols-4 sm:grid-cols-7 gap-3 mb-4">
       {METRIC_CARDS.map(({ key, label, metric, valueCls, pulseCls }) => {
         const count = metrics?.[metric] ?? 0;
         const isActive = activeTab === key;
@@ -199,21 +199,21 @@ function MetricsStrip({
             key={key}
             onClick={() => onTabChange(isActive ? "all" : key)}
             className={cn(
-              "relative rounded-xl border px-3 py-2.5 text-left transition-all hover:bg-muted/40",
+              "relative rounded-xl border px-3 py-3 text-left transition-all hover:bg-muted/40 group",
               isActive
-                ? "border-foreground/30 bg-muted/30 ring-1 ring-foreground/10"
-                : "border-border bg-card",
+                ? "border-foreground/30 bg-muted/30 ring-1 ring-foreground/10 shadow-sm"
+                : "border-border bg-card hover:border-foreground/20",
             )}
           >
             {isLive && (
-              <span className={cn("absolute top-2 right-2 h-1.5 w-1.5 rounded-full animate-pulse", pulseCls)} />
+              <span className={cn("absolute top-2.5 right-2.5 h-1.5 w-1.5 rounded-full animate-pulse", pulseCls)} />
             )}
             {loading ? (
-              <div className="h-5 w-8 bg-muted/60 rounded animate-pulse mb-1" />
+              <div className="h-6 w-10 bg-muted/60 rounded animate-pulse mb-1.5" />
             ) : (
-              <p className={cn("text-lg font-bold tabular-nums leading-none", valueCls)}>{count}</p>
+              <p className={cn("text-xl font-bold tabular-nums leading-none mb-1.5", valueCls)}>{count}</p>
             )}
-            <p className="text-[9px] text-muted-foreground/50 uppercase tracking-wider mt-1">{label}</p>
+            <p className="text-[9px] text-muted-foreground/50 uppercase tracking-wider font-semibold">{label}</p>
           </button>
         );
       })}
@@ -770,14 +770,14 @@ export default function LiveQueueTab({ campaignId }: { campaignId: number }) {
             </p>
             <div className="flex gap-1.5">
               <Button
-                variant="outline" size="sm" className="h-7 text-xs gap-1 px-2"
+                variant="outline" size="sm" className="h-8 text-xs gap-1.5 rounded-lg"
                 disabled={page === 0}
                 onClick={() => setPage(p => p - 1)}
               >
                 <ChevronLeft className="h-3 w-3" /> Prev
               </Button>
               <Button
-                variant="outline" size="sm" className="h-7 text-xs gap-1 px-2"
+                variant="outline" size="sm" className="h-8 text-xs gap-1.5 rounded-lg"
                 disabled={(page + 1) * LIMIT >= total}
                 onClick={() => setPage(p => p + 1)}
               >
