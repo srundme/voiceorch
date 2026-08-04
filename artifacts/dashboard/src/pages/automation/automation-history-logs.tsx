@@ -36,6 +36,8 @@ import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
 } from "@/components/ui/sheet";
 import { useToast } from "@/hooks/use-toast";
+import { useListCalls, getListCallsQueryKey } from "@workspace/api-client-react";
+import { format, parseISO } from "date-fns";
 
 export type CallLogDetail = {
   id: string;
@@ -94,9 +96,9 @@ export function AutomationHistoryLogs({ agentId }: { agentId?: number }) {
           leadCount: calls.length,
           channel: "AI Voice Call & Web Call",
           status: "completed" as const,
-          duration: `${Math.floor(calls.reduce((acc, c) => acc + (c.durationSeconds || 0), 0) / 60)}m ${calls.reduce((acc, c) => acc + (c.durationSeconds || 0), 0) % 60}s`,
-          cost: `₹${(calls.reduce((acc, c) => acc + (c.costCents || 0), 0) / 100).toFixed(2)}`,
-          logs: calls.map((c, i) => {
+          duration: `${Math.floor(calls.reduce((acc: number, c: any) => acc + (c.durationSeconds || 0), 0) / 60)}m ${calls.reduce((acc: number, c: any) => acc + (c.durationSeconds || 0), 0) % 60}s`,
+          cost: `₹${(calls.reduce((acc: number, c: any) => acc + (c.costCents || 0), 0) / 100).toFixed(2)}`,
+          logs: calls.map((c: any, i: number) => {
             const isWeb = (c.fromNumber ?? "").startsWith("webcall") || (c.toNumber ?? "").startsWith("webcall");
             return {
               id: `log-${c.id}`,
