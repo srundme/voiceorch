@@ -943,7 +943,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
             )}
           </Link>
           <div className="ml-auto flex items-center gap-0.5">
-            <ThemeToggle />
             <MobileTopbarUser />
           </div>
         </div>
@@ -980,12 +979,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         {/* Voice-a-thon top notification */}
         <VoiceathonTopBanner />
 
-        {/* Utility strip — desktop only; hide on full-bleed builder surfaces */}
-        {!location.startsWith("/app/agents") && !location.startsWith("/app/vibe") && (
-          <div className="hidden md:block">
-            <UtilityStrip />
-          </div>
-        )}
+        {/* Utility strip removed as per user request */}
 
         {/* Scrollable content */}
         <div className="flex-1 overflow-y-auto min-h-0 overscroll-y-contain">
