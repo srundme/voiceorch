@@ -545,6 +545,7 @@ function CampaignWizard({
   function canNext(): boolean {
     if (step === "info") return name.trim().length > 0;
     if (step === "source") return !!leadSource;
+    if (step === "source_setup") return true;
     if (step === "crm_mode") return true;
     if (step === "agent") return agentId !== null;
     if (step === "phone") return fromNumber !== null;
@@ -642,15 +643,19 @@ function CampaignWizard({
           <div className="flex items-center gap-1.5 mt-4">
             {activeSteps.map((s, i) => (
               <div key={s} className="flex items-center gap-1.5 flex-1">
-                <div className={cn(
-                  "flex items-center gap-1.5 text-[10px] font-semibold px-2.5 py-1 rounded-full whitespace-nowrap transition-all",
-                  i < stepIdx ? "bg-foreground/10 text-muted-foreground" :
-                  i === stepIdx ? "bg-foreground text-background" :
-                  "text-muted-foreground/30"
-                )}>
+                <button
+                  type="button"
+                  onClick={() => { if (i <= stepIdx || canNext()) setStep(s); }}
+                  className={cn(
+                    "flex items-center gap-1.5 text-[10px] font-semibold px-2.5 py-1 rounded-full whitespace-nowrap transition-all cursor-pointer",
+                    i < stepIdx ? "bg-foreground/10 text-muted-foreground hover:bg-foreground/20" :
+                    i === stepIdx ? "bg-foreground text-background" :
+                    "text-muted-foreground/30 hover:text-muted-foreground/60"
+                  )}
+                >
                   <span className="tabular-nums">{i + 1}</span>
                   <span className="hidden sm:inline">{STEP_LABELS[s]}</span>
-                </div>
+                </button>
                 {i < activeSteps.length - 1 && <div className="flex-1 h-px bg-border" />}
               </div>
             ))}

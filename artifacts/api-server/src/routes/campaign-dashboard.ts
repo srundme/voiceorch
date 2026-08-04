@@ -107,22 +107,23 @@ const ZERO_STATS = {
 };
 
 router.get("/campaigns/dashboard", async (req, res): Promise<void> => {
-  const { userId } = getAuth(req);
-  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
-
-  const { start: todayStart, yesterday: yestStart, now } = todayUtcBounds();
-
-  // ── 1. fetch campaigns ────────────────────────────────────────────────────
-  let campaigns: (typeof campaignsTable.$inferSelect)[];
   try {
-    campaigns = await db.select().from(campaignsTable)
-      .where(eq(campaignsTable.userId, userId))
-      .orderBy(desc(campaignsTable.createdAt));
-  } catch (err) {
-    req.log.error({ err }, "campaign-dashboard: failed to fetch campaigns");
-    res.status(500).json({ error: "Failed to load campaigns" });
-    return;
-  }
+    const { userId } = getAuth(req);
+    if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+    const { start: todayStart, yesterday: yestStart, now } = todayUtcBounds();
+
+    // ── 1. fetch campaigns ────────────────────────────────────────────────────
+    let campaigns: (typeof campaignsTable.$inferSelect)[];
+    try {
+      campaigns = await db.select().from(campaignsTable)
+        .where(eq(campaignsTable.userId, userId))
+        .orderBy(desc(campaignsTable.createdAt));
+    } catch (err) {
+      req.log.error({ err }, "campaign-dashboard: failed to fetch campaigns");
+      res.json({ stats: ZERO_STATS, campaigns: [] });
+      return;
+    }
 
   if (campaigns.length === 0) {
     res.json({ stats: ZERO_STATS, campaigns: [] });
@@ -281,7 +282,11 @@ router.get("/campaigns/dashboard", async (req, res): Promise<void> => {
     };
   });
 
-  res.json({ stats, campaigns: enriched });
+    res.json({ stats, campaigns: enriched });
+  } catch (err) {
+    req.log.error({ err }, "GET /campaigns/dashboard error");
+    res.json({ stats: ZERO_STATS, campaigns: [] });
+  }
 });
 
 export default router;
