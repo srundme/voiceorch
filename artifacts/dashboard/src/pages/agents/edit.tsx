@@ -552,7 +552,7 @@ export default function AgentEdit() {
       icon: <Mail className="h-4 w-4" />,
       color: "sky",
       label: "Send Email",
-      description: "Lets the agent email the caller mid-call using Channels → Email (SnapServe or your Brevo). Collects their address, then sends the channel template.",
+      description: "Lets the agent email the caller mid-call using Channels → Email (your Brevo). Collects their address, then sends the channel template.",
     },
     {
       type: "send_whatsapp",

@@ -2392,7 +2392,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
       icon: <Mail className="h-4 w-4" />,
       color: "sky",
       label: "Send Email",
-      description: "Lets the agent email the caller mid-call using Channels → Email (SnapServe managed or your Brevo). Asks for their address, then sends the channel template.",
+      description: "Lets the agent email the caller mid-call using Channels → Email (your Brevo). Asks for their address, then sends the channel template.",
       needsEventType: false,
     },
     {

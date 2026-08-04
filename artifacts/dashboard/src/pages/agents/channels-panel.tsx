@@ -156,8 +156,7 @@ function JourneyReadinessPanel({ agent }: { agent: any }) {
         ))}
       </div>
       <p className="text-[11px] text-muted-foreground">
-        Messaging channels are Email + WhatsApp only (managed SnapServe or your own Brevo / Vobiz-BSP).
-        SMS is not a messaging channel.
+        Messaging channels are Email (your Brevo) + WhatsApp (Instant / Business / BSP). SMS is not a messaging channel.
       </p>
     </div>
   );
@@ -210,7 +209,7 @@ export function ChannelsPanel({
       detail: "Messages & follow-ups",
       ready: !!agentConnection || !!waData?.channel?.active,
     },
-    { id: "email" as const, label: "Email", detail: "Managed or Brevo", ready: false },
+    { id: "email" as const, label: "Email", detail: "Your Brevo account", ready: false },
     { id: "meetings" as const, label: "Meetings", detail: "Meet, Zoom & Teams", ready: !!agent?.id },
     {
       id: "booking" as const,
