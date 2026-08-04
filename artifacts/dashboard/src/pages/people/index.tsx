@@ -15,7 +15,7 @@ export default function PeoplePage() {
       fullBleed
       contentClassName="!px-0 !py-0 max-w-none"
     >
-      <CampaignsPage />
+      <CampaignsPage mode="lists" />
     </StripePage>
   );
 }

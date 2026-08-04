@@ -13,8 +13,8 @@ SnapServe lets a business:
 
 1. Create an **agent** (who talks on phone and/or in meetings)  
 2. Make a **call plan** (ordered steps for each person)  
-3. Attach **people** (CSV, Google Sheet, website forms)  
-4. Wire **connections** once (phone, WhatsApp, Sheets, Meet, CRM)
+3. Attach **people** (CSV lists)  
+4. Wire **connections** once (Sheets, WhatsApp, email, website form, Meta)
 
 SnapServe runs the work, logs **History**, and bills by wallet / minutes.
 
@@ -32,8 +32,8 @@ Journeys, campaigns, and dial engines still power execution under the hood. Prod
 |-------|-----|------------------|
 | **Agent** | Who talks — prompt, voice, tools, versions | **Agents** → Agent Builder |
 | **Call plan** | What happens next for each person (ordered steps) | **Call plans** |
-| **People** | Who to reach — lists, sheets, website forms | **People** |
-| **Connections** | Shared wiring — phone, WhatsApp, Sheets, CRM, Meet | **Connections** (+ deep-links) |
+| **People** | Who to reach — CSV lists | **People** |
+| **Connections** | Shared wiring — Sheets, WhatsApp, email, website form, Meta | **Connections** |
 | **History** | What happened — calls, callbacks, transfers | **History** |
 | **Intelligence** | Knowledge, memory, teams, analytics, scheduling | MORE section |
 | **Settings** | Workspace, keys, billing | Workspace · Providers · Developers · Billing |
@@ -91,8 +91,8 @@ MORE
 |-----|----------|
 | `/app/automation` | `/app/call-plans` |
 | `/app/campaigns` | `/app/people` |
-| `/app/automatic-calls` (list) | `/app/people?tab=scheduled` |
-| `/app/meta-leads` | `/app/people?tab=lead-sources` |
+| `/app/automatic-calls` (list) | `/app/connections?setup=sheets` |
+| `/app/meta-leads` | `/app/connections?setup=meta` |
 | `/app/calls`, `/app/activity` | `/app/history` |
 | `/app/callbacks` | `/app/history?tab=callbacks` |
 | `/app/transfers` | `/app/history?tab=transfers` |
@@ -105,8 +105,9 @@ MORE
 
 ```
      Connections          People
-     (phone, WA,          (CSV / Sheet /
-      Sheets, CRM)         website forms)
+     (Sheets, WA,         (CSV lists
+      email, website,      only)
+      Meta)
            │                     │
            └──────────┬──────────┘
                       ▼
@@ -253,15 +254,11 @@ Per-person / run progress on the plan detail page; full call outcomes also in **
 
 **Route:** `/app/people`  
 
-| Tab | Purpose | Legacy engine |
-|-----|---------|---------------|
-| **Lists / CSV** | Outbound list campaigns, batches, leads | `/app/campaigns` |
-| **Google Sheet** | Sheet automatic-call pipelines | `/app/automatic-calls` |
-| **Website forms** | Website webhook + Meta Lead Ads | `/app/meta-leads`, form campaigns |
+CSV / list people only. Create a list → upload CSV batches → attach to a **call plan** → Start.
 
-Every list / sheet / form is bound to an **agent** (and usually attached to a **call plan** to Start).
+Website forms, Google Sheets auto-dial, and Meta Lead Ads live under **Connections** — not on this page.
 
-Detail routes for campaign / batch / lead / sheet pipeline still exist for deep work.
+Detail routes for list / batch / lead still exist under `/app/campaigns/:id` for deep work.
 
 ---
 
@@ -283,11 +280,7 @@ Deep setup: `/app/connections?setup=sheets|email|website|meta` · WhatsApp → `
 
 ---
 
-## 9. People (lists)
-
-**Route:** `/app/people`  
-
-CSV / list people for call plans only. Sheets and forms live under Connections.
+## 9. History
 
 **Route:** `/app/history` (legacy `/app/calls` still works)  
 
@@ -413,14 +406,14 @@ Default India stack (when not BYO): Sarvam ASR, Google LLM, Cartesia/Sarvam TTS,
 
 ### D — Sheet keep-live
 
-1. Connections → connect Google Sheets  
-2. People → Google Sheet → map columns to agent  
+1. Connections → Google Sheets → connect  
+2. Set up sheet auto-dial (`/app/automatic-calls/new` or Connections → Sheets)  
 3. Call plan → attach sheet → **Keep live**  
 4. Optional: **Update the list** step writes status back  
 
 ### E — Website form → call plan
 
-1. People → Website forms → webhook campaign bound to agent  
+1. Connections → Website form → create webhook bound to agent  
 2. Paste webhook into the site form  
 3. Attach / use with a call plan for dial + follow-ups  
 
@@ -486,8 +479,8 @@ Builder is a focused editor. MORE and Settings are secondary / administrative.
 | Start once / Keep live | Yes | Call plans |
 | Sheet write-back step | Yes | Call plans |
 | People lists / CSV | Yes | People |
-| Google Sheets people | Yes | People + Connections |
-| Website forms / Meta leads | Yes | People |
+| Google Sheets people | Yes | Connections |
+| Website forms / Meta leads | Yes | Connections |
 | CRM (HubSpot, Zoho) | Yes | Connections |
 | Post-call webhook | Yes | Builder Advanced |
 | Dispositions | Yes | Builder Advanced |
@@ -510,8 +503,8 @@ Builder is a focused editor. MORE and Settings are secondary / administrative.
 | **Agent** | AI voice persona (prompt, voice, tools, published version) |
 | **Builder** | UI to configure how the agent speaks |
 | **Call plan** | Ordered steps for each person (product front door for journeys) |
-| **People** | Who you reach — CSV, Sheet, website forms |
-| **Connections** | Shared wiring — phone, WhatsApp, Sheets, CRM, Meet |
+| **People** | Who you reach — CSV lists |
+| **Connections** | Shared wiring — Sheets, WhatsApp, email, website form, Meta |
 | **History** | Calls, callbacks, transfers (what happened) |
 | **Agent channels** | Per-agent phone / WA / email / meetings / booking deep page |
 | **Team / Squad** | Multi-agent handoff group |
