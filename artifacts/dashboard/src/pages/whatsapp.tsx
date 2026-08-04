@@ -437,7 +437,7 @@ function NativeSection({
   }
 
   return (
-    <div className="mx-6 space-y-4">
+    <div className="space-y-4">
       {!channel ? (
         <div className="space-y-4">
           {data?.purchasedNumber && (
@@ -471,24 +471,23 @@ function NativeSection({
             </p>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-3 md:grid-cols-2">
             {/* Non-business → instant shared tier */}
-            <div className="rounded-lg border border-emerald-500/25 bg-emerald-500/[0.04] p-5 flex flex-col">
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-emerald-400" />
+            <div className="flex flex-col rounded-lg border border-emerald-500/25 bg-emerald-500/[0.04] p-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <Sparkles className="h-4 w-4 text-emerald-400" />
                 <h3 className="text-sm font-semibold">I don't have one — just make it work</h3>
-                <Badge className="bg-emerald-500/15 text-emerald-400 border-transparent text-[10px]">Instant · most users</Badge>
+                <Badge className="border-transparent bg-emerald-500/15 text-[10px] text-emerald-400">Instant · most users</Badge>
               </div>
-              <ul className="mt-3 space-y-1.5 text-xs text-muted-foreground flex-1">
-                <li>• Live in 30 seconds — <strong className="text-foreground">no Meta account, no number purchase, no documents</strong></li>
-                <li>• Booking confirmations, call summaries &amp; callback alerts sent automatically after every call</li>
-                <li>• Sent from SnapServe's verified WhatsApp number with your business name inside every message</li>
-                <li>• Customers reply “call me” and your AI agent calls them back</li>
-                <li>• Fair-use 50 messages/day — upgrade to Business WhatsApp any time</li>
+              <ul className="mt-3 flex-1 space-y-1.5 text-xs text-muted-foreground">
+                <li>• Live in ~30 seconds — no Meta account or number purchase</li>
+                <li>• Booking confirmations, summaries &amp; callback alerts after calls</li>
+                <li>• Sent from SnapServe's verified WhatsApp with your business name</li>
+                <li>• Fair-use 50 messages/day — upgrade to Business any time</li>
               </ul>
               <Button
                 size="sm"
-                className="mt-4 w-full"
+                className="mt-4 h-9 w-full"
                 disabled={!data?.sharedTierAvailable}
                 onClick={openSharedDialog}
               >
@@ -496,35 +495,35 @@ function NativeSection({
               </Button>
               {!data?.sharedTierAvailable && (
                 <p className="mt-2 text-[11px] text-amber-400/90">
-                  Temporarily unavailable — the platform channel isn't configured yet. Check back soon or use Business WhatsApp.
+                  Temporarily unavailable — use Business WhatsApp for now.
                 </p>
               )}
             </div>
 
             {/* Business → direct Meta Cloud API */}
-            <div className="rounded-lg border border-sky-500/25 bg-sky-500/[0.04] p-5 flex flex-col">
-              <div className="flex items-center gap-2">
-                <Building2 className="w-4 h-4 text-sky-400" />
+            <div className="flex flex-col rounded-lg border border-sky-500/25 bg-sky-500/[0.04] p-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <Building2 className="h-4 w-4 text-sky-400" />
                 <h3 className="text-sm font-semibold">I have a WhatsApp Business account</h3>
-                <Badge className="bg-sky-500/15 text-sky-300 border-transparent text-[10px]">Meta API · your brand</Badge>
+                <Badge className="border-transparent bg-sky-500/15 text-[10px] text-sky-300">Meta API · your brand</Badge>
               </div>
-              <ul className="mt-3 space-y-1.5 text-xs text-muted-foreground flex-1">
-                <li>• Messages come from <strong className="text-foreground">your own WhatsApp number</strong> with your name &amp; logo</li>
-                <li>• Connect directly with your Meta access token — we fetch your approved templates automatically</li>
-                <li>• Pick which template to send for call summary, booking &amp; callback</li>
-                <li>• Post-call, mid-call tool, and Request-a-Call all supported</li>
+              <ul className="mt-3 flex-1 space-y-1.5 text-xs text-muted-foreground">
+                <li>• Messages from <strong className="text-foreground">your own WhatsApp number</strong></li>
+                <li>• Connect with Meta token — we pull your approved templates</li>
+                <li>• Templates for call summary, booking &amp; callback</li>
+                <li>• Post-call, mid-call tool, and Request-a-Call supported</li>
               </ul>
               {metaConnected ? (
                 <>
                   <div className="mt-4 flex items-center justify-center gap-1.5 rounded-md border border-emerald-500/30 bg-emerald-500/10 py-2 text-xs font-medium text-emerald-400">
                     ✓ Already configured — see Your connections below
                   </div>
-                  <Button size="sm" variant="ghost" className="mt-2 w-full text-[11px] text-muted-foreground" onClick={() => onChooseMeta?.()}>
+                  <Button size="sm" variant="ghost" className="mt-2 h-9 w-full text-[11px] text-muted-foreground" onClick={() => onChooseMeta?.()}>
                     Add another connection
                   </Button>
                 </>
               ) : (
-                <Button size="sm" variant="outline" className="mt-4 w-full" onClick={() => onChooseMeta?.()}>
+                <Button size="sm" className="mt-4 h-9 w-full" onClick={() => onChooseMeta?.()}>
                   Connect Meta API
                 </Button>
               )}
@@ -1379,17 +1378,19 @@ export default function WhatsAppPage() {
   });
 
   return (
-    <div className="space-y-6">
+    <div className="flex min-h-0 flex-1 flex-col">
       <AppPageHeader
+        back={{ href: "/app/channels", label: "Back to Channels" }}
         title="WhatsApp"
         description="Automatic WhatsApp follow-ups after every AI call — booking confirmations, summaries and callback alerts. Customers can reply to get a call back."
       />
 
+      <div className="mx-auto w-full max-w-[1120px] space-y-6 px-5 py-5 sm:px-6 sm:py-6">
       <NativeSection agents={agents} onChooseBsp={() => openBspCreate("webhook")} onChooseMeta={() => openBspCreate("meta")} metaConnected={connections.some((c) => c.active && c.metaPhoneNumberId)} />
 
       {/* Your connections */}
       {(connections.length > 0 || createdSecret || isLoading) && (
-      <div className="mx-6 pb-8 space-y-4" id="bsp-adopter">
+      <div className="space-y-4 pb-4" id="bsp-adopter">
           <div className="space-y-5">
             {createdSecret && (
               <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">
@@ -1525,6 +1526,8 @@ export default function WhatsAppPage() {
           </div>
       </div>
       )}
+
+      </div>
 
       {/* Create */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>

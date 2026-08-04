@@ -113,6 +113,7 @@ export function ReachPanel({
   onConfigureEmail,
   onOpenChannels,
   heading = "Automation",
+  embedded = false,
 }: {
   agentId: number;
   agentName?: string;
@@ -121,6 +122,8 @@ export function ReachPanel({
   onOpenChannels?: () => void;
   /** Page / panel title — defaults to Automation (standalone builder). */
   heading?: string;
+  /** When true, skip duplicate title (parent page already has AppPageHeader). */
+  embedded?: boolean;
 }) {
   const campaignsQ = useListCampaigns({
     query: { queryKey: getListCampaignsQueryKey(), staleTime: 20_000 },
@@ -199,37 +202,58 @@ export function ReachPanel({
   const armedCount = campaigns.length + pipelines.length;
 
   return (
-    <div className="space-y-8 px-4 py-5 sm:px-6 lg:px-8">
-      <header className="flex items-end justify-between gap-4">
-        <div>
-          <h2 className="text-[15px] font-semibold tracking-[-0.02em]">{heading}</h2>
-          <p className="mt-0.5 max-w-xl text-[12px] leading-5 text-muted-foreground">
-            Sources and sequences that feed{" "}
-            {agentName ? <span className="text-foreground">{agentName}</span> : "this agent"}.
-            Phone, WhatsApp, and email credentials stay on the agent under{" "}
+    <div className={cn("space-y-6", !embedded && "px-4 py-5 sm:px-6 lg:px-8")}>
+      {!embedded ? (
+        <header className="flex items-end justify-between gap-4">
+          <div>
+            <h2 className="text-[15px] font-semibold tracking-[-0.02em]">{heading}</h2>
+            <p className="mt-0.5 max-w-xl text-[12px] leading-5 text-muted-foreground">
+              Sources and sequences that feed{" "}
+              {agentName ? <span className="text-foreground">{agentName}</span> : "this agent"}.
+              Phone, WhatsApp, and email credentials stay under{" "}
+              {onOpenChannels ? (
+                <button
+                  type="button"
+                  onClick={onOpenChannels}
+                  className="underline underline-offset-2 hover:text-foreground"
+                >
+                  Channels
+                </button>
+              ) : (
+                <Link
+                  href={`/app/channels?agentId=${agentId}`}
+                  className="underline underline-offset-2 hover:text-foreground"
+                >
+                  Channels
+                </Link>
+              )}
+              .
+            </p>
+          </div>
+          <span className="shrink-0 rounded-md border border-border/70 bg-muted/30 px-2 py-1 text-[10px] tabular-nums text-muted-foreground">
+            {armedCount} armed
+          </span>
+        </header>
+      ) : (
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-xs text-muted-foreground">
+            Credentials live in{" "}
             {onOpenChannels ? (
-              <button
-                type="button"
-                onClick={onOpenChannels}
-                className="underline underline-offset-2 hover:text-foreground"
-              >
+              <button type="button" onClick={onOpenChannels} className="underline underline-offset-2 hover:text-foreground">
                 Channels
               </button>
             ) : (
-              <Link
-                href={`/app/channels?agentId=${agentId}`}
-                className="underline underline-offset-2 hover:text-foreground"
-              >
+              <Link href={`/app/channels?agentId=${agentId}`} className="underline underline-offset-2 hover:text-foreground">
                 Channels
               </Link>
             )}
             .
           </p>
+          <span className="shrink-0 rounded-md border border-border/70 bg-muted/30 px-2 py-1 text-[10px] tabular-nums text-muted-foreground">
+            {armedCount} armed
+          </span>
         </div>
-        <span className="shrink-0 rounded-md border border-border/70 bg-muted/30 px-2 py-1 text-[10px] tabular-nums text-muted-foreground">
-          {armedCount} armed
-        </span>
-      </header>
+      )}
 
       <section className="overflow-hidden rounded-lg border border-border bg-card">
         <div className="flex h-10 items-center justify-between border-b border-border/70 px-3.5">

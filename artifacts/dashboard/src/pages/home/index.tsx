@@ -200,7 +200,7 @@ export default function HomePage() {
             </div>
             <h1 className="text-2xl font-semibold tracking-[-0.03em]">Create your first agent</h1>
             <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
-              Start with the voice runtime. Phone numbers, channels, meetings, Reach flows,
+              Start with the voice runtime. Phone numbers, channels, meetings, automation,
               memory, and squads connect to the agent after it exists.
             </p>
           </div>
@@ -286,7 +286,7 @@ export default function HomePage() {
                       </span>
                     </div>
                     <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
-                      {agent.description || "Prompt · Voice · Tools · Reach · Channels"}
+                      {agent.description || "Prompt · Voice · Tools"}
                     </p>
                   </div>
                 </div>
@@ -399,7 +399,7 @@ export default function HomePage() {
 
         <section className="overflow-hidden rounded-lg border border-border bg-card">
           <div className="flex h-10 items-center justify-between border-b border-border px-3.5">
-            <h2 className="text-[11px] font-semibold">Active Reach</h2>
+            <h2 className="text-[11px] font-semibold">Active automation</h2>
             <span className="text-[9px] text-muted-foreground">
               {activePipelines.length} sheet · {activeCampaigns.length} list
             </span>

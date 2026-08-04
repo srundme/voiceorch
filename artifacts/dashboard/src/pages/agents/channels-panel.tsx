@@ -166,9 +166,12 @@ function JourneyReadinessPanel({ agent }: { agent: any }) {
 export function ChannelsPanel({
   agent,
   initialChannel = "phone",
+  embedded = false,
 }: {
   agent: any;
   initialChannel?: ChannelId;
+  /** When true, skip the duplicate page title (parent page already has one). */
+  embedded?: boolean;
 }) {
   const [, navigate] = useLocation();
   const [activeChannel, setActiveChannel] = useState<ChannelId>(initialChannel);
@@ -218,18 +221,20 @@ export function ChannelsPanel({
   ];
 
   return (
-    <div className="space-y-5 px-4 py-5 sm:px-6 lg:px-8">
-      <section>
-        <h2 className="text-[15px] font-semibold tracking-[-0.02em]">Channels</h2>
-        <p className="mt-0.5 max-w-xl text-[12px] leading-5 text-muted-foreground">
-          Wire how{" "}
-          {agent?.name ? <span className="text-foreground">{agent.name}</span> : "this agent"}{" "}
-          talks — phone, WhatsApp, email, meetings, booking. Prompt and voice stay in the agent builder.
-        </p>
-      </section>
+    <div className={cn("space-y-5", !embedded && "px-4 py-5 sm:px-6 lg:px-8")}>
+      {!embedded && (
+        <section>
+          <h2 className="text-[15px] font-semibold tracking-[-0.02em]">Channels</h2>
+          <p className="mt-0.5 max-w-xl text-[12px] leading-5 text-muted-foreground">
+            Wire how{" "}
+            {agent?.name ? <span className="text-foreground">{agent.name}</span> : "this agent"}{" "}
+            talks — phone, WhatsApp, email, meetings, booking.
+          </p>
+        </section>
+      )}
 
-      <section className="grid min-h-[420px] overflow-hidden rounded-lg border border-border bg-card md:grid-cols-[190px_minmax(0,1fr)]">
-        <div className="border-b border-border bg-muted/[0.16] p-2 md:border-b-0 md:border-r">
+      <section className="grid min-h-[480px] overflow-hidden rounded-lg border border-border bg-card md:grid-cols-[220px_minmax(0,1fr)]">
+        <div className="border-b border-border bg-muted/[0.16] p-2.5 md:border-b-0 md:border-r">
           <div className="grid grid-cols-2 gap-1 md:grid-cols-1">
             {channelItems.map((item) => (
               <button
@@ -237,29 +242,29 @@ export function ChannelsPanel({
                 type="button"
                 onClick={() => setActiveChannel(item.id)}
                 className={cn(
-                  "flex min-h-10 items-center gap-2 rounded-md px-2 text-left transition-colors",
+                  "flex min-h-11 items-center gap-2.5 rounded-md px-2.5 text-left transition-colors",
                   activeChannel === item.id
-                    ? "bg-foreground/[0.065] text-foreground"
+                    ? "bg-foreground/[0.08] text-foreground"
                     : "text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground",
                 )}
               >
                 <StatusDot tone={item.ready ? "success" : "neutral"} />
                 <div className="min-w-0">
-                  <p className="truncate text-[11px] font-medium">{item.label}</p>
-                  <p className="hidden truncate text-[9px] text-muted-foreground md:block">{item.detail}</p>
+                  <p className="truncate text-[12px] font-medium">{item.label}</p>
+                  <p className="hidden truncate text-[10px] text-muted-foreground md:block">{item.detail}</p>
                 </div>
               </button>
             ))}
           </div>
         </div>
 
-        <div className="min-w-0 p-4 sm:p-5">
+        <div className="min-w-0 p-5 sm:p-6">
           {activeChannel === "phone" && (
             <div className="space-y-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <h3 className="text-[12px] font-semibold">Phone</h3>
-                  <p className="mt-0.5 text-[10px] text-muted-foreground">
+                  <h3 className="text-sm font-semibold">Phone</h3>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
                     Inbound routing, outbound caller ID, and test calls.
                   </p>
                 </div>
@@ -267,7 +272,7 @@ export function ChannelsPanel({
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="h-7 text-[10px]"
+                  className="h-8 text-xs"
                   onClick={() => navigate("/app/phone-numbers")}
                 >
                   Manage numbers
@@ -280,7 +285,7 @@ export function ChannelsPanel({
                   telephonyProvider={cfg.telephonyProvider}
                 />
               ) : (
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   Save the agent first to attach inbound phone numbers.
                 </p>
               )}
@@ -291,8 +296,8 @@ export function ChannelsPanel({
             <div className="space-y-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <h3 className="text-[12px] font-semibold">WhatsApp</h3>
-                  <p className="mt-0.5 text-[10px] text-muted-foreground">
+                  <h3 className="text-sm font-semibold">WhatsApp</h3>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
                     Managed, VoBiz, or BYO BSP messages and follow-ups.
                   </p>
                 </div>
@@ -300,8 +305,8 @@ export function ChannelsPanel({
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="h-7 text-[10px]"
-                  onClick={() => navigate("/app/whatsapp")}
+                  className="h-8 text-xs"
+                  onClick={() => navigate(`/app/whatsapp${agent?.id ? `?agentId=${agent.id}` : ""}`)}
                 >
                   Configure
                 </Button>
@@ -309,12 +314,12 @@ export function ChannelsPanel({
               {waLoading ? (
                 <Skeleton className="h-20 w-full rounded-md" />
               ) : agentConnection ? (
-                <div className="flex items-center justify-between border-y border-border py-3">
+                <div className="flex items-center justify-between border-y border-border py-3.5">
                   <div className="min-w-0">
-                    <p className="truncate text-[11px] font-medium">
+                    <p className="truncate text-[13px] font-medium">
                       {agentConnection.name || "WhatsApp connection"}
                     </p>
-                    <p className="text-[10px] text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                       {agentConnection.metaPhoneNumberId
                         ? "WhatsApp Business · Meta API"
                         : "BSP webhook connection"}
@@ -323,12 +328,12 @@ export function ChannelsPanel({
                   <StatusBadge ready readyLabel="Active" emptyLabel="Inactive" />
                 </div>
               ) : waData?.channel ? (
-                <div className="flex items-center justify-between border-y border-border py-3">
+                <div className="flex items-center justify-between border-y border-border py-3.5">
                   <div className="min-w-0">
-                    <p className="truncate text-[11px] font-medium">
+                    <p className="truncate text-[13px] font-medium">
                       {waData.channel.businessName || "WhatsApp channel"}
                     </p>
-                    <p className="text-[10px] text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                       {waData.channel.mode === "own" ? "Own number" : "Shared SnapServe channel"}
                       {waData.channel.phoneE164 ? ` · ${waData.channel.phoneE164}` : ""}
                     </p>
@@ -340,11 +345,19 @@ export function ChannelsPanel({
                   />
                 </div>
               ) : (
-                <div className="border-y border-border py-5">
-                  <p className="text-[11px] font-medium">No WhatsApp channel</p>
-                  <p className="mt-1 text-[10px] text-muted-foreground">
+                <div className="border-y border-border py-6">
+                  <p className="text-[13px] font-medium">No WhatsApp channel</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
                     Connect one for summaries, reminders, and chat replies.
                   </p>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="mt-4 h-8"
+                    onClick={() => navigate(`/app/whatsapp${agent?.id ? `?agentId=${agent.id}` : ""}`)}
+                  >
+                    Set up WhatsApp
+                  </Button>
                 </div>
               )}
             </div>
@@ -356,8 +369,8 @@ export function ChannelsPanel({
             <div className="space-y-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <h3 className="text-[12px] font-semibold">Booking</h3>
-                  <p className="mt-0.5 text-[10px] text-muted-foreground">
+                  <h3 className="text-sm font-semibold">Booking</h3>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
                     Calendar, event type, meeting links, and notifications.
                   </p>
                 </div>
@@ -365,19 +378,19 @@ export function ChannelsPanel({
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="h-7 text-[10px]"
+                  className="h-8 text-xs"
                   onClick={() => navigate("/app/scheduling")}
                 >
                   Open scheduling
                 </Button>
               </div>
-              <div className="flex items-center justify-between border-y border-border py-3">
+              <div className="flex items-center justify-between border-y border-border py-3.5">
                 <div>
-                  <p className="text-[11px] font-medium">Calendar + event type</p>
-                  <p className="text-[10px] text-muted-foreground">
+                  <p className="text-[13px] font-medium">Calendar + event type</p>
+                  <p className="text-xs text-muted-foreground">
                     {cfg.schedulingCalendarId && cfg.schedulingEventTypeId
                       ? "Booking tools and notifications are linked."
-                      : "Link scheduling in Tools (agent builder) or Scheduling before promising bookings."}
+                      : "Link scheduling in agent Tools → Booking before promising bookings."}
                   </p>
                 </div>
                 <StatusBadge
@@ -387,7 +400,7 @@ export function ChannelsPanel({
                 />
               </div>
               {agent?.id && (
-                <Button asChild variant="ghost" size="sm" className="h-7 px-0 text-[11px]">
+                <Button asChild variant="ghost" size="sm" className="h-8 px-0 text-xs">
                   <Link href={`/app/agents/${agent.id}?section=tools`}>Open agent Tools → Booking</Link>
                 </Button>
               )}
@@ -397,8 +410,8 @@ export function ChannelsPanel({
       </section>
 
       <details className="rounded-lg border border-border bg-card">
-        <summary className="cursor-pointer px-3.5 py-3 text-[11px] font-medium">Channel readiness</summary>
-        <div className="border-t border-border p-3.5">
+        <summary className="cursor-pointer px-4 py-3.5 text-[12px] font-medium">Channel readiness</summary>
+        <div className="border-t border-border p-4">
           <JourneyReadinessPanel agent={agent} />
         </div>
       </details>

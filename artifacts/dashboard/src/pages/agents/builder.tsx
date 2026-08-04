@@ -4,7 +4,7 @@ import { useLocation, useParams, useSearch } from "wouter";
 import {
   Bot, Plus, Search, Phone, Mic, Brain, Webhook, PhoneForwarded,
   Save, MoreHorizontal, Trash2, Settings, FileText, Wrench,
-  VoicemailIcon, SlidersHorizontal, TestTube2, ChevronRight,
+  VoicemailIcon, SlidersHorizontal, TestTube2, ChevronRight, ChevronLeft,
   Volume2, Check, X, Pencil, ChevronDown, List, Globe, BarChart3,
   User2, Sparkles, BookOpen, ToggleLeft, ToggleRight, Tag, Loader2, Square, AudioLines,
   Play, Pause,
@@ -15,6 +15,7 @@ import {
 import { format, formatDistanceToNow } from "date-fns";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { canGoBackInApp } from "@/lib/nav-history";
 import { WebcallPanel } from "@/components/webcall-panel";
 import { AgentConfigCard, EditConfigDialog } from "@/components/agent-config-card";
 import { GeminiLiveVoicePicker } from "@/components/gemini-live-voice-picker";
@@ -5966,6 +5967,19 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
       {/* Single toolbar — agent identity + actions */}
       <header className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border bg-background px-3 sm:h-14 sm:px-5">
         <div className="flex min-w-0 items-center gap-2.5">
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-8 gap-1 px-2 text-[11px] text-muted-foreground hover:text-foreground"
+            onClick={() => {
+              if (canGoBackInApp()) window.history.back();
+              else navigate("/app/home");
+            }}
+          >
+            <ChevronLeft className="size-3.5" />
+            <span className="hidden sm:inline">Back</span>
+          </Button>
           {onOpenAgents && (
             <Button
               type="button"

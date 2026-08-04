@@ -1,6 +1,5 @@
 /**
- * Channels — integration-style page for phone / WhatsApp / email / meetings / booking.
- * Separate from the agent builder (prompt, voice, tools).
+ * Channels — how an agent communicates (phone, WhatsApp, email, meetings, booking).
  */
 
 import { useEffect, useMemo } from "react";
@@ -12,6 +11,7 @@ import {
   useGetAgent,
   useListAgents,
 } from "@workspace/api-client-react";
+import { AppPageHeader } from "@/components/app-page-header";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -87,55 +87,55 @@ export default function ChannelsPage() {
 
   if (agents.length === 0) {
     return (
-      <div className="mx-auto flex max-w-lg flex-col items-center px-6 py-20 text-center">
-        <div className="mb-4 flex size-12 items-center justify-center rounded-xl border border-border bg-card">
-          <Radio className="size-5 text-muted-foreground" />
+      <div className="flex min-h-0 flex-1 flex-col">
+        <AppPageHeader
+          back={{ href: "/app/home", label: "Back to Home" }}
+          title="Channels"
+          description="Create an agent first, then attach phone, WhatsApp, email, meetings, and booking."
+        />
+        <div className="flex flex-1 flex-col items-center justify-center px-6 py-16 text-center">
+          <div className="mb-4 flex size-12 items-center justify-center rounded-xl border border-border bg-card">
+            <Radio className="size-5 text-muted-foreground" />
+          </div>
+          <p className="text-sm text-muted-foreground">No agents yet.</p>
+          <Button asChild className="mt-5 gap-1.5">
+            <Link href="/app/agents?create=1">
+              <Plus className="size-4" />
+              Create agent
+            </Link>
+          </Button>
         </div>
-        <h1 className="text-lg font-semibold tracking-tight">Connect channels</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Create an agent first, then attach phone, WhatsApp, email, meetings, and booking here.
-        </p>
-        <Button asChild className="mt-6 gap-1.5">
-          <Link href="/app/agents?create=1">
-            <Plus className="size-4" />
-            Create agent
-          </Link>
-        </Button>
       </div>
     );
   }
 
+  const agentLabel = selectedAgent?.name || (selectedId != null ? `Agent ${selectedId}` : "Agent");
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="shrink-0 border-b border-border/70 bg-background/95 px-4 py-3 sm:px-6">
-        <div className="mx-auto flex max-w-[920px] flex-wrap items-center justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">
-              Integrations
-            </p>
-            <h1 className="text-[15px] font-semibold tracking-[-0.02em]">Channels</h1>
-            <p className="mt-0.5 text-[12px] text-muted-foreground">
-              How this agent communicates — separate from prompt, voice, and tools.
-            </p>
-          </div>
+      <AppPageHeader
+        back={{ href: "/app/home", label: "Back" }}
+        title="Channels"
+        description={`Connect how ${agentLabel} talks on phone, WhatsApp, email, meetings, and booking.`}
+        actions={
           <div className="flex flex-wrap items-center gap-2">
             <Select
               value={selectedId != null ? String(selectedId) : undefined}
               onValueChange={(v) => setAgentId(Number(v))}
             >
-              <SelectTrigger className="h-8 w-[200px] bg-background text-xs">
+              <SelectTrigger className="h-9 w-[200px] bg-background text-sm">
                 <SelectValue placeholder="Select agent" />
               </SelectTrigger>
               <SelectContent>
                 {agents.map((agent) => (
-                  <SelectItem key={agent.id} value={String(agent.id)} className="text-xs">
+                  <SelectItem key={agent.id} value={String(agent.id)}>
                     {agent.name || `Agent ${agent.id}`}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
             {selectedId != null && (
-              <Button asChild variant="outline" size="sm" className="h-8 gap-1.5 text-xs">
+              <Button asChild variant="outline" size="sm" className="h-9 gap-1.5">
                 <Link href={`/app/agents/${selectedId}`}>
                   <Bot className="size-3.5" />
                   Edit agent
@@ -143,13 +143,17 @@ export default function ChannelsPage() {
               </Button>
             )}
           </div>
-        </div>
-      </div>
+        }
+      />
 
       {selectedAgent && (
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-[920px]">
-            <ChannelsPanel agent={selectedAgent} initialChannel={initialChannel} />
+          <div className="mx-auto w-full max-w-[1120px] px-5 py-5 sm:px-6 sm:py-6">
+            <ChannelsPanel
+              agent={selectedAgent}
+              initialChannel={initialChannel}
+              embedded
+            />
           </div>
         </div>
       )}
