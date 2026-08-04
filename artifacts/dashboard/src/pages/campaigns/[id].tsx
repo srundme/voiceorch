@@ -1607,6 +1607,45 @@ export default function CampaignDetailPage() {
           {/* ── OVERVIEW tab ─────────────────────────────────────────────── */}
           {activeTab === "overview" && (<>
 
+          {/* Campaign Configuration & Details Header Card */}
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 p-3.5 rounded-xl border border-border/70 bg-card/60 mb-2 text-xs">
+            <div>
+              <span className="text-[10px] text-muted-foreground/60 uppercase font-semibold">Lead Source</span>
+              <p className="font-semibold text-foreground flex items-center gap-1.5 mt-0.5 capitalize">
+                <Upload className="h-3.5 w-3.5 text-blue-400" />
+                {(campaign as any).leadSource === "csv" ? "CSV File" : (campaign as any).leadSource === "meta_ads" ? "Meta Ads Form" : (campaign as any).leadSource === "google_sheets" ? "Google Sheet" : "Website Webhook"}
+              </p>
+            </div>
+            <div>
+              <span className="text-[10px] text-muted-foreground/60 uppercase font-semibold">Launch Mode</span>
+              <p className="font-semibold text-foreground flex items-center gap-1.5 mt-0.5 capitalize">
+                <Zap className="h-3.5 w-3.5 text-amber-400" />
+                {(campaign as any).triggerMode === "instant" ? "Instant Launch" : "Scheduled Batch"}
+              </p>
+            </div>
+            <div>
+              <span className="text-[10px] text-muted-foreground/60 uppercase font-semibold">Pacing Delay</span>
+              <p className="font-semibold text-foreground flex items-center gap-1.5 mt-0.5">
+                <Clock className="h-3.5 w-3.5 text-purple-400" />
+                {(campaign as any).callDelaySeconds ?? 5}s delay
+              </p>
+            </div>
+            <div>
+              <span className="text-[10px] text-muted-foreground/60 uppercase font-semibold">Retry Policy</span>
+              <p className="font-semibold text-foreground flex items-center gap-1.5 mt-0.5">
+                <RefreshCw className="h-3.5 w-3.5 text-emerald-400" />
+                {(campaign as any).maxAttempts ?? 2} retries ({(campaign as any).retryDelayMinutes ?? 15}m)
+              </p>
+            </div>
+            <div>
+              <span className="text-[10px] text-muted-foreground/60 uppercase font-semibold">Calling Window</span>
+              <p className="font-semibold text-foreground flex items-center gap-1.5 mt-0.5">
+                <Calendar className="h-3.5 w-3.5 text-cyan-400" />
+                09:00 AM - 07:00 PM
+              </p>
+            </div>
+          </div>
+
           {/* View Analytics */}
           <div className="flex items-center justify-end">
             <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5"
