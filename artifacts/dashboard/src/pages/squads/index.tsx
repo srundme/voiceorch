@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useParams } from "wouter";
 import { customFetch, useListAgents } from "@workspace/api-client-react";
-import { AppPageHeader } from "@/components/app-page-header";
+import { StripePage } from "@/components/stripe-page";
 import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import {
-  UsersRound, Plus, ArrowLeft, Phone, Trash2, Loader2, ArrowLeftRight,
+  UsersRound, Plus, Phone, Trash2, Loader2, ArrowLeftRight,
   CalendarClock, X, PhoneForwarded,
 } from "lucide-react";
 
@@ -124,18 +124,15 @@ function SquadListPage({ onOpen }: { onOpen: (id: number) => void }) {
   });
 
   return (
-    <div className="flex flex-col h-full">
-      <AppPageHeader
-        title="Squads"
-        description="Put your agents on a team. They hand live calls to each other mid-conversation, share what they know about each caller, and schedule follow-up calls for one another."
-        actions={
-          <Button onClick={() => setCreateOpen(true)}>
-            <Plus className="w-4 h-4 mr-1.5" /> New Squad
-          </Button>
-        }
-      />
-
-      <div className="px-6 pb-8 space-y-6 overflow-auto">
+    <StripePage
+      title="Squads"
+      description="Put your agents on a team. They hand live calls to each other mid-conversation, share what they know about each caller, and schedule follow-up calls for one another."
+      actions={
+        <Button onClick={() => setCreateOpen(true)}>
+          <Plus className="w-4 h-4 mr-1.5" /> New Squad
+        </Button>
+      }
+    >
         {isLoading ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground py-12 justify-center">
             <Loader2 className="w-4 h-4 animate-spin" /> Loading squads…
@@ -181,7 +178,7 @@ function SquadListPage({ onOpen }: { onOpen: (id: number) => void }) {
           </div>
         )}
 
-        <div className="rounded-xl border border-border/50 bg-muted/20 p-4 max-w-2xl">
+        <div className="rounded-xl border border-border/50 bg-muted/20 p-4 max-w-2xl mt-6">
           <h2 className="text-sm font-semibold mb-2">How squads work</h2>
           <ul className="text-xs text-muted-foreground space-y-1.5">
             <li className="flex gap-2">
@@ -198,7 +195,6 @@ function SquadListPage({ onOpen }: { onOpen: (id: number) => void }) {
             </li>
           </ul>
         </div>
-      </div>
 
       <CreateSquadDialog
         open={createOpen}
@@ -207,7 +203,7 @@ function SquadListPage({ onOpen }: { onOpen: (id: number) => void }) {
         onSubmit={(body) => createMut.mutate(body)}
         saving={createMut.isPending}
       />
-    </div>
+    </StripePage>
   );
 }
 
@@ -395,32 +391,26 @@ function SquadDetailPage({ squadId, onBack }: { squadId: number; onBack: () => v
   const isActive = squad.status === "active";
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="px-6 pt-4 pb-2">
-        <Button variant="ghost" size="sm" onClick={onBack} className="-ml-2 mb-2">
-          <ArrowLeft className="w-4 h-4 mr-1" /> Squads
-        </Button>
-        <AppPageHeader
-          title={squad.name}
-          description={squad.description || "Agents on this team hand calls to each other and share caller context."}
-          actions={
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2">
-                <Switch
-                  checked={isActive}
-                  onCheckedChange={(on) => updateMut.mutate({ status: on ? "active" : "paused" })}
-                />
-                <span className="text-xs text-muted-foreground">{isActive ? "Active" : "Paused"}</span>
-              </div>
-              <Button variant="outline" size="sm" onClick={() => deleteMut.mutate()}>
-                <Trash2 className="w-3.5 h-3.5" />
-              </Button>
-            </div>
-          }
-        />
-      </div>
-
-      <div className="px-6 pb-10 grid gap-6 lg:grid-cols-2 overflow-auto">
+    <StripePage
+      title={squad.name}
+      description={squad.description || "Agents on this team hand calls to each other and share caller context."}
+      back={{ href: "/app/squads", label: "Squads" }}
+      actions={
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <Switch
+              checked={isActive}
+              onCheckedChange={(on) => updateMut.mutate({ status: on ? "active" : "paused" })}
+            />
+            <span className="text-xs text-muted-foreground">{isActive ? "Active" : "Paused"}</span>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => deleteMut.mutate()}>
+            <Trash2 className="w-3.5 h-3.5" />
+          </Button>
+        </div>
+      }
+    >
+      <div className="grid gap-6 lg:grid-cols-2">
         <section className="space-y-3">
           <h2 className="text-sm font-semibold">Team</h2>
           <p className="text-xs text-muted-foreground">
@@ -511,6 +501,6 @@ function SquadDetailPage({ squadId, onBack }: { squadId: number; onBack: () => v
           )}
         </section>
       </div>
-    </div>
+    </StripePage>
   );
 }

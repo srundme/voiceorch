@@ -20,7 +20,6 @@ import {
   ChevronDown, ChevronUp, Zap, WifiOff, Info,
 } from "lucide-react";
 import { CallDetailDrawer } from "@/components/call-detail-drawer";
-import { AppPageHeader } from "@/components/app-page-header";
 import { EmptyState } from "@/components/empty-state";
 import { MetricCard, MetricStrip } from "@/components/metric-strip";
 
@@ -501,15 +500,10 @@ export default function CallbacksPage() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <AppPageHeader
-        eyebrow="Voice Operations"
-        title="Callbacks & Auto-Redials"
-        description="Scheduled callbacks requested by callers, plus automatic redial retries for missed calls."
-      >
-        <StatsBanner stats={stats} />
-      </AppPageHeader>
-
       <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+      {/* Stats (parent StripePage owns the page title) */}
+      <StatsBanner stats={stats} />
+
       {/* Guide */}
       <CallbacksGuide />
 

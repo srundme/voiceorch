@@ -169,13 +169,11 @@ export default function ConferencingPage({ embedded = false, returnPath = "confe
 
   return (
     <div className="flex flex-col gap-6 max-w-3xl">
+      {/* Description only — SchedulingTabNav (or parent) labels the page */}
       {!embedded && (
-        <div>
-          <h1 className="text-xl font-semibold">Conferencing</h1>
-          <p className="text-sm text-muted-foreground">
-            Connect Google Calendar accounts — Meet links are auto-generated and included in every booking confirmation
-          </p>
-        </div>
+        <p className="text-sm text-muted-foreground">
+          Connect Google Calendar accounts — Meet links are auto-generated and included in every booking confirmation
+        </p>
       )}
 
       {/* Google Meet card */}

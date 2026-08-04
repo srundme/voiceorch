@@ -1,26 +1,19 @@
 /**
- * /app/api-keys — tabbed page (shown as "Developers" in the nav)
- * Tabs: API keys | Webhooks
+ * /app/api-keys — API keys | Webhooks
  */
-import { PageTabs } from "@/components/page-tabs";
+import { StripeTabPage } from "@/components/stripe-tab-page";
 import ApiKeysPage from "@/pages/api-keys";
 import WebhooksPage from "@/pages/webhooks";
 
 export default function ApiKeysTabPage() {
   return (
-    <PageTabs
+    <StripeTabPage
+      title="Developers"
+      description="API keys and outbound webhooks for your workspace."
       defaultTab="api-keys"
       tabs={[
-        {
-          key: "api-keys",
-          label: "API keys",
-          content: <ApiKeysPage />,
-        },
-        {
-          key: "webhooks",
-          label: "Webhooks",
-          content: <WebhooksPage />,
-        },
+        { key: "api-keys", label: "API keys", content: <ApiKeysPage /> },
+        { key: "webhooks", label: "Webhooks", content: <WebhooksPage /> },
       ]}
     />
   );

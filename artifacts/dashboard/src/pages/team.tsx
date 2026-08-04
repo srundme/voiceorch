@@ -167,21 +167,16 @@ export function TeamPage() {
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-background overflow-y-auto">
-      {/* Header Banner */}
-      <div className="px-6 py-8 border-b border-border/40 bg-card/30">
+      {/* Toolbar — parent StripeTabPage owns the page title */}
+      <div className="px-6 py-4 border-b border-border/40">
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold tracking-tight text-foreground">
-                Team & Workspace Members
-              </h1>
-              <Badge variant="outline" className="text-[10px] uppercase font-mono tracking-wider">
-                Multi-User Access
-              </Badge>
-            </div>
-            <p className="text-sm text-muted-foreground mt-1">
-              Invite colleagues, developers, and reviewers to collaborate on agents, voice campaigns, and call analytics.
+          <div className="flex items-center gap-2">
+            <p className="text-sm text-muted-foreground">
+              Invite colleagues to collaborate on agents, campaigns, and analytics.
             </p>
+            <Badge variant="outline" className="text-[10px] uppercase font-mono tracking-wider shrink-0">
+              Multi-User Access
+            </Badge>
           </div>
 
           <Button

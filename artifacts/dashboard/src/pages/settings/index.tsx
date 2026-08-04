@@ -662,11 +662,7 @@ export default function SettingsPage() {
           <GeneralSettingsView onBack={() => setView("overview")} />
         ) : (
           <>
-            <div>
-              <h2 className="text-3xl font-bold tracking-tight">Settings</h2>
-              <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground/60 mt-1">Overview</p>
-              <p className="text-muted-foreground mt-1">Manage your account, integrations, preferences and billing.</p>
-            </div>
+            {/* Parent StripeTabPage owns the Workspace title */}
             <QuickOverview />
             <CategoryGrid onOpenGeneral={() => setView("general")} />
             <DangerZoneCard />

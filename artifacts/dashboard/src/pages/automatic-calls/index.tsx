@@ -45,14 +45,9 @@ export default function AutomaticCallsPage() {
   const rows = q.data ?? [];
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-8 space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Automatic Calls</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Watch a Google Sheet for leads, dial them automatically, inject row data as lookup variables, and write results back.
-          </p>
-        </div>
+    <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
+      {/* Toolbar — parent StripePage owns the Dial flows title */}
+      <div className="flex items-center justify-end gap-2">
         <Button asChild className="h-9">
           <Link href="/app/automatic-calls/new">
             <Plus className="h-4 w-4 mr-1.5" />

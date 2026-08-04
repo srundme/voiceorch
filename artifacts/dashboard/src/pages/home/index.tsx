@@ -26,6 +26,7 @@ import {
   useListPhoneNumbers,
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
+import { StripePage } from "@/components/stripe-page";
 import { StatusDot } from "@/components/workspace/workspace";
 import { useMinuteRatesMap, useUserProviderNames } from "@/hooks/use-minute-rates";
 import { usePartnerContext } from "@/hooks/use-partner";
@@ -240,29 +241,24 @@ export default function HomePage() {
   }
 
   return (
-    <main className="mx-auto w-full max-w-[1180px] px-4 py-5 sm:px-6 sm:py-7">
-      <header className="mb-6 flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-lg font-semibold tracking-[-0.025em]">Workspace</h1>
-          <p className="mt-0.5 text-[11px] text-muted-foreground">
-            {statsQ.data?.callsToday ?? "—"} calls today
-            {statsQ.data?.successRate != null ? ` · ${statsQ.data.successRate}% success` : ""}
-            {balanceCents != null ? ` · ₹${(balanceCents / 100).toFixed(0)} balance` : ""}
-          </p>
-        </div>
-        {!isManagedClient && (
+    <StripePage
+      title="Home"
+      description={`${statsQ.data?.callsToday ?? "—"} calls today${statsQ.data?.successRate != null ? ` · ${statsQ.data.successRate}% success` : ""}${balanceCents != null ? ` · ₹${(balanceCents / 100).toFixed(0)} balance` : ""}`}
+      actions={
+        !isManagedClient ? (
           <Button size="sm" className="h-8 gap-1.5 px-3 text-xs" onClick={() => navigate("/app/vibe")}>
             <Plus className="size-3.5" />
             New agent
           </Button>
-        )}
-      </header>
-
+        ) : undefined
+      }
+      contentClassName="!pt-4"
+    >
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
-        <div className="min-w-0 overflow-hidden rounded-lg border border-border bg-card">
+        <div className="min-w-0 overflow-hidden rounded-lg border border-border">
           <div className="flex h-10 items-center justify-between border-b border-border px-3.5">
-            <h2 className="text-[11px] font-semibold">Agents</h2>
-            <Link href="/app/agents" className="text-[10px] text-muted-foreground hover:text-foreground">
+            <h2 className="text-[13px] font-semibold">Agents</h2>
+            <Link href="/app/agents" className="text-[11px] text-muted-foreground hover:text-foreground">
               View all
             </Link>
           </div>
@@ -279,13 +275,13 @@ export default function HomePage() {
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <p className="truncate text-[12px] font-medium">{agent.name ?? `Agent ${agent.id}`}</p>
-                      <span className="inline-flex items-center gap-1 text-[9px] capitalize text-muted-foreground">
+                      <p className="truncate text-[13px] font-medium">{agent.name ?? `Agent ${agent.id}`}</p>
+                      <span className="inline-flex items-center gap-1 text-[10px] capitalize text-muted-foreground">
                         <StatusDot tone={agent.status === "active" ? "success" : "neutral"} />
                         {agent.status ?? "draft"}
                       </span>
                     </div>
-                    <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
+                    <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
                       {agent.description || "Prompt · Voice · Tools"}
                     </p>
                   </div>
@@ -441,13 +437,13 @@ export default function HomePage() {
         </section>
       </div>
 
-      <footer className="mt-5 flex items-center justify-between border-t border-border/70 pt-4 text-[10px] text-muted-foreground">
+      <footer className="mt-5 flex items-center justify-between border-t border-border/70 pt-4 text-[11px] text-muted-foreground">
         <span>{agents.length} agent{agents.length === 1 ? "" : "s"} in this workspace</span>
         <Link href="/app/wallet" className="inline-flex items-center gap-1.5 hover:text-foreground">
           <Wallet className="size-3" />
           {availableMinutes == null ? "Billing" : `~${availableMinutes} minutes available`}
         </Link>
       </footer>
-    </main>
+    </StripePage>
   );
 }

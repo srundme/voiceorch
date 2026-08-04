@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo, useEffect } from "react";
-import { Wallet, Plus, RefreshCw, ArrowDownLeft, ArrowUpRight, Zap, CreditCard, ToggleLeft, ToggleRight, AlertCircle, ShieldCheck, CheckCircle2, FileText, Download } from "lucide-react";
+import { Plus, RefreshCw, ArrowDownLeft, ArrowUpRight, Zap, CreditCard, ToggleLeft, ToggleRight, AlertCircle, ShieldCheck, CheckCircle2, FileText, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -305,12 +305,9 @@ export default function WalletPage() {
 
   return (
     <div className="flex flex-col h-full overflow-auto">
-      <div className="border-b border-border px-4 sm:px-6 py-4 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 shrink-0">
-        <div className="flex items-center gap-3">
-        <Wallet className="w-5 h-5 text-foreground" />
-        <h1 className="font-semibold text-foreground text-lg">Wallet & Billing</h1>
-        </div>
-        <span className="text-xs text-muted-foreground sm:ml-auto">₹{rateInr} / minute · INR · GST on top-ups</span>
+      {/* Toolbar — parent StripeTabPage owns the Billing title */}
+      <div className="border-b border-border px-4 sm:px-6 py-3 flex items-center gap-2 sm:gap-3 shrink-0">
+        <span className="text-xs text-muted-foreground">₹{rateInr} / minute · INR · GST on top-ups</span>
       </div>
 
       <div className="flex-1 overflow-auto p-4 sm:p-6">

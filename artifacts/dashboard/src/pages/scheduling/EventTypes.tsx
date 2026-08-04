@@ -343,20 +343,12 @@ export default function EventTypesPage({
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <SchedulingTabNav />
-      {/* Header */}
+      {/* Toolbar — SchedulingTabNav labels the page; skip duplicate h1 */}
       <div className="border-b px-4 sm:px-6 py-4 shrink-0">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-muted">
-              <Calendar className="h-4 w-4 text-foreground" />
-            </div>
-            <div>
-              <h1 className="text-base font-semibold">Event Types</h1>
-              <p className="text-xs text-muted-foreground">Configure different events for people to book on your calendar.</p>
-            </div>
-          </div>
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-xs text-muted-foreground">Configure different events for people to book on your calendar.</p>
           {(calendars?.length ?? 0) > 0 && (
-            <Button size="sm" onClick={() => setCreateOpen(true)} className="gap-1.5">
+            <Button size="sm" onClick={() => setCreateOpen(true)} className="gap-1.5 shrink-0">
               <Plus className="h-3.5 w-3.5" /> New
             </Button>
           )}

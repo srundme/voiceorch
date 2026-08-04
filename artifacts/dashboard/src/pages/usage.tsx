@@ -220,10 +220,8 @@ export default function UsagePage() {
 
   return (
     <div className="max-w-4xl mx-auto px-6 py-8 space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold text-foreground">Usage</h1>
-        <p className="text-sm text-muted-foreground/60 mt-0.5">{currentMonth} · Your billing and cost breakdown</p>
-      </div>
+      {/* Parent StripeTabPage owns the Billing / Usage title */}
+      <p className="text-sm text-muted-foreground/60">{currentMonth} · Your billing and cost breakdown</p>
 
       {isLoading ? (
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">

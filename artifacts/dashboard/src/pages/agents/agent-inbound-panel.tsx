@@ -37,7 +37,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError } from "@/lib/format-api-error";
 import { cn } from "@/lib/utils";
-import { ChevronRight, Loader2, Phone, PhoneForwarded, Plus } from "lucide-react";
+import { Loader2, Phone, PhoneForwarded, Plus } from "lucide-react";
 
 const _DASH_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const DASH_API = `${_DASH_BASE}/api`;
@@ -154,150 +154,76 @@ export function AgentInboundPanel({
   const trialExhausted = quota?.limited && quota.remaining <= 0;
 
   return (
-    <div className={cn("space-y-2", className)}>
-      {/* Primary path: own number — buy / assign */}
-      <div className={cn(
-        "rounded-xl border p-3 space-y-2.5",
-        (assigned || byoNumber)
-          ? "border-emerald-500/25 bg-emerald-500/5"
-          : "border-amber-500/30 bg-amber-500/5",
-      )}>
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5 min-w-0">
-            <PhoneForwarded className={cn("h-3.5 w-3.5 shrink-0", (assigned || byoNumber) ? "text-emerald-500" : "text-amber-500")} />
-            <span className={cn(
-              "text-[10px] font-semibold uppercase tracking-wider",
-              (assigned || byoNumber) ? "text-emerald-600/90 dark:text-emerald-400/90" : "text-amber-600/90 dark:text-amber-400/90",
-            )}>
-              Your phone number
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={() => navigate("/app/phone-numbers")}
-            className="text-[10px] font-medium text-muted-foreground hover:text-foreground transition-colors"
-          >
-            {ownedCount === 0 ? "Buy →" : "Numbers →"}
-          </button>
+    <div className={cn("overflow-hidden rounded-lg border border-border", className)}>
+      {/* Own number row */}
+      <div className="flex min-h-14 items-center gap-3 border-b border-border/70 px-3.5 py-3">
+        <PhoneForwarded className="size-4 shrink-0 text-muted-foreground" />
+        <div className="min-w-0 flex-1">
+          {isLoading ? (
+            <Skeleton className="h-8 w-48" />
+          ) : byoNumber ? (
+            <>
+              <p className="truncate text-[13px] font-medium tabular-nums">{byoNumber}</p>
+              <p className="text-[11px] text-muted-foreground">
+                Your {telephonyProvider === "plivo" ? "Plivo" : "Twilio"} number · unlimited
+              </p>
+            </>
+          ) : assigned ? (
+            <button type="button" onClick={openDialog} className="w-full text-left">
+              <p className="truncate text-[13px] font-medium tabular-nums">{assigned.number}</p>
+              <p className="text-[11px] text-muted-foreground">Assigned · inbound + outbound</p>
+            </button>
+          ) : ownedCount === 0 ? (
+            <>
+              <p className="text-[13px] font-medium">No number assigned</p>
+              <p className="text-[11px] text-muted-foreground">Buy a number to go live on this agent</p>
+            </>
+          ) : (
+            <button type="button" onClick={openDialog} className="w-full text-left">
+              <p className="text-[13px] font-medium">Assign a purchased number</p>
+              <p className="text-[11px] text-muted-foreground">You have a number — attach it here</p>
+            </button>
+          )}
         </div>
-
-        {isLoading ? (
-          <Skeleton className="h-9 w-full rounded-lg" />
-        ) : byoNumber ? (
-          <div className="w-full flex items-center justify-between gap-2 rounded-lg border border-border/50 bg-background/50 px-2.5 py-2">
-            <div className="min-w-0">
-              <p className="text-[12px] font-medium truncate tabular-nums text-foreground">{byoNumber}</p>
-              <p className="text-[10px] text-muted-foreground/70 truncate mt-0.5">
-                Your own {telephonyProvider === "plivo" ? "Plivo" : "Twilio"} number — outbound caller ID · unlimited calls
-              </p>
-            </div>
-          </div>
-        ) : assigned ? (
-          <button
-            type="button"
-            onClick={openDialog}
-            className="w-full flex items-center justify-between gap-2 rounded-lg border border-border/50 bg-background/50 px-2.5 py-2 text-left hover:border-border hover:bg-background/70 transition-colors"
-          >
-            <div className="min-w-0">
-              <p className="text-[12px] font-medium truncate tabular-nums text-foreground">{assigned.number}</p>
-              <p className="text-[10px] text-muted-foreground/70 truncate mt-0.5">
-                Live — inbound + outbound caller ID · unlimited tests
-              </p>
-            </div>
-            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-          </button>
+        {isLoading ? null : byoNumber ? null : assigned ? (
+          <Button type="button" size="sm" variant="outline" className="h-8 shrink-0 text-xs" onClick={openDialog}>
+            Change
+          </Button>
         ) : ownedCount === 0 ? (
-          <div className="space-y-2">
-            <p className="text-[12px] font-medium text-foreground">Required to go live</p>
-            <p className="text-[10px] text-muted-foreground leading-relaxed">
-              Buy your own number for inbound calls, your caller ID on outbound, and unlimited testing. The platform number below is only a short trial.
-            </p>
-            <Button
-              type="button"
-              size="sm"
-              className="h-8 w-full text-xs gap-1.5"
-              onClick={() => navigate("/app/phone-numbers")}
-            >
-              <Plus className="h-3.5 w-3.5" /> Buy a phone number
-            </Button>
-          </div>
+          <Button type="button" size="sm" className="h-8 shrink-0 gap-1 text-xs" onClick={() => navigate("/app/phone-numbers")}>
+            <Plus className="size-3.5" /> Buy
+          </Button>
         ) : (
-          <button
-            type="button"
-            onClick={openDialog}
-            className="w-full flex items-center justify-between gap-2 rounded-lg border border-amber-500/30 bg-background/50 px-2.5 py-2 text-left hover:border-amber-500/50 transition-colors"
-          >
-            <div className="min-w-0">
-              <p className="text-[12px] font-medium truncate text-foreground">Number purchased — assign it</p>
-              <p className="text-[10px] text-muted-foreground/70 truncate mt-0.5">
-                Click to attach your number for inbound + outbound
-              </p>
-            </div>
-            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-          </button>
+          <Button type="button" size="sm" className="h-8 shrink-0 text-xs" onClick={openDialog}>
+            Assign
+          </Button>
         )}
       </div>
 
-      {/* Trial outbound — demoted, capped. Hidden for BYO telephony (own carrier = no trial line involved). */}
+      {/* Trial row — only when no own number */}
       {!assigned && !byoNumber && (
-      <div className={cn(
-        "rounded-xl border p-3 space-y-1.5",
-        trialExhausted
-          ? "border-border/40 bg-muted/20 opacity-90"
-          : "border-border/50 bg-card/40",
-      )}>
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5 min-w-0">
-            <Phone className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Trial outbound
-            </span>
-          </div>
-          <span className={cn(
-            "text-[9px] font-medium uppercase tracking-wide shrink-0 rounded-full border px-1.5 py-0.5",
-            quota?.unlimitedTrial
-              ? "border-emerald-500/30 text-emerald-500"
-              : trialExhausted
-                ? "border-border/50 text-muted-foreground"
-                : "border-amber-500/30 text-amber-500",
-          )}>
-            {quota?.unlimitedTrial
-              ? "Unlimited trial"
-              : quota?.limited
-                ? (trialExhausted ? "Limit reached" : `${trialRemaining}/${trialLimit} left today`)
-                : "Trial"}
-          </span>
-        </div>
-        {testingFromNumber ? (
-          <>
-            <p className="text-[12px] font-medium tabular-nums text-muted-foreground tracking-tight">
-              {testingFromNumber}
+        <div className="flex min-h-12 items-center gap-3 px-3.5 py-2.5">
+          <Phone className="size-4 shrink-0 text-muted-foreground" />
+          <div className="min-w-0 flex-1">
+            <p className="text-[12px] font-medium tabular-nums text-muted-foreground">
+              {testingFromNumber ?? "No trial line"}
             </p>
-            <p className="text-[10px] text-muted-foreground leading-relaxed">
+            <p className="text-[11px] text-muted-foreground">
               {quota?.unlimitedTrial
-                ? "Shared platform trial line — unlimited for your account (admin grant). Still not your number; inbound will not ring this agent. Buy a number to go live."
+                ? "Shared trial · inbound won't ring this agent"
                 : trialExhausted
-                  ? "Free trial calls are used up for today. Buy a number to keep testing and to receive inbound calls."
-                  : `Shared platform line for a quick listen — ${trialLimit} outbound tests/day. Not your number; inbound will not ring this agent.`}
+                  ? "Trial used up today"
+                  : quota?.limited
+                    ? `Shared trial · ${trialRemaining}/${trialLimit} left today`
+                    : "Shared trial line"}
             </p>
-            {trialExhausted && (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="h-7 w-full text-[11px] gap-1.5 mt-1"
-                onClick={() => navigate("/app/phone-numbers")}
-              >
-                <Plus className="h-3 w-3" /> Buy number to continue
-              </Button>
-            )}
-          </>
-        ) : (
-          <p className="text-[11px] text-muted-foreground leading-relaxed">
-            No trial line configured. Buy your own number to place outbound calls.
-          </p>
-        )}
-      </div>
+          </div>
+          {trialExhausted && (
+            <Button type="button" size="sm" variant="outline" className="h-8 shrink-0 text-xs" onClick={() => navigate("/app/phone-numbers")}>
+              Buy number
+            </Button>
+          )}
+        </div>
       )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -305,14 +231,14 @@ export function AgentInboundPanel({
           <DialogHeader>
             <DialogTitle>Attach your phone number</DialogTitle>
             <DialogDescription>
-              Your purchased number handles inbound routing and outbound caller ID. Trial platform lines are shared and capped — buy a number to go live.
+              Your purchased number handles inbound routing and outbound caller ID.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-1">
             {phoneNumbers.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-border/60 bg-muted/20 px-3 py-4 text-center space-y-2">
+              <div className="space-y-2 rounded-lg border border-border px-3 py-4 text-center">
                 <p className="text-sm text-muted-foreground">You don’t have a purchased number yet.</p>
-                <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => { setDialogOpen(false); navigate("/app/phone-numbers"); }}>
+                <Button size="sm" className="h-8 gap-1.5 text-xs" onClick={() => { setDialogOpen(false); navigate("/app/phone-numbers"); }}>
                   <Plus className="h-3.5 w-3.5" /> Buy a number
                 </Button>
               </div>
@@ -337,7 +263,7 @@ export function AgentInboundPanel({
                     })}
                   </SelectContent>
                 </Select>
-                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
                   Reassigning a number in use by another agent moves inbound and outbound to this agent.
                 </p>
               </>
@@ -347,7 +273,7 @@ export function AgentInboundPanel({
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
               <Button type="button" onClick={handleSave} disabled={assign.isPending}>
-                {assign.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
+                {assign.isPending ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
                 Save
               </Button>
             </DialogFooter>

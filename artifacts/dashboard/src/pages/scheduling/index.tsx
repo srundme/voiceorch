@@ -2,8 +2,7 @@ import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { format, parseISO } from "date-fns";
 import { Calendar, Filter, ChevronRight, Bot, Globe, Plus } from "lucide-react";
-import { SchedulingTabNav } from "@/components/scheduling-tab-nav";
-import { AppPageHeader } from "@/components/app-page-header";
+import { StripePage } from "@/components/stripe-page";
 import { EmptyState } from "@/components/empty-state";
 import {
   useListBookings,
@@ -24,9 +23,17 @@ import {
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useQueryClient } from "@tanstack/react-query";
+import { cn } from "@/lib/utils";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+const SCHED_TABS = [
+  { label: "Bookings", href: `${BASE}/app/scheduling`, exact: true },
+  { label: "Calendars", href: `${BASE}/app/scheduling/calendars` },
+  { label: "Event Types", href: `${BASE}/app/scheduling/event-types` },
+  { label: "Availability", href: `${BASE}/app/scheduling/availability` },
+  { label: "Conferencing", href: `${BASE}/app/scheduling/conferencing` },
+] as const;
 
 function statusBadge(status: string) {
   switch (status) {
@@ -107,7 +114,7 @@ function CalSyncBadge({ status, error }: { status: Booking["calendarSyncStatus"]
 }
 
 export default function SchedulingPage() {
-  const [, navigate] = useLocation();
+  const [location, navigate] = useLocation();
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [calendarFilter, setCalendarFilter] = useState<string>("all");
   const [sourceFilter, setSourceFilter] = useState<string>("all");
@@ -128,79 +135,101 @@ export default function SchedulingPage() {
 
   return (
     <TooltipProvider>
-      <div className="flex flex-col h-full overflow-hidden">
-        <SchedulingTabNav />
-        <AppPageHeader
-          compact
-          eyebrow="Scheduling"
-          title="Bookings"
-          description="Appointments booked by agents or the web — sync status and attendee details in one place."
-          actions={
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8 text-xs gap-1.5 rounded-lg"
-              onClick={() => navigate(`${BASE}/app/scheduling/calendars`)}
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Set up calendar
-            </Button>
-          }
-        >
-          <div className="flex gap-2 items-center flex-wrap">
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[140px] h-8 text-xs">
-                <Filter className="h-3 w-3 mr-1.5 opacity-50" />
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All statuses</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="confirmed">Confirmed</SelectItem>
-                <SelectItem value="cancelled">Cancelled</SelectItem>
-                <SelectItem value="rescheduled">Rescheduled</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={sourceFilter} onValueChange={setSourceFilter}>
-              <SelectTrigger className="w-[140px] h-8 text-xs">
-                <SelectValue placeholder="Source" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All sources</SelectItem>
-                <SelectItem value="agent">Agent Call</SelectItem>
-                <SelectItem value="web">Web</SelectItem>
-                <SelectItem value="api">API</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={syncFilter} onValueChange={setSyncFilter}>
-              <SelectTrigger className="w-[150px] h-8 text-xs">
-                <SelectValue placeholder="Cal sync" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All sync statuses</SelectItem>
-                <SelectItem value="synced">Synced</SelectItem>
-                <SelectItem value="scope_insufficient">Scope issue</SelectItem>
-                <SelectItem value="sync_failed">Sync failed</SelectItem>
-                <SelectItem value="skipped">No calendar</SelectItem>
-              </SelectContent>
-            </Select>
-            {calendars && calendars.length > 0 && (
-              <Select value={calendarFilter} onValueChange={setCalendarFilter}>
-                <SelectTrigger className="w-[160px] h-8 text-xs">
-                  <SelectValue placeholder="Calendar" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All calendars</SelectItem>
-                  {calendars.map(c => (
-                    <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
+      <StripePage
+        title="Bookings"
+        description="Appointments booked by agents or the web — sync status and attendee details in one place."
+        actions={
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 text-xs gap-1.5 rounded-lg"
+            onClick={() => navigate(`${BASE}/app/scheduling/calendars`)}
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Set up calendar
+          </Button>
+        }
+        tabs={
+          <div className="flex items-center gap-0 -mx-1 overflow-x-auto">
+            {SCHED_TABS.map((tab) => {
+              const exact = "exact" in tab && tab.exact;
+              const active = exact
+                ? location === tab.href || location === `${tab.href}/`
+                : location.startsWith(tab.href);
+              return (
+                <Link key={tab.href} href={tab.href}>
+                  <button
+                    type="button"
+                    className={cn(
+                      "relative px-3 pb-3 text-[13px] font-medium transition-colors whitespace-nowrap",
+                      active
+                        ? "text-foreground"
+                        : "text-muted-foreground hover:text-foreground/80",
+                    )}
+                  >
+                    {tab.label}
+                    {active && (
+                      <span className="absolute inset-x-1 bottom-0 h-0.5 rounded-full bg-foreground" />
+                    )}
+                  </button>
+                </Link>
+              );
+            })}
           </div>
-        </AppPageHeader>
+        }
+      >
+        <div className="mb-4 flex gap-2 items-center flex-wrap">
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-[140px] h-8 text-xs">
+              <Filter className="h-3 w-3 mr-1.5 opacity-50" />
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All statuses</SelectItem>
+              <SelectItem value="pending">Pending</SelectItem>
+              <SelectItem value="confirmed">Confirmed</SelectItem>
+              <SelectItem value="cancelled">Cancelled</SelectItem>
+              <SelectItem value="rescheduled">Rescheduled</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={sourceFilter} onValueChange={setSourceFilter}>
+            <SelectTrigger className="w-[140px] h-8 text-xs">
+              <SelectValue placeholder="Source" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All sources</SelectItem>
+              <SelectItem value="agent">Agent Call</SelectItem>
+              <SelectItem value="web">Web</SelectItem>
+              <SelectItem value="api">API</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={syncFilter} onValueChange={setSyncFilter}>
+            <SelectTrigger className="w-[150px] h-8 text-xs">
+              <SelectValue placeholder="Cal sync" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All sync statuses</SelectItem>
+              <SelectItem value="synced">Synced</SelectItem>
+              <SelectItem value="scope_insufficient">Scope issue</SelectItem>
+              <SelectItem value="sync_failed">Sync failed</SelectItem>
+              <SelectItem value="skipped">No calendar</SelectItem>
+            </SelectContent>
+          </Select>
+          {calendars && calendars.length > 0 && (
+            <Select value={calendarFilter} onValueChange={setCalendarFilter}>
+              <SelectTrigger className="w-[160px] h-8 text-xs">
+                <SelectValue placeholder="Calendar" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All calendars</SelectItem>
+                {calendars.map(c => (
+                  <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
 
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6">
         <Card className="border-border/50">
           <CardContent className="p-0">
             {/* Mobile booking cards */}
@@ -284,7 +313,7 @@ export default function SchedulingPage() {
                         description={
                           statusFilter !== "all" || sourceFilter !== "all" || syncFilter !== "all" || calendarFilter !== "all"
                             ? "No bookings match these filters. Try clearing them."
-                            : "When agents book appointments mid-call, they’ll show up here. Start by connecting a calendar and event type."
+                            : "When agents book appointments mid-call, they'll show up here. Start by connecting a calendar and event type."
                         }
                         action={{
                           label: "Open calendars",
@@ -365,8 +394,7 @@ export default function SchedulingPage() {
             </div>
           </CardContent>
         </Card>
-      </div>
-      </div>
+      </StripePage>
     </TooltipProvider>
   );
 }

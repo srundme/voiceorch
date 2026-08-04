@@ -39,7 +39,7 @@ import {
   Activity, KeyRound, ChevronLeft, ArrowUp, ArrowDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { OperateShell } from "@/components/operate-shell";
+import { StripePage } from "@/components/stripe-page";
 import { BrandLogo, BrandLogoBadge } from "@/components/brand-logos";
 import { format } from "date-fns";
 
@@ -2255,10 +2255,9 @@ export default function ConnectionsPage() {
   }, [qc, refetch]);
 
   return (
-    <OperateShell
+    <StripePage
       title="Integrations"
       description="CRM, Google Sheets, and dial-flow webhooks — credentials for Automation to use."
-      back={{ href: "/app/home", label: "Back" }}
       actions={
         <Button
           size="sm"
@@ -2437,6 +2436,6 @@ export default function ConnectionsPage() {
           </RecipeCard>
         </div>
       </details>
-    </OperateShell>
+    </StripePage>
   );
 }

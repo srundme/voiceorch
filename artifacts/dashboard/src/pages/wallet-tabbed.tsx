@@ -1,26 +1,19 @@
 /**
- * /app/wallet — tabbed page (shown as "Billing" in the nav)
- * Tabs: Wallet (balance, top-up) | Usage (cost breakdown)
+ * /app/wallet — Wallet | Usage
  */
-import { PageTabs } from "@/components/page-tabs";
+import { StripeTabPage } from "@/components/stripe-tab-page";
 import WalletPage from "@/pages/wallet";
 import UsagePage from "@/pages/usage";
 
 export default function WalletTabPage() {
   return (
-    <PageTabs
+    <StripeTabPage
+      title="Billing"
+      description="Wallet balance, top-ups, and usage."
       defaultTab="wallet"
       tabs={[
-        {
-          key: "wallet",
-          label: "Wallet",
-          content: <WalletPage />,
-        },
-        {
-          key: "usage",
-          label: "Usage",
-          content: <UsagePage />,
-        },
+        { key: "wallet", label: "Wallet", content: <WalletPage /> },
+        { key: "usage", label: "Usage", content: <UsagePage /> },
       ]}
     />
   );

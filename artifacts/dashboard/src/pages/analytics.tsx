@@ -4,16 +4,16 @@
  */
 
 import { useState } from "react";
-import { useSearch, useLocation } from "wouter";
+import { useSearch } from "wouter";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
 import {
   Users, PhoneCall, TrendingUp, CalendarCheck, ArrowRightLeft,
-  PhoneIncoming, Clock, BarChart2, ArrowLeft,
+  PhoneIncoming, Clock, BarChart2,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { StripePage } from "@/components/stripe-page";
 import { cn } from "@/lib/utils";
 import { format, subDays, parseISO } from "date-fns";
 import { useChartTheme } from "@/hooks/use-chart-theme";
@@ -194,10 +194,8 @@ export default function AnalyticsPage() {
   const range = presetToRange(preset);
 
   const search = useSearch();
-  const [, setLocation] = useLocation();
   const campaignIdParam = new URLSearchParams(search).get("campaignId");
   const campaignId = campaignIdParam ? parseInt(campaignIdParam, 10) : undefined;
-  const backTo = campaignId ? `/app/campaigns/${campaignId}` : "/app/campaigns";
 
   const { data: campaign } = useGetCampaign(campaignId ?? 0, {
     query: { enabled: campaignId !== undefined, queryKey: getGetCampaignQueryKey(campaignId ?? 0) },
@@ -205,63 +203,43 @@ export default function AnalyticsPage() {
   const campaignName = (campaign as { name?: string } | undefined)?.name;
 
   return (
-    <div className="flex flex-col h-full overflow-auto bg-background">
-      <div className="max-w-screen-2xl mx-auto w-full p-6 space-y-5">
-
-        {/* Back navigation */}
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 -ml-2 text-xs gap-1.5 text-muted-foreground hover:text-foreground"
-          onClick={() => setLocation(backTo)}
-        >
-          <ArrowLeft className="h-3.5 w-3.5" />
-          {campaignId ? "Back to campaign" : "Back to campaigns"}
-        </Button>
-
-        {/* Header */}
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div>
-            <h1 className="text-xl font-bold tracking-tight flex items-center gap-2">
-              <BarChart2 className="h-5 w-5 text-muted-foreground" />
-              Analytics
-            </h1>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {campaignId
-                ? `Operational outcomes for ${campaignName ?? "this campaign"}`
-                : "Operational outcomes across all campaigns"}
-            </p>
-          </div>
-          {/* Date range presets */}
-          <div className="flex items-center gap-1 bg-muted/40 rounded-lg p-1">
-            {PRESETS.map(p => (
-              <button
-                key={p.key}
-                onClick={() => setPreset(p.key)}
-                className={cn(
-                  "px-3 py-1.5 rounded-md text-xs font-medium transition-all",
-                  preset === p.key
-                    ? "bg-background shadow-sm text-foreground"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
+    <StripePage
+      title="Analytics"
+      description={
+        campaignId
+          ? `Operational outcomes for ${campaignName ?? "this campaign"}`
+          : "Operational outcomes across all campaigns"
+      }
+      back={
+        campaignId
+          ? { href: `/app/campaigns/${campaignId}`, label: "Back to campaign" }
+          : undefined
+      }
+      actions={
+        <div className="flex items-center gap-1 bg-muted/40 rounded-lg p-1">
+          {PRESETS.map(p => (
+            <button
+              key={p.key}
+              type="button"
+              onClick={() => setPreset(p.key)}
+              className={cn(
+                "px-3 py-1.5 rounded-md text-xs font-medium transition-all",
+                preset === p.key
+                  ? "bg-background shadow-sm text-foreground"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {p.label}
+            </button>
+          ))}
         </div>
-
-        {/* Date range badge */}
-        <p className="text-[11px] text-muted-foreground">
-          Showing data from <span className="font-medium text-foreground">{range.from}</span> to{" "}
-          <span className="font-medium text-foreground">{range.to}</span>
-        </p>
-
-        {/* Overview content */}
-        <div className="pb-8">
-          <OverviewTab range={range} campaignId={campaignId} />
-        </div>
-      </div>
-    </div>
+      }
+    >
+      <p className="mb-5 text-[11px] text-muted-foreground">
+        Showing data from <span className="font-medium text-foreground">{range.from}</span> to{" "}
+        <span className="font-medium text-foreground">{range.to}</span>
+      </p>
+      <OverviewTab range={range} campaignId={campaignId} />
+    </StripePage>
   );
 }

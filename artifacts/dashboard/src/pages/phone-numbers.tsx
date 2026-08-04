@@ -953,12 +953,10 @@ export default function PhoneNumbersPage() {
 
   return (
     <div className="h-full overflow-y-auto bg-transparent">
-      {/* Header */}
-      <div className="border-b border-border px-4 sm:px-6 py-4 flex flex-wrap items-center gap-3 shrink-0">
-        <Phone className="w-5 h-5 text-foreground shrink-0" />
-        <h1 className="font-semibold text-foreground text-lg">Phone Numbers</h1>
-        <span className="text-xs text-muted-foreground w-full sm:w-auto sm:ml-auto order-last sm:order-none">Powered by VoBiz</span>
-        {!isManagedClient && numbers && numbers.length > 0 && (
+      {/* Toolbar — parent StripePage owns the "Phone Numbers" title */}
+      {!isManagedClient && numbers && numbers.length > 0 && (
+        <div className="border-b border-border px-4 sm:px-6 py-3 flex flex-wrap items-center gap-3 shrink-0">
+          <span className="text-xs text-muted-foreground">Powered by VoBiz</span>
           <Button
             size="sm"
             className="h-10 min-h-10 gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90 w-full sm:w-auto sm:ml-auto"
@@ -966,8 +964,8 @@ export default function PhoneNumbersPage() {
           >
             <Plus className="h-3.5 w-3.5" /> Get Number
           </Button>
-        )}
-      </div>
+        </div>
+      )}
 
       <div className="p-4 sm:p-6 max-w-4xl mx-auto space-y-4">
         {/* KYC banner (purchasing is a partner concern for managed clients) */}

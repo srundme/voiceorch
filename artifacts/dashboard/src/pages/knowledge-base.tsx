@@ -36,7 +36,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError } from "@/lib/format-api-error";
 import { formatDistanceToNow } from "date-fns";
-import { AppPageHeader } from "@/components/app-page-header";
+import { StripePage } from "@/components/stripe-page";
 import { EmptyState } from "@/components/empty-state";
 
 /* ── Type constants ─────────────────────────────────────────────────────── */
@@ -807,20 +807,16 @@ export default function KnowledgeBasePage() {
   }
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
-      <AppPageHeader
-        eyebrow="Knowledge"
-        title="Agent Knowledge"
-        description="Build reusable knowledge sources from FAQs, text, documents, and websites — then attach them to any agent."
-        actions={
-          <Button size="sm" className="h-8 text-xs gap-1.5 rounded-lg" onClick={() => setCreateOpen(true)}>
-            <Plus className="w-3.5 h-3.5" />
-            Add Knowledge
-          </Button>
-        }
-      />
-
-      <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-5 space-y-5">
+    <StripePage
+      title="Agent Knowledge"
+      description="Build reusable knowledge sources from FAQs, text, documents, and websites — then attach them to any agent."
+      actions={
+        <Button size="sm" className="h-8 text-xs gap-1.5 rounded-lg" onClick={() => setCreateOpen(true)}>
+          <Plus className="w-3.5 h-3.5" />
+          Add Knowledge
+        </Button>
+      }
+    >
       {/* Source grid */}
       {isLoading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -853,7 +849,7 @@ export default function KnowledgeBasePage() {
 
       {/* Info row */}
       {sources && sources.length > 0 && (
-        <div className="flex flex-wrap gap-5 pt-3 border-t border-border/50 text-xs text-muted-foreground/70">
+        <div className="flex flex-wrap gap-5 pt-3 mt-5 border-t border-border/50 text-xs text-muted-foreground/70">
           <span className="flex items-center gap-1.5">
             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
             {sources.length} knowledge {sources.length === 1 ? "source" : "sources"}
@@ -864,7 +860,6 @@ export default function KnowledgeBasePage() {
           </span>
         </div>
       )}
-      </div>
 
       {/* Create modal */}
       <CreateSourceModal open={createOpen} onClose={() => setCreateOpen(false)} />
@@ -902,6 +897,6 @@ export default function KnowledgeBasePage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </StripePage>
   );
 }

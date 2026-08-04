@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError } from "@/lib/format-api-error";
-import { Loader2, Save, Video } from "lucide-react";
+import { Loader2, Save } from "lucide-react";
 
 export type MeetingsForm = {
   enabled: boolean;
@@ -124,32 +124,27 @@ export function MeetingsChannelCard({ agentId }: { agentId: number }) {
   };
 
   return (
-    <div className="rounded-xl border border-border/60 bg-card/20 p-4 space-y-3 xl:col-span-2">
+    <div className="space-y-4">
       <div className="flex items-start justify-between gap-3">
-        <div className="flex items-start gap-2.5 min-w-0">
-          <div className="h-9 w-9 rounded-lg bg-rose-500/10 flex items-center justify-center shrink-0">
-            <Video className="h-4 w-4 text-rose-600" />
-          </div>
-          <div className="min-w-0">
-            <h3 className="text-sm font-semibold">Meetings</h3>
-            <p className="text-[11px] text-muted-foreground">
-              Google Meet / Zoom / Teams — different prompt from calls, or send another agent.
-            </p>
-          </div>
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold">Meetings</h3>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Meet, Zoom, Teams — meeting prompt, or delegate another agent.
+          </p>
         </div>
-        <Button asChild type="button" variant="outline" size="sm" className="h-8 text-xs shrink-0">
+        <Button asChild type="button" variant="outline" size="sm" className="h-8 shrink-0 text-xs">
           <Link href={`/app/meet?agentId=${agentId}`}>Join now</Link>
         </Button>
       </div>
 
       {!loaded || agentQ.isLoading ? (
-        <div className="h-28 rounded-lg bg-muted/30 animate-pulse" />
+        <div className="h-28 animate-pulse rounded-md bg-muted/40" />
       ) : (
-        <div className="space-y-4 rounded-lg border border-border/40 bg-background/40 p-3">
-          <div className="flex items-center justify-between gap-3">
+        <div className="space-y-4">
+          <div className="flex items-center justify-between gap-3 border-y border-border py-3">
             <div>
-              <p className="text-[12px] font-medium">Can join meetings</p>
-              <p className="text-[10px] text-muted-foreground mt-0.5">
+              <p className="text-[13px] font-medium">Can join meetings</p>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">
                 Off skips auto-join from bookings; you can still launch manually.
               </p>
             </div>

@@ -816,18 +816,13 @@ export default function CalendarsPage({ embedded = false, onCalendarSaved }: { e
     <div className={embedded ? "flex flex-col gap-6 max-w-3xl" : "flex flex-col h-full overflow-hidden"}>
       {!embedded && <SchedulingTabNav />}
       <div className={embedded ? "contents" : "flex flex-col gap-6 p-4 sm:p-6 max-w-3xl flex-1 overflow-y-auto"}>
-      {/* Back + header — hidden when embedded inside Settings tabs */}
+      {/* Toolbar — SchedulingTabNav labels the page; skip duplicate h1 */}
       {!embedded && (
-        <div>
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-xl font-semibold">Calendars</h1>
-              <p className="text-sm text-muted-foreground">One calendar per agent — links the agent to bookable event types</p>
-            </div>
-            <Button size="sm" onClick={() => setCreateOpen(true)} className="gap-1.5">
-              <Plus className="h-4 w-4" /> New Calendar
-            </Button>
-          </div>
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm text-muted-foreground">One calendar per agent — links the agent to bookable event types</p>
+          <Button size="sm" onClick={() => setCreateOpen(true)} className="gap-1.5 shrink-0">
+            <Plus className="h-4 w-4" /> New Calendar
+          </Button>
         </div>
       )}
 

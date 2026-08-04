@@ -43,7 +43,6 @@ import {
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { AppPageHeader } from "@/components/app-page-header";
 import { MetricCard, MetricStrip } from "@/components/metric-strip";
 import { BrandLogo, BrandLogoBadge } from "@/components/brand-logos";
 
@@ -1251,41 +1250,36 @@ export default function CampaignsPage() {
 
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden">
-      <AppPageHeader
-        eyebrow="Reach · account view"
-        title="Dial flows"
-        description={
-          isFetching && !isLoading
-            ? "Live overview · refreshing… Prefer Agent → Reach for new setups."
-            : "Live overview of list and source dials. Prefer Agent → Reach for new setups."
-        }
-        actions={
-          <>
-            <button
-              onClick={() => setHelpOpen(true)}
-              className="h-8 w-8 rounded-lg border border-border/60 bg-muted/40 hover:bg-muted/70 flex items-center justify-center text-muted-foreground/50 hover:text-foreground transition-all"
-              title="Dial flow guide"
-            >
-              <HelpCircle className="h-3.5 w-3.5" />
-            </button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8 text-xs gap-1.5 rounded-lg"
-              onClick={() => {
-                const token = localStorage.getItem("voiceorch:session");
-                const url = `${BASE}/api/campaigns/export.csv${token ? `?token=${encodeURIComponent(token)}` : ""}`;
-                window.open(url, "_blank");
-              }}
-            >
-              <FileText className="h-3.5 w-3.5" /> Export
-            </Button>
-            <Button size="sm" className="h-8 text-xs gap-1.5 rounded-lg" onClick={() => setCreateOpen(true)}>
-              <Plus className="h-3.5 w-3.5" /> New dial flow
-            </Button>
-          </>
-        }
-      >
+      {/* Stats + actions (parent StripePage owns the page title) */}
+      <div className="shrink-0 space-y-4 border-b border-border px-4 sm:px-6 py-4">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {isFetching && !isLoading && (
+            <span className="mr-auto text-[11px] text-muted-foreground">Refreshing…</span>
+          )}
+          <button
+            type="button"
+            onClick={() => setHelpOpen(true)}
+            className="h-8 w-8 rounded-lg border border-border/60 bg-muted/40 hover:bg-muted/70 flex items-center justify-center text-muted-foreground/50 hover:text-foreground transition-all"
+            title="Dial flow guide"
+          >
+            <HelpCircle className="h-3.5 w-3.5" />
+          </button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 text-xs gap-1.5 rounded-lg"
+            onClick={() => {
+              const token = localStorage.getItem("voiceorch:session");
+              const url = `${BASE}/api/campaigns/export.csv${token ? `?token=${encodeURIComponent(token)}` : ""}`;
+              window.open(url, "_blank");
+            }}
+          >
+            <FileText className="h-3.5 w-3.5" /> Export
+          </Button>
+          <Button size="sm" className="h-8 text-xs gap-1.5 rounded-lg" onClick={() => setCreateOpen(true)}>
+            <Plus className="h-3.5 w-3.5" /> New dial flow
+          </Button>
+        </div>
         <MetricStrip cols={6}>
           <MetricCard
             label="Active flows"
@@ -1335,7 +1329,7 @@ export default function CampaignsPage() {
             loading={isLoading}
           />
         </MetricStrip>
-      </AppPageHeader>
+      </div>
 
       {/* ── Content ── */}
       <div ref={listScrollRef} className="flex-1 overflow-auto px-4 sm:px-6 py-5">

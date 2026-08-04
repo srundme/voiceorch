@@ -304,17 +304,14 @@ export default function KycPage() {
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-2xl mx-auto px-6 py-8 space-y-6">
 
-          {/* Header */}
-          <div className="space-y-1">
-            <div className="flex items-center justify-between">
-              <h1 className="text-xl font-semibold tracking-tight">Identity Verification</h1>
-              <Button variant="ghost" size="icon" onClick={handleRefresh} title="Refresh status" className="shrink-0">
-                <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
-              </Button>
-            </div>
+          {/* Section intro — parent StripePage owns the page title */}
+          <div className="flex items-start justify-between gap-3">
             <p className="text-sm text-muted-foreground">
-              One-time verification required to activate telephony features on your account.
+              One-time identity verification required to activate telephony features on your account.
             </p>
+            <Button variant="ghost" size="icon" onClick={handleRefresh} title="Refresh status" className="shrink-0">
+              <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+            </Button>
           </div>
 
           {/* Step indicator */}

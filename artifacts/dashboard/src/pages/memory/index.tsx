@@ -28,7 +28,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { AppPageHeader } from "@/components/app-page-header";
+import { StripePage } from "@/components/stripe-page";
 import { EmptyState } from "@/components/empty-state";
 import {
   useListAgentMemorySummaries, getListAgentMemorySummariesQueryKey,
@@ -1207,15 +1207,13 @@ export default function MemoryPage() {
   const noteAgent = noteAgentId != null ? summaries.find(s => s.agentId === noteAgentId) : undefined;
 
   return (
-    <div className="flex-1 flex flex-col h-full overflow-hidden animate-fade-in">
-      <AppPageHeader
-        eyebrow="Memory / CRM"
-        title="Customer Intelligence"
-        description="Facts, episodes, and call history your agents remember about each caller."
-        compact
-      />
-
-      <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+    <StripePage
+      title="Customer Intelligence"
+      description="Facts, episodes, and call history your agents remember about each caller."
+      fullBleed
+      contentClassName="!px-0 !py-0 max-w-none h-full min-h-0 overflow-hidden"
+    >
+      <div className="flex-1 min-h-0 flex flex-col overflow-hidden h-full">
         {isLoading ? (
           <div className="flex-1 min-h-0 flex overflow-hidden">
             <div className="w-[180px] xl:w-[210px] shrink-0 border-r border-border/40 p-3 space-y-2">
@@ -1332,6 +1330,6 @@ export default function MemoryPage() {
           currentNote={agentById.get(noteAgent.agentId)?.description ?? ""}
         />
       )}
-    </div>
+    </StripePage>
   );
 }

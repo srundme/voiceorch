@@ -5,8 +5,8 @@ import { canGoBackInApp } from "@/lib/nav-history";
 import { cn } from "@/lib/utils";
 
 /**
- * Canonical in-app page header matching Campaign Operations style:
- * optional back · eyebrow + title + muted description + optional right actions.
+ * Page header — prefer StripePage for full screens.
+ * Kept for tabbed pages and legacy surfaces that need a header block only.
  */
 export function AppPageHeader({
   back,
@@ -61,11 +61,11 @@ export function AppPageHeader({
               {eyebrow}
             </p>
           )}
-          <h1 className="text-2xl font-semibold leading-none tracking-tight text-foreground">
+          <h1 className="text-[22px] font-semibold leading-none tracking-tight text-foreground sm:text-2xl">
             {title}
           </h1>
           {description && (
-            <p className="mt-1.5 max-w-2xl text-xs leading-relaxed text-muted-foreground/55">
+            <p className="mt-1.5 max-w-2xl text-[13px] leading-relaxed text-muted-foreground">
               {description}
             </p>
           )}

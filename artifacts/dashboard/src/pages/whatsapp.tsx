@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { customFetch, useListAgents } from "@workspace/api-client-react";
-import { AppPageHeader } from "@/components/app-page-header";
+import { StripePage } from "@/components/stripe-page";
 import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1378,14 +1378,11 @@ export default function WhatsAppPage() {
   });
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <AppPageHeader
-        back={{ href: "/app/channels", label: "Back to Channels" }}
-        title="WhatsApp"
-        description="Automatic WhatsApp follow-ups after every AI call — booking confirmations, summaries and callback alerts. Customers can reply to get a call back."
-      />
-
-      <div className="mx-auto w-full max-w-[1120px] space-y-6 px-5 py-5 sm:px-6 sm:py-6">
+    <StripePage
+      title="WhatsApp"
+      description="Automatic WhatsApp follow-ups after every AI call — booking confirmations, summaries and callback alerts. Customers can reply to get a call back."
+    >
+      <div className="space-y-6">
       <NativeSection agents={agents} onChooseBsp={() => openBspCreate("webhook")} onChooseMeta={() => openBspCreate("meta")} metaConnected={connections.some((c) => c.active && c.metaPhoneNumberId)} />
 
       {/* Your connections */}
@@ -1726,6 +1723,6 @@ export default function WhatsAppPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </StripePage>
   );
 }

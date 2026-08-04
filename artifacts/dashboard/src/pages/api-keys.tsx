@@ -75,12 +75,10 @@ export default function ApiKeysPage() {
 
   return (
     <div className="p-6 max-w-3xl mx-auto space-y-5">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-foreground">API Keys</h1>
-          <p className="text-sm text-muted-foreground/60 mt-1">Use API keys to authenticate requests from your own apps or automations.</p>
-        </div>
-        <Button onClick={() => setCreateOpen(true)} disabled={activeKeys.length >= 5} className="h-8 text-xs gap-2">
+      {/* Toolbar — parent StripeTabPage owns the Developers title */}
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm text-muted-foreground/60">Use API keys to authenticate requests from your own apps or automations.</p>
+        <Button onClick={() => setCreateOpen(true)} disabled={activeKeys.length >= 5} className="h-8 text-xs gap-2 shrink-0">
           <Plus className="w-3.5 h-3.5" /> New Key
         </Button>
       </div>

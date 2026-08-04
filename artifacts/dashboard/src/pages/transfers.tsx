@@ -86,15 +86,6 @@ export default function TransfersPage() {
 
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold flex items-center gap-2">
-          <ArrowRightLeft className="w-6 h-6" /> Call Transfers
-        </h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          Supervisor view — warm transfers initiated by your AI agents.
-        </p>
-      </div>
-
       {/* Active transfers banner */}
       {active.length > 0 && (
         <Card className="border-amber-400 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/20">

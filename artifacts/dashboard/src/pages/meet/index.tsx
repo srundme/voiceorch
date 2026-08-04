@@ -1,14 +1,12 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { customFetch, useListAgents } from "@workspace/api-client-react";
-import { AppPageHeader } from "@/components/app-page-header";
+import { customFetch } from "@workspace/api-client-react";
+import { AgentContextBar, useAgentFromSearch } from "@/components/agent-context-bar";
+import { StripePage } from "@/components/stripe-page";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Video, Loader2, LogOut } from "lucide-react";
 
@@ -18,17 +16,9 @@ type ActiveBot = { botId: string; agentName: string; meetingUrl: string };
 
 export default function MeetPage() {
   const { toast } = useToast();
-  const { data: agentsData } = useListAgents();
-  const agents: Array<{ id: number; name: string }> = (agentsData as any)?.agents ?? (agentsData as any) ?? [];
+  const { agents, selectedId, setAgentId } = useAgentFromSearch();
+  const agentId = selectedId != null ? String(selectedId) : "";
 
-  const [agentId, setAgentId] = useState<string>(() => {
-    try {
-      const raw = new URLSearchParams(window.location.search).get("agentId");
-      return raw && /^\d+$/.test(raw) ? raw : "";
-    } catch {
-      return "";
-    }
-  });
   const [meetingUrl, setMeetingUrl] = useState("");
   const [bots, setBots] = useState<ActiveBot[]>([]);
 
@@ -65,33 +55,23 @@ export default function MeetPage() {
   });
 
   return (
-    <div className="space-y-6">
-      <AppPageHeader
-        title="Meeting Bots"
-        description="Send a voice agent into a Google Meet, Zoom, or Teams meeting. Meeting prompt and delegate live under Channels → Meetings."
-      />
-
+    <StripePage
+      title="Meeting Bots"
+      description="Send a voice agent into a Google Meet, Zoom, or Teams meeting. Meeting prompt and delegate live under Channels → Meetings."
+      actions={
+        <AgentContextBar agents={agents} selectedId={selectedId} onChange={setAgentId} />
+      }
+    >
       <div className="max-w-xl space-y-4 rounded-lg border p-4">
-        <div className="space-y-2">
-          <Label>Agent</Label>
-          <Select value={agentId} onValueChange={setAgentId}>
-            <SelectTrigger><SelectValue placeholder="Choose an agent" /></SelectTrigger>
-            <SelectContent>
-              {agents.map((a) => (
-                <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {agentId ? (
-            <p className="text-[11px] text-muted-foreground">
-              Meeting prompt and delegates:{" "}
-              <a className="underline underline-offset-2" href={`/app/channels?agentId=${agentId}&channel=meetings`}>
-                Channels → Meetings
-              </a>
-              .
-            </p>
-          ) : null}
-        </div>
+        {agentId ? (
+          <p className="text-[11px] text-muted-foreground">
+            Meeting prompt and delegates:{" "}
+            <a className="underline underline-offset-2" href={`/app/channels?agentId=${agentId}&channel=meetings`}>
+              Channels → Meetings
+            </a>
+            .
+          </p>
+        ) : null}
         <div className="space-y-2">
           <Label>Meeting link</Label>
           <Input
@@ -110,14 +90,14 @@ export default function MeetPage() {
       </div>
 
       {bots.length > 0 && (
-        <div className="max-w-xl space-y-2">
+        <div className="mt-6 max-w-xl space-y-2">
           <Label>Active bots (this session)</Label>
           {bots.map((b) => (
             <BotRow key={b.botId} bot={b} onRemove={() => remove.mutate(b.botId)} removing={remove.isPending} />
           ))}
         </div>
       )}
-    </div>
+    </StripePage>
   );
 }
 

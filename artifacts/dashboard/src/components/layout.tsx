@@ -7,7 +7,8 @@ import {
   Settings, Wallet, Mic2, Key,
   Menu, ChevronDown, ChevronLeft, ChevronRight,
   LogOut, Bell, Search, SlidersHorizontal, BookOpen, PlugZap, Sun, Moon, Sparkles,
-  Plus, X, Wand2, Wrench,
+  Plus, X, Wand2, Wrench, Megaphone, Calendar, Video, MessageCircle,
+  Brain, Users, BarChart3,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -97,9 +98,9 @@ interface NavGroup {
 }
 
 /**
- * Agent-centric IA (see docs/snapserve-agent-centric-ia.md).
- * Phase 7: MORE is gone — Campaigns / WhatsApp / Meet / Squads / KB /
- * Scheduling / Memory stay reachable via agent Channels and Operate nav (and old URLs).
+ * Full-page Stripe IA (see docs/snapserve-agent-centric-ia.md).
+ * Builder = agent runtime only; Automation / Channels are separate Operate surfaces.
+ * Every product surface is first-class in the sidebar.
  */
 const NAV_GROUPS: NavGroup[] = [
   {
@@ -111,15 +112,29 @@ const NAV_GROUPS: NavGroup[] = [
   {
     group: "OPERATE",
     items: [
-      { name: "Activity",      href: "/app/calls",         icon: Phone, callbackBadge: true },
-      { name: "Automation",   href: "/app/automation",    icon: Workflow },
+      { name: "Activity",       href: "/app/calls",         icon: Phone, callbackBadge: true },
+      { name: "Automation",    href: "/app/automation",    icon: Workflow },
+      { name: "Dial flows",    href: "/app/campaigns",     icon: Megaphone },
       { name: "Phone Numbers", href: "/app/phone-numbers", icon: Hash },
     ],
   },
   {
+    group: "CONNECT",
     items: [
-      { name: "Channels",     href: "/app/channels",    icon: Radio },
-      { name: "Integrations", href: "/app/connections", icon: PlugZap },
+      { name: "Channels",     href: "/app/channels",     icon: Radio },
+      { name: "Integrations", href: "/app/connections",  icon: PlugZap },
+      { name: "Scheduling",   href: "/app/scheduling",   icon: Calendar },
+      { name: "Meet",         href: "/app/meet",         icon: Video },
+      { name: "WhatsApp",     href: "/app/whatsapp",     icon: MessageCircle },
+    ],
+  },
+  {
+    group: "INTELLIGENCE",
+    items: [
+      { name: "Knowledge",  href: "/app/knowledge-bases", icon: BookOpen },
+      { name: "Memory",     href: "/app/memory",          icon: Brain },
+      { name: "Squads",     href: "/app/squads",          icon: Users },
+      { name: "Analytics",  href: "/app/analytics",       icon: BarChart3 },
     ],
   },
 ];
@@ -156,48 +171,6 @@ const NAV_SETTINGS: NavItem[] = [
 ];
 
 const SETTINGS_HREFS = NAV_SETTINGS.map(s => s.href);
-
-const ROUTE_TITLES: [string, string][] = [
-  ["/app/home",            "Home"],
-  ["/app/command-center",  "Home"],
-  ["/app/vibe",            "New agent"],
-  ["/app/agents",          "Agents"],
-  ["/app/automation",      "Automation"],
-  ["/app/channels",        "Channels"],
-  ["/app/knowledge-bases", "Knowledge"],
-  ["/app/campaigns",       "Dial flows"],
-  ["/app/connections",     "Integrations"],
-  ["/app/whatsapp",        "WhatsApp"],
-  ["/app/scheduling",      "Scheduling"],
-  ["/app/memory",          "Contacts and Memory"],
-  ["/app/calls",           "Activity"],
-  ["/app/meet",            "Meetings"],
-  ["/app/squads",          "Squads"],
-  ["/app/phone-numbers",   "Phone Numbers"],
-  ["/app/partner-join",    "Accept invitation"],
-  ["/app/partner",         "Partner Hub"],
-  ["/app/providers",       "Providers"],
-  ["/app/api-keys",        "Developers"],
-  ["/app/wallet",          "Billing"],
-  ["/app/settings",        "Workspace"],
-  ["/app/test-simulator",  "Test Simulator"],
-  ["/app/analytics",       "Analytics"],
-  // Legacy routes (redirect targets still render briefly)
-  ["/app/team",            "Workspace"],
-  ["/app/automatic-calls", "Sheet dial"],
-  ["/app/meta-leads",      "Dial flows"],
-  ["/app/callbacks",       "Activity"],
-  ["/app/transfers",       "Activity"],
-  ["/app/kyc",             "Phone Numbers"],
-  ["/app/voices",          "Providers"],
-  ["/app/webhooks",        "Developers"],
-  ["/app/usage",           "Billing"],
-];
-
-function getPageTitle(location: string): string {
-  const match = ROUTE_TITLES.find(([prefix]) => location.startsWith(prefix));
-  return match?.[1] ?? "SnapServe";
-}
 
 /* ─── Pending callbacks count (for sidebar badge) ────────────────────────── */
 const BASE_URL = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -356,15 +329,12 @@ function SidebarUser({ collapsed }: { collapsed: boolean }) {
   );
 }
 
-/* ─── Topbar (desktop — page title only) ─────────────────────────────────── */
-function Topbar({ location }: { location: string }) {
+/* ─── Utility strip (desktop) — no page title; pages own their h1 via StripePage */
+function UtilityStrip() {
   return (
-    <div className="flex h-11 shrink-0 items-center justify-between gap-4 border-b border-border/70 bg-background px-4">
-      <span className="truncate text-[11px] font-medium text-muted-foreground">{getPageTitle(location)}</span>
-      <div className="flex items-center gap-1">
-        <ThemeToggle />
-        <BellButton />
-      </div>
+    <div className="flex h-10 shrink-0 items-center justify-end gap-1 border-b border-border/70 bg-background px-4">
+      <ThemeToggle />
+      <BellButton />
     </div>
   );
 }
@@ -456,9 +426,8 @@ function SidebarContent({
     ? MANAGED_CLIENT_NAV
     : partnerCtx?.isPartner
       ? [
-          ...NAV_GROUPS.slice(0, -1),
+          ...NAV_GROUPS,
           { group: "PARTNER", items: [{ name: "Partner Hub", href: "/app/partner", icon: Handshake }] },
-          NAV_GROUPS[NAV_GROUPS.length - 1]!,
         ]
       : NAV_GROUPS;
   const settingsItems: NavItem[] = isManagedClient
@@ -1011,10 +980,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
         {/* Voice-a-thon top notification */}
         <VoiceathonTopBanner />
 
-        {/* Topbar — desktop only; hide on full-bleed builder surfaces */}
+        {/* Utility strip — desktop only; hide on full-bleed builder surfaces */}
         {!location.startsWith("/app/agents") && !location.startsWith("/app/vibe") && (
           <div className="hidden md:block">
-            <Topbar location={location} />
+            <UtilityStrip />
           </div>
         )}
 

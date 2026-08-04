@@ -254,13 +254,11 @@ export default function VoicesPage() {
   return (
     <div className="flex-1 min-h-0 flex flex-col overflow-y-auto">
       <div className="max-w-6xl mx-auto w-full p-4 sm:p-6 space-y-6">
+        {/* Toolbar — parent StripeTabPage owns the Providers / Voices title */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Voices</h1>
-            <p className="text-muted-foreground mt-1 text-sm">
-              Whitelisted Cartesia voices, Cartesia instant clones, and Sarvam Creative Studio clones.
-            </p>
-          </div>
+          <p className="text-muted-foreground text-sm">
+            Whitelisted Cartesia voices, Cartesia instant clones, and Sarvam Creative Studio clones.
+          </p>
           <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
             <Button onClick={() => setCloneOpen(true)} className="gap-1.5 w-full sm:w-auto min-h-10 h-11">
               <Sparkles className="h-4 w-4" />

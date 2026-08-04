@@ -269,13 +269,10 @@ export default function AvailabilityPage({ embedded = false, calendarId: calenda
       {!embedded && <SchedulingTabNav />}
     <div className={embedded ? "contents" : "flex flex-col gap-6 p-4 sm:p-6 max-w-3xl mx-auto w-full flex-1 overflow-y-auto"}>
 
-      {/* Header */}
+      {/* Toolbar — SchedulingTabNav labels the page; skip duplicate h1 */}
       {!embedded && (
       <div className="flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold">Availability</h1>
-          <p className="text-sm text-muted-foreground">Set when you're available to be booked</p>
-        </div>
+        <p className="text-sm text-muted-foreground">Set when you're available to be booked</p>
         {calendars && calendars.length > 1 && !calendarIdProp && (
           <Select value={String(calendarId ?? "")} onValueChange={v => setSelectedCalendarId(parseInt(v))}>
             <SelectTrigger className="w-48"><SelectValue placeholder="Select calendar" /></SelectTrigger>

@@ -29,7 +29,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
-import { AppPageHeader } from "@/components/app-page-header";
 import {
   Plus,
   Webhook,
@@ -275,17 +274,16 @@ export default function WebhooksPage() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <AppPageHeader
-        eyebrow="Developer"
-        title="Call webhooks"
-        description="Push call results (transcript, summary, cost) to your app when a call finishes. This is not for receiving CRM leads."
-        actions={
-          <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => setCreateOpen(true)}>
-            <Plus className="w-3.5 h-3.5" />
-            Add endpoint
-          </Button>
-        }
-      />
+      {/* Toolbar — parent StripeTabPage owns the Developers title */}
+      <div className="shrink-0 border-b border-border px-5 py-4 sm:px-6 flex items-start justify-between gap-3">
+        <p className="text-sm text-muted-foreground">
+          Push call results (transcript, summary, cost) to your app when a call finishes. This is not for receiving CRM leads.
+        </p>
+        <Button size="sm" className="h-8 text-xs gap-1.5 shrink-0" onClick={() => setCreateOpen(true)}>
+          <Plus className="w-3.5 h-3.5" />
+          Add endpoint
+        </Button>
+      </div>
 
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-3xl px-6 py-6 space-y-6">

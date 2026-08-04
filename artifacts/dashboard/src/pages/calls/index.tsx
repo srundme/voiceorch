@@ -35,7 +35,6 @@ import {
 } from "@/components/ui/popover";
 import { Card, CardContent } from "@/components/ui/card";
 import { CallDetailDrawer } from "@/components/call-detail-drawer";
-import { AppPageHeader } from "@/components/app-page-header";
 import { EmptyState } from "@/components/empty-state";
 import { MetricCard, MetricStrip } from "@/components/metric-strip";
 
@@ -496,12 +495,8 @@ export default function CallsList() {
   return (
     <TooltipProvider>
       <div className="flex-1 flex flex-col h-full overflow-hidden animate-fade-in">
-        <AppPageHeader
-          eyebrow="Voice Operations"
-          title="Call Logs"
-          description="Complete history of voice interactions with AI agents."
-        >
-          <div className="space-y-4">
+        {/* Stats + filters toolbar (parent StripePage owns the page title) */}
+        <div className="shrink-0 space-y-4 border-b border-border px-4 sm:px-6 py-4">
           {stats && (
             <MetricStrip cols={5}>
               <MiniStat
@@ -662,8 +657,7 @@ export default function CallsList() {
               </div>
             )}
           </div>
-          </div>
-        </AppPageHeader>
+        </div>
 
         {/* Table */}
         <div ref={callsScrollRef} className="flex-1 overflow-auto px-4 sm:px-6 py-5">
