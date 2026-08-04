@@ -1543,11 +1543,11 @@ export default function CampaignDetailPage() {
                 <CheckCircle2 className="h-3.5 w-3.5" /> Campaign Completed
               </span>
             )}
-            {/* CSV campaigns: Create Batch button + dropdown controls */}
+            {/* CSV campaigns: Upload Leads button + dropdown controls */}
             {(!isContinuous || campaign.status === "draft") && (
               <Button size="sm" className="h-8 text-xs gap-1.5"
                 onClick={() => setLocation(`/app/campaigns/${campaignId}/batches/new`)}>
-                <Plus className="h-3.5 w-3.5" /> Create Batch
+                <Plus className="h-3.5 w-3.5" /> Upload Leads
               </Button>
             )}
             {/* Stopped continuous campaign → Activate button */}
@@ -1845,8 +1845,8 @@ export default function CampaignDetailPage() {
           <div>
             <div className="flex items-start justify-between gap-3 mb-3">
               <div>
-                <h3 className="text-sm font-semibold text-foreground">Batches</h3>
-                <p className="text-xs text-muted-foreground/50 mt-0.5">Manage and monitor your batches</p>
+                <h3 className="text-sm font-semibold text-foreground">Lead Runs</h3>
+                <p className="text-xs text-muted-foreground/50 mt-0.5">Manage and monitor your uploaded lead runs</p>
               </div>
               {(campaign as any).leadSource === "crm" && (
                 <CrmImportButton campaignId={campaignId} />
@@ -1859,11 +1859,11 @@ export default function CampaignDetailPage() {
             ) : !batches?.length ? (
               <div className="py-10 text-center border border-dashed border-border rounded-xl">
                 <Layers className="h-8 w-8 text-muted-foreground/20 mx-auto mb-2" />
-                <p className="text-sm text-muted-foreground/50">No batches yet</p>
-                <p className="text-xs text-muted-foreground/30 mt-0.5 mb-4">Create a batch to start calling leads</p>
+                <p className="text-sm text-muted-foreground/50">No lead runs yet</p>
+                <p className="text-xs text-muted-foreground/30 mt-0.5 mb-4">Upload a CSV file or connect a source to start calling leads</p>
                 <Button size="sm" variant="outline" className="gap-1.5 h-7 text-xs"
                   onClick={() => setLocation(`/app/campaigns/${campaignId}/batches/new`)}>
-                  <Plus className="h-3 w-3" /> Create First Batch
+                  <Plus className="h-3 w-3" /> Upload Lead File
                 </Button>
               </div>
             ) : (
