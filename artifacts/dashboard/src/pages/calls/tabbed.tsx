@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import CallsList from "./index";
 import CallbacksPage from "@/pages/callbacks";
 import TransfersPage from "@/pages/transfers";
-import { SequenceRulesPanel } from "@/pages/automation/sequence-rules-panel";
+import { AutomationHistoryLogs } from "@/pages/automation/automation-history-logs";
 import { useAgentFromSearch } from "@/components/agent-context-bar";
 
 const TABS = [
@@ -65,11 +65,7 @@ export default function CallsTabPage() {
       {active === "all-calls" && <CallsList />}
       {active === "callbacks" && <CallbacksPage />}
       {active === "transfers" && <TransfersPage />}
-      {active === "automations" && (
-        <div className="p-6">
-          <SequenceRulesPanel agents={agents} agentId={defaultAgentId} />
-        </div>
-      )}
+      {active === "automations" && <AutomationHistoryLogs agentId={defaultAgentId} />}
     </StripePage>
   );
 }
