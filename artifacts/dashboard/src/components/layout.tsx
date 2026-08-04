@@ -112,9 +112,9 @@ const NAV_GROUPS: NavGroup[] = [
   {
     group: "OPERATE",
     items: [
-      { name: "Phone Numbers", href: "/app/phone-numbers", icon: Hash },
       { name: "Campaign Studios",    href: "/app/campaigns",     icon: Megaphone },
       { name: "Automation",    href: "/app/automation",    icon: Workflow },
+      { name: "Phone Numbers", href: "/app/phone-numbers", icon: Hash },
       { name: "Activity",       href: "/app/calls",         icon: Phone, callbackBadge: true },
     ],
   },
