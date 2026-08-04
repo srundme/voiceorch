@@ -505,6 +505,13 @@ function CampaignWizard({
   const [consentProofRef, setConsentProofRef] = useState("");
   const [consentNotes, setConsentNotes] = useState("");
 
+  const [scheduleMode, setScheduleMode] = useState<"instant" | "scheduled">("instant");
+  const [scheduleTime, setScheduleTime] = useState<string>("");
+  const [callDelaySeconds, setCallDelaySeconds] = useState<number>(5);
+  const [maxAttempts, setMaxAttempts] = useState<number>(2);
+  const [retryDelayMinutes, setRetryDelayMinutes] = useState<number>(15);
+  const [callingWindow, setCallingWindow] = useState<string>("09:00 AM - 07:00 PM");
+
   const liveAgentIds = new Set(
     activeCampaigns.filter(c => c.status === "active").map(c => c.agentId).filter(Boolean)
   );
@@ -1072,32 +1079,126 @@ function CampaignWizard({
           )}
 
           {step === "settings" && (
-            <div className="space-y-5">
+            <div className="space-y-4">
               <div>
-                <h3 className="text-sm font-semibold mb-0.5">Concurrency Settings</h3>
+                <h3 className="text-sm font-semibold mb-0.5">Campaign Run Timer & Schedule Settings</h3>
                 <p className="text-xs text-muted-foreground/60">
-                  Set the max simultaneous calls. Batch-level settings (delays, retries, business hours) are set when you create each batch.
+                  Configure launch schedule, pacing call delays between leads, retry intervals, and business hour windows.
                 </p>
               </div>
-              <div className="bg-card border border-border rounded-xl p-5">
-                <div className="flex items-center justify-between mb-2">
-                  <Label className="text-xs">Max Concurrent Calls</Label>
-                  <span className="text-xl font-mono font-bold text-foreground">{effectiveConcurrency}</span>
+
+              {/* Schedule Launch Mode */}
+              <div className="space-y-2.5 bg-card border border-border p-4 rounded-xl">
+                <Label className="text-xs font-semibold flex items-center gap-1.5">
+                  <Clock className="h-3.5 w-3.5 text-amber-400" />
+                  Launch Schedule Mode
+                </Label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setScheduleMode("instant")}
+                    className={cn(
+                      "p-3 text-left rounded-lg border transition-all text-xs",
+                      scheduleMode === "instant" ? "border-foreground bg-foreground/5 font-semibold" : "border-border bg-card hover:bg-muted/20"
+                    )}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <Zap className="h-3.5 w-3.5 text-emerald-500" />
+                      <span>Instant Launch</span>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-1 leading-normal">Start calling leads immediately upon campaign creation</p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setScheduleMode("scheduled")}
+                    className={cn(
+                      "p-3 text-left rounded-lg border transition-all text-xs",
+                      scheduleMode === "scheduled" ? "border-foreground bg-foreground/5 font-semibold" : "border-border bg-card hover:bg-muted/20"
+                    )}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <Clock className="h-3.5 w-3.5 text-blue-400" />
+                      <span>Scheduled Timer Launch</span>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-1 leading-normal">Set a future date & time timer to trigger campaign calls</p>
+                  </button>
                 </div>
-                <input type="range" min={1} max={maxConcurrency} step={1} value={effectiveConcurrency}
-                  onChange={e => setConcurrentCallLimit(Number(e.target.value))}
-                  className="w-full h-1.5 accent-foreground cursor-pointer" />
-                <div className="flex justify-between mt-1 text-[10px] text-muted-foreground/40">
-                  <span>1 (serial)</span><span>{maxConcurrency} (your limit)</span>
+
+                {scheduleMode === "scheduled" && (
+                  <div className="space-y-1.5 pt-2 border-t border-border/50">
+                    <Label className="text-xs">Select Start Date & Time Timer</Label>
+                    <Input
+                      type="datetime-local"
+                      value={scheduleTime}
+                      onChange={e => setScheduleTime(e.target.value)}
+                      className="h-9 text-xs"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Concurrency & Pacing Delays */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="bg-card border border-border rounded-xl p-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-semibold">Max Concurrent Calls</Label>
+                    <span className="text-sm font-mono font-bold text-foreground">{effectiveConcurrency}</span>
+                  </div>
+                  <input type="range" min={1} max={maxConcurrency} step={1} value={effectiveConcurrency}
+                    onChange={e => setConcurrentCallLimit(Number(e.target.value))}
+                    className="w-full h-1.5 accent-foreground cursor-pointer" />
+                  <p className="text-[10px] text-muted-foreground">Simultaneous outbound calls (Limit: {maxConcurrency})</p>
+                </div>
+
+                <div className="bg-card border border-border rounded-xl p-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-semibold">Pacing Call Delay</Label>
+                    <span className="text-sm font-mono font-bold text-foreground">{callDelaySeconds}s</span>
+                  </div>
+                  <input type="range" min={0} max={60} step={5} value={callDelaySeconds}
+                    onChange={e => setCallDelaySeconds(Number(e.target.value))}
+                    className="w-full h-1.5 accent-foreground cursor-pointer" />
+                  <p className="text-[10px] text-muted-foreground">Pacing interval delay between lead triggers</p>
                 </div>
               </div>
+
+              {/* Retries & Business Hours */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {["Call Delay", "Max Attempts", "Business Hours"].map(lbl => (
-                  <div key={lbl} className="bg-muted/30 rounded-lg p-3 text-center border border-border">
-                    <p className="text-[9px] text-muted-foreground/40 uppercase tracking-widest mb-1">{lbl}</p>
-                    <p className="text-xs font-medium text-muted-foreground/60">Per batch</p>
-                  </div>
-                ))}
+                <div className="bg-card border border-border rounded-xl p-3.5 space-y-1">
+                  <Label className="text-xs">Max Retries</Label>
+                  <Select value={String(maxAttempts)} onValueChange={v => setMaxAttempts(Number(v))}>
+                    <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1" className="text-xs">1 Attempt</SelectItem>
+                      <SelectItem value="2" className="text-xs">2 Retries</SelectItem>
+                      <SelectItem value="3" className="text-xs">3 Retries</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="bg-card border border-border rounded-xl p-3.5 space-y-1">
+                  <Label className="text-xs">Retry Delay</Label>
+                  <Select value={String(retryDelayMinutes)} onValueChange={v => setRetryDelayMinutes(Number(v))}>
+                    <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="5" className="text-xs">5 minutes</SelectItem>
+                      <SelectItem value="15" className="text-xs">15 minutes</SelectItem>
+                      <SelectItem value="30" className="text-xs">30 minutes</SelectItem>
+                      <SelectItem value="60" className="text-xs">1 hour</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="bg-card border border-border rounded-xl p-3.5 space-y-1">
+                  <Label className="text-xs">Calling Hours Window</Label>
+                  <Input
+                    value={callingWindow}
+                    onChange={e => setCallingWindow(e.target.value)}
+                    className="h-8 text-xs font-mono"
+                    placeholder="09:00 AM - 07:00 PM"
+                  />
+                </div>
               </div>
             </div>
           )}
@@ -1116,6 +1217,10 @@ function CampaignWizard({
                   { label: "Trigger",       value: triggerMode === "instant" ? "Instant — auto-dial on arrival" : "Batch-wise — manual batch management", mono: false },
                   { label: "Agent",         value: selectedAgent?.name ?? "—", mono: false },
                   { label: "From Number",   value: fromNumber ?? "—", mono: true },
+                  { label: "Launch Timer",  value: scheduleMode === "instant" ? "Instant Launch" : `Scheduled: ${scheduleTime || "Custom Timer"}`, mono: false },
+                  { label: "Pacing Delay",  value: `${callDelaySeconds} seconds between calls`, mono: true },
+                  { label: "Retry Policy",  value: `${maxAttempts} attempts (${retryDelayMinutes} min delay)`, mono: true },
+                  { label: "Calling Window", value: callingWindow, mono: true },
                   { label: "Concurrent Calls", value: String(effectiveConcurrency), mono: true },
                 ].map(r => (
                   <div key={r.label} className="flex items-center justify-between px-4 py-2.5">
