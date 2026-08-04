@@ -12,7 +12,7 @@ import { isCallerFarewellUtterance as isCallerFarewellUtteranceShared } from "./
 import { shouldSwitchSttLang } from "./stt-language-switch.js";
 import { EAGER_PARTIAL_STABLE_MS, isEagerCommitReady, isSpeculativeHit } from "./eager-stt.js";
 import type { SttFinalMetadata } from "./adapters/stt/base.js";
-import { makeThinkFilter, stripReasoningBlocks, stripJsonMessageWrapper } from "./reasoningFilter.js";
+import { makeThinkFilter, stripReasoningBlocks, stripJsonMessageWrapper, isLeakedMonologueClause } from "./reasoningFilter.js";
 import { createSTTAdapter } from "./adapters/stt/index.js";
 import { resolveSarvamSttMode } from "./adapters/stt/sarvam-mode.js";
 import { toReadableError, envInt, parseJsonObject } from "./utils.js";
@@ -6708,6 +6708,13 @@ export class OrchestrationPipeline implements VoiceSession {
 
     const enqueue = (text: string, sequenceId: number = this.activeAgentSequenceId): void => {
       if (this.bargeInRequested) return;
+      if (isLeakedMonologueClause(text)) {
+        logger.info(
+          { callId: this.config.callId, evt: "llm_monologue_clause_suppressed", textSnippet: text.slice(0, 120) },
+          "Pipeline: dropped leaked English chain-of-thought clause before TTS",
+        );
+        return;
+      }
       if (llmFirstTokenAt !== null && this._tTurnLlmFirstClause === null) {
         this._tTurnLlmFirstClause = performance.now();
       }
@@ -8736,6 +8743,13 @@ export class OrchestrationPipeline implements VoiceSession {
 
     const enqueue = (text: string, sequenceId: number = this.activeAgentSequenceId): void => {
       if (this.bargeInRequested) return;
+      if (isLeakedMonologueClause(text)) {
+        logger.info(
+          { callId: this.config.callId, evt: "llm_monologue_clause_suppressed", textSnippet: text.slice(0, 120) },
+          "Pipeline: dropped leaked English chain-of-thought clause before TTS",
+        );
+        return;
+      }
       // Extract any leading <emotion value="…"/> tag so the clean sentence goes
       // to TTS while the emotion array is forwarded to Cartesia's voice controls.
       const { emotion, text: cleanText } = extractEmotionTag(text);

@@ -6170,12 +6170,11 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
       {showWebcall && (
         <div
           className={cn(
-            "fixed z-50 flex flex-col overflow-visible bg-transparent pointer-events-none",
-            "inset-x-0 bottom-0 top-14",
-            "md:inset-auto md:bottom-6 md:right-6 md:top-auto md:h-[520px] md:w-[380px]",
+            "pointer-events-none fixed inset-x-0 bottom-0 z-50 flex justify-center bg-transparent pb-safe",
+            "md:inset-auto md:bottom-8 md:right-8 md:justify-end",
           )}
         >
-          <div className="pointer-events-auto h-full min-h-0">
+          <div className="pointer-events-auto h-[440px] w-full max-w-[340px] md:h-[480px] md:w-[340px]">
             <WebcallPanel
               agentId={agent.id}
               agentName={agent.name ?? "Agent"}

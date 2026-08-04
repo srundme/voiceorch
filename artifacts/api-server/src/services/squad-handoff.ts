@@ -157,10 +157,10 @@ async function buildTargetAgentConfig(
       })(),
       presencePenalty: 0.3,
       frequencyPenalty: 0.3,
-      ...(agentCfg["reasoningEffort"] === null || ["low", "medium", "high"].includes(agentCfg["reasoningEffort"] as string)
-        ? { reasoningEffort: agentCfg["reasoningEffort"] as "low" | "medium" | "high" | null }
+      ...(agentCfg["reasoningEffort"] === "medium" || agentCfg["reasoningEffort"] === "high"
+        ? { reasoningEffort: agentCfg["reasoningEffort"] as "medium" | "high" }
         : isSarvamLlm
-          ? { reasoningEffort: "low" as const }
+          ? { reasoningEffort: null }
           : {}),
     },
     maxDuration: agent.maxDuration ?? 600,

@@ -515,9 +515,8 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
   // so the voice default is now 200. This is a protective cap, not a target —
   // typical turns end naturally at 30-80 tokens, so raising it does not slow
   // normal replies; it only stops long ones being cut mid-sentence.
-  // Voice default max tokens. Sarvam 105B runs with reasoning_effort "low" by
-  // default (matches Sarvam product); reasoning tokens count toward the cap, so
-  // the old 200 floor starved spoken content and answers looked "dumb"/cut off.
+  // Voice default max tokens. Sarvam thinking is OFF by default for live calls
+  // (reasoning leaks into spoken audio). Keep a healthy spoken-content budget.
   const isSarvamLlm = (agent.llmProvider ?? "").toLowerCase() === "sarvam";
   const VOICE_DEFAULT_MAX_TOKENS = Number(
     process.env.VOICE_DEFAULT_MAX_TOKENS ?? (isSarvamLlm ? 500 : 200),
@@ -554,11 +553,13 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
       ...(typeof agentCfg["seed"] === "number" ? { seed: agentCfg["seed"] as number } : {}),
       ...(typeof agentCfg["stop"] === "string" || Array.isArray(agentCfg["stop"]) ? { stop: agentCfg["stop"] as string | string[] } : {}),
       ...(typeof agentCfg["wikiGrounding"] === "boolean" ? { wikiGrounding: agentCfg["wikiGrounding"] as boolean } : {}),
-      // Sarvam product default is reasoning "low". Explicit null disables thinking.
-      ...(agentCfg["reasoningEffort"] === null || ["low", "medium", "high"].includes(agentCfg["reasoningEffort"] as string)
-        ? { reasoningEffort: agentCfg["reasoningEffort"] as "low" | "medium" | "high" | null }
+      // Voice: thinking OFF unless the agent explicitly opts into medium/high.
+      // Historical default "low" streamed English CoT into TTS (call 5646).
+      // Treat stored "low" the same as off for live calls; null disables.
+      ...(agentCfg["reasoningEffort"] === "medium" || agentCfg["reasoningEffort"] === "high"
+        ? { reasoningEffort: agentCfg["reasoningEffort"] as "medium" | "high" }
         : isSarvamLlm
-          ? { reasoningEffort: "low" as const }
+          ? { reasoningEffort: null }
           : {}),
     },
     maxDuration: agent.maxDuration ?? 600,

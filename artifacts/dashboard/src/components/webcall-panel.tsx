@@ -15,6 +15,27 @@ import { cn } from "@/lib/utils";
 type CallState = "idle" | "connecting" | "live" | "ending" | "error";
 type Line = { id: number; speaker: "user" | "agent"; text: string };
 
+const INDIC_SCRIPT_RE =
+  /[\u0900-\u097F\u0980-\u09FF\u0A00-\u0A7F\u0A80-\u0AFF\u0B00-\u0B7F\u0B80-\u0BFF\u0C00-\u0C7F\u0C80-\u0CFF\u0D00-\u0D7F]/;
+
+const COT_CAPTION_RE =
+  /^(The user |Let me |According to |Wait[, ]|Actually[, ]|Looking |Since (they|the caller) |So I should |I (need to|already|should) |Based on |IDENTITY|FACTS|Stage \d)/i;
+
+/** Drop English chain-of-thought / prompt leaks from live captions. */
+function isSpeakableCaption(text: string): boolean {
+  const t = text.trim();
+  if (!t || t.length < 2) return false;
+  if (COT_CAPTION_RE.test(t)) return false;
+  if (/\b(Let me analyze|According to the flow|constraints:)\b/i.test(t) && !INDIC_SCRIPT_RE.test(t)) {
+    return false;
+  }
+  // Long English-only dumps that look like planning, not speech.
+  if (t.length > 160 && !INDIC_SCRIPT_RE.test(t) && /\b(I should|flow|Stage)\b/i.test(t)) {
+    return false;
+  }
+  return true;
+}
+
 // Inlined AudioWorklet processor.
 const CAPTURE_WORKLET = `
 class PcmCaptureProcessor extends AudioWorkletProcessor {
@@ -244,9 +265,9 @@ export function WebcallPanel({
             break;
           }
           case "transcript":
-            if (msg.speaker && msg.text) {
-              const line: Line = { id: lineIdRef.current++, speaker: msg.speaker, text: msg.text };
-              setLines((prev) => [...prev, line]);
+            if (msg.speaker && msg.text && isSpeakableCaption(msg.text)) {
+              const line: Line = { id: lineIdRef.current++, speaker: msg.speaker, text: msg.text.trim() };
+              setLines((prev) => [...prev.slice(-2), line]);
             }
             break;
           case "clear":
@@ -325,20 +346,19 @@ export function WebcallPanel({
   const active = state === "live" || state === "connecting" || state === "ending";
   /** Wave while speaking / live; fluid dots while idle or connecting. */
   const waveVariant = state === "live" ? "wave" : "fluid-dots";
-  const waveSize = compact ? 300 : 380;
-  /** Live captions only — latest few lines, no chat history UI. */
-  const captions = lines.slice(-3);
+  const waveSize = compact ? 260 : 320;
+  /** Single live caption — latest speakable line only (no chat stack). */
+  const caption = [...lines].reverse().find((l) => isSpeakableCaption(l.text)) ?? null;
 
   return (
     <div
       className={cn(
         "relative flex h-full min-h-0 flex-col bg-transparent",
-        !compact && "mx-auto max-w-md p-4",
+        !compact && "mx-auto max-w-sm p-2",
       )}
       style={!compact ? { height: "calc(100dvh - 6rem)" } : undefined}
     >
-      {/* Minimal top chrome — no card */}
-      <div className="relative z-20 flex shrink-0 items-center gap-2.5 px-1 py-2">
+      <div className="relative z-20 flex shrink-0 items-center gap-2 px-1 py-1.5">
         <span
           className={cn(
             "h-1.5 w-1.5 rounded-full",
@@ -351,22 +371,17 @@ export function WebcallPanel({
                   : "bg-foreground/25",
           )}
         />
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-[12px] font-medium text-foreground/80">
-            {agentName}
-          </p>
-          <p className="text-[10px] text-muted-foreground/70">
-            {state === "idle" && "Live test"}
-            {state === "connecting" && "Connecting…"}
-            {state === "live" && "Listening"}
-            {state === "ending" && "Ending…"}
-            {state === "error" && "Error"}
-          </p>
-        </div>
+        <p className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground/70">
+          {state === "idle" && agentName}
+          {state === "connecting" && "Connecting…"}
+          {state === "live" && "Listening"}
+          {state === "ending" && "Ending…"}
+          {state === "error" && "Error"}
+        </p>
         {onClose && (
           <button
             onClick={onClose}
-            className="shrink-0 rounded-full p-1.5 text-muted-foreground/60 transition-colors hover:bg-foreground/5 hover:text-foreground"
+            className="shrink-0 rounded-full p-1.5 text-muted-foreground/50 transition-colors hover:bg-foreground/5 hover:text-foreground"
             title="Close"
           >
             <X className="h-3.5 w-3.5" />
@@ -374,59 +389,41 @@ export function WebcallPanel({
         )}
       </div>
 
-      {/* Frameless stage: wave + fade-in captions only */}
-      <div className="relative z-10 min-h-0 flex-1">
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <div
-            className={cn(
-              "transition-all duration-700 ease-out",
-              active ? "scale-100 opacity-100" : "scale-95 opacity-70",
-            )}
-          >
-            <SiriWave
-              variant={waveVariant}
-              size={waveSize}
-              renderScale={compact ? 0.7 : 0.8}
-              className="rounded-full"
-              aria-hidden
-            />
-          </div>
+      <div className="relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center gap-5 px-3">
+        <div
+          className={cn(
+            "pointer-events-none transition-all duration-700 ease-out",
+            active ? "scale-100 opacity-100" : "scale-95 opacity-70",
+          )}
+        >
+          <SiriWave
+            variant={waveVariant}
+            size={waveSize}
+            renderScale={compact ? 0.7 : 0.8}
+            className="rounded-full"
+            aria-hidden
+          />
         </div>
 
-        {/* Live captions — fade in on screen, no bubbles / speakers / chat layout */}
-        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-end px-5 pb-4 pt-20">
-          {captions.length === 0 && state === "idle" && (
-            <p className="text-center text-[12px] text-muted-foreground/50">
+        <div className="pointer-events-none flex min-h-[3.5rem] w-full max-w-[18rem] items-center justify-center px-2">
+          {!caption && state === "idle" && (
+            <p className="text-center text-[12px] text-muted-foreground/45">
               Press Start to talk
             </p>
           )}
-          {captions.length === 0 && state === "live" && (
-            <p className="text-center text-[11px] uppercase tracking-[0.22em] text-foreground/25">
+          {!caption && state === "live" && (
+            <p className="text-center text-[10px] uppercase tracking-[0.2em] text-foreground/25">
               Listening
             </p>
           )}
-          <div className="flex w-full max-w-[22rem] flex-col items-center gap-2.5">
-            {captions.map((l, i) => {
-              const age = captions.length - 1 - i;
-              return (
-                <p
-                  key={l.id}
-                  className={cn(
-                    "w-full text-center text-pretty leading-relaxed tracking-tight",
-                    "webcall-caption-in",
-                    age === 0
-                      ? "text-[15px] font-medium text-foreground/90"
-                      : age === 1
-                        ? "text-[13px] text-foreground/40"
-                        : "text-[12px] text-foreground/20",
-                  )}
-                  style={{ animationDelay: age === 0 ? "0ms" : undefined }}
-                >
-                  {l.text}
-                </p>
-              );
-            })}
-          </div>
+          {caption && (
+            <p
+              key={caption.id}
+              className="webcall-caption-in w-full text-center text-[14px] font-medium leading-snug tracking-tight text-foreground/90 text-pretty"
+            >
+              {caption.text}
+            </p>
+          )}
         </div>
       </div>
 
@@ -444,7 +441,6 @@ export function WebcallPanel({
         </div>
       )}
 
-      {/* Floating controls — no bar / border */}
       <div className="relative z-20 flex shrink-0 items-center justify-center gap-3 px-2 py-3">
         {state === "idle" || state === "error" ? (
           <Button

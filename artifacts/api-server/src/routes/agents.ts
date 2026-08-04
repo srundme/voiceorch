@@ -209,7 +209,8 @@ router.post("/agents", requireAuth, clientContext, denyManagedClient, async (req
     insertAgentConfig["llmMaxTokens"] = llmProv === "sarvam" ? 500 : 200;
   }
   if (insertAgentConfig["reasoningEffort"] === undefined && String(insertData["llmProvider"] ?? "").toLowerCase() === "sarvam") {
-    insertAgentConfig["reasoningEffort"] = "low";
+    // Voice default: thinking off — "low" leaked English CoT into TTS.
+    insertAgentConfig["reasoningEffort"] = null;
   }
   if (insertAgentConfig["bargeInEnergyThreshold"] == null) {
     insertAgentConfig["bargeInEnergyThreshold"] = engineDefaults["bargeInEnergyThreshold"];
