@@ -1,5 +1,5 @@
 /**
- * Channels — how an agent communicates (phone, WhatsApp, email, meetings, booking).
+ * Agent channels — deep-link from Connections / Meet (not primary nav).
  */
 
 import { Link, useSearch } from "wouter";
@@ -42,7 +42,7 @@ export default function ChannelsPage() {
   if (agents.length === 0) {
     return (
       <StripePage
-        title="Channels"
+        title="Agent channels"
         description="Create an agent first, then attach phone, WhatsApp, email, meetings, and booking."
       >
         <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -63,8 +63,8 @@ export default function ChannelsPage() {
 
   return (
     <StripePage
-      title="Channels"
-      description={`${agentLabel} · phone, WhatsApp, email, meetings, booking`}
+      title="Agent channels"
+      description={`${agentLabel} · WhatsApp, email, meetings join · workspace wiring under Connections`}
       actions={
         <AgentContextBar agents={agents} selectedId={selectedId} onChange={setAgentId} />
       }

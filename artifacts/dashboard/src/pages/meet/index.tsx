@@ -57,7 +57,7 @@ export default function MeetPage() {
   return (
     <StripePage
       title="Meeting Bots"
-      description="Send a voice agent into a Google Meet, Zoom, or Teams meeting. Meeting prompt and delegate live under Channels → Meetings."
+      description="Send a voice agent into a Google Meet, Zoom, or Teams meeting. Meeting prompt lives on the agent; join settings are under Agent channels → Meetings."
       actions={
         <AgentContextBar agents={agents} selectedId={selectedId} onChange={setAgentId} />
       }
@@ -65,9 +65,14 @@ export default function MeetPage() {
       <div className="max-w-xl space-y-4 rounded-lg border p-4">
         {agentId ? (
           <p className="text-[11px] text-muted-foreground">
-            Meeting prompt and delegates:{" "}
+            Meeting prompt:{" "}
+            <a className="underline underline-offset-2" href={`/app/agents/${agentId}?section=prompt`}>
+              Agent → Prompt
+            </a>
+            {" · "}
+            Join / delegate:{" "}
             <a className="underline underline-offset-2" href={`/app/channels?agentId=${agentId}&channel=meetings`}>
-              Channels → Meetings
+              Agent channels → Meetings
             </a>
             .
           </p>

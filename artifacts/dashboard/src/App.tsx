@@ -38,7 +38,6 @@ import Settings                from "@/pages/settings/index";
 import ProfilePage             from "@/pages/settings/Profile";
 import KnowledgeBasePage       from "@/pages/knowledge-base";
 import WalletPage              from "@/pages/wallet";
-import ActivityPage            from "@/pages/activity";
 import PhoneNumbersPage        from "@/pages/phone-numbers";
 import WebhooksPage            from "@/pages/webhooks";
 import WhatsAppPage            from "@/pages/whatsapp";
@@ -86,8 +85,10 @@ import VoicesPage           from "@/pages/voices";
 import TestSimulatorPage    from "@/pages/test-simulator";
 import VibePage             from "@/pages/vibe";
 import HomePage             from "@/pages/home/index";
-import AutomationPage       from "@/pages/automation/index";
 import ChannelsPage         from "@/pages/channels/index";
+import CallPlansPage        from "@/pages/call-plans/index";
+import CallPlanDetailPage   from "@/pages/call-plans/[id]";
+import PeoplePage           from "@/pages/people/index";
 import CommandCenterRedirect from "@/pages/command-center/index";
 import MemoryPage           from "@/pages/memory/index";
 import DocsPage             from "@/pages/docs/index";
@@ -299,7 +300,14 @@ function AppRoutes() {
       <Switch>
         <Route path="/app" component={AppRoot} />
         <Route path="/app/home" component={HomePage} />
-        <Route path="/app/automation" component={AutomationPage} />
+        <Route path="/app/call-plans/:id" component={CallPlanDetailPage} />
+        <Route path="/app/call-plans" component={CallPlansPage} />
+        <Route path="/app/people" component={PeoplePage} />
+        {/* Phase 4 — Journey / Automation peers → Call plans */}
+        <Route path="/app/automation">
+          <TabRedirect to="/app/call-plans" />
+        </Route>
+        {/* Channels kept for Connections / Meet deep-links; removed from primary nav */}
         <Route path="/app/channels" component={ChannelsPage} />
         <Route path="/app/command-center" component={CommandCenterRedirect} />
         <Route path="/app/analytics" component={AnalyticsPage} />
@@ -313,13 +321,11 @@ function AppRoutes() {
         <Route path="/app/agents" component={AgentsTabPage} />
         <Route path="/app/agents/:id" component={AgentBuilder} />
 
-        {/* ── Squads (standalone page; legacy detail links land on the list) ── */}
-        <Route path="/app/squads/:id">
-          <TabRedirect to="/app/squads" />
-        </Route>
+        {/* ── Squads (list + detail; create opens with ?seedAgent=) ── */}
+        <Route path="/app/squads/:id" component={SquadsPage} />
         <Route path="/app/squads" component={SquadsPage} />
 
-        {/* ── Meeting bots (send an agent into Google Meet/Zoom/Teams) ── */}
+        {/* ── Meeting bots — still reachable; nav entry folded into Connections ── */}
         <Route path="/app/meet" component={MeetPage} />
 
         {/* ── Team → settings?tab=team redirect ── */}
@@ -329,18 +335,20 @@ function AppRoutes() {
 
         <Route path="/app/events*" component={() => { useLocation()[1]("/app/home", { replace: true }); return null; }} />
 
-        {/* ── Calls (tabbed) ── */}
+        {/* ── History (Phase 4 label) + legacy /app/calls ── */}
+        <Route path="/app/history/:id" component={CallDetail} />
+        <Route path="/app/history" component={CallsTabPage} />
         <Route path="/app/calls/:id" component={CallDetail} />
         <Route path="/app/calls" component={CallsTabPage} />
 
-        {/* ── Callbacks → calls?tab=callbacks redirect ── */}
+        {/* ── Callbacks → history?tab=callbacks redirect ── */}
         <Route path="/app/callbacks">
-          <TabRedirect to="/app/calls?tab=callbacks" />
+          <TabRedirect to="/app/history?tab=callbacks" />
         </Route>
 
-        {/* ── Transfers → calls?tab=transfers redirect ── */}
+        {/* ── Transfers → history?tab=transfers redirect ── */}
         <Route path="/app/transfers">
-          <TabRedirect to="/app/calls?tab=transfers" />
+          <TabRedirect to="/app/history?tab=transfers" />
         </Route>
 
         <Route path="/app/knowledge-bases" component={KnowledgeBasePage} />
@@ -362,7 +370,10 @@ function AppRoutes() {
         </Route>
 
         <Route path="/app/memory" component={MemoryPage} />
-        <Route path="/app/activity" component={ActivityPage} />
+        {/* Legacy Activity → History */}
+        <Route path="/app/activity">
+          <TabRedirect to="/app/history" />
+        </Route>
 
         {/* ── Phone Numbers (tabbed) ── */}
         <Route path="/app/phone-numbers" component={PhoneNumbersTabPage} />
@@ -373,6 +384,7 @@ function AppRoutes() {
         </Route>
 
         <Route path="/app/connections" component={ConnectionsPage} />
+        {/* WhatsApp page kept for Connections hub deep-link; removed from primary nav */}
         <Route path="/app/whatsapp" component={WhatsAppPage} />
 
         {/* ── Webhooks → api-keys?tab=webhooks redirect ── */}
@@ -389,17 +401,16 @@ function AppRoutes() {
         <Route path="/app/campaigns/:id" component={CampaignDetailPage} />
         <Route path="/app/campaigns" component={CampaignsTabPage} />
 
-        {/* ── Automatic Calls → campaigns?tab=scheduled redirect ── */}
-        {/* Deep-link sub-routes still work directly */}
+        {/* ── Automatic Calls → People sheet tab ── */}
         <Route path="/app/automatic-calls/new" component={AutomaticCallsWizardPage} />
         <Route path="/app/automatic-calls/:id" component={AutomaticCallDetailPage} />
         <Route path="/app/automatic-calls">
-          <TabRedirect to="/app/campaigns?tab=scheduled" />
+          <TabRedirect to="/app/people?tab=scheduled" />
         </Route>
 
-        {/* ── Meta Leads → campaigns?tab=lead-sources redirect ── */}
+        {/* ── Meta Leads → People website forms ── */}
         <Route path="/app/meta-leads">
-          <TabRedirect to="/app/campaigns?tab=lead-sources" />
+          <TabRedirect to="/app/people?tab=lead-sources" />
         </Route>
 
         {/* ── Scheduling ── */}

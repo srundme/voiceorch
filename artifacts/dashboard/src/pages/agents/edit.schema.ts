@@ -127,6 +127,13 @@ export const agentFormSchema = z.object({
   geminiLiveVoiceName: z.string().optional(),
   geminiLiveThinkingLevel: z.enum(["minimal", "low", "medium", "high"]).optional(),
 
+  /** Create-time: one agent vs team entry. */
+  agentComposition: z.enum(["single", "team"]).optional(),
+  /** Create-time: phone only vs phone + meetings (dual prompt). */
+  agentSurfaces: z.enum(["phone", "phone_and_meet"]).optional(),
+  /** Meeting-room system prompt (agentConfig.meetings.meetingPrompt). */
+  meetingPrompt: z.string().optional(),
+
   // Auto-redial on drop
   autoRedialEnabled:      z.boolean().optional(),
   autoRedialMaxAttempts:  z.number().min(1).max(10).optional(),

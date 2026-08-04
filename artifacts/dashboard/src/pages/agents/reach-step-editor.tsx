@@ -39,7 +39,9 @@ export type ReachStepType =
   | "send_email"
   | "schedule_callback"
   | "send_webhook"
-  | "condition";
+  | "condition"
+  | "join_meeting"
+  | "update_sheet";
 
 export type ReachStep = {
   id: string;
@@ -60,6 +62,9 @@ export type ReachStep = {
   emailField?: string;
   emailSubject?: string;
   emailBody?: string;
+  meetingUrlField?: string;
+  sheetStatusColumn?: string;
+  sheetStatusValue?: string;
 };
 
 const STEP_CATALOG: Array<{
@@ -103,6 +108,22 @@ export function defaultStep(type: ReachStepType, agentId: number): ReachStep {
         emailField: "email",
         label: "Email follow-up",
       };
+    case "join_meeting":
+      return {
+        id: sid("meet"),
+        type,
+        agentId,
+        meetingUrlField: "meetingUrl",
+        label: "Join a meeting",
+      };
+    case "update_sheet":
+      return {
+        id: sid("sheet"),
+        type,
+        sheetStatusColumn: "Status",
+        sheetStatusValue: "",
+        label: "Update the list",
+      };
     case "schedule_callback":
       return {
         id: sid("cb"),
@@ -134,6 +155,8 @@ export function stepLabel(step: ReachStep): string {
       return step.squadId ? "Call with squad handoffs" : "Call with this agent";
     case "send_whatsapp": return "WhatsApp follow-up";
     case "send_email": return "Email follow-up";
+    case "join_meeting": return "Join a meeting";
+    case "update_sheet": return "Update the list";
     case "schedule_callback":
       return step.callbackDelayDays
         ? `Callback in ${step.callbackDelayDays} days`

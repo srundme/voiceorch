@@ -1,5 +1,5 @@
 /**
- * /app/calls — Activity (calls, callbacks, transfers)
+ * /app/history (and legacy /app/calls) — what happened.
  */
 import { useLocation, useSearch } from "wouter";
 import { StripePage } from "@/components/stripe-page";
@@ -9,7 +9,7 @@ import CallbacksPage from "@/pages/callbacks";
 import TransfersPage from "@/pages/transfers";
 
 const TABS = [
-  { key: "all-calls", label: "All calls" },
+  { key: "all-calls", label: "Calls" },
   { key: "callbacks", label: "Callbacks" },
   { key: "transfers", label: "Transfers" },
 ] as const;
@@ -17,8 +17,7 @@ const TABS = [
 export default function CallsTabPage() {
   const [, navigate] = useLocation();
   const search = useSearch();
-  const activeKey =
-    new URLSearchParams(search).get("tab") ?? "all-calls";
+  const activeKey = new URLSearchParams(search).get("tab") ?? "all-calls";
   const active = TABS.some((t) => t.key === activeKey) ? activeKey : "all-calls";
 
   const setTab = (key: string) => {
@@ -29,8 +28,8 @@ export default function CallsTabPage() {
 
   return (
     <StripePage
-      title="Activity"
-      description="Calls, callbacks, and transfers across your agents."
+      title="History"
+      description="Calls, callbacks, and transfers — what happened for each person."
       fullBleed
       contentClassName="!px-0 !py-0 max-w-none"
       tabs={

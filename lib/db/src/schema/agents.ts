@@ -164,6 +164,15 @@ export type AgentConfig = {
     voiceName?: string;
     thinkingLevel?: "minimal" | "low" | "medium" | "high";
   };
+  /** Meet/Zoom/Teams channel — meeting prompt + who joins (Channels + Builder Talk). */
+  meetings?: {
+    enabled?: boolean;
+    whoJoins?: "self" | "delegate";
+    meetingPrompt?: string;
+    delegateAgentId?: number | null;
+    passMemory?: boolean;
+    passCallContext?: boolean;
+  };
 };
 
 export const agentsTable = pgTable("agents", {

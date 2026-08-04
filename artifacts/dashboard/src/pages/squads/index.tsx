@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useLocation, useParams } from "wouter";
+import { useLocation, useParams, useSearch } from "wouter";
 import { customFetch, useListAgents } from "@workspace/api-client-react";
 import { StripePage } from "@/components/stripe-page";
 import { EmptyState } from "@/components/empty-state";
@@ -101,7 +101,21 @@ export default function SquadsPage() {
 function SquadListPage({ onOpen }: { onOpen: (id: number) => void }) {
   const { toast } = useToast();
   const qc = useQueryClient();
+  const [, setLocation] = useLocation();
+  const search = useSearch();
+  const seedAgentRaw = new URLSearchParams(search).get("seedAgent");
+  const seedAgentId = seedAgentRaw && /^\d+$/.test(seedAgentRaw) ? Number(seedAgentRaw) : null;
   const [createOpen, setCreateOpen] = useState(false);
+
+  useEffect(() => {
+    if (seedAgentId == null) return;
+    setCreateOpen(true);
+  }, [seedAgentId]);
+
+  const clearSeed = () => {
+    if (seedAgentId == null) return;
+    setLocation("/app/squads", { replace: true });
+  };
 
   const { data: squads = [], isLoading } = useQuery({
     queryKey: ["squads"],
@@ -117,11 +131,17 @@ function SquadListPage({ onOpen }: { onOpen: (id: number) => void }) {
     onSuccess: (s) => {
       void qc.invalidateQueries({ queryKey: ["squads"] });
       setCreateOpen(false);
-      toast({ title: "Squad created", description: "Members can now hand calls to each other." });
+      clearSeed();
+      toast({ title: "Team created", description: "Members can hand calls to each other mid-conversation." });
       onOpen(s.id);
     },
     onError: (err: Error) => toast({ title: "Create failed", description: err.message, variant: "destructive" }),
   });
+
+  const handleCreateOpenChange = (open: boolean) => {
+    setCreateOpen(open);
+    if (!open) clearSeed();
+  };
 
   return (
     <StripePage
@@ -129,7 +149,7 @@ function SquadListPage({ onOpen }: { onOpen: (id: number) => void }) {
       description="Put your agents on a team. They hand live calls to each other mid-conversation, share what they know about each caller, and schedule follow-up calls for one another."
       actions={
         <Button onClick={() => setCreateOpen(true)}>
-          <Plus className="w-4 h-4 mr-1.5" /> New Squad
+          <Plus className="w-4 h-4 mr-1.5" /> New team
         </Button>
       }
     >
@@ -140,10 +160,10 @@ function SquadListPage({ onOpen }: { onOpen: (id: number) => void }) {
         ) : squads.length === 0 ? (
           <EmptyState
             icon={<UsersRound className="w-6 h-6" />}
-            title="No squads yet"
+            title="No teams yet"
             description="Pick two or more agents you already built — like a Lead Qualifier and a Meeting Scheduler — and they will work as a team automatically."
             action={{
-              label: "Create squad",
+              label: "Create team",
               onClick: () => setCreateOpen(true),
               icon: <Plus className="w-4 h-4" />,
             }}
@@ -179,7 +199,7 @@ function SquadListPage({ onOpen }: { onOpen: (id: number) => void }) {
         )}
 
         <div className="rounded-xl border border-border/50 bg-muted/20 p-4 max-w-2xl mt-6">
-          <h2 className="text-sm font-semibold mb-2">How squads work</h2>
+          <h2 className="text-sm font-semibold mb-2">How teams work</h2>
           <ul className="text-xs text-muted-foreground space-y-1.5">
             <li className="flex gap-2">
               <ArrowLeftRight className="w-3.5 h-3.5 mt-0.5 shrink-0" />
@@ -198,8 +218,9 @@ function SquadListPage({ onOpen }: { onOpen: (id: number) => void }) {
 
       <CreateSquadDialog
         open={createOpen}
-        onOpenChange={setCreateOpen}
+        onOpenChange={handleCreateOpenChange}
         agents={agents.map((a) => ({ id: a.id, name: a.name }))}
+        seedAgentId={seedAgentId}
         onSubmit={(body) => createMut.mutate(body)}
         saving={createMut.isPending}
       />
@@ -211,21 +232,45 @@ function CreateSquadDialog({
   open,
   onOpenChange,
   agents,
+  seedAgentId,
   onSubmit,
   saving,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   agents: Array<{ id: number; name: string }>;
+  seedAgentId?: number | null;
   onSubmit: (body: Record<string, unknown>) => void;
   saving: boolean;
 }) {
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [drafts, setDrafts] = useState<MemberDraft[]>([
+  const seeded = seedAgentId != null && agents.some((a) => a.id === seedAgentId);
+  const seedName = seeded ? agents.find((a) => a.id === seedAgentId)?.name : null;
+
+  const blankDrafts = (): MemberDraft[] => [
     { agentId: "", roleName: "Lead Qualifier", instructions: "" },
     { agentId: "", roleName: "Meeting Scheduler", instructions: "" },
-  ]);
+  ];
+
+  const seededDrafts = (): MemberDraft[] => [
+    {
+      agentId: String(seedAgentId),
+      roleName: "First agent",
+      instructions: "Entry point — hand off when a specialist should take over",
+    },
+    { agentId: "", roleName: "Specialist", instructions: "" },
+  ];
+
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [drafts, setDrafts] = useState<MemberDraft[]>(blankDrafts);
+
+  useEffect(() => {
+    if (!open) return;
+    setName("");
+    setDescription("");
+    setDrafts(seeded ? seededDrafts() : blankDrafts());
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset only when dialog opens / seed changes
+  }, [open, seedAgentId, seeded]);
 
   const usedIds = new Set(drafts.map((d) => d.agentId).filter(Boolean));
   const filled = drafts.filter((d) => d.agentId && d.roleName.trim());
@@ -240,15 +285,17 @@ function CreateSquadDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>New Squad</DialogTitle>
+          <DialogTitle>{seeded ? "Assemble your team" : "New team"}</DialogTitle>
           <DialogDescription>
-            Pick agents you already built and give each a role. Handoff tools, shared caller memory, and task creation are wired up automatically.
+            {seeded
+              ? <>{seedName ?? "Your agent"} is ready — add at least one more agent, name the team, and create.</>
+              : "Pick agents you already built and give each a role. Handoff tools, shared caller memory, and task creation are wired up automatically."}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div>
             <Label>Name</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Sales team" />
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Sales team" autoFocus={seeded} />
           </div>
           <div>
             <Label>Description (optional)</Label>
@@ -258,7 +305,9 @@ function CreateSquadDialog({
           {drafts.map((d, i) => (
             <div key={i} className="rounded-lg border border-border/60 p-3 space-y-2">
               <div className="flex items-center justify-between">
-                <p className="text-xs font-medium text-muted-foreground">Agent {i + 1}</p>
+                <p className="text-xs font-medium text-muted-foreground">
+                  {seeded && i === 0 ? "First agent (from create)" : `Agent ${i + 1}`}
+                </p>
                 {drafts.length > 2 && (
                   <button type="button" onClick={() => setDrafts((prev) => prev.filter((_, idx) => idx !== i))}>
                     <X className="w-3.5 h-3.5 text-muted-foreground" />
@@ -302,6 +351,9 @@ function CreateSquadDialog({
           >
             <Plus className="w-3.5 h-3.5 mr-1" /> Add another agent
           </Button>
+          {filled.length < 2 && (
+            <p className="text-[11px] text-muted-foreground">Add at least two agents to form a team.</p>
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
@@ -323,7 +375,7 @@ function CreateSquadDialog({
               });
             }}
           >
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Create squad"}
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Create team"}
           </Button>
         </DialogFooter>
       </DialogContent>

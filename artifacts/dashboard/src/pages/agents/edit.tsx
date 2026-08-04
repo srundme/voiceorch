@@ -109,6 +109,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     sarvamSttMode, kbBakedOnly, schedulingCalendarId, schedulingEventTypeId,
     sarvamHighVadSensitivity, sarvamSpeechEndFlushMs, sarvamIncompleteHoldMs,
     voiceStack, geminiLiveVoiceName, geminiLiveThinkingLevel,
+    agentComposition, agentSurfaces, meetingPrompt,
     // Inbound/outbound phone number assignment is read-only in the agent form —
     // it's managed exclusively from the Phone Numbers page now. Never forward
     // these to the server: they're populated from the agent's own (potentially
@@ -220,6 +221,11 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     };
   } else if (voiceStack === "classic") {
     agentConfig["voiceStack"] = "classic";
+  }
+  // Meeting-room prompt (Builder Talk → In meetings). Deep-merged on the server
+  // so Channels whoJoins / delegate / memory toggles are preserved.
+  if (meetingPrompt !== undefined) {
+    agentConfig["meetings"] = { meetingPrompt: meetingPrompt ?? "" };
   }
 
   const NATIVE_BOOKING_TYPES = new Set(["native_booking", "native_check_availability", "native_list_bookings", "native_reschedule", "native_cancel"]);
@@ -464,6 +470,9 @@ export default function AgentEdit() {
       voiceStack: "classic",
       geminiLiveVoiceName: "Kore",
       geminiLiveThinkingLevel: "minimal",
+      agentComposition: "single",
+      agentSurfaces: "phone",
+      meetingPrompt: "",
     },
   });
 
@@ -743,6 +752,11 @@ export default function AgentEdit() {
       voiceStack:               (((agent as any).agentConfig?.voiceStack as string | undefined) === "gemini_live" ? "gemini_live" : "classic") as AgentFormValues["voiceStack"],
       geminiLiveVoiceName:      ((agent as any).agentConfig?.geminiLive?.voiceName as string | undefined) ?? "Kore",
       geminiLiveThinkingLevel:  ((agent as any).agentConfig?.geminiLive?.thinkingLevel as AgentFormValues["geminiLiveThinkingLevel"] | undefined) ?? "minimal",
+      agentComposition: "single",
+      agentSurfaces: ((agent as any).agentConfig?.meetings?.enabled === true ? "phone_and_meet" : "phone") as AgentFormValues["agentSurfaces"],
+      meetingPrompt: typeof (agent as any).agentConfig?.meetings?.meetingPrompt === "string"
+        ? (agent as any).agentConfig.meetings.meetingPrompt
+        : "",
     });
     const cfg = (agent as any).agentConfig;
     if (cfg?.voiceStack === "gemini_live") {
@@ -917,10 +931,27 @@ export default function AgentEdit() {
               <CardContent className="space-y-4">
                 <FormField control={form.control} name="systemPrompt" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>System Prompt</FormLabel>
+                    <FormLabel>Call prompt</FormLabel>
                     <FormControl>
                       <Textarea placeholder="You are a helpful assistant..." className="min-h-[120px] font-mono text-sm" {...field} />
                     </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="meetingPrompt" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Meeting prompt</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Optional. Leave blank to reuse the call prompt in Meet/Zoom/Teams…"
+                        className="min-h-[100px] font-mono text-sm"
+                        {...field}
+                        value={field.value ?? ""}
+                      />
+                    </FormControl>
+                    <FormDescription className="text-xs">
+                      Used when this agent joins a video meeting. Blank falls back to the call prompt.
+                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )} />

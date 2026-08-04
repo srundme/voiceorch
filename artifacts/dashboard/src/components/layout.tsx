@@ -8,7 +8,7 @@ import {
   Menu, ChevronDown, ChevronLeft, ChevronRight,
   LogOut, Bell, Search, SlidersHorizontal, BookOpen, PlugZap, Sun, Moon, Sparkles,
   Plus, X, Wand2, Wrench, Megaphone, Calendar, Video, MessageCircle,
-  Brain, Users, BarChart3,
+  Brain, Users, BarChart3, ListOrdered, GitBranch,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -98,43 +98,29 @@ interface NavGroup {
 }
 
 /**
- * Full-page Stripe IA (see docs/snapserve-agent-centric-ia.md).
- * Builder = agent runtime only; Automation / Channels are separate Operate surfaces.
- * Every product surface is first-class in the sidebar.
+ * Call-plans IA (Phase 4).
+ * Primary: Home · Call plans · Agents · People · Connections · History
+ * Journeys / Automation / Dial flows / Channels peers are redirected, not deleted.
  */
 const NAV_GROUPS: NavGroup[] = [
   {
     items: [
-      { name: "Home",   href: "/app/home",   icon: Home },
-      { name: "Agents", href: "/app/agents", icon: Bot },
+      { name: "Home",        href: "/app/home",        icon: Home },
+      { name: "Call plans",  href: "/app/call-plans",  icon: ListOrdered },
+      { name: "Agents",      href: "/app/agents",      icon: Bot },
+      { name: "People",      href: "/app/people",      icon: Users },
+      { name: "Connections", href: "/app/connections", icon: PlugZap },
+      { name: "History",     href: "/app/history",     icon: Phone, callbackBadge: true },
     ],
   },
   {
-    group: "OPERATE",
-    items: [
-      { name: "Activity",       href: "/app/calls",         icon: Phone, callbackBadge: true },
-      { name: "Automation",    href: "/app/automation",    icon: Workflow },
-      { name: "Dial flows",    href: "/app/campaigns",     icon: Megaphone },
-      { name: "Phone Numbers", href: "/app/phone-numbers", icon: Hash },
-    ],
-  },
-  {
-    group: "CONNECT",
-    items: [
-      { name: "Channels",     href: "/app/channels",     icon: Radio },
-      { name: "Integrations", href: "/app/connections",  icon: PlugZap },
-      { name: "Scheduling",   href: "/app/scheduling",   icon: Calendar },
-      { name: "Meet",         href: "/app/meet",         icon: Video },
-      { name: "WhatsApp",     href: "/app/whatsapp",     icon: MessageCircle },
-    ],
-  },
-  {
-    group: "INTELLIGENCE",
+    group: "MORE",
     items: [
       { name: "Knowledge",  href: "/app/knowledge-bases", icon: BookOpen },
       { name: "Memory",     href: "/app/memory",          icon: Brain },
-      { name: "Squads",     href: "/app/squads",          icon: Users },
+      { name: "Squads",     href: "/app/squads",          icon: GitBranch },
       { name: "Analytics",  href: "/app/analytics",       icon: BarChart3 },
+      { name: "Scheduling", href: "/app/scheduling",      icon: Calendar },
     ],
   },
 ];
@@ -148,15 +134,11 @@ const NAV_GROUPS: NavGroup[] = [
 const MANAGED_CLIENT_NAV: NavGroup[] = [
   {
     items: [
-      { name: "Home",   href: "/app/home",   icon: Home },
-      { name: "Agents", href: "/app/agents", icon: Bot },
-    ],
-  },
-  {
-    group: "OPERATE",
-    items: [
-      { name: "Activity",      href: "/app/calls",         icon: Phone, callbackBadge: true },
-      { name: "Phone Numbers", href: "/app/phone-numbers", icon: Hash },
+      { name: "Home",        href: "/app/home",        icon: Home },
+      { name: "Call plans",  href: "/app/call-plans",  icon: ListOrdered },
+      { name: "Agents",      href: "/app/agents",      icon: Bot },
+      { name: "History",     href: "/app/history",     icon: Phone, callbackBadge: true },
+      { name: "Connections", href: "/app/connections", icon: PlugZap },
     ],
   },
 ];
@@ -340,6 +322,26 @@ function UtilityStrip() {
 }
 
 /* ─── Single nav item ────────────────────────────────────────────────────── */
+function navItemIsActive(location: string, href: string): boolean {
+  if (href === "/app") return false;
+  if (location.startsWith(href)) return true;
+  // Phase 4 aliases — old URLs still work; highlight the new home.
+  if (href === "/app/history" && (location.startsWith("/app/calls") || location.startsWith("/app/history"))) return true;
+  if (href === "/app/people" && (location.startsWith("/app/people") || location.startsWith("/app/campaigns"))) return true;
+  if (
+    href === "/app/connections"
+    && (
+      location.startsWith("/app/connections")
+      || location.startsWith("/app/phone-numbers")
+      || location.startsWith("/app/meet")
+      || location.startsWith("/app/whatsapp")
+      || location.startsWith("/app/channels")
+    )
+  ) return true;
+  if (href === "/app/call-plans" && (location.startsWith("/app/call-plans") || location.startsWith("/app/automation"))) return true;
+  return false;
+}
+
 function NavItemEl({
   item, collapsed, indent = false, onClick, badge = 0,
 }: {
@@ -350,7 +352,7 @@ function NavItemEl({
   badge?: number;
 }) {
   const [location] = useLocation();
-  const isActive = location.startsWith(item.href) && item.href !== "/app";
+  const isActive = navItemIsActive(location, item.href);
 
   return (
     <Link href={item.href} onClick={onClick}>
@@ -642,11 +644,11 @@ function SidebarContent({
 
 /* ─── Mobile bottom nav ──────────────────────────────────────────────────── */
 const MOBILE_BOTTOM_NAV_ITEMS = [
-  { name: "Home",   href: "/app/home",   icon: Home },
-  { name: "Create", href: null,          icon: Sparkles }, // opens modal
-  { name: "Agents", href: "/app/agents", icon: Bot },
-  { name: "Activity", href: "/app/calls",  icon: Phone },
-  { name: "Wallet", href: "/app/wallet", icon: Wallet },
+  { name: "Home",   href: "/app/home",       icon: Home },
+  { name: "Plans",  href: "/app/call-plans", icon: ListOrdered },
+  { name: "Create", href: null,              icon: Sparkles }, // opens modal
+  { name: "Agents", href: "/app/agents",     icon: Bot },
+  { name: "History", href: "/app/history",   icon: Phone },
 ] as const;
 
 function MobileBottomNav({ onNewAgent }: { onNewAgent?: () => void }) {
@@ -876,7 +878,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const isManagedClient = partnerCtx?.isManagedClient === true;
   useEffect(() => {
     if (!isManagedClient) return;
-    const allowed = ["/app/home", "/app/agents", "/app/calls", "/app/phone-numbers", "/app/wallet", "/app/settings"];
+    const allowed = [
+      "/app/home",
+      "/app/call-plans",
+      "/app/agents",
+      "/app/history",
+      "/app/calls",
+      "/app/connections",
+      "/app/phone-numbers",
+      "/app/wallet",
+      "/app/settings",
+    ];
     if (location === "/app" || allowed.some((p) => location === p || location.startsWith(p + "/"))) return;
     navigate("/app/home", { replace: true });
   }, [isManagedClient, location, navigate]);

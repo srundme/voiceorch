@@ -890,7 +890,7 @@ function WebhookTable({
         {/* Table header */}
         <div className="flex items-center gap-3 border-b border-border/50 bg-muted/30 px-3.5 py-2">
           <div className="w-7 shrink-0" />
-          <div className="flex-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Dial flow</div>
+          <div className="flex-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">People list</div>
           <div className="hidden max-w-[220px] flex-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground sm:block">Webhook URL</div>
           <div className="hidden w-28 text-right text-[10px] font-semibold uppercase tracking-widest text-muted-foreground md:block">Last Event</div>
           {/* Date sort toggle */}
@@ -906,7 +906,7 @@ function WebhookTable({
 
         {pageRows.length === 0 ? (
           <div className="flex items-center justify-center py-8 text-xs text-muted-foreground">
-            {search ? `No dial flows match "${search}"` : "No webhook connections yet"}
+            {search ? `No lists match "${search}"` : "No webhook connections yet"}
           </div>
         ) : (
           pageRows.map(c => (
@@ -2256,8 +2256,8 @@ export default function ConnectionsPage() {
 
   return (
     <StripePage
-      title="Integrations"
-      description="CRM, Google Sheets, and dial-flow webhooks — credentials for Automation to use."
+      title="Connections"
+      description="Wire phone, WhatsApp, email, Meet, and Sheets once — call plans and agents use what’s connected."
       actions={
         <Button
           size="sm"
@@ -2271,6 +2271,27 @@ export default function ConnectionsPage() {
       }
       contentClassName="space-y-4"
     >
+      {/* Channel shortcuts (Phase 4 — folded peers) */}
+      <section className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+        {[
+          { label: "Phone numbers", href: "/app/phone-numbers", hint: "DIDs & caller ID" },
+          { label: "WhatsApp", href: "/app/whatsapp", hint: "Templates & channel" },
+          { label: "Meetings", href: "/app/meet", hint: "Meet / Zoom / Teams" },
+          { label: "Agent channels", href: "/app/channels", hint: "Email, Meet join" },
+          { label: "People lists", href: "/app/people", hint: "CSV & sheets" },
+        ].map((card) => (
+          <button
+            key={card.href}
+            type="button"
+            onClick={() => navigate(card.href)}
+            className="rounded-lg border border-border/60 bg-card px-3 py-2.5 text-left hover:bg-muted/30 transition-colors"
+          >
+            <p className="text-[12px] font-medium">{card.label}</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">{card.hint}</p>
+          </button>
+        ))}
+      </section>
+
       {/* Connected accounts — CRM + Sheets as dense rows */}
       <section className="space-y-2">
         <div className="flex items-center justify-between gap-2 px-0.5">
@@ -2340,7 +2361,7 @@ export default function ConnectionsPage() {
       {/* Dial-flow webhooks */}
       <section className="space-y-2">
         <div className="flex items-center justify-between px-0.5">
-          <h2 className="text-[11px] font-semibold">Dial-flow webhooks</h2>
+      <h2 className="text-[11px] font-semibold">Lead webhooks</h2>
           <span className="text-[10px] text-muted-foreground">
             {webhookConnections.length} webhook{webhookConnections.length !== 1 ? "s" : ""}
           </span>
@@ -2356,14 +2377,14 @@ export default function ConnectionsPage() {
           ) : webhookConnections.length === 0 ? (
             <div className="px-3.5 py-6 text-center">
               <p className="text-[12px] text-muted-foreground">
-                No webhook connections yet. Create a dial flow or open Automation to get a lead intake URL.
+                No webhook connections yet. Create a people list or a call plan intake URL.
               </p>
               <div className="mt-3 flex justify-center gap-2">
-                <Button size="sm" variant="outline" className="h-8 text-[11px]" onClick={() => navigate("/app/automation")}>
-                  Open Automation
+                <Button size="sm" variant="outline" className="h-8 text-[11px]" onClick={() => navigate("/app/call-plans")}>
+                  Call plans
                 </Button>
-                <Button size="sm" className="h-8 text-[11px]" onClick={() => navigate("/app/campaigns")}>
-                  Dial flows
+                <Button size="sm" className="h-8 text-[11px]" onClick={() => navigate("/app/people")}>
+                  People
                 </Button>
               </div>
             </div>

@@ -46,6 +46,19 @@ export interface JourneySettings {
   emailSubject?: string | null;
   /** Optional body override for journey email step (supports {{vars}}). */
   emailBody?: string | null;
+  /**
+   * Call plans — which people list this plan runs against.
+   * Engines stay campaigns / sheets; this is product metadata only.
+   */
+  peopleSource?: "campaign" | "manual" | "sheet";
+  /** Dial-flow / CSV campaign whose leads are walked on Start once. */
+  campaignId?: number | null;
+  /** Google Sheets Automatic Calls pipeline id (UUID). */
+  sheetPipelineId?: string | null;
+  /** once = Start once only; live = new sheet rows keep entering from step 1. */
+  runMode?: "once" | "live";
+  /** 1-based sheet row cursor for Keep live (header = 1). */
+  sheetCursorRow?: number;
 }
 
 export const journeysTable = pgTable("journeys", {

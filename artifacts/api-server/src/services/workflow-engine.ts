@@ -19,6 +19,7 @@
 import {
   db, workflowsTable, workflowRunsTable, campaignsTable, campaignLeadsTable,
   callsTable, agentsTable, phoneNumbersTable, journeysTable,
+  sheetAutoCallPipelinesTable,
   type Workflow, type WorkflowRun, type WorkflowStep,
 } from "@workspace/db";
 import { eq, and, sql } from "drizzle-orm";
@@ -36,6 +37,8 @@ import {
 } from "./whatsapp/vobiz.js";
 import { sendChannelEmail } from "./email-channel.js";
 import { interpolateTemplate } from "./template-vars.js";
+import { launchMeetingBotForAgent } from "./meeting-bot-launch.js";
+import { updateSheetRowByIndex } from "./google-sheets.js";
 
 const CALL_TIMEOUT_MS = 20 * 60 * 1000; // give up waiting on a call after 20 min
 
@@ -238,6 +241,16 @@ export async function advanceRun(runId: number): Promise<void> {
       }
       if (step.type === "send_email") {
         await doSendEmail(workflow.userId, step, context);
+        idx++;
+        continue;
+      }
+      if (step.type === "join_meeting") {
+        await doJoinMeeting(workflow.userId, step, context);
+        idx++;
+        continue;
+      }
+      if (step.type === "update_sheet") {
+        await doUpdateSheet(workflow.userId, step, context);
         idx++;
         continue;
       }
@@ -523,6 +536,91 @@ async function doSendEmail(userId: string, step: WorkflowStep, context: Ctx): Pr
     throw new Error(result.error ?? "send_email failed");
   }
   logger.info({ userId, ok: result.ok, skipped: result.skipped }, "workflow: send_email done");
+}
+
+async function doJoinMeeting(userId: string, step: WorkflowStep, context: Ctx): Promise<void> {
+  const field = step.meetingUrlField?.trim();
+  const meetingUrl = toStr(
+    (field ? getPath(context, field) : undefined)
+      || context["meetingUrl"]
+      || context["meetLink"]
+      || context["meeting_url"]
+      || context["meet_link"]
+      || "",
+  ).trim();
+  if (!meetingUrl) {
+    logger.warn({ userId }, "workflow: join_meeting skipped — no meeting URL in context");
+    return;
+  }
+  if (!process.env["RECALL_API_KEY"]) {
+    throw new Error("Meeting bots are not configured (missing Recall API key)");
+  }
+
+  const configuredAgentId =
+    typeof step.agentId === "number" && step.agentId > 0
+      ? step.agentId
+      : Number(context["agentId"] ?? 0);
+  if (!Number.isInteger(configuredAgentId) || configuredAgentId <= 0) {
+    throw new Error("join_meeting step missing agentId");
+  }
+
+  const result = await launchMeetingBotForAgent({
+    userId,
+    configuredAgentId,
+    meetingUrl,
+  });
+  context["meetingBotId"] = result.botId;
+  context["meetingRuntimeAgentId"] = result.runtimeAgentId;
+  logger.info(
+    { userId, botId: result.botId, agentId: result.runtimeAgentId },
+    "workflow: join_meeting dispatched",
+  );
+}
+
+async function doUpdateSheet(userId: string, step: WorkflowStep, context: Ctx): Promise<void> {
+  const pipelineId = toStr(
+    context["__sheet_pipeline_id"]
+      || context["sheetPipelineId"]
+      || context["sheet_pipeline_id"]
+      || "",
+  ).trim();
+  const rowRaw = context["__sheet_row_index"] ?? context["sheetRowIndex"] ?? context["sheet_row_index"];
+  const sheetRowIndex = typeof rowRaw === "number" ? rowRaw : Number(rowRaw);
+  if (!pipelineId || !Number.isFinite(sheetRowIndex) || sheetRowIndex < 2) {
+    logger.warn({ userId, pipelineId, sheetRowIndex }, "workflow: update_sheet skipped — no sheet row in context");
+    return;
+  }
+
+  const [pipeline] = await db.select().from(sheetAutoCallPipelinesTable)
+    .where(and(
+      eq(sheetAutoCallPipelinesTable.id, pipelineId),
+      eq(sheetAutoCallPipelinesTable.userId, userId),
+    ))
+    .limit(1);
+  if (!pipeline) {
+    logger.warn({ userId, pipelineId }, "workflow: update_sheet skipped — pipeline not found");
+    return;
+  }
+
+  const callObj = (context["call"] && typeof context["call"] === "object")
+    ? (context["call"] as Record<string, unknown>)
+    : {};
+  const col = (step.sheetStatusColumn?.trim() || "Status");
+  const value = (
+    step.sheetStatusValue?.trim()
+    || toStr(callObj["disposition"] || callObj["status"] || context["disposition"] || "")
+    || "Updated"
+  ).slice(0, 200);
+
+  await updateSheetRowByIndex(
+    userId,
+    pipeline.connectionId,
+    pipeline.spreadsheetId,
+    pipeline.sheetName,
+    sheetRowIndex,
+    { [col]: value },
+  );
+  logger.info({ userId, pipelineId, sheetRowIndex, col, value }, "workflow: update_sheet done");
 }
 
 // ── atomic claim helpers ─────────────────────────────────────────────────────

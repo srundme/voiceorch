@@ -1,16 +1,16 @@
 import React, { useEffect, useState, useMemo, useRef } from "react";
 import { diffWords, diffWordsWithSpace } from "diff";
-import { useLocation, useParams, useSearch } from "wouter";
+import { useLocation, useParams, useSearch, Link } from "wouter";
 import {
   Bot, Plus, Search, Phone, Mic, Brain, Webhook, PhoneForwarded,
   Save, MoreHorizontal, Trash2, Settings, FileText, Wrench,
   VoicemailIcon, SlidersHorizontal, TestTube2, ChevronRight, ChevronLeft,
   Volume2, Check, X, Pencil, ChevronDown, List, Globe, BarChart3,
-  User2, Sparkles, BookOpen, ToggleLeft, ToggleRight, Tag, Loader2, Square, AudioLines,
+  User2, Users, Sparkles, BookOpen, ToggleLeft, ToggleRight, Tag, Loader2, Square, AudioLines,
   Play, Pause,
   Timer, ShieldCheck, Layers, Gauge, MicOff, HelpCircle, PhoneOff, Mail, MessageCircle,
   History, GitBranch, Eye, RotateCcw, ChevronUp, AlertTriangle, ArrowLeftRight,
-  Upload, Archive, Info, AlertCircle, Calendar, Star,
+  Upload, Archive, Info, AlertCircle, Calendar, Star, Video,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { motion } from "framer-motion";
@@ -74,6 +74,7 @@ import {
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Progress } from "@/components/ui/progress";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError, mapApiErrors, isDestinationUnverifiedError } from "@/lib/format-api-error";
@@ -762,18 +763,18 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
             </div>
           </section>
 
-          {/* Canvas — system prompt */}
+          {/* Canvas — call + meeting prompts */}
           <section className="space-y-3">
             <div className="flex items-start justify-between gap-3">
               <div className="space-y-0.5">
                 <div className="flex items-center gap-2">
-                  <h3 className="text-base font-semibold tracking-tight text-foreground">Canvas</h3>
+                  <h3 className="text-base font-semibold tracking-tight text-foreground">Talk</h3>
                   <Badge variant="secondary" className="text-[10px] font-medium px-1.5 py-0 h-5 rounded-md">
                     {langLabel}
                   </Badge>
                 </div>
                 <p className="text-[12px] text-muted-foreground max-w-lg">
-                  How the agent talks, what it sells, and the rules it never breaks.
+                  Separate instructions for phone calls and video meetings.
                 </p>
               </div>
               <Button
@@ -787,20 +788,54 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
                 Generate
               </Button>
             </div>
-            <div className="rounded-xl border border-border/50 bg-card/40 overflow-hidden shadow-sm">
-              <FormField control={form.control} name="systemPrompt" render={({ field }) => (
-                <FormItem className="space-y-0">
-                  <FormControl>
-                    <Textarea
-                      className="min-h-[320px] text-[13px] resize-none font-mono leading-[1.75] rounded-none border-0 bg-transparent px-4 pt-4 pb-3 shadow-none focus-visible:ring-0"
-                      placeholder="You are a helpful voice assistant…"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage className="text-[10px] px-4 pb-2" />
-                </FormItem>
-              )} />
-            </div>
+            <Tabs defaultValue="calls" className="w-full">
+              <TabsList className="h-9 w-full sm:w-auto grid grid-cols-2 sm:inline-flex">
+                <TabsTrigger value="calls" className="gap-1.5 text-xs">
+                  <Phone className="h-3.5 w-3.5" />
+                  On calls
+                </TabsTrigger>
+                <TabsTrigger value="meetings" className="gap-1.5 text-xs">
+                  <Video className="h-3.5 w-3.5" />
+                  In meetings
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="calls" className="mt-3">
+                <div className="rounded-xl border border-border/50 bg-card/40 overflow-hidden shadow-sm">
+                  <FormField control={form.control} name="systemPrompt" render={({ field }) => (
+                    <FormItem className="space-y-0">
+                      <FormControl>
+                        <Textarea
+                          className="min-h-[280px] text-[13px] resize-none font-mono leading-[1.75] rounded-none border-0 bg-transparent px-4 pt-4 pb-3 shadow-none focus-visible:ring-0"
+                          placeholder="You are a helpful voice assistant on phone calls…"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage className="text-[10px] px-4 pb-2" />
+                    </FormItem>
+                  )} />
+                </div>
+              </TabsContent>
+              <TabsContent value="meetings" className="mt-3 space-y-2">
+                <div className="rounded-xl border border-border/50 bg-card/40 overflow-hidden shadow-sm">
+                  <FormField control={form.control} name="meetingPrompt" render={({ field }) => (
+                    <FormItem className="space-y-0">
+                      <FormControl>
+                        <Textarea
+                          className="min-h-[280px] text-[13px] resize-none font-mono leading-[1.75] rounded-none border-0 bg-transparent px-4 pt-4 pb-3 shadow-none focus-visible:ring-0"
+                          placeholder="Optional. Leave blank to reuse the call prompt. Example: You are in a live video meeting — be concise, greet attendees by name…"
+                          {...field}
+                          value={field.value ?? ""}
+                        />
+                      </FormControl>
+                      <FormMessage className="text-[10px] px-4 pb-2" />
+                    </FormItem>
+                  )} />
+                </div>
+                <p className="text-[11px] text-muted-foreground px-0.5">
+                  Used when this agent joins Meet / Zoom / Teams. Channel join settings live under Channels → Meetings.
+                </p>
+              </TabsContent>
+            </Tabs>
           </section>
 
           {/* Phone assign — mobile/tablet only; desktop uses the action rail */}
@@ -1253,9 +1288,12 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
 function PromptTab({ form }: { form: any }) {
   const { fields: pvFields, append: pvAppend, remove: pvRemove } = useFieldArray({ control: form.control, name: "promptVariables" });
   const [generateOpen, setGenerateOpen] = useState(false);
+  const [promptSurface, setPromptSurface] = useState<"calls" | "meetings">("calls");
   const agentName  = form.watch("name")     as string | undefined;
   const agentLang  = form.watch("language") as string | undefined;
-  const promptLen = String(form.watch("systemPrompt") ?? "").length;
+  const callPromptLen = String(form.watch("systemPrompt") ?? "").length;
+  const meetPromptLen = String(form.watch("meetingPrompt") ?? "").length;
+  const promptLen = promptSurface === "calls" ? callPromptLen : meetPromptLen;
 
   return (
     <div className="relative flex min-h-full flex-col gap-6 px-4 py-5 sm:px-6 lg:px-8">
@@ -1268,6 +1306,7 @@ function PromptTab({ form }: { form: any }) {
         onApply={(prompt, meta) => {
           form.setValue("systemPrompt", prompt, { shouldDirty: true });
           form.setValue("systemPromptGenMeta", meta, { shouldDirty: true });
+          setPromptSurface("calls");
         }}
       />
 
@@ -1275,46 +1314,88 @@ function PromptTab({ form }: { form: any }) {
         <div>
           <h2 className="text-[15px] font-semibold tracking-[-0.02em]">Prompt</h2>
           <p className="mt-0.5 text-[12px] text-muted-foreground">
-            Core instructions for every turn.
+            On calls and in meetings — edit each surface separately.
           </p>
         </div>
         <div className="flex items-center gap-2">
           <span className="hidden text-[10px] tabular-nums text-muted-foreground sm:inline">
             {promptLen.toLocaleString()} chars
           </span>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-8 gap-1.5 text-[11px]"
-            onClick={() => setGenerateOpen(true)}
-          >
-            <Sparkles className="size-3.5" />
-            Generate
-          </Button>
+          {promptSurface === "calls" && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1.5 text-[11px]"
+              onClick={() => setGenerateOpen(true)}
+            >
+              <Sparkles className="size-3.5" />
+              Generate
+            </Button>
+          )}
         </div>
       </div>
 
-      <FormField control={form.control} name="systemPrompt" render={({ field }) => (
-        <FormItem className="space-y-0">
-          <FormControl>
-            <div className="overflow-hidden rounded-lg border border-border bg-card">
-              <div className="flex h-9 items-center justify-between border-b border-border/70 bg-muted/20 px-3">
-                <span className="text-[10px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
-                  System prompt
-                </span>
-                <span className="font-mono text-[10px] text-muted-foreground/70">markdown · plain text</span>
-              </div>
-              <Textarea
-                className="min-h-[min(52vh,520px)] resize-y rounded-none border-0 bg-transparent px-3.5 py-3.5 font-mono text-[12.5px] leading-6 shadow-none focus-visible:ring-0"
-                placeholder="You are a helpful voice assistant…"
-                {...field}
-              />
-            </div>
-          </FormControl>
-          <FormMessage className="mt-2" />
-        </FormItem>
-      )} />
+      <Tabs value={promptSurface} onValueChange={(v) => setPromptSurface(v as "calls" | "meetings")} className="w-full">
+        <TabsList className="h-9 w-full sm:w-auto grid grid-cols-2 sm:inline-flex">
+          <TabsTrigger value="calls" className="gap-1.5 text-xs">
+            <Phone className="h-3.5 w-3.5" />
+            On calls
+          </TabsTrigger>
+          <TabsTrigger value="meetings" className="gap-1.5 text-xs">
+            <Video className="h-3.5 w-3.5" />
+            In meetings
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="calls" className="mt-3">
+          <FormField control={form.control} name="systemPrompt" render={({ field }) => (
+            <FormItem className="space-y-0">
+              <FormControl>
+                <div className="overflow-hidden rounded-lg border border-border bg-card">
+                  <div className="flex h-9 items-center justify-between border-b border-border/70 bg-muted/20 px-3">
+                    <span className="text-[10px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
+                      Call prompt
+                    </span>
+                    <span className="font-mono text-[10px] text-muted-foreground/70">markdown · plain text</span>
+                  </div>
+                  <Textarea
+                    className="min-h-[min(52vh,520px)] resize-y rounded-none border-0 bg-transparent px-3.5 py-3.5 font-mono text-[12.5px] leading-6 shadow-none focus-visible:ring-0"
+                    placeholder="You are a helpful voice assistant on phone calls…"
+                    {...field}
+                  />
+                </div>
+              </FormControl>
+              <FormMessage className="mt-2" />
+            </FormItem>
+          )} />
+        </TabsContent>
+        <TabsContent value="meetings" className="mt-3 space-y-2">
+          <FormField control={form.control} name="meetingPrompt" render={({ field }) => (
+            <FormItem className="space-y-0">
+              <FormControl>
+                <div className="overflow-hidden rounded-lg border border-border bg-card">
+                  <div className="flex h-9 items-center justify-between border-b border-border/70 bg-muted/20 px-3">
+                    <span className="text-[10px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
+                      Meeting prompt
+                    </span>
+                    <span className="font-mono text-[10px] text-muted-foreground/70">blank = use call prompt</span>
+                  </div>
+                  <Textarea
+                    className="min-h-[min(52vh,520px)] resize-y rounded-none border-0 bg-transparent px-3.5 py-3.5 font-mono text-[12.5px] leading-6 shadow-none focus-visible:ring-0"
+                    placeholder="Optional. Leave blank to reuse the call prompt…"
+                    {...field}
+                    value={field.value ?? ""}
+                  />
+                </div>
+              </FormControl>
+              <FormMessage className="mt-2" />
+            </FormItem>
+          )} />
+          <p className="text-[11px] text-muted-foreground">
+            Join / delegate settings stay under Channels → Meetings.
+          </p>
+        </TabsContent>
+      </Tabs>
 
       <section className="overflow-hidden rounded-lg border border-border bg-card">
         <div className="border-b border-border/70 px-3.5 py-2.5">
@@ -5612,6 +5693,9 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
       voiceStack: "classic",
       geminiLiveVoiceName: "Kore",
       geminiLiveThinkingLevel: "minimal",
+      agentComposition: "single",
+      agentSurfaces: "phone",
+      meetingPrompt: "",
     },
   });
 
@@ -5756,6 +5840,11 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
       voiceStack:               (((agent as any).agentConfig?.voiceStack as string | undefined) === "gemini_live" ? "gemini_live" : "classic") as AgentFormValues["voiceStack"],
       geminiLiveVoiceName:      ((agent as any).agentConfig?.geminiLive?.voiceName as string | undefined) ?? "Kore",
       geminiLiveThinkingLevel:  ((agent as any).agentConfig?.geminiLive?.thinkingLevel as AgentFormValues["geminiLiveThinkingLevel"] | undefined) ?? "minimal",
+      agentComposition: "single",
+      agentSurfaces: ((agent as any).agentConfig?.meetings?.enabled === true ? "phone_and_meet" : "phone") as AgentFormValues["agentSurfaces"],
+      meetingPrompt: typeof (agent as any).agentConfig?.meetings?.meetingPrompt === "string"
+        ? (agent as any).agentConfig.meetings.meetingPrompt
+        : "",
     });
     if ((agent as any).agentConfig?.voiceStack === "gemini_live") {
       form.setValue("llmProvider", "google");
@@ -5830,6 +5919,7 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
         voicemailMessage:         "voicemail",
         voicemailLeadInSeconds:   "voicemail",
         systemPrompt:             "prompt",
+        meetingPrompt:            "prompt",
         temperature:              "prompt",
         greetingMessage:          "overview",
         name:                     "overview",
@@ -6051,6 +6141,8 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
         </div>
       </header>
 
+      <AgentTeamStrip agentId={agent.id} />
+
       {/* Rename Agent dialog */}
       <Dialog open={renameDialogOpen} onOpenChange={setRenameDialogOpen}>
         <DialogContent className="sm:max-w-[440px]">
@@ -6222,28 +6314,104 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
 
 /* ── Empty state ────────────────────────────────────────────────────────────── */
 
+function AgentTeamStrip({ agentId }: { agentId: number }) {
+  const [, navigate] = useLocation();
+  const squadsQ = useQuery({
+    queryKey: ["agent-team-strip", agentId],
+    queryFn: () => customFetch<Array<{
+      id: number;
+      name: string;
+      status: string;
+      members: Array<{ agentId: number; roleName: string; agentName?: string | null }>;
+    }>>("/api/squads"),
+    staleTime: 30_000,
+  });
+  const teams = (squadsQ.data ?? []).filter((s) =>
+    s.members?.some((m) => m.agentId === agentId),
+  );
+
+  if (squadsQ.isLoading) return null;
+
+  if (teams.length === 0) {
+    return (
+      <div className="flex shrink-0 items-center gap-2 border-b border-border/70 bg-muted/15 px-3 py-1.5 sm:px-5">
+        <Users className="size-3.5 shrink-0 text-muted-foreground" />
+        <p className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">
+          Solo agent — not on a team yet.
+        </p>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="h-7 shrink-0 gap-1 px-2 text-[11px]"
+          onClick={() => navigate(`/app/squads?seedAgent=${agentId}`)}
+        >
+          <Plus className="size-3" />
+          Add to team
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border/70 bg-muted/15 px-3 py-1.5 sm:px-5">
+      <Users className="size-3.5 shrink-0 text-muted-foreground" />
+      <span className="text-[11px] text-muted-foreground">Team</span>
+      {teams.map((team) => {
+        const role = team.members.find((m) => m.agentId === agentId)?.roleName;
+        const mates = team.members
+          .filter((m) => m.agentId !== agentId)
+          .map((m) => m.agentName || m.roleName)
+          .slice(0, 3);
+        return (
+          <button
+            key={team.id}
+            type="button"
+            onClick={() => navigate(`/app/squads/${team.id}`)}
+            className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-border/70 bg-background px-2 py-0.5 text-[11px] hover:bg-muted/40"
+            title={mates.length ? `With ${mates.join(", ")}` : team.name}
+          >
+            <GitBranch className="size-3 shrink-0 text-muted-foreground" />
+            <span className="truncate font-medium">{team.name}</span>
+            {role ? <span className="truncate text-muted-foreground">· {role}</span> : null}
+          </button>
+        );
+      })}
+      <Button
+        type="button"
+        size="sm"
+        variant="ghost"
+        className="h-7 shrink-0 gap-1 px-2 text-[11px] text-muted-foreground"
+        onClick={() => navigate("/app/squads")}
+      >
+        Manage
+      </Button>
+    </div>
+  );
+}
+
 function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [, navigate] = useLocation();
   const queryClient = useQueryClient();
-  const [step, setStep] = useState<"pick" | "scratch">("pick");
+  const { toast } = useToast();
+  const [step, setStep] = useState<"compose" | "surfaces" | "name">("compose");
+  const [composition, setComposition] = useState<"single" | "team">("single");
+  const [surfaces, setSurfaces] = useState<"phone" | "phone_and_meet">("phone");
   const [agentName, setAgentName] = useState("");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
   const handleClose = () => {
     if (creating) return;
-    setStep("pick");
+    setStep("compose");
+    setComposition("single");
+    setSurfaces("phone");
     setAgentName("");
     setCreateError(null);
     onClose();
   };
 
-  const handleVibe = () => {
-    handleClose();
-    navigate("/app/vibe");
-  };
-
-  const handleScratch = async () => {
+  const handleCreate = async () => {
     setCreating(true);
     setCreateError(null);
     try {
@@ -6266,6 +6434,17 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
         ttsModel: "bulbul:v3",
         ttsVoice: "priya",
       };
+      if (surfaces === "phone_and_meet") {
+        body.agentConfig = {
+          meetings: {
+            enabled: true,
+            whoJoins: "self",
+            meetingPrompt: "",
+            passMemory: true,
+            passCallContext: true,
+          },
+        };
+      }
 
       const result = await customFetch<{ id: number }>(`${DASH_API}/agents`, {
         method: "POST",
@@ -6274,7 +6453,15 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
       });
       await queryClient.invalidateQueries({ queryKey: getListAgentsQueryKey() });
       handleClose();
-      navigate(`/app/agents/${result.id}`);
+      if (composition === "team") {
+        toast({
+          title: "First agent ready",
+          description: "Add teammates and name the team — then they can hand off mid-call.",
+        });
+        navigate(`/app/squads?seedAgent=${result.id}`);
+      } else {
+        navigate(`/app/agents/${result.id}`);
+      }
     } catch (err: any) {
       const issueMsg = Array.isArray(err?.issues) ? err.issues.map((i: any) => `${i.path.join(".")}: ${i.message}`).join(", ") : "";
       setCreateError(issueMsg ? `Validation failed: ${issueMsg}` : (err?.message ?? "Failed to create agent. Please try again."));
@@ -6283,51 +6470,117 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
     }
   };
 
+  const stepTitle =
+    step === "compose" ? "Who is this for?"
+      : step === "surfaces" ? "Where will they talk?"
+        : "Name your agent";
+  const stepDesc =
+    step === "compose" ? "Start with one agent, or plan a handoff team."
+      : step === "surfaces" ? "Phone only, or phone plus video meetings with a separate prompt."
+        : composition === "team"
+          ? "We’ll create this agent, then open team setup so you can add teammates."
+          : "You can edit prompts and channels anytime.";
+
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
+    <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose(); }}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>
-            {step === "pick" && "Create a new agent"}
-            {step === "scratch" && "Configure new agent"}
-          </DialogTitle>
-          <DialogDescription>
-            {step === "pick" && "Build with AI for a guided setup, or configure manually from scratch."}
-            {step === "scratch" && "Name your agent. You can edit settings anytime."}
-          </DialogDescription>
+          <DialogTitle>{stepTitle}</DialogTitle>
+          <DialogDescription>{stepDesc}</DialogDescription>
         </DialogHeader>
 
-        {step === "pick" ? (
+        {step === "compose" && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 py-2">
             <button
-              onClick={handleVibe}
-              className="group relative flex flex-col items-center gap-2 rounded-xl border-2 border-primary/40 bg-primary/5 p-5 text-center hover:border-primary hover:bg-primary/10 transition-colors"
+              type="button"
+              onClick={() => { setComposition("single"); setStep("surfaces"); }}
+              className={cn(
+                "group flex flex-col items-center gap-2 rounded-xl border p-5 text-center transition-colors",
+                composition === "single"
+                  ? "border-primary/40 bg-primary/5 hover:border-primary"
+                  : "border-border/60 bg-card hover:border-primary/50 hover:bg-primary/5",
+              )}
             >
-              <span className="absolute top-2 right-2 text-[10px] font-semibold uppercase tracking-wide text-primary bg-primary/10 px-1.5 py-0.5 rounded">
-                Recommended
-              </span>
-              <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
-                <Sparkles className="h-5 w-5 text-primary" />
+              <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                <User2 className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <p className="text-sm font-semibold">Build with AI</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Guided conversational setup</p>
+                <p className="text-sm font-semibold">One agent</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Single voice personality</p>
               </div>
             </button>
             <button
-              onClick={() => setStep("scratch")}
-              className="group flex flex-col items-center gap-2 rounded-xl border border-border/60 bg-card p-5 text-center hover:border-primary/50 hover:bg-primary/5 transition-colors"
+              type="button"
+              onClick={() => { setComposition("team"); setStep("surfaces"); }}
+              className={cn(
+                "group flex flex-col items-center gap-2 rounded-xl border p-5 text-center transition-colors",
+                composition === "team"
+                  ? "border-primary/40 bg-primary/5 hover:border-primary"
+                  : "border-border/60 bg-card hover:border-primary/50 hover:bg-primary/5",
+              )}
             >
-              <div className="h-10 w-10 rounded-xl bg-muted flex items-center justify-center group-hover:bg-muted/80 transition-colors">
-                <Settings className="h-5 w-5 text-muted-foreground" />
+              <div className="h-10 w-10 rounded-xl bg-muted flex items-center justify-center group-hover:bg-muted/80">
+                <Users className="h-5 w-5 text-muted-foreground" />
               </div>
               <div>
-                <p className="text-sm font-semibold">Build from scratch</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Full manual configuration</p>
+                <p className="text-sm font-semibold">Team</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Handoffs across agents</p>
               </div>
             </button>
+            <button
+              type="button"
+              onClick={() => { handleClose(); navigate("/app/vibe"); }}
+              className="sm:col-span-2 flex items-center justify-center gap-2 rounded-lg border border-dashed border-border/60 px-3 py-2.5 text-xs text-muted-foreground hover:border-primary/40 hover:text-foreground transition-colors"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              Or build with AI (guided)
+            </button>
           </div>
-        ) : (
+        )}
+
+        {step === "surfaces" && (
+          <div className="space-y-4 py-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setSurfaces("phone")}
+                className={cn(
+                  "flex flex-col items-start gap-1.5 rounded-xl border p-4 text-left transition-colors",
+                  surfaces === "phone"
+                    ? "border-primary/40 bg-primary/5"
+                    : "border-border/60 hover:border-primary/40 hover:bg-primary/5",
+                )}
+              >
+                <Phone className="h-4 w-4 text-primary" />
+                <p className="text-sm font-semibold">Phone</p>
+                <p className="text-[11px] text-muted-foreground leading-snug">Inbound / outbound voice calls</p>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSurfaces("phone_and_meet")}
+                className={cn(
+                  "flex flex-col items-start gap-1.5 rounded-xl border p-4 text-left transition-colors",
+                  surfaces === "phone_and_meet"
+                    ? "border-primary/40 bg-primary/5"
+                    : "border-border/60 hover:border-primary/40 hover:bg-primary/5",
+                )}
+              >
+                <div className="flex items-center gap-1.5">
+                  <Phone className="h-4 w-4 text-primary" />
+                  <Video className="h-4 w-4 text-primary" />
+                </div>
+                <p className="text-sm font-semibold">Phone + meetings</p>
+                <p className="text-[11px] text-muted-foreground leading-snug">Dual prompts — calls and Meet/Zoom</p>
+              </button>
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setStep("compose")}>Back</Button>
+              <Button onClick={() => setStep("name")}>Continue</Button>
+            </DialogFooter>
+          </div>
+        )}
+
+        {step === "name" && (
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
               <Label htmlFor="scratch-name">Agent name</Label>
@@ -6336,16 +6589,20 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
                 placeholder="e.g. Support Representative"
                 value={agentName}
                 onChange={e => setAgentName(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && void handleScratch()}
+                onKeyDown={e => e.key === "Enter" && void handleCreate()}
                 autoFocus
               />
             </div>
-
+            <p className="text-[11px] text-muted-foreground">
+              {composition === "single" ? "One agent" : "Team (first agent)"}
+              {" · "}
+              {surfaces === "phone" ? "Phone" : "Phone + meetings"}
+            </p>
             {createError && <p className="text-xs text-destructive">{createError}</p>}
             <DialogFooter>
-              <Button variant="ghost" onClick={() => setStep("pick")} disabled={creating}>Back</Button>
-              <Button onClick={() => void handleScratch()} disabled={creating}>
-                {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create agent"}
+              <Button variant="ghost" onClick={() => setStep("surfaces")} disabled={creating}>Back</Button>
+              <Button onClick={() => void handleCreate()} disabled={creating}>
+                {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : composition === "team" ? "Create & assemble team" : "Create agent"}
               </Button>
             </DialogFooter>
           </div>
@@ -6366,15 +6623,15 @@ function StudioEmptyCanvas({ onCreate }: { onCreate: () => void }) {
         <div className="space-y-1.5">
           <h2 className="text-lg font-semibold tracking-tight">Select an agent</h2>
           <p className="text-sm text-muted-foreground leading-relaxed">
-            Pick one from the list, or create a new agent with AI or manual setup.
+            Pick one from the list, or create a new agent for phone — or phone plus meetings.
           </p>
         </div>
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-2 pt-1 w-full max-w-sm mx-auto">
-          <Button className="h-11 min-h-11 rounded-xl gap-1.5 text-xs w-full sm:w-auto" onClick={() => navigate("/app/vibe")}>
-            <Sparkles className="h-3.5 w-3.5" /> Build with AI
+          <Button className="h-11 min-h-11 rounded-xl gap-1.5 text-xs w-full sm:w-auto" onClick={onCreate}>
+            <Plus className="h-3.5 w-3.5" /> New agent
           </Button>
-          <Button variant="outline" className="h-11 min-h-11 rounded-xl gap-1.5 text-xs w-full sm:w-auto" onClick={onCreate}>
-            <Plus className="h-3.5 w-3.5" /> Manual setup
+          <Button variant="outline" className="h-11 min-h-11 rounded-xl gap-1.5 text-xs w-full sm:w-auto" onClick={() => navigate("/app/vibe")}>
+            <Sparkles className="h-3.5 w-3.5" /> Build with AI
           </Button>
         </div>
       </div>

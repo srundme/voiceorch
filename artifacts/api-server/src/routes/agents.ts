@@ -373,6 +373,16 @@ router.patch("/agents/:id", requireAuth, clientContext, denyManagedClient, async
       if (incomingCal != null && existingCal != null) {
         merged.calendarCapability = { ...existingCal, ...incomingCal };
       }
+      // Deep-merge meetings so Builder Talk → Meet prompt doesn't wipe
+      // Channels → Meetings whoJoins / delegate / memory toggles.
+      const incomingMeet = (updateData.agentConfig as AgentConfig)?.meetings;
+      const existingMeet = (existing.agentConfig as AgentConfig)?.meetings;
+      if (incomingMeet != null && typeof incomingMeet === "object") {
+        merged.meetings = {
+          ...(existingMeet && typeof existingMeet === "object" ? existingMeet : {}),
+          ...incomingMeet,
+        };
+      }
       // IRDAI advisory prompt check (informational only — never blocks the save).
       // When IRDAI is enabled, statically analyze the resulting system prompt
       // against the IRDAI disclosure checklist and persist the result. When
