@@ -2325,8 +2325,8 @@ export default function ConnectionsPage() {
                     Watch a sheet, dial leads, write results back
                   </p>
                 </div>
-                <Button size="sm" variant="outline" className="h-8 px-2.5 text-[11px]" onClick={() => setMetaOpen(true)}>
-                  Configure Meta Ads
+                <Button size="sm" className="h-8 px-2.5 text-[11px]" onClick={() => void connectSheets()}>
+                  Connect
                 </Button>
               </div>
             ) : (
