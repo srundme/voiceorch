@@ -1,4 +1,5 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { Link, useLocation } from "wouter";
 import { useScrollRestoration } from "@/lib/use-scroll-restoration";
 import {
@@ -1203,6 +1204,11 @@ export default function CampaignsPage() {
   const [search,          setSearch]          = useState("");
   const [filterSource,    setFilterSource]    = useState("__all__");
   const [filterStatus,    setFilterStatus]    = useState("__all__");
+  const [portalTarget,    setPortalTarget]    = useState<HTMLElement | null>(null);
+
+  useEffect(() => {
+    setPortalTarget(document.getElementById("stripe-page-actions"));
+  }, []);
 
   const qc      = useQueryClient();
   const { toast } = useToast();
@@ -1248,38 +1254,42 @@ export default function CampaignsPage() {
     }
   }
 
+  const actionsContent = (
+    <>
+      {isFetching && !isLoading && (
+        <span className="mr-auto text-[11px] text-muted-foreground hidden sm:inline">Refreshing…</span>
+      )}
+      <button
+        type="button"
+        onClick={() => setHelpOpen(true)}
+        className="h-8 w-8 rounded-lg border border-border/60 bg-muted/40 hover:bg-muted/70 flex items-center justify-center text-muted-foreground/50 hover:text-foreground transition-all"
+        title="Campaign Studio guide"
+      >
+        <HelpCircle className="h-3.5 w-3.5" />
+      </button>
+      <Button
+        size="sm"
+        variant="outline"
+        className="h-8 text-xs gap-1.5 rounded-lg"
+        onClick={() => {
+          const token = localStorage.getItem("voiceorch:session");
+          const url = `${BASE}/api/campaigns/export.csv${token ? `?token=${encodeURIComponent(token)}` : ""}`;
+          window.open(url, "_blank");
+        }}
+      >
+        <FileText className="h-3.5 w-3.5" /> Export
+      </Button>
+      <Button size="sm" className="h-8 text-xs gap-1.5 rounded-lg" onClick={() => setCreateOpen(true)}>
+        <Plus className="h-3.5 w-3.5" /> New campaign studio
+      </Button>
+    </>
+  );
+
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden">
-      {/* Stats + actions (parent StripePage owns the page title) */}
+      {portalTarget && createPortal(actionsContent, portalTarget)}
+      {/* Stats (no actions here anymore) */}
       <div className="shrink-0 space-y-4 border-b border-border px-4 sm:px-6 py-4">
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          {isFetching && !isLoading && (
-            <span className="mr-auto text-[11px] text-muted-foreground">Refreshing…</span>
-          )}
-          <button
-            type="button"
-            onClick={() => setHelpOpen(true)}
-            className="h-8 w-8 rounded-lg border border-border/60 bg-muted/40 hover:bg-muted/70 flex items-center justify-center text-muted-foreground/50 hover:text-foreground transition-all"
-            title="Campaign Studio guide"
-          >
-            <HelpCircle className="h-3.5 w-3.5" />
-          </button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8 text-xs gap-1.5 rounded-lg"
-            onClick={() => {
-              const token = localStorage.getItem("voiceorch:session");
-              const url = `${BASE}/api/campaigns/export.csv${token ? `?token=${encodeURIComponent(token)}` : ""}`;
-              window.open(url, "_blank");
-            }}
-          >
-            <FileText className="h-3.5 w-3.5" /> Export
-          </Button>
-          <Button size="sm" className="h-8 text-xs gap-1.5 rounded-lg" onClick={() => setCreateOpen(true)}>
-            <Plus className="h-3.5 w-3.5" /> New campaign studio
-          </Button>
-        </div>
         <MetricStrip cols={6}>
           <MetricCard
             label="Active flows"

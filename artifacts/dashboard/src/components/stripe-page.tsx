@@ -64,11 +64,10 @@ export function StripePage({
               </p>
             )}
           </div>
-          {actions && (
-            <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 pt-0.5">
-              {actions}
-            </div>
-          )}
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 pt-0.5 empty:hidden">
+            {actions}
+            <div id="stripe-page-actions" className="contents" />
+          </div>
         </div>
         {tabs && <div className="mt-4 -mb-4">{tabs}</div>}
       </header>
