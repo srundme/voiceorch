@@ -1223,16 +1223,18 @@ function MetaIntegrationCard({
 
 // ── Campaign summary KPI card (mirrors the Batch Workspace KpiCard) ───────────
 
-function KpiCard({ icon, label, value, color }: {
-  icon: React.ReactNode; label: string; value: number | string; color?: string;
+function KpiCard({ icon, label, value, color, bgCls }: {
+  icon: React.ReactNode; label: string; value: number | string; color?: string; bgCls?: string;
 }) {
   return (
-    <div className="bg-card px-3.5 py-3 flex flex-col gap-1.5">
-      <div className="flex items-center gap-1.5">
-        <span className={cn("text-muted-foreground/50", color)}>{icon}</span>
-        <span className="text-xs uppercase tracking-wider font-semibold text-muted-foreground/40 truncate">{label}</span>
+    <div className="bg-card rounded-xl border border-border p-5 flex flex-col gap-3 shadow-sm hover:shadow-md transition-shadow">
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground/70 truncate">{label}</span>
+        <div className={cn("h-8 w-8 rounded-lg flex items-center justify-center shrink-0", bgCls || "bg-muted")}>
+          <span className={cn(color)}>{icon}</span>
+        </div>
       </div>
-      <p className={cn("text-xl font-bold tabular-nums truncate", color ?? "text-foreground")}>{value}</p>
+      <p className={cn("text-2xl font-bold tabular-nums truncate", color ?? "text-foreground")}>{value}</p>
     </div>
   );
 }
@@ -1784,10 +1786,12 @@ export default function CampaignDetailPage() {
           {/* CSV campaigns — no extra configuration needed */}
           {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
           {(campaign as any).leadSource === "csv" && (
-            <div className="py-12 text-center border border-dashed border-border rounded-xl">
+            <div className="py-12 text-center border border-dashed border-border rounded-xl bg-muted/10">
               <FileText className="h-8 w-8 text-muted-foreground/20 mx-auto mb-2" />
-              <p className="text-sm text-muted-foreground/50">No extra configuration needed</p>
-              <p className="text-xs text-muted-foreground/30 mt-0.5">Upload a CSV file when creating a new batch</p>
+              <p className="text-sm font-medium text-foreground/70">CSV Upload Campaign</p>
+              <p className="text-xs text-muted-foreground/50 mt-1 max-w-sm mx-auto">
+                No extra configuration is needed. Leads are dialled automatically based on your campaign settings.
+              </p>
             </div>
           )}
 
@@ -1805,49 +1809,74 @@ export default function CampaignDetailPage() {
 
           {/* Campaign-level summary — health + progress, then outcome metrics that
               actually help judge performance (vs. flat administrative counts). */}
-          <div className="rounded-xl border border-border/60 bg-card overflow-hidden">
-            <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-8 px-4 py-3.5 border-b border-border/50">
-              <div className="flex items-center gap-2 shrink-0" title={campaignHealth.label}>
-                <span className={cn("h-2 w-2 rounded-full shrink-0", campaignHealth.dotCls)} />
-                <span className={cn("inline-flex items-center gap-1.5 text-xs font-semibold", campaignHealth.accent)}>
-                  {campaignHealth.icon}
-                  {campaignHealth.label}
-                </span>
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-[11px] uppercase tracking-wider font-semibold text-muted-foreground/40">Overall Progress</span>
-                  <span className="text-xs font-mono font-semibold text-foreground/80 tabular-nums">{overallProgress}</span>
+          <div className="space-y-4">
+            {/* Overall Progress and Health Card */}
+            <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+                <div className="flex items-center gap-3 shrink-0" title={campaignHealth.label}>
+                  <div className={cn("flex items-center justify-center h-10 w-10 rounded-full bg-opacity-20", campaignHealth.dotCls.replace("bg-", "bg-").replace("500", "500/10"))}>
+                    <span className={cn(campaignHealth.accent)}>
+                      {campaignHealth.icon}
+                    </span>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 mb-0.5">Campaign Status</p>
+                    <p className={cn("text-sm font-bold", campaignHealth.accent)}>
+                      {campaignHealth.label}
+                    </p>
+                  </div>
                 </div>
-                <Progress value={overallPct} className="h-1.5" />
+
+                <div className="flex-1 max-w-lg min-w-0">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-semibold text-foreground/70">Overall Progress</span>
+                    <span className="text-xs font-mono font-bold text-foreground">{overallProgress}</span>
+                  </div>
+                  <Progress value={overallPct} className="h-2" />
+                </div>
               </div>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-border/60">
-              <KpiCard icon={<PhoneCall className="h-3 w-3" />} label="Connected"       value={connectedCalls.toLocaleString()} color="text-sky-500" />
-              <KpiCard icon={<Target className="h-3 w-3" />}    label="Success Rate"    value={`${successRatePct}%`} color="text-emerald-500" />
-              <KpiCard icon={<Users className="h-3 w-3" />}     label="Leads Remaining" value={leadsRemaining.toLocaleString()} color="text-amber-500" />
-              <KpiCard icon={<XCircle className="h-3 w-3" />}   label="Failed"          value={failed.toLocaleString()} color="text-red-500" />
-            </div>
-            <div className="px-4 py-2 border-t border-border/40 bg-muted/20 flex items-center justify-between text-[11px] text-muted-foreground flex-wrap gap-2">
-              <span className="flex items-center gap-1 font-medium">
-                📁 Source: <strong className="text-foreground capitalize">{(campaign as any).leadSource === "csv" ? "CSV Upload" : (campaign as any).leadSource === "meta_ads" ? "Meta Ads" : (campaign as any).leadSource === "google_sheets" ? "Google Sheets" : "Website Webhook"}</strong>
-              </span>
-              <span>⚡ Pacing: <strong className="text-foreground font-mono">{(campaign as any).callDelaySeconds ?? 5}s</strong> delay</span>
-              <span>🔄 Retries: <strong className="text-foreground font-mono">{(campaign as any).maxAttempts ?? 2}</strong> attempts</span>
-              <span>🕒 Hours: <strong className="text-foreground font-mono">09:00 AM - 07:00 PM</strong></span>
-            </div>
-          </div>
 
-          {/* Leads & Live Pipeline Table */}
-          <div className="mt-2 space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                <Users className="h-4 w-4 text-emerald-400" />
-                Uploaded Leads & Live Calling Pipeline
-              </h3>
+            {/* 4 KPIs Grid */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <KpiCard icon={<PhoneCall className="h-4 w-4" />} label="Connected"       value={connectedCalls.toLocaleString()} color="text-sky-500" bgCls="bg-sky-500/10" />
+              <KpiCard icon={<Target className="h-4 w-4" />}    label="Success Rate"    value={`${successRatePct}%`} color="text-emerald-500" bgCls="bg-emerald-500/10" />
+              <KpiCard icon={<Users className="h-4 w-4" />}     label="Remaining"       value={leadsRemaining.toLocaleString()} color="text-amber-500" bgCls="bg-amber-500/10" />
+              <KpiCard icon={<XCircle className="h-4 w-4" />}   label="Failed"          value={failed.toLocaleString()} color="text-red-500" bgCls="bg-red-500/10" />
             </div>
-            <div className="rounded-xl border border-border/60 bg-card overflow-hidden">
-              <LiveQueueTab campaignId={campaignId} />
+
+            {/* Config metadata row */}
+            <div className="rounded-xl border border-border bg-muted/30 px-5 py-4 mt-4">
+              <div className="flex items-center justify-between flex-wrap gap-4 text-xs">
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-muted-foreground/50 uppercase tracking-wider text-[10px] font-semibold">Source</span>
+                  <span className="font-medium text-foreground/80 capitalize flex items-center gap-1.5">
+                    <FileText className="h-3.5 w-3.5 text-muted-foreground/50" />
+                    {(campaign as any).leadSource === "csv" ? "CSV Upload" : (campaign as any).leadSource === "meta_ads" ? "Meta Ads" : (campaign as any).leadSource === "google_sheets" ? "Google Sheets" : "Website Webhook"}
+                  </span>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-muted-foreground/50 uppercase tracking-wider text-[10px] font-semibold">Pacing</span>
+                  <span className="font-medium text-foreground/80 flex items-center gap-1.5">
+                    <Zap className="h-3.5 w-3.5 text-muted-foreground/50" />
+                    {(campaign as any).callDelaySeconds ?? 5}s delay
+                  </span>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-muted-foreground/50 uppercase tracking-wider text-[10px] font-semibold">Retries</span>
+                  <span className="font-medium text-foreground/80 flex items-center gap-1.5">
+                    <RefreshCw className="h-3.5 w-3.5 text-muted-foreground/50" />
+                    {(campaign as any).maxAttempts ?? 2} attempts
+                  </span>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-muted-foreground/50 uppercase tracking-wider text-[10px] font-semibold">Hours</span>
+                  <span className="font-medium text-foreground/80 flex items-center gap-1.5">
+                    <Clock className="h-3.5 w-3.5 text-muted-foreground/50" />
+                    09:00 AM - 07:00 PM
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
 
