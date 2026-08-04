@@ -1879,13 +1879,12 @@ export default function CampaignDetailPage() {
             </div>
           </div>
 
-          {/* Batches — batch-mode campaigns only */}
-          {(campaign as unknown as Record<string, unknown>)["triggerMode"] !== "instant" ? (
+          {/* Lead Runs & Pipeline Batches */}
           <div>
             <div className="flex items-start justify-between gap-3 mb-3">
               <div>
                 <h3 className="text-sm font-semibold text-foreground">Lead Runs</h3>
-                <p className="text-xs text-muted-foreground/50 mt-0.5">Manage and monitor your uploaded lead runs</p>
+                <p className="text-xs text-muted-foreground/50 mt-0.5">Manage and monitor your active lead runs and pipeline batches</p>
               </div>
               {(campaign as any).leadSource === "crm" && (
                 <CrmImportButton campaignId={campaignId} />
@@ -1896,14 +1895,14 @@ export default function CampaignDetailPage() {
                 {[1, 2].map(i => <div key={i} className="h-24 bg-muted rounded-xl animate-pulse" />)}
               </div>
             ) : !batches?.length ? (
-              <div className="py-10 text-center border border-dashed border-border rounded-xl">
-                <Layers className="h-8 w-8 text-muted-foreground/20 mx-auto mb-2" />
-                <p className="text-sm text-muted-foreground/50">No lead runs yet</p>
-                <p className="text-xs text-muted-foreground/30 mt-0.5 mb-4">Upload a CSV file or connect a source to start calling leads</p>
-                <Button size="sm" variant="outline" className="gap-1.5 h-7 text-xs"
-                  onClick={() => setLocation(`/app/campaigns/${campaignId}/batches/new`)}>
-                  <Plus className="h-3 w-3" /> Upload Lead File
-                </Button>
+              <div className="py-8 px-6 text-center border border-emerald-500/30 bg-emerald-500/8 rounded-xl space-y-2">
+                <div className="size-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto">
+                  <Zap className="size-5 animate-pulse" />
+                </div>
+                <p className="text-sm font-semibold text-foreground">🟢 Live Lead Pipeline Active</p>
+                <p className="text-xs text-muted-foreground/70 max-w-md mx-auto">
+                  This Studio is active for Agent #{campaign.agentId}. Inbound leads from website webhooks, Google Sheets, or uploaded CSV files populate here and dial automatically.
+                </p>
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-3">
@@ -1913,27 +1912,6 @@ export default function CampaignDetailPage() {
               </div>
             )}
           </div>
-          ) : (
-          <div>
-            <div className="flex items-start justify-between gap-3 mb-3">
-              <div>
-                <h3 className="text-sm font-semibold text-foreground">Daily Batches</h3>
-                <p className="text-xs text-muted-foreground/50 mt-0.5">Auto-created per day as leads arrive via the webhook</p>
-              </div>
-              {(campaign as any).leadSource === "crm" && (
-                <CrmImportButton campaignId={campaignId} />
-              )}
-            </div>
-            {batchLoading ? (
-              <div className="grid grid-cols-1 gap-3">
-                {[1, 2].map(i => <div key={i} className="h-24 bg-muted rounded-xl animate-pulse" />)}
-              </div>
-            ) : !batches?.length ? (
-              <div className="py-10 text-center border border-dashed border-border rounded-xl">
-                <Zap className="h-8 w-8 text-muted-foreground/20 mx-auto mb-2" />
-                <p className="text-sm text-muted-foreground/50">No leads yet</p>
-                <p className="text-xs text-muted-foreground/30 mt-0.5">A batch is auto-created the moment the first lead arrives today.</p>
-              </div>
             ) : (() => {
               // Group batches by their date label (extracted from "Live — Jun 30" names)
               const groups: { dateLabel: string; items: CampaignBatch[] }[] = [];

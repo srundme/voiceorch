@@ -5,7 +5,7 @@ import {
   CreateCampaignBody,
   UpdateCampaignBody,
 } from "@workspace/api-zod";
-import { db, campaignsTable, campaignLeadsTable, callsTable, agentsTable, providersTable, platformSettingsTable, campaignConsentBasisTable, phoneNumbersTable, type CampaignFieldMappings } from "@workspace/db";
+import { db, campaignsTable, campaignBatchesTable, campaignLeadsTable, callsTable, agentsTable, providersTable, platformSettingsTable, campaignConsentBasisTable, phoneNumbersTable, type CampaignFieldMappings } from "@workspace/db";
 import { encryptKey, decryptKey } from "../lib/crypto.js";
 import { eq, and, count, desc, inArray, isNull, ne } from "drizzle-orm";
 import { scheduleCampaignCall } from "../orchestration/campaignCaller.js";
@@ -322,7 +322,7 @@ router.post("/campaigns", async (req, res): Promise<void> => {
     }
 
     const leadSource = (parsed.data as Record<string, unknown>)["leadSource"] as string ?? "csv";
-    const isContinuous = ["webhook", "meta_ads", "crm"].includes(leadSource);
+    const rawLeads = Array.isArray((req.body as any)?.leads) ? ((req.body as any).leads as Record<string, string>[]) : [];
 
     const [campaign] = await db.insert(campaignsTable).values({
       userId,
@@ -332,15 +332,56 @@ router.post("/campaigns", async (req, res): Promise<void> => {
       fieldMappings,
       fromNumber:          parsed.data.fromNumber,
       concurrentCallLimit: parsed.data.concurrentCallLimit ?? MAX_CONCURRENT_CALLS,
-      callDelaySeconds:    parsed.data.callDelaySeconds,
-      maxAttempts:         parsed.data.maxAttempts,
-      retryDelayMinutes:   parsed.data.retryDelayMinutes,
+      callDelaySeconds:    parsed.data.callDelaySeconds ?? 5,
+      maxAttempts:         parsed.data.maxAttempts ?? 2,
+      retryDelayMinutes:   parsed.data.retryDelayMinutes ?? 15,
       leadSource,
-      triggerMode:         isContinuous ? "instant" : ((parsed.data as Record<string, unknown>)["triggerMode"] as string ?? "batch"),
+      triggerMode:         "instant",
       webhookToken:        randomUUID(),
-      status:              isContinuous ? "active" : "draft",
-      isActive:            isContinuous,
+      status:              "active",
+      isActive:            true,
     }).returning();
+
+    // ── Automatically Create Initial Lead Run & Insert Leads ──
+    try {
+      const [batch] = await db.insert(campaignBatchesTable).values({
+        campaignId: campaign!.id,
+        name: rawLeads.length > 0 ? `Batch #1 (${rawLeads.length} Leads)` : `Live Lead Pipeline (${leadSource})`,
+        leadSource,
+        status: "running",
+        callDelaySeconds: campaign!.callDelaySeconds ?? 5,
+        maxAttempts: campaign!.maxAttempts ?? 2,
+        retryDelayMinutes: campaign!.retryDelayMinutes ?? 15,
+        totalLeads: rawLeads.length,
+      }).returning();
+
+      if (rawLeads.length > 0 && batch) {
+        const leadValues = rawLeads.map((row) => {
+          const phone = row["phone"] || row["mobile"] || row["number"] || Object.values(row)[0] || "";
+          const nameVal = row["name"] || row["full_name"] || row["customer_name"] || null;
+          const emailVal = row["email"] || null;
+          return {
+            campaignId: campaign!.id,
+            batchId: batch.id,
+            phone: String(phone).trim(),
+            name: nameVal ? String(nameVal).trim() : null,
+            email: emailVal ? String(emailVal).trim() : null,
+            leadData: row,
+            callStatus: "pending",
+            source: leadSource,
+          };
+        }).filter(l => l.phone.length > 0);
+
+        if (leadValues.length > 0) {
+          await db.insert(campaignLeadsTable).values(leadValues);
+          await db.update(campaignsTable)
+            .set({ totalLeads: leadValues.length })
+            .where(eq(campaignsTable.id, campaign!.id));
+        }
+      }
+    } catch (batchErr) {
+      req.log.warn({ batchErr, campaignId: campaign!.id }, "Failed to auto-create initial batch");
+    }
 
     if (dpdpEnabled && consentBasis) {
       try {
