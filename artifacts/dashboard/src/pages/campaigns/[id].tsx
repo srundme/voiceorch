@@ -1539,13 +1539,7 @@ export default function CampaignDetailPage() {
                 <CheckCircle2 className="h-3.5 w-3.5" /> Campaign Completed
               </span>
             )}
-            {/* CSV campaigns: Upload Leads button + dropdown controls */}
-            {(!isContinuous || campaign.status === "draft") && (
-              <Button size="sm" className="h-8 text-xs gap-1.5"
-                onClick={() => setLocation(`/app/campaigns/${campaignId}/batches/new`)}>
-                <Plus className="h-3.5 w-3.5" /> Upload Leads
-              </Button>
-            )}
+
             {/* Stopped continuous campaign → Activate button */}
             {isContinuous && campaign.status === "stopped" && (
               <Button size="sm" className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
@@ -1868,12 +1862,6 @@ export default function CampaignDetailPage() {
                 <p className="text-xs text-muted-foreground/70 max-w-md mx-auto">
                   This Studio is active for Agent #{campaign.agentId}. Inbound leads from website webhooks, Google Sheets, or uploaded CSV files populate here and dial automatically.
                 </p>
-                <div className="pt-2">
-                  <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10"
-                    onClick={() => setLocation(`/app/campaigns/${campaignId}/batches/new`)}>
-                    <Upload className="h-3.5 w-3.5" /> Upload CSV File for this Agent
-                  </Button>
-                </div>
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-3">

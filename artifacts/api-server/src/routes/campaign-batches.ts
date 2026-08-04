@@ -193,9 +193,41 @@ router.get("/campaigns/:id/batches", async (req, res): Promise<void> => {
   const campaign = await requireCampaign(campaignId, userId);
   if (!campaign) { res.status(404).json({ error: "Not found" }); return; }
 
-  const batches = await db.select().from(campaignBatchesTable)
+  let batches = await db.select().from(campaignBatchesTable)
     .where(eq(campaignBatchesTable.campaignId, campaignId))
     .orderBy(desc(campaignBatchesTable.createdAt));
+
+  if (batches.length === 0) {
+    try {
+      const [leadCountRow] = await db.select({ c: count() })
+        .from(campaignLeadsTable)
+        .where(eq(campaignLeadsTable.campaignId, campaignId));
+      const leadCount = Number(leadCountRow?.c ?? 0);
+
+      const [newBatch] = await db.insert(campaignBatchesTable).values({
+        campaignId,
+        name: leadCount > 0 ? `Batch #1 (${leadCount} Leads)` : `Live Lead Pipeline (${campaign.leadSource ?? 'csv'})`,
+        leadSource: campaign.leadSource ?? "csv",
+        status: "running",
+        callDelaySeconds: campaign.callDelaySeconds ?? 5,
+        maxAttempts: campaign.maxAttempts ?? 2,
+        retryDelayMinutes: campaign.retryDelayMinutes ?? 15,
+        totalLeads: leadCount,
+      }).returning();
+
+      if (newBatch) {
+        batches = [newBatch];
+        await db.update(campaignLeadsTable)
+          .set({ batchId: newBatch.id })
+          .where(and(
+            eq(campaignLeadsTable.campaignId, campaignId),
+            isNull(campaignLeadsTable.batchId)
+          ));
+      }
+    } catch {
+      // ignore auto-create fallback error
+    }
+  }
 
   res.json(batches.map(b => toBatch(b)));
 });
