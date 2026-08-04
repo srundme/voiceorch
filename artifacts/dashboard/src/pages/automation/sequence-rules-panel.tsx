@@ -17,7 +17,8 @@ import {
   ArrowLeft,
   ShieldCheck,
   Zap,
-  Bot
+  Bot,
+  CalendarDays
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,21 +34,29 @@ import { useToast } from "@/hooks/use-toast";
 export type RuleStep = {
   id: string;
   actionType: "call" | "whatsapp" | "meet";
-  triggerType: "day_of_month" | "delay_days";
-  dayValue: number;
-  timeOfDay: string;
+  triggerType: "day_of_month" | "delay_days" | "specific_date";
+  dayValue: number | string; // e.g. 21 for 21st, or "2026-08-25"
+  timeOfDay: string; // e.g. "10:00 AM", "04:00 AM"
   promptNote: string;
 };
 
+function getOrdinalSuffix(i: number) {
+  const j = i % 10, k = i % 100;
+  if (j === 1 && k !== 11) return `${i}st`;
+  if (j === 2 && k !== 12) return `${i}nd`;
+  if (j === 3 && k !== 13) return `${i}rd`;
+  return `${i}th`;
+}
+
 export function SequenceRulesPanel({ agentId, agentName }: { agentId: number; agentName?: string }) {
   const { toast } = useToast();
-  const [step, setStep] = useState<1 | 2>(1); // 1 = Lead Source, 2 = Rules
+  const [step, setStep] = useState<1 | 2>(1); // 1 = Lead Source, 2 = Call Schedule Rules
   const [sheetUrl, setSheetUrl] = useState("");
   const [autoSync, setAutoSync] = useState(true);
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [activeTab, setActiveTab] = useState("sheet");
 
-  // Preset default rules
+  // Preset default rules matching user request: 21st call, 30th call, 4th mrg wake up call
   const [rules, setRules] = useState<RuleStep[]>([
     {
       id: "rule-1",
@@ -55,7 +64,7 @@ export function SequenceRulesPanel({ agentId, agentName }: { agentId: number; ag
       triggerType: "day_of_month",
       dayValue: 21,
       timeOfDay: "10:00 AM",
-      promptNote: "AI Sales Follow-up Call",
+      promptNote: "1st Follow-up Call (Sales Pitch)",
     },
     {
       id: "rule-2",
@@ -63,7 +72,7 @@ export function SequenceRulesPanel({ agentId, agentName }: { agentId: number; ag
       triggerType: "day_of_month",
       dayValue: 30,
       timeOfDay: "11:30 AM",
-      promptNote: "Monthly Reminder AI Call",
+      promptNote: "2nd Follow-up Call (Monthly Offer)",
     },
     {
       id: "rule-3",
@@ -71,18 +80,19 @@ export function SequenceRulesPanel({ agentId, agentName }: { agentId: number; ag
       triggerType: "day_of_month",
       dayValue: 4,
       timeOfDay: "04:00 AM",
-      promptNote: "Early Morning Wake-up Call + Google Meet Briefing",
+      promptNote: "3rd Call: Wake-up Call + Google Meet Invite",
     },
   ]);
 
   const addRule = () => {
+    const nextCallNum = rules.length + 1;
     const newRule: RuleStep = {
       id: `rule-${Date.now()}`,
       actionType: "call",
-      triggerType: "day_of_month",
-      dayValue: 1,
+      triggerType: "delay_days",
+      dayValue: 3,
       timeOfDay: "09:00 AM",
-      promptNote: "AI Follow-up Call",
+      promptNote: `${getOrdinalSuffix(nextCallNum)} Call Follow-up`,
     };
     setRules([...rules, newRule]);
   };
@@ -98,13 +108,13 @@ export function SequenceRulesPanel({ agentId, agentName }: { agentId: number; ag
   const handleSaveAutomation = () => {
     toast({
       title: "Automation Sequence Deployed! 🚀",
-      description: `Active rules configured for ${agentName || "Agent"}. Leads will be called automatically on scheduled days.`,
+      description: `Configured ${rules.length} calls for ${agentName || "Agent"}. Leads will be called automatically on configured dates.`,
     });
   };
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
-      {/* Wizard Progress Indicator */}
+      {/* Wizard Step Navigation */}
       <div className="flex items-center justify-between border-b border-border/60 pb-3">
         <div className="flex items-center gap-3">
           <button
@@ -114,7 +124,7 @@ export function SequenceRulesPanel({ agentId, agentName }: { agentId: number; ag
             }`}
           >
             <span className="size-4 rounded-full bg-background/20 text-current text-[10px] flex items-center justify-center font-bold">1</span>
-            Step 1: Lead Source
+            Step 1: Upload Leads (Sheet / CSV)
           </button>
           <ArrowRight className="size-3.5 text-muted-foreground/60" />
           <button
@@ -124,7 +134,7 @@ export function SequenceRulesPanel({ agentId, agentName }: { agentId: number; ag
             }`}
           >
             <span className="size-4 rounded-full bg-background/20 text-current text-[10px] flex items-center justify-center font-bold">2</span>
-            Step 2: Rules & Schedule
+            Step 2: Set Call Dates & Times
           </button>
         </div>
 
@@ -152,11 +162,11 @@ export function SequenceRulesPanel({ agentId, agentName }: { agentId: number; ag
 
             <div className="p-4 rounded-xl border border-border/80 bg-card/60 backdrop-blur-sm shadow-sm space-y-1">
               <div className="flex items-center justify-between text-muted-foreground">
-                <span className="text-[11px] font-medium uppercase tracking-wider">Active Rules</span>
+                <span className="text-[11px] font-medium uppercase tracking-wider">Configured Calls</span>
                 <Sparkles className="size-3.5 text-amber-500" />
               </div>
-              <p className="text-xl font-bold tracking-tight">{rules.length} Rules</p>
-              <p className="text-[10px] text-muted-foreground font-medium">Configured</p>
+              <p className="text-xl font-bold tracking-tight">{rules.length} Calls</p>
+              <p className="text-[10px] text-muted-foreground font-medium">Automatic Drip Sequence</p>
             </div>
 
             <div className="p-4 rounded-xl border border-border/80 bg-card/60 backdrop-blur-sm shadow-sm space-y-1">
@@ -186,10 +196,10 @@ export function SequenceRulesPanel({ agentId, agentName }: { agentId: number; ag
               <div>
                 <h3 className="text-sm font-semibold flex items-center gap-2">
                   <FileSpreadsheet className="size-4 text-emerald-500" />
-                  Lead Source & Upload Channel
+                  Lead Source (Google Sheet / CSV File)
                 </h3>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Upload your lead CSV file or paste a live Google Sheet URL.
+                  Upload your lead list once. The AI will call each lead based on the 1st call, 2nd call, and 3rd call dates you set.
                 </p>
               </div>
               <Badge variant="outline" className="text-[10px] gap-1 bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
@@ -200,17 +210,17 @@ export function SequenceRulesPanel({ agentId, agentName }: { agentId: number; ag
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
               <TabsList className="grid w-full grid-cols-2 max-w-xs mb-4 h-9 p-1">
                 <TabsTrigger value="sheet" className="text-xs gap-1.5">
-                  <Link2 className="size-3 text-blue-500" /> Google Sheet
+                  <Link2 className="size-3 text-blue-500" /> Google Sheet Sync
                 </TabsTrigger>
                 <TabsTrigger value="csv" className="text-xs gap-1.5">
-                  <Upload className="size-3 text-purple-500" /> CSV Upload
+                  <Upload className="size-3 text-purple-500" /> Upload CSV File
                 </TabsTrigger>
               </TabsList>
 
               <TabsContent value="sheet" className="space-y-3 mt-0">
                 <div className="space-y-2 border border-border/60 rounded-lg p-4 bg-muted/10">
                   <Label className="text-xs font-semibold flex items-center gap-1.5">
-                    Live Google Sheet URL
+                    Live Google Sheet Link
                   </Label>
                   <div className="flex gap-2">
                     <Input
@@ -257,7 +267,7 @@ export function SequenceRulesPanel({ agentId, agentName }: { agentId: number; ag
             {/* Next Button */}
             <div className="flex justify-end pt-3 border-t border-border/60">
               <Button onClick={() => setStep(2)} className="gap-2 text-xs h-9 px-5">
-                Next: Configure Rules
+                Next: Set Call Schedule Dates & Times
                 <ArrowRight className="size-3.5" />
               </Button>
             </div>
@@ -265,137 +275,158 @@ export function SequenceRulesPanel({ agentId, agentName }: { agentId: number; ag
         </div>
       )}
 
-      {/* STEP 2: Super Clean, Simple Rules Configurator */}
+      {/* STEP 2: Flexible Date & Time Call Schedule Builder */}
       {step === 2 && (
         <div className="rounded-xl border border-border bg-card p-5 space-y-5 shadow-sm">
-          <div className="flex items-center justify-between border-b border-border/60 pb-3">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-border/60 pb-3">
             <div>
               <h3 className="text-sm font-semibold flex items-center gap-2">
-                <Sparkles className="size-4 text-amber-500" />
-                Automated Schedule Rules
+                <CalendarDays className="size-4 text-emerald-500" />
+                Call Schedule (1st Call, 2nd Call, 3rd Call...)
               </h3>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Set when to call or connect Google Meet for your imported leads.
+                Set exact dates and times for each call. The AI engine will call leads automatically.
               </p>
             </div>
             <Button size="sm" variant="outline" onClick={addRule} className="gap-1.5 text-xs h-8">
               <Plus className="size-3.5" />
-              Add Rule
+              + Add Next Call
             </Button>
           </div>
 
-          {/* Simple Clean Rules Table/List */}
-          <div className="space-y-2.5">
-            {rules.map((rule, index) => (
-              <div
-                key={rule.id}
-                className="flex flex-col md:flex-row items-center gap-2.5 p-3 rounded-lg border border-border/70 bg-background hover:border-primary/40 transition-all text-xs"
-              >
-                {/* Rule Number */}
-                <span className="size-6 rounded-full bg-primary/10 text-primary font-bold text-xs flex items-center justify-center shrink-0">
-                  {index + 1}
-                </span>
+          {/* Flexible Call Rules List */}
+          <div className="space-y-3">
+            {rules.map((rule, index) => {
+              const callOrdinal = getOrdinalSuffix(index + 1);
 
-                {/* Action Type */}
-                <div className="w-full md:w-40 shrink-0">
-                  <Select
-                    value={rule.actionType}
-                    onValueChange={(v) => updateRule(rule.id, { actionType: v as any })}
-                  >
-                    <SelectTrigger className="h-8 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="call" className="text-xs">
-                        <div className="flex items-center gap-1.5">
-                          <Phone className="size-3 text-emerald-500" /> AI Phone Call
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="whatsapp" className="text-xs">
-                        <div className="flex items-center gap-1.5">
-                          <MessageSquare className="size-3 text-purple-500" /> WhatsApp Msg
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="meet" className="text-xs">
-                        <div className="flex items-center gap-1.5">
-                          <Video className="size-3 text-blue-500" /> Google Meet Call
-                        </div>
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Schedule Type */}
-                <div className="w-full md:w-36 shrink-0">
-                  <Select
-                    value={rule.triggerType}
-                    onValueChange={(v) => updateRule(rule.id, { triggerType: v as any })}
-                  >
-                    <SelectTrigger className="h-8 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="day_of_month" className="text-xs">Day of Month</SelectItem>
-                      <SelectItem value="delay_days" className="text-xs">Days After Upload</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Day Input */}
-                <div className="w-full md:w-20 shrink-0 flex items-center gap-1">
-                  <span className="text-[10px] text-muted-foreground md:hidden">Day:</span>
-                  <Input
-                    type="number"
-                    min={1}
-                    max={31}
-                    value={rule.dayValue}
-                    onChange={(e) => updateRule(rule.id, { dayValue: Number(e.target.value) })}
-                    placeholder="Day"
-                    className="h-8 text-xs text-center"
-                  />
-                </div>
-
-                {/* Time Input */}
-                <div className="w-full md:w-24 shrink-0 flex items-center gap-1">
-                  <span className="text-[10px] text-muted-foreground md:hidden">Time:</span>
-                  <Input
-                    type="text"
-                    value={rule.timeOfDay}
-                    onChange={(e) => updateRule(rule.id, { timeOfDay: e.target.value })}
-                    placeholder="Time"
-                    className="h-8 text-xs text-center"
-                  />
-                </div>
-
-                {/* Goal / Note */}
-                <div className="w-full md:flex-1">
-                  <Input
-                    type="text"
-                    value={rule.promptNote}
-                    onChange={(e) => updateRule(rule.id, { promptNote: e.target.value })}
-                    placeholder="Rule goal (e.g. Sales follow up)"
-                    className="h-8 text-xs bg-muted/20"
-                  />
-                </div>
-
-                {/* Delete */}
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="size-7 text-muted-foreground hover:text-destructive shrink-0"
-                  onClick={() => removeRule(rule.id)}
+              return (
+                <div
+                  key={rule.id}
+                  className="flex flex-col md:flex-row items-start md:items-center gap-3 p-3.5 rounded-xl border border-border/80 bg-background hover:border-primary/40 transition-all text-xs shadow-xs"
                 >
-                  <Trash2 className="size-3.5" />
-                </Button>
-              </div>
-            ))}
+                  {/* Call Step Badge */}
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Badge className="bg-primary/10 text-primary border-primary/20 text-xs px-2.5 py-1 font-bold">
+                      {callOrdinal} Call
+                    </Badge>
+                  </div>
+
+                  {/* Channel / Action */}
+                  <div className="w-full md:w-36 shrink-0">
+                    <Select
+                      value={rule.actionType}
+                      onValueChange={(v) => updateRule(rule.id, { actionType: v as any })}
+                    >
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="call" className="text-xs">
+                          <div className="flex items-center gap-1.5">
+                            <Phone className="size-3 text-emerald-500" /> AI Phone Call
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="whatsapp" className="text-xs">
+                          <div className="flex items-center gap-1.5">
+                            <MessageSquare className="size-3 text-purple-500" /> WhatsApp Msg
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="meet" className="text-xs">
+                          <div className="flex items-center gap-1.5">
+                            <Video className="size-3 text-blue-500" /> Google Meet Call
+                          </div>
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Date Mode Dropdown */}
+                  <div className="w-full md:w-44 shrink-0">
+                    <Select
+                      value={rule.triggerType}
+                      onValueChange={(v) => updateRule(rule.id, { triggerType: v as any })}
+                    >
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="day_of_month" className="text-xs">Day of Month (21st, 30th...)</SelectItem>
+                        <SelectItem value="delay_days" className="text-xs">Days After Upload</SelectItem>
+                        <SelectItem value="specific_date" className="text-xs">Specific Date (YYYY-MM-DD)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Day or Date Value */}
+                  <div className="w-full md:w-28 shrink-0">
+                    <Input
+                      type={rule.triggerType === "specific_date" ? "text" : "number"}
+                      value={rule.dayValue}
+                      onChange={(e) => updateRule(rule.id, { dayValue: e.target.value })}
+                      placeholder={rule.triggerType === "day_of_month" ? "e.g. 21" : rule.triggerType === "delay_days" ? "Days (e.g. 3)" : "2026-08-25"}
+                      className="h-8 text-xs text-center"
+                    />
+                  </div>
+
+                  {/* Time Value */}
+                  <div className="w-full md:w-28 shrink-0">
+                    <Input
+                      type="text"
+                      value={rule.timeOfDay}
+                      onChange={(e) => updateRule(rule.id, { timeOfDay: e.target.value })}
+                      placeholder="e.g. 10:00 AM"
+                      className="h-8 text-xs text-center"
+                    />
+                  </div>
+
+                  {/* Purpose / Goal Note */}
+                  <div className="w-full md:flex-1">
+                    <Input
+                      type="text"
+                      value={rule.promptNote}
+                      onChange={(e) => updateRule(rule.id, { promptNote: e.target.value })}
+                      placeholder="Goal of this call (e.g. Follow-up pitch)"
+                      className="h-8 text-xs bg-muted/20"
+                    />
+                  </div>
+
+                  {/* Delete Button */}
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="size-7 text-muted-foreground hover:text-destructive shrink-0"
+                    onClick={() => removeRule(rule.id)}
+                  >
+                    <Trash2 className="size-3.5" />
+                  </Button>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Plain-English Schedule Summary Preview */}
+          <div className="rounded-lg border border-border/70 bg-muted/15 p-4 space-y-2">
+            <h4 className="text-xs font-semibold flex items-center gap-1.5 text-foreground">
+              <CheckCircle2 className="size-3.5 text-emerald-500" />
+              Plain-English Schedule Preview for Clients:
+            </h4>
+            <ul className="space-y-1 text-[11px] text-muted-foreground pl-5 list-disc">
+              {rules.map((r, i) => (
+                <li key={r.id}>
+                  <strong className="text-foreground">{getOrdinalSuffix(i + 1)} Call:</strong>{" "}
+                  {r.actionType === "call" ? "AI Voice Call" : r.actionType === "meet" ? "Google Meet Audio Call" : "WhatsApp Message"}{" "}
+                  {r.triggerType === "day_of_month" ? `on the ${r.dayValue}st/th of every month` : r.triggerType === "delay_days" ? `${r.dayValue} days after lead is uploaded` : `on date ${r.dayValue}`}{" "}
+                  at <strong className="text-foreground">{r.timeOfDay}</strong> ({r.promptNote || "No note"}).
+                </li>
+              ))}
+            </ul>
           </div>
 
           {/* Bottom Navigation & Save */}
           <div className="flex items-center justify-between pt-4 border-t border-border/60">
             <Button size="sm" variant="outline" onClick={() => setStep(1)} className="gap-1.5 text-xs h-9">
               <ArrowLeft className="size-3.5" />
-              Back to Lead Source
+              Back to Upload Leads
             </Button>
 
             <Button onClick={handleSaveAutomation} className="gap-2 text-xs h-9 px-5">
