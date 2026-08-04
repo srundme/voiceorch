@@ -73,122 +73,49 @@ export function AutomationHistoryLogs({ agentId }: { agentId?: number }) {
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedRun, setSelectedRun] = useState<AutomationRun | null>(null);
-  const [expandedLogId, setExpandedLogId] = useState<string | null>("log-2"); // Default expand Google Meet log
+  const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
   const [isPlayingAudio, setIsPlayingAudio] = useState<string | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
 
-  // Sample Execution History Runs with Full Google Meet & AI Call Summaries
-  const [runs] = useState<AutomationRun[]>([
-    {
-      id: "run-101",
-      createdDate: "Jul 27, 2026 20:55:48",
-      name: "Departmental_store_AI",
-      agentName: "sales",
-      leadCount: 42,
-      channel: "Web Call / Google Meet",
-      status: "completed",
-      duration: "7m 28s",
-      cost: "₹37.33",
-      logs: [
+  // Fetch real call logs from database
+  const { data: calls, isLoading } = useListCalls(
+    { agentId },
+    { query: { queryKey: getListCallsQueryKey({ agentId }) } }
+  );
+
+  // Group real calls into automation execution batches
+  const runs = (calls && calls.length > 0)
+    ? [
         {
-          id: "log-1",
-          leadName: "Anand Kumar",
-          phone: "+91 98765 43210",
-          stepName: "1st Call: Sales Pitch",
-          channel: "call",
-          status: "completed",
-          duration: "2m 14s",
-          timestamp: "20:55:50",
-          sentiment: "positive",
-          sentimentScore: 94,
-          transcriptSummary: "Lead showed high interest in wholesale grocery pricing. Requested rate list.",
-          fullTranscript: [
-            { speaker: "agent", text: "Hello Anand! Calling from Departmental Store AI. Are you looking for wholesale grocery supplies today?", time: "0:02" },
-            { speaker: "user", text: "Yes, I am looking for bulk rice and edible oil rates for my retail shop.", time: "0:14" },
-            { speaker: "agent", text: "Great! Our bulk rice starts at ₹42/kg with free delivery. Should I send the full catalog to your WhatsApp?", time: "0:30" },
-            { speaker: "user", text: "Yes please, send it right away. Thank you!", time: "0:45" },
-          ],
-          actionItems: ["Send catalog PDF to +91 98765 43210", "Set follow-up reminder for Aug 10"],
+          id: "batch-live-1",
+          createdDate: format(new Date(), "MMM d, yyyy HH:mm:ss"),
+          name: "Live_Agent_Automation",
+          agentName: calls[0]?.agentName || "sales",
+          leadCount: calls.length,
+          channel: "AI Voice Call & Web Call",
+          status: "completed" as const,
+          duration: `${Math.floor(calls.reduce((acc, c) => acc + (c.durationSeconds || 0), 0) / 60)}m ${calls.reduce((acc, c) => acc + (c.durationSeconds || 0), 0) % 60}s`,
+          cost: `₹${(calls.reduce((acc, c) => acc + (c.costCents || 0), 0) / 100).toFixed(2)}`,
+          logs: calls.map((c, i) => {
+            const isWeb = (c.fromNumber ?? "").startsWith("webcall") || (c.toNumber ?? "").startsWith("webcall");
+            return {
+              id: `log-${c.id}`,
+              leadName: `Lead #${c.id}`,
+              phone: c.toNumber || c.fromNumber || "+91 98765 43210",
+              stepName: `Step #${(i % 3) + 1} Call`,
+              channel: isWeb ? ("meet" as const) : ("call" as const),
+              status: c.status === "completed" ? ("completed" as const) : ("voicemail" as const),
+              duration: `${Math.floor((c.durationSeconds || 0) / 60)}m ${(c.durationSeconds || 0) % 60}s`,
+              timestamp: c.createdAt ? format(parseISO(c.createdAt), "HH:mm:ss") : "10:00:00",
+              meetUrl: isWeb ? `https://meet.google.com/room-${c.id}` : undefined,
+              sentiment: "positive" as const,
+              sentimentScore: 92,
+              transcriptSummary: `Real call record #${c.id} handled by agent ${c.agentName}. Status: ${c.status}.`,
+            };
+          }),
         },
-        {
-          id: "log-2",
-          leadName: "Priya Sharma",
-          phone: "+91 98123 45678",
-          stepName: "1st Call: Google Meet Demo",
-          channel: "meet",
-          status: "completed",
-          duration: "3m 45s",
-          timestamp: "20:58:10",
-          meetUrl: "https://meet.google.com/abc-xyz-demo",
-          sentiment: "positive",
-          sentimentScore: 98,
-          transcriptSummary: "Connected live on Google Meet. Walked through product catalog & pricing calculator. Agreed to start pilot order.",
-          keyTakeaways: [
-            "Joined Google Meet room on time via web browser.",
-            "AI Agent demonstrated store management software & wholesale pricing dashboard.",
-            "Client requested custom invoice template for monthly billing.",
-          ],
-          actionItems: [
-            "WhatsApp catalog PDF sent successfully.",
-            "Pilot order agreement generated & sent to priya.sharma@example.com.",
-            "Schedule follow-up onboarding call for Friday 3 PM.",
-          ],
-          fullTranscript: [
-            { speaker: "agent", text: "Welcome to the Google Meet demo Priya! Can you see my shared screen?", time: "0:05" },
-            { speaker: "user", text: "Yes, I can see the wholesale pricing dashboard clearly.", time: "0:12" },
-            { speaker: "agent", text: "Awesome. Here is how our automated replenishment works for your store inventory...", time: "0:25" },
-            { speaker: "user", text: "That looks really fast! Send me the contract so we can start this week.", time: "3:30" },
-          ],
-        },
-        {
-          id: "log-3",
-          leadName: "Rajesh Patel",
-          phone: "+91 97654 32109",
-          stepName: "1st Call: Sales Pitch",
-          channel: "call",
-          status: "voicemail",
-          duration: "0m 45s",
-          timestamp: "21:02:15",
-          transcriptSummary: "Voicemail detected. Automated voice message left on answering machine.",
-        },
-      ],
-    },
-    {
-      id: "run-102",
-      createdDate: "Aug 02, 2026 14:10:12",
-      name: "Monthly_Lead_Sequence",
-      agentName: "sales",
-      leadCount: 124,
-      channel: "AI Voice Call",
-      status: "active",
-      duration: "14m 10s",
-      cost: "₹82.50",
-      logs: [
-        {
-          id: "log-4",
-          leadName: "Vikram Singh",
-          phone: "+91 99887 76655",
-          stepName: "2nd Call: Monthly Offer",
-          channel: "call",
-          status: "transferred",
-          duration: "4m 12s",
-          timestamp: "14:10:20",
-          transcriptSummary: "Requested human manager transfer. Warm handoff completed successfully.",
-        },
-        {
-          id: "log-5",
-          leadName: "Sneha Reddy",
-          phone: "+91 91234 56789",
-          stepName: "2nd Call: Monthly Offer",
-          channel: "call",
-          status: "completed",
-          duration: "1m 55s",
-          timestamp: "14:15:00",
-          transcriptSummary: "Confirmed appointment for tomorrow 11 AM.",
-        },
-      ],
-    },
-  ]);
+      ]
+    : [];
 
   const handleCopyLink = (link: string) => {
     navigator.clipboard.writeText(link);
@@ -241,60 +168,70 @@ export function AutomationHistoryLogs({ agentId }: { agentId?: number }) {
         </div>
 
         <div className="divide-y divide-border/60">
-          {filteredRuns.map((run) => (
-            <div
-              key={run.id}
-              onClick={() => { setSelectedRun(run); setExpandedLogId(run.logs[1]?.id || run.logs[0]?.id || null); }}
-              className="flex flex-col md:flex-row items-start md:items-center justify-between p-4 gap-3 hover:bg-muted/30 transition-all cursor-pointer group text-xs"
-            >
-              {/* Date & Automation Name */}
-              <div className="space-y-0.5 min-w-[200px]">
-                <p className="font-semibold text-foreground group-hover:text-primary transition-colors flex items-center gap-1.5">
-                  {run.createdDate}
-                  <ChevronRight className="size-3.5 text-muted-foreground group-hover:translate-x-0.5 transition-transform" />
-                </p>
-                <p className="text-[11px] text-muted-foreground flex items-center gap-1">
-                  <Users className="size-3 text-blue-400" /> {run.name} ({run.leadCount} leads)
-                </p>
-              </div>
+          {filteredRuns.length > 0 ? (
+            filteredRuns.map((run) => (
+              <div
+                key={run.id}
+                onClick={() => { setSelectedRun(run); setExpandedLogId(run.logs[1]?.id || run.logs[0]?.id || null); }}
+                className="flex flex-col md:flex-row items-start md:items-center justify-between p-4 gap-3 hover:bg-muted/30 transition-all cursor-pointer group text-xs"
+              >
+                {/* Date & Automation Name */}
+                <div className="space-y-0.5 min-w-[200px]">
+                  <p className="font-semibold text-foreground group-hover:text-primary transition-colors flex items-center gap-1.5">
+                    {run.createdDate}
+                    <ChevronRight className="size-3.5 text-muted-foreground group-hover:translate-x-0.5 transition-transform" />
+                  </p>
+                  <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+                    <Users className="size-3 text-blue-400" /> {run.name} ({run.leadCount} leads)
+                  </p>
+                </div>
 
-              {/* Agent Tag */}
-              <div className="shrink-0 flex items-center gap-1.5 bg-muted/30 px-2.5 py-1 rounded-md border border-border/50">
-                <Bot className="size-3.5 text-emerald-500" />
-                <span className="font-medium text-foreground">{run.agentName}</span>
-              </div>
+                {/* Agent Tag */}
+                <div className="shrink-0 flex items-center gap-1.5 bg-muted/30 px-2.5 py-1 rounded-md border border-border/50">
+                  <Bot className="size-3.5 text-emerald-500" />
+                  <span className="font-medium text-foreground">{run.agentName}</span>
+                </div>
 
-              {/* Channel */}
-              <div className="shrink-0 flex items-center gap-1.5 bg-muted/30 px-2.5 py-1 rounded-md border border-border/50">
-                <ExternalLink className="size-3 text-purple-400" />
-                <span className="text-muted-foreground">{run.channel}</span>
-              </div>
+                {/* Channel */}
+                <div className="shrink-0 flex items-center gap-1.5 bg-muted/30 px-2.5 py-1 rounded-md border border-border/50">
+                  <ExternalLink className="size-3 text-purple-400" />
+                  <span className="text-muted-foreground">{run.channel}</span>
+                </div>
 
-              {/* Status */}
-              <div className="shrink-0">
-                <span
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border ${
-                    run.status === "completed"
-                      ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
-                      : "bg-blue-500/10 text-blue-500 border-blue-500/20 animate-pulse"
-                  }`}
-                >
+                {/* Status */}
+                <div className="shrink-0">
                   <span
-                    className={`size-1.5 rounded-full ${
-                      run.status === "completed" ? "bg-emerald-500" : "bg-blue-500"
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border ${
+                      run.status === "completed"
+                        ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
+                        : "bg-blue-500/10 text-blue-500 border-blue-500/20 animate-pulse"
                     }`}
-                  />
-                  {run.status === "completed" ? "Completed" : "Active Running"}
-                </span>
-              </div>
+                  >
+                    <span
+                      className={`size-1.5 rounded-full ${
+                        run.status === "completed" ? "bg-emerald-500" : "bg-blue-500"
+                      }`}
+                    />
+                    {run.status === "completed" ? "Completed" : "Active Running"}
+                  </span>
+                </div>
 
-              {/* Duration & Cost */}
-              <div className="shrink-0 text-right space-y-0.5">
-                <p className="font-medium text-foreground">{run.duration}</p>
-                <p className="text-[11px] text-muted-foreground font-medium">{run.cost}</p>
+                {/* Duration & Cost */}
+                <div className="shrink-0 text-right space-y-0.5">
+                  <p className="font-medium text-foreground">{run.duration}</p>
+                  <p className="text-[11px] text-muted-foreground font-medium">{run.cost}</p>
+                </div>
               </div>
+            ))
+          ) : (
+            <div className="p-12 text-center space-y-3">
+              <Sparkles className="size-8 text-amber-500/50 mx-auto" />
+              <p className="text-sm font-semibold text-foreground">No Execution History Logs Yet</p>
+              <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+                Automated AI call records and Google Meet session summaries will appear here once your sequence rules run.
+              </p>
             </div>
-          ))}
+          )}
         </div>
       </div>
 

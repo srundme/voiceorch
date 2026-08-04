@@ -83,33 +83,8 @@ export function SequenceRulesPanel({
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [activeTab, setActiveTab] = useState("sheet");
 
-  // Saved Automations List
-  const [automations, setAutomations] = useState<AutomationItem[]>([
-    {
-      id: "auto-1",
-      createdDate: "Jul 27, 2026 20:55:48",
-      name: "Departmental_store_AI",
-      agentName: agentName || "sales",
-      leadCount: 420,
-      channel: "Web Call / Google Meet",
-      status: "completed",
-      duration: "7m 28s",
-      cost: "₹37.33",
-      nextTrigger: "Aug 21 @ 10:00 AM",
-    },
-    {
-      id: "auto-2",
-      createdDate: "Aug 02, 2026 14:10:12",
-      name: "Monthly_Lead_Sequence",
-      agentName: agentName || "sales",
-      leadCount: 1248,
-      channel: "AI Voice Call",
-      status: "active",
-      duration: "14m 10s",
-      cost: "₹82.50",
-      nextTrigger: "Aug 30 @ 11:30 AM",
-    },
-  ]);
+  // Saved Automations List (starts empty, populated when user creates or fetches sequences)
+  const [automations, setAutomations] = useState<AutomationItem[]>([]);
 
   // Preset default rules with exact calendar dates
   const [rules, setRules] = useState<RuleStep[]>([
