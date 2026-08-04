@@ -76,7 +76,7 @@ import UsagePage            from "@/pages/usage";
 import KycPage              from "@/pages/kyc";
 import ApiKeysPage          from "@/pages/api-keys";
 import MetaLeadsPage        from "@/pages/meta-leads";
-import ConnectionsPage      from "@/pages/connections/index";
+import ConnectionsPage      from "@/pages/connections/hub";
 import AutomaticCallsPage   from "@/pages/automatic-calls/index";
 import AutomaticCallsWizardPage from "@/pages/automatic-calls/wizard";
 import AutomaticCallDetailPage  from "@/pages/automatic-calls/[id]";
@@ -405,12 +405,12 @@ function AppRoutes() {
         <Route path="/app/automatic-calls/new" component={AutomaticCallsWizardPage} />
         <Route path="/app/automatic-calls/:id" component={AutomaticCallDetailPage} />
         <Route path="/app/automatic-calls">
-          <TabRedirect to="/app/people?tab=scheduled" />
+          <TabRedirect to="/app/connections?setup=sheets" />
         </Route>
 
-        {/* ── Meta Leads → People website forms ── */}
+        {/* ── Meta Leads → Connections Meta card ── */}
         <Route path="/app/meta-leads">
-          <TabRedirect to="/app/people?tab=lead-sources" />
+          <TabRedirect to="/app/connections?setup=meta" />
         </Route>
 
         {/* ── Scheduling ── */}

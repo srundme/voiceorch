@@ -1,17 +1,13 @@
 /**
- * /app/campaigns — legacy Dial flows URL.
- * Phase 4 product home is /app/people (same engines).
+ * /app/campaigns — legacy URL → People lists.
  */
 import { useEffect } from "react";
-import { useLocation, useSearch } from "wouter";
+import { useLocation } from "wouter";
 
 export default function CampaignsTabPage() {
   const [, navigate] = useLocation();
-  const search = useSearch();
   useEffect(() => {
-    const sp = new URLSearchParams(search);
-    const tab = sp.get("tab");
-    navigate(tab ? `/app/people?tab=${encodeURIComponent(tab)}` : "/app/people", { replace: true });
-  }, [navigate, search]);
+    navigate("/app/people", { replace: true });
+  }, [navigate]);
   return null;
 }

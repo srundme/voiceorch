@@ -512,7 +512,7 @@ function Wizard({
 }
 
 /* ─── Page ─────────────────────────────────────────────────────────────── */
-export default function FromWebsitePage() {
+export default function FromWebsitePage({ hideMeta = false }: { hideMeta?: boolean } = {}) {
   const initialAgentId = (() => {
     try {
       return new URLSearchParams(window.location.search).get("agentId") ?? "";
@@ -532,20 +532,20 @@ export default function FromWebsitePage() {
 
   return (
     <div className="flex flex-col">
-      {/* ── Website Calls section ── */}
+      {/* ── Website form ── */}
       <div className="mx-auto w-full max-w-3xl px-4 sm:px-6 py-6 space-y-5">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/40 mb-1">Website Calls</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/40 mb-1">Website form</p>
             <h2 className="text-xl font-semibold text-foreground leading-tight">
-              Turn form submissions into calls
+              Connect your website form
             </h2>
             <p className="text-sm text-muted-foreground mt-1 max-w-lg">
-              A lead fills your website form → SnapServe dials them instantly. Leads arriving outside calling hours are queued and bulk-dialled at opening time.
+              Paste the webhook into your form. New leads become people you can attach to a call plan.
             </p>
           </div>
           <Button size="sm" className="shrink-0 gap-1.5 mt-1" onClick={() => setWizardOpen(true)}>
-            <Plus className="w-3.5 h-3.5" />Create
+            <Plus className="w-3.5 h-3.5" />Connect
           </Button>
         </div>
 
@@ -553,13 +553,13 @@ export default function FromWebsitePage() {
           <div className="rounded-2xl border border-dashed border-border/60 bg-card/20 px-6 py-12 text-center space-y-3">
             <Globe className="w-9 h-9 text-muted-foreground/25 mx-auto" />
             <div>
-              <p className="text-sm font-medium text-foreground/60">No website campaigns yet</p>
+              <p className="text-sm font-medium text-foreground/60">No website form yet</p>
               <p className="text-[12px] text-muted-foreground/40 mt-0.5">
                 Create one to get a webhook URL and embed snippet for your site.
               </p>
             </div>
             <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setWizardOpen(true)}>
-              <Plus className="w-3.5 h-3.5" />Create campaign
+              <Plus className="w-3.5 h-3.5" />Connect form
             </Button>
           </div>
         ) : (
@@ -571,13 +571,13 @@ export default function FromWebsitePage() {
         )}
       </div>
 
-      {/* ── Divider ── */}
-      <div className="border-t border-border mx-4 sm:mx-6" />
+      {!hideMeta && (
+        <>
+          <div className="border-t border-border mx-4 sm:mx-6" />
+          <MetaLeadsPage />
+        </>
+      )}
 
-      {/* ── Meta / Instagram section ── */}
-      <MetaLeadsPage />
-
-      {/* ── Wizard ── */}
       <Wizard
         open={wizardOpen}
         onClose={() => setWizardOpen(false)}

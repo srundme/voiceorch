@@ -838,13 +838,12 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
             </Tabs>
           </section>
 
-          {/* Phone assign — mobile/tablet only; desktop uses the action rail */}
+          {/* Phone number — assign on the agent (not Connections) */}
           {agent?.id != null && (
             <AgentInboundPanel
               agentId={agent.id}
               preferredManagedNumber={form.watch("preferredManagedNumber")}
               telephonyProvider={form.watch("telephonyProvider")}
-              className="xl:hidden"
             />
           )}
 

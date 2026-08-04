@@ -269,58 +269,25 @@ Detail routes for campaign / batch / lead / sheet pipeline still exist for deep 
 
 **Route:** `/app/connections`  
 
-Hub for shared account wiring. Shortcut cards:
+Five integrations only — brand logos, Ready / Set up:
 
-- **Phone numbers** → `/app/phone-numbers`  
-- **WhatsApp** → `/app/whatsapp`  
-- **Meetings** → `/app/meet`  
-- **Agent channels** → `/app/channels` (per-agent WhatsApp / Email / Meetings / Booking)  
-- **People lists** → `/app/people`  
+1. **Google Sheets**  
+2. **WhatsApp**  
+3. **Email (Brevo)** — BYO key  
+4. **Website form**  
+5. **Meta Lead Ads**  
 
-Also on this page:
+Phone numbers are **not** here — assign on **Agents → Overview**.
 
-- **CRM:** HubSpot, Zoho — OAuth, field mapping, import, writeback  
-- **Google Sheets:** OAuth for sheet people / write-back  
-- **Lead webhooks:** listen/capture payload, map fields  
-- **Meta Lead Ads** when connected  
-- Recipes for Zapier / Make  
-
-**Note:** Per-agent post-call CRM webhook also lives under Builder → Advanced. Connections = shared connectors; Advanced = that agent’s outbound post-call URL.
+Deep setup: `/app/connections?setup=sheets|email|website|meta` · WhatsApp → `/app/whatsapp`.
 
 ---
 
-## 9. Agent channels (deep-link)
+## 9. People (lists)
 
-**Route:** `/app/channels?agentId=&channel=`  
-**Not in primary nav** — opened from Connections / Meet / in-product links.
+**Route:** `/app/people`  
 
-**Tabs:** Phone · WhatsApp · Email · Meetings · Booking  
-
-| Channel | What it configures |
-|---------|-------------------|
-| **Phone** | Assign number; trial line; link to Phone Numbers |
-| **WhatsApp** | Connection status; open WhatsApp admin |
-| **Email** | Brevo API key + from-address + templates (BYO only) |
-| **Meetings** | Enable join; this agent or **delegate**; pass memory / call context. Meeting **prompt** is edited in Builder → Prompt → In meetings |
-| **Booking** | Calendar + event type readiness; links to Scheduling and Tools → Booking |
-
----
-
-## 10. Phone Numbers
-
-**Route:** `/app/phone-numbers` (also from Connections)  
-
-| Tab | Purpose |
-|-----|---------|
-| **My numbers** | List, assign/unassign to agents, release |
-| **Buy number** | Purchase DIDs (India-focused; KYC may be required) |
-| **Verification** | KYC / identity verification |
-
-Without an assigned number: inbound won’t ring the agent; outbound may use a shared trial line with daily caps (unless BYO telephony).
-
----
-
-## 11. History
+CSV / list people for call plans only. Sheets and forms live under Connections.
 
 **Route:** `/app/history` (legacy `/app/calls` still works)  
 
