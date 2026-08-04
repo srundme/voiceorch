@@ -35,8 +35,8 @@ export type RuleStep = {
   id: string;
   actionType: "call" | "whatsapp" | "meet";
   triggerType: "specific_date" | "delay_days";
-  dayValue: string; // e.g. "2026-08-21" or "3"
-  timeOfDay: string; // e.g. "10:00 AM", "04:00 AM"
+  dayValue: string;
+  timeOfDay: string;
   promptNote: string;
   selectedAgentId?: number;
 };
@@ -65,7 +65,7 @@ export function SequenceRulesPanel({
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [activeTab, setActiveTab] = useState("sheet");
 
-  // Preset default rules with exact calendar dates as requested
+  // Preset default rules with exact calendar dates
   const [rules, setRules] = useState<RuleStep[]>([
     {
       id: "rule-1",
@@ -133,7 +133,7 @@ export function SequenceRulesPanel({
         <div className="flex items-center gap-3">
           <button
             onClick={() => setStep(1)}
-            className={`flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-full transition-all ${
+            className={`flex items-center gap-2 text-xs font-semibold px-3.5 py-1.5 rounded-full transition-all ${
               step === 1 ? "bg-primary text-primary-foreground shadow-sm" : "bg-muted/40 text-muted-foreground hover:bg-muted"
             }`}
           >
@@ -143,12 +143,12 @@ export function SequenceRulesPanel({
           <ArrowRight className="size-3.5 text-muted-foreground/60" />
           <button
             onClick={() => setStep(2)}
-            className={`flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-full transition-all ${
+            className={`flex items-center gap-2 text-xs font-semibold px-3.5 py-1.5 rounded-full transition-all ${
               step === 2 ? "bg-primary text-primary-foreground shadow-sm" : "bg-muted/40 text-muted-foreground hover:bg-muted"
             }`}
           >
             <span className="size-4 rounded-full bg-background/20 text-current text-[10px] flex items-center justify-center font-bold">2</span>
-            Step 2: Pick Exact Dates & Times
+            Step 2: Assign Agent & Set Call Schedule
           </button>
         </div>
 
@@ -185,7 +185,7 @@ export function SequenceRulesPanel({
 
             <div className="p-4 rounded-xl border border-border/80 bg-card/60 backdrop-blur-sm shadow-sm space-y-1">
               <div className="flex items-center justify-between text-muted-foreground">
-                <span className="text-[11px] font-medium uppercase tracking-wider">Next Date Trigger</span>
+                <span className="text-[11px] font-medium uppercase tracking-wider">Next Trigger</span>
                 <Clock className="size-3.5 text-purple-500" />
               </div>
               <p className="text-xl font-bold tracking-tight">Aug 21 @ 10:00 AM</p>
@@ -281,7 +281,7 @@ export function SequenceRulesPanel({
             {/* Next Button */}
             <div className="flex justify-end pt-3 border-t border-border/60">
               <Button onClick={() => setStep(2)} className="gap-2 text-xs h-9 px-5">
-                Next: Pick Exact Call Dates & Times
+                Next: Assign Agent & Set Call Schedule
                 <ArrowRight className="size-3.5" />
               </Button>
             </div>
@@ -289,17 +289,17 @@ export function SequenceRulesPanel({
         </div>
       )}
 
-      {/* STEP 2: Exact Calendar Date & Time Picker Schedule Builder */}
+      {/* STEP 2: Neat & Spacious Multi-Agent Date & Time Call Schedule Builder */}
       {step === 2 && (
-        <div className="rounded-xl border border-border bg-card p-5 space-y-5 shadow-sm">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-border/60 pb-3">
+        <div className="rounded-xl border border-border bg-card p-6 space-y-6 shadow-sm">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-border/60 pb-4">
             <div>
               <h3 className="text-sm font-semibold flex items-center gap-2">
                 <CalendarDays className="size-4 text-emerald-500" />
-                Call Dates & Times (1st Call, 2nd Call, 3rd Call...)
+                Call Schedule (1st Call, 2nd Call, 3rd Call...)
               </h3>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Select exact calendar dates or days delay for each call.
+                Assign an AI Agent and set the exact calendar date & time for each call.
               </p>
             </div>
             <Button size="sm" variant="outline" onClick={addRule} className="gap-1.5 text-xs h-8">
@@ -308,8 +308,8 @@ export function SequenceRulesPanel({
             </Button>
           </div>
 
-          {/* Call Rules List with Direct Calendar Date Picker */}
-          <div className="space-y-3">
+          {/* Spacious Card Grid Layout for Rules */}
+          <div className="space-y-4">
             {rules.map((rule, index) => {
               const callOrdinal = getOrdinalSuffix(index + 1);
               const currentAgentId = rule.selectedAgentId || agentId;
@@ -319,150 +319,134 @@ export function SequenceRulesPanel({
               return (
                 <div
                   key={rule.id}
-                  className="flex flex-col md:flex-row items-start md:items-center gap-2.5 p-3.5 rounded-xl border border-border/80 bg-background hover:border-primary/40 transition-all text-xs shadow-xs"
+                  className="rounded-xl border border-border/80 bg-background p-4.5 space-y-4 shadow-xs hover:border-primary/40 transition-all"
                 >
-                  {/* Call Step Badge */}
-                  <div className="flex items-center gap-2 shrink-0">
-                    <Badge className="bg-primary/10 text-primary border-primary/20 text-xs px-2.5 py-1 font-bold">
-                      {callOrdinal} Call
-                    </Badge>
+                  {/* Card Header Bar */}
+                  <div className="flex items-center justify-between border-b border-border/50 pb-3">
+                    <div className="flex items-center gap-2.5">
+                      <Badge className="bg-primary/10 text-primary border-primary/20 text-xs px-2.5 py-0.5 font-bold">
+                        {callOrdinal} Call
+                      </Badge>
+                      <span className="text-xs text-muted-foreground font-medium">
+                        Assigned Agent: <strong className="text-foreground">{currentAgentName}</strong>
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="text-[11px] gap-1 font-normal bg-muted/30">
+                        {rule.actionType === "call" ? "📞 AI Phone Call" : rule.actionType === "meet" ? "🎥 Google Meet Call" : "💬 WhatsApp"}
+                      </Badge>
+
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="size-7 text-muted-foreground hover:text-destructive shrink-0"
+                        onClick={() => removeRule(rule.id)}
+                      >
+                        <Trash2 className="size-3.5" />
+                      </Button>
+                    </div>
                   </div>
 
-                  {/* Agent Selector Dropdown */}
-                  <div className="w-full md:w-44 shrink-0">
-                    <Select
-                      value={String(currentAgentId)}
-                      onValueChange={(v) => updateRule(rule.id, { selectedAgentId: Number(v) })}
-                    >
-                      <SelectTrigger className="h-8 text-xs font-medium border-emerald-500/30 bg-emerald-500/5">
-                        <div className="flex items-center gap-1.5 truncate">
-                          <Bot className="size-3 text-emerald-500 shrink-0" />
+                  {/* Card Inputs Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+                    {/* 1. Assigned Agent */}
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px] text-muted-foreground font-medium">Select Agent</Label>
+                      <Select
+                        value={String(currentAgentId)}
+                        onValueChange={(v) => updateRule(rule.id, { selectedAgentId: Number(v) })}
+                      >
+                        <SelectTrigger className="h-9 text-xs font-medium bg-muted/20">
                           <SelectValue placeholder="Select Agent" />
-                        </div>
-                      </SelectTrigger>
-                      <SelectContent>
-                        {agents.length > 0 ? (
-                          agents.map((a) => (
-                            <SelectItem key={a.id} value={String(a.id)} className="text-xs">
-                              <div className="flex items-center gap-1.5">
-                                <Bot className="size-3 text-emerald-500" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {agents.length > 0 ? (
+                            agents.map((a) => (
+                              <SelectItem key={a.id} value={String(a.id)} className="text-xs">
                                 {a.name || `Agent #${a.id}`}
-                              </div>
+                              </SelectItem>
+                            ))
+                          ) : (
+                            <SelectItem value={String(agentId)} className="text-xs">
+                              {agentName || `Agent #${agentId}`}
                             </SelectItem>
-                          ))
-                        ) : (
-                          <SelectItem value={String(agentId)} className="text-xs">
-                            {agentName || `Agent #${agentId}`}
-                          </SelectItem>
-                        )}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                          )}
+                        </SelectContent>
+                      </Select>
+                    </div>
 
-                  {/* Channel / Action */}
-                  <div className="w-full md:w-36 shrink-0">
-                    <Select
-                      value={rule.actionType}
-                      onValueChange={(v) => updateRule(rule.id, { actionType: v as any })}
-                    >
-                      <SelectTrigger className="h-8 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="call" className="text-xs">
-                          <div className="flex items-center gap-1.5">
-                            <Phone className="size-3 text-emerald-500" /> AI Phone Call
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="whatsapp" className="text-xs">
-                          <div className="flex items-center gap-1.5">
-                            <MessageSquare className="size-3 text-purple-500" /> WhatsApp Msg
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="meet" className="text-xs">
-                          <div className="flex items-center gap-1.5">
-                            <Video className="size-3 text-blue-500" /> Google Meet Call
-                          </div>
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                    {/* 2. Action Type */}
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px] text-muted-foreground font-medium">Action Type</Label>
+                      <Select
+                        value={rule.actionType}
+                        onValueChange={(v) => updateRule(rule.id, { actionType: v as any })}
+                      >
+                        <SelectTrigger className="h-9 text-xs bg-muted/20">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="call" className="text-xs">📞 AI Phone Call</SelectItem>
+                          <SelectItem value="whatsapp" className="text-xs">💬 WhatsApp Msg</SelectItem>
+                          <SelectItem value="meet" className="text-xs">🎥 Google Meet Call</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
 
-                  {/* Date Mode Dropdown (Specific Date vs Days Delay) */}
-                  <div className="w-full md:w-40 shrink-0">
-                    <Select
-                      value={rule.triggerType}
-                      onValueChange={(v) => updateRule(rule.id, { triggerType: v as any })}
-                    >
-                      <SelectTrigger className="h-8 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="specific_date" className="text-xs">🗓️ Exact Calendar Date</SelectItem>
-                        <SelectItem value="delay_days" className="text-xs">⏱️ Days After Upload</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                    {/* 3. Date Mode & Picker */}
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px] text-muted-foreground font-medium">Calendar Date</Label>
+                      {rule.triggerType === "specific_date" ? (
+                        <Input
+                          type="date"
+                          value={rule.dayValue}
+                          onChange={(e) => updateRule(rule.id, { dayValue: e.target.value })}
+                          className="h-9 text-xs bg-muted/20"
+                        />
+                      ) : (
+                        <Input
+                          type="number"
+                          min={1}
+                          value={rule.dayValue}
+                          onChange={(e) => updateRule(rule.id, { dayValue: e.target.value })}
+                          placeholder="Days (e.g. 3)"
+                          className="h-9 text-xs text-center bg-muted/20"
+                        />
+                      )}
+                    </div>
 
-                  {/* Interactive Calendar Date Picker or Number Input */}
-                  <div className="w-full md:w-36 shrink-0">
-                    {rule.triggerType === "specific_date" ? (
+                    {/* 4. Time Window */}
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px] text-muted-foreground font-medium">Time Window</Label>
                       <Input
-                        type="date"
-                        value={rule.dayValue}
-                        onChange={(e) => updateRule(rule.id, { dayValue: e.target.value })}
-                        className="h-8 text-xs"
+                        type="text"
+                        value={rule.timeOfDay}
+                        onChange={(e) => updateRule(rule.id, { timeOfDay: e.target.value })}
+                        placeholder="e.g. 10:00 AM"
+                        className="h-9 text-xs bg-muted/20"
                       />
-                    ) : (
-                      <Input
-                        type="number"
-                        min={1}
-                        value={rule.dayValue}
-                        onChange={(e) => updateRule(rule.id, { dayValue: e.target.value })}
-                        placeholder="Days (e.g. 3)"
-                        className="h-8 text-xs text-center"
-                      />
-                    )}
+                    </div>
                   </div>
 
-                  {/* Time Value */}
-                  <div className="w-full md:w-28 shrink-0">
-                    <Input
-                      type="text"
-                      value={rule.timeOfDay}
-                      onChange={(e) => updateRule(rule.id, { timeOfDay: e.target.value })}
-                      placeholder="e.g. 10:00 AM"
-                      className="h-8 text-xs text-center"
-                    />
-                  </div>
-
-                  {/* Goal / Purpose Note */}
-                  <div className="w-full md:flex-1">
+                  {/* Goal / Purpose Note (Full width below) */}
+                  <div className="space-y-1.5 pt-1">
+                    <Label className="text-[11px] text-muted-foreground font-medium">Call Goal / Prompt Note</Label>
                     <Input
                       type="text"
                       value={rule.promptNote}
                       onChange={(e) => updateRule(rule.id, { promptNote: e.target.value })}
-                      placeholder="Goal of this call"
-                      className="h-8 text-xs bg-muted/20"
+                      placeholder="Goal of this call (e.g. Sales pitch, Monthly offer)"
+                      className="h-9 text-xs bg-muted/20"
                     />
                   </div>
-
-                  {/* Delete Button */}
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="size-7 text-muted-foreground hover:text-destructive shrink-0"
-                    onClick={() => removeRule(rule.id)}
-                  >
-                    <Trash2 className="size-3.5" />
-                  </Button>
                 </div>
               );
             })}
           </div>
 
           {/* Plain-English Schedule Summary Preview */}
-          <div className="rounded-lg border border-border/70 bg-muted/15 p-4 space-y-2">
+          <div className="rounded-xl border border-border/70 bg-muted/15 p-4 space-y-2.5">
             <h4 className="text-xs font-semibold flex items-center gap-1.5 text-foreground">
               <CheckCircle2 className="size-3.5 text-emerald-500" />
               Plain-English Schedule Preview for Clients:
