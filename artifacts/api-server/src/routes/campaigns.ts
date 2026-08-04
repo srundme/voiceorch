@@ -302,12 +302,20 @@ router.post("/campaigns", async (req, res): Promise<void> => {
     }
 
     // ── Hard platform ceiling on concurrent calls (max 10) ──
-    if (parsed.data.concurrentCallLimit != null && parsed.data.concurrentCallLimit > MAX_CONCURRENT_CALLS) {
-      res.status(400).json({
-        error: `Max Concurrent Calls cannot exceed ${MAX_CONCURRENT_CALLS}.`,
-        code: "CONCURRENT_LIMIT_EXCEEDED",
-      });
-      return;
+    // ── Verify selected agent exists ──
+    if (parsed.data.agentId) {
+      const [agentExists] = await db
+        .select({ id: agentsTable.id })
+        .from(agentsTable)
+        .where(eq(agentsTable.id, parsed.data.agentId));
+
+      if (!agentExists) {
+        res.status(400).json({
+          error: "Selected agent was not found. Please pick an active agent.",
+          code: "INVALID_AGENT",
+        });
+        return;
+      }
     }
 
     const leadSource = (parsed.data as Record<string, unknown>)["leadSource"] as string ?? "csv";
