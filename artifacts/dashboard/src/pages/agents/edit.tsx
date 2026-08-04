@@ -560,7 +560,7 @@ export default function AgentEdit() {
       icon: <MessageCircle className="h-4 w-4" />,
       color: "emerald",
       label: "Send WhatsApp",
-      description: "Lets the agent send a WhatsApp template mid-call via Instant/Business or your BSP webhook.",
+      description: "Lets the agent send a WhatsApp template mid-call via Meta Business API or your BSP webhook.",
     },
   ] as const;
 

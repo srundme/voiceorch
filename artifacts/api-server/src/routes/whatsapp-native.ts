@@ -188,7 +188,6 @@ router.get("/whatsapp/channel", requireAuth, async (req, res): Promise<void> => 
     .from(whatsappChannelsTable)
     .where(eq(whatsappChannelsTable.userId, userId))
     .limit(1);
-  const shared = await getSharedChannelConfig();
   let usage: { used24h: number; cap: number } | null = null;
   if (row) usage = { used24h: await countRecentOutbound(row.id), cap: row.dailyCap };
 
@@ -207,7 +206,7 @@ router.get("/whatsapp/channel", requireAuth, async (req, res): Promise<void> => 
 
   res.json({
     channel: row ? formatChannel(row) : null,
-    sharedTierAvailable: !!shared && !!getMasterVobizCreds(),
+    sharedTierAvailable: false,
     usage,
     purchasedNumber: wn ? {
       id: wn.id,
@@ -218,65 +217,12 @@ router.get("/whatsapp/channel", requireAuth, async (req, res): Promise<void> => 
   });
 });
 
-/** Enroll (or switch) to the zero-setup shared SnapServe channel. */
-router.post("/whatsapp/channel/shared", requireAuth, async (req, res): Promise<void> => {
-  const userId = (req as any).clerkUserId as string;
-  const body = req.body as {
-    businessName?: string;
-    inboundAgentId?: number | null;
-    notifyBookingConfirmed?: boolean;
-    notifyCallSummary?: boolean;
-    notifyCallbackScheduled?: boolean;
-    switch?: boolean;
-  };
-
-  const businessName = (body.businessName ?? "").trim();
-  if (!businessName) {
-    res.status(400).json({ error: "businessName is required — it appears inside the WhatsApp messages" });
-    return;
-  }
-  if (body.inboundAgentId != null && !(await validateAgentOwnership(userId, Number(body.inboundAgentId)))) {
-    res.status(404).json({ error: "Agent not found" });
-    return;
-  }
-  const shared = await getSharedChannelConfig();
-  if (!shared || !getMasterVobizCreds()) {
-    res.status(503).json({ error: "Shared WhatsApp channel is not configured yet — contact support or connect your own channel" });
-    return;
-  }
-
-  const [existing] = await db.select().from(whatsappChannelsTable)
-    .where(eq(whatsappChannelsTable.userId, userId)).limit(1);
-  if (existing?.mode === "own" && existing.active && existing.vobizChannelId && body.switch !== true) {
-    res.status(409).json({ error: "You have your own WhatsApp channel connected. Disconnect it first (or pass switch: true) to move to the shared channel." });
-    return;
-  }
-
-  const values = {
-    userId,
-    mode: "shared" as const,
-    businessName: businessName.slice(0, 120),
-    inboundAgentId: body.inboundAgentId ?? null,
-    notifyBookingConfirmed: body.notifyBookingConfirmed ?? true,
-    notifyCallSummary: body.notifyCallSummary ?? true,
-    notifyCallbackScheduled: body.notifyCallbackScheduled ?? true,
-    status: "active",
-    active: true,
-    lastError: null as string | null,
-    // switching from own → shared clears own-channel fields
-    vobizChannelId: null as string | null,
-    wabaId: null as string | null,
-    phoneNumberId: null as string | null,
-    phoneE164: null as string | null,
-    accessTokenLast4: null as string | null,
-    updatedAt: new Date(),
-  };
-  const [row] = await db.insert(whatsappChannelsTable)
-    .values(values)
-    .onConflictDoUpdate({ target: whatsappChannelsTable.userId, set: values })
-    .returning();
-  logger.info({ userId }, "whatsapp-native: enrolled in shared tier");
-  res.status(201).json(formatChannel(row!));
+/** Instant (shared) WhatsApp enrollment — closed. Existing shared channels still work via GET/PATCH/DELETE. */
+router.post("/whatsapp/channel/shared", requireAuth, async (_req, res): Promise<void> => {
+  res.status(410).json({
+    error: "Instant WhatsApp is no longer available. Connect Meta API / Business WhatsApp with your own number instead.",
+    code: "INSTANT_WHATSAPP_REMOVED",
+  });
 });
 
 /** Connect the user's own WABA/number as a VoBiz channel (upgrade path). */
@@ -365,7 +311,7 @@ router.post("/whatsapp/channel/own", requireAuth, async (req, res): Promise<void
   if (providedChannelId) {
     const sharedCfg = await getSharedChannelConfig();
     if (sharedCfg && providedChannelId === sharedCfg.channelId) {
-      res.status(400).json({ error: "That channel id is the platform shared channel — enroll in the shared tier instead" });
+      res.status(400).json({ error: "That channel id is the platform shared channel — connect your own Meta Business WhatsApp number instead" });
       return;
     }
   }

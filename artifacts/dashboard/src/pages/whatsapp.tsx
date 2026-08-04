@@ -221,24 +221,6 @@ function NativeSection({
   const [existingChannelId, setExistingChannelId] = useState("");
   const [testPhone, setTestPhone] = useState("");
 
-  const enrollShared = useMutation({
-    mutationFn: () =>
-      customFetch<WaChannel>(`${API}/whatsapp/channel/shared`, {
-        method: "POST",
-        body: JSON.stringify({
-          businessName,
-          inboundAgentId: inboundAgentId === "" ? null : Number(inboundAgentId),
-        }),
-        headers: { "Content-Type": "application/json" },
-      }),
-    onSuccess: () => {
-      invalidate();
-      setSharedOpen(false);
-      toast({ title: "WhatsApp notifications enabled", description: "Post-call messages now go out automatically — no other setup needed." });
-    },
-    onError: (err: Error) => toast({ title: "Could not enable", description: err.message, variant: "destructive" }),
-  });
-
   const connectOwn = useMutation({
     mutationFn: (vars: { numberSource: "direct" | "purchased" | "voice_number"; voicePhoneNumberId?: number }) =>
       customFetch<WaChannel>(`${API}/whatsapp/channel/own`, {
@@ -465,41 +447,13 @@ function NativeSection({
           )}
 
           <div>
-            <h3 className="text-sm font-semibold">Which describes you best?</h3>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Instant if you have no WhatsApp Business setup. Meta API if you already have a WhatsApp Business account.
+            <h3 className="text-sm font-semibold">Connect WhatsApp Business</h3>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Use your own WhatsApp Business account via Meta API. SnapServe Instant WhatsApp is no longer offered.
             </p>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-2">
-            {/* Non-business → instant shared tier */}
-            <div className="flex flex-col rounded-lg border border-emerald-500/25 bg-emerald-500/[0.04] p-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <Sparkles className="h-4 w-4 text-emerald-400" />
-                <h3 className="text-sm font-semibold">I don't have one — just make it work</h3>
-                <Badge className="border-transparent bg-emerald-500/15 text-[10px] text-emerald-400">Instant · most users</Badge>
-              </div>
-              <ul className="mt-3 flex-1 space-y-1.5 text-xs text-muted-foreground">
-                <li>• Live in ~30 seconds — no Meta account or number purchase</li>
-                <li>• Booking confirmations, summaries &amp; callback alerts after calls</li>
-                <li>• Sent from SnapServe's verified WhatsApp with your business name</li>
-                <li>• Fair-use 50 messages/day — upgrade to Business any time</li>
-              </ul>
-              <Button
-                size="sm"
-                className="mt-4 h-9 w-full"
-                disabled={!data?.sharedTierAvailable}
-                onClick={openSharedDialog}
-              >
-                Enable Instant WhatsApp
-              </Button>
-              {!data?.sharedTierAvailable && (
-                <p className="mt-2 text-[11px] text-amber-400/90">
-                  Temporarily unavailable — use Business WhatsApp for now.
-                </p>
-              )}
-            </div>
-
+          <div className="max-w-xl">
             {/* Business → direct Meta Cloud API */}
             <div className="flex flex-col rounded-lg border border-sky-500/25 bg-sky-500/[0.04] p-4">
               <div className="flex flex-wrap items-center gap-2">
@@ -539,7 +493,7 @@ function NativeSection({
                   ? <Sparkles className="w-4 h-4 text-emerald-400" />
                   : <Building2 className="w-4 h-4 text-sky-400" />}
                 <h3 className="text-sm font-semibold">
-                  {channel.mode === "shared" ? "SnapServe WhatsApp" : "Your WhatsApp number"}
+                  {channel.mode === "shared" ? "Legacy Instant WhatsApp" : "Your WhatsApp number"}
                 </h3>
                 <Badge
                   className={channel.status === "active"
@@ -754,15 +708,15 @@ function NativeSection({
         />
       )}
 
-      {/* Shared enroll / edit dialog */}
+      {/* Edit channel settings (existing Instant or Business) */}
       <Dialog open={sharedOpen} onOpenChange={setSharedOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{channel ? "WhatsApp settings" : "Enable WhatsApp notifications"}</DialogTitle>
+            <DialogTitle>WhatsApp settings</DialogTitle>
             <DialogDescription>
               {channel?.mode === "own"
                 ? "Update the business name shown in your messages and the reply-call agent."
-                : "Messages are sent from SnapServe's WhatsApp business number with your business name inside."}
+                : "Update the business name and reply-call agent. New Instant WhatsApp enrollments are closed — upgrade to Meta API / Business for your own number."}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
@@ -792,21 +746,16 @@ function NativeSection({
           <DialogFooter>
             <Button variant="ghost" onClick={() => setSharedOpen(false)}>Cancel</Button>
             <Button
-              disabled={!businessName.trim() || enrollShared.isPending || patchChannel.isPending}
+              disabled={!channel || !businessName.trim() || patchChannel.isPending}
               onClick={() => {
-                if (channel) {
-                  // Edit of an existing channel (either tier) must PATCH — never
-                  // re-enroll shared, which would wipe own-channel fields.
-                  patchChannel.mutate(
-                    { businessName, inboundAgentId: inboundAgentId === "" ? null : Number(inboundAgentId) },
-                    { onSuccess: () => { setSharedOpen(false); toast({ title: "Saved" }); } },
-                  );
-                } else {
-                  enrollShared.mutate();
-                }
+                if (!channel) return;
+                patchChannel.mutate(
+                  { businessName, inboundAgentId: inboundAgentId === "" ? null : Number(inboundAgentId) },
+                  { onSuccess: () => { setSharedOpen(false); toast({ title: "Saved" }); } },
+                );
               }}
             >
-              {channel ? "Save" : "Enable"}
+              Save
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1063,7 +1012,7 @@ function BspAdopterGuide() {
         <h2 className="text-sm font-semibold">Bring your BSP — 4 steps</h2>
         <p className="mt-1 text-xs text-muted-foreground max-w-2xl">
           Create templates in your WhatsApp provider. SnapServe POSTs to your webhook; your BSP sends the message.
-          A BSP connection for an agent overrides Instant/Business post-call for that agent.
+          A BSP connection for an agent overrides Meta API / Business post-call for that agent.
         </p>
       </div>
       <ol className="space-y-2 text-xs text-muted-foreground">

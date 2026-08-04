@@ -34,7 +34,7 @@ Content-Type: application/json
 2. `create_journey` then `apply_journey_preset`
 3. Bind agent in journey settings / agent builder Journey tab
 4. `activate_journey` → copy lead intake URL from journey (or campaign webhook)
-5. Channels: WhatsApp Instant + Email ready before go-live
+5. Channels: WhatsApp (Meta Business) + Email ready before go-live
 
 ## 4. Google Sheets Automatic Calls
 
@@ -43,11 +43,11 @@ Content-Type: application/json
 3. `start_automatic_call`
 4. Monitor with `list_automatic_calls` / activity via `snapserve_api`
 
-## 5. WhatsApp Instant (Voiceathon default)
+## 5. WhatsApp Meta Business
 
-1. `get_whatsapp_channel` — enable Instant if inactive
+1. Connect Meta API / Business WhatsApp in Dashboard (own number) — Instant shared tier is closed
 2. Attach agent in channel / journey
-3. Avoid stale BYO BSP connection overriding Instant (`list_whatsapp_connections`)
+3. Or use BYO BSP via `list_whatsapp_connections` / create connection
 
 ## 6. CRM / Zap post-call webhook
 

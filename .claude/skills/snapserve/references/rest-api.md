@@ -48,7 +48,7 @@ Auth: `Authorization: Bearer sk_live_...`
 ## WhatsApp / Email
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET/PATCH | `/whatsapp/channel` | Native Instant/Business |
+| GET/PATCH | `/whatsapp/channel` | Native Meta Business (own number); Instant enroll closed |
 | GET/POST | `/whatsapp/connections` | BYO / Request-a-Call |
 | GET/PUT | `/email/channel` | Brevo channel |
 

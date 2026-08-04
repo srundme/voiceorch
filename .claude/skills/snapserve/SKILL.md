@@ -33,7 +33,7 @@ and `references/workflows.md`.
 | Website linking | Form → lead → dial | `create_campaign` → `get_website_webhook` |
 | Campaigns | CSV import, batches, redial | `import_campaign_leads`, `start_campaign_batch` |
 | Journeys | Lead intake sequence | `apply_journey_preset`, `activate_journey` |
-| WhatsApp | Instant / Business / BYO BSP | `get_whatsapp_channel`, connections |
+| WhatsApp | Meta Business / BYO BSP | `get_whatsapp_channel`, connections |
 | Email | Brevo mid-call / post-call | `upsert_email_channel` |
 | Sheets | Automatic Calls from rows | `create_automatic_call`, `start_automatic_call` |
 | Dispositions | Post-call labels | `set_disposition_config` |
@@ -50,7 +50,7 @@ Prefer unless the user specifies otherwise:
 - LLM: **google** (e.g. gemini flash)
 - TTS: **cartesia** or **sarvam**
 - Telephony: **vobiz**
-- WhatsApp: **Instant** for non-business
+- WhatsApp: **Meta Business API** (own number) or BYO BSP
 - Website intake: campaign webhook `POST /api/webhooks/lead/{token}`
 
 ## Guardrails

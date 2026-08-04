@@ -210,7 +210,7 @@ export function ChannelsPanel({
                 <div>
                   <h3 className="text-sm font-semibold">WhatsApp</h3>
                   <p className="mt-0.5 text-xs text-muted-foreground">
-                    Instant, Business, or BYO BSP messages and follow-ups.
+                    Meta Business API or BYO BSP messages and follow-ups.
                   </p>
                 </div>
                 <Button
@@ -246,7 +246,7 @@ export function ChannelsPanel({
                       {waData.channel.businessName || "WhatsApp channel"}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {waData.channel.mode === "own" ? "Own number" : "Shared SnapServe channel"}
+                      {waData.channel.mode === "own" ? "Own number" : "Legacy Instant channel"}
                       {waData.channel.phoneE164 ? ` · ${waData.channel.phoneE164}` : ""}
                     </p>
                   </div>

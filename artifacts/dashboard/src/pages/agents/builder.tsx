@@ -2400,7 +2400,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
       icon: <MessageCircle className="h-4 w-4" />,
       color: "emerald",
       label: "Send WhatsApp",
-      description: "Lets the agent send a WhatsApp template mid-call via Instant/Business or your BSP webhook. Uses the caller’s phone unless they give another number.",
+      description: "Lets the agent send a WhatsApp template mid-call via Meta Business API or your BSP webhook. Uses the caller’s phone unless they give another number.",
       needsEventType: false,
     },
   ] as const;
