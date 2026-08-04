@@ -8,7 +8,7 @@ import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowDown, ArrowUp, ChevronDown, ChevronRight, Clock, FileSpreadsheet,
-  GitBranch, Mail, MessageCircle, OctagonX, Phone, Plus, Trash2, Video,
+  GitBranch, Mail, MessageCircle, OctagonX, Phone, PhoneForwarded, Plus, Trash2, Video,
 } from "lucide-react";
 import { customFetch } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
@@ -83,6 +83,7 @@ const MVP_CATALOG: Array<{
   { type: "send_whatsapp", title: "Send WhatsApp", desc: "Message after the previous step", icon: MessageCircle },
   { type: "send_email", title: "Send email", desc: "Email after the previous step", icon: Mail },
   { type: "delay", title: "Wait", desc: "Pause before the next step", icon: Clock },
+  { type: "schedule_callback", title: "Schedule callback", desc: "Queue another dial later (plan-level)", icon: PhoneForwarded },
   { type: "join_meeting", title: "Join a meeting", desc: "Bot joins Meet / Zoom / Teams", icon: Video },
   { type: "update_sheet", title: "Update the list", desc: "Write status back to the Sheet row", icon: FileSpreadsheet },
   { type: "condition", title: "If…", desc: "Continue only when something is true", icon: GitBranch },
@@ -132,6 +133,7 @@ function displayLabel(step: CallPlanStep): string {
   }
   if (step.type === "send_whatsapp") return step.label?.trim() || "Send WhatsApp";
   if (step.type === "send_email") return step.label?.trim() || "Send email";
+  if (step.type === "schedule_callback") return step.label?.trim() || "Schedule callback";
   if (step.type === "join_meeting") return step.label?.trim() || "Join a meeting";
   if (step.type === "update_sheet") return step.label?.trim() || "Update the list";
   return stepLabel(step);
@@ -196,6 +198,7 @@ export function CallPlanStepEditor({ steps, agentId, onChange, readOnly = false 
     if (type === "make_call") step.label = "Call them";
     if (type === "send_whatsapp") step.label = "Send WhatsApp";
     if (type === "send_email") step.label = "Send email";
+    if (type === "schedule_callback") step.label = "Schedule callback";
     if (type === "join_meeting") step.label = "Join a meeting";
     if (type === "update_sheet") step.label = "Update the list";
     if (type === "condition") {
@@ -227,6 +230,16 @@ export function CallPlanStepEditor({ steps, agentId, onChange, readOnly = false 
 
   return (
     <div className="space-y-2">
+      {steps.some((s, i) => {
+        if (!(s.type === "condition" && s.field !== "__stop")) return false;
+        const field = s.field ?? "";
+        if (!field.startsWith("call.")) return false;
+        return !steps.slice(0, i).some((p) => p.type === "make_call");
+      }) && (
+        <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-2 text-[11px] text-amber-400">
+          An If… step looks at the call before any Call them step — move Call them above If… or the condition will always fail.
+        </p>
+      )}
       <ol className="space-y-1.5">
         {steps.map((step, idx) => {
           const open = expandedId === step.id;
@@ -444,6 +457,36 @@ export function CallPlanStepEditor({ steps, agentId, onChange, readOnly = false 
                         Needs email connected. Uses the person’s email from the list when present.
                       </p>
                     </div>
+                  ) : step.type === "schedule_callback" ? (
+                    <div className="space-y-2">
+                      <div className="space-y-1">
+                        <Label className="text-[11px]">Callback in (days)</Label>
+                        <Input
+                          type="number"
+                          min={1}
+                          className="h-8 text-xs"
+                          value={step.callbackDelayDays ?? 5}
+                          onChange={(e) =>
+                            updateAt(idx, {
+                              callbackDelayDays: Math.max(1, Number(e.target.value) || 1),
+                              label: `Callback in ${Math.max(1, Number(e.target.value) || 1)} days`,
+                            })
+                          }
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[11px]">Notes</Label>
+                        <Input
+                          className="h-8 text-xs"
+                          value={step.notes ?? ""}
+                          onChange={(e) => updateAt(idx, { notes: e.target.value })}
+                          placeholder="Plan follow-up"
+                        />
+                      </div>
+                      <p className="text-[10px] text-muted-foreground">
+                        Queues a later dial via Callbacks. Agent auto-redial settings stay separate.
+                      </p>
+                    </div>
                   ) : step.type === "join_meeting" ? (
                     <div className="space-y-2">
                       <p className="text-[11px] text-muted-foreground rounded-md border border-border/50 bg-muted/20 px-2.5 py-2">
@@ -601,4 +644,73 @@ export function defaultCallPlanSteps(agentId: number): CallPlanStep[] {
     { ...defaultStep("send_whatsapp", agentId), label: "Send WhatsApp" },
     { ...defaultStep("delay", agentId), delaySeconds: 86400, label: "Wait 1 day" },
   ];
+}
+
+export type CallPlanTemplateId = "lead_followup" | "soft_nudge" | "sheet_live" | "blank";
+
+export const CALL_PLAN_TEMPLATES: Array<{
+  id: CallPlanTemplateId;
+  title: string;
+  blurb: string;
+  peopleHint: "campaign" | "sheet";
+  runMode?: "once" | "live";
+}> = [
+  {
+    id: "lead_followup",
+    title: "Lead follow-up",
+    blurb: "Call → if no answer, WhatsApp → wait 1 day → call again",
+    peopleHint: "campaign",
+  },
+  {
+    id: "soft_nudge",
+    title: "Soft nudge",
+    blurb: "Call → WhatsApp → wait 2 days → stop",
+    peopleHint: "campaign",
+  },
+  {
+    id: "sheet_live",
+    title: "Sheet live dial",
+    blurb: "Call → update the sheet (Keep live)",
+    peopleHint: "sheet",
+    runMode: "live",
+  },
+  {
+    id: "blank",
+    title: "Start blank",
+    blurb: "Call → WhatsApp → Wait (edit freely)",
+    peopleHint: "campaign",
+  },
+];
+
+export function stepsForTemplate(id: CallPlanTemplateId, agentId: number): CallPlanStep[] {
+  if (id === "lead_followup") {
+    return [
+      { ...defaultStep("make_call", agentId), label: "Call them" },
+      {
+        ...defaultStep("condition", agentId),
+        field: "call.connected",
+        op: "eq",
+        value: "false",
+        label: "If they didn’t answer",
+      },
+      { ...defaultStep("send_whatsapp", agentId), label: "Send WhatsApp" },
+      { ...defaultStep("delay", agentId), delaySeconds: 86400, label: "Wait 1 day" },
+      { ...defaultStep("make_call", agentId), label: "Call again" },
+    ];
+  }
+  if (id === "soft_nudge") {
+    return [
+      { ...defaultStep("make_call", agentId), label: "Call them" },
+      { ...defaultStep("send_whatsapp", agentId), label: "Send WhatsApp" },
+      { ...defaultStep("delay", agentId), delaySeconds: 172800, label: "Wait 2 days" },
+      stopStep(),
+    ];
+  }
+  if (id === "sheet_live") {
+    return [
+      { ...defaultStep("make_call", agentId), label: "Call them" },
+      { ...defaultStep("update_sheet", agentId), label: "Update the list" },
+    ];
+  }
+  return defaultCallPlanSteps(agentId);
 }

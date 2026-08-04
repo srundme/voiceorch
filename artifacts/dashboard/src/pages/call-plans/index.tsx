@@ -27,7 +27,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError } from "@/lib/format-api-error";
 import { cn } from "@/lib/utils";
-import { defaultCallPlanSteps } from "./step-editor";
+import { CALL_PLAN_TEMPLATES, stepsForTemplate, type CallPlanTemplateId } from "./step-editor";
 
 const _DASH_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const DASH_API = `${_DASH_BASE}/api`;
@@ -57,6 +57,7 @@ export default function CallPlansPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [name, setName] = useState("");
   const [agentId, setAgentId] = useState<string>("");
+  const [templateId, setTemplateId] = useState<CallPlanTemplateId>("lead_followup");
 
   const agentsQ = useListAgents({
     query: { queryKey: getListAgentsQueryKey(), staleTime: 30_000 },
@@ -73,7 +74,8 @@ export default function CallPlansPage() {
     mutationFn: async () => {
       const aid = Number(agentId);
       if (!Number.isFinite(aid) || aid <= 0) throw new Error("Pick an agent who will talk");
-      const planName = name.trim() || "New call plan";
+      const tpl = CALL_PLAN_TEMPLATES.find((t) => t.id === templateId) ?? CALL_PLAN_TEMPLATES[0]!;
+      const planName = name.trim() || tpl.title;
       return customFetch<CallPlan>(`${DASH_API}/journeys`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -81,10 +83,13 @@ export default function CallPlansPage() {
           agentId: aid,
           presetId: "custom",
           name: planName,
-          description: "Call plan",
+          description: tpl.blurb,
           trigger: { type: "manual" },
-          steps: defaultCallPlanSteps(aid),
-          settings: { peopleSource: "campaign" },
+          steps: stepsForTemplate(templateId, aid),
+          settings: {
+            peopleSource: tpl.peopleHint,
+            ...(tpl.runMode ? { runMode: tpl.runMode } : { runMode: "once" }),
+          },
         }),
       });
     },
@@ -92,6 +97,7 @@ export default function CallPlansPage() {
       qc.invalidateQueries({ queryKey: ["call-plans"] });
       setCreateOpen(false);
       setName("");
+      setTemplateId("lead_followup");
       navigate(`/app/call-plans/${plan.id}`);
     },
     onError: (err) => {
@@ -132,8 +138,32 @@ export default function CallPlansPage() {
           <ListOrdered className="mb-3 size-5 text-muted-foreground" />
           <p className="text-sm font-medium">No call plans yet</p>
           <p className="mt-1 max-w-sm text-[13px] text-muted-foreground">
-            Build Call → WhatsApp → Wait (or any order), pick a people list, and press Start.
+            Four steps to your first run:
           </p>
+          <ol className="mt-4 max-w-sm space-y-2 text-left">
+            {[
+              agents.length === 0 ? (
+                <>
+                  Create an agent —{" "}
+                  <Link href="/app/agents?create=1" className="underline underline-offset-2 text-foreground/80 hover:text-foreground">
+                    Agents
+                  </Link>
+                </>
+              ) : (
+                "Create an agent (you already have one)"
+              ),
+              "New call plan — pick a template",
+              "Attach people (list, paste, or sheet)",
+              "Start once",
+            ].map((step, i) => (
+              <li key={i} className="flex items-start gap-2.5 text-[12px] text-muted-foreground">
+                <span className="mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-border/60 bg-muted/30 text-[10px] font-semibold text-muted-foreground">
+                  {i + 1}
+                </span>
+                <span className="leading-snug pt-0.5">{step}</span>
+              </li>
+            ))}
+          </ol>
           <Button
             className="mt-5 gap-1.5"
             onClick={() => {
@@ -146,7 +176,7 @@ export default function CallPlansPage() {
             }}
           >
             <Plus className="size-4" />
-            Create call plan
+            {agents.length === 0 ? "Create an agent" : "Create call plan"}
           </Button>
         </div>
       ) : (
@@ -188,14 +218,35 @@ export default function CallPlansPage() {
       )}
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>New call plan</DialogTitle>
             <DialogDescription>
-              Name it and pick who talks. You’ll add steps and people next.
+              Pick a template, name it, and choose who talks. You’ll attach people next.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-1">
+            <div className="space-y-1.5">
+              <Label>Template</Label>
+              <div className="grid gap-1.5 sm:grid-cols-2">
+                {CALL_PLAN_TEMPLATES.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setTemplateId(t.id)}
+                    className={cn(
+                      "rounded-lg border px-3 py-2.5 text-left transition-colors",
+                      templateId === t.id
+                        ? "border-primary/40 bg-primary/5"
+                        : "border-border/50 hover:bg-muted/30",
+                    )}
+                  >
+                    <p className="text-[12px] font-medium">{t.title}</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5 leading-snug">{t.blurb}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="space-y-1.5">
               <Label htmlFor="plan-name">Name</Label>
               <Input
@@ -204,7 +255,6 @@ export default function CallPlansPage() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && create.mutate()}
-                autoFocus
               />
             </div>
             <div className="space-y-1.5">

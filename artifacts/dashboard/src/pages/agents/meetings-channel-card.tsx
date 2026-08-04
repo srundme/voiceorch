@@ -7,12 +7,14 @@
 
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import {
   useGetAgent,
   useListAgents,
   useUpdateAgent,
   getGetAgentQueryKey,
   getListAgentsQueryKey,
+  customFetch,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -68,6 +70,13 @@ export function MeetingsChannelCard({ agentId }: { agentId: number }) {
     query: { queryKey: getListAgentsQueryKey(), staleTime: 30_000 },
   });
   const update = useUpdateAgent();
+
+  const identityQ = useQuery({
+    queryKey: ["meet-bot-identity"],
+    queryFn: () =>
+      customFetch<{ botEmail: string | null; signedInGoogleMeet: boolean }>("/api/meet-bots/identity"),
+    staleTime: 60_000,
+  });
 
   const [form, setForm] = useState<MeetingsForm>(EMPTY);
   const [loaded, setLoaded] = useState(false);
@@ -150,6 +159,23 @@ export function MeetingsChannelCard({ agentId }: { agentId: number }) {
             </div>
             <Switch checked={form.enabled} onCheckedChange={(v) => set({ enabled: v })} />
           </div>
+
+          {identityQ.data && (
+            <div className="rounded-md border border-border/60 bg-muted/20 px-3 py-2.5 text-[11px] text-muted-foreground leading-relaxed">
+              {identityQ.data.botEmail ? (
+                <>
+                  Bot joins as{" "}
+                  <span className="font-mono text-foreground">{identityQ.data.botEmail}</span>
+                  {" — "}admit this address, or add it to the Meet invite.
+                </>
+              ) : (
+                <>
+                  Managed meeting agent joins as a guest. Google Meet may ask the host to admit it by
+                  the agent&apos;s name (no email shown).
+                </>
+              )}
+            </div>
+          )}
 
           {form.enabled && (
             <>

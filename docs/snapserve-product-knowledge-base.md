@@ -239,12 +239,23 @@ Retries and call-backs are **agent** settings — not plan steps.
 
 | Mode | Behaviour |
 |------|-----------|
-| **Start once** | Run the attached people through the plan |
-| **Keep live** | For Sheet people — keep watching new/updated rows |
+| **Start once** | Run the attached people through the plan in **batches of 100**; use **Continue** for the next batch |
+| **Keep live** | For Sheet people — keep watching new/updated rows (uses a **sheet cursor** so already-processed rows are not re-run) |
+
+**Pause / Resume** — stop or restart an active plan without deleting it.
+
+### Intake on a plan
+
+Optional intake sources on the plan itself (in addition to attached lists/sheets):
+
+- **Website form** — form webhook leads enter this plan  
+- **Meta Lead Ads** — Meta form submissions enter this plan  
+
+Configure the form/Meta connection under **Connections**, then enable intake on the plan.
 
 ### Results
 
-Per-person / run progress on the plan detail page; full call outcomes also in **History**.
+Per-person / run progress on the plan detail page (**Activity**); export via **CSV**. Full call outcomes also in **History**.
 
 **Under the hood:** journeys + workflows. Product copy says **Call plans**.
 

@@ -120,7 +120,7 @@ const NAV_GROUPS: NavGroup[] = [
       { name: "Memory",     href: "/app/memory",          icon: Brain },
       { name: "Squads",     href: "/app/squads",          icon: GitBranch },
       { name: "Analytics",  href: "/app/analytics",       icon: BarChart3 },
-      { name: "Scheduling", href: "/app/scheduling",      icon: Calendar },
+      { name: "Bookings", href: "/app/scheduling",      icon: Calendar },
     ],
   },
 ];

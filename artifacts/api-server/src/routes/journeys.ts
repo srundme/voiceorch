@@ -31,6 +31,7 @@ import {
   buildJourneyPreset,
   listJourneyPresets,
 } from "../services/journey-presets.js";
+import { normalizePhone } from "../lib/phone-normalize.js";
 
 const router: IRouter = Router();
 
@@ -408,6 +409,7 @@ router.post("/journeys/:id/test", requireAuth, async (req, res): Promise<void> =
 // Walk current people through the plan: one workflow run per phone.
 // Retries / "call me back" stay on the agent — this only starts the sequence.
 
+/** Max people started per Start click (continue with offset for the rest). */
 const START_ONCE_MAX = 100;
 
 router.post("/journeys/:id/start", requireAuth, async (req, res): Promise<void> => {
@@ -425,7 +427,11 @@ router.post("/journeys/:id/start", requireAuth, async (req, res): Promise<void> 
     sheetPipelineId?: string;
     phones?: string[];
     limit?: number;
+    /** Skip this many people in the source list (for Continue after a 100-cap batch). */
+    offset?: number;
     runMode?: "once" | "live";
+    /** Re-dial people who already have a run on this plan. */
+    force?: boolean;
   };
 
   const settings = (journey.settings ?? {}) as JourneySettings;
@@ -437,6 +443,7 @@ router.post("/journeys/:id/start", requireAuth, async (req, res): Promise<void> 
     Math.max(1, Number(body.limit) || START_ONCE_MAX),
     START_ONCE_MAX,
   );
+  const offset = Math.max(0, Number(body.offset) || 0);
 
   type Person = {
     phone: string;
@@ -449,12 +456,15 @@ router.post("/journeys/:id/start", requireAuth, async (req, res): Promise<void> 
   const people: Person[] = [];
   let sheetCursorRow = typeof settings.sheetCursorRow === "number" ? settings.sheetCursorRow : 1;
 
+  let sourceTotal = 0;
+  let scanned = 0;
+
   if (Array.isArray(body.phones) && body.phones.length > 0) {
-    for (const raw of body.phones) {
-      const phone = String(raw ?? "").trim();
-      if (phone) people.push({ phone });
-      if (people.length >= limit) break;
-    }
+    const allPhones = body.phones.map((raw) => String(raw ?? "").trim()).filter(Boolean);
+    sourceTotal = allPhones.length;
+    const slice = allPhones.slice(offset, offset + limit);
+    scanned = slice.length;
+    for (const phone of slice) people.push({ phone });
   } else if (sheetPipelineId) {
     const {
       loadOwnedSheetPipeline,
@@ -464,9 +474,13 @@ router.post("/journeys/:id/start", requireAuth, async (req, res): Promise<void> 
     if (!pipeline) { res.status(404).json({ error: "Sheet list not found" }); return; }
     const listed = await listSheetPipelinePeople(pipeline, {
       fromRowExclusive: runMode === "live" ? sheetCursorRow : 1,
-      limit,
+      limit: runMode === "live" ? limit : offset + limit,
     });
-    for (const p of listed.people) {
+    // Approximate source size: lastRow after header.
+    sourceTotal = Math.max(0, listed.lastRow - 1);
+    const sheetSlice = runMode === "live" ? listed.people : listed.people.slice(offset, offset + limit);
+    scanned = sheetSlice.length;
+    for (const p of sheetSlice) {
       people.push({
         phone: p.phone,
         name: p.name,
@@ -487,19 +501,22 @@ router.post("/journeys/:id/start", requireAuth, async (req, res): Promise<void> 
       .limit(1);
     if (!campaign) { res.status(404).json({ error: "People list (campaign) not found" }); return; }
 
-    const leads = await db.select({
+    const allLeads = await db.select({
       id: campaignLeadsTable.id,
       phone: campaignLeadsTable.phone,
       name: campaignLeadsTable.name,
       email: campaignLeadsTable.email,
     }).from(campaignLeadsTable)
       .where(eq(campaignLeadsTable.campaignId, campaignId))
-      .orderBy(desc(campaignLeadsTable.createdAt))
-      .limit(limit);
+      .orderBy(desc(campaignLeadsTable.createdAt));
 
-    for (const lead of leads) {
+    const withPhone = allLeads.filter((l) => (l.phone ?? "").trim());
+    sourceTotal = withPhone.length;
+    const slice = withPhone.slice(offset, offset + limit);
+    scanned = slice.length;
+
+    for (const lead of slice) {
       const phone = (lead.phone ?? "").trim();
-      if (!phone) continue;
       people.push({
         phone,
         name: lead.name ?? undefined,
@@ -550,8 +567,54 @@ router.post("/journeys/:id/start", requireAuth, async (req, res): Promise<void> 
     .limit(1);
   if (!workflow) { res.status(500).json({ error: "Backing workflow missing" }); return; }
 
+  // Dedup Start once: skip phones that already have an active/completed run unless force.
+  const force = body.force === true;
+  let skippedDup = 0;
+  let toStart = people;
+  if (!force && runMode === "once" && people.length > 0) {
+    const prior = await db.select({
+      context: workflowRunsTable.context,
+      status: workflowRunsTable.status,
+    }).from(workflowRunsTable)
+      .where(and(
+        eq(workflowRunsTable.workflowId, workflowId),
+        eq(workflowRunsTable.userId, clerkId),
+      ))
+      .limit(2000);
+
+    const busy = new Set<string>();
+    for (const r of prior) {
+      if (r.status === "failed") continue;
+      const phone = typeof r.context?.["phone"] === "string" ? r.context["phone"] : "";
+      const norm = normalizePhone(phone);
+      if (norm) busy.add(norm);
+      else if (phone.trim()) busy.add(phone.trim());
+    }
+
+    toStart = [];
+    for (const p of people) {
+      const norm = normalizePhone(p.phone) || p.phone.trim();
+      if (busy.has(norm)) {
+        skippedDup++;
+        continue;
+      }
+      toStart.push(p);
+      busy.add(norm);
+    }
+  }
+
+  if (toStart.length === 0 && !(runMode === "live" && sheetPipelineId)) {
+    res.status(400).json({
+      error: skippedDup > 0
+        ? `All ${skippedDup} people already walked this plan. Pass force=true to re-dial.`
+        : "No people to start — add leads, connect a sheet, or paste phone numbers",
+      skipped: skippedDup,
+    });
+    return;
+  }
+
   const runIds: number[] = [];
-  for (const person of people) {
+  for (const person of toStart) {
     const runId = await startWorkflowRun({
       workflow,
       context: {
@@ -578,15 +641,172 @@ router.post("/journeys/:id/start", requireAuth, async (req, res): Promise<void> 
     runIds.push(runId);
   }
 
+  const nextOffset = offset + scanned;
+  const hasMore = nextOffset < sourceTotal;
+
+  // Persist batch cursor so Continue can resume without the client guessing.
+  if (hasMore && runMode === "once") {
+    await db.update(journeysTable).set({
+      settings: {
+        ...nextSettings,
+        startOffset: nextOffset,
+        startSourceTotal: sourceTotal,
+      } as JourneySettings,
+      updatedAt: new Date(),
+    }).where(and(eq(journeysTable.id, id), eq(journeysTable.userId, clerkId)));
+  } else if (!hasMore) {
+    await db.update(journeysTable).set({
+      settings: {
+        ...nextSettings,
+        startOffset: 0,
+        startSourceTotal: sourceTotal,
+      } as JourneySettings,
+      updatedAt: new Date(),
+    }).where(and(eq(journeysTable.id, id), eq(journeysTable.userId, clerkId)));
+  }
+
   res.status(201).json({
     ok: true,
     started: runIds.length,
+    skipped: skippedDup,
     runIds,
     workflowId,
     journeyId: id,
     runMode,
     keepLive: runMode === "live" && !!sheetPipelineId,
+    batchMax: START_ONCE_MAX,
+    offset,
+    nextOffset,
+    hasMore,
+    sourceTotal,
+    scanned,
   });
+});
+
+/** Preview who would start vs skip (dedup) before committing a Start. */
+router.post("/journeys/:id/start-preview", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+  const id = parseInt(String(req.params["id"]), 10);
+  const journey = await loadOwnedJourney(clerkId, id);
+  if (!journey) { res.status(404).json({ error: "Journey not found" }); return; }
+
+  const body = (req.body ?? {}) as {
+    campaignId?: number;
+    sheetPipelineId?: string;
+    phones?: string[];
+    offset?: number;
+    force?: boolean;
+  };
+  const settings = (journey.settings ?? {}) as JourneySettings;
+  const campaignIdRaw = body.campaignId ?? settings.campaignId ?? null;
+  const campaignId = campaignIdRaw != null ? Number(campaignIdRaw) : NaN;
+  const sheetPipelineId = (body.sheetPipelineId ?? settings.sheetPipelineId ?? "").trim() || null;
+  const offset = Math.max(0, Number(body.offset) || 0);
+  const force = body.force === true;
+
+  type Person = { phone: string; name?: string };
+  const people: Person[] = [];
+  let sourceTotal = 0;
+
+  if (Array.isArray(body.phones) && body.phones.length > 0) {
+    const all = body.phones.map((p) => String(p ?? "").trim()).filter(Boolean);
+    sourceTotal = all.length;
+    for (const phone of all.slice(offset, offset + START_ONCE_MAX)) people.push({ phone });
+  } else if (sheetPipelineId) {
+    const {
+      loadOwnedSheetPipeline,
+      listSheetPipelinePeople,
+    } = await import("../services/call-plan-sheet-live.js");
+    const pipeline = await loadOwnedSheetPipeline(clerkId, sheetPipelineId);
+    if (!pipeline) { res.status(404).json({ error: "Sheet list not found" }); return; }
+    const listed = await listSheetPipelinePeople(pipeline, {
+      fromRowExclusive: 1,
+      limit: offset + START_ONCE_MAX,
+    });
+    sourceTotal = Math.max(0, listed.lastRow - 1);
+    for (const p of listed.people.slice(offset, offset + START_ONCE_MAX)) {
+      people.push({ phone: p.phone, name: p.name });
+    }
+  } else if (Number.isFinite(campaignId) && campaignId > 0) {
+    const leads = await db.select({
+      phone: campaignLeadsTable.phone,
+      name: campaignLeadsTable.name,
+    }).from(campaignLeadsTable)
+      .where(eq(campaignLeadsTable.campaignId, campaignId))
+      .orderBy(desc(campaignLeadsTable.createdAt));
+    const withPhone = leads.filter((l) => (l.phone ?? "").trim());
+    sourceTotal = withPhone.length;
+    for (const l of withPhone.slice(offset, offset + START_ONCE_MAX)) {
+      people.push({ phone: (l.phone ?? "").trim(), name: l.name ?? undefined });
+    }
+  } else {
+    res.status(400).json({ error: "Pick people first" }); return;
+  }
+
+  let wouldSkip = 0;
+  const sampleSkipped: Array<{ phone: string; name?: string }> = [];
+  let wouldStart = people.length;
+
+  if (!force && journey.workflowId) {
+    const prior = await db.select({
+      context: workflowRunsTable.context,
+      status: workflowRunsTable.status,
+    }).from(workflowRunsTable)
+      .where(and(
+        eq(workflowRunsTable.workflowId, journey.workflowId),
+        eq(workflowRunsTable.userId, clerkId),
+      ))
+      .limit(2000);
+    const busy = new Set<string>();
+    for (const r of prior) {
+      if (r.status === "failed") continue;
+      const phone = typeof r.context?.["phone"] === "string" ? r.context["phone"] : "";
+      const norm = normalizePhone(phone) || phone.trim();
+      if (norm) busy.add(norm);
+    }
+    wouldStart = 0;
+    for (const p of people) {
+      const norm = normalizePhone(p.phone) || p.phone.trim();
+      if (busy.has(norm)) {
+        wouldSkip++;
+        if (sampleSkipped.length < 8) sampleSkipped.push(p);
+      } else {
+        wouldStart++;
+        busy.add(norm);
+      }
+    }
+  }
+
+  res.json({
+    batchMax: START_ONCE_MAX,
+    offset,
+    sourceTotal,
+    inBatch: people.length,
+    wouldStart,
+    wouldSkip,
+    sampleSkipped,
+    hasMore: offset + people.length < sourceTotal,
+    nextOffset: offset + people.length,
+  });
+});
+
+/** Disarm Keep live — stop accepting new sheet rows without deleting the plan. */
+router.post("/journeys/:id/stop-live", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+  const id = parseInt(String(req.params["id"]), 10);
+  const journey = await loadOwnedJourney(clerkId, id);
+  if (!journey) { res.status(404).json({ error: "Journey not found" }); return; }
+
+  const settings = { ...(journey.settings ?? {}) } as JourneySettings;
+  settings.runMode = "once";
+
+  await db.update(journeysTable).set({
+    settings,
+    status: "paused",
+    updatedAt: new Date(),
+  }).where(and(eq(journeysTable.id, id), eq(journeysTable.userId, clerkId)));
+
+  res.json({ ok: true, runMode: "once", status: "paused" });
 });
 
 // ── Runs (via backing workflow) ──────────────────────────────────────────────

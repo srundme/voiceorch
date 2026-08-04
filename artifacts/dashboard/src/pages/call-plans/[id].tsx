@@ -14,7 +14,7 @@ import {
   customFetch,
 } from "@workspace/api-client-react";
 import {
-  Loader2, Play, Save, Trash2, ExternalLink, Users,
+  Loader2, Pause, Play, Save, Trash2, ExternalLink, Users, Square,
 } from "lucide-react";
 import { StripePage } from "@/components/stripe-page";
 import { Button } from "@/components/ui/button";
@@ -38,6 +38,16 @@ import { CallPlanActivityPanel, type PlanRun } from "./activity-panel";
 const _DASH_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const DASH_API = `${_DASH_BASE}/api`;
 
+type CallPlanSettings = {
+  peopleSource?: string;
+  campaignId?: number | null;
+  sheetPipelineId?: string | null;
+  runMode?: "once" | "live";
+  sheetCursorRow?: number;
+  startOffset?: number;
+  startSourceTotal?: number;
+};
+
 type CallPlan = {
   id: number;
   agentId: number;
@@ -45,15 +55,33 @@ type CallPlan = {
   description: string | null;
   status: "draft" | "active" | "paused";
   steps: CallPlanStep[];
-  settings: {
-    peopleSource?: string;
-    campaignId?: number | null;
-    sheetPipelineId?: string | null;
-    runMode?: "once" | "live";
-    sheetCursorRow?: number;
-  };
+  trigger?: { type: string };
+  publicToken?: string | null;
+  hookUrl?: string | null;
+  settings: CallPlanSettings;
   totalRuns: number;
   lastRunAt: string | null;
+};
+
+type StartOnceResult = {
+  started: number;
+  skipped?: number;
+  keepLive?: boolean;
+  hasMore?: boolean;
+  nextOffset?: number;
+  sourceTotal?: number;
+  batchMax?: number;
+};
+
+type StartPreviewResult = {
+  wouldStart: number;
+  wouldSkip: number;
+  sampleSkipped: Array<{ phone: string; name?: string }>;
+  hasMore?: boolean;
+  nextOffset?: number;
+  sourceTotal?: number;
+  batchMax?: number;
+  inBatch?: number;
 };
 
 function statusClass(status: string) {
@@ -86,6 +114,15 @@ export default function CallPlanDetailPage() {
   const [runMode, setRunMode] = useState<"once" | "live">("once");
   const [dirty, setDirty] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [forceOpen, setForceOpen] = useState(false);
+  const [pendingForce, setPendingForce] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewData, setPreviewData] = useState<StartPreviewResult | null>(null);
+  const [previewPending, setPreviewPending] = useState(false);
+  const [continueOffset, setContinueOffset] = useState(0);
+  const [lastHasMore, setLastHasMore] = useState(false);
+  const [intakeMode, setIntakeMode] = useState<"manual" | "form_lead" | "instagram_lead">("manual");
+  const [hookUrl, setHookUrl] = useState<string | null>(null);
 
   const agentsQ = useListAgents({
     query: { queryKey: getListAgentsQueryKey(), staleTime: 30_000 },
@@ -123,6 +160,23 @@ export default function CallPlanDetailPage() {
     refetchInterval: 8_000,
   });
 
+  const waReadyQ = useQuery({
+    queryKey: ["call-plan-wa-ready"],
+    queryFn: () => customFetch<{ channel: { active?: boolean } | null }>(`${DASH_API}/whatsapp/channel`),
+    staleTime: 60_000,
+  });
+  const emailReadyQ = useQuery({
+    queryKey: ["call-plan-email-ready"],
+    queryFn: () => customFetch<{ channel: { active?: boolean; mode?: string } | null }>(`${DASH_API}/email/channel`),
+    staleTime: 60_000,
+    retry: false,
+  });
+
+  const needsWhatsapp = steps.some((s) => s.type === "send_whatsapp");
+  const needsEmail = steps.some((s) => s.type === "send_email");
+  const waReady = !!waReadyQ.data?.channel?.active;
+  const emailReady = !!emailReadyQ.data?.channel?.active;
+
   useEffect(() => {
     const plan = planQ.data;
     if (!plan) return;
@@ -139,6 +193,20 @@ export default function CallPlanDetailPage() {
       setPeopleMode("campaign");
     }
     setRunMode(plan.settings?.runMode === "live" ? "live" : "once");
+    const t = plan.trigger?.type;
+    setIntakeMode(t === "form_lead" || t === "instagram_lead" ? t : "manual");
+    setHookUrl(plan.hookUrl ?? (plan.publicToken ? `/api/workflows/hook/${plan.publicToken}` : null));
+    const savedOffset = plan.settings?.startOffset;
+    const savedTotal = plan.settings?.startSourceTotal;
+    if (typeof savedOffset === "number" && savedOffset > 0) {
+      setContinueOffset(savedOffset);
+      setLastHasMore(
+        typeof savedTotal === "number" ? savedOffset < savedTotal : true,
+      );
+    } else {
+      setContinueOffset(0);
+      setLastHasMore(false);
+    }
     setDirty(false);
   }, [planQ.data]);
 
@@ -152,7 +220,7 @@ export default function CallPlanDetailPage() {
           name: name.trim() || "Call plan",
           agentId,
           steps: steps.map((s) =>
-            s.type === "make_call" || s.type === "send_whatsapp"
+            s.type === "make_call" || s.type === "send_whatsapp" || s.type === "schedule_callback" || s.type === "join_meeting"
               ? { ...s, agentId }
               : s,
           ),
@@ -167,12 +235,14 @@ export default function CallPlanDetailPage() {
               : null,
             runMode: peopleMode === "sheet" ? runMode : "once",
           },
+          trigger: { type: intakeMode },
         }),
       });
     },
     onSuccess: (plan) => {
       qc.setQueryData(["call-plans", planId], plan);
       qc.invalidateQueries({ queryKey: ["call-plans"] });
+      setHookUrl(plan.hookUrl ?? (plan.publicToken ? `/api/workflows/hook/${plan.publicToken}` : null));
       setDirty(false);
       toast({ title: "Plan saved" });
     },
@@ -181,44 +251,130 @@ export default function CallPlanDetailPage() {
     },
   });
 
+  function buildStartBody(opts?: { force?: boolean; offset?: number }): Record<string, unknown> {
+    const body: Record<string, unknown> = {
+      runMode: peopleMode === "sheet" ? runMode : "once",
+      ...(opts?.force ? { force: true } : {}),
+      ...(opts?.offset != null && opts.offset > 0 ? { offset: opts.offset } : {}),
+    };
+    if (peopleMode === "manual") {
+      const phones = manualPhones
+        .split(/[\n,;]+/)
+        .map((p) => p.trim())
+        .filter(Boolean);
+      if (phones.length === 0) throw new Error("Paste at least one phone number");
+      body.phones = phones;
+    } else if (peopleMode === "sheet") {
+      if (!sheetPipelineId) throw new Error("Pick a Sheet list");
+      body.sheetPipelineId = sheetPipelineId;
+    } else {
+      if (!campaignId) throw new Error("Pick a people list");
+      body.campaignId = Number(campaignId);
+    }
+    return body;
+  }
+
   const startOnce = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (opts?: { force?: boolean; offset?: number }) => {
       if (dirty) await save.mutateAsync();
-      const body: Record<string, unknown> = {
-        runMode: peopleMode === "sheet" ? runMode : "once",
-      };
-      if (peopleMode === "manual") {
-        const phones = manualPhones
-          .split(/[\n,;]+/)
-          .map((p) => p.trim())
-          .filter(Boolean);
-        if (phones.length === 0) throw new Error("Paste at least one phone number");
-        body.phones = phones;
-      } else if (peopleMode === "sheet") {
-        if (!sheetPipelineId) throw new Error("Pick a Sheet list");
-        body.sheetPipelineId = sheetPipelineId;
-      } else {
-        if (!campaignId) throw new Error("Pick a people list");
-        body.campaignId = Number(campaignId);
-      }
-      return customFetch<{ started: number; keepLive?: boolean }>(`${DASH_API}/journeys/${planId}/start`, {
+      const body = buildStartBody(opts);
+      return customFetch<StartOnceResult>(`${DASH_API}/journeys/${planId}/start`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
     },
     onSuccess: (res) => {
+      setForceOpen(false);
+      setPreviewOpen(false);
+      setPreviewData(null);
+      setPendingForce(false);
+      if (res.hasMore && typeof res.nextOffset === "number") {
+        setContinueOffset(res.nextOffset);
+        setLastHasMore(true);
+      } else {
+        setContinueOffset(0);
+        setLastHasMore(false);
+      }
       qc.invalidateQueries({ queryKey: ["call-plans", planId] });
       qc.invalidateQueries({ queryKey: ["call-plans", planId, "runs"] });
+      const total = res.sourceTotal ?? 0;
+      const batchDesc = res.hasMore && total > 0
+        ? `Started ${res.started} of ${total} — press Continue for the rest`
+        : res.keepLive
+          ? `${res.started} started now — new sheet rows will keep entering.`
+          : `${res.started} ${res.started === 1 ? "person" : "people"} walking this plan${
+              res.skipped ? ` · ${res.skipped} already walked (skipped)` : ""
+            }.`;
       toast({
         title: res.keepLive ? "Live" : "Started",
-        description: res.keepLive
-          ? `${res.started} started now — new sheet rows will keep entering.`
-          : `${res.started} ${res.started === 1 ? "person" : "people"} walking this plan.`,
+        description: batchDesc,
       });
     },
     onError: (err) => {
+      const msg = formatApiError(err);
+      if (/already walked|force=true/i.test(msg) && !pendingForce) {
+        setForceOpen(true);
+        return;
+      }
+      toast({ title: "Could not start", description: msg, variant: "destructive" });
+    },
+  });
+
+  async function handleStartClick() {
+    try {
+      if (dirty) await save.mutateAsync();
+      setPreviewPending(true);
+      const body = buildStartBody({});
+      const preview = await customFetch<StartPreviewResult>(
+        `${DASH_API}/journeys/${planId}/start-preview`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        },
+      );
+      if (preview.wouldSkip > 0) {
+        setPreviewData(preview);
+        setPreviewOpen(true);
+        return;
+      }
+      startOnce.mutate({});
+    } catch (err) {
       toast({ title: "Could not start", description: formatApiError(err), variant: "destructive" });
+    } finally {
+      setPreviewPending(false);
+    }
+  }
+
+  function handleContinue() {
+    const offset = continueOffset || planQ.data?.settings?.startOffset || 0;
+    startOnce.mutate({ offset });
+  }
+
+  const setStatus = useMutation({
+    mutationFn: async (action: "activate" | "pause") =>
+      customFetch<CallPlan>(`${DASH_API}/journeys/${planId}/${action}`, { method: "POST" }),
+    onSuccess: (plan) => {
+      qc.setQueryData(["call-plans", planId], plan);
+      qc.invalidateQueries({ queryKey: ["call-plans"] });
+      toast({ title: plan.status === "active" ? "Resumed" : "Paused" });
+    },
+    onError: (err) => {
+      toast({ title: "Could not update status", description: formatApiError(err), variant: "destructive" });
+    },
+  });
+
+  const stopLive = useMutation({
+    mutationFn: () =>
+      customFetch<{ ok: boolean }>(`${DASH_API}/journeys/${planId}/stop-live`, { method: "POST" }),
+    onSuccess: () => {
+      setRunMode("once");
+      qc.invalidateQueries({ queryKey: ["call-plans", planId] });
+      toast({ title: "Live stopped", description: "New sheet rows will no longer enter this plan." });
+    },
+    onError: (err) => {
+      toast({ title: "Could not stop live", description: formatApiError(err), variant: "destructive" });
     },
   });
 
@@ -262,6 +418,13 @@ export default function CallPlanDetailPage() {
   const plan = planQ.data;
   const runs = runsQ.data ?? [];
   const selectedCampaign = campaigns.find((c) => String(c.id) === campaignId);
+  const settingsOffset = typeof plan.settings?.startOffset === "number" ? plan.settings.startOffset : 0;
+  const settingsTotal = typeof plan.settings?.startSourceTotal === "number" ? plan.settings.startSourceTotal : 0;
+  const effectiveContinueOffset = continueOffset || settingsOffset;
+  const showContinue =
+    effectiveContinueOffset > 0
+    && (lastHasMore || (settingsTotal > 0 && effectiveContinueOffset < settingsTotal));
+  const startBusy = startOnce.isPending || previewPending || save.isPending;
 
   return (
     <StripePage
@@ -283,19 +446,96 @@ export default function CallPlanDetailPage() {
             {save.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
             Save
           </Button>
+          {plan.status === "active" ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9 gap-1.5"
+              disabled={setStatus.isPending}
+              onClick={() => setStatus.mutate("pause")}
+            >
+              {setStatus.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Pause className="size-3.5" />}
+              Pause
+            </Button>
+          ) : plan.status === "paused" ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9 gap-1.5"
+              disabled={setStatus.isPending}
+              onClick={() => setStatus.mutate("activate")}
+            >
+              {setStatus.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Play className="size-3.5" />}
+              Resume
+            </Button>
+          ) : null}
+          {peopleMode === "sheet" && runMode === "live" && plan.status === "active" && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9 gap-1.5"
+              disabled={stopLive.isPending}
+              onClick={() => stopLive.mutate()}
+            >
+              {stopLive.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Square className="size-3.5" />}
+              Stop live
+            </Button>
+          )}
+          {showContinue && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9 gap-1.5"
+              disabled={startBusy || steps.length === 0}
+              onClick={() => handleContinue()}
+            >
+              {startOnce.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Play className="size-3.5" />}
+              Continue
+            </Button>
+          )}
           <Button
             size="sm"
             className="h-9 gap-1.5"
-            disabled={startOnce.isPending || steps.length === 0}
-            onClick={() => startOnce.mutate()}
+            disabled={startBusy || steps.length === 0}
+            onClick={() => { void handleStartClick(); }}
           >
-            {startOnce.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Play className="size-3.5" />}
+            {startBusy ? <Loader2 className="size-3.5 animate-spin" /> : <Play className="size-3.5" />}
             {peopleMode === "sheet" && runMode === "live" ? "Start live" : "Start once"}
           </Button>
         </div>
       }
     >
       <div className="space-y-6">
+        {(needsWhatsapp || needsEmail) && (
+          <div className="flex flex-wrap gap-2 text-[11px]">
+            {needsWhatsapp && (
+              <span
+                className={cn(
+                  "rounded-md border px-2.5 py-1",
+                  waReady
+                    ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+                    : "border-amber-500/30 bg-amber-500/10 text-amber-400",
+                )}
+              >
+                WhatsApp {waReady ? "ready" : "not connected"} —{" "}
+                <Link href="/app/whatsapp" className="underline underline-offset-2">Connections</Link>
+              </span>
+            )}
+            {needsEmail && (
+              <span
+                className={cn(
+                  "rounded-md border px-2.5 py-1",
+                  emailReady
+                    ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+                    : "border-amber-500/30 bg-amber-500/10 text-amber-400",
+                )}
+              >
+                Email {emailReady ? "ready" : "not set up"} —{" "}
+                <Link href="/app/connections?setup=email" className="underline underline-offset-2">Connections</Link>
+              </span>
+            )}
+          </div>
+        )}
         <div className="grid gap-5 lg:grid-cols-2 lg:items-start">
           {/* Meta + people */}
           <div className="space-y-5 min-w-0">
@@ -401,7 +641,7 @@ export default function CallPlanDetailPage() {
                   </Select>
                   <p className="text-[10px] text-muted-foreground">
                     {selectedCampaign
-                      ? `Start once walks up to 100 people from this list.`
+                      ? `Starts up to 100 people per click — Continue for more.`
                       : (
                         <>
                           No list yet?{" "}
@@ -486,12 +726,19 @@ export default function CallPlanDetailPage() {
                   {sheetPipelines.length > 0 && (
                     <p className="text-[10px] text-muted-foreground">
                       {runMode === "live"
-                        ? "Press Start to arm — new sheet rows walk this plan from step 1."
-                        : "Start once walks up to 100 current rows."}
+                        ? "Press Start live to arm — even with zero rows now. New sheet rows (up to 25 every ~15s) walk this plan from step 1. Starts up to 100 people per click — Continue for more."
+                        : "Starts up to 100 people per click — Continue for more."}
                       {" "}
                       <Link href="/app/automatic-calls/new" className="underline underline-offset-2">
                         Add another sheet
                       </Link>
+                    </p>
+                  )}
+                  {peopleMode === "sheet" && (
+                    <p className="text-[10px] text-muted-foreground tabular-nums">
+                      Sheet cursor: row {plan.settings?.sheetCursorRow ?? 1}
+                      {" · "}
+                      Keep live {runMode === "live" ? "on" : "off"}
                     </p>
                   )}
                 </div>
@@ -505,8 +752,83 @@ export default function CallPlanDetailPage() {
                     onChange={(e) => setManualPhones(e.target.value)}
                   />
                   <p className="text-[10px] text-muted-foreground">
-                    One phone per line. Used only for this Start — not saved as a list.
+                    One phone per line. Used only for this Start — not saved as a list. Starts up to 100 people per click — Continue for more.
                   </p>
+                </div>
+              )}
+            </section>
+
+            <section className="space-y-3 rounded-xl border border-border/60 bg-card/30 p-4">
+              <div>
+                <h2 className="text-sm font-semibold">Also start from intake</h2>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Optional — new website or Meta leads can walk this plan automatically (save to apply).
+                </p>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {(
+                  [
+                    { id: "manual" as const, label: "Manual / Start only" },
+                    { id: "form_lead" as const, label: "Website form" },
+                    { id: "instagram_lead" as const, label: "Meta Lead Ads" },
+                  ] as const
+                ).map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => { setIntakeMode(opt.id); setDirty(true); }}
+                    className={cn(
+                      "rounded-lg border px-2.5 py-2.5 text-left text-[11px]",
+                      intakeMode === opt.id
+                        ? "border-primary/40 bg-primary/5 font-medium"
+                        : "border-border/50 hover:bg-muted/30",
+                    )}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              {intakeMode !== "manual" && (
+                <div className="space-y-2">
+                  {hookUrl ? (
+                    <div className="space-y-1">
+                      <Label className="text-[11px]">Hook URL</Label>
+                      <div className="flex gap-2">
+                        <Input
+                          className="h-8 text-[11px] font-mono"
+                          readOnly
+                          value={typeof window !== "undefined" ? `${window.location.origin}${hookUrl}` : hookUrl}
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-8 shrink-0 text-[11px]"
+                          onClick={() => {
+                            const full = `${window.location.origin}${hookUrl}`;
+                            void navigator.clipboard.writeText(full);
+                            toast({ title: "Hook URL copied" });
+                          }}
+                        >
+                          Copy
+                        </Button>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground">
+                        Save the plan first if this is empty after enabling. Point your{" "}
+                        <Link
+                          href={intakeMode === "form_lead" ? "/app/connections?setup=website" : "/app/connections?setup=meta"}
+                          className="underline underline-offset-2"
+                        >
+                          {intakeMode === "form_lead" ? "Website form" : "Meta"} connection
+                        </Link>{" "}
+                        here, or POST leads to this URL.
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-amber-400">
+                      Save the plan to mint a hook URL for {intakeMode === "form_lead" ? "website" : "Meta"} leads.
+                    </p>
+                  )}
                 </div>
               )}
             </section>
@@ -555,6 +877,78 @@ export default function CallPlanDetailPage() {
           onRefresh={() => { void runsQ.refetch(); }}
         />
       </div>
+
+      <AlertDialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Some people already walked this plan</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <p>
+                  {previewData
+                    ? `${previewData.wouldSkip} would be skipped · ${previewData.wouldStart} would start`
+                    : "Some numbers already have a run on this plan."}
+                </p>
+                {previewData?.sampleSkipped && previewData.sampleSkipped.length > 0 && (
+                  <ul className="rounded-md border border-border/50 bg-muted/20 px-3 py-2 text-[11px] font-mono space-y-0.5 max-h-32 overflow-y-auto">
+                    {previewData.sampleSkipped.map((p) => (
+                      <li key={p.phone}>
+                        {p.phone}
+                        {p.name ? ` · ${p.name}` : ""}
+                      </li>
+                    ))}
+                    {previewData.wouldSkip > previewData.sampleSkipped.length && (
+                      <li className="text-muted-foreground/70">
+                        +{previewData.wouldSkip - previewData.sampleSkipped.length} more
+                      </li>
+                    )}
+                  </ul>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                startOnce.mutate({});
+              }}
+            >
+              Start (skip dups)
+            </AlertDialogAction>
+            <AlertDialogAction
+              onClick={() => {
+                setPendingForce(true);
+                startOnce.mutate({ force: true });
+              }}
+            >
+              Re-dial all
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={forceOpen} onOpenChange={setForceOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Re-dial people already on this plan?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Everyone in this list already walked this plan. Start again only if you want to call them again.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setPendingForce(false)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setPendingForce(true);
+                startOnce.mutate({ force: true });
+              }}
+            >
+              Re-dial anyway
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <AlertDialogContent>

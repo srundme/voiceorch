@@ -7,7 +7,7 @@ import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { formatDistanceToNow, format, parseISO } from "date-fns";
 import {
-  Activity, Phone, CheckCircle2, XCircle, Clock, Search, RefreshCw, ExternalLink,
+  Activity, Phone, CheckCircle2, XCircle, Clock, Search, RefreshCw, ExternalLink, Download,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -47,6 +47,42 @@ type CallCtx = {
   disposition?: string;
   callId?: number;
 };
+
+type StepAudit = {
+  type?: string;
+  status?: string;
+  reason?: string;
+  at?: string;
+  stepIndex?: number;
+};
+
+function lastStepAudit(ctx: Record<string, unknown> | null): StepAudit | null {
+  if (!ctx) return null;
+  if (ctx.lastStep && typeof ctx.lastStep === "object") return ctx.lastStep as StepAudit;
+  if (Array.isArray(ctx.steps) && ctx.steps.length > 0) {
+    const last = ctx.steps[ctx.steps.length - 1];
+    if (last && typeof last === "object") return last as StepAudit;
+  }
+  return null;
+}
+
+function formatStepAudit(audit: StepAudit | null): string | null {
+  if (!audit?.type) return null;
+  const label = audit.type.replace(/_/g, " ");
+  const st = audit.status ?? "";
+  const reason = audit.reason?.trim();
+  if (st === "skipped") return `${label} skipped${reason ? ` — ${reason}` : ""}`;
+  if (st === "failed") return `${label} failed${reason ? ` — ${reason}` : ""}`;
+  if (st === "sent") return `${label} sent`;
+  if (st === "joined") return `${label} joined`;
+  if (reason) return `${label}: ${reason}`;
+  return label;
+}
+
+function stepAuditTrail(ctx: Record<string, unknown> | null): StepAudit[] {
+  if (!ctx || !Array.isArray(ctx.steps)) return [];
+  return ctx.steps.filter((s): s is StepAudit => !!s && typeof s === "object");
+}
 
 function statusClass(status: string) {
   if (status === "completed") {
@@ -114,6 +150,43 @@ function isWaiting(status: string) {
   return status === "waiting_call" || status === "waiting_delay";
 }
 
+function csvEscape(value: string): string {
+  if (/[",\n\r]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
+  return value;
+}
+
+function exportRunsCsv(runs: PlanRun[], steps: CallPlanStep[]) {
+  const header = ["Person", "Phone", "Status", "Step", "CallId", "Duration", "Last step", "Updated"];
+  const lines = [header.join(",")];
+  for (const run of runs) {
+    const call = callFromContext(run.context);
+    const callId = resolveCallId(run);
+    const audit = lastStepAudit(run.context);
+    const auditLabel = formatStepAudit(audit) ?? "";
+    const stepN = Math.min(run.currentStepIndex + 1, Math.max(steps.length, 1));
+    const stepType = steps[run.currentStepIndex]?.type?.replace(/_/g, " ") ?? "";
+    const duration = typeof call?.duration === "number" ? call.duration : null;
+    const row = [
+      personName(run.context),
+      personPhone(run.context),
+      run.status.replace(/_/g, " "),
+      `${stepN}/${Math.max(steps.length, 1)}${stepType ? ` ${stepType}` : ""}`,
+      callId != null ? String(callId) : "",
+      duration != null && duration > 0 ? String(Math.round(duration)) : "",
+      auditLabel,
+      run.updatedAt,
+    ].map((c) => csvEscape(c));
+    lines.push(row.join(","));
+  }
+  const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `call-plan-runs-${format(new Date(), "yyyyMMdd-HHmm")}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 const FILTERS: { id: RunFilter; label: string }[] = [
   { id: "all", label: "All" },
   { id: "in_progress", label: "In progress" },
@@ -142,6 +215,7 @@ export function CallPlanActivityPanel({
   const [search, setSearch] = useState("");
   const [drawerCallId, setDrawerCallId] = useState<number | null>(null);
   const [drawerIndex, setDrawerIndex] = useState(0);
+  const [expandedRunId, setExpandedRunId] = useState<number | null>(null);
 
   const kpis = useMemo(() => {
     const started = runs.length;
@@ -202,11 +276,24 @@ export function CallPlanActivityPanel({
     { key: "with_call" as RunFilter, label: "Calls logged", value: kpis.withCall, icon: Phone, accent: "text-sky-400" },
   ];
 
+  const isLive = kpis.inProgress > 0;
+
   return (
     <section className="overflow-hidden rounded-xl border border-border/60 bg-card/40">
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border/50 px-4 py-3 sm:px-5">
         <div>
-          <h2 className="text-sm font-semibold">Activity &amp; call log</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-semibold">Activity &amp; call log</h2>
+            {isLive && (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-400">
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+                  <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                </span>
+                Live
+              </span>
+            )}
+          </div>
           <p className="text-[11px] text-muted-foreground mt-0.5">
             Live progress for everyone walking this plan
             {typeof totalRuns === "number" && totalRuns > runs.length
@@ -215,17 +302,30 @@ export function CallPlanActivityPanel({
             . Open a row to see the full call.
           </p>
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-8 gap-1.5 text-[11px]"
-          onClick={onRefresh}
-          disabled={refreshing}
-        >
-          <RefreshCw className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} />
-          Refresh
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 gap-1.5 text-[11px]"
+            onClick={() => exportRunsCsv(runs, steps)}
+            disabled={loading || runs.length === 0}
+          >
+            <Download className="h-3.5 w-3.5" />
+            Export CSV
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 gap-1.5 text-[11px]"
+            onClick={onRefresh}
+            disabled={refreshing}
+          >
+            <RefreshCw className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {/* KPI strip */}
@@ -329,21 +429,38 @@ export function CallPlanActivityPanel({
               const callId = resolveCallId(run);
               const phone = personPhone(run.context);
               const duration = typeof call?.duration === "number" ? call.duration : null;
+              const audit = lastStepAudit(run.context);
+              const auditLabel = formatStepAudit(audit);
+              const trail = stepAuditTrail(run.context);
               const outcome =
+                auditLabel ||
                 call?.summary?.trim() ||
-                call?.disposition?.trim() ||
+                (typeof call?.disposition === "string" ? call.disposition.trim() : null) ||
                 (call?.connected === true ? "Connected" : call?.connected === false ? "No connect" : null) ||
                 run.error;
+              const expanded = expandedRunId === run.id;
 
               return (
                 <li
                   key={run.id}
                   className={cn(
-                    "grid grid-cols-1 gap-2 px-4 py-3 text-[12px] transition-colors md:grid-cols-[minmax(140px,1.4fr)_90px_110px_88px_72px_minmax(120px,1fr)_72px] md:items-center md:gap-2",
-                    callId != null ? "cursor-pointer hover:bg-muted/25" : "hover:bg-muted/10",
+                    "px-4 py-3 text-[12px] transition-colors",
+                    "hover:bg-muted/10",
                   )}
-                  onClick={() => { if (callId != null) openCall(run); }}
                 >
+                  <div
+                    className={cn(
+                      "grid grid-cols-1 gap-2 md:grid-cols-[minmax(140px,1.4fr)_90px_110px_88px_72px_minmax(120px,1fr)_72px] md:items-center md:gap-2",
+                      callId != null || trail.length > 0 ? "cursor-pointer" : "",
+                    )}
+                    onClick={() => {
+                      if (trail.length > 0) {
+                        setExpandedRunId(expanded ? null : run.id);
+                      } else if (callId != null) {
+                        openCall(run);
+                      }
+                    }}
+                  >
                   <div className="min-w-0">
                     <p className="font-medium truncate">{personName(run.context)}</p>
                     <p className="text-[10px] text-muted-foreground truncate mt-0.5">
@@ -384,13 +501,35 @@ export function CallPlanActivityPanel({
                   </div>
                   <div className="min-w-0">
                     <p className="text-[11px] text-muted-foreground truncate">{formatTs(run.updatedAt)}</p>
-                    {outcome && (
-                      <p className="text-[10px] text-muted-foreground/70 truncate mt-0.5" title={outcome}>
+                    {auditLabel && (
+                      <p
+                        className={cn(
+                          "text-[10px] truncate mt-0.5 font-medium",
+                          audit?.status === "failed"
+                            ? "text-destructive"
+                            : audit?.status === "skipped"
+                              ? "text-amber-400"
+                              : audit?.status === "sent" || audit?.status === "joined"
+                                ? "text-emerald-400/90"
+                                : isInProgress(run.status) || isWaiting(run.status)
+                                  ? "text-sky-400/90"
+                                  : "text-muted-foreground/80",
+                        )}
+                        title={auditLabel}
+                      >
+                        {auditLabel}
+                      </p>
+                    )}
+                    {!auditLabel && outcome && (
+                      <p
+                        className="text-[10px] truncate mt-0.5 text-muted-foreground/70"
+                        title={outcome}
+                      >
                         {outcome}
                       </p>
                     )}
                   </div>
-                  <div className="flex justify-end">
+                  <div className="flex justify-end gap-1">
                     {callId != null ? (
                       <Button
                         type="button"
@@ -406,6 +545,28 @@ export function CallPlanActivityPanel({
                       </Button>
                     ) : null}
                   </div>
+                  </div>
+                  {expanded && trail.length > 0 && (
+                    <ol className="mt-2 space-y-1 border-t border-border/30 pt-2 pl-1">
+                      {trail.map((s, i) => (
+                        <li key={`${run.id}-s-${i}`} className="text-[10px] text-muted-foreground flex gap-2">
+                          <span className="tabular-nums text-muted-foreground/50 w-4">{i + 1}</span>
+                          <span className="capitalize">{(s.type ?? "?").replace(/_/g, " ")}</span>
+                          <span
+                            className={cn(
+                              "capitalize",
+                              s.status === "skipped" || s.status === "failed"
+                                ? "text-amber-400"
+                                : "text-emerald-400/80",
+                            )}
+                          >
+                            {s.status}
+                          </span>
+                          {s.reason && <span className="truncate text-muted-foreground/60">— {s.reason}</span>}
+                        </li>
+                      ))}
+                    </ol>
+                  )}
                 </li>
               );
             })}

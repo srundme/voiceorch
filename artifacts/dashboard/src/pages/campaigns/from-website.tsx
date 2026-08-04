@@ -6,6 +6,7 @@
  */
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { Link } from "wouter";
 import {
   useListCampaigns, useCreateCampaign, useUpdateCampaign,
   useListAgents, getListCampaignsQueryKey,
@@ -22,7 +23,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import {
-  Copy, Globe, Clock, Bot, Plus, ChevronRight, Check,
+  Copy, Globe, Clock, Bot, Plus, ChevronRight, Check, ListOrdered,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import MetaLeadsPage from "@/pages/meta-leads";
@@ -569,6 +570,24 @@ export default function FromWebsitePage({ hideMeta = false }: { hideMeta?: boole
             ))}
           </div>
         )}
+
+        <div className="rounded-xl border border-border/60 bg-muted/15 px-4 py-3.5 flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-[13px] font-medium flex items-center gap-2">
+              <ListOrdered className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              Attach to a call plan
+            </p>
+            <p className="mt-0.5 text-[11px] text-muted-foreground leading-relaxed">
+              On the plan, enable Website form intake so new form leads enter the timeline automatically.
+            </p>
+          </div>
+          <Button asChild size="sm" variant="outline" className="h-8 shrink-0 gap-1.5">
+            <Link href="/app/call-plans">
+              Open call plans
+              <ChevronRight className="h-3.5 w-3.5" />
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {!hideMeta && (

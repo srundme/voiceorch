@@ -2361,7 +2361,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
       } else if (!(agentCalendar as any).connectedGoogleEmail) {
         toast({ title: "No Google account connected", description: `Connect a Google account to the "${agentCalendar.name}" calendar in Scheduling.`, variant: "destructive" });
       } else if ((agentEventTypes ?? []).length === 0) {
-        toast({ title: "No event types found", description: "Create an event type in Scheduling before using booking.", variant: "destructive" });
+        toast({ title: "No event types found", description: "Create an event type under Connections → Calendar & booking before using booking.", variant: "destructive" });
       }
     } else {
       replace(current.filter((t: any) => !(BOOKING_TYPES as readonly string[]).includes(t.type)));
@@ -2577,8 +2577,14 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                       ))}
                     </SelectContent>
                   </Select>
-                  {calendarIdForEt && (agentEventTypes ?? []).length === 0 && (
-                    <p className="text-[10px] text-amber-400/80">No event types yet. Create one in Scheduling → Event Types.</p>
+                  {(!calendarIdForEt || (agentEventTypes ?? []).length === 0) && (
+                    <p className="text-[10px] text-amber-400/80">
+                      {!calendarIdForEt ? "No calendar yet. " : "No event types yet. "}
+                      <a href="/app/connections?setup=calendar" className="underline underline-offset-2">
+                        Finish calendar setup
+                      </a>
+                      .
+                    </p>
                   )}
                 </div>
               </div>
@@ -2588,9 +2594,21 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                   {!agentId ? (
                     <p className="text-[10px] text-amber-400/80">Save agent first to link calendar tools.</p>
                   ) : !agentCalendar ? (
-                    <p className="text-[10px] text-amber-400/80">No calendar found for this agent.</p>
+                    <p className="text-[10px] text-amber-400/80">
+                      No calendar found for this agent.{" "}
+                      <a href="/app/connections?setup=calendar" className="underline underline-offset-2">
+                        Finish calendar setup
+                      </a>
+                      .
+                    </p>
                   ) : !(agentCalendar as any).connectedGoogleEmail ? (
-                    <span className="text-[10px] text-amber-400/80">No Google account connected.</span>
+                    <span className="text-[10px] text-amber-400/80">
+                      No Google account connected.{" "}
+                      <a href="/app/connections?setup=calendar" className="underline underline-offset-2">
+                        Finish calendar setup
+                      </a>
+                      .
+                    </span>
                   ) : (
                     <span className="text-[10px] text-muted-foreground/60">
                       {(agentCalendar as any).connectedGoogleAccountsCount > 1

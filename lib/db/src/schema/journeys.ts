@@ -59,6 +59,10 @@ export interface JourneySettings {
   runMode?: "once" | "live";
   /** 1-based sheet row cursor for Keep live (header = 1). */
   sheetCursorRow?: number;
+  /** Next Start once offset into the people source (after a capped batch). */
+  startOffset?: number;
+  /** Last known people count in the source list for Continue UX. */
+  startSourceTotal?: number;
 }
 
 export const journeysTable = pgTable("journeys", {

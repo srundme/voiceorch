@@ -13,17 +13,19 @@ import { BrandLogo, BrandLogoBadge, type BrandSlug } from "@/components/brand-lo
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { ArrowRight, Check, Globe, Loader2 } from "lucide-react";
+import { ArrowRight, Check, Globe, Loader2, Calendar } from "lucide-react";
 import { EmailChannelCard, useEmailChannelReady } from "@/pages/agents/email-channel-card";
 import FromWebsitePage from "@/pages/campaigns/from-website";
 import MetaLeadsPage from "@/pages/meta-leads";
+import { ConnectionsCalendarSetup } from "@/pages/connections/calendar-setup";
+import { useListCalendars, useListEventTypes } from "@workspace/api-client-react";
 
-type SetupId = "sheets" | "whatsapp" | "email" | "website" | "meta" | null;
+type SetupId = "sheets" | "whatsapp" | "email" | "website" | "meta" | "calendar" | null;
 
 type ConnCard = {
   id: Exclude<SetupId, null>;
   brand?: BrandSlug;
-  icon?: "globe";
+  icon?: "globe" | "calendar";
   title: string;
   blurb: string;
   href?: string;
@@ -35,6 +37,12 @@ const CARDS: ConnCard[] = [
     brand: "googleSheets",
     title: "Google Sheets",
     blurb: "Watch a sheet and feed people into a call plan.",
+  },
+  {
+    id: "calendar",
+    icon: "calendar",
+    title: "Calendar & booking",
+    blurb: "Google Calendar setup for mid-call appointments.",
   },
   {
     id: "whatsapp",
@@ -69,7 +77,11 @@ function CardMark({ card }: { card: ConnCard }) {
   }
   return (
     <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-black/5 bg-white shadow-sm">
-      <Globe className="size-5 text-foreground/70" />
+      {card.icon === "calendar" ? (
+        <Calendar className="size-5 text-foreground/70" />
+      ) : (
+        <Globe className="size-5 text-foreground/70" />
+      )}
     </div>
   );
 }
@@ -164,14 +176,24 @@ export default function ConnectionsPage() {
   const { data: connections = [] } = useListConnections();
   const websiteReady = connections.some((c) => c.type === "webhook");
   const metaReady = connections.some((c) => c.type === "meta_lead_ads");
+  const calendarsQ = useListCalendars();
+  const eventTypesQ = useListEventTypes();
+  const calendarReady =
+    (Array.isArray(calendarsQ.data) ? calendarsQ.data.length : 0) > 0
+    && (Array.isArray(eventTypesQ.data) ? eventTypesQ.data.length : 0) > 0;
 
   const readyMap: Record<Exclude<SetupId, null>, boolean> = {
     sheets: sheetsConnected,
+    calendar: calendarReady,
     whatsapp: waReady,
     email: emailReady,
     website: websiteReady,
     meta: metaReady,
   };
+
+  if (setup === "calendar") {
+    return <ConnectionsCalendarSetup />;
+  }
 
   if (setup === "email") {
     return (
@@ -191,7 +213,7 @@ export default function ConnectionsPage() {
     return (
       <StripePage
         title="Website form"
-        description="Copy a webhook into your site form. New leads can enter a call plan."
+        description="Copy a webhook into your site form. New leads can enter a call plan — attach the hook on Call plans → Also start from intake."
         back={{ href: "/app/connections", label: "Connections" }}
         fullBleed
         contentClassName="!px-0 !py-0 max-w-none"
@@ -205,7 +227,7 @@ export default function ConnectionsPage() {
     return (
       <StripePage
         title="Meta Lead Ads"
-        description="Connect a Meta form so new leads can enter a call plan."
+        description="Connect a Meta form so new leads can enter a call plan — enable Meta intake on the plan detail page."
         back={{ href: "/app/connections", label: "Connections" }}
         fullBleed
         contentClassName="!px-0 !py-0 max-w-none"
@@ -257,7 +279,12 @@ export default function ConnectionsPage() {
                 ))
               ) : (
                 <p className="text-[13px] text-muted-foreground">
-                  Connect the Google account that owns your lead sheet.
+                  Connect the Google account that owns your lead sheet. Then attach it on a call plan
+                  (Keep live) or{" "}
+                  <Link href="/app/call-plans" className="underline underline-offset-2">
+                    create a plan
+                  </Link>
+                  .
                 </p>
               )}
               <div className="flex flex-wrap gap-2 pt-1">
@@ -284,7 +311,7 @@ export default function ConnectionsPage() {
   return (
     <StripePage
       title="Connections"
-      description="Wire the tools your call plans use — Sheets, WhatsApp, email, and lead forms."
+      description="Wire the tools your call plans use — Sheets, calendar, WhatsApp, email, and lead forms."
       back={{ href: "/app/home", label: "Home" }}
     >
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
