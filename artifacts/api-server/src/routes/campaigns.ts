@@ -237,106 +237,121 @@ router.get("/campaigns/export.csv", async (req, res): Promise<void> => {
 
 // ── POST /campaigns ────────────────────────────────────────────────────────
 router.post("/campaigns", async (req, res): Promise<void> => {
-  const { userId } = getAuth(req);
-  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+  try {
+    const { userId } = getAuth(req);
+    if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
 
-  const parsed = CreateCampaignBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: "Validation failed", issues: parsed.error.issues }); return; }
+    const parsed = CreateCampaignBody.safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: "Validation failed", issues: parsed.error.issues }); return; }
 
-  const fieldMappings: CampaignFieldMappings = parsed.data.fieldMappings
-    ? (parsed.data.fieldMappings as CampaignFieldMappings)
-    : { phone: "phone" };
+    const fieldMappings: CampaignFieldMappings = parsed.data.fieldMappings
+      ? (parsed.data.fieldMappings as CampaignFieldMappings)
+      : { phone: "phone" };
 
-  // ── Block platform-managed numbers from being used in campaigns ──
-  // A number is "managed" only if it lives in the platform's managed_phone_numbers
-  // pool (platform_settings). Numbers the user purchased themselves are in
-  // phoneNumbersTable and are always allowed — they are the user's own numbers.
-  if (parsed.data.fromNumber) {
-    const selectedNumber = parsed.data.fromNumber;
+    // ── Block platform-managed numbers from being used in campaigns ──
+    // A number is "managed" only if it lives in the platform's managed_phone_numbers
+    // pool (platform_settings). Numbers the user purchased themselves are in
+    // phoneNumbersTable and are always allowed — they are the user's own numbers.
+    if (parsed.data.fromNumber) {
+      const selectedNumber = parsed.data.fromNumber;
 
-    // Check if this number is one of the user's own purchased numbers first.
-    // If it is, it is never a managed-platform number, regardless of VoBiz creds.
-    const [ownedRow] = await db
-      .select({ id: phoneNumbersTable.id })
-      .from(phoneNumbersTable)
-      .where(and(eq(phoneNumbersTable.userId, userId), eq(phoneNumbersTable.number, selectedNumber)));
+      // Check if this number is one of the user's own purchased numbers first.
+      // If it is, it is never a managed-platform number, regardless of VoBiz creds.
+      const [ownedRow] = await db
+        .select({ id: phoneNumbersTable.id })
+        .from(phoneNumbersTable)
+        .where(and(eq(phoneNumbersTable.userId, userId), eq(phoneNumbersTable.number, selectedNumber)));
 
-    if (!ownedRow) {
-      // Not in the user's own inventory — check if it's a platform-managed number.
-      const [numbersRow] = await db
-        .select({ value: platformSettingsTable.value })
-        .from(platformSettingsTable)
-        .where(eq(platformSettingsTable.key, "managed_phone_numbers"));
-      const managedPool: string[] = numbersRow?.value ? (JSON.parse(numbersRow.value) as string[]) : [];
+      if (!ownedRow) {
+        // Not in the user's own inventory — check if it's a platform-managed number safely.
+        let managedPool: string[] = [];
+        try {
+          const [numbersRow] = await db
+            .select({ value: platformSettingsTable.value })
+            .from(platformSettingsTable)
+            .where(eq(platformSettingsTable.key, "managed_phone_numbers"));
 
-      if (managedPool.includes(selectedNumber)) {
-        res.status(403).json({
-          error: "Platform managed numbers cannot be used for campaigns. Purchase your own number from Phone Numbers and use it here.",
-          code: "MANAGED_NUMBER_CAMPAIGN_BLOCKED",
-        });
-        return;
+          if (typeof numbersRow?.value === "string") {
+            managedPool = JSON.parse(numbersRow.value);
+          } else if (Array.isArray(numbersRow?.value)) {
+            managedPool = numbersRow.value as string[];
+          }
+        } catch {
+          managedPool = [];
+        }
+
+        if (managedPool.includes(selectedNumber)) {
+          res.status(403).json({
+            error: "Platform managed numbers cannot be used for campaigns. Purchase your own number from Phone Numbers and use it here.",
+            code: "MANAGED_NUMBER_CAMPAIGN_BLOCKED",
+          });
+          return;
+        }
       }
     }
-  }
 
-  // ── DPDP consent basis (record-keeping only — NEVER blocks dialing) ──
-  // If the assigned agent has DPDP enabled, a documented consent basis must
-  // accompany the campaign. This validates the audit record up front; it does
-  // not gate or delay any outbound call.
-  const consentBasis = parsed.data.consentBasis as ConsentBasisInput | undefined;
-  const dpdpEnabled = await isAgentDpdpEnabled(parsed.data.agentId);
-  if (dpdpEnabled) {
-    const err = validateConsentBasis(consentBasis);
-    if (err) { res.status(400).json({ error: err, code: "DPDP_CONSENT_BASIS_REQUIRED" }); return; }
-  }
-
-  // ── Hard platform ceiling on concurrent calls (max 10) ──
-  if (parsed.data.concurrentCallLimit != null && parsed.data.concurrentCallLimit > MAX_CONCURRENT_CALLS) {
-    res.status(400).json({
-      error: `Max Concurrent Calls cannot exceed ${MAX_CONCURRENT_CALLS}.`,
-      code: "CONCURRENT_LIMIT_EXCEEDED",
-    });
-    return;
-  }
-
-  const leadSource = (parsed.data as Record<string, unknown>)["leadSource"] as string ?? "csv";
-  const isContinuous = ["webhook", "meta_ads", "crm"].includes(leadSource);
-
-  const [campaign] = await db.insert(campaignsTable).values({
-    userId,
-    name:                parsed.data.name,
-    description:         parsed.data.description,
-    agentId:             parsed.data.agentId,
-    fieldMappings,
-    fromNumber:          parsed.data.fromNumber,
-    concurrentCallLimit: parsed.data.concurrentCallLimit ?? MAX_CONCURRENT_CALLS,
-    callDelaySeconds:    parsed.data.callDelaySeconds,
-    maxAttempts:         parsed.data.maxAttempts,
-    retryDelayMinutes:   parsed.data.retryDelayMinutes,
-    leadSource,
-    triggerMode:         isContinuous ? "instant" : ((parsed.data as Record<string, unknown>)["triggerMode"] as string ?? "batch"),
-    webhookToken:        randomUUID(),
-    status:              isContinuous ? "active" : "draft",
-    isActive:            isContinuous,
-  }).returning();
-
-  if (dpdpEnabled && consentBasis) {
-    try {
-      await db.insert(campaignConsentBasisTable).values({
-        campaignId:       campaign!.id,
-        basisType:        consentBasis.basisType,
-        attestedBy:       consentBasis.attestedBy ?? userId,
-        consentSource:    consentBasis.consentSource ?? null,
-        consentDateRange: consentBasis.consentDateRange ?? null,
-        proofReference:   consentBasis.proofReference ?? null,
-        notes:            consentBasis.notes ?? null,
-      });
-    } catch (err) {
-      req.log.warn({ err, campaignId: campaign!.id }, "DPDP: failed to record campaign consent basis");
+    // ── DPDP consent basis (record-keeping only — NEVER blocks dialing) ──
+    // If the assigned agent has DPDP enabled, a documented consent basis must
+    // accompany the campaign. This validates the audit record up front; it does
+    // not gate or delay any outbound call.
+    const consentBasis = parsed.data.consentBasis as ConsentBasisInput | undefined;
+    const dpdpEnabled = await isAgentDpdpEnabled(parsed.data.agentId);
+    if (dpdpEnabled) {
+      const err = validateConsentBasis(consentBasis);
+      if (err) { res.status(400).json({ error: err, code: "DPDP_CONSENT_BASIS_REQUIRED" }); return; }
     }
-  }
 
-  res.status(201).json(toCampaign(campaign!));
+    // ── Hard platform ceiling on concurrent calls (max 10) ──
+    if (parsed.data.concurrentCallLimit != null && parsed.data.concurrentCallLimit > MAX_CONCURRENT_CALLS) {
+      res.status(400).json({
+        error: `Max Concurrent Calls cannot exceed ${MAX_CONCURRENT_CALLS}.`,
+        code: "CONCURRENT_LIMIT_EXCEEDED",
+      });
+      return;
+    }
+
+    const leadSource = (parsed.data as Record<string, unknown>)["leadSource"] as string ?? "csv";
+    const isContinuous = ["webhook", "meta_ads", "crm"].includes(leadSource);
+
+    const [campaign] = await db.insert(campaignsTable).values({
+      userId,
+      name:                parsed.data.name,
+      description:         parsed.data.description,
+      agentId:             parsed.data.agentId,
+      fieldMappings,
+      fromNumber:          parsed.data.fromNumber,
+      concurrentCallLimit: parsed.data.concurrentCallLimit ?? MAX_CONCURRENT_CALLS,
+      callDelaySeconds:    parsed.data.callDelaySeconds,
+      maxAttempts:         parsed.data.maxAttempts,
+      retryDelayMinutes:   parsed.data.retryDelayMinutes,
+      leadSource,
+      triggerMode:         isContinuous ? "instant" : ((parsed.data as Record<string, unknown>)["triggerMode"] as string ?? "batch"),
+      webhookToken:        randomUUID(),
+      status:              isContinuous ? "active" : "draft",
+      isActive:            isContinuous,
+    }).returning();
+
+    if (dpdpEnabled && consentBasis) {
+      try {
+        await db.insert(campaignConsentBasisTable).values({
+          campaignId:       campaign!.id,
+          basisType:        consentBasis.basisType,
+          attestedBy:       consentBasis.attestedBy ?? userId,
+          consentSource:    consentBasis.consentSource ?? null,
+          consentDateRange: consentBasis.consentDateRange ?? null,
+          proofReference:   consentBasis.proofReference ?? null,
+          notes:            consentBasis.notes ?? null,
+        });
+      } catch (err) {
+        req.log.warn({ err, campaignId: campaign!.id }, "DPDP: failed to record campaign consent basis");
+      }
+    }
+
+    res.status(201).json(toCampaign(campaign!));
+  } catch (err: any) {
+    req.log.error({ err }, "POST /campaigns failed");
+    res.status(500).json({ error: err?.message || "Internal server error creating campaign" });
+  }
 });
 
 // ── GET /campaigns/:id ─────────────────────────────────────────────────────
