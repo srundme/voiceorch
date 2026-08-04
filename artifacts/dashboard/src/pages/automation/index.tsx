@@ -67,7 +67,7 @@ export default function AutomationPage() {
     >
       {selectedId != null && (
         <div className="mt-4">
-          <SequenceRulesPanel agentId={selectedId} agentName={agent?.name} />
+          <SequenceRulesPanel agents={agents} agentId={selectedId} agentName={agent?.name} />
         </div>
       )}
     </StripePage>

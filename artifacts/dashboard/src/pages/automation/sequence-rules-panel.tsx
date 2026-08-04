@@ -35,9 +35,10 @@ export type RuleStep = {
   id: string;
   actionType: "call" | "whatsapp" | "meet";
   triggerType: "day_of_month" | "delay_days" | "specific_date";
-  dayValue: number | string; // e.g. 21 for 21st, or "2026-08-25"
-  timeOfDay: string; // e.g. "10:00 AM", "04:00 AM"
+  dayValue: number | string;
+  timeOfDay: string;
   promptNote: string;
+  selectedAgentId?: number; // Selected agent for this call
 };
 
 function getOrdinalSuffix(i: number) {
@@ -48,7 +49,15 @@ function getOrdinalSuffix(i: number) {
   return `${i}th`;
 }
 
-export function SequenceRulesPanel({ agentId, agentName }: { agentId: number; agentName?: string }) {
+export function SequenceRulesPanel({ 
+  agents = [], 
+  agentId, 
+  agentName 
+}: { 
+  agents?: any[]; 
+  agentId: number; 
+  agentName?: string 
+}) {
   const { toast } = useToast();
   const [step, setStep] = useState<1 | 2>(1); // 1 = Lead Source, 2 = Call Schedule Rules
   const [sheetUrl, setSheetUrl] = useState("");
@@ -65,6 +74,7 @@ export function SequenceRulesPanel({ agentId, agentName }: { agentId: number; ag
       dayValue: 21,
       timeOfDay: "10:00 AM",
       promptNote: "1st Follow-up Call (Sales Pitch)",
+      selectedAgentId: agentId,
     },
     {
       id: "rule-2",
@@ -73,6 +83,7 @@ export function SequenceRulesPanel({ agentId, agentName }: { agentId: number; ag
       dayValue: 30,
       timeOfDay: "11:30 AM",
       promptNote: "2nd Follow-up Call (Monthly Offer)",
+      selectedAgentId: agentId,
     },
     {
       id: "rule-3",
@@ -81,6 +92,7 @@ export function SequenceRulesPanel({ agentId, agentName }: { agentId: number; ag
       dayValue: 4,
       timeOfDay: "04:00 AM",
       promptNote: "3rd Call: Wake-up Call + Google Meet Invite",
+      selectedAgentId: agentId,
     },
   ]);
 
@@ -93,6 +105,7 @@ export function SequenceRulesPanel({ agentId, agentName }: { agentId: number; ag
       dayValue: 3,
       timeOfDay: "09:00 AM",
       promptNote: `${getOrdinalSuffix(nextCallNum)} Call Follow-up`,
+      selectedAgentId: agentId,
     };
     setRules([...rules, newRule]);
   };
@@ -108,7 +121,7 @@ export function SequenceRulesPanel({ agentId, agentName }: { agentId: number; ag
   const handleSaveAutomation = () => {
     toast({
       title: "Automation Sequence Deployed! 🚀",
-      description: `Configured ${rules.length} calls for ${agentName || "Agent"}. Leads will be called automatically on configured dates.`,
+      description: `Configured ${rules.length} calls across your selected agents. Leads will be called automatically on configured dates.`,
     });
   };
 
@@ -134,13 +147,13 @@ export function SequenceRulesPanel({ agentId, agentName }: { agentId: number; ag
             }`}
           >
             <span className="size-4 rounded-full bg-background/20 text-current text-[10px] flex items-center justify-center font-bold">2</span>
-            Step 2: Set Call Dates & Times
+            Step 2: Assign Agent, Date & Time
           </button>
         </div>
 
         <Badge variant="outline" className="text-[11px] gap-1.5 font-normal">
           <Bot className="size-3 text-emerald-500" />
-          {agentName || `Agent #${agentId}`}
+          {agents.length > 0 ? `${agents.length} Agents Available` : (agentName || `Agent #${agentId}`)}
         </Badge>
       </div>
 
@@ -166,7 +179,7 @@ export function SequenceRulesPanel({ agentId, agentName }: { agentId: number; ag
                 <Sparkles className="size-3.5 text-amber-500" />
               </div>
               <p className="text-xl font-bold tracking-tight">{rules.length} Calls</p>
-              <p className="text-[10px] text-muted-foreground font-medium">Automatic Drip Sequence</p>
+              <p className="text-[10px] text-muted-foreground font-medium">Automatic Multi-Agent Drip</p>
             </div>
 
             <div className="p-4 rounded-xl border border-border/80 bg-card/60 backdrop-blur-sm shadow-sm space-y-1">
@@ -180,12 +193,12 @@ export function SequenceRulesPanel({ agentId, agentName }: { agentId: number; ag
 
             <div className="p-4 rounded-xl border border-border/80 bg-card/60 backdrop-blur-sm shadow-sm space-y-1">
               <div className="flex items-center justify-between text-muted-foreground">
-                <span className="text-[11px] font-medium uppercase tracking-wider">Assigned Agent</span>
+                <span className="text-[11px] font-medium uppercase tracking-wider">Available Agents</span>
                 <Bot className="size-3.5 text-emerald-500" />
               </div>
-              <p className="text-sm font-bold truncate">{agentName || `Agent #${agentId}`}</p>
+              <p className="text-sm font-bold truncate">{agents.length || 1} AI Agents</p>
               <span className="inline-flex items-center gap-1 text-[10px] text-emerald-500 font-medium">
-                <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" /> Ready & Live
+                <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" /> Multi-Agent Enabled
               </span>
             </div>
           </div>
@@ -199,7 +212,7 @@ export function SequenceRulesPanel({ agentId, agentName }: { agentId: number; ag
                   Lead Source (Google Sheet / CSV File)
                 </h3>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Upload your lead list once. The AI will call each lead based on the 1st call, 2nd call, and 3rd call dates you set.
+                  Upload your lead list once. You can choose different AI agents for the 1st call, 2nd call, and 3rd call.
                 </p>
               </div>
               <Badge variant="outline" className="text-[10px] gap-1 bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
@@ -267,7 +280,7 @@ export function SequenceRulesPanel({ agentId, agentName }: { agentId: number; ag
             {/* Next Button */}
             <div className="flex justify-end pt-3 border-t border-border/60">
               <Button onClick={() => setStep(2)} className="gap-2 text-xs h-9 px-5">
-                Next: Set Call Schedule Dates & Times
+                Next: Choose Agents & Set Call Schedule
                 <ArrowRight className="size-3.5" />
               </Button>
             </div>
@@ -275,17 +288,17 @@ export function SequenceRulesPanel({ agentId, agentName }: { agentId: number; ag
         </div>
       )}
 
-      {/* STEP 2: Flexible Date & Time Call Schedule Builder */}
+      {/* STEP 2: Flexible Multi-Agent Date & Time Call Schedule Builder */}
       {step === 2 && (
         <div className="rounded-xl border border-border bg-card p-5 space-y-5 shadow-sm">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-border/60 pb-3">
             <div>
               <h3 className="text-sm font-semibold flex items-center gap-2">
                 <CalendarDays className="size-4 text-emerald-500" />
-                Call Schedule (1st Call, 2nd Call, 3rd Call...)
+                Call Schedule (Assign Agent, Date & Time for Each Call)
               </h3>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Set exact dates and times for each call. The AI engine will call leads automatically.
+                Assign specific AI agents to call your leads on 1st, 2nd, 3rd calls.
               </p>
             </div>
             <Button size="sm" variant="outline" onClick={addRule} className="gap-1.5 text-xs h-8">
@@ -294,21 +307,55 @@ export function SequenceRulesPanel({ agentId, agentName }: { agentId: number; ag
             </Button>
           </div>
 
-          {/* Flexible Call Rules List */}
+          {/* Flexible Call Rules List with Agent Selector */}
           <div className="space-y-3">
             {rules.map((rule, index) => {
               const callOrdinal = getOrdinalSuffix(index + 1);
+              const currentAgentId = rule.selectedAgentId || agentId;
+              const selectedAgentObj = agents.find((a) => a.id === currentAgentId);
+              const currentAgentName = selectedAgentObj?.name || (currentAgentId === agentId ? (agentName || `Agent #${agentId}`) : `Agent #${currentAgentId}`);
 
               return (
                 <div
                   key={rule.id}
-                  className="flex flex-col md:flex-row items-start md:items-center gap-3 p-3.5 rounded-xl border border-border/80 bg-background hover:border-primary/40 transition-all text-xs shadow-xs"
+                  className="flex flex-col md:flex-row items-start md:items-center gap-2.5 p-3.5 rounded-xl border border-border/80 bg-background hover:border-primary/40 transition-all text-xs shadow-xs"
                 >
                   {/* Call Step Badge */}
                   <div className="flex items-center gap-2 shrink-0">
                     <Badge className="bg-primary/10 text-primary border-primary/20 text-xs px-2.5 py-1 font-bold">
                       {callOrdinal} Call
                     </Badge>
+                  </div>
+
+                  {/* Agent Selector Dropdown */}
+                  <div className="w-full md:w-44 shrink-0">
+                    <Select
+                      value={String(currentAgentId)}
+                      onValueChange={(v) => updateRule(rule.id, { selectedAgentId: Number(v) })}
+                    >
+                      <SelectTrigger className="h-8 text-xs font-medium border-emerald-500/30 bg-emerald-500/5">
+                        <div className="flex items-center gap-1.5 truncate">
+                          <Bot className="size-3 text-emerald-500 shrink-0" />
+                          <SelectValue placeholder="Select Agent" />
+                        </div>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {agents.length > 0 ? (
+                          agents.map((a) => (
+                            <SelectItem key={a.id} value={String(a.id)} className="text-xs">
+                              <div className="flex items-center gap-1.5">
+                                <Bot className="size-3 text-emerald-500" />
+                                {a.name || `Agent #${a.id}`}
+                              </div>
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <SelectItem value={String(agentId)} className="text-xs">
+                            {agentName || `Agent #${agentId}`}
+                          </SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   {/* Channel / Action */}
@@ -341,7 +388,7 @@ export function SequenceRulesPanel({ agentId, agentName }: { agentId: number; ag
                   </div>
 
                   {/* Date Mode Dropdown */}
-                  <div className="w-full md:w-44 shrink-0">
+                  <div className="w-full md:w-40 shrink-0">
                     <Select
                       value={rule.triggerType}
                       onValueChange={(v) => updateRule(rule.id, { triggerType: v as any })}
@@ -358,7 +405,7 @@ export function SequenceRulesPanel({ agentId, agentName }: { agentId: number; ag
                   </div>
 
                   {/* Day or Date Value */}
-                  <div className="w-full md:w-28 shrink-0">
+                  <div className="w-full md:w-24 shrink-0">
                     <Input
                       type={rule.triggerType === "specific_date" ? "text" : "number"}
                       value={rule.dayValue}
@@ -369,7 +416,7 @@ export function SequenceRulesPanel({ agentId, agentName }: { agentId: number; ag
                   </div>
 
                   {/* Time Value */}
-                  <div className="w-full md:w-28 shrink-0">
+                  <div className="w-full md:w-24 shrink-0">
                     <Input
                       type="text"
                       value={rule.timeOfDay}
@@ -379,13 +426,13 @@ export function SequenceRulesPanel({ agentId, agentName }: { agentId: number; ag
                     />
                   </div>
 
-                  {/* Purpose / Goal Note */}
+                  {/* Goal / Purpose Note */}
                   <div className="w-full md:flex-1">
                     <Input
                       type="text"
                       value={rule.promptNote}
                       onChange={(e) => updateRule(rule.id, { promptNote: e.target.value })}
-                      placeholder="Goal of this call (e.g. Follow-up pitch)"
+                      placeholder="Goal of this call"
                       className="h-8 text-xs bg-muted/20"
                     />
                   </div>
@@ -410,15 +457,22 @@ export function SequenceRulesPanel({ agentId, agentName }: { agentId: number; ag
               <CheckCircle2 className="size-3.5 text-emerald-500" />
               Plain-English Schedule Preview for Clients:
             </h4>
-            <ul className="space-y-1 text-[11px] text-muted-foreground pl-5 list-disc">
-              {rules.map((r, i) => (
-                <li key={r.id}>
-                  <strong className="text-foreground">{getOrdinalSuffix(i + 1)} Call:</strong>{" "}
-                  {r.actionType === "call" ? "AI Voice Call" : r.actionType === "meet" ? "Google Meet Audio Call" : "WhatsApp Message"}{" "}
-                  {r.triggerType === "day_of_month" ? `on the ${r.dayValue}st/th of every month` : r.triggerType === "delay_days" ? `${r.dayValue} days after lead is uploaded` : `on date ${r.dayValue}`}{" "}
-                  at <strong className="text-foreground">{r.timeOfDay}</strong> ({r.promptNote || "No note"}).
-                </li>
-              ))}
+            <ul className="space-y-1.5 text-[11px] text-muted-foreground pl-5 list-disc">
+              {rules.map((r, i) => {
+                const targetAgentId = r.selectedAgentId || agentId;
+                const targetAgent = agents.find((a) => a.id === targetAgentId);
+                const targetAgentName = targetAgent?.name || (targetAgentId === agentId ? (agentName || `Agent #${agentId}`) : `Agent #${targetAgentId}`);
+
+                return (
+                  <li key={r.id}>
+                    <strong className="text-foreground">{getOrdinalSuffix(i + 1)} Call:</strong>{" "}
+                    Assigned Agent: <strong className="text-emerald-500 font-semibold">{targetAgentName}</strong> —{" "}
+                    {r.actionType === "call" ? "AI Voice Call" : r.actionType === "meet" ? "Google Meet Audio Call" : "WhatsApp Message"}{" "}
+                    {r.triggerType === "day_of_month" ? `on the ${r.dayValue}st/th of every month` : r.triggerType === "delay_days" ? `${r.dayValue} days after lead upload` : `on date ${r.dayValue}`}{" "}
+                    at <strong className="text-foreground">{r.timeOfDay}</strong> ({r.promptNote || "No note"}).
+                  </li>
+                );
+              })}
             </ul>
           </div>
 
