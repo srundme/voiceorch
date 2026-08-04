@@ -130,6 +130,7 @@ export default function HomePage() {
   ];
   const completedSetupCount = setup.filter(s => s.done).length;
   const setupPercent = Math.round((completedSetupCount / setup.length) * 100);
+  const setupDone = setup.every(s => s.done);
 
   const issues: Array<{ title: string; detail: string; href: string; tone: "warning" | "danger" }> = [];
   pipelines
