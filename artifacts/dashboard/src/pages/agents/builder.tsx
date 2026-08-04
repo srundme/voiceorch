@@ -10,7 +10,7 @@ import {
   Play, Pause,
   Timer, ShieldCheck, Layers, Gauge, MicOff, HelpCircle, PhoneOff, Mail, MessageCircle,
   History, GitBranch, Eye, RotateCcw, ChevronUp, AlertTriangle, ArrowLeftRight,
-  Upload, Archive, Info, AlertCircle, Calendar, Star, Rocket, Zap,
+  Upload, Archive, Info, AlertCircle, Calendar, Star,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { motion } from "framer-motion";
@@ -91,10 +91,9 @@ import { RecentNumbersList } from "@/components/recent-numbers-list";
 import { useRecentNumbers } from "@/hooks/use-recent-numbers";
 import { GeneratePromptSheet } from "./generate-prompt-sheet";
 import { JourneyPanel } from "./journey-panel";
-import { ReachPanel } from "./reach-panel";
-import { EmailChannelCard, useEmailChannelReady } from "./email-channel-card";
-import { MeetingsChannelCard } from "./meetings-channel-card";
+import { AgentInboundPanel } from "./agent-inbound-panel";
 import {
+  PropertyRow,
   StatusDot,
   WorkspaceSegmentNav,
   type WorkspaceNavItem,
@@ -104,7 +103,7 @@ const DASH_API   = `${_DASH_BASE}/api`;
 
 /* ── Types ──────────────────────────────────────────────────────────────────── */
 
-type TabId = "overview" | "prompt" | "voice" | "tools" | "reach" | "launch" | "voicemail" | "advanced" | "versions";
+type TabId = "overview" | "prompt" | "voice" | "tools" | "voicemail" | "advanced" | "versions";
 
 interface TabDef { id: TabId; label: string; icon: React.ReactNode }
 
@@ -113,8 +112,6 @@ const TABS: TabDef[] = [
   { id: "prompt",      label: "Prompt",      icon: <FileText className="h-3.5 w-3.5" /> },
   { id: "voice",       label: "Voice",       icon: <Mic className="h-3.5 w-3.5" /> },
   { id: "tools",       label: "Tools",       icon: <Wrench className="h-3.5 w-3.5" /> },
-  { id: "reach",       label: "Reach",       icon: <Zap className="h-3.5 w-3.5" /> },
-  { id: "launch",      label: "Channels",    icon: <Rocket className="h-3.5 w-3.5" /> },
   { id: "voicemail",   label: "Voicemail",   icon: <VoicemailIcon className="h-3.5 w-3.5" /> },
   { id: "advanced",    label: "Advanced",    icon: <SlidersHorizontal className="h-3.5 w-3.5" /> },
   { id: "versions",    label: "Versions",    icon: <History className="h-3.5 w-3.5" /> },
@@ -190,10 +187,11 @@ function OverviewCard({ title, icon, children }: { title: string; icon: React.Re
 
 function SectionDivider({ label }: { label: string }) {
   return (
-    <div className="flex items-center gap-3 py-2">
-      <div className="h-px flex-1 bg-border/40" />
-      <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">{label}</span>
-      <div className="h-px flex-1 bg-border/40" />
+    <div className="flex items-center gap-3">
+      <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+        {label}
+      </span>
+      <div className="h-px flex-1 bg-border/70" />
     </div>
   );
 }
@@ -452,615 +450,7 @@ const SECTION_FIELDS: Record<CardSection, string[]> = {
   voice: ["voiceStack", "ttsProvider", "ttsModel", "ttsVoice", "ttsSpeed", "geminiLiveVoiceName", "geminiLiveThinkingLevel"],
 };
 
-/* ── Inbound number card (same assign API as Phone Numbers) ─────────────────── */
-
-function AgentInboundPanel({
-  agentId,
-  preferredManagedNumber,
-  telephonyProvider,
-  className,
-}: {
-  agentId: number;
-  preferredManagedNumber?: string | null;
-  telephonyProvider?: string | null;
-  className?: string;
-}) {
-  const [, navigate] = useLocation();
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-  const { data: phoneNumbersRaw, isLoading } = useListPhoneNumbers({
-    query: { queryKey: getListPhoneNumbersQueryKey(), staleTime: 60_000 },
-  });
-  const { data: agents } = useListAgents({ query: { queryKey: getListAgentsQueryKey() } });
-  const { data: managedData } = useQuery({
-    queryKey: ["phone-numbers", "managed"],
-    queryFn: () => customFetch<{ numbers: string[] }>(`${DASH_API}/phone-numbers/managed`),
-    staleTime: 5 * 60 * 1000,
-  });
-  const { data: quota, refetch: refetchQuota } = useQuery({
-    queryKey: ["phone-numbers", "managed-quota"],
-    queryFn: () => customFetch<{
-      limit: number;
-      used: number;
-      remaining: number;
-      hasOwnNumber: boolean;
-      limited: boolean;
-      unlimitedTrial?: boolean;
-      resetsAt: string;
-    }>(`${DASH_API}/phone-numbers/managed-quota`),
-    staleTime: 15_000,
-  });
-  const assign = useAssignPhoneNumber();
-  // BYO telephony (Plivo/Twilio): when the agent dials on the user's own
-  // carrier account, its saved fromNumber IS the agent's number — show it
-  // instead of buy/trial nags.
-  const { data: providerKeys } = useListProviders({ query: { queryKey: getListProvidersQueryKey(), staleTime: 60_000 } });
-  const byo = (telephonyProvider === "plivo" || telephonyProvider === "twilio")
-    ? (providerKeys ?? []).find((p) => p.providerType === "telephony" && p.providerName === telephonyProvider && p.isActive)
-    : undefined;
-  let byoNumber: string | null = null;
-  if (byo) {
-    try { byoNumber = (JSON.parse(byo.extraConfig ?? "{}") as Record<string, string>)["fromNumber"] ?? null; } catch { /* ignore */ }
-  }
-  const phoneNumbers = Array.isArray(phoneNumbersRaw) ? phoneNumbersRaw : [];
-  const assigned = phoneNumbers.find(p => p.agentId === agentId);
-  const ownedCount = phoneNumbers.length;
-  const managedNumbers = managedData?.numbers ?? [];
-  const testingFromNumber =
-    preferredManagedNumber
-    ?? (assigned?.number ?? null)
-    ?? managedNumbers[0]
-    ?? null;
-
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [selectedId, setSelectedId] = useState<string>("none");
-
-  const openDialog = () => {
-    setSelectedId(assigned ? String(assigned.id) : "none");
-    setDialogOpen(true);
-  };
-
-  const configureWebhook = async (numberId: number) => {
-    try {
-      const token = localStorage.getItem("voiceorch:session");
-      await fetch(`/api/phone-numbers/${numberId}/configure-webhook`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-      });
-    } catch {
-      // Non-fatal — number is assigned; webhook can be repaired from Phone Numbers.
-    }
-  };
-
-  const handleSave = async () => {
-    const nextId = selectedId === "none" ? null : parseInt(selectedId, 10);
-    try {
-      // Agent-centric: clear previous number on this agent if switching/unassigning
-      if (assigned && assigned.id !== nextId) {
-        await assign.mutateAsync({ id: assigned.id, data: { agentId: null } });
-      }
-      if (nextId != null) {
-        await assign.mutateAsync({ id: nextId, data: { agentId } });
-        await configureWebhook(nextId);
-      }
-      queryClient.invalidateQueries({ queryKey: getListPhoneNumbersQueryKey() });
-      queryClient.invalidateQueries({ queryKey: getGetAgentQueryKey(agentId) });
-      void refetchQuota();
-      toast({
-        title: nextId ? "Your number is live on this agent" : "Number cleared",
-        description: nextId
-          ? "Inbound rings this agent. Outbound caller ID uses your number — unlimited calls."
-          : "Assign a purchased number to go live.",
-      });
-      setDialogOpen(false);
-    } catch (err) {
-      toast({ title: "Error", description: formatApiError(err), variant: "destructive" });
-    }
-  };
-
-  const trialRemaining = quota?.limited ? quota.remaining : null;
-  const trialLimit = quota?.limit ?? 3;
-  const trialExhausted = quota?.limited && quota.remaining <= 0;
-
-  return (
-    <div className={cn("space-y-2", className)}>
-      {/* Primary path: own number — buy / assign */}
-      <div className={cn(
-        "rounded-xl border p-3 space-y-2.5",
-        (assigned || byoNumber)
-          ? "border-emerald-500/25 bg-emerald-500/5"
-          : "border-amber-500/30 bg-amber-500/5",
-      )}>
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5 min-w-0">
-            <PhoneForwarded className={cn("h-3.5 w-3.5 shrink-0", (assigned || byoNumber) ? "text-emerald-500" : "text-amber-500")} />
-            <span className={cn(
-              "text-[10px] font-semibold uppercase tracking-wider",
-              (assigned || byoNumber) ? "text-emerald-600/90 dark:text-emerald-400/90" : "text-amber-600/90 dark:text-amber-400/90",
-            )}>
-              Your phone number
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={() => navigate("/app/phone-numbers")}
-            className="text-[10px] font-medium text-muted-foreground hover:text-foreground transition-colors"
-          >
-            {ownedCount === 0 ? "Buy →" : "Numbers →"}
-          </button>
-        </div>
-
-        {isLoading ? (
-          <Skeleton className="h-9 w-full rounded-lg" />
-        ) : byoNumber ? (
-          <div className="w-full flex items-center justify-between gap-2 rounded-lg border border-border/50 bg-background/50 px-2.5 py-2">
-            <div className="min-w-0">
-              <p className="text-[12px] font-medium truncate tabular-nums text-foreground">{byoNumber}</p>
-              <p className="text-[10px] text-muted-foreground/70 truncate mt-0.5">
-                Your own {telephonyProvider === "plivo" ? "Plivo" : "Twilio"} number — outbound caller ID · unlimited calls
-              </p>
-            </div>
-          </div>
-        ) : assigned ? (
-          <button
-            type="button"
-            onClick={openDialog}
-            className="w-full flex items-center justify-between gap-2 rounded-lg border border-border/50 bg-background/50 px-2.5 py-2 text-left hover:border-border hover:bg-background/70 transition-colors"
-          >
-            <div className="min-w-0">
-              <p className="text-[12px] font-medium truncate tabular-nums text-foreground">{assigned.number}</p>
-              <p className="text-[10px] text-muted-foreground/70 truncate mt-0.5">
-                Live — inbound + outbound caller ID · unlimited tests
-              </p>
-            </div>
-            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-          </button>
-        ) : ownedCount === 0 ? (
-          <div className="space-y-2">
-            <p className="text-[12px] font-medium text-foreground">Required to go live</p>
-            <p className="text-[10px] text-muted-foreground leading-relaxed">
-              Buy your own number for inbound calls, your caller ID on outbound, and unlimited testing. The platform number below is only a short trial.
-            </p>
-            <Button
-              type="button"
-              size="sm"
-              className="h-8 w-full text-xs gap-1.5"
-              onClick={() => navigate("/app/phone-numbers")}
-            >
-              <Plus className="h-3.5 w-3.5" /> Buy a phone number
-            </Button>
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={openDialog}
-            className="w-full flex items-center justify-between gap-2 rounded-lg border border-amber-500/30 bg-background/50 px-2.5 py-2 text-left hover:border-amber-500/50 transition-colors"
-          >
-            <div className="min-w-0">
-              <p className="text-[12px] font-medium truncate text-foreground">Number purchased — assign it</p>
-              <p className="text-[10px] text-muted-foreground/70 truncate mt-0.5">
-                Click to attach your number for inbound + outbound
-              </p>
-            </div>
-            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-          </button>
-        )}
-      </div>
-
-      {/* Trial outbound — demoted, capped. Hidden for BYO telephony (own carrier = no trial line involved). */}
-      {!assigned && !byoNumber && (
-      <div className={cn(
-        "rounded-xl border p-3 space-y-1.5",
-        trialExhausted
-          ? "border-border/40 bg-muted/20 opacity-90"
-          : "border-border/50 bg-card/40",
-      )}>
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5 min-w-0">
-            <Phone className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Trial outbound
-            </span>
-          </div>
-          <span className={cn(
-            "text-[9px] font-medium uppercase tracking-wide shrink-0 rounded-full border px-1.5 py-0.5",
-            quota?.unlimitedTrial
-              ? "border-emerald-500/30 text-emerald-500"
-              : trialExhausted
-                ? "border-border/50 text-muted-foreground"
-                : "border-amber-500/30 text-amber-500",
-          )}>
-            {quota?.unlimitedTrial
-              ? "Unlimited trial"
-              : quota?.limited
-                ? (trialExhausted ? "Limit reached" : `${trialRemaining}/${trialLimit} left today`)
-                : "Trial"}
-          </span>
-        </div>
-        {testingFromNumber ? (
-          <>
-            <p className="text-[12px] font-medium tabular-nums text-muted-foreground tracking-tight">
-              {testingFromNumber}
-            </p>
-            <p className="text-[10px] text-muted-foreground leading-relaxed">
-              {quota?.unlimitedTrial
-                ? "Shared platform trial line — unlimited for your account (admin grant). Still not your number; inbound will not ring this agent. Buy a number to go live."
-                : trialExhausted
-                  ? "Free trial calls are used up for today. Buy a number to keep testing and to receive inbound calls."
-                  : `Shared platform line for a quick listen — ${trialLimit} outbound tests/day. Not your number; inbound will not ring this agent.`}
-            </p>
-            {trialExhausted && (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="h-7 w-full text-[11px] gap-1.5 mt-1"
-                onClick={() => navigate("/app/phone-numbers")}
-              >
-                <Plus className="h-3 w-3" /> Buy number to continue
-              </Button>
-            )}
-          </>
-        ) : (
-          <p className="text-[11px] text-muted-foreground leading-relaxed">
-            No trial line configured. Buy your own number to place outbound calls.
-          </p>
-        )}
-      </div>
-      )}
-
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Attach your phone number</DialogTitle>
-            <DialogDescription>
-              Your purchased number handles inbound routing and outbound caller ID. Trial platform lines are shared and capped — buy a number to go live.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3 py-1">
-            {phoneNumbers.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-border/60 bg-muted/20 px-3 py-4 text-center space-y-2">
-                <p className="text-sm text-muted-foreground">You don’t have a purchased number yet.</p>
-                <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => { setDialogOpen(false); navigate("/app/phone-numbers"); }}>
-                  <Plus className="h-3.5 w-3.5" /> Buy a number
-                </Button>
-              </div>
-            ) : (
-              <>
-                <Label className="text-sm">Phone number</Label>
-                <Select value={selectedId} onValueChange={setSelectedId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a number…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">— Unassigned —</SelectItem>
-                    {phoneNumbers.map(n => {
-                      const owner = n.agentId && n.agentId !== agentId
-                        ? agents?.find(a => a.id === n.agentId)?.name
-                        : null;
-                      return (
-                        <SelectItem key={n.id} value={String(n.id)}>
-                          {n.number}{owner ? ` · ${owner}` : n.agentId === agentId ? " · current" : ""}
-                        </SelectItem>
-                      );
-                    })}
-                  </SelectContent>
-                </Select>
-                <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  Reassigning a number in use by another agent moves inbound and outbound to this agent.
-                </p>
-              </>
-            )}
-          </div>
-          {phoneNumbers.length > 0 && (
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-              <Button type="button" onClick={handleSave} disabled={assign.isPending}>
-                {assign.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
-                Save
-              </Button>
-            </DialogFooter>
-          )}
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
-}
-
-type BuilderWhatsappChannel = {
-  mode: "shared" | "own";
-  businessName: string;
-  phoneE164: string | null;
-  status: string;
-  active: boolean;
-};
-
-type BuilderWhatsappResponse = {
-  channel: BuilderWhatsappChannel | null;
-  sharedTierAvailable: boolean;
-  usage: { used24h: number; cap: number } | null;
-};
-
-type BuilderWhatsappConnection = {
-  id: string;
-  name: string;
-  active: boolean;
-  agentId: number | null;
-  metaPhoneNumberId?: string | null;
-  outboundWebhookUrl?: string | null;
-};
-
-function StatusBadge({
-  ready,
-  readyLabel = "Ready",
-  emptyLabel = "Needs setup",
-}: {
-  ready: boolean;
-  readyLabel?: string;
-  emptyLabel?: string;
-}) {
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium",
-        ready
-          ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-400"
-          : "border-amber-500/25 bg-amber-500/10 text-amber-400",
-      )}
-    >
-      <span className={cn("h-1.5 w-1.5 rounded-full", ready ? "bg-emerald-400" : "bg-amber-400")} />
-      {ready ? readyLabel : emptyLabel}
-    </span>
-  );
-}
-
-function JourneyReadinessPanel({ form, agent }: { form: any; agent: any }) {
-  const knowledgeIds = (form.watch("knowledgeSourceIds") ?? []) as number[];
-  const schedulingCalendarId = form.watch("schedulingCalendarId");
-  const schedulingEventTypeId = form.watch("schedulingEventTypeId");
-  const webhookUrl = (form.watch("webhookUrl") ?? "").trim();
-  const [hasInboundPhone, setHasInboundPhone] = useState(false);
-  const emailReady = useEmailChannelReady();
-
-  const { data: phoneNumbersRaw } = useListPhoneNumbers({
-    query: { queryKey: getListPhoneNumbersQueryKey(), staleTime: 60_000 },
-  });
-
-  const { data: waData } = useQuery({
-    queryKey: ["builder-whatsapp-channel", agent?.id],
-    enabled: !!agent?.id,
-    queryFn: () => customFetch<BuilderWhatsappResponse>(`${DASH_API}/whatsapp/channel`),
-    staleTime: 60_000,
-  });
-
-  // Meta/BSP connections count as a working WhatsApp channel too.
-  const { data: waConnData } = useQuery({
-    queryKey: ["builder-whatsapp-connections", agent?.id],
-    enabled: !!agent?.id,
-    queryFn: () => customFetch<{ connections: Array<{ active: boolean; agentId: number | null }> }>(`${DASH_API}/whatsapp/connections`),
-    staleTime: 60_000,
-  });
-  const waConnActive = (Array.isArray(waConnData?.connections) ? waConnData.connections : [])
-    .some((c) => c.active && (c.agentId === agent?.id || c.agentId == null));
-  const waReady = !!waData?.channel?.active || waConnActive;
-
-  useEffect(() => {
-    const phoneNumbers = Array.isArray(phoneNumbersRaw) ? phoneNumbersRaw : [];
-    setHasInboundPhone(phoneNumbers.some((p: any) => p.agentId === agent?.id));
-  }, [phoneNumbersRaw, agent?.id]);
-
-  const checks = [
-    { label: "Voice + prompt", ready: !!(form.watch("name") ?? "").trim() && !!(form.watch("systemPrompt") ?? "").trim() },
-    { label: "Knowledge attached", ready: knowledgeIds.length > 0 },
-    { label: "Phone channel", ready: hasInboundPhone },
-    { label: "WhatsApp channel", ready: waReady },
-    { label: "Email channel", ready: emailReady },
-    { label: "Booking channel", ready: !!schedulingCalendarId && !!schedulingEventTypeId },
-    { label: "Follow-up output", ready: waReady || emailReady || !!webhookUrl },
-  ];
-
-  const readyCount = checks.filter((c) => c.ready).length;
-
-  return (
-    <div className="rounded-xl border border-border/60 bg-card/30 p-4 space-y-3">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Journey readiness</p>
-          <h3 className="text-sm font-semibold mt-1">Build a complete agent, not just a voice bot</h3>
-        </div>
-        <span className="text-xs font-semibold text-muted-foreground">{readyCount}/{checks.length}</span>
-      </div>
-      <div className="grid gap-2 sm:grid-cols-2">
-        {checks.map((check) => (
-          <div key={check.label} className="flex items-center justify-between rounded-lg border border-border/40 bg-background/40 px-3 py-2">
-            <span className="text-xs">{check.label}</span>
-            <StatusBadge ready={check.ready} readyLabel="Connected" emptyLabel="Pending" />
-          </div>
-        ))}
-      </div>
-      <p className="text-[11px] text-muted-foreground">
-        Messaging channels are Email + WhatsApp only (managed SnapServe or your own Brevo / Vobiz-BSP). SMS is not a messaging channel.
-      </p>
-    </div>
-  );
-}
-
-
-function ChannelsTab({ form, agent, forceExpandEmail = false }: { form: any; agent: any; forceExpandEmail?: boolean }) {
-  const [, navigate] = useLocation();
-  const [activeChannel, setActiveChannel] = useState<"phone" | "whatsapp" | "email" | "meetings" | "booking">("phone");
-  const schedulingCalendarId = form.watch("schedulingCalendarId");
-  const schedulingEventTypeId = form.watch("schedulingEventTypeId");
-  useEffect(() => {
-    if (forceExpandEmail) setActiveChannel("email");
-  }, [forceExpandEmail]);
-
-  const { data: waData, isLoading: waLoading } = useQuery({
-    queryKey: ["builder-whatsapp-channel", agent?.id],
-    enabled: !!agent?.id,
-    queryFn: () => customFetch<BuilderWhatsappResponse>(`${DASH_API}/whatsapp/channel`),
-    staleTime: 60_000,
-  });
-
-  // BSP/Meta connections are a separate store from the native channel — an
-  // active connection for this agent means WhatsApp IS working for it.
-  const { data: waConnections } = useQuery({
-    queryKey: ["builder-whatsapp-connections", agent?.id],
-    enabled: !!agent?.id,
-    queryFn: () => customFetch<{ connections: BuilderWhatsappConnection[] }>(`${DASH_API}/whatsapp/connections`),
-    staleTime: 60_000,
-  });
-  const waConnList: BuilderWhatsappConnection[] = Array.isArray(waConnections?.connections)
-    ? waConnections.connections
-    : [];
-  const agentConnection = waConnList.find((c) => c.active && c.agentId === agent?.id)
-    ?? waConnList.find((c) => c.active) ?? null;
-  const channelItems = [
-    { id: "phone" as const, label: "Phone", detail: "Inbound & outbound", ready: !!agent?.id },
-    { id: "whatsapp" as const, label: "WhatsApp", detail: "Messages & follow-ups", ready: !!agentConnection || !!waData?.channel?.active },
-    { id: "email" as const, label: "Email", detail: "Managed or Brevo", ready: false },
-    { id: "meetings" as const, label: "Meetings", detail: "Meet, Zoom & Teams", ready: !!agent?.id },
-    { id: "booking" as const, label: "Booking", detail: "Calendar & event type", ready: !!schedulingCalendarId && !!schedulingEventTypeId },
-  ];
-
-  return (
-    <div className="space-y-5 px-4 py-6 sm:px-6">
-      <section>
-        <h2 className="text-[15px] font-semibold tracking-[-0.02em]">Channels</h2>
-        <p className="mt-1 max-w-xl text-[12px] leading-5 text-muted-foreground">
-          Select a channel to configure how this agent communicates.
-        </p>
-      </section>
-
-      <section className="grid min-h-[420px] overflow-hidden rounded-lg border border-border bg-card md:grid-cols-[190px_minmax(0,1fr)]">
-        <div className="border-b border-border bg-muted/[0.16] p-2 md:border-b-0 md:border-r">
-          <div className="grid grid-cols-2 gap-1 md:grid-cols-1">
-            {channelItems.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => setActiveChannel(item.id)}
-                className={cn(
-                  "flex min-h-10 items-center gap-2 rounded-md px-2 text-left transition-colors",
-                  activeChannel === item.id
-                    ? "bg-foreground/[0.065] text-foreground"
-                    : "text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground",
-                )}
-              >
-                <StatusDot tone={item.ready ? "success" : "neutral"} />
-                <div className="min-w-0">
-                  <p className="truncate text-[11px] font-medium">{item.label}</p>
-                  <p className="hidden truncate text-[9px] text-muted-foreground md:block">{item.detail}</p>
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="min-w-0 p-4 sm:p-5">
-          {activeChannel === "phone" && (
-            <div className="space-y-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h3 className="text-[12px] font-semibold">Phone</h3>
-                  <p className="mt-0.5 text-[10px] text-muted-foreground">Inbound routing, outbound caller ID, and test calls.</p>
-                </div>
-                <Button type="button" variant="outline" size="sm" className="h-7 text-[10px]" onClick={() => navigate("/app/phone-numbers")}>
-                  Manage numbers
-                </Button>
-              </div>
-              {agent?.id ? (
-                <AgentInboundPanel agentId={agent.id} preferredManagedNumber={form.watch("preferredManagedNumber")} telephonyProvider={form.watch("telephonyProvider")} />
-              ) : (
-                <p className="text-[11px] text-muted-foreground">Save the agent first to attach inbound phone numbers.</p>
-              )}
-            </div>
-          )}
-
-          {activeChannel === "whatsapp" && (
-            <div className="space-y-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h3 className="text-[12px] font-semibold">WhatsApp</h3>
-                  <p className="mt-0.5 text-[10px] text-muted-foreground">Managed, VoBiz, or BYO BSP messages and follow-ups.</p>
-                </div>
-                <Button type="button" variant="outline" size="sm" className="h-7 text-[10px]" onClick={() => navigate("/app/whatsapp")}>
-                  Configure
-                </Button>
-              </div>
-              {waLoading ? (
-                <Skeleton className="h-20 w-full rounded-md" />
-              ) : agentConnection ? (
-                <div className="flex items-center justify-between border-y border-border py-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-[11px] font-medium">{agentConnection.name || "WhatsApp connection"}</p>
-                    <p className="text-[10px] text-muted-foreground">
-                      {agentConnection.metaPhoneNumberId ? "WhatsApp Business · Meta API" : "BSP webhook connection"}
-                    </p>
-                  </div>
-                  <StatusBadge ready readyLabel="Active" emptyLabel="Inactive" />
-                </div>
-              ) : waData?.channel ? (
-                <div className="flex items-center justify-between border-y border-border py-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-[11px] font-medium">{waData.channel.businessName || "WhatsApp channel"}</p>
-                    <p className="text-[10px] text-muted-foreground">
-                      {waData.channel.mode === "own" ? "Own number" : "Shared SnapServe channel"}
-                      {waData.channel.phoneE164 ? ` · ${waData.channel.phoneE164}` : ""}
-                    </p>
-                  </div>
-                  <StatusBadge ready={waData.channel.active} readyLabel={waData.channel.status || "Active"} emptyLabel="Inactive" />
-                </div>
-              ) : (
-                <div className="border-y border-border py-5">
-                  <p className="text-[11px] font-medium">No WhatsApp channel</p>
-                  <p className="mt-1 text-[10px] text-muted-foreground">Connect one for summaries, reminders, and chat replies.</p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {activeChannel === "email" && <EmailChannelCard forceExpanded />}
-          {activeChannel === "meetings" && agent?.id && <MeetingsChannelCard agentId={agent.id} />}
-          {activeChannel === "booking" && (
-            <div className="space-y-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h3 className="text-[12px] font-semibold">Booking</h3>
-                  <p className="mt-0.5 text-[10px] text-muted-foreground">Calendar, event type, meeting links, and notifications.</p>
-                </div>
-                <Button type="button" variant="outline" size="sm" className="h-7 text-[10px]" onClick={() => navigate("/app/scheduling")}>
-                  Open scheduling
-                </Button>
-              </div>
-              <div className="flex items-center justify-between border-y border-border py-3">
-                <div>
-                  <p className="text-[11px] font-medium">Calendar + event type</p>
-                  <p className="text-[10px] text-muted-foreground">
-                    {schedulingCalendarId && schedulingEventTypeId
-                      ? "Booking tools and notifications are linked."
-                      : "Link scheduling before the agent promises bookings."}
-                  </p>
-                </div>
-                <StatusBadge ready={!!schedulingCalendarId && !!schedulingEventTypeId} readyLabel="Linked" emptyLabel="Unlinked" />
-              </div>
-            </div>
-          )}
-        </div>
-      </section>
-
-      <details className="rounded-lg border border-border bg-card">
-        <summary className="cursor-pointer px-3.5 py-3 text-[11px] font-medium">Channel readiness</summary>
-        <div className="border-t border-border p-3.5">
-          <JourneyReadinessPanel form={form} agent={agent} />
-        </div>
-      </details>
-    </div>
-  );
-}
+/* ── Overview ───────────────────────────────────────────────────────────────── */
 
 function OverviewTab({ form, agent }: { form: any; agent: any }) {
   const [openSection, setOpenSection] = useState<CardSection | null>(null);
@@ -1864,15 +1254,10 @@ function PromptTab({ form }: { form: any }) {
   const [generateOpen, setGenerateOpen] = useState(false);
   const agentName  = form.watch("name")     as string | undefined;
   const agentLang  = form.watch("language") as string | undefined;
+  const promptLen = String(form.watch("systemPrompt") ?? "").length;
 
   return (
-    <div className="relative flex flex-col gap-4 px-4 py-6 sm:px-6">
-      <div>
-        <h2 className="text-[15px] font-semibold tracking-[-0.02em]">Prompt</h2>
-        <p className="mt-1 text-[12px] text-muted-foreground">
-          Instructions the agent follows on every turn.
-        </p>
-      </div>
+    <div className="relative flex min-h-full flex-col gap-6 px-4 py-5 sm:px-6 lg:px-8">
       <GeneratePromptSheet
         open={generateOpen}
         onOpenChange={setGenerateOpen}
@@ -1884,76 +1269,142 @@ function PromptTab({ form }: { form: any }) {
           form.setValue("systemPromptGenMeta", meta, { shouldDirty: true });
         }}
       />
-      <FormField control={form.control} name="systemPrompt" render={({ field }) => (
-        <FormItem className="flex flex-1 flex-col space-y-2">
-          <div className="flex items-center justify-between">
-            <FormLabel className="text-[12px] font-medium">System prompt</FormLabel>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-7 gap-1.5 text-xs"
-              onClick={() => setGenerateOpen(true)}
-            >
-              <Sparkles className="size-3" />
-              Generate
-            </Button>
-          </div>
-          <FormControl>
-            <Textarea className="flex-1 min-h-[320px] font-mono text-sm resize-none leading-relaxed" placeholder="You are a helpful voice assistant…" {...field} />
-          </FormControl>
-          <FormMessage />
-        </FormItem>
-      )} />
-      <div className="space-y-4">
-        <SectionDivider label="Call Behaviour" />
-        <FormField control={form.control} name="timezone" render={({ field }) => (
-          <FormItem>
-            <FormLabel className="text-xs">Agent Timezone</FormLabel>
-            <SmallSelect value={field.value ?? ""} onChange={field.onChange}
-              options={[{ value: "", label: "Not set" }, ...AGENT_TIMEZONES]}
-              placeholder="Not set" />
-            <FormDescription className="text-[10px]">Injected as current-time context</FormDescription>
-          </FormItem>
-        )} />
-        <FormField control={form.control} name="endCallPhrases" render={({ field }) => (
-          <FormItem>
-            <FormLabel className="text-xs">End-Call Phrases (comma-separated)</FormLabel>
-            <FormControl><Input placeholder="goodbye, bye, see you" className="h-8 text-xs" {...field} /></FormControl>
-            <FormDescription className="text-[10px]">Agent hangs up after it says any of these phrases</FormDescription>
-          </FormItem>
-        )} />
-      </div>
 
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <SectionDivider label="Prompt Variables" />
-          <Button type="button" variant="outline" size="sm" className="h-7 text-xs ml-4"
-            onClick={() => pvAppend({ key: "", defaultValue: "", description: "" })}>
-            <Plus className="h-3 w-3 mr-1" /> Add Variable
+      <div className="flex items-end justify-between gap-4">
+        <div>
+          <h2 className="text-[15px] font-semibold tracking-[-0.02em]">Prompt</h2>
+          <p className="mt-0.5 text-[12px] text-muted-foreground">
+            Core instructions for every turn.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="hidden text-[10px] tabular-nums text-muted-foreground sm:inline">
+            {promptLen.toLocaleString()} chars
+          </span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 gap-1.5 text-[11px]"
+            onClick={() => setGenerateOpen(true)}
+          >
+            <Sparkles className="size-3.5" />
+            Generate
           </Button>
         </div>
-        {pvFields.length === 0 && <p className="text-xs text-muted-foreground">No variables — use {"{{variable}}"} in prompt to inject runtime values.</p>}
-        {pvFields.map((f, i) => (
-          <div key={f.id} className="grid grid-cols-[1fr_1fr_2fr_28px] gap-2 items-start">
-            <FormField control={form.control} name={`promptVariables.${i}.key`} render={({ field: ff }) => (
+      </div>
+
+      <FormField control={form.control} name="systemPrompt" render={({ field }) => (
+        <FormItem className="space-y-0">
+          <FormControl>
+            <div className="overflow-hidden rounded-lg border border-border bg-card">
+              <div className="flex h-9 items-center justify-between border-b border-border/70 bg-muted/20 px-3">
+                <span className="text-[10px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
+                  System prompt
+                </span>
+                <span className="font-mono text-[10px] text-muted-foreground/70">markdown · plain text</span>
+              </div>
+              <Textarea
+                className="min-h-[min(52vh,520px)] resize-y rounded-none border-0 bg-transparent px-3.5 py-3.5 font-mono text-[12.5px] leading-6 shadow-none focus-visible:ring-0"
+                placeholder="You are a helpful voice assistant…"
+                {...field}
+              />
+            </div>
+          </FormControl>
+          <FormMessage className="mt-2" />
+        </FormItem>
+      )} />
+
+      <section className="overflow-hidden rounded-lg border border-border bg-card">
+        <div className="border-b border-border/70 px-3.5 py-2.5">
+          <h3 className="text-[11px] font-semibold">Call behaviour</h3>
+        </div>
+        <div className="px-3.5">
+          <PropertyRow
+            label="Timezone"
+            description="Injected as current-time context"
+          >
+            <FormField control={form.control} name="timezone" render={({ field }) => (
               <FormItem className="space-y-0">
-                <FormControl><Input placeholder="key" className="h-8 text-xs" {...ff} /></FormControl>
-                <FormMessage className="text-[10px]" />
+                <SmallSelect
+                  value={field.value ?? ""}
+                  onChange={field.onChange}
+                  options={[{ value: "", label: "Not set" }, ...AGENT_TIMEZONES]}
+                  placeholder="Not set"
+                />
               </FormItem>
             )} />
-            <FormField control={form.control} name={`promptVariables.${i}.defaultValue`} render={({ field: ff }) => (
-              <FormItem className="space-y-0"><FormControl><Input placeholder="default" className="h-8 text-xs" {...ff} /></FormControl></FormItem>
+          </PropertyRow>
+          <PropertyRow
+            label="End-call phrases"
+            description="Hang up after saying any of these"
+          >
+            <FormField control={form.control} name="endCallPhrases" render={({ field }) => (
+              <FormItem className="space-y-0">
+                <FormControl>
+                  <Input placeholder="goodbye, bye, see you" className="h-8 text-xs" {...field} />
+                </FormControl>
+              </FormItem>
             )} />
-            <FormField control={form.control} name={`promptVariables.${i}.description`} render={({ field: ff }) => (
-              <FormItem className="space-y-0"><FormControl><Input placeholder="description" className="h-8 text-xs" {...ff} /></FormControl></FormItem>
-            )} />
-            <Button type="button" variant="ghost" size="icon" className="h-8 w-7 text-muted-foreground hover:text-destructive" onClick={() => pvRemove(i)}>
-              <Trash2 className="h-3.5 w-3.5" />
-            </Button>
+          </PropertyRow>
+        </div>
+      </section>
+
+      <section className="overflow-hidden rounded-lg border border-border bg-card">
+        <div className="flex h-10 items-center justify-between border-b border-border/70 px-3.5">
+          <div>
+            <h3 className="text-[11px] font-semibold">Prompt variables</h3>
+            <p className="text-[10px] text-muted-foreground">Use {"{{variable}}"} in the prompt</p>
           </div>
-        ))}
-      </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 gap-1 px-2 text-[11px]"
+            onClick={() => pvAppend({ key: "", defaultValue: "", description: "" })}
+          >
+            <Plus className="size-3" />
+            Add
+          </Button>
+        </div>
+        {pvFields.length === 0 ? (
+          <p className="px-3.5 py-5 text-[11px] text-muted-foreground">
+            No variables yet.
+          </p>
+        ) : (
+          <div className="divide-y divide-border/70">
+            {pvFields.map((f, i) => (
+              <div key={f.id} className="grid grid-cols-[1fr_1fr_minmax(0,1.4fr)_28px] items-center gap-2 px-3.5 py-2.5">
+                <FormField control={form.control} name={`promptVariables.${i}.key`} render={({ field: ff }) => (
+                  <FormItem className="space-y-0">
+                    <FormControl><Input placeholder="key" className="h-8 text-xs" {...ff} /></FormControl>
+                    <FormMessage className="text-[10px]" />
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name={`promptVariables.${i}.defaultValue`} render={({ field: ff }) => (
+                  <FormItem className="space-y-0">
+                    <FormControl><Input placeholder="default" className="h-8 text-xs" {...ff} /></FormControl>
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name={`promptVariables.${i}.description`} render={({ field: ff }) => (
+                  <FormItem className="space-y-0">
+                    <FormControl><Input placeholder="description" className="h-8 text-xs" {...ff} /></FormControl>
+                  </FormItem>
+                )} />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 text-muted-foreground hover:text-destructive"
+                  onClick={() => pvRemove(i)}
+                >
+                  <Trash2 className="size-3.5" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }
@@ -2716,7 +2167,7 @@ function VoiceCallFeelPresets({ form }: { form: any }) {
 /* ── Tab: Tools ─────────────────────────────────────────────────────────────── */
 
 function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined }) {
-  const { fields, append, remove } = useFieldArray({ control: form.control, name: "tools" });
+  const { fields, append, remove, replace } = useFieldArray({ control: form.control, name: "tools" });
   const genderEnabled = form.watch("genderDetectionEnabled") ?? false;
   const voiceMemoryEnabled = form.watch("voiceMemoryEnabled") ?? false;
   const recordingEnabled = form.watch("recordingEnabled") ?? true;
@@ -2779,8 +2230,17 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
   const [expandedTest, setExpandedTest]     = useState<string | null>(null);
   const [testArgs, setTestArgs]             = useState<Record<string, string>>({});
   const [testResult, setTestResult]         = useState<Record<string, string | null>>({});
+  const [bookingDetailsOpen, setBookingDetailsOpen] = useState(false);
 
   const runTest = useRunToolTest();
+
+  const BOOKING_TYPES = [
+    "native_booking",
+    "native_check_availability",
+    "native_list_bookings",
+    "native_reschedule",
+    "native_cancel",
+  ] as const;
 
   const hasNativeTool = (type: string) => watchedTools.some((t: any) => t.type === type);
   const nativeToolIndex = (type: string) => watchedTools.findIndex((t: any) => t.type === type);
@@ -2796,6 +2256,42 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
     send_whatsapp: "send_whatsapp",
   };
 
+  const bookingEnabled = BOOKING_TYPES.every((type) => hasNativeTool(type));
+  const bookingPartial = !bookingEnabled && BOOKING_TYPES.some((type) => hasNativeTool(type));
+
+  const toggleBookingSuite = (on: boolean) => {
+    const current = (form.getValues("tools") ?? []) as any[];
+    if (on) {
+      const existing = new Set(current.map((t: any) => t.type));
+      const next = [
+        ...current,
+        ...BOOKING_TYPES
+          .filter((type) => !existing.has(type))
+          .map((type) => ({
+            type: type as any,
+            name: NATIVE_DEFAULT_NAMES[type] ?? "",
+            description: "",
+          })),
+      ];
+      replace(next);
+      setBookingDetailsOpen(true);
+      if (!agentId) {
+        toast({ title: "Save agent first", description: "Save this agent before configuring calendar tools.", variant: "destructive" });
+      } else if (!agentCalendar) {
+        toast({ title: "No calendar configured", description: "No calendar configured for this agent. Go to Settings → Calendar to set one up.", variant: "destructive" });
+      } else if (!(agentCalendar as any).connectedGoogleEmail) {
+        toast({ title: "No Google account connected", description: `Connect a Google account to the "${agentCalendar.name}" calendar in Scheduling.`, variant: "destructive" });
+      } else if ((agentEventTypes ?? []).length === 0) {
+        toast({ title: "No event types found", description: "Create an event type in Scheduling before using booking.", variant: "destructive" });
+      }
+    } else {
+      replace(current.filter((t: any) => !(BOOKING_TYPES as readonly string[]).includes(t.type)));
+      setExpandedSchema(null);
+      setExpandedTest(null);
+      setBookingDetailsOpen(false);
+    }
+  };
+
   const toggleNativeTool = (type: string) => {
     const idx = nativeToolIndex(type);
     if (idx >= 0) {
@@ -2804,36 +2300,17 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
       setExpandedTest(null);
     } else {
       append({ type: type as any, name: NATIVE_DEFAULT_NAMES[type] ?? "", description: "" });
-      const bookingTypes = ["native_booking", "native_check_availability", "native_list_bookings", "native_reschedule", "native_cancel"];
-      if (bookingTypes.includes(type)) {
-        if (!agentId) {
-          toast({ title: "Save agent first", description: "Save this agent before configuring calendar tools.", variant: "destructive" });
-        } else if (!agentCalendar) {
-          toast({ title: "No calendar configured", description: "No calendar configured for this agent. Go to Settings → Calendar to set one up.", variant: "destructive" });
-        } else if (!(agentCalendar as any).connectedGoogleEmail) {
-          toast({ title: "No Google account connected", description: `Connect a Google account to the "${agentCalendar.name}" calendar in Scheduling.`, variant: "destructive" });
-        } else if ((agentEventTypes ?? []).length === 0 && ["native_booking", "native_check_availability", "native_list_bookings"].includes(type)) {
-          toast({ title: "No event types found", description: "Create an event type in Scheduling before using this tool.", variant: "destructive" });
-        }
-      }
     }
   };
 
 
-  const BOOKING_TOOLS_ICONS: Record<string, React.ReactElement> = {
-    native_booking:            <BookOpen className="h-4 w-4" />,
-    native_check_availability: <Sparkles className="h-4 w-4" />,
-    native_list_bookings:      <List className="h-4 w-4" />,
-    native_reschedule:         <Pencil className="h-4 w-4" />,
-    native_cancel:             <X className="h-4 w-4" />,
-  };
-  const BOOKING_TOOLS = [
-    { type: "native_booking",           fnName: "book_appointment",   color: "emerald", label: "Book Appointment",    description: "Lets the agent book a meeting slot for the caller. Agent collects name, email, and preferred time, then confirms the booking live.",    icon: BOOKING_TOOLS_ICONS["native_booking"] },
-    { type: "native_check_availability", fnName: "check_availability", color: "sky",     label: "Check Availability", description: "Enables the agent to look up open slots before suggesting a time. Use alongside Book Appointment for a natural booking flow.",             icon: BOOKING_TOOLS_ICONS["native_check_availability"] },
-    { type: "native_list_bookings",      fnName: "list_bookings",      color: "violet",  label: "List Bookings",      description: "Allows the agent to retrieve existing bookings for the caller — useful for reschedule or cancellation flows.",                           icon: BOOKING_TOOLS_ICONS["native_list_bookings"] },
-    { type: "native_reschedule",         fnName: "reschedule_booking", color: "amber",   label: "Reschedule Booking", description: "Lets the agent reschedule an existing booking to a new time slot chosen by the caller.",                                                icon: BOOKING_TOOLS_ICONS["native_reschedule"] },
-    { type: "native_cancel",             fnName: "cancel_booking",     color: "red",     label: "Cancel Booking",     description: "Allows the agent to cancel an upcoming booking on the caller's request.",                                                               icon: BOOKING_TOOLS_ICONS["native_cancel"] },
-  ];
+  const BOOKING_TOOL_LABELS = [
+    { type: "native_booking", fnName: "book_appointment", label: "Book" },
+    { type: "native_check_availability", fnName: "check_availability", label: "Check availability" },
+    { type: "native_list_bookings", fnName: "list_bookings", label: "List" },
+    { type: "native_reschedule", fnName: "reschedule_booking", label: "Reschedule" },
+    { type: "native_cancel", fnName: "cancel_booking", label: "Cancel" },
+  ] as const;
 
   const BOOKING_TOOL_SCHEMAS: Record<string, object> = {
     native_booking: {
@@ -2946,183 +2423,202 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
 
         <div className="space-y-2">
 
-        {/* ── Booking Tools ── */}
+        {/* ── Booking suite (one switch → all five tools) ── */}
         <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-1 mt-3">Scheduling & Bookings</p>
-        {/* Event type picker — shared across all booking tools */}
-        <div className="rounded-xl border border-border/40 bg-card/20 px-4 py-3 flex items-center gap-3 mb-2">
-          <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
-          <div className="flex-1 min-w-0 space-y-1">
-            <p className="text-[11px] text-muted-foreground/70">
-              {agentCalendar ? (
-                <>Calendar: <span className="font-medium text-foreground/80">{agentCalendar.name}</span></>
-              ) : "Event type used by booking tools"}
-            </p>
-            <Select
-              value={schedulingEventTypeId != null ? String(schedulingEventTypeId) : "__none__"}
-              onValueChange={v => form.setValue("schedulingEventTypeId", v === "__none__" ? null : Number(v), { shouldDirty: true })}
-              disabled={!calendarIdForEt}
-            >
-              <SelectTrigger className="h-7 text-xs bg-background/50">
-                <SelectValue placeholder="Any event type">
-                  {schedulingEventTypeId != null
-                    ? agentEventTypes == null
-                      ? "Loading…"
-                      : ((agentEventTypes as any[]).find((e: any) => e.id === schedulingEventTypeId)?.title
-                         || (agentEventTypes as any[]).find((e: any) => e.id === schedulingEventTypeId)?.name
-                         || undefined)
-                    : undefined}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__none__" className="text-xs text-muted-foreground">Any event type</SelectItem>
-                {(agentEventTypes ?? []).map((et: any) => (
-                  <SelectItem key={et.id} value={String(et.id)} className="text-xs">{et.title || et.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {calendarIdForEt && (agentEventTypes ?? []).length === 0 && (
-              <p className="text-[10px] text-amber-400/80">No event types yet. Create one in Scheduling → Event Types.</p>
-            )}
+        <div className={cn(
+          "rounded-xl border transition-all duration-150",
+          bookingEnabled || bookingPartial ? "border-border/70 bg-card/40" : "border-border/40 bg-card/20",
+        )}>
+          <div className="flex items-start gap-3 p-4">
+            <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted/30">
+              <Calendar className={cn("h-4 w-4", bookingEnabled || bookingPartial ? "text-foreground/70" : "text-muted-foreground/35")} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="mb-0.5 flex items-center gap-2">
+                <span className="text-xs font-semibold text-foreground/80">Booking</span>
+                {bookingPartial && (
+                  <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-600">
+                    Incomplete
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] leading-relaxed text-muted-foreground/60">
+                One switch enables the full booking flow: check availability, book, list, reschedule, and cancel.
+              </p>
+            </div>
+            <div className="mt-1 shrink-0">
+              <Switch
+                checked={bookingEnabled || bookingPartial}
+                onCheckedChange={(on) => toggleBookingSuite(on)}
+              />
+            </div>
           </div>
-        </div>
-        {BOOKING_TOOLS.map(({ type, fnName, icon, color, label, description }) => {
-          const isOn = hasNativeTool(type);
-          const c = colorMap[color];
-          const schemaOpen = expandedSchema === type;
-          const testOpen   = expandedTest === type;
-          const argKey = `${type}:args`;
-          const handleRunTest = async () => {
-            setTestResult((r) => ({ ...r, [type]: null }));
-            try {
-              let parsedArgs: Record<string, unknown> = {};
-              try { parsedArgs = JSON.parse(testArgs[argKey] || "{}"); } catch { parsedArgs = {}; }
-              const res = await runTest.mutateAsync({ data: { agentId: agentId!, toolName: fnName, args: parsedArgs } });
-              setTestResult((r) => ({ ...r, [type]: res.result ?? JSON.stringify(res) }));
-            } catch (err: any) {
-              setTestResult((r) => ({ ...r, [type]: `Error: ${err?.message ?? String(err)}` }));
-            }
-          };
-          return (
-            <div key={type} className={cn("rounded-xl border transition-all duration-150", isOn ? "border-border/70 bg-card/40" : "border-border/40 bg-card/20")}>
-              <div className="w-full text-left p-4 flex items-start gap-3">
-                <div className="mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center shrink-0 bg-muted/30">
-                  <span className={cn(isOn ? "text-foreground/70" : "text-muted-foreground/35")}>{icon}</span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <code className="text-[11px] font-mono font-semibold text-foreground/80">{fnName}</code>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground/60 leading-relaxed">{description}</p>
-                </div>
-                <div className="shrink-0 mt-1">
-                  <Switch checked={isOn} onCheckedChange={() => toggleNativeTool(type)} />
+
+          {(bookingEnabled || bookingPartial) && (
+            <div className="space-y-3 border-t border-border/30 px-4 pb-4 pt-3">
+              <div className="flex flex-wrap gap-1.5">
+                {BOOKING_TOOL_LABELS.map((tool) => (
+                  <span
+                    key={tool.type}
+                    className="rounded-md border border-border/60 bg-background/40 px-2 py-0.5 font-mono text-[10px] text-muted-foreground"
+                  >
+                    {tool.fnName}
+                  </span>
+                ))}
+              </div>
+
+              <div className="flex items-center gap-3 rounded-lg border border-border/40 bg-background/30 px-3 py-2.5">
+                <Calendar className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <div className="min-w-0 flex-1 space-y-1">
+                  <p className="text-[11px] text-muted-foreground/70">
+                    {agentCalendar ? (
+                      <>Calendar: <span className="font-medium text-foreground/80">{agentCalendar.name}</span></>
+                    ) : "Event type used by booking"}
+                  </p>
+                  <Select
+                    value={schedulingEventTypeId != null ? String(schedulingEventTypeId) : "__none__"}
+                    onValueChange={(v) => form.setValue("schedulingEventTypeId", v === "__none__" ? null : Number(v), { shouldDirty: true })}
+                    disabled={!calendarIdForEt}
+                  >
+                    <SelectTrigger className="h-7 bg-background/50 text-xs">
+                      <SelectValue placeholder="Any event type">
+                        {schedulingEventTypeId != null
+                          ? agentEventTypes == null
+                            ? "Loading…"
+                            : ((agentEventTypes as any[]).find((e: any) => e.id === schedulingEventTypeId)?.title
+                               || (agentEventTypes as any[]).find((e: any) => e.id === schedulingEventTypeId)?.name
+                               || undefined)
+                          : undefined}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__" className="text-xs text-muted-foreground">Any event type</SelectItem>
+                      {(agentEventTypes ?? []).map((et: any) => (
+                        <SelectItem key={et.id} value={String(et.id)} className="text-xs">{et.title || et.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {calendarIdForEt && (agentEventTypes ?? []).length === 0 && (
+                    <p className="text-[10px] text-amber-400/80">No event types yet. Create one in Scheduling → Event Types.</p>
+                  )}
                 </div>
               </div>
-              {isOn && (
-                <div className="px-4 pb-4 -mt-1">
-                  <div className="border-t border-border/30 pt-3 flex items-center justify-between gap-2 flex-wrap">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {!agentId ? (
-                        <p className="text-[10px] text-amber-400/80">Save agent first to link calendar tools.</p>
-                      ) : !agentCalendar ? (
-                        <p className="text-[10px] text-amber-400/80">No calendar found for this agent.</p>
-                      ) : !(agentCalendar as any).connectedGoogleEmail ? (
-                        <>
-                          <span className={cn("text-[10px] font-medium px-2 py-0.5 rounded", c.badge, c.badgeText)}>{agentCalendar.name || "Calendar"}</span>
-                          <span className="text-[10px] text-amber-400/80">No Google account connected.</span>
-                        </>
-                      ) : (
-                        <>
-                          <span className={cn("text-[10px] font-medium px-2 py-0.5 rounded", c.badge, c.badgeText)}>{agentCalendar.name || "Calendar"}</span>
-                          <span className="text-[10px] text-muted-foreground/60">
-                            {(agentCalendar as any).connectedGoogleAccountsCount > 1
-                              ? `${(agentCalendar as any).connectedGoogleAccountsCount} accounts`
-                              : (agentCalendar as any).connectedGoogleEmail}
-                          </span>
-                        </>
-                      )}
-                    </div>
-                    {/* Action buttons */}
-                    <div className="flex items-center gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-6 text-[10px] px-2 gap-1"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setExpandedSchema(schemaOpen ? null : type);
-                          setExpandedTest(null);
-                        }}
-                      >
-                        <FileText className="h-3 w-3" /> View Schema
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-6 text-[10px] px-2 gap-1"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setExpandedTest(testOpen ? null : type);
-                          setExpandedSchema(null);
-                          setTestResult((r) => ({ ...r, [type]: null }));
-                        }}
-                      >
-                        <TestTube2 className="h-3 w-3" /> Test Tool
-                      </Button>
-                    </div>
-                    {/* Schema panel */}
-                    {schemaOpen && (
-                      <div className="rounded-md bg-muted/20 border border-border/30 p-3">
-                        <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/50 mb-2">Function Schema</p>
-                        <pre className="text-[10px] text-muted-foreground/80 overflow-x-auto whitespace-pre-wrap font-mono leading-relaxed">
-                          {JSON.stringify(BOOKING_TOOL_SCHEMAS[type] ?? {}, null, 2)}
-                        </pre>
-                      </div>
-                    )}
-                    {/* Test panel */}
-                    {testOpen && (
-                      <div className="rounded-md bg-muted/20 border border-border/30 p-3 space-y-2">
-                        <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/50">Test Tool</p>
-                        {!agentCalendar ? (
-                          <p className="text-[10px] text-amber-400/80">No calendar is assigned to this agent yet. Go to Settings → Calendar to set one up.</p>
-                        ) : (
-                          <>
-                            <div>
-                              <label className="text-[10px] text-muted-foreground block mb-1">Arguments (JSON)</label>
-                              <textarea
-                                className="w-full rounded-md border border-border/50 bg-background/50 text-[10px] font-mono p-2 min-h-[60px] resize-y focus:outline-none focus:ring-1 focus:ring-ring"
-                                placeholder={`{}`}
-                                value={testArgs[argKey] ?? "{}"}
-                                onChange={(e) => setTestArgs((a) => ({ ...a, [argKey]: e.target.value }))}
-                              />
-                            </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  {!agentId ? (
+                    <p className="text-[10px] text-amber-400/80">Save agent first to link calendar tools.</p>
+                  ) : !agentCalendar ? (
+                    <p className="text-[10px] text-amber-400/80">No calendar found for this agent.</p>
+                  ) : !(agentCalendar as any).connectedGoogleEmail ? (
+                    <span className="text-[10px] text-amber-400/80">No Google account connected.</span>
+                  ) : (
+                    <span className="text-[10px] text-muted-foreground/60">
+                      {(agentCalendar as any).connectedGoogleAccountsCount > 1
+                        ? `${(agentCalendar as any).connectedGoogleAccountsCount} accounts`
+                        : (agentCalendar as any).connectedGoogleEmail}
+                    </span>
+                  )}
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 gap-1 px-2 text-[10px]"
+                  onClick={() => setBookingDetailsOpen((v) => !v)}
+                >
+                  {bookingDetailsOpen ? "Hide details" : "Test & schema"}
+                  <ChevronDown className={cn("h-3 w-3 transition-transform", bookingDetailsOpen && "rotate-180")} />
+                </Button>
+              </div>
+
+              {bookingDetailsOpen && (
+                <div className="space-y-2 rounded-lg border border-border/40 bg-muted/15 p-3">
+                  {BOOKING_TOOL_LABELS.map(({ type, fnName, label }) => {
+                    const schemaOpen = expandedSchema === type;
+                    const testOpen = expandedTest === type;
+                    const argKey = `${type}:args`;
+                    const handleRunTest = async () => {
+                      setTestResult((r) => ({ ...r, [type]: null }));
+                      try {
+                        let parsedArgs: Record<string, unknown> = {};
+                        try { parsedArgs = JSON.parse(testArgs[argKey] || "{}"); } catch { parsedArgs = {}; }
+                        const res = await runTest.mutateAsync({ data: { agentId: agentId!, toolName: fnName, args: parsedArgs } });
+                        setTestResult((r) => ({ ...r, [type]: res.result ?? JSON.stringify(res) }));
+                      } catch (err: any) {
+                        setTestResult((r) => ({ ...r, [type]: `Error: ${err?.message ?? String(err)}` }));
+                      }
+                    };
+                    return (
+                      <div key={type} className="rounded-md border border-border/40 bg-background/40">
+                        <div className="flex items-center justify-between gap-2 px-3 py-2">
+                          <div className="min-w-0">
+                            <p className="text-[11px] font-medium">{label}</p>
+                            <code className="font-mono text-[10px] text-muted-foreground">{fnName}</code>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-1.5">
                             <Button
                               type="button"
+                              variant="outline"
                               size="sm"
-                              className="h-6 text-[10px] px-3"
-                              disabled={runTest.isPending}
-                              onClick={handleRunTest}
+                              className="h-6 gap-1 px-2 text-[10px]"
+                              onClick={() => {
+                                setExpandedSchema(schemaOpen ? null : type);
+                                setExpandedTest(null);
+                              }}
                             >
-                              {runTest.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Run Test"}
+                              Schema
                             </Button>
-                            {testResult[type] != null && (
-                              <div className="rounded-md bg-background/50 border border-border/30 p-2">
-                                <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/50 mb-1">Response</p>
-                                <pre className="text-[10px] text-muted-foreground/80 font-mono whitespace-pre-wrap break-all">{testResult[type]}</pre>
-                              </div>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-6 gap-1 px-2 text-[10px]"
+                              onClick={() => {
+                                setExpandedTest(testOpen ? null : type);
+                                setExpandedSchema(null);
+                                setTestResult((r) => ({ ...r, [type]: null }));
+                              }}
+                            >
+                              Test
+                            </Button>
+                          </div>
+                        </div>
+                        {schemaOpen && (
+                          <pre className="overflow-x-auto border-t border-border/30 p-3 font-mono text-[10px] leading-relaxed text-muted-foreground/80 whitespace-pre-wrap">
+                            {JSON.stringify(BOOKING_TOOL_SCHEMAS[type] ?? {}, null, 2)}
+                          </pre>
+                        )}
+                        {testOpen && (
+                          <div className="space-y-2 border-t border-border/30 p-3">
+                            {!agentCalendar ? (
+                              <p className="text-[10px] text-amber-400/80">No calendar assigned yet.</p>
+                            ) : (
+                              <>
+                                <textarea
+                                  className="min-h-[60px] w-full resize-y rounded-md border border-border/50 bg-background/50 p-2 font-mono text-[10px] focus:outline-none focus:ring-1 focus:ring-ring"
+                                  placeholder="{}"
+                                  value={testArgs[argKey] ?? "{}"}
+                                  onChange={(e) => setTestArgs((a) => ({ ...a, [argKey]: e.target.value }))}
+                                />
+                                <Button type="button" size="sm" className="h-6 px-3 text-[10px]" disabled={runTest.isPending} onClick={handleRunTest}>
+                                  {runTest.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Run test"}
+                                </Button>
+                                {testResult[type] != null && (
+                                  <pre className="whitespace-pre-wrap break-all font-mono text-[10px] text-muted-foreground/80">{testResult[type]}</pre>
+                                )}
+                              </>
                             )}
-                          </>
+                          </div>
                         )}
                       </div>
-                    )}
-                  </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
-          );
-        })}
+          )}
+        </div>
 
         <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-1 mt-4">Call Control</p>
         {CALL_CONTROL_TOOLS.map(({ type, icon, color, label, description }) => {
@@ -6038,7 +5534,6 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
   const [, navigate] = useLocation();
   const search = useSearch();
   const [activeTab, setActiveTab] = useState<TabId>(() => sectionFromSearch(search));
-  const [forceExpandEmail, setForceExpandEmail] = useState(false);
   const tabContentRef = useRef<HTMLDivElement>(null);
   const scrollPositions = useRef<Partial<Record<TabId, number>>>({});
   const agentResetSigRef = useRef<string | null>(null);
@@ -6051,20 +5546,10 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
     if (tabContentRef.current) {
       scrollPositions.current[activeTab] = tabContentRef.current.scrollTop;
     }
-    if (tabId !== "launch") setForceExpandEmail(false);
     setActiveTab(tabId);
     const next = new URL(window.location.href);
     next.searchParams.set("section", tabId);
     window.history.replaceState(window.history.state, "", `${next.pathname}${next.search}${next.hash}`);
-  };
-
-  const openEmailChannel = () => {
-    setForceExpandEmail(true);
-    handleTabClick("launch");
-  };
-
-  const openChannels = () => {
-    handleTabClick("launch");
   };
 
   useEffect(() => {
@@ -6478,44 +5963,41 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
-      {/* Single toolbar — agent identity + actions (no nested side rails) */}
-      <header className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border/70 px-3 sm:px-5">
-        <div className="flex min-w-0 items-center gap-2">
+      {/* Single toolbar — agent identity + actions */}
+      <header className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border bg-background px-3 sm:h-14 sm:px-5">
+        <div className="flex min-w-0 items-center gap-2.5">
           {onOpenAgents && (
             <Button
               type="button"
               size="sm"
-              variant="ghost"
-              className="h-8 gap-1.5 px-2 text-[11px]"
+              variant="outline"
+              className="h-8 gap-1.5 border-border/80 px-2.5 text-[11px]"
               onClick={onOpenAgents}
             >
               <List className="size-3.5" />
-              <span className="hidden sm:inline">Switch</span>
+              <span className="hidden sm:inline">Agents</span>
               <ChevronDown className="size-3 text-muted-foreground" />
             </Button>
           )}
+          <div className="h-4 w-px shrink-0 bg-border/80" />
           <button
             type="button"
             onClick={() => { setRenameValue(agent.name ?? ""); setRenameDialogOpen(true); }}
-            className="inline-flex max-w-[280px] items-center gap-1.5 truncate text-left"
+            className="inline-flex max-w-[320px] items-center gap-1.5 truncate text-left"
             title="Rename agent"
           >
-            <span className="truncate text-[13px] font-semibold tracking-[-0.02em]">{agent.name}</span>
-            <Pencil className="size-3 shrink-0 text-muted-foreground" />
+            <span className="truncate text-[14px] font-semibold tracking-[-0.02em]">{agent.name}</span>
+            <Pencil className="size-3 shrink-0 text-muted-foreground opacity-60" />
           </button>
-          <span className="inline-flex items-center gap-1 text-[10px] capitalize text-muted-foreground">
+          <span className="inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-muted/30 px-1.5 py-0.5 text-[10px] capitalize text-muted-foreground">
             <StatusDot tone={agent.status === "active" ? "success" : "neutral"} />
-            {agent.status === "active" ? "live" : "draft"}
+            {agent.status === "active" ? "Live" : "Draft"}
           </span>
           {isDirty && (
-            <span className="inline-flex items-center gap-1 text-[10px] text-amber-600">
-              <StatusDot tone="warning" />
-              unsaved
+            <span className="inline-flex items-center gap-1.5 rounded-md border border-amber-500/25 bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-600">
+              Unsaved
             </span>
           )}
-          <span className="hidden font-mono text-[10px] text-muted-foreground/50 sm:inline">
-            #{String(agent.id).padStart(4, "0")}
-          </span>
         </div>
 
         <div className="flex shrink-0 items-center gap-1.5">
@@ -6526,7 +6008,7 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
             className="hidden h-8 gap-1.5 px-2.5 text-[11px] sm:inline-flex"
             onClick={() => setCallDialog(true)}
           >
-            <Phone className="size-3" />
+            <Phone className="size-3.5" />
             Phone
           </Button>
           <Button
@@ -6536,17 +6018,17 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
             className="hidden h-8 gap-1.5 px-2.5 text-[11px] sm:inline-flex"
             onClick={() => setShowWebcall((v) => !v)}
           >
-            <Play className="size-3" />
+            <Play className="size-3.5" />
             {showWebcall ? "Close test" : "Live test"}
           </Button>
           <Button
             type="button"
             size="sm"
-            className={cn("h-8 gap-1.5 px-3 text-[11px]", savedFlash && "bg-emerald-600 text-white hover:bg-emerald-600")}
+            className={cn("h-8 gap-1.5 px-3.5 text-[11px] font-medium", savedFlash && "bg-emerald-600 text-white hover:bg-emerald-600")}
             onClick={onSave}
             disabled={updateAgent.isPending}
           >
-            {savedFlash ? <Check className="size-3" /> : <Save className="size-3" />}
+            {savedFlash ? <Check className="size-3.5" /> : <Save className="size-3.5" />}
             {updateAgent.isPending ? "Saving…" : savedFlash ? "Saved" : "Save"}
           </Button>
           <DropdownMenu>
@@ -6633,24 +6115,19 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
           <div ref={tabContentRef} className="min-h-0 flex-1 overflow-y-auto">
             <form
               onSubmit={(e) => e.preventDefault()}
-              className="builder-workspace-content mx-auto min-h-full w-full max-w-[720px]"
+              className={cn(
+                "builder-workspace-content mx-auto min-h-full w-full",
+                activeTab === "prompt" || activeTab === "voice" || activeTab === "advanced"
+                  ? "max-w-[980px]"
+                  : activeTab === "tools"
+                    ? "max-w-[920px]"
+                    : "max-w-[860px]",
+              )}
             >
               {activeTab === "overview"  && <OverviewTab form={form} agent={agent} />}
               {activeTab === "prompt"    && <PromptTab form={form} />}
               {activeTab === "voice"     && <VoiceTab form={form} />}
               {activeTab === "tools"     && <ToolsTab form={form} agentId={agentId} />}
-              {activeTab === "reach"     && (
-                <ReachPanel
-                  agentId={agentId}
-                  agentName={agent?.name}
-                  webhookUrl={form.watch("webhookUrl")}
-                  onConfigureEmail={openEmailChannel}
-                  onOpenChannels={openChannels}
-                />
-              )}
-              {activeTab === "launch" && (
-                <ChannelsTab form={form} agent={agent} forceExpandEmail={forceExpandEmail} />
-              )}
               {activeTab === "voicemail" && <VoicemailTab form={form} />}
               {activeTab === "advanced"  && <AdvancedTab form={form} agent={agent} />}
               {activeTab === "versions"  && <VersionsTab agentId={agent.id} />}

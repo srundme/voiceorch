@@ -122,7 +122,7 @@ export default function HomePage() {
     {
       label: "Configure how leads reach it",
       done: hasReach,
-      href: firstAgentId ? `/app/agents/${firstAgentId}?section=reach` : "/app/agents",
+      href: firstAgentId ? `/app/automation?agentId=${firstAgentId}` : "/app/automation",
     },
   ];
   const setupDone = setup.every((item) => item.done);
@@ -407,14 +407,12 @@ export default function HomePage() {
           {recentReach.length === 0 ? (
             <div className="px-3.5 py-8 text-center">
               <p className="text-[10px] text-muted-foreground">No active lead sources.</p>
-              {firstAgentId && (
-                <Link
-                  href={`/app/agents/${firstAgentId}?section=reach`}
-                  className="mt-2 inline-flex items-center gap-1 text-[10px] font-medium"
-                >
-                  Configure Reach <ArrowRight className="size-3" />
-                </Link>
-              )}
+              <Link
+                href={firstAgentId ? `/app/automation?agentId=${firstAgentId}` : "/app/automation"}
+                className="mt-2 inline-flex items-center gap-1 text-[10px] font-medium"
+              >
+                Build automation <ArrowRight className="size-3" />
+              </Link>
             </div>
           ) : (
             <div className="divide-y divide-border/70">

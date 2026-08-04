@@ -86,6 +86,8 @@ import VoicesPage           from "@/pages/voices";
 import TestSimulatorPage    from "@/pages/test-simulator";
 import VibePage             from "@/pages/vibe";
 import HomePage             from "@/pages/home/index";
+import AutomationPage       from "@/pages/automation/index";
+import ChannelsPage         from "@/pages/channels/index";
 import CommandCenterRedirect from "@/pages/command-center/index";
 import MemoryPage           from "@/pages/memory/index";
 import DocsPage             from "@/pages/docs/index";
@@ -297,6 +299,8 @@ function AppRoutes() {
       <Switch>
         <Route path="/app" component={AppRoot} />
         <Route path="/app/home" component={HomePage} />
+        <Route path="/app/automation" component={AutomationPage} />
+        <Route path="/app/channels" component={ChannelsPage} />
         <Route path="/app/command-center" component={CommandCenterRedirect} />
         <Route path="/app/analytics" component={AnalyticsPage} />
 

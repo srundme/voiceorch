@@ -164,7 +164,7 @@ export function WorkspaceSegmentNav<T extends string>({
     <nav
       aria-label="Editor sections"
       className={cn(
-        "flex h-10 shrink-0 items-stretch gap-0 overflow-x-auto border-b border-border/70 px-3 sm:px-5",
+        "flex h-11 shrink-0 items-stretch gap-0.5 overflow-x-auto border-b border-border/70 bg-muted/[0.18] px-2 sm:px-4",
         className,
       )}
     >
@@ -177,16 +177,13 @@ export function WorkspaceSegmentNav<T extends string>({
             onClick={() => onSelect(item.id)}
             aria-current={active ? "page" : undefined}
             className={cn(
-              "relative shrink-0 px-3 text-[12px] transition-colors",
+              "relative my-1.5 shrink-0 rounded-md px-3 text-[12px] transition-colors",
               active
-                ? "font-medium text-foreground"
-                : "text-muted-foreground hover:text-foreground",
+                ? "bg-background font-medium text-foreground shadow-sm ring-1 ring-border/80"
+                : "text-muted-foreground hover:bg-background/50 hover:text-foreground",
             )}
           >
             {item.label}
-            {active && (
-              <span className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-foreground" />
-            )}
           </button>
         );
       })}
@@ -270,14 +267,14 @@ export function PropertyRow({
   return (
     <div
       className={cn(
-        "grid gap-2 border-b border-border/50 py-3 last:border-b-0 sm:grid-cols-[minmax(150px,0.42fr)_minmax(240px,1fr)] sm:gap-6",
+        "grid gap-2 border-b border-border/60 py-3.5 last:border-b-0 sm:grid-cols-[minmax(160px,0.38fr)_minmax(220px,1fr)] sm:items-center sm:gap-8",
         className,
       )}
     >
-      <div>
-        <div className="text-[11px] font-medium">{label}</div>
+      <div className="min-w-0">
+        <div className="text-[12px] font-medium leading-none">{label}</div>
         {description && (
-          <p className="mt-0.5 text-[10px] leading-relaxed text-muted-foreground">
+          <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
             {description}
           </p>
         )}

@@ -3,7 +3,7 @@ import { Link, useLocation } from "wouter";
 import { useTheme } from "@/components/theme-provider";
 import { GlobalSearch, useGlobalSearchTrigger } from "@/components/GlobalSearch";
 import {
-  Home, Bot, Phone, Hash,
+  Home, Bot, Phone, Hash, Workflow, Radio,
   Settings, Wallet, Mic2, Key,
   Menu, ChevronDown, ChevronLeft, ChevronRight,
   LogOut, Bell, Search, SlidersHorizontal, BookOpen, PlugZap, Sun, Moon, Sparkles,
@@ -99,7 +99,7 @@ interface NavGroup {
 /**
  * Agent-centric IA (see docs/snapserve-agent-centric-ia.md).
  * Phase 7: MORE is gone — Campaigns / WhatsApp / Meet / Squads / KB /
- * Scheduling / Memory stay reachable via agent Reach & Channels (and old URLs).
+ * Scheduling / Memory stay reachable via agent Channels and Operate nav (and old URLs).
  */
 const NAV_GROUPS: NavGroup[] = [
   {
@@ -112,11 +112,13 @@ const NAV_GROUPS: NavGroup[] = [
     group: "OPERATE",
     items: [
       { name: "Activity",      href: "/app/calls",         icon: Phone, callbackBadge: true },
+      { name: "Automation",   href: "/app/automation",    icon: Workflow },
       { name: "Phone Numbers", href: "/app/phone-numbers", icon: Hash },
     ],
   },
   {
     items: [
+      { name: "Channels",     href: "/app/channels",    icon: Radio },
       { name: "Integrations", href: "/app/connections", icon: PlugZap },
     ],
   },
@@ -160,6 +162,8 @@ const ROUTE_TITLES: [string, string][] = [
   ["/app/command-center",  "Home"],
   ["/app/vibe",            "New agent"],
   ["/app/agents",          "Agents"],
+  ["/app/automation",      "Automation"],
+  ["/app/channels",        "Channels"],
   ["/app/knowledge-bases", "Knowledge"],
   ["/app/campaigns",       "Dial flows"],
   ["/app/connections",     "Integrations"],

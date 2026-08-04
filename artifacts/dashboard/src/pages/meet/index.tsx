@@ -68,7 +68,7 @@ export default function MeetPage() {
     <div className="space-y-6">
       <AppPageHeader
         title="Meeting Bots"
-        description="Send a voice agent into a Google Meet, Zoom, or Teams meeting. Meeting prompt and delegate live on the agent → Channels → Meetings."
+        description="Send a voice agent into a Google Meet, Zoom, or Teams meeting. Meeting prompt and delegate live under Channels → Meetings."
       />
 
       <div className="max-w-xl space-y-4 rounded-lg border p-4">
@@ -84,8 +84,8 @@ export default function MeetPage() {
           </Select>
           {agentId ? (
             <p className="text-[11px] text-muted-foreground">
-              Meeting prompt and delegates: open this agent →{" "}
-              <a className="underline underline-offset-2" href={`/app/agents/${agentId}`}>
+              Meeting prompt and delegates:{" "}
+              <a className="underline underline-offset-2" href={`/app/channels?agentId=${agentId}&channel=meetings`}>
                 Channels → Meetings
               </a>
               .
