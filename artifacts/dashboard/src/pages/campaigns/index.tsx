@@ -1933,28 +1933,7 @@ export default function CampaignsPage() {
                   </p>
                 </div>
 
-                {/* How it works */}
-                <div className="max-w-2xl mx-auto mb-8">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/40 text-center mb-4">How it works</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    {[
-                      { icon: <Upload className="h-4 w-4 text-blue-400" />, step: "1", title: "Bring your leads", body: "Connect a CSV, a Meta Ads form, a webhook, or your CRM. Leads flow in automatically." },
-                      { icon: <Zap className="h-4 w-4 text-amber-400" />, step: "2", title: "Agent calls instantly", body: "Within seconds of a lead arriving, your voice agent dials the number and starts talking." },
-                      { icon: <CheckCircle2 className="h-4 w-4 text-emerald-400" />, step: "3", title: "Track every outcome", body: "See bookings, callbacks, transfers, and dispositions per lead. Every call is recorded." },
-                    ].map(item => (
-                      <div key={item.step} className="rounded-xl border border-border/60 bg-card/60 p-4">
-                        <div className="flex items-center gap-2 mb-2.5">
-                          <div className="h-6 w-6 rounded-full bg-muted flex items-center justify-center">
-                            <span className="text-[10px] font-bold text-muted-foreground/60">{item.step}</span>
-                          </div>
-                          {item.icon}
-                        </div>
-                        <p className="text-xs font-semibold text-foreground mb-1">{item.title}</p>
-                        <p className="text-[11px] text-muted-foreground/60 leading-relaxed">{item.body}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+
 
                 {/* Source types */}
                 <div className="max-w-2xl mx-auto mb-8">
