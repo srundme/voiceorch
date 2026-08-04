@@ -688,6 +688,7 @@ function CampaignWizard({
             maxAttempts: d.maxAttempts,
             retryDelayMinutes: d.retryDelayMinutes,
             callDelaySeconds: d.callDelaySeconds,
+            leads: parsedLeadRows.length > 0 ? parsedLeadRows : undefined,
           } as Parameters<typeof create.mutateAsync>[0]["data"],
         });
         targetCampaignId = createdCampaign.id;
@@ -696,7 +697,7 @@ function CampaignWizard({
       // ── Automatically Upload Parsed CSV Batch Leads ──
       if (targetCampaignId && parsedLeadRows.length > 0) {
         try {
-          await fetch(`/api/campaigns/${targetCampaignId}/batches`, {
+          await fetch(`${BASE}/api/campaigns/${targetCampaignId}/batches`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
