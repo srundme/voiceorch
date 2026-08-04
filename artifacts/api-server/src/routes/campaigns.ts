@@ -365,10 +365,7 @@ router.post("/campaigns", async (req, res): Promise<void> => {
     if (isFkError) {
       res.status(400).json({ error: "The selected agent or phone number is invalid. Please select an active agent." });
       return;
-    }
     res.status(500).json({ error: err.message || "Failed to create campaign" });
-  }
-    res.status(500).json({ error: err?.message || "Internal server error creating campaign" });
   }
 });
 
