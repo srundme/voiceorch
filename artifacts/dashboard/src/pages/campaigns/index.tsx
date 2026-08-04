@@ -675,41 +675,36 @@ function CampaignWizard({
           };
         };
         const d = cfg.callDefaults ?? {};
-        const createdCampaign = await create.mutateAsync({
-          data: {
-            name: name.trim(),
-            description: desc.trim() || undefined,
-            agentId,
-            fromNumber: fromNumber ?? undefined,
-            concurrentCallLimit: effectiveConcurrency ?? d.concurrentCallLimit,
-            consentBasis,
-            leadSource,
-            triggerMode,
-            maxAttempts: d.maxAttempts,
-            retryDelayMinutes: d.retryDelayMinutes,
-            callDelaySeconds: d.callDelaySeconds,
-            leads: parsedLeadRows.length > 0 ? parsedLeadRows : undefined,
-          } as Parameters<typeof create.mutateAsync>[0]["data"],
-        });
-        targetCampaignId = createdCampaign.id;
-      }
-
-      // ── Automatically Upload Parsed CSV Batch Leads ──
-      if (targetCampaignId && parsedLeadRows.length > 0) {
-        try {
-          await fetch(`${BASE}/api/campaigns/${targetCampaignId}/batches`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              name: `Batch #${new Date().toLocaleDateString()} (${parsedLeadRows.length} leads)`,
-              leadSource: "csv",
-              leads: parsedLeadRows,
-              autoStart: true,
-            }),
-          });
-        } catch (err) {
-          console.error("Batch leads auto-upload failed:", err);
+        // Use direct fetch so `leads` array is always included in the JSON body
+        // (generated API client type strips unknown fields on TypeScript side)
+        const campaignPayload: Record<string, unknown> = {
+          name: name.trim(),
+          description: desc.trim() || undefined,
+          agentId,
+          fromNumber: fromNumber ?? undefined,
+          concurrentCallLimit: effectiveConcurrency ?? d.concurrentCallLimit,
+          consentBasis,
+          leadSource,
+          triggerMode,
+          maxAttempts: d.maxAttempts,
+          retryDelayMinutes: d.retryDelayMinutes,
+          callDelaySeconds: d.callDelaySeconds,
+        };
+        if (parsedLeadRows.length > 0) {
+          campaignPayload["leads"] = parsedLeadRows;
         }
+        const createRes = await fetch(`${BASE}/api/campaigns`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify(campaignPayload),
+        });
+        if (!createRes.ok) {
+          const errBody = await createRes.json().catch(() => ({}));
+          throw new Error((errBody as { error?: string }).error || `HTTP ${createRes.status}`);
+        }
+        const createdCampaign = await createRes.json() as { id: number };
+        targetCampaignId = createdCampaign.id;
       }
 
       toast({ 
