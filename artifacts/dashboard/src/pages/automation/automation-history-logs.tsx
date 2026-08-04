@@ -36,7 +36,7 @@ import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
 } from "@/components/ui/sheet";
 import { useToast } from "@/hooks/use-toast";
-import { useListCalls, getListCallsQueryKey } from "@workspace/api-client-react";
+import { useQuery } from "@tanstack/react-query";
 import { format, parseISO } from "date-fns";
 
 export type CallLogDetail = {
@@ -79,11 +79,20 @@ export function AutomationHistoryLogs({ agentId }: { agentId?: number }) {
   const [isPlayingAudio, setIsPlayingAudio] = useState<string | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
 
-  // Fetch real call logs from database
-  const { data: calls, isLoading } = useListCalls(
-    { agentId },
-    { query: { queryKey: getListCallsQueryKey({ agentId }) } }
-  );
+  // Fetch real call logs from database with fail-safe fetch
+  const { data: calls } = useQuery<any[]>({
+    queryKey: ["automation-history-calls", agentId],
+    queryFn: async () => {
+      try {
+        const res = await fetch(`/api/calls${agentId ? `?agentId=${agentId}` : ""}`);
+        if (!res.ok) return [];
+        return await res.json();
+      } catch {
+        return [];
+      }
+    },
+    refetchInterval: 15_000,
+  });
 
   // Group real calls into automation execution batches
   const runs = (calls && calls.length > 0)
