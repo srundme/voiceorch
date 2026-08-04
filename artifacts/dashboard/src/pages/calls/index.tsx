@@ -321,13 +321,13 @@ export default function CallsList() {
 
   const { data: calls, isLoading: callsLoading } = useListCalls(
     {
-      status: statusFilter !== "all" ? statusFilter : undefined,
+      status: statusFilter !== "all" && statusFilter !== "automation" ? statusFilter : undefined,
       agentId: agentFilter !== "all" ? parseInt(agentFilter) : undefined,
     },
     {
       query: {
         queryKey: getListCallsQueryKey({
-          status: statusFilter !== "all" ? statusFilter : undefined,
+          status: statusFilter !== "all" && statusFilter !== "automation" ? statusFilter : undefined,
           agentId: agentFilter !== "all" ? parseInt(agentFilter) : undefined,
         }),
         // Poll fast when any call is live (ringing or in-progress) so status
@@ -352,6 +352,15 @@ export default function CallsList() {
   const filteredCalls = useMemo(() => {
     if (!calls) return [];
     let result = [...calls];
+
+    if (statusFilter === "automation") {
+      result = result.filter((c: any) => 
+        c.campaignId != null || 
+        (c.fromNumber ?? "").startsWith("webcall") || 
+        (c.toNumber ?? "").startsWith("webcall") ||
+        (c as any).sequenceId != null
+      );
+    }
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -548,6 +557,38 @@ export default function CallsList() {
               )}
             </div>
 
+            {/* Quick Category Tabs: All, Transferred, Automations & Meet */}
+            <div className="flex items-center gap-1 p-1 bg-muted/20 border border-border/60 rounded-lg shrink-0">
+              <button
+                type="button"
+                onClick={() => setStatusFilter("all")}
+                className={`px-3 py-1 text-xs rounded-md font-medium transition-all ${
+                  statusFilter === "all" ? "bg-background text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                All
+              </button>
+              <button
+                type="button"
+                onClick={() => setStatusFilter("transferred")}
+                className={`px-3 py-1 text-xs rounded-md font-medium transition-all ${
+                  statusFilter === "transferred" ? "bg-background text-purple-400 shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Transferred
+              </button>
+              <button
+                type="button"
+                onClick={() => setStatusFilter("automation")}
+                className={`px-3 py-1 text-xs rounded-md font-medium transition-all flex items-center gap-1.5 ${
+                  statusFilter === "automation" ? "bg-background text-amber-400 shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <Sparkles className="size-3 text-amber-400" />
+                Automations & Meet
+              </button>
+            </div>
+
             <div className="shrink-0 w-full sm:w-auto">
               <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger className="w-full sm:w-[150px] h-9 text-xs">
@@ -555,13 +596,14 @@ export default function CallsList() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All statuses</SelectItem>
+                  <SelectItem value="transferred">Transferred</SelectItem>
+                  <SelectItem value="automation">🤖 Automations & Meet</SelectItem>
                   <SelectItem value="ringing">Calling</SelectItem>
                   <SelectItem value="in_progress">In Progress</SelectItem>
                   <SelectItem value="completed">Completed</SelectItem>
                   <SelectItem value="failed">Failed</SelectItem>
                   <SelectItem value="pending">Pending</SelectItem>
                   <SelectItem value="cancelled">Cancelled</SelectItem>
-                  <SelectItem value="transferred">Transferred</SelectItem>
                   <SelectItem value="booked">Booked</SelectItem>
                   <SelectItem value="callback_scheduled">Callback</SelectItem>
                   <SelectItem value="voicemail">Voicemail</SelectItem>
