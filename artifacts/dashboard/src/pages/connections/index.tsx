@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
 import {
   useListConnections,
@@ -36,7 +36,7 @@ import {
   Zap, Sheet, Radio, X, ChevronDown, ChevronRight,
   ArrowRight, ExternalLink, Lock, RefreshCw, Eye, EyeOff,
   Phone, User, Mail, Loader2, Check, Link2, Link2Off, Building2, Code2, Search,
-  Activity, KeyRound, ChevronLeft, ArrowUp, ArrowDown,
+  Activity, KeyRound, ChevronLeft, ArrowUp, ArrowDown, MessageCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { StripePage } from "@/components/stripe-page";
@@ -2333,6 +2333,22 @@ export default function ConnectionsPage() {
                 </div>
               ))
             )}
+          </div>
+
+          {/* WhatsApp link row */}
+          <div className="border-t border-border/70">
+            <div className="flex min-h-12 items-center gap-3 px-3.5 py-2.5">
+              <MessageCircle className="size-4.5 text-emerald-500" />
+              <div className="min-w-0 flex-1">
+                <p className="text-[13px] font-medium">WhatsApp</p>
+                <p className="truncate text-[11px] text-muted-foreground">
+                  Connect your agent to WhatsApp for inbound/outbound messaging
+                </p>
+              </div>
+              <Button size="sm" variant="outline" className="h-8 px-2.5 text-[11px]" asChild>
+                <Link href="/app/whatsapp">Configure</Link>
+              </Button>
+            </div>
           </div>
         </div>
       </section>
