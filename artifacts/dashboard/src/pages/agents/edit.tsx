@@ -164,10 +164,10 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     agentConfig["asrEndpointingSilenceMs"] = clampEndpointingMs(asrEndpointingSilenceMs);
   }
   if (sarvamSttMode) agentConfig["sarvamSttMode"] = sarvamSttMode;
-  // Always persist Sarvam STT latency knobs (UI is source of truth; snappy defaults).
-  agentConfig["sarvamHighVadSensitivity"] = sarvamHighVadSensitivity === true;
-  agentConfig["sarvamSpeechEndFlushMs"] = clampSarvamSpeechEndFlushMs(sarvamSpeechEndFlushMs);
-  agentConfig["sarvamIncompleteHoldMs"] = clampSarvamIncompleteHoldMs(sarvamIncompleteHoldMs);
+  // Saaras owns turn-taking — persist high-VAD only; hold knobs forced off.
+  agentConfig["sarvamHighVadSensitivity"] = sarvamHighVadSensitivity !== false;
+  agentConfig["sarvamSpeechEndFlushMs"] = 0;
+  agentConfig["sarvamIncompleteHoldMs"] = 0;
   if (kbBakedOnly) agentConfig["kbBakedOnly"] = true;
   // Always persist speed so Sarvam pace / Cartesia speed stay UI-owned (1.0 clears prior boost).
   agentConfig["ttsSpeed"] = ttsSpeed != null && Number.isFinite(ttsSpeed) ? ttsSpeed : 1;
@@ -443,12 +443,12 @@ export default function AgentEdit() {
       ttsMinSentenceChars: 18,
       ttsSpeed: 1,
       linearDelayMs: 0,
-      fragmentCoalesceListeningMs: 250,
-      fragmentCoalescePlayingMs: 1000,
+      fragmentCoalesceListeningMs: 0,
+      fragmentCoalescePlayingMs: 0,
       telephonyTailDrainMs: 400,
-      sarvamHighVadSensitivity: false,
-      sarvamSpeechEndFlushMs: 80,
-      sarvamIncompleteHoldMs: 700,
+      sarvamHighVadSensitivity: true,
+      sarvamSpeechEndFlushMs: 0,
+      sarvamIncompleteHoldMs: 0,
       kbBakedOnly: false,
       startSpeakingWaitSecs: 0,
       startSpeakingOnPunctuationSecs: 0.1,
@@ -1712,39 +1712,11 @@ export default function AgentEdit() {
                         <FormLabel>Detect pauses quickly</FormLabel>
                         <div className="flex items-center gap-3 pt-2">
                           <Switch checked={!!field.value} onCheckedChange={field.onChange} />
-                          <span className="text-sm text-muted-foreground">{field.value ? "On (faster)" : "Off (more patient)"}</span>
+                          <span className="text-sm text-muted-foreground">{field.value ? "On (Saaras VAD)" : "Off (more patient)"}</span>
                         </div>
                         <FormDescription className="text-[11px]">
-                          Default <strong>Off</strong> — avoids cutting callers mid-sentence on phone audio. Turn on only if replies feel too slow.
+                          Default <strong>On</strong> — Saaras VAD owns end-of-speech. Turn off only if callers get cut mid-sentence on noisy lines.
                         </FormDescription>
-                      </FormItem>
-                    )} />
-                    <FormField control={form.control} name="sarvamSpeechEndFlushMs" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Reply kickoff delay (ms)</FormLabel>
-                        <FormControl>
-                          <Input type="number" min={0} max={200} step={10}
-                            value={field.value ?? 80}
-                            onChange={e => field.onChange(parseInt(e.target.value, 10))} />
-                        </FormControl>
-                        <FormDescription className="text-[11px]">
-                          Tiny pause after the caller finishes before the agent starts thinking. Default <strong>80</strong>.
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                    <FormField control={form.control} name="sarvamIncompleteHoldMs" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Wait for unfinished thoughts (ms)</FormLabel>
-                        <FormControl>
-                          <Input type="number" min={50} max={1000} step={10}
-                            value={field.value ?? 700}
-                            onChange={e => field.onChange(parseInt(e.target.value, 10))} />
-                        </FormControl>
-                        <FormDescription className="text-[11px]">
-                          Extra wait when someone seems mid-sentence (e.g. “I want…”). Default <strong>700</strong>. Raise if callers get cut off while thinking.
-                        </FormDescription>
-                        <FormMessage />
                       </FormItem>
                     )} />
                   </div>

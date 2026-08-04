@@ -138,7 +138,7 @@ export const agentFormSchema = z.object({
   /** ms after speech_end before emitting final — default 30. */
   sarvamSpeechEndFlushMs: z.number().min(0).max(200).optional(),
   /** ms hold for incomplete mid-thought fragments — default 220. */
-  sarvamIncompleteHoldMs: z.number().min(50).max(1000).optional(),
+  sarvamIncompleteHoldMs: z.number().min(0).max(1000).optional(),
 
   // Workspace calendar assigned to this agent for native scheduling tools
   schedulingCalendarId: z.number().optional().nullable(),
@@ -189,15 +189,12 @@ export function hydrateToolsForForm(tools: readonly AgentTool[]): AgentFormTool[
   });
 }
 
-/** Bolna-style Call Engine presets (endpointing + linear delay + interrupt words). */
+/** Call Engine presets — Fast = Saaras-native (STT owns turns). */
 export const CALL_ENGINE_PRESETS = {
-  // sarvamHighVadSensitivity ("Detect pauses quickly") is the single biggest
-  // Sarvam latency lever: OFF = Sarvam waits ~1-2s of silence before ending the
-  // turn; ON = ~0.13s. Fast MUST turn it on or the preset leaves a ~2s tax in
-  // place (call 5096). Balanced/Patient keep it off to protect slow speakers.
-  fast:     { asrEndpointingSilenceMs: 150, linearDelayMs: 0,   stopSpeakingNumWords: 1, sarvamHighVadSensitivity: true,  sarvamIncompleteHoldMs: 300 },
-  balanced: { asrEndpointingSilenceMs: 250, linearDelayMs: 0,   stopSpeakingNumWords: 3, sarvamHighVadSensitivity: false, sarvamIncompleteHoldMs: 700 },
-  patient:  { asrEndpointingSilenceMs: 500, linearDelayMs: 350, stopSpeakingNumWords: 4, sarvamHighVadSensitivity: false, sarvamIncompleteHoldMs: 1000 },
+  // Saaras VAD owns turn boundaries. Endpointing + barge words + optional linear delay.
+  fast:     { asrEndpointingSilenceMs: 150, linearDelayMs: 0,   stopSpeakingNumWords: 1, sarvamHighVadSensitivity: true },
+  balanced: { asrEndpointingSilenceMs: 250, linearDelayMs: 0,   stopSpeakingNumWords: 3, sarvamHighVadSensitivity: true },
+  patient:  { asrEndpointingSilenceMs: 500, linearDelayMs: 350, stopSpeakingNumWords: 4, sarvamHighVadSensitivity: false },
 } as const;
 
 export type CallEnginePreset = keyof typeof CALL_ENGINE_PRESETS;
@@ -225,12 +222,12 @@ export function clampLinearDelayMs(value: number | null | undefined): number {
 }
 
 export function clampFragmentCoalesceListeningMs(value: number | null | undefined): number {
-  const v = typeof value === "number" && Number.isFinite(value) ? value : 250;
+  const v = typeof value === "number" && Number.isFinite(value) ? value : 0;
   return Math.max(0, Math.min(2000, Math.round(v)));
 }
 
 export function clampFragmentCoalescePlayingMs(value: number | null | undefined): number {
-  const v = typeof value === "number" && Number.isFinite(value) ? value : 1000;
+  const v = typeof value === "number" && Number.isFinite(value) ? value : 0;
   return Math.max(0, Math.min(3000, Math.round(v)));
 }
 
@@ -240,13 +237,13 @@ export function clampTelephonyTailDrainMs(value: number | null | undefined): num
 }
 
 export function clampSarvamSpeechEndFlushMs(value: number | null | undefined): number {
-  const v = typeof value === "number" && Number.isFinite(value) ? value : 80;
+  const v = typeof value === "number" && Number.isFinite(value) ? value : 0;
   return Math.max(0, Math.min(200, Math.round(v)));
 }
 
 export function clampSarvamIncompleteHoldMs(value: number | null | undefined): number {
-  const v = typeof value === "number" && Number.isFinite(value) ? value : 700;
-  return Math.max(50, Math.min(1000, Math.round(v)));
+  const v = typeof value === "number" && Number.isFinite(value) ? value : 0;
+  return Math.max(0, Math.min(1000, Math.round(v)));
 }
 
 export function clampInterruptWords(value: number | null | undefined): number {

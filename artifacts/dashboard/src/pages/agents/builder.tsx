@@ -2095,8 +2095,7 @@ function VoiceCallFeelPresets({ form }: { form: any }) {
         && linearMs === p.linearDelayMs
         && interruptWords === p.stopSpeakingNumWords
         && (asrProviderVal !== "sarvam"
-          || ((form.watch("sarvamHighVadSensitivity") ?? false) === p.sarvamHighVadSensitivity
-            && (form.watch("sarvamIncompleteHoldMs") ?? 700) === p.sarvamIncompleteHoldMs))
+          || (form.watch("sarvamHighVadSensitivity") ?? false) === p.sarvamHighVadSensitivity)
       ) return key;
     }
     return "custom";
@@ -2110,7 +2109,6 @@ function VoiceCallFeelPresets({ form }: { form: any }) {
     form.setValue("stopSpeakingVoiceSecs", voiceSecondsFromInterruptWords(p.stopSpeakingNumWords), { shouldDirty: true });
     // Sarvam pause-detection is part of the preset — Fast without it leaves a ~2s turn tax.
     form.setValue("sarvamHighVadSensitivity", p.sarvamHighVadSensitivity, { shouldDirty: true });
-    form.setValue("sarvamIncompleteHoldMs", p.sarvamIncompleteHoldMs, { shouldDirty: true });
   };
 
   return (
@@ -3070,8 +3068,7 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
         && linearMs === p.linearDelayMs
         && interruptWords === p.stopSpeakingNumWords
         && (asrProviderVal !== "sarvam"
-          || ((form.watch("sarvamHighVadSensitivity") ?? false) === p.sarvamHighVadSensitivity
-            && (form.watch("sarvamIncompleteHoldMs") ?? 700) === p.sarvamIncompleteHoldMs))
+          || (form.watch("sarvamHighVadSensitivity") ?? false) === p.sarvamHighVadSensitivity)
       ) return key;
     }
     return "custom";
@@ -3085,7 +3082,6 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
     form.setValue("stopSpeakingVoiceSecs", voiceSecondsFromInterruptWords(p.stopSpeakingNumWords), { shouldDirty: true });
     // Sarvam pause-detection is part of the preset — Fast without it leaves a ~2s turn tax.
     form.setValue("sarvamHighVadSensitivity", p.sarvamHighVadSensitivity, { shouldDirty: true });
-    form.setValue("sarvamIncompleteHoldMs", p.sarvamIncompleteHoldMs, { shouldDirty: true });
   };
 
   const nav: { id: AdvSection; icon: React.ReactNode; label: string }[] = [
@@ -3227,7 +3223,7 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                           <div>
                             <FormLabel className="text-[12px] font-medium text-foreground/90">Detect pauses quickly</FormLabel>
                             <p className="text-[10px] text-muted-foreground/70 mt-0.5">
-                              Set automatically by the Endpointing slider (under 200ms = on). On = ~0.13s pause detection, off = patient ~1s+.
+                              Saaras VAD owns end-of-speech. On = faster pause detection (default).
                             </p>
                           </div>
                           <FormControl>
@@ -3235,26 +3231,6 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                           </FormControl>
                         </FormItem>
                       )} />
-                      <AdvSlider
-                        form={form}
-                        name="sarvamSpeechEndFlushMs"
-                        label="Reply kickoff delay"
-                        hint="Tiny pause after the caller finishes before the agent starts thinking. Default 80ms."
-                        min={0}
-                        max={200}
-                        step={10}
-                        fmt={(v) => `${v}ms`}
-                      />
-                      <AdvSlider
-                        form={form}
-                        name="sarvamIncompleteHoldMs"
-                        label="Wait for unfinished thoughts"
-                        hint="Extra wait when someone seems mid-sentence (e.g. “I want…”). Default 700ms."
-                        min={50}
-                        max={1000}
-                        step={10}
-                        fmt={(v) => `${v}ms`}
-                      />
                     </>
                   )}
 
@@ -3262,7 +3238,7 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                     form={form}
                     name="fragmentCoalesceListeningMs"
                     label="Fragment hold (listening)"
-                    hint="Hold short STT fragments while agent is silent. 0 = off. Default 250ms."
+                    hint="Hold short STT fragments while agent is silent. 0 = off (default — trust STT VAD)."
                     min={0}
                     max={2000}
                     step={50}
@@ -3273,7 +3249,7 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                     form={form}
                     name="fragmentCoalescePlayingMs"
                     label="Fragment hold (playing)"
-                    hint="Hold short acks while agent is speaking. 0 = off. Default 1000ms."
+                    hint="Hold short acks while agent is speaking. 0 = off (default — trust STT VAD)."
                     min={0}
                     max={3000}
                     step={50}
@@ -5622,12 +5598,12 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
       ttsMinSentenceChars: 18,
       ttsSpeed: 1,
       linearDelayMs: 0,
-      fragmentCoalesceListeningMs: 250,
-      fragmentCoalescePlayingMs: 1000,
+      fragmentCoalesceListeningMs: 0,
+      fragmentCoalescePlayingMs: 0,
       telephonyTailDrainMs: 400,
-      sarvamHighVadSensitivity: false,
-      sarvamSpeechEndFlushMs: 80,
-      sarvamIncompleteHoldMs: 700,
+      sarvamHighVadSensitivity: true,
+      sarvamSpeechEndFlushMs: 0,
+      sarvamIncompleteHoldMs: 0,
       kbBakedOnly: false,
       autoRedialEnabled: true,
       autoRedialMaxAttempts: 3,
@@ -5768,9 +5744,9 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
       fragmentCoalesceListeningMs:     clampFragmentCoalesceListeningMs((agent as any).agentConfig?.fragmentCoalesceListeningMs),
       fragmentCoalescePlayingMs:       clampFragmentCoalescePlayingMs((agent as any).agentConfig?.fragmentCoalescePlayingMs),
       telephonyTailDrainMs:            clampTelephonyTailDrainMs((agent as any).agentConfig?.telephonyTailDrainMs),
-      sarvamHighVadSensitivity:        ((agent as any).agentConfig?.sarvamHighVadSensitivity as boolean | undefined) === true,
-      sarvamSpeechEndFlushMs:          clampSarvamSpeechEndFlushMs((agent as any).agentConfig?.sarvamSpeechEndFlushMs),
-      sarvamIncompleteHoldMs:          clampSarvamIncompleteHoldMs((agent as any).agentConfig?.sarvamIncompleteHoldMs),
+      sarvamHighVadSensitivity:        ((agent as any).agentConfig?.sarvamHighVadSensitivity as boolean | undefined) !== false,
+      sarvamSpeechEndFlushMs:          0,
+      sarvamIncompleteHoldMs:          0,
       kbBakedOnly:                     ((agent as any).agentConfig?.kbBakedOnly as boolean | undefined) ?? false,
       autoRedialEnabled:      (agent as any).agentConfig?.autoRedial?.enabled ?? false,
       autoRedialMaxAttempts:  (agent as any).agentConfig?.autoRedial?.maxAttempts  ?? 3,

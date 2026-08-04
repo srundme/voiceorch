@@ -20,17 +20,28 @@ export const CALL_ENGINE_SAFE = {
   snappyNumberSeconds: 0.1,
 } as const;
 
-/** Sarvam STT latency knobs — patient defaults (call 4940 premature VAD chops). */
+/** Sarvam STT — trust Saaras VAD; no SnapServe artificial holds. */
 export const SARVAM_STT_LATENCY_DEFAULTS = {
-  /** OFF by default — ON (~128ms silence) cuts mid-utterance on PSTN. */
-  highVadSensitivity: false,
-  /** Pause after speech_end before emitting final. */
-  speechEndFlushMs: 80,
-  /** Hold mid-thought fragments before speech_end. */
-  incompleteHoldMs: 700,
+  /** Match Sarvam docs / LiveKit agents: STT owns end-of-speech. */
+  highVadSensitivity: true,
+  /** Emit immediately when Saaras ends speech / returns transcript. */
+  speechEndFlushMs: 0,
+  /** Do not second-guess Saaras with mid-thought coalesce holds. */
+  incompleteHoldMs: 0,
 } as const;
 
-/** Prior snappy insert defaults — rewritten to patient values on normalize/session. */
+/**
+ * Prior "patient" platform defaults (post call-4940) that added hundreds of ms
+ * of dead air on top of Saaras VAD — rewritten to Saaras-native on normalize.
+ */
+export const SARVAM_STT_LATENCY_LEGACY_PATIENT = {
+  highVadSensitivity: false,
+  speechEndFlushMs: 80,
+  incompleteHoldMs: 700,
+  fragmentCoalesceListeningMs: 250,
+} as const;
+
+/** Older snappy insert defaults (pre-patient). */
 export const SARVAM_STT_LATENCY_LEGACY_SNAPPY = {
   highVadSensitivity: true,
   speechEndFlushMs: 0,
@@ -38,13 +49,10 @@ export const SARVAM_STT_LATENCY_LEGACY_SNAPPY = {
   fragmentCoalesceListeningMs: 150,
 } as const;
 
+/** Pipeline fragment coalesce — off by default; Saaras (and most STTs) already segment turns. */
 export const FRAGMENT_COALESCE_DEFAULTS = {
-  // listeningMs 500→250 (Aug 2026): "yes"/"okay" while the agent is silent is
-  // usually the caller's ANSWER; 500ms of hold read as dead air on every short
-  // reply. 250ms still catches Sarvam speech-resume (VAD start arrives in
-  // ~100-300ms), which extends the window when the caller keeps talking.
-  listeningMs: 250,
-  playingMs: 1000,
+  listeningMs: 0,
+  playingMs: 0,
 } as const;
 
 export function clampSarvamSpeechEndFlushMs(value: number | null | undefined): number {
@@ -54,7 +62,7 @@ export function clampSarvamSpeechEndFlushMs(value: number | null | undefined): n
 
 export function clampSarvamIncompleteHoldMs(value: number | null | undefined): number {
   const v = typeof value === "number" && Number.isFinite(value) ? value : SARVAM_STT_LATENCY_DEFAULTS.incompleteHoldMs;
-  return Math.max(50, Math.min(1000, Math.round(v)));
+  return Math.max(0, Math.min(1000, Math.round(v)));
 }
 
 export function resolveSarvamHighVadSensitivity(value: unknown): boolean {
@@ -150,16 +158,25 @@ export function normalizeCallEngineAgentConfig(
     cfg["incrementalDelay"] = CALL_ENGINE_SAFE.incrementalDelay;
   }
 
-  // Rewrite legacy snappy Sarvam STT defaults that caused premature VAD chops (call 4940).
-  // Only when the agent still has the old insert triplet — leave intentional custom tuning alone.
+  // Rewrite legacy patient Sarvam STT defaults that stacked artificial holds on
+  // top of Saaras VAD. Only when the agent still has the old platform triplet —
+  // leave intentional custom tuning alone.
   const sarvamHigh = cfg["sarvamHighVadSensitivity"];
   const sarvamFlush = cfg["sarvamSpeechEndFlushMs"];
   const sarvamHold = cfg["sarvamIncompleteHoldMs"];
-  const stillSnappySarvam =
-    (sarvamHigh === true || sarvamHigh === undefined)
-    && (sarvamFlush === SARVAM_STT_LATENCY_LEGACY_SNAPPY.speechEndFlushMs || sarvamFlush === undefined)
-    && (sarvamHold === SARVAM_STT_LATENCY_LEGACY_SNAPPY.incompleteHoldMs || sarvamHold === undefined);
-  if (stillSnappySarvam) {
+  const stillPatientSarvam =
+    (sarvamHigh === false || sarvamHigh === undefined)
+    && (sarvamFlush === SARVAM_STT_LATENCY_LEGACY_PATIENT.speechEndFlushMs || sarvamFlush === undefined)
+    && (sarvamHold === SARVAM_STT_LATENCY_LEGACY_PATIENT.incompleteHoldMs || sarvamHold === undefined);
+  // Older insert profiles that still layered SnapServe holds on Saaras.
+  const stillLegacyHoldProfile =
+    (sarvamHold === SARVAM_STT_LATENCY_LEGACY_SNAPPY.incompleteHoldMs || sarvamHold === 220)
+    && (
+      sarvamFlush === SARVAM_STT_LATENCY_LEGACY_SNAPPY.speechEndFlushMs
+      || sarvamFlush === 30
+      || sarvamFlush === undefined
+    );
+  if (stillPatientSarvam || stillLegacyHoldProfile) {
     if (cfg["sarvamHighVadSensitivity"] !== SARVAM_STT_LATENCY_DEFAULTS.highVadSensitivity) {
       reasons.push(
         `sarvamHighVadSensitivity ${String(sarvamHigh ?? "∅")}→${SARVAM_STT_LATENCY_DEFAULTS.highVadSensitivity}`,
@@ -181,17 +198,18 @@ export function normalizeCallEngineAgentConfig(
   }
 
   const fragListen = cfg["fragmentCoalesceListeningMs"];
-  // NOTE: the previous platform default (500) is migrated once via DB migration,
-  // NOT here — a per-session rewrite would silently override users who
-  // deliberately set 500 in the dashboard afterwards.
-  if (fragListen === SARVAM_STT_LATENCY_LEGACY_SNAPPY.fragmentCoalesceListeningMs) {
+  if (
+    fragListen === SARVAM_STT_LATENCY_LEGACY_SNAPPY.fragmentCoalesceListeningMs
+    || fragListen === SARVAM_STT_LATENCY_LEGACY_PATIENT.fragmentCoalesceListeningMs
+    || fragListen === 500
+  ) {
     reasons.push(
       `fragmentCoalesceListeningMs ${fragListen}→${FRAGMENT_COALESCE_DEFAULTS.listeningMs}`,
     );
     cfg["fragmentCoalesceListeningMs"] = FRAGMENT_COALESCE_DEFAULTS.listeningMs;
   }
   const fragPlay = cfg["fragmentCoalescePlayingMs"];
-  if (fragPlay === 800) {
+  if (fragPlay === 800 || fragPlay === 1000) {
     reasons.push(`fragmentCoalescePlayingMs ${fragPlay}→${FRAGMENT_COALESCE_DEFAULTS.playingMs}`);
     cfg["fragmentCoalescePlayingMs"] = FRAGMENT_COALESCE_DEFAULTS.playingMs;
   }

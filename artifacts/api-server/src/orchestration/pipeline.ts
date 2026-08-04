@@ -132,10 +132,10 @@ const FILLER_THRESHOLD_MS     = 350;    // play a filler phrase if LLM has not r
                                         // token within this window (and backchannel didn't fire)
 const DEAD_AIR_FILLER_CANCEL_MS = 500; // skip dead-air filler playback if LLM first token
                                         // arrives within this window after filler was enqueued
-const FRAGMENT_COALESCE_MS_DEFAULT = 1000;  // fallback when agentConfig omits playing coalesce — keep in sync with FRAGMENT_COALESCE_DEFAULTS.playingMs (lib/db)
+const FRAGMENT_COALESCE_MS_DEFAULT = 0;  // fallback when agentConfig omits playing coalesce — keep in sync with FRAGMENT_COALESCE_DEFAULTS.playingMs (lib/db)
 /** Listening-side hold for ack fragments ("Yes Ma'am") — was 150ms; call 4856
  *  flushed before the caller finished "…how are you?" → zigzag replies. */
-const FRAGMENT_COALESCE_LISTENING_MS_DEFAULT = 250;
+const FRAGMENT_COALESCE_LISTENING_MS_DEFAULT = 0;
 const VAD_FLUSH_COOLDOWN_MS   = 5000;   // min interval between backstop flushes — keeps the flush strictly anomaly-only
 /** Lost-turn recovery: when the streaming socket loses an utterance entirely, re-run
  *  the buffered caller audio through batch STT rather than leaving dead air.
@@ -2155,8 +2155,6 @@ export class OrchestrationPipeline implements VoiceSession {
           ...parseJsonObject(providerExtraConfig),
           mode: resolveSarvamSttMode(sttCfg.language, this.agent.sarvamSttMode),
           highVadSensitivity: this.agent.sarvamHighVadSensitivity,
-          speechEndFlushMs: this.agent.sarvamSpeechEndFlushMs,
-          incompleteHoldMs: this.agent.sarvamIncompleteHoldMs,
           firstTurnMinSpeechMs: this.agent.sarvamFirstTurnMinSpeechMs,
           endOfSpeechSilenceMs: this.agent.sarvamEndOfSpeechSilenceMs,
         })
