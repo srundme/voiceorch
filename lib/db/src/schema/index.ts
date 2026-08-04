@@ -70,3 +70,4 @@ export * from "./whatsapp";
 export * from "./webcall-links";
 export * from "./squads";
 export * from "./voiceathon-events";
+export * from "./automation-sequences";

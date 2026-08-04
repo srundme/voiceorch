@@ -8,7 +8,7 @@ import { getGetAgentQueryKey, useGetAgent } from "@workspace/api-client-react";
 import { AgentContextBar, useAgentFromSearch } from "@/components/agent-context-bar";
 import { StripePage } from "@/components/stripe-page";
 import { Button } from "@/components/ui/button";
-import { ReachPanel } from "@/pages/agents/reach-panel";
+import { SequenceRulesPanel } from "./sequence-rules-panel";
 
 export default function AutomationPage() {
   const [, navigate] = useLocation();
@@ -66,14 +66,9 @@ export default function AutomationPage() {
       }
     >
       {selectedId != null && (
-        <ReachPanel
-          agentId={selectedId}
-          agentName={agent?.name}
-          webhookUrl={webhookUrl}
-          embedded
-          onOpenChannels={() => navigate(`/app/channels?agentId=${selectedId}`)}
-          onConfigureEmail={() => navigate(`/app/channels?agentId=${selectedId}&channel=email`)}
-        />
+        <div className="mt-4">
+          <SequenceRulesPanel agentId={selectedId} agentName={agent?.name} />
+        </div>
       )}
     </StripePage>
   );
