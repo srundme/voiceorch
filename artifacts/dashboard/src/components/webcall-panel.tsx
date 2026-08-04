@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Mic, MicOff, PhoneOff, Phone, Loader2, AlertCircle, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SiriWave } from "@/components/ui/siri-wave";
+import { cn } from "@/lib/utils";
 
 /**
  * Webcall 2.0 — browser "Live Test" transport for an agent.
@@ -323,82 +325,153 @@ export function WebcallPanel({
   useEffect(() => { scrollEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [lines]);
 
   const active = state === "live" || state === "connecting" || state === "ending";
+  /** Wave while speaking / live; fluid dots while idle or connecting. */
+  const waveVariant = state === "live" ? "wave" : "fluid-dots";
+  const waveSize = compact ? 280 : 360;
 
   return (
     <div className={compact ? "h-full flex flex-col" : "p-5 max-w-3xl"}>
-      <div className={`bg-card border border-border rounded-2xl overflow-hidden flex flex-col${compact ? " flex-1" : ""}`} style={compact ? undefined : { height: "calc(100dvh - 9rem)" }}>
-        {/* Header */}
-        <div className="flex items-center gap-3 px-4 h-12 shrink-0 border-b border-border">
-          <span className={
-            "h-2 w-2 rounded-full " +
-            (state === "live" ? "bg-emerald-500 animate-pulse"
-              : state === "connecting" || state === "ending" ? "bg-amber-500 animate-pulse"
-              : state === "error" ? "bg-red-500"
-              : "bg-muted-foreground/40")
-          } />
+      <div
+        className={cn(
+          "relative overflow-hidden flex flex-col rounded-2xl border border-border",
+          "bg-[#050508]",
+          compact ? "flex-1" : "",
+        )}
+        style={compact ? undefined : { height: "calc(100dvh - 9rem)" }}
+      >
+        {/* Soft vignette so the WebGL stage reads as one composition */}
+        <div
+          className="pointer-events-none absolute inset-0 z-0"
+          aria-hidden
+          style={{
+            background:
+              "radial-gradient(ellipse 70% 55% at 50% 42%, rgba(30,40,70,0.45) 0%, transparent 70%), linear-gradient(180deg, #07070c 0%, #050508 55%, #030306 100%)",
+          }}
+        />
+
+        {/* Header — glass strip */}
+        <div className="relative z-20 flex items-center gap-3 px-4 h-12 shrink-0 border-b border-white/5 bg-black/30 backdrop-blur-md">
+          <span
+            className={cn(
+              "h-2 w-2 rounded-full",
+              state === "live"
+                ? "bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.7)]"
+                : state === "connecting" || state === "ending"
+                  ? "bg-amber-400 animate-pulse"
+                  : state === "error"
+                    ? "bg-red-400"
+                    : "bg-white/25",
+            )}
+          />
           <div className="min-w-0 flex-1">
-            <p className="text-[13px] font-semibold text-foreground truncate">
+            <p className="text-[13px] font-semibold text-white/95 truncate">
               {shareToken ? agentName : `Live Test — ${agentName}`}
             </p>
-            <p className="text-[10.5px] text-muted-foreground/60">
-              {state === "idle"       && "Talk to your agent right in the browser"}
+            <p className="text-[10.5px] text-white/45">
+              {state === "idle" && "Talk to your agent right in the browser"}
               {state === "connecting" && "Connecting…"}
-              {state === "live"       && "Connected — start speaking"}
-              {state === "ending"     && "Ending call…"}
-              {state === "error"      && "Call ended with an error"}
+              {state === "live" && "Connected — start speaking"}
+              {state === "ending" && "Ending call…"}
+              {state === "error" && "Call ended with an error"}
             </p>
           </div>
           {onClose && (
-            <button onClick={onClose} className="ml-auto shrink-0 p-1 rounded hover:bg-muted/60 text-muted-foreground/60 hover:text-foreground transition-colors" title="Close">
+            <button
+              onClick={onClose}
+              className="ml-auto shrink-0 p-1 rounded hover:bg-white/10 text-white/50 hover:text-white transition-colors"
+              title="Close"
+            >
               <X className="h-3.5 w-3.5" />
             </button>
           )}
         </div>
 
-        {/* Transcript */}
-        <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-2.5">
-          {lines.length === 0 && (
-            <div className="h-full flex flex-col items-center justify-center text-center gap-2 text-muted-foreground/50">
-              <Phone className="h-7 w-7 opacity-40" />
-              <p className="text-[12px]">
-                {active ? "Listening… say hello to your agent." : "Press Start call to begin a live voice test."}
-              </p>
+        {/* Stage: Siri effect + transparent transcript overlay */}
+        <div className="relative z-10 flex-1 min-h-0">
+          {/* Centered WebGL orb */}
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div
+              className={cn(
+                "transition-all duration-700 ease-out",
+                active ? "scale-100 opacity-100" : "scale-95 opacity-80",
+                state === "live" && "drop-shadow-[0_0_40px_rgba(100,140,255,0.25)]",
+              )}
+            >
+              <SiriWave
+                variant={waveVariant}
+                size={waveSize}
+                renderScale={compact ? 0.65 : 0.75}
+                className="rounded-full bg-transparent shadow-[0_20px_80px_rgba(0,0,0,0.55)]"
+                aria-hidden
+              />
             </div>
-          )}
-          {lines.map((l) => (
-            <div key={l.id} className={"flex " + (l.speaker === "user" ? "justify-end" : "justify-start")}>
-              <div className={
-                "max-w-[80%] rounded-2xl px-3.5 py-2 text-[12.5px] leading-relaxed " +
-                (l.speaker === "user"
-                  ? "bg-primary text-primary-foreground rounded-br-sm"
-                  : "bg-elevated border border-border text-foreground rounded-bl-sm")
-              }>
-                <span className="block text-[9px] uppercase tracking-wide opacity-50 mb-0.5">
-                  {l.speaker === "user" ? "You" : agentName}
-                </span>
-                {l.text}
+          </div>
+
+          {/* Transparent transcript layer over the effect */}
+          <div className="absolute inset-0 overflow-y-auto px-4 py-5 space-y-2.5 [mask-image:linear-gradient(to_bottom,transparent_0%,black_8%,black_88%,transparent_100%)]">
+            {lines.length === 0 && (
+              <div className="h-full flex flex-col items-center justify-center text-center gap-3 text-white/40">
+                {!active && (
+                  <>
+                    <Phone className="h-6 w-6 opacity-50" />
+                    <p className="text-[12px] max-w-[16rem] leading-relaxed">
+                      Press Start call to begin a live voice test.
+                    </p>
+                  </>
+                )}
+                {active && state !== "live" && (
+                  <p className="text-[12px] tracking-wide text-white/50 animate-pulse">
+                    Connecting…
+                  </p>
+                )}
+                {state === "live" && (
+                  <p className="text-[11px] tracking-[0.18em] uppercase text-white/35">
+                    Listening
+                  </p>
+                )}
               </div>
-            </div>
-          ))}
-          <div ref={scrollEndRef} />
+            )}
+            {lines.map((l) => (
+              <div
+                key={l.id}
+                className={cn(
+                  "flex",
+                  l.speaker === "user" ? "justify-end" : "justify-start",
+                )}
+              >
+                <div
+                  className={cn(
+                    "max-w-[85%] rounded-2xl px-3.5 py-2 text-[12.5px] leading-relaxed backdrop-blur-xl border shadow-[0_8px_32px_rgba(0,0,0,0.35)]",
+                    l.speaker === "user"
+                      ? "bg-white/15 border-white/20 text-white rounded-br-sm"
+                      : "bg-black/35 border-white/10 text-white/90 rounded-bl-sm",
+                  )}
+                >
+                  <span className="block text-[9px] uppercase tracking-wide text-white/40 mb-0.5">
+                    {l.speaker === "user" ? "You" : agentName}
+                  </span>
+                  {l.text}
+                </div>
+              </div>
+            ))}
+            <div ref={scrollEndRef} />
+          </div>
         </div>
 
-        {/* Non-fatal notice banner (call still live, e.g. voice synthesis failing) */}
         {notice && !error && (
-          <div className="px-4 py-2 border-t border-border flex items-center gap-2 text-[11.5px] text-amber-400 bg-amber-500/5">
+          <div className="relative z-20 px-4 py-2 border-t border-white/5 flex items-center gap-2 text-[11.5px] text-amber-300 bg-amber-500/10 backdrop-blur-md">
             <AlertCircle className="h-3.5 w-3.5 shrink-0" /> {notice}
           </div>
         )}
 
-        {/* Error banner */}
         {error && (
-          <div className="px-4 py-2 border-t border-border flex items-center gap-2 text-[11.5px] text-red-400 bg-red-500/5">
+          <div className="relative z-20 px-4 py-2 border-t border-white/5 flex items-center gap-2 text-[11.5px] text-red-300 bg-red-500/10 backdrop-blur-md">
             <AlertCircle className="h-3.5 w-3.5 shrink-0" /> {error}
           </div>
         )}
 
-        {/* Controls */}
-        <div className="shrink-0 border-t border-border p-3 flex items-center justify-center gap-2.5">
+        {/* Controls — floating glass bar */}
+        <div className="relative z-20 shrink-0 border-t border-white/5 p-3 flex items-center justify-center gap-2.5 bg-black/40 backdrop-blur-md">
           {state === "idle" || state === "error" ? (
             <Button onClick={() => void start()} className="h-10 px-5 gap-2 rounded-full text-[13px]">
               <Phone className="h-4 w-4" /> Start call
@@ -409,7 +482,10 @@ export function WebcallPanel({
                 onClick={toggleMute}
                 variant="outline"
                 disabled={state !== "live"}
-                className={"h-10 w-10 p-0 rounded-full border-border " + (muted ? "bg-amber-500/10 text-amber-400" : "text-muted-foreground")}
+                className={cn(
+                  "h-10 w-10 p-0 rounded-full border-white/15 bg-white/5 text-white/80 hover:bg-white/10",
+                  muted && "bg-amber-500/15 text-amber-300 border-amber-400/30",
+                )}
                 title={muted ? "Unmute" : "Mute"}
               >
                 {muted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
@@ -419,7 +495,11 @@ export function WebcallPanel({
                 disabled={state === "ending"}
                 className="h-10 px-5 gap-2 rounded-full text-[13px] bg-red-500 hover:bg-red-600 text-white"
               >
-                {state === "ending" ? <Loader2 className="h-4 w-4 animate-spin" /> : <PhoneOff className="h-4 w-4" />}
+                {state === "ending" ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <PhoneOff className="h-4 w-4" />
+                )}
                 {state === "connecting" ? "Connecting…" : "End call"}
               </Button>
             </>
