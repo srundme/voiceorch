@@ -124,7 +124,6 @@ const NAV_GROUPS: NavGroup[] = [
       { name: "Integrations", href: "/app/connections",  icon: PlugZap },
       { name: "Scheduling",   href: "/app/scheduling",   icon: Calendar },
       { name: "Meet",         href: "/app/meet",         icon: Video },
-      { name: "WhatsApp",     href: "/app/whatsapp",     icon: MessageCircle },
     ],
   },
   {
