@@ -121,7 +121,6 @@ const NAV_GROUPS: NavGroup[] = [
   {
     group: "CONNECT",
     items: [
-      { name: "Channels",     href: "/app/channels",     icon: Radio },
       { name: "Integrations", href: "/app/connections",  icon: PlugZap },
       { name: "Scheduling",   href: "/app/scheduling",   icon: Calendar },
       { name: "Meet",         href: "/app/meet",         icon: Video },
