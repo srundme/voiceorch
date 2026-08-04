@@ -1838,38 +1838,17 @@ export default function CampaignDetailPage() {
             </div>
           </div>
 
-          {/* Lead Runs & Pipeline Batches */}
-          <div>
-            <div className="flex items-start justify-between gap-3 mb-3">
-              <div>
-                <h3 className="text-sm font-semibold text-foreground">Lead Runs</h3>
-                <p className="text-xs text-muted-foreground/50 mt-0.5">Manage and monitor your active lead runs and pipeline batches</p>
-              </div>
-              {(campaign as any).leadSource === "crm" && (
-                <CrmImportButton campaignId={campaignId} />
-              )}
+          {/* Leads & Live Pipeline Table */}
+          <div className="mt-2 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <Users className="h-4 w-4 text-emerald-400" />
+                Uploaded Leads & Live Calling Pipeline
+              </h3>
             </div>
-            {batchLoading ? (
-              <div className="grid grid-cols-1 gap-3">
-                {[1, 2].map(i => <div key={i} className="h-24 bg-muted rounded-xl animate-pulse" />)}
-              </div>
-            ) : !batches?.length ? (
-              <div className="py-8 px-6 text-center border border-emerald-500/30 bg-emerald-500/8 rounded-xl space-y-2">
-                <div className="size-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto">
-                  <Zap className="size-5 animate-pulse" />
-                </div>
-                <p className="text-sm font-semibold text-foreground">🟢 Live Lead Pipeline Active</p>
-                <p className="text-xs text-muted-foreground/70 max-w-md mx-auto">
-                  This Studio is active for Agent #{campaign.agentId}. Inbound leads from website webhooks, Google Sheets, or uploaded CSV files populate here and dial automatically.
-                </p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 gap-3">
-                {batches.map((batch, i) => (
-                  <BatchKpiCard key={batch.id} batch={batch} index={i} campaignId={campaignId} />
-                ))}
-              </div>
-            )}
+            <div className="rounded-xl border border-border/60 bg-card overflow-hidden">
+              <LiveQueueTab campaignId={campaignId} />
+            </div>
           </div>
 
           </>)}
