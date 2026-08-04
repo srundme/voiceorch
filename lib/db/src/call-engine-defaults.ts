@@ -16,8 +16,24 @@ export const CALL_ENGINE_SAFE = {
   legacyIncrementalDelay: 350,
   legacyNoPunctuationSeconds: 1.5,
   legacyNumberSeconds: 0.5,
-  snappyNoPunctuationSeconds: 0.1,
-  snappyNumberSeconds: 0.1,
+  /** Prior "snappy" 100ms waits — still a second endpointing layer after STT final. */
+  legacySnappySpeakingSeconds: 0.1,
+  /**
+   * Trust STT final: no SnapServe content-based wait before LLM.
+   * Providers already decide speech-end; punctuation heuristics are ours alone.
+   */
+  trustSpeakingSeconds: 0,
+} as const;
+
+/**
+ * TTS early-dispatch threshold. Providers stream tokens; SnapServe must chunk
+ * for TTS APIs (multi-vendor glue) but should not wait for a long "complete" clause.
+ */
+export const TTS_STREAM_DEFAULTS = {
+  /** Speak as soon as a short clause is ready (.!? / comma). */
+  minSentenceChars: 5,
+  /** Prior platform defaults that delayed first audio. */
+  legacyMinSentenceChars: [15, 18] as const,
 } as const;
 
 /** Sarvam STT — trust Saaras VAD; no SnapServe artificial holds. */
@@ -218,28 +234,42 @@ export function normalizeCallEngineAgentConfig(
   if (sspRaw && typeof sspRaw === "object") {
     const ssp = { ...(sspRaw as Record<string, unknown>) };
     let sspChanged = false;
-    if (ssp["onNoPunctuationSeconds"] === CALL_ENGINE_SAFE.legacyNoPunctuationSeconds) {
-      reasons.push(
-        `startSpeakingPlan.onNoPunctuationSeconds ${CALL_ENGINE_SAFE.legacyNoPunctuationSeconds}→${CALL_ENGINE_SAFE.snappyNoPunctuationSeconds}`,
-      );
-      ssp["onNoPunctuationSeconds"] = CALL_ENGINE_SAFE.snappyNoPunctuationSeconds;
-      sspChanged = true;
-    }
-    if (ssp["onNumberSeconds"] === CALL_ENGINE_SAFE.legacyNumberSeconds) {
-      reasons.push(
-        `startSpeakingPlan.onNumberSeconds ${CALL_ENGINE_SAFE.legacyNumberSeconds}→${CALL_ENGINE_SAFE.snappyNumberSeconds}`,
-      );
-      ssp["onNumberSeconds"] = CALL_ENGINE_SAFE.snappyNumberSeconds;
-      sspChanged = true;
+    const trustSpeakingKeys = [
+      "waitSeconds",
+      "onPunctuationSeconds",
+      "onNoPunctuationSeconds",
+      "onNumberSeconds",
+    ] as const;
+    const legacySpeakingValues = new Set<number>([
+      CALL_ENGINE_SAFE.legacyNoPunctuationSeconds,
+      CALL_ENGINE_SAFE.legacyNumberSeconds,
+      CALL_ENGINE_SAFE.legacySnappySpeakingSeconds,
+    ]);
+    for (const key of trustSpeakingKeys) {
+      const v = ssp[key];
+      if (typeof v === "number" && legacySpeakingValues.has(v)) {
+        reasons.push(`startSpeakingPlan.${key} ${v}→${CALL_ENGINE_SAFE.trustSpeakingSeconds}`);
+        ssp[key] = CALL_ENGINE_SAFE.trustSpeakingSeconds;
+        sspChanged = true;
+      }
     }
     if (sspChanged) cfg["startSpeakingPlan"] = ssp;
+  }
+
+  const ttsMin = cfg["ttsMinSentenceChars"];
+  if (
+    typeof ttsMin === "number"
+    && (TTS_STREAM_DEFAULTS.legacyMinSentenceChars as readonly number[]).includes(ttsMin)
+  ) {
+    reasons.push(`ttsMinSentenceChars ${ttsMin}→${TTS_STREAM_DEFAULTS.minSentenceChars}`);
+    cfg["ttsMinSentenceChars"] = TTS_STREAM_DEFAULTS.minSentenceChars;
   }
 
   const uniqueReasons = [...new Set(reasons)];
   return { changed: uniqueReasons.length > 0, config: cfg, reasons: uniqueReasons };
 }
 
-/** Defaults for INSERT / Vibe create — Bolna Call Engine Balanced (snappy latency). */
+/** Defaults for INSERT / Vibe create — trust provider turn-taking; no second waits. */
 export function callEngineInsertDefaults(): Record<string, unknown> {
   return {
     asrEndpointingSilenceMs: CALL_ENGINE_SAFE.asrEndpointingSilenceMs,
@@ -247,11 +277,12 @@ export function callEngineInsertDefaults(): Record<string, unknown> {
     bargeInEnergyThreshold: CALL_ENGINE_SAFE.bargeInEnergyThreshold,
     wordsForInterruption: CALL_ENGINE_SAFE.wordsForInterruption,
     startSpeakingPlan: {
-      waitSeconds: 0,
-      onPunctuationSeconds: 0.1,
-      onNoPunctuationSeconds: CALL_ENGINE_SAFE.snappyNoPunctuationSeconds,
-      onNumberSeconds: CALL_ENGINE_SAFE.snappyNumberSeconds,
+      waitSeconds: CALL_ENGINE_SAFE.trustSpeakingSeconds,
+      onPunctuationSeconds: CALL_ENGINE_SAFE.trustSpeakingSeconds,
+      onNoPunctuationSeconds: CALL_ENGINE_SAFE.trustSpeakingSeconds,
+      onNumberSeconds: CALL_ENGINE_SAFE.trustSpeakingSeconds,
     },
+    ttsMinSentenceChars: TTS_STREAM_DEFAULTS.minSentenceChars,
     fragmentCoalesceListeningMs: FRAGMENT_COALESCE_DEFAULTS.listeningMs,
     fragmentCoalescePlayingMs: FRAGMENT_COALESCE_DEFAULTS.playingMs,
     telephonyTailDrainMs: 400,
@@ -264,4 +295,47 @@ export function callEngineInsertDefaults(): Record<string, unknown> {
       backOffSeconds: 1,
     },
   };
+}
+
+/** Runtime rewrite: platform speaking waits → trust STT final (0). Custom values kept. */
+export function resolveStartSpeakingPlan(
+  raw: {
+    waitSeconds?: number;
+    onPunctuationSeconds?: number;
+    onNoPunctuationSeconds?: number;
+    onNumberSeconds?: number;
+  } | null | undefined,
+): {
+  waitSeconds: number;
+  onPunctuationSeconds: number;
+  onNoPunctuationSeconds: number;
+  onNumberSeconds: number;
+} {
+  const legacy = new Set<number>([
+    CALL_ENGINE_SAFE.legacyNoPunctuationSeconds,
+    CALL_ENGINE_SAFE.legacyNumberSeconds,
+    CALL_ENGINE_SAFE.legacySnappySpeakingSeconds,
+  ]);
+  const trust = (v: number | undefined): number => {
+    if (typeof v !== "number" || !Number.isFinite(v)) return CALL_ENGINE_SAFE.trustSpeakingSeconds;
+    if (legacy.has(v)) return CALL_ENGINE_SAFE.trustSpeakingSeconds;
+    return Math.max(0, v);
+  };
+  return {
+    waitSeconds: trust(raw?.waitSeconds),
+    onPunctuationSeconds: trust(raw?.onPunctuationSeconds),
+    onNoPunctuationSeconds: trust(raw?.onNoPunctuationSeconds),
+    onNumberSeconds: trust(raw?.onNumberSeconds),
+  };
+}
+
+/** Runtime rewrite: platform TTS clause waits (15/18) → early dispatch (5). */
+export function resolveTtsMinSentenceChars(value: number | null | undefined): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return TTS_STREAM_DEFAULTS.minSentenceChars;
+  }
+  if ((TTS_STREAM_DEFAULTS.legacyMinSentenceChars as readonly number[]).includes(value)) {
+    return TTS_STREAM_DEFAULTS.minSentenceChars;
+  }
+  return Math.max(1, Math.min(200, Math.round(value)));
 }

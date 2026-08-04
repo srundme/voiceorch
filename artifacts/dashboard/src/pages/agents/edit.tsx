@@ -175,7 +175,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   // update, so omitting it when the field is blanked would silently keep the
   // old cap forever — "leave blank for default" would never actually work.
   agentConfig["llmMaxTokens"] = llmMaxTokens ?? null;
-  if (ttsMinSentenceChars != null && ttsMinSentenceChars !== 18) agentConfig["ttsMinSentenceChars"] = ttsMinSentenceChars;
+  if (ttsMinSentenceChars != null && ttsMinSentenceChars !== 5) agentConfig["ttsMinSentenceChars"] = ttsMinSentenceChars;
   agentConfig["incrementalDelay"] = clampLinearDelayMs(linearDelayMs);
   agentConfig["fragmentCoalesceListeningMs"] = clampFragmentCoalesceListeningMs(fragmentCoalesceListeningMs);
   agentConfig["fragmentCoalescePlayingMs"] = clampFragmentCoalescePlayingMs(fragmentCoalescePlayingMs);
@@ -186,9 +186,9 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   };
   agentConfig["startSpeakingPlan"] = {
     waitSeconds:            startSpeakingWaitSecs          ?? 0,
-    onPunctuationSeconds:   startSpeakingOnPunctuationSecs ?? 0.1,
-    onNoPunctuationSeconds: startSpeakingOnNoPunctuationSecs ?? 0.1,
-    onNumberSeconds:        startSpeakingOnNumberSecs      ?? 0.1,
+    onPunctuationSeconds:   startSpeakingOnPunctuationSecs ?? 0,
+    onNoPunctuationSeconds: startSpeakingOnNoPunctuationSecs ?? 0,
+    onNumberSeconds:        startSpeakingOnNumberSecs      ?? 0,
   };
   {
     // Bolna parity: one "words before interrupt" drives word-count AND energy floor.
@@ -440,7 +440,7 @@ export default function AgentEdit() {
       stagedPromptCoreIdentity: "",
       asrEndpointingSilenceMs: 250,
       llmMaxTokens: null,
-      ttsMinSentenceChars: 18,
+      ttsMinSentenceChars: 5,
       ttsSpeed: 1,
       linearDelayMs: 0,
       fragmentCoalesceListeningMs: 0,
@@ -451,9 +451,9 @@ export default function AgentEdit() {
       sarvamIncompleteHoldMs: 0,
       kbBakedOnly: false,
       startSpeakingWaitSecs: 0,
-      startSpeakingOnPunctuationSecs: 0.1,
-      startSpeakingOnNoPunctuationSecs: 0.1,
-      startSpeakingOnNumberSecs: 0.1,
+      startSpeakingOnPunctuationSecs: 0,
+      startSpeakingOnNoPunctuationSecs: 0,
+      startSpeakingOnNumberSecs: 0,
       stopSpeakingNumWords: 3,
       stopSpeakingVoiceSecs: 0.45,
       stopSpeakingBackOffSecs: 1,
@@ -706,7 +706,7 @@ export default function AgentEdit() {
       stagedPromptCoreIdentity: (agent as any).stagedPromptCoreIdentity ?? "",
       asrEndpointingSilenceMs: clampEndpointingMs((agent as any).agentConfig?.asrEndpointingSilenceMs as number | undefined),
       llmMaxTokens: ((agent as any).agentConfig?.llmMaxTokens as number | null | undefined) ?? null,
-      ttsMinSentenceChars: ((agent as any).agentConfig?.ttsMinSentenceChars as number | undefined) ?? 18,
+      ttsMinSentenceChars: ((agent as any).agentConfig?.ttsMinSentenceChars as number | undefined) ?? 5,
       linearDelayMs: clampLinearDelayMs((agent as any).agentConfig?.incrementalDelay as number | undefined),
       fragmentCoalesceListeningMs: clampFragmentCoalesceListeningMs((agent as any).agentConfig?.fragmentCoalesceListeningMs as number | undefined),
       fragmentCoalescePlayingMs: clampFragmentCoalescePlayingMs((agent as any).agentConfig?.fragmentCoalescePlayingMs as number | undefined),
@@ -716,9 +716,9 @@ export default function AgentEdit() {
       sarvamIncompleteHoldMs: clampSarvamIncompleteHoldMs((agent as any).agentConfig?.sarvamIncompleteHoldMs as number | undefined),
       kbBakedOnly: ((agent as any).agentConfig?.kbBakedOnly as boolean | undefined) ?? false,
       startSpeakingWaitSecs:            ((agent as any).agentConfig?.startSpeakingPlan?.waitSeconds as number | undefined)            ?? 0,
-      startSpeakingOnPunctuationSecs:   ((agent as any).agentConfig?.startSpeakingPlan?.onPunctuationSeconds as number | undefined)   ?? 0.1,
-      startSpeakingOnNoPunctuationSecs: ((agent as any).agentConfig?.startSpeakingPlan?.onNoPunctuationSeconds as number | undefined) ?? 0.1,
-      startSpeakingOnNumberSecs:        ((agent as any).agentConfig?.startSpeakingPlan?.onNumberSeconds as number | undefined)        ?? 0.1,
+      startSpeakingOnPunctuationSecs:   ((agent as any).agentConfig?.startSpeakingPlan?.onPunctuationSeconds as number | undefined)   ?? 0,
+      startSpeakingOnNoPunctuationSecs: ((agent as any).agentConfig?.startSpeakingPlan?.onNoPunctuationSeconds as number | undefined) ?? 0,
+      startSpeakingOnNumberSecs:        ((agent as any).agentConfig?.startSpeakingPlan?.onNumberSeconds as number | undefined)        ?? 0,
       stopSpeakingNumWords: (() => {
         const fromWords = (agent as any).agentConfig?.wordsForInterruption as number | undefined;
         const fromPlan = (agent as any).agentConfig?.stopSpeakingPlan?.numWords as number | undefined;
@@ -1618,11 +1618,11 @@ export default function AgentEdit() {
                     <FormLabel>TTS Early Dispatch Threshold (chars)</FormLabel>
                     <FormControl>
                       <Input type="number" min={5} max={200} step={5}
-                        value={field.value ?? 18}
+                        value={field.value ?? 5}
                         onChange={e => field.onChange(parseInt(e.target.value, 10))} />
                     </FormControl>
                     <FormDescription className="text-[11px]">
-                      Min chars before a comma-clause triggers an early TTS request mid-LLM-stream. <strong>Lower = TTS fires earlier.</strong> Default: 18 (voice). Range: 5–200.
+                      Min chars before a comma-clause triggers an early TTS request mid-LLM-stream. <strong>Lower = TTS fires earlier.</strong> Default: 5 (trust stream). Range: 5–200.
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -1726,15 +1726,15 @@ export default function AgentEdit() {
               <div className="mt-6">
                 <p className="text-sm font-medium text-foreground mb-0.5">Response Timing — Start Speaking Delays</p>
                 <p className="text-[11px] text-muted-foreground mb-4">
-                  How long the agent waits after end-of-turn detection before it starts speaking. Values are applied exactly as set here (no silent pipeline cap).
+                  Extra wait after STT final before the LLM. Default <strong>0</strong> — STT already decided end-of-turn. Raise only for OTP/number dictation edge cases.
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                   {(
                     [
-                      { name: "startSpeakingWaitSecs",            label: "Base Wait",            desc: "Flat extra pause before any response. 0 = off.", default: 0, step: 0.1, max: 5 },
-                      { name: "startSpeakingOnPunctuationSecs",   label: "After Punctuation",    desc: "Extra delay when turn ends with . ? ! or ।. Default 0.1s.", default: 0.1, step: 0.05, max: 3 },
-                      { name: "startSpeakingOnNoPunctuationSecs", label: "After No Punctuation", desc: "Extra delay when no terminal punctuation. Default 0.1s — raise if callers trail off mid-sentence.", default: 0.1, step: 0.05, max: 3 },
-                      { name: "startSpeakingOnNumberSecs",        label: "After Number",         desc: "Extra delay when turn ends with a digit. Default 0.1s — raise to avoid cutting off phone/OTP numbers.", default: 0.1, step: 0.05, max: 3 },
+                      { name: "startSpeakingWaitSecs",            label: "Base Wait",            desc: "Flat extra pause before any response. 0 = off (recommended).", default: 0, step: 0.1, max: 5 },
+                      { name: "startSpeakingOnPunctuationSecs",   label: "After Punctuation",    desc: "Extra delay when turn ends with . ? ! or ।. Default 0.", default: 0, step: 0.05, max: 3 },
+                      { name: "startSpeakingOnNoPunctuationSecs", label: "After No Punctuation", desc: "Extra delay when no terminal punctuation. Default 0 — raise if callers trail off mid-sentence.", default: 0, step: 0.05, max: 3 },
+                      { name: "startSpeakingOnNumberSecs",        label: "After Number",         desc: "Extra delay when turn ends with a digit. Default 0 — raise to avoid cutting off phone/OTP numbers.", default: 0, step: 0.05, max: 3 },
                     ] as const
                   ).map(({ name, label, desc, default: def, step, max }) => (
                     <FormField key={name} control={form.control} name={name} render={({ field }) => (

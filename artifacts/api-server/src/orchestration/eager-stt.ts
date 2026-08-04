@@ -1,8 +1,10 @@
 /**
  * Flux-free eager / speculative LLM commit heuristics.
  *
- * Bolna uses Deepgram Flux EagerEndOfTurn; on Sarvam we use VAD speech_end plus
- * stable partial text as the commit signal instead.
+ * Bolna uses Deepgram Flux EagerEndOfTurn; on Sarvam we trust provider speech_end
+ * (VAD END_SPEECH) as the commit signal. Mid-utterance stable-partial launches are
+ * off by default in the pipeline (`EAGER_STABLE_PARTIAL=1` to re-enable) — that path
+ * second-guesses STT before the provider decides the turn is done.
  */
 
 import { isBackchannelOnlyUtterance } from "./transcriptQuality.js";

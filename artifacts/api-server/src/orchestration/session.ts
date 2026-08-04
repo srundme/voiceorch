@@ -26,6 +26,8 @@ import {
   resolveSarvamHighVadSensitivity,
   normalizeCallEngineAgentConfig,
   FRAGMENT_COALESCE_DEFAULTS,
+  resolveStartSpeakingPlan,
+  resolveTtsMinSentenceChars,
 } from "@workspace/db/call-engine-defaults";
 import { withDbRetry } from "./db-retry.js";
 import { CONVERSATION_DISCIPLINE_BLOCK } from "./conversationDiscipline.js";
@@ -668,26 +670,10 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     sarvamIndicNumbers:   agentCfg["sarvamIndicNumbers"] !== false,
     // P1-H: Call lifecycle
     hangupAfterLlmCall: (agentCfg["hangupAfterLlmCall"] as boolean | undefined) ?? false,
-    // P1-I: Start Speaking Plan — snappy defaults; rewrite legacy 1.5/0.5 footguns.
-    startSpeakingPlan: (() => {
-      const raw = agentCfg["startSpeakingPlan"] as AgentConfig["startSpeakingPlan"] | undefined;
-      const plan = raw ?? {
-        waitSeconds: 0,
-        onPunctuationSeconds: 0.1,
-        onNoPunctuationSeconds: 0.1,
-        onNumberSeconds: 0.1,
-      };
-      return {
-        waitSeconds: plan.waitSeconds ?? 0,
-        onPunctuationSeconds: plan.onPunctuationSeconds ?? 0.1,
-        onNoPunctuationSeconds: plan.onNoPunctuationSeconds === 1.5
-          ? 0.1
-          : (plan.onNoPunctuationSeconds ?? 0.1),
-        onNumberSeconds: plan.onNumberSeconds === 0.5
-          ? 0.1
-          : (plan.onNumberSeconds ?? 0.1),
-      };
-    })(),
+    // P1-I: Start Speaking Plan — trust STT final (0); rewrite platform 0.1/1.5/0.5 waits.
+    startSpeakingPlan: resolveStartSpeakingPlan(
+      agentCfg["startSpeakingPlan"] as AgentConfig["startSpeakingPlan"] | undefined,
+    ),
     // P1-J: Stop Speaking Plan
     stopSpeakingPlan: (agentCfg["stopSpeakingPlan"] as AgentConfig["stopSpeakingPlan"]) ?? null,
     // P1-K: Compliance
@@ -702,7 +688,9 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     // Latency tuning
     asrEndpointingSilenceMs: (agentCfg["asrEndpointingSilenceMs"] as number | undefined) ?? 250,
     llmMaxTokens: (agentCfg["llmMaxTokens"] as number | null | undefined) ?? null,
-    ttsMinSentenceChars: (agentCfg["ttsMinSentenceChars"] as number | undefined) ?? 18,
+    ttsMinSentenceChars: resolveTtsMinSentenceChars(
+      agentCfg["ttsMinSentenceChars"] as number | undefined,
+    ),
     fragmentCoalesceListeningMs: (() => {
       const v = agentCfg["fragmentCoalesceListeningMs"];
       if (typeof v !== "number" || !Number.isFinite(v)) return FRAGMENT_COALESCE_DEFAULTS.listeningMs;

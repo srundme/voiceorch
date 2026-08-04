@@ -174,13 +174,13 @@ function buildUpdateAgentPayload(data: AgentFormValues) {
   // Always send the key (null clears it) — the server merges agentConfig, so an
   // omitted key would keep the old stored cap even after blanking the field.
   agentConfig["llmMaxTokens"] = llmMaxTokens ?? null;
-  if (ttsMinSentenceChars != null && ttsMinSentenceChars !== 15) agentConfig["ttsMinSentenceChars"] = ttsMinSentenceChars;
+  if (ttsMinSentenceChars != null && ttsMinSentenceChars !== 5) agentConfig["ttsMinSentenceChars"] = ttsMinSentenceChars;
   if (linearDelayMs != null && linearDelayMs > 0) agentConfig["incrementalDelay"] = linearDelayMs;
   agentConfig["startSpeakingPlan"] = {
     waitSeconds:            startSpeakingWaitSecs          ?? 0,
-    onPunctuationSeconds:   startSpeakingOnPunctuationSecs ?? 0.1,
-    onNoPunctuationSeconds: startSpeakingOnNoPunctuationSecs ?? 1.5,
-    onNumberSeconds:        startSpeakingOnNumberSecs      ?? 0.5,
+    onPunctuationSeconds:   startSpeakingOnPunctuationSecs ?? 0,
+    onNoPunctuationSeconds: startSpeakingOnNoPunctuationSecs ?? 0,
+    onNumberSeconds:        startSpeakingOnNumberSecs      ?? 0,
   };
   agentConfig["stopSpeakingPlan"] = {
     numWords:       stopSpeakingNumWords    ?? 0,
@@ -335,7 +335,7 @@ export default function AdminAgentEdit() {
       tools: [], genderDetectionEnabled: false, recordingEnabled: false,
       snapserveAgentId: "", contextWindowTurns: undefined, summarizationEnabled: false,
       stagedPromptEnabled: false, stagedPromptStages: [], stagedPromptCoreIdentity: "",
-      asrEndpointingSilenceMs: 300, llmMaxTokens: undefined, ttsMinSentenceChars: 15, linearDelayMs: 0,
+      asrEndpointingSilenceMs: 300, llmMaxTokens: undefined, ttsMinSentenceChars: 5, linearDelayMs: 0,
     },
   });
 
@@ -398,7 +398,7 @@ export default function AdminAgentEdit() {
       stagedPromptCoreIdentity: agent.stagedPromptCoreIdentity ?? "",
       asrEndpointingSilenceMs: (agent.agentConfig?.asrEndpointingSilenceMs as number | undefined) ?? 300,
       llmMaxTokens: (agent.agentConfig?.llmMaxTokens as number | null | undefined) ?? null,
-      ttsMinSentenceChars: (agent.agentConfig?.ttsMinSentenceChars as number | undefined) ?? 15,
+      ttsMinSentenceChars: (agent.agentConfig?.ttsMinSentenceChars as number | undefined) ?? 5,
       ttsSpeed: (agent.agentConfig?.ttsSpeed as number | undefined) ?? 1,
       linearDelayMs: (agent.agentConfig?.incrementalDelay as number | undefined) ?? 0,
       greetingMessage: agent.greetingMessage ?? "",
@@ -406,9 +406,9 @@ export default function AdminAgentEdit() {
       complianceDpdp:  (agent.agentConfig?.compliance?.dpdp  as boolean | undefined) ?? false,
       complianceTrai:  (agent.agentConfig?.compliance?.trai  as boolean | undefined) ?? false,
       startSpeakingWaitSecs: (agent.agentConfig?.startSpeakingPlan?.waitSeconds as number | undefined) ?? 0,
-      startSpeakingOnPunctuationSecs: (agent.agentConfig?.startSpeakingPlan?.onPunctuationSeconds as number | undefined) ?? 0.1,
-      startSpeakingOnNoPunctuationSecs: (agent.agentConfig?.startSpeakingPlan?.onNoPunctuationSeconds as number | undefined) ?? 1.5,
-      startSpeakingOnNumberSecs: (agent.agentConfig?.startSpeakingPlan?.onNumberSeconds as number | undefined) ?? 0.5,
+      startSpeakingOnPunctuationSecs: (agent.agentConfig?.startSpeakingPlan?.onPunctuationSeconds as number | undefined) ?? 0,
+      startSpeakingOnNoPunctuationSecs: (agent.agentConfig?.startSpeakingPlan?.onNoPunctuationSeconds as number | undefined) ?? 0,
+      startSpeakingOnNumberSecs: (agent.agentConfig?.startSpeakingPlan?.onNumberSeconds as number | undefined) ?? 0,
       stopSpeakingNumWords: (agent.agentConfig?.stopSpeakingPlan?.numWords as number | undefined) ?? 0,
       stopSpeakingVoiceSecs: (agent.agentConfig?.stopSpeakingPlan?.voiceSeconds as number | undefined) ?? 0.2,
       stopSpeakingBackOffSecs: (agent.agentConfig?.stopSpeakingPlan?.backOffSeconds as number | undefined) ?? 1,

@@ -41,4 +41,40 @@ describe("normalizeCallEngineAgentConfig — Saaras-native Sarvam defaults", () 
     };
     expect(normalizeCallEngineAgentConfig(input).changed).toBe(false);
   });
+
+  it("rewrites platform speaking waits and TTS clause gate to trust-provider defaults", () => {
+    const result = normalizeCallEngineAgentConfig({
+      startSpeakingPlan: {
+        waitSeconds: 0,
+        onPunctuationSeconds: 0.1,
+        onNoPunctuationSeconds: 1.5,
+        onNumberSeconds: 0.5,
+      },
+      ttsMinSentenceChars: 18,
+    });
+    expect(result.changed).toBe(true);
+    expect(result.config.startSpeakingPlan).toEqual({
+      waitSeconds: 0,
+      onPunctuationSeconds: 0,
+      onNoPunctuationSeconds: 0,
+      onNumberSeconds: 0,
+    });
+    expect(result.config.ttsMinSentenceChars).toBe(5);
+  });
+
+  it("leaves intentional custom speaking / TTS thresholds alone", () => {
+    const input = {
+      sarvamHighVadSensitivity: true,
+      sarvamSpeechEndFlushMs: 0,
+      sarvamIncompleteHoldMs: 0,
+      startSpeakingPlan: {
+        waitSeconds: 0,
+        onPunctuationSeconds: 0.3,
+        onNoPunctuationSeconds: 0.4,
+        onNumberSeconds: 0.6,
+      },
+      ttsMinSentenceChars: 30,
+    };
+    expect(normalizeCallEngineAgentConfig(input).changed).toBe(false);
+  });
 });

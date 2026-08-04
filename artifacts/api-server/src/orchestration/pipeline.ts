@@ -1407,8 +1407,11 @@ export class OrchestrationPipeline implements VoiceSession {
     this.eagerPartialText = "";
   }
 
-  /** Schedule eager LLM when a partial stabilizes (Bolna Flux EagerEndOfTurn analogue). */
+  /** Schedule eager LLM when a partial stabilizes (Bolna Flux EagerEndOfTurn analogue).
+   * DISABLED: mid-utterance partials second-guess STT. Trust provider speech_end only
+   * (handleSttSpeechEnd / speech_end_partial). Re-enable with EAGER_STABLE_PARTIAL=1. */
   private scheduleEagerLlm(partial: string): void {
+    if (process.env["EAGER_STABLE_PARTIAL"] !== "1") return;
     if (this.isPlaying || this.isSendingTtsAudio || this.closed || this.isProcessing) return;
     if (this._specLlmState) return;
     // Turn 1 allowed: the greeting response is the most latency-sensitive turn.
