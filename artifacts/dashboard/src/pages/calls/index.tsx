@@ -300,7 +300,7 @@ export default function CallsList() {
     return Number.isNaN(p) || p < 1 ? 1 : p;
   });
   const [pageInput, setPageInput] = useState("");
-  const [pageSize, setPageSize] = useState(100);
+  const [pageSize, setPageSize] = useState(50);
 
   // Mirror filter/search/pagination state into the URL query string (replace, so
   // we don't spam history) so it can be restored on return.

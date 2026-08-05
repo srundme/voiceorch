@@ -173,17 +173,28 @@ export async function fireCampaignCall(lead: LeadRow, campaign: CampaignRow): Pr
   const isPreClaimed = lead.callStatus === "calling";
 
   if (!isPreClaimed) {
-    // Check concurrency limit before firing
-    const limit = campaign.concurrentCallLimit ?? 20;
-    const currentlyActive = (await db.select({ count: sql<number>`count(*)` })
-      .from(campaignLeadsTable)
-      .where(and(
-        eq(campaignLeadsTable.campaignId, campaign.id),
-        inArray(campaignLeadsTable.callStatus, ["calling", "connected"]),
-      )))[0]?.count ?? 0;
+    // Workflow (call-plan) campaigns share the account concurrentLimit pool.
+    // Regular campaigns keep their per-campaign concurrentCallLimit.
+    let limit = campaign.concurrentCallLimit ?? 20;
+    let currentlyActive = 0;
+    if (campaign.leadSource === "workflow") {
+      const {
+        getUserConcurrentLimit,
+        countActiveWorkflowCallsForUser,
+      } = await import("../services/workflow-dial-queue.js");
+      limit = await getUserConcurrentLimit(campaign.userId);
+      currentlyActive = await countActiveWorkflowCallsForUser(campaign.userId);
+    } else {
+      currentlyActive = (await db.select({ count: sql<number>`count(*)` })
+        .from(campaignLeadsTable)
+        .where(and(
+          eq(campaignLeadsTable.campaignId, campaign.id),
+          inArray(campaignLeadsTable.callStatus, ["calling", "connected"]),
+        )))[0]?.count ?? 0;
+    }
 
     if (currentlyActive >= limit) {
-      logger.warn({ leadId: lead.id, campaignId: campaign.id, limit, currentlyActive }, "Campaign concurrency limit reached — skipping call");
+      logger.warn({ leadId: lead.id, campaignId: campaign.id, limit, currentlyActive, leadSource: campaign.leadSource }, "Campaign concurrency limit reached — skipping call");
       await db.update(campaignLeadsTable)
         .set({ callStatus: "pending", notes: `Queued — concurrency limit (${limit}) reached` })
         .where(eq(campaignLeadsTable.id, lead.id));

@@ -46,6 +46,7 @@ type CallPlanSettings = {
   sheetCursorRow?: number;
   startOffset?: number;
   startSourceTotal?: number;
+  autoFeed?: boolean;
 };
 
 type CallPlan = {
@@ -71,6 +72,9 @@ type StartOnceResult = {
   nextOffset?: number;
   sourceTotal?: number;
   batchMax?: number;
+  autoFeed?: boolean;
+  concurrentLimit?: number;
+  queue?: boolean;
 };
 
 type StartPreviewResult = {
@@ -286,7 +290,10 @@ export default function CallPlanDetailPage() {
       setPreviewOpen(false);
       setPreviewData(null);
       setPendingForce(false);
-      if (res.hasMore && typeof res.nextOffset === "number") {
+      if (res.autoFeed || res.queue) {
+        setContinueOffset(0);
+        setLastHasMore(false);
+      } else if (res.hasMore && typeof res.nextOffset === "number") {
         setContinueOffset(res.nextOffset);
         setLastHasMore(true);
       } else {
@@ -296,15 +303,16 @@ export default function CallPlanDetailPage() {
       qc.invalidateQueries({ queryKey: ["call-plans", planId] });
       qc.invalidateQueries({ queryKey: ["call-plans", planId, "runs"] });
       const total = res.sourceTotal ?? 0;
-      const batchDesc = res.hasMore && total > 0
-        ? `Started ${res.started} of ${total} — press Continue for the rest`
-        : res.keepLive
-          ? `${res.started} started now — new sheet rows will keep entering.`
+      const conc = res.concurrentLimit;
+      const batchDesc = res.keepLive
+        ? `${res.started} started now — new sheet rows will keep entering.`
+        : res.autoFeed || res.queue
+          ? `Queued ${res.started}${total > 0 ? ` of ${total}` : ""} — dials up to your concurrency${conc != null ? ` (${conc})` : ""}; the rest feed automatically.`
           : `${res.started} ${res.started === 1 ? "person" : "people"} walking this plan${
               res.skipped ? ` · ${res.skipped} already walked (skipped)` : ""
             }.`;
       toast({
-        title: res.keepLive ? "Live" : "Started",
+        title: res.keepLive ? "Live" : "Dial queue started",
         description: batchDesc,
       });
     },
@@ -416,9 +424,12 @@ export default function CallPlanDetailPage() {
   const selectedCampaign = campaigns.find((c) => String(c.id) === campaignId);
   const settingsOffset = typeof plan.settings?.startOffset === "number" ? plan.settings.startOffset : 0;
   const settingsTotal = typeof plan.settings?.startSourceTotal === "number" ? plan.settings.startSourceTotal : 0;
+  const autoFeedOn = plan.settings?.autoFeed === true && plan.status === "active";
   const effectiveContinueOffset = continueOffset || settingsOffset;
+  // Continue is legacy — auto-feed drains the list; only show if feed is off and cursor remains.
   const showContinue =
-    effectiveContinueOffset > 0
+    !autoFeedOn
+    && effectiveContinueOffset > 0
     && (lastHasMore || (settingsTotal > 0 && effectiveContinueOffset < settingsTotal));
   const startBusy = startOnce.isPending || previewPending || save.isPending;
 
@@ -432,6 +443,12 @@ export default function CallPlanDetailPage() {
           <Badge variant="outline" className={cn("text-[10px] h-5 px-1.5 capitalize", statusClass(plan.status))}>
             {plan.status}
           </Badge>
+          {autoFeedOn && (
+            <Badge variant="outline" className="h-5 px-1.5 text-[10px] border-border/70 text-muted-foreground">
+              Auto-feeding
+              {settingsTotal > 0 ? ` · ${settingsOffset}/${settingsTotal}` : ""}
+            </Badge>
+          )}
           <Button
             variant="outline"
             size="sm"
@@ -496,7 +513,7 @@ export default function CallPlanDetailPage() {
             onClick={() => { void handleStartClick(); }}
           >
             {startBusy ? <Loader2 className="size-3.5 animate-spin" /> : <Play className="size-3.5" />}
-            {peopleMode === "sheet" && runMode === "live" ? "Start live" : "Start once"}
+            {peopleMode === "sheet" && runMode === "live" ? "Start live" : "Start queue"}
           </Button>
         </div>
       }
@@ -640,7 +657,15 @@ export default function CallPlanDetailPage() {
                   </Select>
                   <p className="text-[10px] text-muted-foreground">
                     {selectedCampaign
-                      ? `Starts up to 100 people per click — Continue for more.`
+                      ? (
+                        <>
+                          Starts a dial queue up to your account concurrency. Large lists feed automatically —{" "}
+                          <Link href="/app/wallet" className="underline underline-offset-2">
+                            check concurrency in Wallet
+                          </Link>
+                          .
+                        </>
+                      )
                       : (
                         <>
                           No list yet?{" "}
@@ -705,8 +730,8 @@ export default function CallPlanDetailPage() {
                           : "border-border/50 hover:bg-muted/30",
                       )}
                     >
-                      <p className="font-medium">Start once</p>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">Current rows only</p>
+                      <p className="font-medium">Start queue</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">Current rows · concurrency dial</p>
                     </button>
                     <button
                       type="button"
@@ -725,8 +750,8 @@ export default function CallPlanDetailPage() {
                   {sheetPipelines.length > 0 && (
                     <p className="text-[10px] text-muted-foreground">
                       {runMode === "live"
-                        ? "Same sheet for import and Keep live — new rows (up to 25 every ~15s) walk this plan. Starts up to 100 people per click — Continue for more."
-                        : "Imports current rows from this sheet (up to 100 per click). Keep the sheet attached to Continue or switch to Keep live for new rows."}
+                        ? "Same sheet for import and Keep live — new rows keep entering. Dials respect your account concurrency."
+                        : "Queues current sheet rows and dials up to your account concurrency; the rest feed automatically. Or switch to Keep live for new rows."}
                       {" "}
                       Add an “Update the list” step to write status back to this same sheet.
                       {" "}
@@ -753,7 +778,7 @@ export default function CallPlanDetailPage() {
                     onChange={(e) => setManualPhones(e.target.value)}
                   />
                   <p className="text-[10px] text-muted-foreground">
-                    One phone per line. Used only for this Start — not saved as a list. Starts up to 100 people per click — Continue for more.
+                    One phone per line. Queued and dialed up to your account concurrency; leftover numbers feed automatically.
                   </p>
                 </div>
               )}

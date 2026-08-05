@@ -317,10 +317,23 @@ router.post("/journeys/:id/activate", requireAuth, async (req, res): Promise<voi
   const existing = await loadOwnedJourney(clerkId, id);
   if (!existing) { res.status(404).json({ error: "Journey not found" }); return; }
 
-  const [j] = await db.update(journeysTable).set({ status: "active" })
+  // Resume dial queue feed when source still has remaining people.
+  const settings = { ...(existing.settings ?? {}) } as JourneySettings;
+  const offset = typeof settings.startOffset === "number" ? settings.startOffset : 0;
+  const total = typeof settings.startSourceTotal === "number" ? settings.startSourceTotal : 0;
+  if (settings.runMode !== "live" && total > 0 && offset > 0 && offset < total) {
+    settings.autoFeed = true;
+  }
+
+  const [j] = await db.update(journeysTable).set({ status: "active", settings })
     .where(and(eq(journeysTable.id, id), eq(journeysTable.userId, clerkId)))
     .returning();
   await syncBackingWorkflow(j!);
+
+  // Resume uses the same campaign-engine rolling refill as People campaigns.
+  const { refillWorkflowDialSlots } = await import("../services/workflow-dial-queue.js");
+  void refillWorkflowDialSlots(clerkId);
+
   const [fresh] = await db.select().from(journeysTable).where(eq(journeysTable.id, id)).limit(1);
   res.json(serializeJourney(fresh!));
 });
@@ -331,10 +344,29 @@ router.post("/journeys/:id/pause", requireAuth, async (req, res): Promise<void> 
   const existing = await loadOwnedJourney(clerkId, id);
   if (!existing) { res.status(404).json({ error: "Journey not found" }); return; }
 
-  const [j] = await db.update(journeysTable).set({ status: "paused" })
+  const settings = { ...(existing.settings ?? {}) } as JourneySettings;
+  settings.autoFeed = false;
+
+  const [j] = await db.update(journeysTable).set({ status: "paused", settings })
     .where(and(eq(journeysTable.id, id), eq(journeysTable.userId, clerkId)))
     .returning();
   await syncBackingWorkflow(j!);
+
+  // If no other active call plan shares this agent, pause the hidden dial campaign
+  // so campaign-engine refill stops (same as pausing a People campaign).
+  const [otherActive] = await db.select({ id: journeysTable.id })
+    .from(journeysTable)
+    .where(and(
+      eq(journeysTable.userId, clerkId),
+      eq(journeysTable.agentId, existing.agentId),
+      eq(journeysTable.status, "active"),
+    ))
+    .limit(1);
+  if (!otherActive) {
+    const { pauseWorkflowCampaignsForAgent } = await import("../services/workflow-dial-queue.js");
+    await pauseWorkflowCampaignsForAgent(clerkId, existing.agentId);
+  }
+
   const [fresh] = await db.select().from(journeysTable).where(eq(journeysTable.id, id)).limit(1);
   res.json(serializeJourney(fresh!));
 });
@@ -405,11 +437,11 @@ router.post("/journeys/:id/test", requireAuth, async (req, res): Promise<void> =
   res.status(201).json({ ok: true, runId, workflowId });
 });
 
-// ── Start once (Call plans MVP) ──────────────────────────────────────────────
-// Walk current people through the plan: one workflow run per phone.
-// Retries / "call me back" stay on the agent — this only starts the sequence.
+// ── Start once (Call plans) ──────────────────────────────────────────────────
+// Enqueues people into a dial queue capped by users.concurrentLimit.
+// Worker auto-feeds the rest of the list (no manual Continue required).
 
-/** Max people started per Start click (continue with offset for the rest). */
+/** Legacy preview batch size (UI may still show). */
 const START_ONCE_MAX = 100;
 
 router.post("/journeys/:id/start", requireAuth, async (req, res): Promise<void> => {
@@ -427,7 +459,7 @@ router.post("/journeys/:id/start", requireAuth, async (req, res): Promise<void> 
     sheetPipelineId?: string;
     phones?: string[];
     limit?: number;
-    /** Skip this many people in the source list (for Continue after a 100-cap batch). */
+    /** Skip this many people (Continue / resume). */
     offset?: number;
     runMode?: "once" | "live";
     /** Re-dial people who already have a run on this plan. */
@@ -439,124 +471,163 @@ router.post("/journeys/:id/start", requireAuth, async (req, res): Promise<void> 
   const campaignId = campaignIdRaw != null ? Number(campaignIdRaw) : NaN;
   const sheetPipelineId = (body.sheetPipelineId ?? settings.sheetPipelineId ?? "").trim() || null;
   const runMode = body.runMode === "live" || settings.runMode === "live" ? "live" : "once";
-  const limit = Math.min(
-    Math.max(1, Number(body.limit) || START_ONCE_MAX),
+  const offset = Math.max(0, Number(body.offset) || 0);
+  const force = body.force === true;
+  const manualPhones = Array.isArray(body.phones)
+    ? body.phones.map((raw) => String(raw ?? "").trim()).filter(Boolean)
+    : (settings.manualPhones ?? []);
+
+  const {
+    getUserConcurrentLimit,
+    callPlanFeedBufferSize,
+  } = await import("../services/workflow-dial-queue.js");
+  const {
+    feedCallPlanQueue,
+    loadCallPlanPeopleSlice,
+    startRunsForPeople,
+  } = await import("../services/call-plan-queue-feed.js");
+
+  const concurrentLimit = await getUserConcurrentLimit(clerkId);
+  const bufferTarget = callPlanFeedBufferSize(concurrentLimit);
+  const feedLimit = Math.min(
+    Math.max(1, Number(body.limit) || bufferTarget),
     START_ONCE_MAX,
   );
-  const offset = Math.max(0, Number(body.offset) || 0);
 
-  type Person = {
-    phone: string;
-    name?: string;
-    email?: string;
-    leadId?: number;
-    meetingUrl?: string;
-    sheetRowIndex?: number;
-  };
-  const people: Person[] = [];
-  let sheetCursorRow = typeof settings.sheetCursorRow === "number" ? settings.sheetCursorRow : 1;
-
-  let sourceTotal = 0;
-  let scanned = 0;
-
-  if (Array.isArray(body.phones) && body.phones.length > 0) {
-    const allPhones = body.phones.map((raw) => String(raw ?? "").trim()).filter(Boolean);
-    sourceTotal = allPhones.length;
-    const slice = allPhones.slice(offset, offset + limit);
-    scanned = slice.length;
-    for (const phone of slice) people.push({ phone });
-  } else if (sheetPipelineId) {
+  // Keep live: arm sheet cursor path (existing behaviour).
+  if (runMode === "live" && sheetPipelineId) {
     const {
       loadOwnedSheetPipeline,
       listSheetPipelinePeople,
+      startCallPlanRunsForPeople,
     } = await import("../services/call-plan-sheet-live.js");
     const pipeline = await loadOwnedSheetPipeline(clerkId, sheetPipelineId);
     if (!pipeline) { res.status(404).json({ error: "Sheet list not found" }); return; }
+
+    let sheetCursorRow = typeof settings.sheetCursorRow === "number" ? settings.sheetCursorRow : 1;
     const listed = await listSheetPipelinePeople(pipeline, {
-      fromRowExclusive: runMode === "live" ? sheetCursorRow : 1,
-      limit: runMode === "live" ? limit : offset + limit,
+      fromRowExclusive: sheetCursorRow,
+      limit: feedLimit,
     });
-    // Approximate source size: lastRow after header.
-    sourceTotal = Math.max(0, listed.lastRow - 1);
-    const sheetSlice = runMode === "live" ? listed.people : listed.people.slice(offset, offset + limit);
-    scanned = sheetSlice.length;
-    for (const p of sheetSlice) {
-      people.push({
-        phone: p.phone,
-        name: p.name,
-        email: p.email,
-        meetingUrl: p.meetingUrl,
-        sheetRowIndex: p.sheetRowIndex,
-      });
-    }
+    const people = listed.people;
     if (people.length > 0) {
-      sheetCursorRow = Math.max(...people.map((p) => p.sheetRowIndex ?? 1), sheetCursorRow);
+      sheetCursorRow = Math.max(...people.map((p) => p.sheetRowIndex), sheetCursorRow);
     } else if (listed.lastRow > sheetCursorRow) {
       sheetCursorRow = listed.lastRow;
     }
-  } else if (Number.isFinite(campaignId) && campaignId > 0) {
-    const [campaign] = await db.select({ id: campaignsTable.id })
-      .from(campaignsTable)
-      .where(and(eq(campaignsTable.id, campaignId), eq(campaignsTable.userId, clerkId)))
-      .limit(1);
-    if (!campaign) { res.status(404).json({ error: "People list (campaign) not found" }); return; }
 
-    const allLeads = await db.select({
-      id: campaignLeadsTable.id,
-      phone: campaignLeadsTable.phone,
-      name: campaignLeadsTable.name,
-      email: campaignLeadsTable.email,
-    }).from(campaignLeadsTable)
-      .where(eq(campaignLeadsTable.campaignId, campaignId))
-      .orderBy(desc(campaignLeadsTable.createdAt));
+    const nextSettings: JourneySettings = {
+      ...settings,
+      runMode: "live",
+      peopleSource: "sheet",
+      sheetPipelineId,
+      sheetCursorRow,
+      campaignId: null,
+      autoFeed: false,
+      startOffset: 0,
+    };
+    await db.update(journeysTable).set({
+      settings: nextSettings,
+      status: "active",
+    }).where(and(eq(journeysTable.id, id), eq(journeysTable.userId, clerkId)));
 
-    const withPhone = allLeads.filter((l) => (l.phone ?? "").trim());
-    sourceTotal = withPhone.length;
-    const slice = withPhone.slice(offset, offset + limit);
-    scanned = slice.length;
+    const [freshJourney] = await db.select().from(journeysTable).where(eq(journeysTable.id, id)).limit(1);
+    const workflowId = await syncBackingWorkflow(freshJourney!);
+    const runIds = people.length > 0
+      ? await startCallPlanRunsForPeople({
+          journey: freshJourney!,
+          workflowId,
+          people,
+          triggeredBy: "call_plan_live",
+          sheetPipelineId,
+        })
+      : [];
 
-    for (const lead of slice) {
-      const phone = (lead.phone ?? "").trim();
-      people.push({
-        phone,
-        name: lead.name ?? undefined,
-        email: lead.email ?? undefined,
-        leadId: lead.id,
-      });
-    }
-  } else {
+    res.status(201).json({
+      ok: true,
+      started: runIds.length,
+      skipped: 0,
+      runIds,
+      workflowId,
+      journeyId: id,
+      runMode: "live",
+      keepLive: true,
+      autoFeed: false,
+      concurrentLimit,
+      bufferTarget,
+      batchMax: START_ONCE_MAX,
+      offset: 0,
+      nextOffset: 0,
+      hasMore: false,
+      sourceTotal: Math.max(0, listed.lastRow - 1),
+      scanned: people.length,
+    });
+    return;
+  }
+
+  // Bind people source + enable auto-feed for once mode.
+  const hasCampaign = Number.isFinite(campaignId) && campaignId > 0 && !sheetPipelineId;
+  const hasManual = manualPhones.length > 0 && !sheetPipelineId && !hasCampaign;
+  if (!hasCampaign && !sheetPipelineId && !hasManual) {
     res.status(400).json({
       error: "Pick a people list (CSV or Sheet) or pass phones to start",
     });
     return;
   }
 
-  // Persist people binding + run mode (Keep live can arm with zero current rows).
-  const nextSettings: JourneySettings = {
+  if (hasCampaign) {
+    const [campaign] = await db.select({ id: campaignsTable.id })
+      .from(campaignsTable)
+      .where(and(eq(campaignsTable.id, campaignId), eq(campaignsTable.userId, clerkId)))
+      .limit(1);
+    if (!campaign) { res.status(404).json({ error: "People list (campaign) not found" }); return; }
+  }
+  if (sheetPipelineId) {
+    const { loadOwnedSheetPipeline } = await import("../services/call-plan-sheet-live.js");
+    const pipeline = await loadOwnedSheetPipeline(clerkId, sheetPipelineId);
+    if (!pipeline) { res.status(404).json({ error: "Sheet list not found" }); return; }
+  }
+
+  const boundSettings: JourneySettings = {
     ...settings,
-    runMode,
-    ...(Number.isFinite(campaignId) && campaignId > 0 && !sheetPipelineId
-      ? { peopleSource: "campaign" as const, campaignId, sheetPipelineId: null }
+    runMode: "once",
+    autoFeed: true,
+    startOffset: offset,
+    ...(hasCampaign
+      ? { peopleSource: "campaign" as const, campaignId, sheetPipelineId: null, manualPhones: undefined }
       : {}),
     ...(sheetPipelineId
       ? {
           peopleSource: "sheet" as const,
           sheetPipelineId,
-          sheetCursorRow,
           campaignId: null,
+          manualPhones: undefined,
         }
       : {}),
-    ...(Array.isArray(body.phones) && body.phones.length > 0 && !sheetPipelineId && !(Number.isFinite(campaignId) && campaignId > 0)
-      ? { peopleSource: "manual" as const }
+    ...(hasManual
+      ? { peopleSource: "manual" as const, manualPhones, campaignId: null, sheetPipelineId: null }
       : {}),
   };
 
-  if (people.length === 0 && !(runMode === "live" && sheetPipelineId)) {
-    res.status(400).json({ error: "No people to start — add leads, connect a sheet, or paste phone numbers" }); return;
+  // Probe that the source has someone to dial (respecting offset).
+  const probe = await loadCallPlanPeopleSlice({
+    userId: clerkId,
+    settings: boundSettings,
+    offset,
+    limit: 1,
+    phonesOverride: hasManual ? manualPhones : undefined,
+  });
+  if (probe.people.length === 0 && probe.sourceTotal === 0) {
+    res.status(400).json({ error: "No people to start — add leads, connect a sheet, or paste phone numbers" });
+    return;
   }
 
   await db.update(journeysTable).set({
-    settings: nextSettings,
+    settings: {
+      ...boundSettings,
+      startSourceTotal: probe.sourceTotal,
+      ...(sheetPipelineId ? { sheetCursorRow: probe.sheetCursorRow } : {}),
+    },
     status: "active",
   }).where(and(eq(journeysTable.id, id), eq(journeysTable.userId, clerkId)));
 
@@ -567,119 +638,81 @@ router.post("/journeys/:id/start", requireAuth, async (req, res): Promise<void> 
     .limit(1);
   if (!workflow) { res.status(500).json({ error: "Backing workflow missing" }); return; }
 
-  // Dedup Start once: skip phones that already have an active/completed run unless force.
-  const force = body.force === true;
-  let skippedDup = 0;
-  let toStart = people;
-  if (!force && runMode === "once" && people.length > 0) {
-    const prior = await db.select({
-      context: workflowRunsTable.context,
-      status: workflowRunsTable.status,
-    }).from(workflowRunsTable)
-      .where(and(
-        eq(workflowRunsTable.workflowId, workflowId),
-        eq(workflowRunsTable.userId, clerkId),
-      ))
-      .limit(2000);
+  // First slice into the pipeline; auto-feed continues the rest.
+  const slice = await loadCallPlanPeopleSlice({
+    userId: clerkId,
+    settings: (freshJourney!.settings ?? {}) as JourneySettings,
+    offset,
+    limit: feedLimit,
+    phonesOverride: hasManual ? manualPhones : undefined,
+  });
 
-    const busy = new Set<string>();
-    for (const r of prior) {
-      if (r.status === "failed") continue;
-      const phone = typeof r.context?.["phone"] === "string" ? r.context["phone"] : "";
-      const norm = normalizePhone(phone);
-      if (norm) busy.add(norm);
-      else if (phone.trim()) busy.add(phone.trim());
-    }
+  const { runIds, skippedDup } = await startRunsForPeople({
+    journey: freshJourney!,
+    workflowId,
+    people: slice.people,
+    triggeredBy: "call_plan_start",
+    force,
+  });
 
-    toStart = [];
-    for (const p of people) {
-      const norm = normalizePhone(p.phone) || p.phone.trim();
-      if (busy.has(norm)) {
-        skippedDup++;
-        continue;
-      }
-      toStart.push(p);
-      busy.add(norm);
-    }
-  }
-
-  if (toStart.length === 0 && !(runMode === "live" && sheetPipelineId)) {
+  if (runIds.length === 0 && skippedDup > 0 && slice.people.length > 0) {
+    // Entire first slice already walked — try feeding further via auto-feed helper.
+  } else if (runIds.length === 0 && slice.people.length === 0) {
     res.status(400).json({
-      error: skippedDup > 0
-        ? `All ${skippedDup} people already walked this plan. Pass force=true to re-dial.`
-        : "No people to start — add leads, connect a sheet, or paste phone numbers",
+      error: "No people to start — add leads, connect a sheet, or paste phone numbers",
       skipped: skippedDup,
     });
     return;
   }
 
-  const runIds: number[] = [];
-  for (const person of toStart) {
-    const runId = await startWorkflowRun({
-      workflow,
-      context: {
-        phone: person.phone,
-        ...(person.name ? { name: person.name } : {}),
-        ...(person.email ? { email: person.email } : {}),
-        ...(person.meetingUrl
-          ? { meetingUrl: person.meetingUrl, meetLink: person.meetingUrl }
-          : {}),
-        ...(person.leadId != null ? { leadId: person.leadId } : {}),
-        ...(sheetPipelineId && person.sheetRowIndex != null
-          ? {
-              __sheet_pipeline_id: sheetPipelineId,
-              sheetPipelineId,
-              __sheet_row_index: person.sheetRowIndex,
-              sheetRowIndex: person.sheetRowIndex,
-            }
-          : {}),
-        callPlanId: id,
-        agentId: freshJourney!.agentId,
-      },
-      triggeredBy: runMode === "live" ? "call_plan_live" : "call_plan_start",
-    });
-    runIds.push(runId);
+  const nextOffset = offset + slice.scanned;
+  const hasMore = nextOffset < slice.sourceTotal;
+  await db.update(journeysTable).set({
+    settings: {
+      ...((freshJourney!.settings ?? {}) as JourneySettings),
+      startOffset: hasMore ? nextOffset : 0,
+      startSourceTotal: slice.sourceTotal,
+      autoFeed: hasMore,
+      ...(sheetPipelineId ? { sheetCursorRow: slice.sheetCursorRow } : {}),
+    } as JourneySettings,
+    updatedAt: new Date(),
+  }).where(and(eq(journeysTable.id, id), eq(journeysTable.userId, clerkId)));
+
+  // Top up immediately if first slice was all dups or buffer still hungry.
+  const [afterStart] = await db.select().from(journeysTable).where(eq(journeysTable.id, id)).limit(1);
+  let fed = { started: 0, skipped: 0, nextOffset, hasMore, sourceTotal: slice.sourceTotal, concurrentLimit, bufferTarget };
+  if (afterStart && ((afterStart.settings as JourneySettings)?.autoFeed || runIds.length === 0)) {
+    fed = await feedCallPlanQueue(afterStart, { force });
   }
 
-  const nextOffset = offset + scanned;
-  const hasMore = nextOffset < sourceTotal;
-
-  // Persist batch cursor so Continue can resume without the client guessing.
-  if (hasMore && runMode === "once") {
-    await db.update(journeysTable).set({
-      settings: {
-        ...nextSettings,
-        startOffset: nextOffset,
-        startSourceTotal: sourceTotal,
-      } as JourneySettings,
-      updatedAt: new Date(),
-    }).where(and(eq(journeysTable.id, id), eq(journeysTable.userId, clerkId)));
-  } else if (!hasMore) {
-    await db.update(journeysTable).set({
-      settings: {
-        ...nextSettings,
-        startOffset: 0,
-        startSourceTotal: sourceTotal,
-      } as JourneySettings,
-      updatedAt: new Date(),
-    }).where(and(eq(journeysTable.id, id), eq(journeysTable.userId, clerkId)));
+  const started = runIds.length + fed.started;
+  if (started === 0 && skippedDup + fed.skipped > 0) {
+    res.status(400).json({
+      error: `All people already walked this plan. Pass force=true to re-dial.`,
+      skipped: skippedDup + fed.skipped,
+    });
+    return;
   }
 
   res.status(201).json({
     ok: true,
-    started: runIds.length,
-    skipped: skippedDup,
+    started,
+    skipped: skippedDup + fed.skipped,
     runIds,
     workflowId,
     journeyId: id,
-    runMode,
-    keepLive: runMode === "live" && !!sheetPipelineId,
+    runMode: "once",
+    keepLive: false,
+    autoFeed: fed.hasMore,
+    concurrentLimit,
+    bufferTarget,
     batchMax: START_ONCE_MAX,
     offset,
-    nextOffset,
-    hasMore,
-    sourceTotal,
-    scanned,
+    nextOffset: fed.nextOffset,
+    hasMore: fed.hasMore,
+    sourceTotal: fed.sourceTotal || slice.sourceTotal,
+    scanned: slice.scanned,
+    queue: true,
   });
 });
 
@@ -799,6 +832,7 @@ router.post("/journeys/:id/stop-live", requireAuth, async (req, res): Promise<vo
 
   const settings = { ...(journey.settings ?? {}) } as JourneySettings;
   settings.runMode = "once";
+  settings.autoFeed = false;
 
   await db.update(journeysTable).set({
     settings,
@@ -961,11 +995,17 @@ router.get("/journeys/:id/runs/stats", requireAuth, async (req, res): Promise<vo
   const id = parseInt(String(req.params["id"]), 10);
   const journey = await loadOwnedJourney(clerkId, id);
   if (!journey) { res.status(404).json({ error: "Journey not found" }); return; }
+  const { getUserConcurrentLimit } = await import("../services/workflow-dial-queue.js");
+  const concurrentLimit = await getUserConcurrentLimit(clerkId);
+  const settings = (journey.settings ?? {}) as JourneySettings;
+
   if (!journey.workflowId) {
     res.json({
       started: 0,
       inProgress: 0,
       waiting: 0,
+      queued: 0,
+      dialing: 0,
       completed: 0,
       failed: 0,
       withCall: 0,
@@ -974,6 +1014,10 @@ router.get("/journeys/:id/runs/stats", requireAuth, async (req, res): Promise<vo
       avgDurationSec: null,
       stepFunnel: [],
       stepCount: (journey.steps ?? []).length,
+      concurrentLimit,
+      autoFeed: settings.autoFeed === true,
+      startOffset: settings.startOffset ?? 0,
+      startSourceTotal: settings.startSourceTotal ?? 0,
     });
     return;
   }
@@ -992,6 +1036,17 @@ router.get("/journeys/:id/runs/stats", requireAuth, async (req, res): Promise<vo
     })
     .from(workflowRunsTable)
     .where(base);
+
+  const queueCounts = await db.execute<{ queued: number; dialing: number }>(sql`
+    SELECT
+      count(*) FILTER (WHERE cl.call_status = 'pending')::int AS queued,
+      count(*) FILTER (WHERE cl.call_status IN ('calling', 'connected'))::int AS dialing
+    FROM workflow_runs wr
+    JOIN campaign_leads cl ON cl.id = wr.lead_id
+    WHERE wr.workflow_id = ${journey.workflowId}
+      AND wr.user_id = ${clerkId}
+      AND wr.status = 'waiting_call'
+  `);
 
   const funnelRows = await db
     .select({
@@ -1042,10 +1097,14 @@ router.get("/journeys/:id/runs/stats", requireAuth, async (req, res): Promise<vo
   const withCall = Number(agg?.withCall ?? 0);
   const connected = Number(agg?.connected ?? 0);
   const avgRaw = agg?.avgDurationSec;
+  const queued = Number(queueCounts.rows[0]?.queued ?? 0);
+  const dialing = Number(queueCounts.rows[0]?.dialing ?? 0);
   res.json({
     started,
     inProgress: Number(agg?.inProgress ?? 0),
     waiting: Number(agg?.waiting ?? 0),
+    queued,
+    dialing,
     completed: Number(agg?.completed ?? 0),
     failed: Number(agg?.failed ?? 0),
     withCall,
@@ -1056,6 +1115,10 @@ router.get("/journeys/:id/runs/stats", requireAuth, async (req, res): Promise<vo
       : null,
     stepFunnel,
     stepCount: (journey.steps ?? []).length,
+    concurrentLimit,
+    autoFeed: settings.autoFeed === true,
+    startOffset: settings.startOffset ?? 0,
+    startSourceTotal: settings.startSourceTotal ?? 0,
   });
 });
 

@@ -366,7 +366,7 @@ export default function CallPlansPage() {
                   >
                     <p className="text-[12px] font-medium">Import once</p>
                     <p className="text-[10px] text-muted-foreground mt-0.5 leading-snug">
-                      Dial current rows now (batches of 100). Same sheet stays attached.
+                      Queue current rows — dials up to your account concurrency.
                     </p>
                   </button>
                   <button

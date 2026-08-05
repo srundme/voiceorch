@@ -62,6 +62,8 @@ export type PlanRunStats = {
   started: number;
   inProgress: number;
   waiting: number;
+  queued?: number;
+  dialing?: number;
   completed: number;
   failed: number;
   withCall: number;
@@ -78,6 +80,10 @@ export type PlanRunStats = {
     completedAtOrPast: number;
   }>;
   stepCount: number;
+  concurrentLimit?: number;
+  autoFeed?: boolean;
+  startOffset?: number;
+  startSourceTotal?: number;
 };
 
 type RunsPage = {
@@ -257,13 +263,14 @@ export function CallPlanActivitySummary({
           </Link>
         </Button>
       </div>
-      <div className="grid grid-cols-2 gap-2 border-t border-border/40 p-3 sm:grid-cols-5 sm:px-4">
+      <div className="grid grid-cols-2 gap-2 border-t border-border/40 p-3 sm:grid-cols-3 lg:grid-cols-6 sm:px-4">
         {[
           { label: "Started", value: started, accent: "text-foreground" },
-          { label: "In progress", value: stats?.inProgress ?? 0, accent: "text-amber-400" },
+          { label: "Queued", value: stats?.queued ?? 0, accent: "text-muted-foreground" },
+          { label: "Dialing", value: stats?.dialing ?? 0, accent: "text-amber-400" },
           { label: "Completed", value: stats?.completed ?? 0, accent: "text-emerald-400" },
           { label: "Failed", value: stats?.failed ?? 0, accent: "text-destructive" },
-          { label: "Calls", value: stats?.withCall ?? 0, accent: "text-sky-400" },
+          { label: "Calls", value: stats?.withCall ?? 0, accent: "text-foreground" },
         ].map((card) => (
           <div
             key={card.label}
@@ -276,11 +283,18 @@ export function CallPlanActivitySummary({
           </div>
         ))}
       </div>
-      {stats && (stats.connectRate != null || stats.avgDurationSec != null) && (
+      {(stats?.concurrentLimit != null || stats?.connectRate != null || stats?.avgDurationSec != null) && (
         <p className="border-t border-border/40 px-4 py-2 text-[10px] text-muted-foreground sm:px-5">
-          {stats.connectRate != null ? `${stats.connectRate}% connect rate` : null}
-          {stats.connectRate != null && stats.avgDurationSec != null ? " · " : null}
-          {stats.avgDurationSec != null ? `avg call ${formatDuration(stats.avgDurationSec)}` : null}
+          {stats?.concurrentLimit != null ? (
+            <>
+              Concurrency {stats.concurrentLimit}
+              {stats.autoFeed ? " · auto-feeding" : ""}
+              {(stats.connectRate != null || stats.avgDurationSec != null) ? " · " : ""}
+            </>
+          ) : null}
+          {stats?.connectRate != null ? `${stats.connectRate}% connect rate` : null}
+          {stats?.connectRate != null && stats?.avgDurationSec != null ? " · " : null}
+          {stats?.avgDurationSec != null ? `avg call ${formatDuration(stats.avgDurationSec)}` : null}
         </p>
       )}
     </section>
@@ -342,6 +356,8 @@ export function CallPlanActivityPanel({
   const kpis = useMemo(() => ({
     started: stats?.started ?? totalRuns ?? 0,
     inProgress: stats?.inProgress ?? 0,
+    queued: stats?.queued ?? 0,
+    dialing: stats?.dialing ?? 0,
     completed: stats?.completed ?? 0,
     failed: stats?.failed ?? 0,
     withCall: stats?.withCall ?? 0,
@@ -395,13 +411,14 @@ export function CallPlanActivityPanel({
 
   const kpiCards = [
     { key: "all" as RunFilter, label: "Started", value: kpis.started, icon: Activity, accent: "text-foreground" },
-    { key: "in_progress" as RunFilter, label: "In progress", value: kpis.inProgress, icon: Clock, accent: "text-amber-400" },
+    { key: "waiting" as RunFilter, label: "Queued", value: kpis.queued, icon: Clock, accent: "text-muted-foreground" },
+    { key: "in_progress" as RunFilter, label: "Dialing", value: kpis.dialing, icon: Phone, accent: "text-amber-400" },
     { key: "completed" as RunFilter, label: "Completed", value: kpis.completed, icon: CheckCircle2, accent: "text-emerald-400" },
     { key: "failed" as RunFilter, label: "Failed", value: kpis.failed, icon: XCircle, accent: "text-destructive" },
-    { key: "with_call" as RunFilter, label: "Calls logged", value: kpis.withCall, icon: Phone, accent: "text-sky-400" },
+    { key: "with_call" as RunFilter, label: "Calls logged", value: kpis.withCall, icon: Phone, accent: "text-foreground" },
   ];
 
-  const isLive = kpis.inProgress > 0;
+  const isLive = kpis.inProgress > 0 || kpis.dialing > 0 || kpis.queued > 0;
   const funnel = stats?.stepFunnel ?? [];
   const funnelMax = Math.max(1, ...funnel.map((f) => f.reached));
 
@@ -629,7 +646,7 @@ export function CallPlanActivityPanel({
             </p>
             <p className="max-w-sm text-[11px] text-muted-foreground leading-relaxed">
               {kpis.started === 0
-                ? "Press Start once. Each person walking this plan shows here with step progress, call outcome, and a link to the full History record."
+                ? "Press Start queue. People dial up to your account concurrency; progress, outcomes, and History links show here."
                 : "Clear search or pick another status tab."}
             </p>
           </div>
@@ -789,8 +806,21 @@ export function CallPlanActivityPanel({
 
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/50 px-4 py-2.5">
         <p className="text-[10px] text-muted-foreground">
-          Full transcripts and recordings open in the call drawer, or browse{" "}
-          <Link href="/app/history" className="underline underline-offset-2">History</Link>.
+          {total > 0 ? (
+            <>
+              Showing{" "}
+              <span className="tabular-nums text-foreground/80">
+                {Math.min(page * PAGE_SIZE + 1, total)}–{Math.min((page + 1) * PAGE_SIZE, total)}
+              </span>
+              {" "}of <span className="tabular-nums text-foreground/80">{total}</span>
+              {" "}· {PAGE_SIZE} per page
+            </>
+          ) : (
+            <>
+              Full transcripts and recordings open in the call drawer, or browse{" "}
+              <Link href="/app/history" className="underline underline-offset-2">History</Link>.
+            </>
+          )}
         </p>
         {total > PAGE_SIZE && (
           <div className="flex items-center gap-2">

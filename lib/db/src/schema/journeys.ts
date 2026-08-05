@@ -63,6 +63,14 @@ export interface JourneySettings {
   startOffset?: number;
   /** Last known people count in the source list for Continue UX. */
   startSourceTotal?: number;
+  /**
+   * When true, the worker keeps feeding people from the source into the dial
+   * queue (account concurrentLimit) until the source is exhausted or the plan
+   * is paused. Set on Start once; Clear when source done / Pause.
+   */
+  autoFeed?: boolean;
+  /** Pasted phones for manual Start (kept so auto-feed can continue the list). */
+  manualPhones?: string[];
 }
 
 export const journeysTable = pgTable("journeys", {

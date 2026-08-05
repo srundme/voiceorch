@@ -18,6 +18,7 @@
 
 import {
   db, workflowsTable, workflowRunsTable, campaignsTable, campaignLeadsTable,
+  campaignBatchesTable,
   callsTable, agentsTable, phoneNumbersTable, journeysTable,
   sheetAutoCallPipelinesTable,
   type Workflow, type WorkflowRun, type WorkflowStep,
@@ -26,8 +27,13 @@ import { eq, and, sql } from "drizzle-orm";
 import { randomBytes } from "node:crypto";
 import { logger } from "../lib/logger.js";
 import { normalizePhone } from "../lib/phone-normalize.js";
-import { fireCampaignCall } from "../orchestration/campaignCaller.js";
 import { scheduleCallbackRequested } from "./autoRedial.js";
+import {
+  getUserConcurrentLimit,
+  getOrCreateWorkflowRunningBatch,
+  refillWorkflowDialSlots,
+  syncWorkflowCampaignConcurrency,
+} from "./workflow-dial-queue.js";
 import {
   getActiveChannel,
   resolveSendContext,
@@ -129,15 +135,18 @@ async function getOrCreateWorkflowCampaign(
       eq(campaignsTable.name, name),
     ))
     .limit(1);
+  const accountLimit = await getUserConcurrentLimit(userId);
+
   if (byName) {
+    let campaign = byName;
     if (sid && byName.squadId !== sid) {
       const [updated] = await db.update(campaignsTable)
         .set({ squadId: sid })
         .where(eq(campaignsTable.id, byName.id))
         .returning();
-      return updated!;
+      campaign = updated!;
     }
-    return byName;
+    return syncWorkflowCampaignConcurrency(campaign, userId);
   }
 
   // Legacy: older rows were created without a unique name filter (one per agent).
@@ -149,7 +158,7 @@ async function getOrCreateWorkflowCampaign(
         eq(campaignsTable.leadSource, "workflow"),
       ))
       .limit(1);
-    if (legacy) return legacy;
+    if (legacy) return syncWorkflowCampaignConcurrency(legacy, userId);
   }
 
   const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, agentId)).limit(1);
@@ -159,15 +168,15 @@ async function getOrCreateWorkflowCampaign(
     userId,
     name,
     agentId,
-    // "paused" keeps the batch scheduler + rolling-refill from ever auto-dialing
-    // these leads; we only ever dial explicitly via fireCampaignCall().
-    status: "paused",
+    // Dialable like People campaigns — rolling refill via refillCampaignConcurrency.
+    // Hidden from People UI via leadSource=workflow.
+    status: "active",
     webhookToken: `wf_${randomBytes(20).toString("hex")}`,
     leadSource: "workflow",
     triggerMode: "instant",
     maxAttempts: 1,
-    concurrentCallLimit: 1000,
-    isActive: false,
+    concurrentCallLimit: accountLimit,
+    isActive: true,
     ...(sid ? { squadId: sid } : {}),
     ...(fromNumber ? { fromNumber } : {}),
   }).returning();
@@ -333,10 +342,13 @@ async function beginCall(runId: number, userId: string, step: WorkflowStep, cont
     typeof step.squadId === "number" && Number.isInteger(step.squadId) && step.squadId > 0
       ? step.squadId
       : null;
-  const campaign = await getOrCreateWorkflowCampaign(userId, step.agentId, squadId);
+  let campaign = await getOrCreateWorkflowCampaign(userId, step.agentId, squadId);
+  campaign = await syncWorkflowCampaignConcurrency(campaign, userId);
+  const batch = await getOrCreateWorkflowRunningBatch(campaign.id);
   const leadData = flattenPrimitives(context);
   const [lead] = await db.insert(campaignLeadsTable).values({
     campaignId: campaign.id,
+    batchId: batch.id,
     phone: phoneRaw,
     normalizedPhone: normalizePhone(phoneRaw),
     name: toStr(context["name"]) || null,
@@ -350,16 +362,20 @@ async function beginCall(runId: number, userId: string, step: WorkflowStep, cont
     source: "workflow",
   }).returning();
 
-  // Park BEFORE dialing so the poller resumes at the step AFTER make_call.
-  recordStepAudit(context, { type: "make_call", status: "ok", reason: "Dialing", stepIndex: idx });
+  await db.update(campaignBatchesTable)
+    .set({ totalLeads: sql`${campaignBatchesTable.totalLeads} + 1` })
+    .where(eq(campaignBatchesTable.id, batch.id));
+
+  // Park BEFORE dialing — campaign rolling refill claims up to concurrentLimit.
+  recordStepAudit(context, { type: "make_call", status: "ok", reason: "Queued for dial", stepIndex: idx });
   await db.update(workflowRunsTable)
     .set({ status: "waiting_call", leadId: lead!.id, currentStepIndex: idx + 1, context, updatedAt: new Date() })
     .where(eq(workflowRunsTable.id, runId));
 
-  await fireCampaignCall(lead!, campaign);
+  await refillWorkflowDialSlots(userId, campaign.id);
   logger.info(
-    { runId, leadId: lead!.id, agentId: step.agentId, squadId },
-    "workflow: make_call dialed",
+    { runId, leadId: lead!.id, agentId: step.agentId, squadId, batchId: batch.id, campaignId: campaign.id },
+    "workflow: make_call enqueued on campaign batch",
   );
 }
 
@@ -408,10 +424,13 @@ export async function resumeWaitingCallRuns(): Promise<void> {
       } else if (["failed", "skipped"].includes(lead.callStatus)) {
         // Dial never produced a call record (no answer / blocked / error).
         result = { connected: false, status: lead.callStatus, notes: lead.notes ?? "" };
+      } else if (lead.callStatus === "pending") {
+        // Still in the account dial queue — never treat as timeout/no-answer.
+        continue;
       }
 
-      // Backstop: if we've waited too long, resume as "not connected".
-      if (!result && ageMs > CALL_TIMEOUT_MS) {
+      // Backstop: only for leads that actually started dialing (or have a call).
+      if (!result && ageMs > CALL_TIMEOUT_MS && lead.callStatus !== "pending") {
         result = { connected: false, status: "timeout" };
       }
       if (!result) continue; // still in progress — check again next tick
