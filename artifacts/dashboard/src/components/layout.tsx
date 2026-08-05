@@ -8,7 +8,7 @@ import {
   Menu, ChevronDown, ChevronLeft, ChevronRight,
   LogOut, Bell, Search, SlidersHorizontal, BookOpen, PlugZap, Sun, Moon, Sparkles,
   Plus, X, Wand2, Wrench, Megaphone, Calendar, Video, MessageCircle,
-  Brain, Users, BarChart3, ListOrdered, GitBranch,
+  Brain, BarChart3, GitBranch,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -98,17 +98,14 @@ interface NavGroup {
 }
 
 /**
- * Call-plans IA (Phase 4).
- * Primary: Home · Call plans · Agents · Leads · Connections · History
- * Journeys / Automation / Dial flows / legacy Channels routes are redirected, not deleted.
+ * Primary: Home · Campaigns · Agents · Connections · History
  */
 const NAV_GROUPS: NavGroup[] = [
   {
     items: [
       { name: "Home",        href: "/app/home",        icon: Home },
-      { name: "Call plans",  href: "/app/call-plans",  icon: ListOrdered },
+      { name: "Campaigns",  href: "/app/campaigns",  icon: Megaphone },
       { name: "Agents",      href: "/app/agents",      icon: Bot },
-      { name: "Leads",       href: "/app/people",      icon: Users },
       { name: "Connections", href: "/app/connections", icon: PlugZap },
       { name: "History",     href: "/app/history",     icon: Phone, callbackBadge: true },
     ],
@@ -135,7 +132,7 @@ const MANAGED_CLIENT_NAV: NavGroup[] = [
   {
     items: [
       { name: "Home",        href: "/app/home",        icon: Home },
-      { name: "Call plans",  href: "/app/call-plans",  icon: ListOrdered },
+      { name: "Campaigns",  href: "/app/campaigns",  icon: Megaphone },
       { name: "Agents",      href: "/app/agents",      icon: Bot },
       { name: "History",     href: "/app/history",     icon: Phone, callbackBadge: true },
       { name: "Connections", href: "/app/connections", icon: PlugZap },
@@ -327,7 +324,10 @@ function navItemIsActive(location: string, href: string): boolean {
   if (location.startsWith(href)) return true;
   // Phase 4 aliases — old URLs still work; highlight the new home.
   if (href === "/app/history" && (location.startsWith("/app/calls") || location.startsWith("/app/history"))) return true;
-  if (href === "/app/people" && (location.startsWith("/app/people") || location.startsWith("/app/campaigns"))) return true;
+  if (
+    href === "/app/campaigns"
+    && (location.startsWith("/app/campaigns") || location.startsWith("/app/people") || location.startsWith("/app/automatic-calls"))
+  ) return true;
   if (
     href === "/app/connections"
     && (
@@ -337,7 +337,6 @@ function navItemIsActive(location: string, href: string): boolean {
       || location.startsWith("/app/automatic-calls")
     )
   ) return true;
-  if (href === "/app/call-plans" && (location.startsWith("/app/call-plans") || location.startsWith("/app/automation"))) return true;
   return false;
 }
 
@@ -643,11 +642,11 @@ function SidebarContent({
 
 /* ─── Mobile bottom nav ──────────────────────────────────────────────────── */
 const MOBILE_BOTTOM_NAV_ITEMS = [
-  { name: "Home",   href: "/app/home",       icon: Home },
-  { name: "Plans",  href: "/app/call-plans", icon: ListOrdered },
-  { name: "Create", href: null,              icon: Sparkles }, // opens modal
-  { name: "Agents", href: "/app/agents",     icon: Bot },
-  { name: "History", href: "/app/history",   icon: Phone },
+  { name: "Home",      href: "/app/home",       icon: Home },
+  { name: "Campaigns", href: "/app/campaigns",  icon: Megaphone },
+  { name: "Create",    href: null,              icon: Sparkles }, // opens modal
+  { name: "Agents",    href: "/app/agents",     icon: Bot },
+  { name: "History",   href: "/app/history",    icon: Phone },
 ] as const;
 
 function MobileBottomNav({ onNewAgent }: { onNewAgent?: () => void }) {
@@ -879,7 +878,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     if (!isManagedClient) return;
     const allowed = [
       "/app/home",
-      "/app/call-plans",
+      "/app/campaigns",
       "/app/agents",
       "/app/history",
       "/app/calls",

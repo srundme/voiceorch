@@ -2257,7 +2257,7 @@ export default function ConnectionsPage() {
   return (
     <StripePage
       title="Connections"
-      description="Connect phone, WhatsApp, Sheets, and CRM once. Call plans and agents use what’s here."
+      description="Connect phone, WhatsApp, Sheets, and CRM once. Agents and outreach use what’s here."
       back={{ href: "/app/home", label: "Home" }}
       actions={
         <Button
@@ -2321,7 +2321,7 @@ export default function ConnectionsPage() {
                 <div className="min-w-0 flex-1">
                   <p className="text-[13px] font-medium">Google Sheets</p>
                   <p className="truncate text-[11px] text-muted-foreground">
-                    Connect once — use under Leads / call plans → Google Sheet
+                    Connect once — use under Automatic calls or Leads
                   </p>
                 </div>
                 <Button size="sm" className="h-8 px-2.5 text-[11px]" onClick={() => void connectSheets()}>
@@ -2384,11 +2384,11 @@ export default function ConnectionsPage() {
           ) : webhookConnections.length === 0 ? (
             <div className="px-3.5 py-6 text-center">
               <p className="text-[12px] text-muted-foreground">
-                No webhook connections yet. Create a lead list or a call plan intake URL.
+                No webhook connections yet. Create a lead list under Leads, or add a website form intake.
               </p>
               <div className="mt-3 flex justify-center gap-2">
-                <Button size="sm" variant="outline" className="h-8 text-[11px]" onClick={() => navigate("/app/call-plans")}>
-                  Call plans
+                <Button size="sm" variant="outline" className="h-8 text-[11px]" onClick={() => navigate("/app/connections?setup=website")}>
+                  Website form
                 </Button>
                 <Button size="sm" className="h-8 text-[11px]" onClick={() => navigate("/app/people")}>
                   Leads

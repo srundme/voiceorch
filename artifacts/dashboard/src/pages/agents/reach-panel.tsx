@@ -1,5 +1,5 @@
 /**
- * Automation sources for an agent — forms, sheets, lists, call rules, journeys.
+ * Automation sources for an agent — forms, sheets, lists, call rules.
  * Used by the standalone Automation page (agent builder stays agent-only).
  */
 
@@ -12,7 +12,6 @@ import {
   Globe,
   List,
   Loader2,
-  MessageCircle,
   Plus,
   Video,
   Zap,
@@ -26,7 +25,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { StatusDot } from "@/components/workspace/workspace";
 import { cn } from "@/lib/utils";
-import { JourneyPanel } from "./journey-panel";
 import { CallRulesPanel } from "./call-rules-panel";
 
 type AutoPipeline = {
@@ -109,8 +107,6 @@ function RowLink({
 export function ReachPanel({
   agentId,
   agentName,
-  webhookUrl,
-  onConfigureEmail,
   onOpenChannels,
   heading = "Automation",
   embedded = false,
@@ -181,20 +177,6 @@ export function ReachPanel({
       desc: "Retries, quiet hours, parallel caps",
       href: "#reach-call-rules",
       icon: Clock,
-    },
-    {
-      id: "journey",
-      title: "After-call sequence",
-      desc: "Call → WhatsApp / email / callback",
-      href: "#reach-journey",
-      icon: MessageCircle,
-    },
-    {
-      id: "custom",
-      title: "Custom sequence",
-      desc: "Build your own steps on this agent",
-      href: "#reach-custom-steps",
-      icon: Zap,
     },
   ];
 
@@ -338,10 +320,10 @@ export function ReachPanel({
         {armedCount > 0 && (
           <div className="flex flex-wrap gap-1 border-t border-border/70 px-2 py-2">
             <Button asChild size="sm" variant="ghost" className="h-7 px-2 text-[11px]">
-              <Link href={`/app/campaigns?agentId=${agentId}`}>All list dials</Link>
+              <Link href={`/app/campaigns?agentId=${agentId}`}>All campaigns</Link>
             </Button>
             <Button asChild size="sm" variant="ghost" className="h-7 px-2 text-[11px]">
-              <Link href="/app/campaigns?tab=scheduled">All sheet dials</Link>
+              <Link href="/app/campaigns?tab=scheduled">Automatic calls</Link>
             </Button>
           </div>
         )}
@@ -350,25 +332,6 @@ export function ReachPanel({
       <div id="reach-call-rules" className="scroll-mt-4">
         <CallRulesPanel agentId={agentId} campaigns={campaigns} />
       </div>
-
-      <section id="reach-journey" className="scroll-mt-4 space-y-3">
-        <div>
-          <h3 className="text-[13px] font-semibold tracking-[-0.01em]">After-call journey</h3>
-          <p className="mt-1 max-w-xl text-[11px] leading-5 text-muted-foreground">
-            Auto-pilot after a lead arrives or a call ends. On a Call step you can attach a{" "}
-            <Link href="/app/squads" className="underline underline-offset-2 hover:text-foreground">
-              squad
-            </Link>
-            . Credentials live under Connections.
-          </p>
-        </div>
-        <JourneyPanel
-          agentId={agentId}
-          webhookUrl={webhookUrl}
-          onConfigureEmail={onConfigureEmail}
-          onOpenChannels={onOpenChannels}
-        />
-      </section>
     </div>
   );
 }

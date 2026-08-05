@@ -1,5 +1,5 @@
 /**
- * Connections — wires used by call plans.
+ * Connections — wires used by agents and outreach.
  * Only: Google Sheets · WhatsApp · Brevo email · Website form · Meta Lead Ads.
  * Phone numbers live on the Agent Builder.
  */
@@ -42,7 +42,7 @@ const CARDS: ConnCard[] = [
     setupId: "sheets",
     brand: "googleSheets",
     title: "Google Sheets",
-    blurb: "Watch a sheet and feed people into a call plan.",
+    blurb: "Watch a sheet and feed people into Automatic calls.",
   },
   {
     id: "calendar",
@@ -64,28 +64,28 @@ const CARDS: ConnCard[] = [
     setupId: "whatsapp",
     brand: "whatsapp",
     title: "WhatsApp",
-    blurb: "Send follow-ups after calls from your call plan.",
+    blurb: "Send WhatsApp follow-ups after calls.",
   },
   {
     id: "email",
     setupId: "email",
     brand: "brevo",
     title: "Email (Brevo)",
-    blurb: "Bring your Brevo key to email people mid-plan.",
+    blurb: "Bring your Brevo key to email people from the agent.",
   },
   {
     id: "website",
     setupId: "website",
     icon: "globe",
     title: "Website form",
-    blurb: "Form submit → person enters your call plan.",
+    blurb: "Form submit → person lands in your workspace.",
   },
   {
     id: "meta",
     setupId: "meta",
     brand: "meta",
     title: "Meta Lead Ads",
-    blurb: "New Meta form leads enter your call plan.",
+    blurb: "New Meta form leads land in your workspace.",
   },
 ];
 
@@ -234,7 +234,7 @@ export default function ConnectionsPage() {
     return (
       <StripePage
         title="Email (Brevo)"
-        description="Bring your own Brevo API key. Call plans use this for Send email steps."
+        description="Bring your own Brevo API key. Agents use this for Send email."
         back={{ href: "/app/connections", label: "Connections" }}
       >
         <div className="max-w-xl">
@@ -248,7 +248,7 @@ export default function ConnectionsPage() {
     return (
       <StripePage
         title="Website form"
-        description="Copy a webhook into your site form. New leads can enter a call plan — attach the hook on Call plans → Also start from intake."
+        description="Copy a webhook into your site form. New leads land in your workspace for outreach."
         back={{ href: "/app/connections", label: "Connections" }}
         fullBleed
         contentClassName="!px-0 !py-0 max-w-none"
@@ -262,7 +262,7 @@ export default function ConnectionsPage() {
     return (
       <StripePage
         title="Meta Lead Ads"
-        description="Connect a Meta form so new leads can enter a call plan — enable Meta intake on the plan detail page."
+        description="Connect a Meta form so Lead Ad submissions land in your workspace."
         back={{ href: "/app/connections", label: "Connections" }}
         fullBleed
         contentClassName="!px-0 !py-0 max-w-none"
@@ -278,7 +278,7 @@ export default function ConnectionsPage() {
     return (
       <StripePage
         title="Google Sheets"
-        description="Connect once, then attach a sheet to a call plan — drain the list or drip new rows."
+        description="Connect once, then use the sheet under Automatic calls or attach it when outreach is ready."
         back={{ href: "/app/connections", label: "Connections" }}
       >
         <div className="max-w-lg space-y-4">
@@ -314,12 +314,11 @@ export default function ConnectionsPage() {
                 ))
               ) : (
                 <p className="text-[13px] text-muted-foreground">
-                  Connect the Google account that owns your lead sheet. Then attach it on a call plan
-                  (drain this list, or drip new rows) or{" "}
-                  <Link href="/app/call-plans" className="underline underline-offset-2">
-                    create a plan
-                  </Link>
-                  .
+                  Connect the Google account that owns your lead sheet. Then open{" "}
+                  <Link href="/app/automatic-calls" className="underline underline-offset-2">
+                    Automatic calls
+                  </Link>{" "}
+                  to map columns and dial.
                 </p>
               )}
               <div className="flex flex-wrap gap-2 pt-1">
@@ -330,7 +329,7 @@ export default function ConnectionsPage() {
                 {sheetsConnected && (
                   <Button size="sm" variant="outline" className="h-9 gap-1.5" asChild>
                     <Link href="/app/automatic-calls/new">
-                      Use with a call plan
+                      Start automatic calls
                       <ArrowRight className="size-3.5" />
                     </Link>
                   </Button>
@@ -346,7 +345,7 @@ export default function ConnectionsPage() {
   return (
     <StripePage
       title="Connections"
-      description="Wire the tools your call plans use — Sheets, calendar, meetings, WhatsApp, email, and lead forms."
+      description="Wire Sheets, calendar, meetings, WhatsApp, email, and lead forms for your agents."
       back={{ href: "/app/home", label: "Home" }}
     >
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

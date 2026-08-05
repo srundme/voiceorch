@@ -86,9 +86,6 @@ import TestSimulatorPage    from "@/pages/test-simulator";
 import VibePage             from "@/pages/vibe";
 import HomePage             from "@/pages/home/index";
 import ChannelsRedirectPage from "@/pages/channels/index";
-import CallPlansPage        from "@/pages/call-plans/index";
-import CallPlanDetailPage   from "@/pages/call-plans/[id]";
-import CallPlanActivityPage from "@/pages/call-plans/activity";
 import PeoplePage           from "@/pages/people/index";
 import CommandCenterRedirect from "@/pages/command-center/index";
 import MemoryPage           from "@/pages/memory/index";
@@ -301,13 +298,19 @@ function AppRoutes() {
       <Switch>
         <Route path="/app" component={AppRoot} />
         <Route path="/app/home" component={HomePage} />
-        <Route path="/app/call-plans/:id/activity" component={CallPlanActivityPage} />
-        <Route path="/app/call-plans/:id" component={CallPlanDetailPage} />
-        <Route path="/app/call-plans" component={CallPlansPage} />
+        {/* Call plans product surface removed — await Campaigns rebuild */}
+        <Route path="/app/call-plans/:id/activity">
+          <TabRedirect to="/app/home" />
+        </Route>
+        <Route path="/app/call-plans/:id">
+          <TabRedirect to="/app/home" />
+        </Route>
+        <Route path="/app/call-plans">
+          <TabRedirect to="/app/home" />
+        </Route>
         <Route path="/app/people" component={PeoplePage} />
-        {/* Phase 4 — Journey / Automation peers → Call plans */}
         <Route path="/app/automation">
-          <TabRedirect to="/app/call-plans" />
+          <TabRedirect to="/app/home" />
         </Route>
         {/* Channels product surface removed — redirect legacy links */}
         <Route path="/app/channels" component={ChannelsRedirectPage} />
@@ -403,11 +406,11 @@ function AppRoutes() {
         <Route path="/app/campaigns/:id" component={CampaignDetailPage} />
         <Route path="/app/campaigns" component={CampaignsTabPage} />
 
-        {/* ── Automatic Calls → People sheet tab ── */}
+        {/* ── Automatic Calls (detail/wizard live; list → Campaigns Sheets tab) ── */}
         <Route path="/app/automatic-calls/new" component={AutomaticCallsWizardPage} />
         <Route path="/app/automatic-calls/:id" component={AutomaticCallDetailPage} />
         <Route path="/app/automatic-calls">
-          <TabRedirect to="/app/connections?setup=sheets" />
+          <TabRedirect to="/app/campaigns?tab=scheduled" />
         </Route>
 
         {/* ── Meta Leads → Connections Meta card ── */}

@@ -601,12 +601,19 @@ function CampaignWizard({
         } as Parameters<typeof create.mutateAsync>[0]["data"],
       });
       await qc.invalidateQueries({ queryKey: getListCampaignsQueryKey() });
-      toast({ title: "List created", description: name.trim() });
+      toast({
+        title: csvOnly ? "List created" : "Campaign created",
+        description: name.trim(),
+      });
       close();
     } catch (err) {
       const msg = (err instanceof Error ? err.message : null)
-        ?? "Failed to create list";
-      toast({ title: "Failed to create list", description: msg, variant: "destructive" });
+        ?? (csvOnly ? "Failed to create list" : "Failed to create campaign");
+      toast({
+        title: csvOnly ? "Failed to create list" : "Failed to create campaign",
+        description: msg,
+        variant: "destructive",
+      });
     }
   }
 
@@ -614,11 +621,11 @@ function CampaignWizard({
     <Dialog open={open} onOpenChange={v => { if (!v) close(); }}>
       <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col gap-0 p-0 overflow-hidden">
         <div className="px-6 pt-5 pb-4 border-b border-border shrink-0">
-          <div className="text-base font-semibold">New list</div>
+          <div className="text-base font-semibold">{csvOnly ? "New list" : "New campaign"}</div>
           <p className="text-xs text-muted-foreground/60 mt-0.5">
             {csvOnly
-              ? "Create a CSV list, then attach it to a call plan"
-              : "Upload a CSV or connect a source, then attach it to a call plan"}
+              ? "Create a CSV list of people to reach"
+              : "Pick a source, agent, and phone number — then activate to dial"}
           </p>
           {/* Step indicator */}
           <div className="flex items-center gap-1.5 mt-4">
@@ -1019,7 +1026,7 @@ function CampaignWizard({
           </div>
           {isLast ? (
             <Button size="sm" className="h-9 min-h-10 text-xs gap-1.5" onClick={() => void handleCreate()} disabled={create.isPending || !consentComplete()}>
-              {create.isPending ? "Creating…" : "Create list"}
+              {create.isPending ? "Creating…" : csvOnly ? "Create list" : "Create campaign"}
             </Button>
           ) : (
             <Button size="sm" className="h-9 min-h-10 text-xs" onClick={next} disabled={!canNext()}>Next →</Button>
@@ -1112,7 +1119,7 @@ function CampaignFormDialog({
         <DialogHeader>
           <DialogTitle className="text-base">{editing ? "Edit list" : "New list"}</DialogTitle>
           <DialogDescription className="text-xs">
-            {editing ? "Update this list’s settings." : "Create a people list for call plans."}
+            {editing ? "Update this list’s settings." : "Create a people list for outreach."}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={e => void handleSubmit(e)} className="space-y-4 mt-1">
@@ -1311,7 +1318,7 @@ export default function CampaignsPage({
         ) : (
           <MetricStrip cols={6}>
             <MetricCard
-              label="Active lists"
+              label="Active Campaigns"
               value={stats?.activeCampaigns ?? 0}
               icon={<Megaphone />}
               loading={isLoading}
@@ -1382,7 +1389,7 @@ export default function CampaignsPage({
               </Button>
             )}
             <Button size="sm" className="h-9 text-xs gap-1.5 rounded-lg" onClick={() => setCreateOpen(true)}>
-              <Plus className="h-3.5 w-3.5" /> New list
+              <Plus className="h-3.5 w-3.5" /> {listsMode ? "New list" : "New campaign"}
             </Button>
           </div>
         </div>
@@ -1475,7 +1482,7 @@ export default function CampaignsPage({
                       </div>
                       <h3 className="text-base font-semibold text-foreground mb-1.5">Upload a CSV list</h3>
                       <p className="text-xs text-muted-foreground/60 max-w-sm mx-auto leading-relaxed">
-                        Leads is for CSV lists only. Attach a list to a call plan, then Start queue.
+                        Leads is for CSV lists only.
                         Website forms, Sheets, and Meta live under Connections.
                       </p>
                     </div>
@@ -1485,7 +1492,7 @@ export default function CampaignsPage({
                         {[
                           { icon: <Upload className="h-4 w-4 text-blue-400" />, step: "1", title: "Create a list", body: "Name the list and pick the agent + number that will dial." },
                           { icon: <FileText className="h-4 w-4 text-amber-400" />, step: "2", title: "Upload CSV", body: "Open the list and add a batch from your spreadsheet." },
-                          { icon: <Zap className="h-4 w-4 text-emerald-400" />, step: "3", title: "Attach to a plan", body: "On a Call plan, attach this list and Start once." },
+                          { icon: <Zap className="h-4 w-4 text-emerald-400" />, step: "3", title: "Use the list", body: "Keep contacts here until outreach orchestration is ready." },
                         ].map(item => (
                           <div key={item.step} className="rounded-xl border border-border/60 bg-card/60 p-4">
                             <div className="flex items-center gap-2 mb-2.5">
@@ -1508,7 +1515,7 @@ export default function CampaignsPage({
                         <Link href="/app/connections">Connections</Link>
                       </Button>
                       <Button asChild variant="outline" className="h-8 text-xs gap-2">
-                        <Link href="/app/call-plans">Call plans</Link>
+                        <Link href="/app/agents">Agents</Link>
                       </Button>
                     </div>
                   </>
@@ -1518,10 +1525,9 @@ export default function CampaignsPage({
                       <div className="h-14 w-14 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mx-auto mb-4">
                         <Megaphone className="h-6 w-6 text-primary/60" />
                       </div>
-                      <h3 className="text-base font-semibold text-foreground mb-1.5">Set up how leads reach an agent</h3>
+                      <h3 className="text-base font-semibold text-foreground mb-1.5">Create your first campaign</h3>
                       <p className="text-xs text-muted-foreground/60 max-w-sm mx-auto leading-relaxed">
-                        Prefer Agent → Reach for new setups. This page lists account-wide list and source dials —
-                        form, sheet, CSV, or CRM — that fire your voice agent.
+                        Pick an agent, bring leads from CSV, webhook, Meta, or CRM, then activate and dial.
                       </p>
                     </div>
 
@@ -1572,10 +1578,10 @@ export default function CampaignsPage({
 
                     <div className="text-center flex items-center justify-center gap-3">
                       <Button className="h-8 text-xs gap-2" onClick={() => setCreateOpen(true)}>
-                        <Plus className="h-3.5 w-3.5" /> Create list
+                        <Plus className="h-3.5 w-3.5" /> Create campaign
                       </Button>
                       <Button asChild variant="outline" className="h-8 text-xs gap-2">
-                        <Link href="/app/call-plans">Make a call plan</Link>
+                        <Link href="/app/agents">Open agents</Link>
                       </Button>
                       <button
                         className="text-xs text-muted-foreground/50 hover:text-foreground underline underline-offset-4 transition-colors"
@@ -1629,7 +1635,7 @@ export default function CampaignsPage({
               Lead list guide
             </SheetTitle>
             <p className="text-[11px] text-muted-foreground/60 leading-relaxed mt-1">
-              How lists bind people to an agent and a call plan.
+              How lists bind people to an agent and a phone number.
             </p>
           </SheetHeader>
 
@@ -1638,7 +1644,7 @@ export default function CampaignsPage({
               <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/40 mb-3">What is a people list?</p>
               <div className="rounded-xl border border-border/60 bg-card/60 p-4 text-[11px] text-muted-foreground/70 leading-relaxed space-y-2">
                 <p>A people list ties together a <strong className="text-foreground/80">voice agent</strong>, a <strong className="text-foreground/80">phone number</strong>, and who to reach from a <strong className="text-foreground/80">CSV</strong>.</p>
-                <p>Upload batches of contacts, then attach the list to a <strong className="text-foreground/80">Call plan</strong> to Start.</p>
+                <p>Upload batches of contacts to keep them ready for outreach.</p>
                 {listsMode && (
                   <p>Website forms, Google Sheets, and Meta Lead Ads are set up under <strong className="text-foreground/80">Connections</strong> — not here.</p>
                 )}
@@ -1749,7 +1755,7 @@ export default function CampaignsPage({
 
             <div className="pt-2">
               <Button className="w-full h-9 text-xs gap-2" onClick={() => { setHelpOpen(false); setCreateOpen(true); }}>
-                <Plus className="h-3.5 w-3.5" /> Create a list
+                <Plus className="h-3.5 w-3.5" /> {listsMode ? "Create a list" : "Create a campaign"}
               </Button>
             </div>
           </div>
@@ -1775,7 +1781,7 @@ export default function CampaignsPage({
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-red-500">
-              <Trash2 className="h-4 w-4" /> Delete list
+              <Trash2 className="h-4 w-4" /> {listsMode ? "Delete list" : "Delete campaign"}
             </DialogTitle>
             <DialogDescription className="text-left pt-1">
               This will permanently delete <strong className="text-foreground">{deleting?.name}</strong> along

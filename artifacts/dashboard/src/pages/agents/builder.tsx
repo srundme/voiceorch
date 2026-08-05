@@ -92,7 +92,6 @@ import { DestinationOtpDialog } from "@/components/destination-otp-dialog";
 import { RecentNumbersList } from "@/components/recent-numbers-list";
 import { useRecentNumbers } from "@/hooks/use-recent-numbers";
 import { GeneratePromptSheet } from "./generate-prompt-sheet";
-import { JourneyPanel } from "./journey-panel";
 import { AgentInboundPanel } from "./agent-inbound-panel";
 import {
   PropertyRow,
@@ -3763,7 +3762,7 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
             <div>
               <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">CRM / post-call webhook</h3>
               <p className="text-[11px] text-muted-foreground mt-0.5">
-                Notify your CRM or Zap after a call ends. Separate from Journey lead intake — leave blank if you only need intake.
+                Notify your CRM or Zap after a call ends. Leave blank if unused.
               </p>
             </div>
             <div className="space-y-3 rounded-xl border border-border/50 bg-card/40 p-4">
@@ -4143,36 +4142,6 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
           </Button>
         </div>
       )}
-    </div>
-  );
-}
-
-function AnalysisTab({
-  form,
-  agentId,
-  onConfigureEmail,
-  onOpenChannels,
-}: {
-  form: any;
-  agentId: number;
-  onConfigureEmail?: () => void;
-  onOpenChannels?: () => void;
-}) {
-  return (
-    <div className="relative p-6 space-y-8">
-      <section className="space-y-2">
-        <h2 className="text-base font-semibold tracking-tight">Journey</h2>
-        <p className="text-[12px] text-muted-foreground max-w-3xl">
-          Attach one auto-pilot sequence to this agent: lead in → call → WhatsApp/email/callback. WhatsApp &amp; Email live under Connections; CRM webhook and disposition live under Advanced → Integrations.
-        </p>
-      </section>
-
-      <JourneyPanel
-        agentId={agentId}
-        webhookUrl={form.watch("webhookUrl")}
-        onConfigureEmail={onConfigureEmail}
-        onOpenChannels={onOpenChannels}
-      />
     </div>
   );
 }
