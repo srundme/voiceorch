@@ -55,11 +55,11 @@ export function StripePage({
         )}
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <h1 className="text-[22px] font-semibold leading-none tracking-tight text-foreground sm:text-2xl">
+            <h1 className="text-[24px] font-semibold leading-none tracking-tight text-foreground sm:text-[26px]">
               {title}
             </h1>
             {description && (
-              <p className="mt-1.5 max-w-2xl text-[13px] leading-relaxed text-muted-foreground">
+              <p className="mt-2 max-w-2xl text-[14px] leading-relaxed text-muted-foreground">
                 {description}
               </p>
             )}

@@ -4,6 +4,9 @@ import { useGetPreferences, useUpdatePreferences, getGetPreferencesQueryKey } fr
 import { useTheme } from "@/components/theme-provider";
 import { useQueryClient } from "@tanstack/react-query";
 
+/** Must match ThemeProvider storageKey in App.tsx — new key resets to light for readability. */
+const THEME_STORAGE_KEY = "snapserve-ui-theme-v2";
+
 export function ThemeSync() {
   const { isSignedIn, userId } = useAuth();
   const { theme, setTheme } = useTheme();
@@ -33,11 +36,20 @@ export function ThemeSync() {
     if (!prefs) return;
 
     const serverTheme = prefs.theme as "light" | "dark" | "system" | null | undefined;
-    if (serverTheme && serverTheme !== theme) {
+    // If the user has not chosen a theme on the new storage key yet, keep the
+    // light default (outdoor readability) instead of re-applying a stale dark
+    // preference from the server.
+    const hasLocalChoice = typeof localStorage !== "undefined"
+      && localStorage.getItem(THEME_STORAGE_KEY) != null;
+
+    if (hasLocalChoice && serverTheme && serverTheme !== theme) {
       prevThemeRef.current = serverTheme;
       setTheme(serverTheme);
     } else {
       prevThemeRef.current = theme;
+      if (!hasLocalChoice) {
+        try { localStorage.setItem(THEME_STORAGE_KEY, theme); } catch { /* ignore */ }
+      }
     }
 
     hydratedForUser.current = userId;

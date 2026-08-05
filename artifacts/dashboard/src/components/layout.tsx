@@ -194,28 +194,28 @@ function WalletChip({ compact = false }: { compact?: boolean }) {
 
   const { ring, text, bar } =
     cents === null
-      ? { ring: "border-border",         text: "text-muted-foreground", bar: "bg-border" }
+      ? { ring: "border-border", text: "text-muted-foreground", bar: "bg-border" }
       : cents >= 50_000
-      ? { ring: "border-emerald-500/30", text: "text-emerald-400",      bar: "bg-emerald-500" }
+      ? { ring: "border-emerald-500/35", text: "text-emerald-700 dark:text-emerald-400", bar: "bg-emerald-500" }
       : cents >= 10_000
-      ? { ring: "border-amber-500/30",   text: "text-amber-400",        bar: "bg-amber-500" }
-      : { ring: "border-red-500/30",     text: "text-red-400",          bar: "bg-red-500" };
+      ? { ring: "border-amber-500/35", text: "text-amber-700 dark:text-amber-400", bar: "bg-amber-500" }
+      : { ring: "border-red-500/35", text: "text-red-700 dark:text-red-400", bar: "bg-red-500" };
 
   const pct = cents === null ? 0 : Math.min(100, (cents / 100_000) * 100);
 
   return (
     <Link href="/app/wallet">
       <div className={`flex items-center gap-1.5 px-2.5 py-[7px] rounded-lg border ${ring} bg-elevated/40 cursor-pointer hover:bg-elevated transition-colors w-full`}>
-        <Wallet className={`w-3 h-3 shrink-0 ${text}`} />
+        <Wallet className={`size-3.5 shrink-0 ${text}`} />
         {!compact && (
           <div className="flex flex-col gap-[3px] flex-1 min-w-0">
             {cents !== null ? (
               <div className="flex items-baseline gap-1.5">
-                <span className={`text-[11px] font-semibold tabular-nums leading-none ${text}`}>
+                <span className={`text-[13px] font-semibold tabular-nums leading-none ${text}`}>
                   ₹{(cents / 100).toFixed(2)}
                 </span>
                 {availMins !== null && (
-                  <span className={`text-[9px] leading-none tabular-nums ${text} opacity-60`}>
+                  <span className={`text-[11px] leading-none tabular-nums ${text} opacity-70`}>
                     ~{availMins}m
                   </span>
                 )}
@@ -236,8 +236,8 @@ function WalletChip({ compact = false }: { compact?: boolean }) {
 /* ─── Notification bell ──────────────────────────────────────────────────── */
 function BellButton() {
   return (
-    <button className="p-2 rounded-lg text-muted-foreground/50 hover:text-foreground hover:bg-accent transition-colors relative">
-      <Bell className="w-[15px] h-[15px]" />
+    <button className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors relative">
+      <Bell className="size-4" />
     </button>
   );
 }
@@ -257,13 +257,13 @@ function SidebarUser({ collapsed }: { collapsed: boolean }) {
         onClick={() => setOpen(o => !o)}
         className="flex items-center gap-2 w-full px-2.5 py-2 rounded-lg hover:bg-accent transition-colors"
       >
-        <div className="w-6 h-6 rounded-md bg-elevated border border-border flex items-center justify-center shrink-0">
-          <span className="text-[10px] font-semibold text-foreground/70">{initials}</span>
+        <div className="size-7 rounded-md bg-elevated border border-border flex items-center justify-center shrink-0">
+          <span className="text-[11px] font-semibold text-foreground">{initials}</span>
         </div>
         {!collapsed && (
           <>
-            <span className="flex-1 text-left text-[12.5px] font-medium text-foreground max-w-[110px] truncate">{name}</span>
-            <ChevronDown className={`w-3 h-3 text-muted-foreground/40 transition-transform duration-150 shrink-0 ${open ? "rotate-180" : ""}`} />
+            <span className="flex-1 text-left text-[13px] font-medium text-foreground max-w-[110px] truncate">{name}</span>
+            <ChevronDown className={`size-3.5 text-muted-foreground transition-transform duration-150 shrink-0 ${open ? "rotate-180" : ""}`} />
           </>
         )}
       </button>
@@ -357,15 +357,15 @@ function NavItemEl({
     <Link href={item.href} onClick={onClick}>
       <div
         className={[
-          "relative flex h-8 items-center gap-2 rounded-md px-2 text-[12px] transition-colors duration-100 cursor-pointer select-none",
+          "relative flex h-9 items-center gap-2.5 rounded-md px-2.5 text-[13px] transition-colors duration-100 cursor-pointer select-none",
           indent ? "pl-2" : "",
           isActive
-            ? "bg-foreground/[0.065] text-foreground font-medium"
-            : "text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground",
+            ? "bg-primary/12 text-foreground font-medium"
+            : "text-muted-foreground hover:bg-foreground/[0.05] hover:text-foreground",
         ].join(" ")}
       >
         <item.icon
-          className={`size-3.5 shrink-0 ${isActive ? "text-foreground" : "text-muted-foreground/75"}`}
+          className={`size-4 shrink-0 ${isActive ? "text-primary" : "text-muted-foreground"}`}
         />
         {!collapsed && (
           <>
@@ -468,16 +468,16 @@ function SidebarContent({
             </>
           ) : (
             <>
-              <SnapServeIcon size={20} className="shrink-0 self-center text-foreground" />
+              <SnapServeIcon size={24} className="shrink-0 self-center text-foreground" />
               {!collapsed && (
                 <span className="flex min-w-0 flex-col gap-0.5 py-0.5">
                   <span
-                    className="whitespace-nowrap text-[13px] leading-none text-foreground"
+                    className="whitespace-nowrap text-[15px] leading-none text-foreground"
                     style={{ fontFamily: "system-ui, sans-serif", letterSpacing: "-0.02em" }}
                     aria-label="SnapServe"
                   >
                     <span style={{ fontWeight: 700 }}>Snap</span>
-                    <span style={{ fontWeight: 400, opacity: 0.55 }}>Serve</span>
+                    <span style={{ fontWeight: 400, opacity: 0.72 }}>Serve</span>
                   </span>
                   <PoweredBySarvam variant="inline" className="justify-start" />
                 </span>
@@ -505,13 +505,13 @@ function SidebarContent({
       <div className="shrink-0 px-2 pt-2 pb-1">
         <button
           onClick={onSearchOpen}
-          className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-[12px] text-muted-foreground transition-colors hover:bg-foreground/[0.04] hover:text-foreground"
+          className="flex h-9 w-full items-center gap-2.5 rounded-md px-2.5 text-[13px] text-muted-foreground transition-colors hover:bg-foreground/[0.05] hover:text-foreground"
         >
-          <Search className="w-[14px] h-[14px] shrink-0 text-muted-foreground/70" />
+          <Search className="size-4 shrink-0 text-muted-foreground" />
           {!collapsed && (
             <>
               <span className="flex-1 text-left">Search…</span>
-              <kbd className="rounded border border-border bg-background px-1 py-0.5 text-[8px] font-medium text-muted-foreground/55">⌘K</kbd>
+              <kbd className="rounded border border-border bg-background px-1 py-0.5 text-[10px] font-medium text-muted-foreground">⌘K</kbd>
             </>
           )}
         </button>
@@ -524,11 +524,11 @@ function SidebarContent({
           type="button"
           onClick={() => { onNavClick?.(); onNewAgent?.(); }}
           className={cn(
-            "flex h-8 w-full cursor-pointer select-none items-center gap-2 rounded-md bg-primary px-2 text-[12px] font-medium text-primary-foreground transition-colors hover:bg-primary/90",
+            "flex h-9 w-full cursor-pointer select-none items-center gap-2.5 rounded-md bg-primary px-2.5 text-[13px] font-medium text-primary-foreground transition-colors hover:bg-primary/90",
             collapsed ? "justify-center" : ""
           )}
         >
-          <Plus className="size-3.5 shrink-0" />
+          <Plus className="size-4 shrink-0" />
           {!collapsed && <span>New agent</span>}
         </button>
       </div>
@@ -542,7 +542,7 @@ function SidebarContent({
 
             {/* Group label */}
             {group.group && !collapsed && (
-              <p className="mb-1 px-2 text-[9px] font-semibold uppercase tracking-[0.13em] text-muted-foreground/55 select-none">
+              <p className="mb-1.5 px-2.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground select-none">
                 {group.group}
               </p>
             )}
@@ -568,17 +568,17 @@ function SidebarContent({
         <button
           onClick={toggleSettings}
           className={[
-            "flex h-8 w-full cursor-pointer select-none items-center gap-2 rounded-md px-2 text-[12px] transition-colors duration-100",
+            "flex h-9 w-full cursor-pointer select-none items-center gap-2.5 rounded-md px-2.5 text-[13px] transition-colors duration-100",
             isInSettings
-              ? "text-foreground font-medium"
-              : "text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground",
+              ? "bg-primary/12 text-foreground font-medium"
+              : "text-muted-foreground hover:bg-foreground/[0.05] hover:text-foreground",
           ].join(" ")}
         >
-          <SlidersHorizontal className={`size-3.5 shrink-0 ${isInSettings ? "text-foreground" : "text-muted-foreground/75"}`} />
+          <SlidersHorizontal className={`size-4 shrink-0 ${isInSettings ? "text-primary" : "text-muted-foreground"}`} />
           {!collapsed && (
             <>
               <span className="flex-1 text-left">Settings</span>
-              <ChevronDown className={`w-3 h-3 text-muted-foreground/55 transition-transform duration-150 ${settingsOpen ? "rotate-180" : ""}`} />
+              <ChevronDown className={`size-3.5 text-muted-foreground transition-transform duration-150 ${settingsOpen ? "rotate-180" : ""}`} />
             </>
           )}
         </button>
@@ -620,9 +620,9 @@ function SidebarContent({
           <Link
             href="/docs"
             onClick={onNavClick}
-            className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-[12px] text-muted-foreground transition-colors hover:bg-foreground/[0.04] hover:text-foreground"
+            className="flex h-9 w-full items-center gap-2.5 rounded-md px-2.5 text-[13px] text-muted-foreground transition-colors hover:bg-foreground/[0.05] hover:text-foreground"
           >
-            <BookOpen className="w-[14px] h-[14px] shrink-0 text-muted-foreground/70" />
+            <BookOpen className="size-4 shrink-0 text-muted-foreground" />
             {!collapsed && <span>Documentation</span>}
           </Link>
         </div>
@@ -942,7 +942,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               </span>
             ) : (
               <>
-                <SnapServeIcon size={20} className="text-foreground shrink-0" />
+                <SnapServeIcon size={22} className="text-foreground shrink-0" />
                 <span className="flex flex-col min-w-0 leading-none gap-0.5">
                   <span className="text-[13px] text-foreground truncate" style={{ fontFamily: "system-ui, sans-serif", letterSpacing: "-0.02em" }}>
                     <span style={{ fontWeight: 700 }}>Snap</span>

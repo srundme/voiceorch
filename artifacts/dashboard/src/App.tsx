@@ -523,7 +523,7 @@ function Router() {
 
 function App() {
   return (
-    <ThemeProvider defaultTheme="dark" storageKey="snapserve-ui-theme">
+    <ThemeProvider defaultTheme="light" storageKey="snapserve-ui-theme-v2">
       <TooltipProvider>
         <WouterRouter base={basePath}>
           <Router />
