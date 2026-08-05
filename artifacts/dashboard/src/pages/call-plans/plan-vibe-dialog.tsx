@@ -1,5 +1,5 @@
 /**
- * Call-plan Vibe — describe the path in plain language; we draft people source + recipe.
+ * Suggest a starter — NL → draft lead source + starter steps (not a full plan compiler).
  */
 
 import { useState } from "react";
@@ -75,7 +75,7 @@ export function PlanVibeDialog({ open, onOpenChange, agents, defaultAgentId, onC
       }),
     onSuccess: (d) => setDraft(d),
     onError: (err) => {
-      toast({ title: "Could not draft plan", description: formatApiError(err), variant: "destructive" });
+      toast({ title: "Could not draft", description: formatApiError(err), variant: "destructive" });
     },
   });
 
@@ -93,7 +93,7 @@ export function PlanVibeDialog({ open, onOpenChange, agents, defaultAgentId, onC
           agentId: aid,
           presetId: "custom",
           name: draft.name.trim() || `${src.title} plan`,
-          description: draft.summary || `${src.blurb} · ${tpl.blurb}`,
+          description: draft.summary || tpl.blurb,
           trigger: { type: src.triggerType },
           steps: stepsForTemplate(draft.templateId, aid),
           settings: {
@@ -134,10 +134,10 @@ export function PlanVibeDialog({ open, onOpenChange, agents, defaultAgentId, onC
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="size-4" />
-            Build with AI
+            Suggest a starter
           </DialogTitle>
           <DialogDescription>
-            Describe who to reach and what should happen. We’ll draft lead source + steps — you attach leads and Start queue.
+            Describe who to reach and what should happen. We pick a starter timeline you can edit on the plan — not a free-form compiler.
           </DialogDescription>
         </DialogHeader>
 
@@ -189,6 +189,10 @@ export function PlanVibeDialog({ open, onOpenChange, agents, defaultAgentId, onC
             </>
           ) : (
             <div className="space-y-3 rounded-xl border border-border/60 bg-muted/20 p-3.5">
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                I’ll set this up as <span className="font-medium text-foreground">{tplTitle}</span>
+                {" "}and you can adjust steps and branches on the plan after.
+              </p>
               <div className="space-y-1.5">
                 <Label className="text-[11px]">Plan name</Label>
                 <Input
@@ -203,7 +207,7 @@ export function PlanVibeDialog({ open, onOpenChange, agents, defaultAgentId, onC
                   Leads: {srcTitle}
                 </span>
                 <span className="rounded-md border border-border/60 bg-background px-2 py-1">
-                  Recipe: {tplTitle}
+                  Starter: {tplTitle}
                 </span>
                 {draft.leadSource === "sheet" && (
                   <span className="rounded-md border border-border/60 bg-background px-2 py-1">
@@ -236,7 +240,7 @@ export function PlanVibeDialog({ open, onOpenChange, agents, defaultAgentId, onC
                   </Select>
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-[11px]">Recipe</Label>
+                  <Label className="text-[11px]">Starter</Label>
                   <Select
                     value={draft.templateId}
                     onValueChange={(v) => setDraft({ ...draft, templateId: v as CallPlanTemplateId })}
@@ -289,7 +293,7 @@ export function PlanVibeDialog({ open, onOpenChange, agents, defaultAgentId, onC
                 onClick={() => createMut.mutate()}
               >
                 {createMut.isPending ? <Loader2 className="size-4 animate-spin" /> : <ArrowRight className="size-4" />}
-                Create plan
+                Open plan
               </Button>
             </>
           ) : (
@@ -303,7 +307,7 @@ export function PlanVibeDialog({ open, onOpenChange, agents, defaultAgentId, onC
                 onClick={() => draftMut.mutate(prompt.trim())}
               >
                 {draftMut.isPending ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
-                Draft plan
+                Suggest
               </Button>
             </>
           )}

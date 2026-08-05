@@ -1,6 +1,6 @@
 /**
- * Call plan detail — people + timeline + Start once.
- * Full activity/call log lives on /app/call-plans/:id/activity.
+ * Call plan builder — single screen: Agent + Who + What happens → Start.
+ * Activity log: /app/call-plans/:id/activity.
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -15,6 +15,7 @@ import {
 } from "@workspace/api-client-react";
 import {
   Loader2, Pause, Play, Save, Trash2, ExternalLink, Users, Square, Clock,
+  MoreHorizontal,
 } from "lucide-react";
 import { StripePage } from "@/components/stripe-page";
 import { Button } from "@/components/ui/button";
@@ -27,14 +28,19 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError } from "@/lib/format-api-error";
 import { cn } from "@/lib/utils";
-import { CallPlanStepEditor, type CallPlanStep } from "./step-editor";
+import { CallPlanStepEditor, type CallPlanStep, type CallPlanPeopleHint } from "./step-editor";
 import { CallPlanActivitySummary } from "./activity-panel";
+
+type WhoTab = "list" | "sheet" | "paste" | "form" | "meta";
 
 const _DASH_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const DASH_API = `${_DASH_BASE}/api`;
@@ -391,11 +397,6 @@ export default function CallPlanDetailPage() {
     }
   }
 
-  function handleContinue() {
-    const offset = continueOffset || planQ.data?.settings?.startOffset || 0;
-    startOnce.mutate({ offset });
-  }
-
   const setStatus = useMutation({
     mutationFn: async (action: "activate" | "pause") =>
       customFetch<CallPlan>(`${DASH_API}/journeys/${planId}/${action}`, { method: "POST" }),
@@ -464,18 +465,77 @@ export default function CallPlanDetailPage() {
   const settingsOffset = typeof plan.settings?.startOffset === "number" ? plan.settings.startOffset : 0;
   const settingsTotal = typeof plan.settings?.startSourceTotal === "number" ? plan.settings.startSourceTotal : 0;
   const autoFeedOn = plan.settings?.autoFeed === true && plan.status === "active";
-  const effectiveContinueOffset = continueOffset || settingsOffset;
-  // Continue is legacy — auto-feed drains the list; only show if feed is off and cursor remains.
-  const showContinue =
-    !autoFeedOn
-    && effectiveContinueOffset > 0
-    && (lastHasMore || (settingsTotal > 0 && effectiveContinueOffset < settingsTotal));
-  const startBusy = startOnce.isPending || previewPending || save.isPending;
+  const startBusy = startOnce.isPending || previewPending || save.isPending || setStatus.isPending;
+
+  const whoTab: WhoTab =
+    intakeMode === "form_lead" ? "form"
+      : intakeMode === "instagram_lead" ? "meta"
+        : peopleMode === "sheet" ? "sheet"
+          : peopleMode === "manual" ? "paste"
+            : "list";
+
+  function setWhoTab(tab: WhoTab) {
+    if (tab === "form") {
+      setPeopleMode("manual");
+      setIntakeMode("form_lead");
+      setRunMode("once");
+    } else if (tab === "meta") {
+      setPeopleMode("manual");
+      setIntakeMode("instagram_lead");
+      setRunMode("once");
+    } else if (tab === "sheet") {
+      setPeopleMode("sheet");
+      setIntakeMode("manual");
+    } else if (tab === "paste") {
+      setPeopleMode("manual");
+      setIntakeMode("manual");
+      setRunMode("once");
+    } else {
+      setPeopleMode("campaign");
+      setIntakeMode("manual");
+      setRunMode("once");
+    }
+    setDirty(true);
+  }
+
+  const isIntakeWho = whoTab === "form" || whoTab === "meta";
+  const whoReady =
+    isIntakeWho
+    || (whoTab === "list" && Boolean(campaignId))
+    || (whoTab === "sheet" && Boolean(sheetPipelineId))
+    || (whoTab === "paste" && manualPhones.trim().length > 0);
+
+  const startBlockedReason =
+    steps.length === 0 ? "Pick a starter for steps first"
+      : !whoReady
+        ? (isIntakeWho ? "Save to mint the hook URL, then go live" : "Attach leads first")
+        : null;
+
+  const startLabel =
+    isIntakeWho ? "Go live"
+      : peopleMode === "sheet" && runMode === "live" ? "Start drip"
+        : "Start queue";
+
+  const peopleHint: CallPlanPeopleHint =
+    whoTab === "sheet" ? "sheet"
+      : whoTab === "paste" ? "manual"
+        : whoTab === "form" || whoTab === "meta" ? "form"
+          : "campaign";
+
+  async function handlePrimaryStart() {
+    if (startBlockedReason) return;
+    if (isIntakeWho) {
+      if (dirty) await save.mutateAsync();
+      setStatus.mutate("activate");
+      return;
+    }
+    void handleStartClick();
+  }
 
   return (
     <StripePage
       title={name || plan.name}
-      description="Attach leads → Start queue. Steps run for each lead."
+      description="Who talks · Who to reach · What happens · Start."
       back={{ href: "/app/call-plans", label: "Call plans" }}
       actions={
         <div className="flex flex-wrap items-center gap-2">
@@ -498,62 +558,53 @@ export default function CallPlanDetailPage() {
             {save.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
             Save
           </Button>
-          {plan.status === "active" ? (
+          <div className="flex items-center gap-1">
             <Button
-              variant="outline"
               size="sm"
               className="h-9 gap-1.5"
-              disabled={setStatus.isPending}
-              onClick={() => setStatus.mutate("pause")}
+              disabled={startBusy || Boolean(startBlockedReason)}
+              title={startBlockedReason ?? undefined}
+              onClick={() => { void handlePrimaryStart(); }}
             >
-              {setStatus.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Pause className="size-3.5" />}
-              Pause
+              {startBusy ? <Loader2 className="size-3.5 animate-spin" /> : <Play className="size-3.5" />}
+              {startLabel}
             </Button>
-          ) : plan.status === "paused" ? (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-9 gap-1.5"
-              disabled={setStatus.isPending}
-              onClick={() => setStatus.mutate("activate")}
-            >
-              {setStatus.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Play className="size-3.5" />}
-              Resume
-            </Button>
-          ) : null}
-          {peopleMode === "sheet" && runMode === "live" && plan.status === "active" && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-9 gap-1.5"
-              disabled={stopLive.isPending}
-              onClick={() => stopLive.mutate()}
-            >
-              {stopLive.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Square className="size-3.5" />}
-              Stop drip
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="h-9 w-9 px-0" aria-label="More actions">
+                  <MoreHorizontal className="size-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {plan.status === "active" && (
+                  <DropdownMenuItem disabled={setStatus.isPending} onClick={() => setStatus.mutate("pause")}>
+                    <Pause className="size-3.5 mr-2" /> Pause
+                  </DropdownMenuItem>
+                )}
+                {plan.status === "paused" && (
+                  <DropdownMenuItem disabled={setStatus.isPending} onClick={() => setStatus.mutate("activate")}>
+                    <Play className="size-3.5 mr-2" /> Resume
+                  </DropdownMenuItem>
+                )}
+                {peopleMode === "sheet" && runMode === "live" && plan.status === "active" && (
+                  <DropdownMenuItem disabled={stopLive.isPending} onClick={() => stopLive.mutate()}>
+                    <Square className="size-3.5 mr-2" /> Stop drip
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem
+                  className="text-destructive focus:text-destructive"
+                  onClick={() => setDeleteOpen(true)}
+                >
+                  <Trash2 className="size-3.5 mr-2" /> Delete plan
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+          {startBlockedReason && (
+            <span className="text-[10px] text-muted-foreground max-w-[140px] leading-snug hidden sm:inline">
+              {startBlockedReason}
+            </span>
           )}
-          {showContinue && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-9 gap-1.5"
-              disabled={startBusy || steps.length === 0}
-              onClick={() => handleContinue()}
-            >
-              {startOnce.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Play className="size-3.5" />}
-              Continue
-            </Button>
-          )}
-          <Button
-            size="sm"
-            className="h-9 gap-1.5"
-            disabled={startBusy || steps.length === 0}
-            onClick={() => { void handleStartClick(); }}
-          >
-            {startBusy ? <Loader2 className="size-3.5 animate-spin" /> : <Play className="size-3.5" />}
-            {peopleMode === "sheet" && runMode === "live" ? "Start drip" : "Start queue"}
-          </Button>
         </div>
       }
     >
@@ -588,251 +639,8 @@ export default function CallPlanDetailPage() {
             )}
           </div>
         )}
-        {(() => {
-          const peopleReady =
-            (peopleMode === "campaign" && Boolean(campaignId))
-            || (peopleMode === "sheet" && Boolean(sheetPipelineId))
-            || (peopleMode === "manual" && manualPhones.trim().length > 0)
-            || intakeMode !== "manual";
-          return !peopleReady && plan.status === "draft" ? (
-            <div className="rounded-xl border border-border/70 bg-muted/20 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-[13px] font-medium">Next: attach leads</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">
-                  Pick a list, sheet, or paste numbers — then Start queue.
-                </p>
-              </div>
-              <Button
-                size="sm"
-                className="h-8 gap-1.5 shrink-0"
-                disabled={startBusy || steps.length === 0}
-                onClick={() => { void handleStartClick(); }}
-              >
-                <Play className="size-3.5" />
-                Start queue
-              </Button>
-            </div>
-          ) : null;
-        })()}
-
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] lg:items-start">
-          {/* Leads first — then settings */}
           <div className="space-y-5 min-w-0">
-            <section className="space-y-3 rounded-xl border border-border/60 bg-card/40 p-4 ring-1 ring-border/40">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <Users className="h-4 w-4 text-muted-foreground" />
-                  <h2 className="text-sm font-semibold">Leads</h2>
-                </div>
-                <p className="text-[10px] text-muted-foreground tabular-nums">1 · attach</p>
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                <button
-                  type="button"
-                  onClick={() => { setPeopleMode("campaign"); setRunMode("once"); setDirty(true); }}
-                  className={cn(
-                    "rounded-lg border px-2.5 py-2.5 text-left text-[11px]",
-                    peopleMode === "campaign"
-                      ? "border-primary/40 bg-primary/5 font-medium"
-                      : "border-border/50 hover:bg-muted/30",
-                  )}
-                >
-                  List / CSV
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setPeopleMode("sheet"); setDirty(true); }}
-                  className={cn(
-                    "rounded-lg border px-2.5 py-2.5 text-left text-[11px]",
-                    peopleMode === "sheet"
-                      ? "border-primary/40 bg-primary/5 font-medium"
-                      : "border-border/50 hover:bg-muted/30",
-                  )}
-                >
-                  Google Sheet
-                  <span className="mt-0.5 block text-[9px] font-normal text-muted-foreground leading-snug">
-                    Drain list or drip new rows
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setPeopleMode("manual"); setRunMode("once"); setDirty(true); }}
-                  className={cn(
-                    "rounded-lg border px-2.5 py-2.5 text-left text-[11px]",
-                    peopleMode === "manual"
-                      ? "border-primary/40 bg-primary/5 font-medium"
-                      : "border-border/50 hover:bg-muted/30",
-                  )}
-                >
-                  Paste phones
-                </button>
-              </div>
-
-              {peopleMode === "campaign" ? (
-                <div className="space-y-2">
-                  <Select
-                    value={campaignId || undefined}
-                    onValueChange={(v) => { setCampaignId(v); setDirty(true); }}
-                  >
-                    <SelectTrigger className="h-9 text-xs">
-                      <SelectValue placeholder={campaigns.length ? "Choose a list…" : "Upload a list in Leads first"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {campaigns.map((c) => (
-                        <SelectItem key={c.id} value={String(c.id)} className="text-xs">
-                          {c.name}
-                          {typeof c.totalLeads === "number" ? ` · ${c.totalLeads}` : ""}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-[10px] text-muted-foreground">
-                    {selectedCampaign
-                      ? (
-                        <>
-                          Starts a dial queue up to your account concurrency. Large lists feed automatically —{" "}
-                          <Link href="/app/wallet" className="underline underline-offset-2">
-                            check concurrency in Wallet
-                          </Link>
-                          .
-                        </>
-                      )
-                      : (
-                        <>
-                          No list yet?{" "}
-                          <Link href="/app/people" className="underline underline-offset-2">
-                            Upload CSV under Leads
-                          </Link>
-                          .
-                        </>
-                      )}
-                  </p>
-                </div>
-              ) : peopleMode === "sheet" ? (
-                <div className="space-y-3">
-                  {sheetsQ.isLoading ? (
-                    <div className="flex h-9 items-center gap-2 text-[11px] text-muted-foreground">
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading sheets…
-                    </div>
-                  ) : sheetsQ.isError ? (
-                    <p className="text-[11px] text-destructive">
-                      Could not load sheet pipelines. Try Refresh or reconnect Google Sheets.
-                    </p>
-                  ) : sheetPipelines.length === 0 ? (
-                    <div className="space-y-2 rounded-lg border border-dashed border-border/70 bg-muted/20 p-3">
-                      <p className="text-[11px] text-muted-foreground leading-relaxed">
-                        Connect Google under Connections, then set up one sheet — SnapServe imports those leads and can keep using that same sheet for new rows and status write-back.
-                      </p>
-                      <div className="flex flex-wrap gap-2">
-                        <Button asChild size="sm" className="h-8 text-xs">
-                          <Link href="/app/automatic-calls/new">Set up Google Sheet</Link>
-                        </Button>
-                        <Button asChild size="sm" variant="outline" className="h-8 text-xs">
-                          <Link href="/app/connections?setup=sheets">Connections</Link>
-                        </Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <Select
-                      value={sheetPipelineId || undefined}
-                      onValueChange={(v) => { setSheetPipelineId(v); setDirty(true); }}
-                    >
-                      <SelectTrigger className="h-9 text-xs">
-                        <SelectValue placeholder="Choose a sheet…" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {sheetPipelines.map((p) => (
-                          <SelectItem key={p.id} value={p.id} className="text-xs">
-                            {p.name}
-                            {p.spreadsheetTitle ? ` · ${p.spreadsheetTitle}` : ""}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => { setRunMode("once"); setDirty(true); }}
-                      className={cn(
-                        "rounded-lg border px-3 py-2 text-left text-[11px]",
-                        runMode === "once"
-                          ? "border-primary/40 bg-primary/5 font-medium"
-                          : "border-border/50 hover:bg-muted/30",
-                      )}
-                    >
-                      <p className="font-medium">Drain this list</p>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">
-                        Queue today’s rows once — dial at concurrency until done
-                      </p>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { setRunMode("live"); setDirty(true); }}
-                      className={cn(
-                        "rounded-lg border px-3 py-2 text-left text-[11px]",
-                        runMode === "live"
-                          ? "border-primary/40 bg-primary/5 font-medium"
-                          : "border-border/50 hover:bg-muted/30",
-                      )}
-                    >
-                      <p className="font-medium">Drip new rows</p>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">
-                        Keep watching the sheet — new rows enter the same queue
-                      </p>
-                    </button>
-                  </div>
-                  {sheetPipelines.length > 0 && (
-                    <div className="rounded-lg border border-border/50 bg-muted/15 px-3 py-2.5 text-[10px] text-muted-foreground leading-relaxed space-y-1">
-                      {runMode === "live" ? (
-                        <>
-                          <p>
-                            <span className="font-medium text-foreground">Drip:</span>{" "}
-                            SnapServe watches this sheet. New rows join the dial queue (same concurrency + calling hours). Already-processed rows are not re-dialed.
-                          </p>
-                          <p>Use when leads keep arriving in the spreadsheet.</p>
-                        </>
-                      ) : (
-                        <>
-                          <p>
-                            <span className="font-medium text-foreground">Drain:</span>{" "}
-                            Start queues everyone currently on the sheet, then stops when the list is done. No new rows after Start (unless you Start again).
-                          </p>
-                          <p>Use for a fixed batch — like a CSV list.</p>
-                        </>
-                      )}
-                      <p>
-                        Add an “Update the list” step to write status back.{" "}
-                        <Link href="/app/automatic-calls/new" className="underline underline-offset-2">
-                          Add another sheet
-                        </Link>
-                      </p>
-                    </div>
-                  )}
-                  {peopleMode === "sheet" && (
-                    <p className="text-[10px] text-muted-foreground tabular-nums">
-                      Sheet cursor: row {plan.settings?.sheetCursorRow ?? 1}
-                      {" · "}
-                      Drip {runMode === "live" ? "on" : "off"}
-                    </p>
-                  )}
-                </div>
-              ) : (
-                <div className="space-y-1.5">
-                  <Textarea
-                    rows={4}
-                    className="text-xs font-mono"
-                    placeholder={"+9198…\n+9180…"}
-                    value={manualPhones}
-                    onChange={(e) => setManualPhones(e.target.value)}
-                  />
-                  <p className="text-[10px] text-muted-foreground">
-                    One phone per line. Queued and dialed up to your account concurrency; leftover numbers feed automatically.
-                  </p>
-                </div>
-              )}
-            </section>
-
             <section className="space-y-3 rounded-xl border border-border/50 bg-card/20 p-3.5">
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
@@ -873,156 +681,278 @@ export default function CallPlanDetailPage() {
               </div>
             </section>
 
+            <section className="space-y-3 rounded-xl border border-border/60 bg-card/40 p-4 ring-1 ring-border/40">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Users className="h-4 w-4 text-muted-foreground" />
+                  <h2 className="text-sm font-semibold">Who</h2>
+                </div>
+                <p className="text-[10px] text-muted-foreground">Leads for this plan</p>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {(
+                  [
+                    { id: "list" as const, label: "List" },
+                    { id: "sheet" as const, label: "Sheet" },
+                    { id: "paste" as const, label: "Paste" },
+                    { id: "form" as const, label: "Form" },
+                    { id: "meta" as const, label: "Meta" },
+                  ] as const
+                ).map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setWhoTab(tab.id)}
+                    className={cn(
+                      "rounded-full border px-3 py-1.5 text-[11px] transition-colors",
+                      whoTab === tab.id
+                        ? "border-primary/40 bg-primary/5 font-medium"
+                        : "border-border/50 text-muted-foreground hover:bg-muted/30",
+                    )}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+
+              {whoTab === "list" && (
+                <div className="space-y-2">
+                  <Select
+                    value={campaignId || undefined}
+                    onValueChange={(v) => { setCampaignId(v); setDirty(true); }}
+                  >
+                    <SelectTrigger className="h-9 text-xs">
+                      <SelectValue placeholder={campaigns.length ? "Choose a list…" : "Upload a list in Leads first"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {campaigns.map((c) => (
+                        <SelectItem key={c.id} value={String(c.id)} className="text-xs">
+                          {c.name}
+                          {typeof c.totalLeads === "number" ? ` · ${c.totalLeads}` : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[10px] text-muted-foreground">
+                    {selectedCampaign
+                      ? (
+                        <>
+                          Dial queue uses your account concurrency.{" "}
+                          <Link href="/app/wallet" className="underline underline-offset-2">Wallet</Link>
+                        </>
+                      )
+                      : (
+                        <>
+                          No list yet?{" "}
+                          <Link href="/app/people" className="underline underline-offset-2">Upload CSV under Leads</Link>
+                        </>
+                      )}
+                  </p>
+                </div>
+              )}
+
+              {whoTab === "sheet" && (
+                <div className="space-y-3">
+                  {sheetsQ.isLoading ? (
+                    <div className="flex h-9 items-center gap-2 text-[11px] text-muted-foreground">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading sheets…
+                    </div>
+                  ) : sheetsQ.isError ? (
+                    <p className="text-[11px] text-destructive">Could not load sheets. Reconnect under Connections.</p>
+                  ) : sheetPipelines.length === 0 ? (
+                    <div className="space-y-2 rounded-lg border border-dashed border-border/70 bg-muted/20 p-3">
+                      <p className="text-[11px] text-muted-foreground leading-relaxed">
+                        Connect Google under Connections, then set up one sheet.
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        <Button asChild size="sm" className="h-8 text-xs">
+                          <Link href="/app/automatic-calls/new">Set up Google Sheet</Link>
+                        </Button>
+                        <Button asChild size="sm" variant="outline" className="h-8 text-xs">
+                          <Link href="/app/connections?setup=sheets">Connections</Link>
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <Select
+                      value={sheetPipelineId || undefined}
+                      onValueChange={(v) => { setSheetPipelineId(v); setDirty(true); }}
+                    >
+                      <SelectTrigger className="h-9 text-xs">
+                        <SelectValue placeholder="Choose a sheet…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {sheetPipelines.map((p) => (
+                          <SelectItem key={p.id} value={p.id} className="text-xs">
+                            {p.name}
+                            {p.spreadsheetTitle ? ` · ${p.spreadsheetTitle}` : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => { setRunMode("once"); setDirty(true); }}
+                      className={cn(
+                        "rounded-lg border px-3 py-2 text-left text-[11px]",
+                        runMode === "once"
+                          ? "border-primary/40 bg-primary/5 font-medium"
+                          : "border-border/50 hover:bg-muted/30",
+                      )}
+                    >
+                      <p className="font-medium">Drain this list</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">Queue today’s rows once</p>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setRunMode("live"); setDirty(true); }}
+                      className={cn(
+                        "rounded-lg border px-3 py-2 text-left text-[11px]",
+                        runMode === "live"
+                          ? "border-primary/40 bg-primary/5 font-medium"
+                          : "border-border/50 hover:bg-muted/30",
+                      )}
+                    >
+                      <p className="font-medium">Drip new rows</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">Keep watching the sheet</p>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {whoTab === "paste" && (
+                <div className="space-y-1.5">
+                  <Textarea
+                    rows={4}
+                    className="text-xs font-mono"
+                    placeholder={"+9198…\n+9180…"}
+                    value={manualPhones}
+                    onChange={(e) => setManualPhones(e.target.value)}
+                  />
+                  <p className="text-[10px] text-muted-foreground">
+                    One phone per line. Dialed up to your account concurrency.
+                  </p>
+                </div>
+              )}
+
+              {(whoTab === "form" || whoTab === "meta") && (
+                <div className="space-y-2">
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                    {whoTab === "form"
+                      ? "Website form leads enter this plan automatically."
+                      : "Meta Lead Ads enter this plan automatically."}
+                    {" "}
+                    <Link
+                      href={whoTab === "form" ? "/app/connections?setup=website" : "/app/connections?setup=meta"}
+                      className="underline underline-offset-2"
+                    >
+                      Connections
+                    </Link>
+                  </p>
+                  {hookUrl ? (
+                    <div className="space-y-1">
+                      <Label className="text-[11px]">Hook URL</Label>
+                      <div className="flex gap-2">
+                        <Input
+                          className="h-8 text-[11px] font-mono"
+                          readOnly
+                          value={typeof window !== "undefined" ? `${window.location.origin}${hookUrl}` : hookUrl}
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-8 shrink-0 text-[11px]"
+                          onClick={() => {
+                            const full = `${window.location.origin}${hookUrl}`;
+                            void navigator.clipboard.writeText(full);
+                            toast({ title: "Hook URL copied" });
+                          }}
+                        >
+                          Copy
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-amber-400">Save the plan to mint a hook URL.</p>
+                  )}
+                </div>
+              )}
+            </section>
+
             <details className="group rounded-xl border border-border/50 bg-card/20 open:bg-card/30">
               <summary className="cursor-pointer list-none px-3.5 py-3 flex items-center justify-between gap-2 text-[12px] font-medium [&::-webkit-details-marker]:hidden">
                 <span className="flex items-center gap-2 text-muted-foreground group-open:text-foreground">
                   <Clock className="h-3.5 w-3.5" />
                   More settings
                   <span className="font-normal text-[10px]">
-                    Calling hours
-                    {callingHoursEnabled ? " on" : ""}
-                    {intakeMode !== "manual" ? " · intake" : ""}
+                    Calling hours{callingHoursEnabled ? " on" : ""}
                   </span>
                 </span>
                 <span className="text-[10px] text-muted-foreground group-open:hidden">Show</span>
                 <span className="text-[10px] text-muted-foreground hidden group-open:inline">Hide</span>
               </summary>
-              <div className="space-y-4 border-t border-border/50 px-3.5 py-3.5">
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <h3 className="text-[12px] font-semibold">Calling hours</h3>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">
-                        Queue holds outside this window.
-                      </p>
-                    </div>
-                    <Switch
-                      checked={callingHoursEnabled}
-                      onCheckedChange={(v) => { setCallingHoursEnabled(v); setDirty(true); }}
-                    />
-                  </div>
-                  {callingHoursEnabled && (
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      <div className="space-y-1.5">
-                        <Label className="text-[11px]">Start</Label>
-                        <Select
-                          value={String(hoursStart)}
-                          onValueChange={(v) => { setHoursStart(Number(v)); setDirty(true); }}
-                        >
-                          <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {HOUR_OPTIONS.map((h) => (
-                              <SelectItem key={h.value} value={h.value} className="text-xs">{h.label}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-[11px]">End</Label>
-                        <Select
-                          value={String(hoursEnd)}
-                          onValueChange={(v) => { setHoursEnd(Number(v)); setDirty(true); }}
-                        >
-                          <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {HOUR_OPTIONS.map((h) => (
-                              <SelectItem key={h.value} value={h.value} className="text-xs">{h.label}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-[11px]">Timezone</Label>
-                        <Select
-                          value={timezone}
-                          onValueChange={(v) => { setTimezone(v); setDirty(true); }}
-                        >
-                          <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {CALL_PLAN_TIMEZONES.map((tz) => (
-                              <SelectItem key={tz} value={tz} className="text-xs">{tz}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                <div className="space-y-3 border-t border-border/40 pt-3">
+              <div className="space-y-3 border-t border-border/50 px-3.5 py-3.5">
+                <div className="flex items-center justify-between gap-3">
                   <div>
-                    <h3 className="text-[12px] font-semibold">Also start from intake</h3>
+                    <h3 className="text-[12px] font-semibold">Calling hours</h3>
                     <p className="text-[10px] text-muted-foreground mt-0.5">
-                      Optional — website or Meta leads can enter this plan (save to apply).
+                      Queue holds outside this window.
                     </p>
                   </div>
-                  <div className="grid grid-cols-3 gap-2">
-                    {(
-                      [
-                        { id: "manual" as const, label: "Manual / Start only" },
-                        { id: "form_lead" as const, label: "Website form" },
-                        { id: "instagram_lead" as const, label: "Meta Lead Ads" },
-                      ] as const
-                    ).map((opt) => (
-                      <button
-                        key={opt.id}
-                        type="button"
-                        onClick={() => { setIntakeMode(opt.id); setDirty(true); }}
-                        className={cn(
-                          "rounded-lg border px-2.5 py-2.5 text-left text-[11px]",
-                          intakeMode === opt.id
-                            ? "border-primary/40 bg-primary/5 font-medium"
-                            : "border-border/50 hover:bg-muted/30",
-                        )}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                  {intakeMode !== "manual" && (
-                    <div className="space-y-2">
-                      {hookUrl ? (
-                        <div className="space-y-1">
-                          <Label className="text-[11px]">Hook URL</Label>
-                          <div className="flex gap-2">
-                            <Input
-                              className="h-8 text-[11px] font-mono"
-                              readOnly
-                              value={typeof window !== "undefined" ? `${window.location.origin}${hookUrl}` : hookUrl}
-                            />
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="h-8 shrink-0 text-[11px]"
-                              onClick={() => {
-                                const full = `${window.location.origin}${hookUrl}`;
-                                void navigator.clipboard.writeText(full);
-                                toast({ title: "Hook URL copied" });
-                              }}
-                            >
-                              Copy
-                            </Button>
-                          </div>
-                          <p className="text-[10px] text-muted-foreground">
-                            Point your{" "}
-                            <Link
-                              href={intakeMode === "form_lead" ? "/app/connections?setup=website" : "/app/connections?setup=meta"}
-                              className="underline underline-offset-2"
-                            >
-                              {intakeMode === "form_lead" ? "Website form" : "Meta"} connection
-                            </Link>{" "}
-                            here.
-                          </p>
-                        </div>
-                      ) : (
-                        <p className="text-[11px] text-amber-400">
-                          Save the plan to mint a hook URL for {intakeMode === "form_lead" ? "website" : "Meta"} leads.
-                        </p>
-                      )}
-                    </div>
-                  )}
+                  <Switch
+                    checked={callingHoursEnabled}
+                    onCheckedChange={(v) => { setCallingHoursEnabled(v); setDirty(true); }}
+                  />
                 </div>
+                {callingHoursEnabled && (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px]">Start</Label>
+                      <Select
+                        value={String(hoursStart)}
+                        onValueChange={(v) => { setHoursStart(Number(v)); setDirty(true); }}
+                      >
+                        <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {HOUR_OPTIONS.map((h) => (
+                            <SelectItem key={h.value} value={h.value} className="text-xs">{h.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px]">End</Label>
+                      <Select
+                        value={String(hoursEnd)}
+                        onValueChange={(v) => { setHoursEnd(Number(v)); setDirty(true); }}
+                      >
+                        <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {HOUR_OPTIONS.map((h) => (
+                            <SelectItem key={h.value} value={h.value} className="text-xs">{h.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px]">Timezone</Label>
+                      <Select
+                        value={timezone}
+                        onValueChange={(v) => { setTimezone(v); setDirty(true); }}
+                      >
+                        <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {CALL_PLAN_TIMEZONES.map((tz) => (
+                            <SelectItem key={tz} value={tz} className="text-xs">{tz}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                )}
               </div>
             </details>
           </div>
@@ -1030,36 +960,23 @@ export default function CallPlanDetailPage() {
           {/* Steps */}
           <div className="space-y-5 min-w-0">
             <section className="space-y-3 rounded-xl border border-border/60 bg-card/40 p-4 ring-1 ring-border/40">
-              <div className="flex items-center justify-between gap-2">
-                <div>
-                  <h2 className="text-sm font-semibold">What happens next</h2>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">
-                    Ordered steps for each lead. No flowchart.
-                  </p>
-                </div>
-                <p className="text-[10px] text-muted-foreground tabular-nums shrink-0">2 · steps</p>
+              <div>
+                <h2 className="text-sm font-semibold">What happens next</h2>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Ordered steps for each lead. Pick a starter when empty.
+                </p>
               </div>
               {agentId != null ? (
                 <CallPlanStepEditor
                   steps={steps}
                   agentId={agentId}
+                  peopleHint={peopleHint}
                   onChange={(next) => { setSteps(next); setDirty(true); }}
                 />
               ) : (
                 <p className="text-[12px] text-muted-foreground">Pick an agent first.</p>
               )}
             </section>
-
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-8 text-xs text-destructive gap-1.5"
-              onClick={() => setDeleteOpen(true)}
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-              Delete plan
-            </Button>
           </div>
         </div>
 

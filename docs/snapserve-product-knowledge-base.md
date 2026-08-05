@@ -218,10 +218,12 @@ A call plan is an **ordered timeline of steps** for each person — not a node g
 
 Two doors on Call plans:
 
-1. **Build with AI** — describe the path in plain language; SnapServe drafts people source + recipe (then you attach people and Start queue).  
-2. **Compose** — guided steps: Agent → Lead source → Recipe → Name.
+1. **Suggest a starter** — describe the path in plain language; SnapServe picks a starter timeline you edit on the plan.  
+2. **Compose** — opens the single-screen builder (empty steps → pick a starter inline).
 
-Agent **Vibe** (`/app/vibe`) still builds agents only; plan Vibe is on Call plans.
+Agent **Vibe** (`/app/vibe`) still builds agents only. Plan suggest is not Agent Vibe.
+
+**Builder screen** (`/app/call-plans/:id`): Agent + name · **Who** (List / Sheet / Paste / Form / Meta) · **What happens** (starters when empty) · **Start**.
 
 ### Step palette
 

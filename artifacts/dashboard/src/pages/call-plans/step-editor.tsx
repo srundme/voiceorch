@@ -28,6 +28,9 @@ import {
 
 export type CallPlanStep = ReachStep;
 
+/** Lead-source affinity for filtering starters when the timeline is empty. */
+export type CallPlanPeopleHint = "campaign" | "sheet" | "manual" | "form" | "meta" | "any";
+
 const DASH_API = `${import.meta.env.BASE_URL.replace(/\/$/, "")}/api`;
 
 type SquadListItem = {
@@ -196,9 +199,17 @@ type Props = {
   agentId: number;
   onChange: (next: CallPlanStep[]) => void;
   readOnly?: boolean;
+  /** Filters starters when the timeline is empty. */
+  peopleHint?: CallPlanPeopleHint;
 };
 
-export function CallPlanStepEditor({ steps, agentId, onChange, readOnly = false }: Props) {
+export function CallPlanStepEditor({
+  steps,
+  agentId,
+  onChange,
+  readOnly = false,
+  peopleHint = "any",
+}: Props) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
 
@@ -264,6 +275,33 @@ export function CallPlanStepEditor({ steps, agentId, onChange, readOnly = false 
           <p className="text-[11px] text-muted-foreground px-1">No steps yet.</p>
         )}
       </ol>
+    );
+  }
+
+  if (steps.length === 0) {
+    const starters = startersForPeopleHint(peopleHint);
+    return (
+      <div className="space-y-3">
+        <div>
+          <p className="text-[12px] font-medium text-foreground">Start from</p>
+          <p className="text-[11px] text-muted-foreground mt-0.5">
+            Pick a starter — editable steps, not a locked template.
+          </p>
+        </div>
+        <div className="grid gap-1.5 sm:grid-cols-2">
+          {starters.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => onChange(stepsForTemplate(t.id, agentId))}
+              className="rounded-lg border border-border/50 px-3 py-2.5 text-left transition-colors hover:bg-muted/30 hover:border-border"
+            >
+              <p className="text-[12px] font-medium">{t.title}</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5 leading-snug">{t.blurb}</p>
+            </button>
+          ))}
+        </div>
+      </div>
     );
   }
 
@@ -810,16 +848,17 @@ function WhatsappStepFields({
     queryKey: ["call-plan-wa-catalog", agentId],
     enabled: agentId > 0,
     queryFn: async () => {
+      type WaConn = { agentId: number; active?: boolean; templateCatalog?: WaCatalogEntry[] };
       const [conns, channel, agentTpl] = await Promise.all([
-        customFetch<{ connections: Array<{ agentId: number; active?: boolean; templateCatalog?: WaCatalogEntry[] }> }>(
+        customFetch<{ connections: WaConn[] }>(
           `${DASH_API}/whatsapp/connections`,
-        ).catch(() => ({ connections: [] })),
+        ).catch((): { connections: WaConn[] } => ({ connections: [] })),
         customFetch<{ channel: { templateCatalog?: WaCatalogEntry[] } | null }>(
           `${DASH_API}/whatsapp/channel`,
         ).catch(() => ({ channel: null })),
         customFetch<{ templateCatalog?: WaCatalogEntry[] }>(
           `${DASH_API}/whatsapp/agents/${agentId}/templates`,
-        ).catch(() => ({ templateCatalog: [] })),
+        ).catch((): { templateCatalog: WaCatalogEntry[] } => ({ templateCatalog: [] })),
       ]);
       const forAgent = (conns.connections ?? []).find((c) => c.active && c.agentId === agentId);
       const catalog =
@@ -975,9 +1014,6 @@ export type CallPlanTemplateId =
   | "callback_rescue"
   | "blank";
 
-/** Lead-source affinity for filtering recipes in the create dialog. */
-export type CallPlanPeopleHint = "campaign" | "sheet" | "manual" | "form" | "meta" | "any";
-
 export const CALL_PLAN_TEMPLATES: Array<{
   id: CallPlanTemplateId;
   title: string;
@@ -999,14 +1035,14 @@ export const CALL_PLAN_TEMPLATES: Array<{
   },
   {
     id: "sheet_live",
-    title: "Sheet dial + write-back",
+    title: "Sheet drip",
     blurb: "Call → WhatsApp if no answer → update same sheet → wait → call again → update sheet → stop",
     peopleHint: "sheet",
     runMode: "live",
   },
   {
     id: "form_followup",
-    title: "Form / Meta lead",
+    title: "Form follow-up",
     blurb: "Call new form lead → if no answer, WhatsApp → wait → call again → stop",
     peopleHint: "form",
   },
@@ -1018,7 +1054,7 @@ export const CALL_PLAN_TEMPLATES: Array<{
   },
   {
     id: "blank",
-    title: "Start blank",
+    title: "Blank",
     blurb: "Call → WhatsApp → Wait → Stop (edit freely)",
     peopleHint: "any",
   },
@@ -1090,7 +1126,18 @@ export function stepsForTemplate(id: CallPlanTemplateId, agentId: number): CallP
   }
 }
 
-/** Recipes that fit a lead-source choice in the create dialog. */
+export function startersForPeopleHint(peopleHint: CallPlanPeopleHint = "any") {
+  return CALL_PLAN_TEMPLATES.filter((t) => {
+    const th = String(t.peopleHint);
+    if (peopleHint === "any" || th === "any") return true;
+    if (peopleHint === "form" || peopleHint === "meta") {
+      return th === "form" || th === "any";
+    }
+    return th === peopleHint || t.id === "blank";
+  });
+}
+
+/** Starters that fit a lead-source choice. */
 export function templatesForLeadSource(
   source: "list" | "sheet" | "paste" | "website" | "meta",
 ): typeof CALL_PLAN_TEMPLATES {
