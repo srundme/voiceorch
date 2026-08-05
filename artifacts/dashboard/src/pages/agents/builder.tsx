@@ -2405,11 +2405,11 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
       if (!agentId) {
         toast({ title: "Save agent first", description: "Save this agent before configuring calendar tools.", variant: "destructive" });
       } else if (!agentCalendar) {
-        toast({ title: "No calendar configured", description: "No calendar configured for this agent. Go to Settings → Calendar to set one up.", variant: "destructive" });
+        toast({ title: "No calendar configured", description: "Finish Calendar & booking under Connections first.", variant: "destructive" });
       } else if (!(agentCalendar as any).connectedGoogleEmail) {
-        toast({ title: "No Google account connected", description: `Connect a Google account to the "${agentCalendar.name}" calendar in Scheduling.`, variant: "destructive" });
+        toast({ title: "Google not connected", description: `Connect Google for "${agentCalendar.name}" under Connections → Calendar & booking.`, variant: "destructive" });
       } else if ((agentEventTypes ?? []).length === 0) {
-        toast({ title: "No event types found", description: "Create an event type under Connections → Calendar & booking before using booking.", variant: "destructive" });
+        toast({ title: "No meeting set up", description: "Create a meeting under Connections → Calendar & booking before using booking.", variant: "destructive" });
       }
     } else {
       replace(current.filter((t: any) => !(BOOKING_TYPES as readonly string[]).includes(t.type)));
@@ -2599,8 +2599,14 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                 <div className="min-w-0 flex-1 space-y-1">
                   <p className="text-[11px] text-muted-foreground/70">
                     {agentCalendar ? (
-                      <>Calendar: <span className="font-medium text-foreground/80">{agentCalendar.name}</span></>
-                    ) : "Event type used by booking"}
+                      <>
+                        Calendar: <span className="font-medium text-foreground/80">{agentCalendar.name}</span>
+                        <span className="text-muted-foreground/50"> · </span>
+                        Meeting callers can book
+                      </>
+                    ) : (
+                      "Meeting callers can book"
+                    )}
                   </p>
                   <Select
                     value={schedulingEventTypeId != null ? String(schedulingEventTypeId) : "__none__"}
@@ -2608,7 +2614,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                     disabled={!calendarIdForEt}
                   >
                     <SelectTrigger className="h-7 bg-background/50 text-xs">
-                      <SelectValue placeholder="Any event type">
+                      <SelectValue placeholder="Any meeting">
                         {schedulingEventTypeId != null
                           ? agentEventTypes == null
                             ? "Loading…"
@@ -2619,7 +2625,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                       </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="__none__" className="text-xs text-muted-foreground">Any event type</SelectItem>
+                      <SelectItem value="__none__" className="text-xs text-muted-foreground">Any meeting</SelectItem>
                       {(agentEventTypes ?? []).map((et: any) => (
                         <SelectItem key={et.id} value={String(et.id)} className="text-xs">{et.title || et.name}</SelectItem>
                       ))}
@@ -2627,9 +2633,9 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                   </Select>
                   {(!calendarIdForEt || (agentEventTypes ?? []).length === 0) && (
                     <p className="text-[10px] text-amber-400/80">
-                      {!calendarIdForEt ? "No calendar yet. " : "No event types yet. "}
+                      {!calendarIdForEt ? "No calendar yet. " : "No meeting yet. "}
                       <a href="/app/connections?setup=calendar" className="underline underline-offset-2">
-                        Finish calendar setup
+                        Finish Calendar & booking setup
                       </a>
                       .
                     </p>
@@ -4346,7 +4352,7 @@ const FIELD_LABELS: Record<string, string> = {
   tools: "Tools",
   knowledgeSourceIds: "Knowledge Sources",
   schedulingCalendarId: "Scheduling Calendar",
-  schedulingEventTypeId: "Event Type",
+  schedulingEventTypeId: "Meeting",
   "agentConfig.complianceDpdp": "DPDP Compliance",
   "agentConfig.complianceIrdai": "IRDAI Compliance",
   "agentConfig.complianceTrai": "TRAI Compliance",
