@@ -24,7 +24,7 @@ import {
   resolveStartSpeakingPlan,
   resolveTtsMinSentenceChars,
 } from "@workspace/db/call-engine-defaults";
-import { resolveMicSensitivity, getMicSensitivityThresholds } from "../orchestration/mic-sensitivity.js";
+import { resolveMicSensitivity, resolveBargeInEnergyThreshold } from "../orchestration/mic-sensitivity.js";
 import { optionalMs } from "../orchestration/stt-tuning.js";
 import { getAttachedSourceIds } from "../orchestration/kb-retrieval.js";
 import type { AgentConfig, AgentTool, SessionTransport } from "../orchestration/types.js";
@@ -223,8 +223,7 @@ async function buildTargetAgentConfig(
     webhookSecret: (agentCfg["webhookSecret"] as string | undefined) ?? null,
     vadSilenceMs: (agentCfg["vadSilenceMs"] as number | undefined) ?? 350,
     bargeInEnabled: (agentCfg["bargeInEnabled"] as boolean | undefined) ?? true,
-    bargeInEnergyThreshold: (agentCfg["bargeInEnergyThreshold"] as number | undefined)
-      ?? getMicSensitivityThresholds(micSensitivity).bargeInEnergyThreshold,
+    bargeInEnergyThreshold: resolveBargeInEnergyThreshold(agentCfg["bargeInEnergyThreshold"]),
     bargeInMinFrames: (agentCfg["bargeInMinFrames"] as number | undefined) ?? 4,
     bargeInEchoGraceMs: (agentCfg["bargeInEchoGraceMs"] as number | undefined) ?? 600,
     micSensitivity,

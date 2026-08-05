@@ -196,11 +196,6 @@ const BARGE_IN_ECHO_FLOOR_MIN_SAMPLES = Number(process.env.BARGE_IN_ECHO_FLOOR_M
 const BARGE_IN_STREAMING_MIN_FRAMES = Number(process.env.BARGE_IN_STREAMING_MIN_FRAMES ?? 10); // ~200 ms of sustained above-bar speech to fire (streaming path)
 /** Floor for telephony energy barge-in — agents with bargeInEnergyThreshold=300 (VAD floor) false-trigger constantly. */
 const BARGE_IN_TELEPHONY_MIN_ENERGY = Number(process.env.BARGE_IN_TELEPHONY_MIN_ENERGY ?? 800);
-// Browser webcall: the browser's hardware/OS AEC already cancels the agent's own TTS before the
-// audio reaches the pipeline, so the telephony anti-echo bar (1200) is unnecessary and too high
-// for a typical browser mic. Use a lower threshold so a normal speaking volume can interrupt.
-// Env-tunable; a user-configured bargeInEnergyThreshold BELOW this value is still honoured.
-const BARGE_IN_WEBCALL_AEC_THRESHOLD = Number(process.env.BARGE_IN_WEBCALL_AEC_THRESHOLD ?? 400);
 // ── Content-based self-echo rejection (carrier echo on the Live Call path) ─────
 // On the Vobiz telephony path the carrier echoes the agent's own TTS back to us
 // AFTER the time-based echo-grace windows expire, so STT finalizes it as a
@@ -2058,15 +2053,10 @@ export class OrchestrationPipeline implements VoiceSession {
       );
       this.bargeInEnergyThreshold = BARGE_IN_TELEPHONY_MIN_ENERGY;
     }
-    // Mic Sensitivity — one lever that scales the noise gate ratio, the
-    // hasSpeechEnergy() VAD floor, and (when not already overridden by an
-    // explicit bargeInEnergyThreshold) the barge-in bars. See mic-sensitivity.ts.
-    // "normal" keeps the webcall AEC cap on the env-tunable knob exactly as
-    // before micSensitivity existed; only "low"/"high" scale it.
+    // Mic Sensitivity — product default is always Low (not in Builder). Scales
+    // noise gate, VAD floor, and barge-in bars. See mic-sensitivity.ts.
     const resolvedSensitivity = resolveMicSensitivity(config.agentConfig.micSensitivity);
-    this.micThresholds = resolvedSensitivity === "normal"
-      ? { ...getMicSensitivityThresholds("normal"), webcallAecThreshold: BARGE_IN_WEBCALL_AEC_THRESHOLD }
-      : getMicSensitivityThresholds(resolvedSensitivity);
+    this.micThresholds = getMicSensitivityThresholds(resolvedSensitivity);
     // P1-J: Stop Speaking Plan overrides barge-in params when configured
     this.stopSpeakingPlanConfigured = !!config.agentConfig.stopSpeakingPlan;
     if (config.agentConfig.stopSpeakingPlan) {

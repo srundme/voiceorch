@@ -34,7 +34,7 @@ import { CONVERSATION_DISCIPLINE_BLOCK } from "./conversationDiscipline.js";
 import { transcriptHasFarewellEnding } from "./callFarewell.js";
 import { buildLeadContextBlock, resolvePromptVariables } from "./prompt-vars.js";
 import { createLLMAdapter } from "./adapters/llm/index.js";
-import { resolveMicSensitivity, getMicSensitivityThresholds } from "./mic-sensitivity.js";
+import { resolveMicSensitivity, resolveBargeInEnergyThreshold } from "./mic-sensitivity.js";
 import { loadPcmLoop, TRACK_PARAMS } from "./ambient.js";
 import type { AgentConfig, AgentTool, TelephonyProvider, SessionTransport, PipelineMetrics } from "./types.js";
 import { logger } from "../lib/logger.js";
@@ -643,11 +643,10 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     // P1-D: VAD / Barge-in tuning (defaults match the hardcoded pipeline constants)
     vadSilenceMs:           (agentCfg["vadSilenceMs"]           as number  | undefined) ?? 350,
     bargeInEnabled:         (agentCfg["bargeInEnabled"]         as boolean | undefined) ?? true,
-    // bargeInEnergyThreshold's default (when not explicitly overridden) tracks
-    // micSensitivity so "Low"/"High" actually move the barge-in bar, not just
-    // the noise gate / VAD floor. An explicit override always wins.
-    bargeInEnergyThreshold: (agentCfg["bargeInEnergyThreshold"] as number  | undefined)
-      ?? getMicSensitivityThresholds(resolveMicSensitivity(agentCfg["micSensitivity"] as string | undefined)).bargeInEnergyThreshold,
+    // Mic Sensitivity is not in Builder — all calls use Low. Legacy saved
+    // bargeInEnergyThreshold=1200 (Normal form default) is rewritten to Low's
+    // 1800 so existing agents pick it up without a UI re-save (call 5718).
+    bargeInEnergyThreshold: resolveBargeInEnergyThreshold(agentCfg["bargeInEnergyThreshold"]),
     bargeInMinFrames:       (agentCfg["bargeInMinFrames"]       as number  | undefined) ?? 4,
     bargeInEchoGraceMs:     (agentCfg["bargeInEchoGraceMs"]    as number  | undefined) ?? 600,
     micSensitivity:         resolveMicSensitivity(agentCfg["micSensitivity"] as string | undefined),
