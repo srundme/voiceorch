@@ -185,6 +185,15 @@ export default function ConnectionsPage() {
       window.history.replaceState({}, "", `${window.location.pathname}${next ? `?${next}` : ""}`);
       void qc.invalidateQueries({ queryKey: ["sheets-connections"] });
     }
+    const hash = window.location.hash.replace(/^#/, "");
+    if (hash.startsWith("crm-connected=")) {
+      const provider = hash.split("=")[1] ?? "CRM";
+      toast({
+        title: `${provider.charAt(0).toUpperCase()}${provider.slice(1)} connected`,
+        description: "Back to Campaigns to create a Zoho campaign.",
+      });
+      history.replaceState(null, "", window.location.pathname + window.location.search);
+    }
   }, [qc, toast]);
 
   const { data: waData } = useQuery({
@@ -244,12 +253,17 @@ export default function ConnectionsPage() {
     );
   }
 
+  const fromCampaigns = new URLSearchParams(search).get("from") === "campaigns";
+  const setupBack = fromCampaigns
+    ? { href: "/app/campaigns", label: "Campaigns" }
+    : { href: "/app/connections", label: "Connections" };
+
   if (setup === "website") {
     return (
       <StripePage
         title="Website form"
-        description="Copy a webhook into your site form. New leads land in your workspace for outreach."
-        back={{ href: "/app/connections", label: "Connections" }}
+        description="Create a webhook and embed snippet. New form leads can trigger your agent."
+        back={setupBack}
         fullBleed
         contentClassName="!px-0 !py-0 max-w-none"
       >
@@ -262,8 +276,8 @@ export default function ConnectionsPage() {
     return (
       <StripePage
         title="Meta Lead Ads"
-        description="Connect a Meta form so Lead Ad submissions land in your workspace."
-        back={{ href: "/app/connections", label: "Connections" }}
+        description="Connect a Meta form, assign an agent, and dial new Lead Ad fills."
+        back={setupBack}
         fullBleed
         contentClassName="!px-0 !py-0 max-w-none"
       >

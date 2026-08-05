@@ -14,15 +14,15 @@ Home · **Campaigns** · Agents · Connections · History
 
 ## Campaigns (`/app/campaigns`)
 
-Single page (no tabs). Top section is the starter:
+Single page. Top section is source-specific setup (not one universal wizard):
 
 | Start with | Opens |
 |------------|--------|
-| **Meta** | New campaign wizard (Meta Lead Ads) |
-| **Website** | New campaign wizard (webhook / form) |
+| **Meta** | Connections → Meta Lead Ads setup |
+| **Website** | Connections → Website form / webhook setup |
 | **Google Sheets** | `/app/automatic-calls/new` sheet pipeline |
-| **CSV file** | New campaign wizard (batch upload) |
-| **Zoho CRM** | New campaign wizard (CRM import) |
+| **CSV file** | CSV campaign wizard → then batch upload |
+| **Zoho CRM** | Connect Zoho OAuth (if needed) → CRM campaign wizard → detail |
 
 Below: **Your campaigns** list, metrics, search/filter (when any exist).
 

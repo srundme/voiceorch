@@ -4,8 +4,10 @@ import { useScrollRestoration } from "@/lib/use-scroll-restoration";
 import {
   useCreateCampaign, useUpdateCampaign, useDeleteCampaign,
   getListCampaignsQueryKey,
+  getListCrmConnectionsQueryKey,
   useListAgents,
   useListPhoneNumbers,
+  useListCrmConnections,
   useGetAccount,
 } from "@workspace/api-client-react";
 import type { Campaign, ConsentBasisBasisType } from "@workspace/api-client-react";
@@ -395,11 +397,11 @@ function CampaignRow({
 
 // ── Campaign Creation Wizard ──────────────────────────────────────────────
 
-const WIZARD_STEPS = ["info", "source", "crm_mode", "agent", "phone", "settings", "review"] as const;
+const WIZARD_STEPS = ["info", "source", "crm_mode", "agent", "settings", "review"] as const;
 type WizardStep = (typeof WIZARD_STEPS)[number];
 
 const STEP_LABELS: Record<WizardStep, string> = {
-  info: "Details", source: "Source", crm_mode: "CRM Mode", agent: "Agent", phone: "Phone", settings: "Settings", review: "Review",
+  info: "Details", source: "Source", crm_mode: "CRM Mode", agent: "Agent", settings: "Settings", review: "Review",
 };
 
 type CampaignLeadSource = "csv" | "webhook" | "meta_ads" | "crm";
@@ -463,6 +465,7 @@ function CampaignWizard({
 }) {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const create = useCreateCampaign();
   const { data: agents } = useListAgents();
   const { data: phoneNumbers } = useListPhoneNumbers();
@@ -503,7 +506,6 @@ function CampaignWizard({
       return null;
     }
   });
-  const [fromNumber, setFromNumber] = useState<string | null>(null);
   const [concurrentCallLimit, setConcurrentCallLimit] = useState<number | null>(null);
   // Resolved value: user-chosen (if within limit) or clamped to limit.
   const effectiveConcurrency = Math.min(concurrentCallLimit ?? maxConcurrency, maxConcurrency);
@@ -524,7 +526,7 @@ function CampaignWizard({
     setStep("info"); setName(""); setDesc("");
     setLeadSource(src);
     setTriggerMode(SOURCE_OPTIONS.find(o => o.value === src)?.defaultTrigger ?? "instant");
-    setAgentId(null); setFromNumber(null); setConcurrentCallLimit(null);
+    setAgentId(null); setConcurrentCallLimit(null);
     setConsentBasisType(""); setConsentSource(""); setConsentDateRange("");
     setConsentProofRef(""); setConsentNotes("");
   }
@@ -533,6 +535,12 @@ function CampaignWizard({
   const stepIdx = activeSteps.indexOf(step);
   const isLast = step === "review";
   const selectedAgent = agents?.find(a => a.id === agentId);
+  /** Caller ID comes from the number assigned to the agent — not collected in the wizard. */
+  const agentFromNumber = useMemo(() => {
+    if (!agentId || !phoneNumbers?.length) return null;
+    const assigned = phoneNumbers.find(pn => pn.agentId === agentId);
+    return assigned?.number ?? null;
+  }, [agentId, phoneNumbers]);
   const agentDpdpEnabled = !!(
     (selectedAgent?.agentConfig as { compliance?: { dpdp?: boolean } } | undefined)?.compliance?.dpdp
   );
@@ -552,7 +560,6 @@ function CampaignWizard({
     if (step === "source") return !!leadSource;
     if (step === "crm_mode") return true;
     if (step === "agent") return agentId !== null;
-    if (step === "phone") return fromNumber !== null;
     return true;
   }
 
@@ -587,12 +594,12 @@ function CampaignWizard({
         };
       };
       const d = cfg.callDefaults ?? {};
-      await create.mutateAsync({
+      const created = await create.mutateAsync({
         data: {
           name: name.trim(),
           description: desc.trim() || undefined,
           agentId,
-          fromNumber: fromNumber ?? undefined,
+          fromNumber: agentFromNumber ?? undefined,
           concurrentCallLimit: effectiveConcurrency ?? d.concurrentCallLimit,
           consentBasis,
           leadSource,
@@ -604,15 +611,21 @@ function CampaignWizard({
       });
       await qc.invalidateQueries({ queryKey: getListCampaignsQueryKey() });
       toast({
-        title: csvOnly ? "List created" : "Campaign created",
+        title: "Campaign created",
         description: name.trim(),
       });
       close();
+      // Source-specific next step after create
+      if (leadSource === "csv") {
+        setLocation(`/app/campaigns/${created.id}/batches/new`);
+      } else {
+        setLocation(`/app/campaigns/${created.id}`);
+      }
     } catch (err) {
       const msg = (err instanceof Error ? err.message : null)
-        ?? (csvOnly ? "Failed to create list" : "Failed to create campaign");
+        ?? "Failed to create campaign";
       toast({
-        title: csvOnly ? "Failed to create list" : "Failed to create campaign",
+        title: "Failed to create campaign",
         description: msg,
         variant: "destructive",
       });
@@ -623,11 +636,15 @@ function CampaignWizard({
     <Dialog open={open} onOpenChange={v => { if (!v) close(); }}>
       <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col gap-0 p-0 overflow-hidden">
         <div className="px-6 pt-5 pb-4 border-b border-border shrink-0">
-          <div className="text-base font-semibold">{csvOnly ? "New list" : "New campaign"}</div>
+          <div className="text-base font-semibold">
+            {csvOnly ? "CSV campaign" : lockedSource === "crm" ? "Zoho CRM campaign" : "New campaign"}
+          </div>
           <p className="text-xs text-muted-foreground/60 mt-0.5">
             {csvOnly
-              ? "Create a CSV list of people to reach"
-              : "Pick a source, agent, and phone number — then activate to dial"}
+              ? "Name the campaign and pick an agent — next you’ll upload a CSV batch"
+              : lockedSource === "crm"
+                ? "Name the campaign and pick an agent — then import from Zoho"
+                : "Pick a source and agent — caller ID uses the agent’s number"}
           </p>
           {/* Step indicator */}
           <div className="flex items-center gap-1.5 mt-4">
@@ -800,6 +817,7 @@ function CampaignWizard({
                     const dispositions: string[] = [];
                     const isLive = liveAgentIds.has(agent.id);
                     const isSelected = agentId === agent.id;
+                    const assignedNum = phoneNumbers?.find(pn => pn.agentId === agent.id)?.number;
                     return (
                       <button key={agent.id} type="button" onClick={() => setAgentId(agent.id)}
                         className={cn(
@@ -820,6 +838,14 @@ function CampaignWizard({
                         <div className="flex flex-wrap gap-1.5">
                           {lang && <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 border border-blue-500/20">{lang}</span>}
                           {ttsProvider && <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border">{ttsProvider}</span>}
+                          {assignedNum ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border font-mono">
+                              <Phone className="h-2.5 w-2.5" />
+                              {assignedNum}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 border border-amber-500/20">No number</span>
+                          )}
                           {dispositions.length > 0 && <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border">{dispositions.length} dispositions</span>}
                         </div>
                         {isSelected && <div className="mt-2 flex items-center gap-1 text-[10px] text-emerald-600"><CheckCircle2 className="h-3 w-3" /> Selected</div>}
@@ -828,59 +854,14 @@ function CampaignWizard({
                   })}
                 </div>
               )}
-            </div>
-          )}
-
-          {step === "phone" && (
-            <div className="space-y-4">
-              <div>
-                <h3 className="text-sm font-semibold mb-0.5">Caller ID Number</h3>
-                <p className="text-xs text-muted-foreground/60">Select one of your phone numbers to use as the caller ID for this campaign.</p>
-              </div>
-              {!phoneNumbers ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {[1, 2].map(i => <div key={i} className="h-20 rounded-xl bg-muted/30 animate-pulse border border-border" />)}
-                </div>
-              ) : phoneNumbers.length === 0 ? (
-                <div className="flex flex-col items-center justify-center gap-3 py-12 border border-dashed border-border rounded-xl bg-muted/20">
-                  <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
-                    <Phone className="h-5 w-5 text-muted-foreground/40" />
-                  </div>
-                  <div className="text-center">
-                    <p className="text-sm font-medium text-foreground">No phone numbers yet</p>
-                    <p className="text-xs text-muted-foreground/60 mt-0.5">You need at least one number to run a campaign.</p>
-                  </div>
-                  <a
-                    href={`${BASE}/app/phone-numbers`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1.5 text-xs font-medium text-foreground underline-offset-4 hover:underline"
-                  >
-                    Go to Phone Numbers <ArrowRight className="h-3 w-3" />
+              {agentId && !agentFromNumber && (
+                <p className="text-[11px] text-amber-600 leading-relaxed">
+                  This agent has no phone number assigned. Assign one on the agent before dialing, or{" "}
+                  <a href={`${BASE}/app/phone-numbers`} className="underline underline-offset-2" target="_blank" rel="noreferrer">
+                    manage numbers
                   </a>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {phoneNumbers.map(pn => {
-                    const num = pn.number;
-                    const cc = pn.countryCode;
-                    const type = pn.numberType;
-                    const isSelected = fromNumber === num;
-                    return (
-                      <button key={pn.id} type="button" onClick={() => setFromNumber(num)}
-                        className={cn("text-left p-3 rounded-xl border transition-all",
-                          isSelected ? "border-foreground bg-foreground/5 ring-1 ring-foreground" : "border-border bg-card hover:bg-muted/30"
-                        )}>
-                        <p className="text-sm font-mono font-medium text-foreground">{num}</p>
-                        <div className="flex items-center gap-1.5 mt-1">
-                          {cc && <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border">{cc}</span>}
-                          {type && <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border capitalize">{type}</span>}
-                        </div>
-                        {isSelected && <div className="mt-1.5 flex items-center gap-1 text-[10px] text-emerald-600"><CheckCircle2 className="h-3 w-3" /> Selected</div>}
-                      </button>
-                    );
-                  })}
-                </div>
+                  .
+                </p>
               )}
             </div>
           )}
@@ -929,7 +910,7 @@ function CampaignWizard({
                   { label: "Lead Source",   value: sourceLabel(leadSource), mono: false },
                   { label: "Trigger",       value: triggerMode === "instant" ? "Instant — auto-dial on arrival" : "Batch-wise — manual batch management", mono: false },
                   { label: "Agent",         value: selectedAgent?.name ?? "—", mono: false },
-                  { label: "From Number",   value: fromNumber ?? "—", mono: true },
+                  { label: "Caller ID",     value: agentFromNumber ?? "Agent number (not assigned yet)", mono: !!agentFromNumber },
                   { label: "Concurrent Calls", value: String(effectiveConcurrency), mono: true },
                 ].map(r => (
                   <div key={r.label} className="flex items-center justify-between px-4 py-2.5">
@@ -1223,18 +1204,21 @@ const START_SOURCES: {
   id: StartSourceId;
   title: string;
   description: string;
+  cta: string;
   icon: React.ReactNode;
 }[] = [
   {
     id: "meta_ads",
     title: "Meta",
-    description: "Facebook & Instagram Lead Ads — dial as soon as someone submits.",
+    description: "Connect a Lead Ad form, assign an agent, and dial new fills.",
+    cta: "Connect Meta",
     icon: <BrandLogoBadge brand="meta" size={22} className="!h-11 !w-11 !rounded-xl" />,
   },
   {
     id: "webhook",
     title: "Website",
-    description: "Form or webhook on your site — each enquiry can trigger a call.",
+    description: "Create a form webhook and embed snippet for your site.",
+    cta: "Connect website",
     icon: (
       <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-border bg-background">
         <Globe className="h-5 w-5 text-muted-foreground" />
@@ -1244,13 +1228,15 @@ const START_SOURCES: {
   {
     id: "sheets",
     title: "Google Sheets",
-    description: "Watch a sheet and dial new rows automatically.",
+    description: "Connect a sheet, map columns, and auto-dial new rows.",
+    cta: "Connect sheet",
     icon: <BrandLogoBadge brand="googleSheets" size={22} className="!h-11 !w-11 !rounded-xl" />,
   },
   {
     id: "csv",
     title: "CSV file",
-    description: "Upload a spreadsheet and run batches when you’re ready.",
+    description: "Create a campaign, then upload a batch to dial.",
+    cta: "Upload CSV",
     icon: (
       <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-border bg-background">
         <Upload className="h-5 w-5 text-muted-foreground" />
@@ -1260,7 +1246,8 @@ const START_SOURCES: {
   {
     id: "crm",
     title: "Zoho CRM",
-    description: "Pull contacts from Zoho and call them in a campaign.",
+    description: "Connect Zoho, then import or auto-dial new CRM leads.",
+    cta: "Connect Zoho",
     icon: <BrandLogoBadge brand="zoho" size={22} className="!h-11 !w-11 !rounded-xl" />,
   },
 ];
@@ -1281,6 +1268,10 @@ export default function CampaignsPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const deleteMutation = useDeleteCampaign();
+  const { data: crmConnections = [] } = useListCrmConnections({
+    query: { queryKey: getListCrmConnectionsQueryKey(), staleTime: 30_000 },
+  });
+  const zohoConnected = crmConnections.some(c => c.provider === "zoho");
 
   const { data, isLoading, isFetching } = useQuery<DashboardData>({
     queryKey: ["campaigns-dashboard"],
@@ -1309,17 +1300,45 @@ export default function CampaignsPage() {
   const showClear = filterSource !== "__all__" || filterStatus !== "__all__" || !!search;
   const hasCampaigns = campaigns.length > 0;
 
-  function startFrom(id: StartSourceId) {
-    if (id === "sheets") {
-      navigate("/app/automatic-calls/new");
-      return;
-    }
-    setCreateSource(id);
-    setCreateOpen(true);
+  function connectZoho() {
+    const token = localStorage.getItem("voiceorch:session") ?? "";
+    const url = `${BASE}/api/crm/connect/zoho?returnOrigin=${encodeURIComponent(window.location.origin)}${token ? `&token=${encodeURIComponent(token)}` : ""}`;
+    window.location.href = url;
   }
 
-  function openGenericCreate() {
-    setCreateSource(null);
+  /** Each source has its own setup path — only CSV/Zoho use the in-page campaign wizard. */
+  function startFrom(id: StartSourceId) {
+    switch (id) {
+      case "webhook":
+        navigate("/app/connections?setup=website&from=campaigns");
+        return;
+      case "meta_ads":
+        navigate("/app/connections?setup=meta&from=campaigns");
+        return;
+      case "sheets":
+        navigate("/app/automatic-calls/new");
+        return;
+      case "csv":
+        setCreateSource("csv");
+        setCreateOpen(true);
+        return;
+      case "crm":
+        if (!zohoConnected) {
+          toast({
+            title: "Connect Zoho CRM first",
+            description: "You’ll return here after authorizing Zoho.",
+          });
+          connectZoho();
+          return;
+        }
+        setCreateSource("crm");
+        setCreateOpen(true);
+        return;
+    }
+  }
+
+  function openCsvCreate() {
+    setCreateSource("csv");
     setCreateOpen(true);
   }
 
@@ -1355,37 +1374,43 @@ export default function CampaignsPage() {
                   Where are your leads coming from?
                 </h2>
                 <p className="mt-1.5 max-w-xl text-[13px] leading-relaxed text-muted-foreground">
-                  Pick a source. We’ll wire the agent, number, and dial flow for that channel.
+                  Each source has its own setup — connect the channel first, then dial.
                 </p>
               </div>
               {hasCampaigns && (
-                <Button size="sm" variant="outline" className="h-9 shrink-0 gap-1.5 text-xs" onClick={openGenericCreate}>
+                <Button size="sm" variant="outline" className="h-9 shrink-0 gap-1.5 text-xs" onClick={openCsvCreate}>
                   <Plus className="h-3.5 w-3.5" />
-                  New campaign
+                  CSV campaign
                 </Button>
               )}
             </div>
 
             <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {START_SOURCES.map((src) => (
-                <button
-                  key={src.id}
-                  type="button"
-                  onClick={() => startFrom(src.id)}
-                  className="group flex min-h-[132px] flex-col items-start gap-4 rounded-2xl border border-border bg-card p-4 text-left transition-colors hover:bg-muted/35"
-                >
-                  <div className="flex w-full items-start justify-between gap-3">
-                    {src.icon}
-                    <ArrowRight className="mt-1 size-3.5 shrink-0 text-muted-foreground/40 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[14px] font-semibold tracking-[-0.01em]">{src.title}</p>
-                    <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
-                      {src.description}
-                    </p>
-                  </div>
-                </button>
-              ))}
+              {START_SOURCES.map((src) => {
+                const zohoNeedsConnect = src.id === "crm" && !zohoConnected;
+                return (
+                  <button
+                    key={src.id}
+                    type="button"
+                    onClick={() => startFrom(src.id)}
+                    className="group flex min-h-[132px] flex-col items-start gap-4 rounded-2xl border border-border bg-card p-4 text-left transition-colors hover:bg-muted/35"
+                  >
+                    <div className="flex w-full items-start justify-between gap-3">
+                      {src.icon}
+                      <ArrowRight className="mt-1 size-3.5 shrink-0 text-muted-foreground/40 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[14px] font-semibold tracking-[-0.01em]">{src.title}</p>
+                      <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
+                        {src.description}
+                      </p>
+                      <p className="mt-3 text-[11px] font-medium text-foreground/80">
+                        {zohoNeedsConnect ? "Connect Zoho →" : `${src.cta} →`}
+                      </p>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </div>
         </section>
@@ -1591,6 +1616,7 @@ export default function CampaignsPage() {
         onClose={() => { setCreateOpen(false); setCreateSource(null); }}
         activeCampaigns={campaigns as unknown as Campaign[]}
         initialSource={createSource}
+        allowedSources={createSource ? [createSource] : ["csv"]}
       />
       <CampaignFormDialog
         key={editing?.id ?? "new"}
