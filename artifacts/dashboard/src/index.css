@@ -67,8 +67,8 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
-/* ── Design tokens — light (default): cool paper + teal accent ─────────────
-   Greyscale logo stays black/ink; teal is only for primary / focus / active. */
+/* ── Design tokens — light (default): cool paper + ink primary ─────────────
+   Greyscale logo / white–black chrome only — no teal CTAs. */
 :root {
   --background:         210 24% 97%;      /* soft cool paper */
   --foreground:         222 28% 12%;      /* near-ink */
@@ -82,8 +82,8 @@
   --popover:            0 0% 100%;
   --popover-foreground: 222 28% 12%;
 
-  /* Teal primary — readable in bright rooms, fits grey logo */
-  --primary:            173 72% 32%;      /* deep teal */
+  /* Ink primary — matches black/grey logo */
+  --primary:            222 28% 12%;
   --primary-foreground: 0 0% 100%;
 
   --secondary:          210 18% 94%;
@@ -92,29 +92,29 @@
   --muted:              210 16% 93%;
   --muted-foreground:   215 16% 30%;      /* stronger — was too faint outdoors */
 
-  --accent:             173 40% 94%;
-  --accent-foreground:  173 72% 22%;
+  --accent:             210 16% 92%;
+  --accent-foreground:  222 28% 12%;
 
   --destructive:        0 72% 48%;
   --destructive-foreground: 0 0% 100%;
 
   --input:              214 16% 88%;
-  --ring:               173 72% 36%;
+  --ring:               222 14% 40%;
 
   --sidebar:              210 22% 96%;
   --sidebar-foreground:   222 22% 20%;
   --sidebar-border:       214 16% 88%;
-  --sidebar-primary:      173 72% 32%;
+  --sidebar-primary:      222 28% 12%;
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent:       173 36% 92%;
-  --sidebar-accent-foreground: 173 72% 22%;
-  --sidebar-ring:         173 72% 36%;
+  --sidebar-accent:       210 16% 92%;
+  --sidebar-accent-foreground: 222 28% 12%;
+  --sidebar-ring:         222 14% 40%;
 
-  --chart-1: 173 72% 32%;
-  --chart-2: 199 70% 40%;
-  --chart-3: 222 18% 42%;
-  --chart-4: 215 14% 58%;
-  --chart-5: 210 12% 74%;
+  --chart-1: 222 28% 18%;
+  --chart-2: 215 14% 38%;
+  --chart-3: 215 12% 52%;
+  --chart-4: 210 10% 68%;
+  --chart-5: 210 10% 82%;
 
   --text-faint: 215 14% 36%;
   --text-meta:  215 12% 28%;
@@ -133,26 +133,26 @@
 
   --button-outline:       rgba(15, 23, 42, 0.12);
   --badge-outline:        rgba(15, 23, 42, 0.08);
-  --primary-border:       rgba(13, 148, 136, 0.35);
+  --primary-border:       rgba(15, 23, 42, 0.18);
   --secondary-border:     rgba(15, 23, 42, 0.06);
   --muted-border:         rgba(15, 23, 42, 0.06);
-  --accent-border:        rgba(13, 148, 136, 0.18);
+  --accent-border:        rgba(15, 23, 42, 0.08);
   --destructive-border:   rgba(220, 38, 38, 0.35);
   --opaque-button-border-intensity: 8;
 
-  /* Brand accents (marketing / rare highlights) */
+  /* Brand accents (marketing only — not app chrome) */
   --color-brand-saffron:  #ff9933;
-  --color-brand-teal:     #0d9488;
+  --color-brand-teal:     #14b8a6;
   --color-brand-indigo:   #6366f1;
-  --gradient-brand:       linear-gradient(135deg, #ff9933 0%, #0d9488 55%, #0f766e 100%);
-  --gradient-brand-text:  linear-gradient(135deg, #0f766e, #0d9488, #14b8a6);
+  --gradient-brand:       linear-gradient(135deg, #ff9933 0%, #14b8a6 50%, #6366f1 100%);
+  --gradient-brand-text:  linear-gradient(135deg, #ff9933, #14b8a6, #6366f1);
 
-  --shadow-glow-brand:       0 0 24px rgba(13,148,136,0.18), 0 0 48px rgba(13,148,136,0.08);
-  --shadow-glow-brand-hover: 0 0 32px rgba(13,148,136,0.28), 0 0 60px rgba(13,148,136,0.14);
-  --shadow-glow-teal:        0 0 0 1px rgba(13,148,136,0.35), 0 0 20px rgba(13,148,136,0.12);
+  --shadow-glow-brand:       0 0 24px rgba(255,153,51,0.2), 0 0 48px rgba(20,184,166,0.12);
+  --shadow-glow-brand-hover: 0 0 32px rgba(255,153,51,0.35), 0 0 60px rgba(20,184,166,0.2);
+  --shadow-glow-teal:        0 0 0 1px rgba(20,184,166,0.35), 0 0 20px rgba(20,184,166,0.12);
 }
 
-/* ── Dark mode — charcoal slate + teal (not pure black) ──────────────────── */
+/* ── Dark mode — charcoal slate + white primary (not teal) ───────────────── */
 .dark {
   --background:         222 24% 8%;       /* charcoal-blue */
   --foreground:         210 20% 96%;
@@ -166,8 +166,9 @@
   --popover:            222 22% 10%;
   --popover-foreground: 210 20% 96%;
 
-  --primary:            173 58% 42%;      /* teal CTAs */
-  --primary-foreground: 0 0% 100%;
+  /* White primary — buttons / active states */
+  --primary:            0 0% 98%;
+  --primary-foreground: 222 28% 8%;
 
   --secondary:          222 16% 16%;
   --secondary-foreground: 210 16% 90%;
@@ -175,41 +176,41 @@
   --muted:              222 14% 16%;
   --muted-foreground:   215 14% 72%;      /* bright enough for outdoor glare */
 
-  --accent:             173 28% 16%;
-  --accent-foreground:  173 55% 72%;
+  --accent:             222 14% 16%;
+  --accent-foreground:  210 20% 96%;
 
   --destructive:        0 72% 55%;
   --destructive-foreground: 0 0% 100%;
 
   --input:              222 16% 15%;
-  --ring:               173 58% 46%;
+  --ring:               215 12% 62%;
 
   --sidebar:            222 26% 7%;
   --sidebar-foreground: 215 14% 78%;
   --sidebar-border:     217 16% 18%;
-  --sidebar-primary:    173 58% 42%;
-  --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent:     173 24% 14%;
-  --sidebar-accent-foreground: 173 50% 78%;
-  --sidebar-ring:       173 58% 46%;
+  --sidebar-primary:    0 0% 98%;
+  --sidebar-primary-foreground: 222 28% 8%;
+  --sidebar-accent:     222 14% 14%;
+  --sidebar-accent-foreground: 210 20% 96%;
+  --sidebar-ring:       215 12% 62%;
 
-  --chart-1: 173 58% 48%;
-  --chart-2: 199 60% 52%;
-  --chart-3: 215 14% 70%;
-  --chart-4: 215 12% 52%;
-  --chart-5: 222 12% 36%;
+  --chart-1: 0 0% 82%;
+  --chart-2: 0 0% 64%;
+  --chart-3: 0 0% 48%;
+  --chart-4: 0 0% 34%;
+  --chart-5: 0 0% 22%;
 
   --text-faint: 215 12% 68%;
   --text-meta:  215 12% 60%;
 
-  --primary-border:     rgba(45, 212, 191, 0.35);
+  --primary-border:     rgba(255, 255, 255, 0.2);
   --secondary-border:   rgba(148, 163, 184, 0.25);
   --muted-border:       rgba(255, 255, 255, 0.08);
-  --accent-border:      rgba(45, 212, 191, 0.2);
+  --accent-border:      rgba(255, 255, 255, 0.1);
   --destructive-border: rgba(248, 113, 113, 0.4);
 
   --shadow-card:        0 1px 3px rgba(0,0,0,0.45), 0 0 0 1px rgba(51, 65, 85, 0.55);
-  --shadow-card-hover:  0 4px 20px rgba(0,0,0,0.4), 0 0 0 1px rgba(45, 212, 191, 0.18);
+  --shadow-card-hover:  0 4px 20px rgba(0,0,0,0.4), 0 0 0 1px rgba(255, 255, 255, 0.08);
   --shadow-popover:     0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(148, 163, 184, 0.12);
 }
 

@@ -360,12 +360,12 @@ function NavItemEl({
           "relative flex h-9 items-center gap-2.5 rounded-md px-2.5 text-[13px] transition-colors duration-100 cursor-pointer select-none",
           indent ? "pl-2" : "",
           isActive
-            ? "bg-primary/12 text-foreground font-medium"
+            ? "bg-foreground/[0.08] text-foreground font-medium"
             : "text-muted-foreground hover:bg-foreground/[0.05] hover:text-foreground",
         ].join(" ")}
       >
         <item.icon
-          className={`size-4 shrink-0 ${isActive ? "text-primary" : "text-muted-foreground"}`}
+          className={`size-4 shrink-0 ${isActive ? "text-foreground" : "text-muted-foreground"}`}
         />
         {!collapsed && (
           <>
@@ -570,11 +570,11 @@ function SidebarContent({
           className={[
             "flex h-9 w-full cursor-pointer select-none items-center gap-2.5 rounded-md px-2.5 text-[13px] transition-colors duration-100",
             isInSettings
-              ? "bg-primary/12 text-foreground font-medium"
+              ? "bg-foreground/[0.08] text-foreground font-medium"
               : "text-muted-foreground hover:bg-foreground/[0.05] hover:text-foreground",
           ].join(" ")}
         >
-          <SlidersHorizontal className={`size-4 shrink-0 ${isInSettings ? "text-primary" : "text-muted-foreground"}`} />
+          <SlidersHorizontal className={`size-4 shrink-0 ${isInSettings ? "text-foreground" : "text-muted-foreground"}`} />
           {!collapsed && (
             <>
               <span className="flex-1 text-left">Settings</span>
