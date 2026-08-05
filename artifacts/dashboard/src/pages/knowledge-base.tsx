@@ -45,22 +45,25 @@ import { EmptyState } from "@/components/empty-state";
 
 /* ── Type constants ─────────────────────────────────────────────────────── */
 
+const TYPE_CHIP =
+  "bg-muted text-muted-foreground border-border";
+
 const TYPE_META: Record<string, { label: string; icon: React.ReactNode; color: string }> = {
-  faq: { label: "FAQ", icon: <HelpCircle className="w-4 h-4" />, color: "bg-violet-500/15 text-violet-400 border-violet-500/20" },
-  text: { label: "Text", icon: <AlignLeft className="w-4 h-4" />, color: "bg-blue-500/15 text-blue-400 border-blue-500/20" },
-  website: { label: "Website", icon: <Globe className="w-4 h-4" />, color: "bg-emerald-500/15 text-emerald-400 border-emerald-500/20" },
-  file: { label: "File", icon: <FileText className="w-4 h-4" />, color: "bg-amber-500/15 text-amber-400 border-amber-500/20" },
+  faq: { label: "FAQ", icon: <HelpCircle className="w-4 h-4" />, color: TYPE_CHIP },
+  text: { label: "Text", icon: <AlignLeft className="w-4 h-4" />, color: TYPE_CHIP },
+  website: { label: "Website", icon: <Globe className="w-4 h-4" />, color: TYPE_CHIP },
+  file: { label: "File", icon: <FileText className="w-4 h-4" />, color: TYPE_CHIP },
 };
 
 const STATUS_META: Record<string, { label: string; color: string; spin?: boolean }> = {
-  active:     { label: "Ready",        color: "text-emerald-400" },
-  ready:      { label: "Ready",        color: "text-emerald-400" },
-  partial:    { label: "Needs attention", color: "text-amber-400" },
-  validating: { label: "Checking…",    color: "text-amber-400", spin: true },
-  processing: { label: "Processing…",  color: "text-amber-400", spin: true },
-  crawling:   { label: "Importing…",   color: "text-amber-400", spin: true },
-  error:      { label: "Failed",       color: "text-red-400" },
-  failed:     { label: "Failed",       color: "text-red-400" },
+  active:     { label: "Ready",        color: "text-foreground" },
+  ready:      { label: "Ready",        color: "text-foreground" },
+  partial:    { label: "Needs attention", color: "text-muted-foreground" },
+  validating: { label: "Checking…",    color: "text-muted-foreground", spin: true },
+  processing: { label: "Processing…",  color: "text-muted-foreground", spin: true },
+  crawling:   { label: "Importing…",   color: "text-muted-foreground", spin: true },
+  error:      { label: "Failed",       color: "text-destructive" },
+  failed:     { label: "Failed",       color: "text-destructive" },
 };
 
 const NON_TERMINAL_STATUSES = new Set(["validating", "processing", "crawling"]);
@@ -87,9 +90,9 @@ function SourceCard({
 }) {
   const meta = TYPE_META[source.type] ?? TYPE_META["text"]!;
   const st = source.indexing
-    ? { label: "Indexing…", color: "text-amber-400", spin: true as const }
+    ? { label: "Indexing…", color: "text-muted-foreground", spin: true as const }
     : source.needsAttention
-      ? { label: "Needs attention", color: "text-amber-400", spin: false as const }
+      ? { label: "Needs attention", color: "text-muted-foreground", spin: false as const }
       : (STATUS_META[source.status] ?? STATUS_META["ready"]!);
 
   return (
@@ -315,10 +318,10 @@ function CreateSourceModal({ open, onClose }: CreateSourceModalProps) {
   }
 
   const typeChoices: Array<{ type: SourceType; label: string; desc: string; icon: React.ReactNode }> = [
-    { type: "faq", label: "Q&A", desc: "Common questions and answers", icon: <HelpCircle className="w-5 h-5 text-violet-400" /> },
-    { type: "text", label: "Paste text", desc: "Paste facts or policies", icon: <AlignLeft className="w-5 h-5 text-blue-400" /> },
-    { type: "file", label: "Upload a file", desc: "PDF, Word, text, CSV, or Markdown", icon: <FileText className="w-5 h-5 text-amber-400" /> },
-    { type: "website", label: "Website link", desc: "Import pages from a URL", icon: <Globe className="w-5 h-5 text-emerald-400" /> },
+    { type: "faq", label: "Q&A", desc: "Common questions and answers", icon: <HelpCircle className="w-5 h-5 text-muted-foreground" /> },
+    { type: "text", label: "Paste text", desc: "Paste facts or policies", icon: <AlignLeft className="w-5 h-5 text-muted-foreground" /> },
+    { type: "file", label: "Upload a file", desc: "PDF, Word, text, CSV, or Markdown", icon: <FileText className="w-5 h-5 text-muted-foreground" /> },
+    { type: "website", label: "Website link", desc: "Import pages from a URL", icon: <Globe className="w-5 h-5 text-muted-foreground" /> },
   ];
 
   const stepTitle =
@@ -495,7 +498,7 @@ function CreateSourceModal({ open, onClose }: CreateSourceModalProps) {
                 >
                   {file ? (
                     <>
-                      <FileText className="w-6 h-6 text-amber-400" />
+                      <FileText className="w-6 h-6 text-muted-foreground" />
                       <span className="text-sm font-medium truncate max-w-full">{file.name}</span>
                       <span className="text-xs text-muted-foreground">{(file.size / 1024).toFixed(0)} KB · click to replace</span>
                     </>
@@ -775,7 +778,7 @@ function TestPanel({ sourceId }: { sourceId: number }) {
             </div>
           ) : (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <XCircle className="w-4 h-4 text-amber-400" />
+              <XCircle className="w-4 h-4 text-muted-foreground" />
               No matching pieces. Try different wording.
             </div>
           )}
@@ -814,9 +817,9 @@ function DetailView({ sourceId, onBack }: { sourceId: number; onBack: () => void
   const source = data as KnowledgeSourceDetail & KnowledgeSourceView;
   const meta = TYPE_META[source.type] ?? TYPE_META["text"]!;
   const st = source.indexing
-    ? { label: "Indexing…", color: "text-amber-400", spin: true as const }
+    ? { label: "Indexing…", color: "text-muted-foreground", spin: true as const }
     : source.needsAttention
-      ? { label: "Needs attention", color: "text-amber-400", spin: false as const }
+      ? { label: "Needs attention", color: "text-muted-foreground", spin: false as const }
       : (STATUS_META[source.status] ?? STATUS_META["ready"]!);
 
   return (
@@ -891,31 +894,31 @@ function DetailView({ sourceId, onBack }: { sourceId: number; onBack: () => void
         </div>
       </div>
 
-      {/* Status banners */}
+      {/* Status banners — mono */}
       {source.status === "validating" && (
-        <div className="flex items-center gap-3 bg-amber-500/10 border border-amber-500/20 rounded-lg px-4 py-3 text-sm text-amber-400">
-          <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+        <div className="flex items-center gap-3 bg-muted/50 border border-border rounded-lg px-4 py-3 text-sm text-foreground">
+          <Loader2 className="w-4 h-4 animate-spin shrink-0 text-muted-foreground" />
           Checking the website address…
         </div>
       )}
       {source.status === "processing" && (
-        <div className="flex items-center gap-3 bg-amber-500/10 border border-amber-500/20 rounded-lg px-4 py-3 text-sm text-amber-400">
-          <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+        <div className="flex items-center gap-3 bg-muted/50 border border-border rounded-lg px-4 py-3 text-sm text-foreground">
+          <Loader2 className="w-4 h-4 animate-spin shrink-0 text-muted-foreground" />
           {source.type === "website" ? "Website fetched — finding pages…" : "Preparing your knowledge…"}
         </div>
       )}
       {source.status === "crawling" && (
-        <div className="flex items-center gap-3 bg-amber-500/10 border border-amber-500/20 rounded-lg px-4 py-3 text-sm text-amber-400">
-          <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+        <div className="flex items-center gap-3 bg-muted/50 border border-border rounded-lg px-4 py-3 text-sm text-foreground">
+          <Loader2 className="w-4 h-4 animate-spin shrink-0 text-muted-foreground" />
           Importing website pages. This updates automatically.
         </div>
       )}
       {(source.needsAttention || source.status === "partial") && source.status !== "crawling" && (
-        <div className="flex items-start gap-3 bg-amber-500/10 border border-amber-500/20 rounded-lg px-4 py-3 text-sm text-amber-400">
-          <XCircle className="w-4 h-4 shrink-0 mt-0.5" />
+        <div className="flex items-start gap-3 bg-muted/50 border border-border rounded-lg px-4 py-3 text-sm text-foreground">
+          <XCircle className="w-4 h-4 shrink-0 mt-0.5 text-muted-foreground" />
           <div>
             <p className="font-medium">Needs attention</p>
-            <p className="text-amber-400/80 text-xs mt-0.5">
+            <p className="text-muted-foreground text-xs mt-0.5">
               Some website pages didn’t import
               {source.failedPageCount ? ` (${source.failedPageCount})` : ""}.
               Use Retry failed pages, or add the missing content as text.
@@ -1049,11 +1052,11 @@ export default function KnowledgeBasePage() {
       {sources && sources.length > 0 && (
         <div className="flex flex-wrap gap-5 pt-3 mt-5 border-t border-border/50 text-xs text-muted-foreground/70">
           <span className="flex items-center gap-1.5">
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+            <CheckCircle2 className="w-3.5 h-3.5 text-muted-foreground" />
             {sources.length} knowledge {sources.length === 1 ? "pack" : "packs"}
           </span>
           <span className="flex items-center gap-1.5">
-            <FileText className="w-3.5 h-3.5 text-sky-400" />
+            <FileText className="w-3.5 h-3.5 text-muted-foreground" />
             {sources.reduce((s, x) => s + x.entryCount, 0)} total pieces
           </span>
         </div>
