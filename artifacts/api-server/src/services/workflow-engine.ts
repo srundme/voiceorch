@@ -574,6 +574,11 @@ async function doSendWhatsapp(
   const agentIdRaw = typeof step.agentId === "number" && step.agentId > 0
     ? step.agentId
     : Number(context["agentId"] ?? callObj["agentId"] ?? 0);
+  // Explicit catalog pick on the step wins — any Meta/VoBiz template name.
+  const explicit = step.whatsappTemplate;
+  const templateOverride = explicit?.name && explicit.language
+    ? { name: explicit.name.trim(), lang: explicit.language.trim() }
+    : undefined;
   const result = await sendWhatsappTemplate({
     channel,
     ctx,
@@ -582,6 +587,7 @@ async function doSendWhatsapp(
     params,
     callId,
     agentId: Number.isFinite(agentIdRaw) && agentIdRaw > 0 ? agentIdRaw : null,
+    templateOverride,
   });
   if (!result.ok && !result.skipped) {
     throw new Error(result.error ?? "send_whatsapp failed");

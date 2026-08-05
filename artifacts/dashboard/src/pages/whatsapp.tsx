@@ -1120,7 +1120,7 @@ export default function WhatsAppPage() {
         },
       );
       setMetaTplList(res.templates);
-      // Auto-pick the first approved template for Default + Call summary so the
+      // Auto-pick the first approved template for Default + After a call so the
       // connection works out of the box — user can still change it.
       if (res.templates.length > 0) {
         const first = res.templates[0]!;
@@ -1240,11 +1240,11 @@ export default function WhatsAppPage() {
         <div className="rounded-md border border-border/50 p-3 space-y-2">
           <p className="text-xs font-medium">Link templates ({metaTplList.length} approved found)</p>
           {renderMetaTplSelect("Default (fallback)", metaSelDefault, setMetaSelDefault)}
-          {renderMetaTplSelect("Call summary", metaSelSummary, setMetaSelSummary)}
-          {renderMetaTplSelect("Booking confirmed", metaSelBooking, setMetaSelBooking)}
-          {renderMetaTplSelect("Callback scheduled", metaSelCallback, setMetaSelCallback)}
+          {renderMetaTplSelect("After a call", metaSelSummary, setMetaSelSummary)}
+          {renderMetaTplSelect("After a booking", metaSelBooking, setMetaSelBooking)}
+          {renderMetaTplSelect("After a callback", metaSelCallback, setMetaSelCallback)}
           <p className="text-[10px] text-muted-foreground">
-            Default is used when an outcome isn’t mapped. Variables: business name, then summary / meeting time.
+            These rows are SnapServe send-moments — each dropdown lists any approved template from your WABA (any Meta name).
           </p>
         </div>
       )}
@@ -1559,22 +1559,22 @@ export default function WhatsAppPage() {
               </p>
             </div>
             <div className="rounded-md border border-border/50 p-3 space-y-2">
-              <p className="text-xs font-medium">Template names (from your BSP)</p>
+              <p className="text-xs font-medium">Map SnapServe moments → your BSP template names</p>
               <div>
                 <Label className="text-[10px] text-muted-foreground">Default (fallback)</Label>
-                <Input className="mt-1 h-8 text-xs font-mono" placeholder="ss_default" value={tplDefault} onChange={(e) => setTplDefault(e.target.value)} />
+                <Input className="mt-1 h-8 text-xs font-mono" placeholder="your_default_template" value={tplDefault} onChange={(e) => setTplDefault(e.target.value)} />
               </div>
               <div>
-                <Label className="text-[10px] text-muted-foreground">Call summary</Label>
-                <Input className="mt-1 h-8 text-xs font-mono" placeholder="ss_call_summary" value={tplSummary} onChange={(e) => setTplSummary(e.target.value)} />
+                <Label className="text-[10px] text-muted-foreground">After a call</Label>
+                <Input className="mt-1 h-8 text-xs font-mono" placeholder="any_approved_name" value={tplSummary} onChange={(e) => setTplSummary(e.target.value)} />
               </div>
               <div>
-                <Label className="text-[10px] text-muted-foreground">Booking confirmed</Label>
-                <Input className="mt-1 h-8 text-xs font-mono" placeholder="ss_booking_confirmed" value={tplBooking} onChange={(e) => setTplBooking(e.target.value)} />
+                <Label className="text-[10px] text-muted-foreground">After a booking</Label>
+                <Input className="mt-1 h-8 text-xs font-mono" placeholder="any_approved_name" value={tplBooking} onChange={(e) => setTplBooking(e.target.value)} />
               </div>
               <div>
-                <Label className="text-[10px] text-muted-foreground">Callback scheduled</Label>
-                <Input className="mt-1 h-8 text-xs font-mono" placeholder="ss_callback_scheduled" value={tplCallback} onChange={(e) => setTplCallback(e.target.value)} />
+                <Label className="text-[10px] text-muted-foreground">After a callback</Label>
+                <Input className="mt-1 h-8 text-xs font-mono" placeholder="any_approved_name" value={tplCallback} onChange={(e) => setTplCallback(e.target.value)} />
               </div>
             </div>
             </>)}
@@ -1630,21 +1630,21 @@ export default function WhatsAppPage() {
               />
             </div>
             <div className="rounded-md border border-border/50 p-3 space-y-2">
-              <p className="text-xs font-medium">Template names (from your BSP)</p>
+              <p className="text-xs font-medium">Map SnapServe moments → your BSP template names</p>
               <div>
                 <Label className="text-[10px] text-muted-foreground">Default (fallback)</Label>
                 <Input className="mt-1 h-8 text-xs font-mono" value={tplDefault} onChange={(e) => setTplDefault(e.target.value)} />
               </div>
               <div>
-                <Label className="text-[10px] text-muted-foreground">Call summary</Label>
+                <Label className="text-[10px] text-muted-foreground">After a call</Label>
                 <Input className="mt-1 h-8 text-xs font-mono" value={tplSummary} onChange={(e) => setTplSummary(e.target.value)} />
               </div>
               <div>
-                <Label className="text-[10px] text-muted-foreground">Booking confirmed</Label>
+                <Label className="text-[10px] text-muted-foreground">After a booking</Label>
                 <Input className="mt-1 h-8 text-xs font-mono" value={tplBooking} onChange={(e) => setTplBooking(e.target.value)} />
               </div>
               <div>
-                <Label className="text-[10px] text-muted-foreground">Callback scheduled</Label>
+                <Label className="text-[10px] text-muted-foreground">After a callback</Label>
                 <Input className="mt-1 h-8 text-xs font-mono" value={tplCallback} onChange={(e) => setTplCallback(e.target.value)} />
               </div>
             </div>

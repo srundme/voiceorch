@@ -30,11 +30,12 @@ export type AgentWaTemplates = {
   callback_scheduled?: WaTplChoice;
 };
 
-const SLOTS: Array<{ key: keyof AgentWaTemplates; label: string }> = [
-  { key: "default", label: "Default (fallback)" },
-  { key: "call_summary", label: "Call summary" },
-  { key: "booking_confirmed", label: "Booking confirmed" },
-  { key: "callback_scheduled", label: "Callback scheduled" },
+/** SnapServe send-moments — each dropdown lists ANY approved template from your WABA. */
+const SLOTS: Array<{ key: keyof AgentWaTemplates; label: string; hint: string }> = [
+  { key: "default", label: "Default (any template)", hint: "Used when no other moment is mapped" },
+  { key: "call_summary", label: "After a call", hint: "SnapServe moment — pick any of your Meta templates" },
+  { key: "booking_confirmed", label: "After a booking", hint: "SnapServe moment — pick any of your Meta templates" },
+  { key: "callback_scheduled", label: "After a callback is set", hint: "SnapServe moment — pick any of your Meta templates" },
 ];
 
 function choiceValue(c: WaTplChoice | undefined): string {
@@ -171,7 +172,7 @@ export function AgentWhatsappTemplatePicks({
         <div>
           <p className="text-[13px] font-medium">Templates for this agent</p>
           <p className="text-[11px] text-muted-foreground mt-0.5">
-            Choose which approved WhatsApp templates this agent sends.
+            Your Meta catalog can have any template names. These rows are only SnapServe “when to send” moments — pick any approved template into each.
           </p>
         </div>
         <Button
@@ -188,7 +189,7 @@ export function AgentWhatsappTemplatePicks({
 
       {needsTemplates && (
         <div className="rounded-md bg-amber-500/10 border border-amber-500/20 px-3 py-2 text-[11px] text-amber-600 dark:text-amber-400">
-          Needs templates — pick at least a Default or Call summary before relying on WhatsApp sends.
+          Needs templates — pick at least Default or After a call (any approved template from your list).
         </div>
       )}
 
@@ -198,7 +199,7 @@ export function AgentWhatsappTemplatePicks({
         </p>
       ) : (
         <div className="space-y-2">
-          {SLOTS.map(({ key, label }) => {
+          {SLOTS.map(({ key, label, hint }) => {
             const value = slots[key] ?? "";
             const inList = value && catalog.some(
               (t) => choiceValue({ name: t.name, language: t.language, paramCount: t.paramCount }) === value,
@@ -211,6 +212,7 @@ export function AgentWhatsappTemplatePicks({
             return (
               <div key={key}>
                 <Label className="text-[10px] text-muted-foreground">{label}</Label>
+                <p className="text-[9px] text-muted-foreground/80 mb-0.5">{hint}</p>
                 <select
                   className="mt-1 w-full h-8 rounded-md border border-input bg-background px-2 text-xs"
                   value={value}

@@ -57,7 +57,10 @@ export type ReachStep = {
   delaySeconds?: number;
   callbackDelayDays?: number;
   url?: string;
+  /** SnapServe send-moment (not a Meta template name). */
   whatsappHint?: string;
+  /** Any approved Meta/VoBiz template from the user's catalog. */
+  whatsappTemplate?: { name: string; language: string; paramCount?: number };
   notes?: string;
   emailField?: string;
   emailSubject?: string;
@@ -493,22 +496,7 @@ function StepFields({
       )}
 
       {step.type === "send_whatsapp" && (
-        <div className="space-y-1">
-          <Label className="text-[10px] text-muted-foreground">Template hint</Label>
-          <Select
-            value={step.whatsappHint ?? "call_summary"}
-            onValueChange={(v) => onPatch({ whatsappHint: v })}
-          >
-            <SelectTrigger className="h-8 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="call_summary" className="text-xs">Call summary</SelectItem>
-              <SelectItem value="booking_confirmed" className="text-xs">Booking confirmed</SelectItem>
-              <SelectItem value="callback_scheduled" className="text-xs">Callback scheduled</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+        <ReachWhatsappFields step={step} agentId={agentId} onPatch={onPatch} />
       )}
 
       {step.type === "send_email" && (
@@ -625,5 +613,113 @@ function StepFields({
         </div>
       )}
     </>
+  );
+}
+
+type WaCatalogEntry = { name: string; language: string; status?: string; paramCount?: number };
+
+function ReachWhatsappFields({
+  step,
+  agentId,
+  onPatch,
+}: {
+  step: ReachStep;
+  agentId: number;
+  onPatch: (patch: Partial<ReachStep>) => void;
+}) {
+  const catalogQ = useQuery({
+    queryKey: ["reach-wa-catalog", agentId],
+    enabled: agentId > 0,
+    queryFn: async () => {
+      const [conns, channel, agentTpl] = await Promise.all([
+        customFetch<{ connections: Array<{ agentId: number; active?: boolean; templateCatalog?: WaCatalogEntry[] }> }>(
+          `${DASH_API}/whatsapp/connections`,
+        ).catch(() => ({ connections: [] })),
+        customFetch<{ channel: { templateCatalog?: WaCatalogEntry[] } | null }>(
+          `${DASH_API}/whatsapp/channel`,
+        ).catch(() => ({ channel: null })),
+        customFetch<{ templateCatalog?: WaCatalogEntry[] }>(
+          `${DASH_API}/whatsapp/agents/${agentId}/templates`,
+        ).catch(() => ({ templateCatalog: [] })),
+      ]);
+      const forAgent = (conns.connections ?? []).find((c) => c.active && c.agentId === agentId);
+      const catalog =
+        (forAgent?.templateCatalog?.length ? forAgent.templateCatalog : null)
+        ?? (agentTpl.templateCatalog?.length ? agentTpl.templateCatalog : null)
+        ?? (channel.channel?.templateCatalog?.length ? channel.channel.templateCatalog : null)
+        ?? [];
+      return catalog.filter((t) => t.name && t.language);
+    },
+    staleTime: 60_000,
+  });
+  const catalog = catalogQ.data ?? [];
+  const selected = step.whatsappTemplate;
+  const selectedKey = selected?.name && selected.language
+    ? `${selected.name}|${selected.language}`
+    : "";
+
+  return (
+    <div className="space-y-2 sm:col-span-full">
+      <div className="space-y-1">
+        <Label className="text-[10px] text-muted-foreground">Template (from your WhatsApp catalog)</Label>
+        <Select
+          value={selectedKey || "__agent_default__"}
+          onValueChange={(v) => {
+            if (v === "__agent_default__") {
+              onPatch({ whatsappTemplate: undefined });
+              return;
+            }
+            const [name, language] = v.split("|");
+            const hit = catalog.find((t) => t.name === name && t.language === language);
+            if (!hit) return;
+            onPatch({
+              whatsappTemplate: {
+                name: hit.name,
+                language: hit.language,
+                paramCount: hit.paramCount ?? 0,
+              },
+            });
+          }}
+        >
+          <SelectTrigger className="h-8 text-xs">
+            <SelectValue placeholder={catalogQ.isLoading ? "Loading templates…" : "Choose template…"} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__agent_default__" className="text-xs">
+              Use agent default mapping
+            </SelectItem>
+            {selectedKey && !catalog.some((t) => `${t.name}|${t.language}` === selectedKey) && (
+              <SelectItem value={selectedKey} className="text-xs">
+                {selected!.name} ({selected!.language}, saved)
+              </SelectItem>
+            )}
+            {catalog.map((t) => (
+              <SelectItem key={`${t.name}|${t.language}`} value={`${t.name}|${t.language}`} className="text-xs">
+                {t.name} ({t.language})
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-1">
+        <Label className="text-[10px] text-muted-foreground">If using agent mapping — send moment</Label>
+        <Select
+          value={step.whatsappHint ?? "call_summary"}
+          onValueChange={(v) => onPatch({ whatsappHint: v })}
+        >
+          <SelectTrigger className="h-8 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="call_summary" className="text-xs">After a call</SelectItem>
+            <SelectItem value="booking_confirmed" className="text-xs">After a booking</SelectItem>
+            <SelectItem value="callback_scheduled" className="text-xs">After a callback</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <p className="text-[10px] text-muted-foreground">
+        Pick any approved Meta template by name. “After a call” is only a SnapServe moment when you don’t pick a template above.
+      </p>
+    </div>
   );
 }

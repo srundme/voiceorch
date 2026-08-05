@@ -70,8 +70,18 @@ export interface WorkflowStep {
   callbackDelayDays?: number;
   notes?: string;
 
-  // ── send_whatsapp (native VoBiz template send) ───────────────────────────────
+  // ── send_whatsapp (native VoBiz / Meta template send) ───────────────────────
+  /**
+   * SnapServe send-moment hint (NOT a Meta template name). Used for param
+   * defaults and to look up the agent's mapped template when whatsappTemplate
+   * is unset. Real Meta names come from the user's catalog.
+   */
   whatsappHint?: "call_summary" | "booking_confirmed" | "callback_scheduled";
+  /**
+   * Explicit approved template from the user's WABA catalog (any name/language).
+   * When set, this wins over hint → agent slot mapping.
+   */
+  whatsappTemplate?: { name: string; language: string; paramCount?: number };
   /** Optional body params; defaults are derived from call context. Supports {{vars}}. */
   whatsappParams?: string[];
 
