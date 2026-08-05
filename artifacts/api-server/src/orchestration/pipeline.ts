@@ -51,7 +51,7 @@ import {
   isAffirmationOnlyUtterance,
   type TurnCloseReason,
 } from "./endpointing.js";
-import { checkTranscriptQuality, pickClarificationPhrase, isSemanticInterrupt, isAccidentalInterruptPhrase, shouldHoldFragmentForCoalesce, isUltraShortNoiseFragment, isCallerAudioDifficulty, isFalseInterruptionScrap, isTopicClarificationAsk, isBackchannelOnlyUtterance, normalizeSttPhonetics, isNearDuplicateUtterance } from "./transcriptQuality.js";
+import { checkTranscriptQuality, pickClarificationPhrase, isSemanticInterrupt, isAccidentalInterruptPhrase, shouldHoldFragmentForCoalesce, isUltraShortNoiseFragment, isCallerAudioDifficulty, isFalseInterruptionScrap, isTopicClarificationAsk, isBackchannelOnlyUtterance, normalizeSttPhonetics, isNearDuplicateUtterance, coalescePendingTranscripts } from "./transcriptQuality.js";
 import { buildInterruptionHint, joinHeardSentences, resolveSpokenForHistory, estimateHeardPrefix, composeHeardWithMid } from "./bargeHeard.js";
 import { resolveSttTuning, type SttTuning } from "./stt-tuning.js";
 import { getCachedFillerPcm, setCachedFillerPcm } from "./fillerPcmCache.js";
@@ -3054,6 +3054,18 @@ export class OrchestrationPipeline implements VoiceSession {
       return;
     }
 
+    // Greeting (and any other isProcessing window) can leave orphans in the queue
+    // without draining. A fresh final must not jump ahead of those — that is how
+    // call 5677 answered "ஆமா" while "ஹலோ"/"ambulance" sat 13–20s behind.
+    if (this.pendingTranscriptQueue.length > 0) {
+      this.pendingTranscriptQueue.push({ text: transcript, emittedAt: sttEmittedAt, closeReason });
+      const merged = this.drainPendingTranscripts();
+      if (!merged) return;
+      transcript = merged.text;
+      sttEmittedAt = merged.emittedAt;
+      closeReason = merged.closeReason;
+    }
+
     this.isProcessing = true;
     try {
       await this.processTurn(transcript, 0);
@@ -3067,7 +3079,7 @@ export class OrchestrationPipeline implements VoiceSession {
       // If the call ended (transfer or end_call) while this turn was processing,
       // do NOT drain the pending queue — those transcripts must be discarded.
       if (this.closed) return;
-      const next = this.pendingTranscriptQueue.shift();
+      const next = this.drainPendingTranscripts();
       if (next) {
         void this.handleStreamingTranscript(next.text, next.emittedAt, next.closeReason);
       } else if (!this.closed) {
@@ -3075,6 +3087,36 @@ export class OrchestrationPipeline implements VoiceSession {
         this.safetyNet.beginListening();
       }
     }
+  }
+
+  /**
+   * Collapse everything the caller said during the previous turn into ONE next turn.
+   *
+   * Draining a single entry per completed turn cannot keep up: a turn costs several
+   * seconds (LLM + TTS + playback) while the caller can produce several finals in
+   * that window, so the backlog grows monotonically and every reply answers an
+   * utterance the caller has already moved past (call 5677: the ambulance question
+   * reached the LLM 13s late, the follow-up 20s late; call 5676 peaked at 40s).
+   * Merging bounds the staleness to at most one turn.
+   */
+  private drainPendingTranscripts(): { text: string; emittedAt: number; closeReason: TurnCloseReason } | null {
+    const queued = this.pendingTranscriptQueue;
+    if (queued.length === 0) return null;
+    this.pendingTranscriptQueue = [];
+    const coalesced = coalescePendingTranscripts(queued);
+    if (!coalesced) return null;
+    if (queued.length > 1) {
+      logger.info(
+        {
+          callId: this.config.callId,
+          queuedCount: queued.length,
+          oldestAgeMs: Date.now() - queued[0].emittedAt,
+          transcript: coalesced.text.slice(0, 160),
+        },
+        "Coalesced queued STT finals into a single turn — caller spoke during previous turn",
+      );
+    }
+    return coalesced;
   }
 
   /**
@@ -4572,6 +4614,15 @@ export class OrchestrationPipeline implements VoiceSession {
       // Greeting has been delivered (or failed) — the next caller audio is their
       // intro turn. Arm detection now so we sample THAT, not the greeting echo.
       this.armGenderDetection();
+      // Speech during the greeting is queued (isProcessing=true) but used to be
+      // left undrained — the next final then jumped the queue (call 5677). Drain
+      // coalesced leftovers now so the first reply matches what the caller said.
+      if (!this.closed) {
+        const next = this.drainPendingTranscripts();
+        if (next) {
+          void this.handleStreamingTranscript(next.text, next.emittedAt, next.closeReason);
+        }
+      }
     }
   }
 
