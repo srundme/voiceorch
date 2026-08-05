@@ -83,12 +83,33 @@ const MVP_CATALOG: Array<{
   { type: "send_whatsapp", title: "Send WhatsApp", desc: "Message after the previous step", icon: MessageCircle },
   { type: "send_email", title: "Send email", desc: "Email after the previous step", icon: Mail },
   { type: "delay", title: "Wait", desc: "Pause before the next step", icon: Clock },
-  { type: "schedule_callback", title: "Schedule callback", desc: "Queue another dial later (plan-level)", icon: PhoneForwarded },
+  { type: "schedule_callback", title: "Schedule callback", desc: "Book a later dial (plan-level retry)", icon: PhoneForwarded },
   { type: "join_meeting", title: "Join a meeting", desc: "Bot joins Meet / Zoom / Teams", icon: Video },
   { type: "update_sheet", title: "Update the list", desc: "Write status back to the Sheet row", icon: FileSpreadsheet },
-  { type: "condition", title: "If…", desc: "Continue only when something is true", icon: GitBranch },
+  { type: "condition", title: "If…", desc: "Then / else paths, or stop when false", icon: GitBranch },
   { type: "stop", title: "Stop", desc: "End this person’s path here", icon: OctagonX },
 ];
+
+/** Insertable pattern: If no answer → Wait 1 day → Call again. */
+function noAnswerRetryBlock(agentId: number): CallPlanStep[] {
+  const ifNo: CallPlanStep = {
+    ...defaultStep("condition", agentId),
+    field: "call.connected",
+    op: "eq",
+    value: "false",
+    label: "If they didn’t answer",
+  };
+  const wait: CallPlanStep = {
+    ...defaultStep("delay", agentId),
+    delaySeconds: 86400,
+    label: "Wait 1 day",
+  };
+  const callAgain: CallPlanStep = {
+    ...defaultStep("make_call", agentId),
+    label: "Call again",
+  };
+  return [ifNo, wait, callAgain];
+}
 
 function sid(prefix: string): string {
   return `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
@@ -111,6 +132,20 @@ function isStopStep(step: CallPlanStep): boolean {
 
 function isIfStep(step: CallPlanStep): boolean {
   return step.type === "condition" && step.field !== "__stop";
+}
+
+/** Mark steps that belong to an If then/else block for the timeline. */
+function branchRoleForIndex(steps: CallPlanStep[], index: number): "then" | "else" | null {
+  for (let i = 0; i < index; i++) {
+    const s = steps[i]!;
+    if (!isIfStep(s)) continue;
+    const thenN = Math.max(0, Math.floor(Number(s.thenStepCount ?? 0)));
+    const elseN = Math.max(0, Math.floor(Number(s.elseStepCount ?? 0)));
+    if (thenN === 0 && elseN === 0) continue;
+    if (index > i && index <= i + thenN) return "then";
+    if (index > i + thenN && index <= i + thenN + elseN) return "else";
+  }
+  return null;
 }
 
 function matchIfPreset(step: CallPlanStep): string {
@@ -249,6 +284,7 @@ export function CallPlanStepEditor({ steps, agentId, onChange, readOnly = false 
           const open = expandedId === step.id;
           const stop = isStopStep(step);
           const ifStep = isIfStep(step);
+          const branchTag = branchRoleForIndex(steps, idx);
           return (
             <li key={step.id} className="rounded-lg border border-border/50 bg-background/40 overflow-hidden">
               <div className="flex items-center gap-1.5 px-2 py-1.5">
@@ -261,6 +297,18 @@ export function CallPlanStepEditor({ steps, agentId, onChange, readOnly = false 
                   {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
                 </button>
                 <span className="text-[10px] font-mono text-muted-foreground w-4">{idx + 1}</span>
+                {branchTag && (
+                  <span
+                    className={cn(
+                      "shrink-0 rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide",
+                      branchTag === "then"
+                        ? "bg-foreground/10 text-foreground"
+                        : "bg-muted text-muted-foreground",
+                    )}
+                  >
+                    {branchTag}
+                  </span>
+                )}
                 <button
                   type="button"
                   className="flex-1 text-left text-xs font-medium truncate"
@@ -287,7 +335,7 @@ export function CallPlanStepEditor({ steps, agentId, onChange, readOnly = false 
                   ) : ifStep ? (
                     <div className="space-y-2">
                       <div className="space-y-1">
-                        <Label className="text-[11px]">Continue only if…</Label>
+                        <Label className="text-[11px]">When…</Label>
                         <Select
                           value={matchIfPreset(step)}
                           onValueChange={(id) => {
@@ -348,9 +396,100 @@ export function CallPlanStepEditor({ steps, agentId, onChange, readOnly = false 
                           </div>
                         </div>
                       )}
-                      <p className="text-[10px] text-muted-foreground">
-                        If this isn’t true, this person’s path stops here. Place If after a Call step.
-                      </p>
+                      <div className="space-y-1">
+                        <Label className="text-[11px]">If false…</Label>
+                        <Select
+                          value={
+                            (step.thenStepCount ?? 0) > 0 || (step.elseStepCount ?? 0) > 0
+                              ? "branch"
+                              : "stop"
+                          }
+                          onValueChange={(mode) => {
+                            if (mode === "stop") {
+                              updateAt(idx, { thenStepCount: 0, elseStepCount: 0 });
+                              return;
+                            }
+                            const thenN = Math.max(1, step.thenStepCount ?? 1);
+                            const elseN = Math.max(1, step.elseStepCount ?? 1);
+                            const need = thenN + elseN;
+                            const head = steps.slice(0, idx + 1);
+                            const after = steps.slice(idx + 1);
+                            const fillers: CallPlanStep[] = [];
+                            while (after.length + fillers.length < thenN) {
+                              fillers.push({
+                                ...defaultStep("send_whatsapp", agentId),
+                                label: "Then — WhatsApp",
+                                whatsappHint: "call_summary",
+                              });
+                            }
+                            while (after.length + fillers.length < need) {
+                              fillers.push({
+                                ...defaultStep("send_whatsapp", agentId),
+                                label: "Else — WhatsApp",
+                                whatsappHint: "call_summary",
+                              });
+                            }
+                            if (fillers.length > 0) {
+                              const next = [...head, ...after, ...fillers];
+                              next[idx] = { ...next[idx]!, thenStepCount: thenN, elseStepCount: elseN };
+                              onChange(next);
+                              return;
+                            }
+                            updateAt(idx, { thenStepCount: thenN, elseStepCount: elseN });
+                          }}
+                        >
+                          <SelectTrigger className="h-8 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="stop" className="text-xs">Stop this person (gate)</SelectItem>
+                            <SelectItem value="branch" className="text-xs">Run Then / Else paths</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      {((step.thenStepCount ?? 0) > 0 || (step.elseStepCount ?? 0) > 0) && (
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="space-y-1">
+                            <Label className="text-[11px]">Then steps</Label>
+                            <Input
+                              type="number"
+                              min={0}
+                              max={10}
+                              className="h-8 text-xs"
+                              value={step.thenStepCount ?? 1}
+                              onChange={(e) =>
+                                updateAt(idx, {
+                                  thenStepCount: Math.max(0, Math.min(10, Number(e.target.value) || 0)),
+                                })
+                              }
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-[11px]">Else steps</Label>
+                            <Input
+                              type="number"
+                              min={0}
+                              max={10}
+                              className="h-8 text-xs"
+                              value={step.elseStepCount ?? 1}
+                              onChange={(e) =>
+                                updateAt(idx, {
+                                  elseStepCount: Math.max(0, Math.min(10, Number(e.target.value) || 0)),
+                                })
+                              }
+                            />
+                          </div>
+                          <p className="col-span-2 text-[10px] text-muted-foreground leading-relaxed">
+                            Next {step.thenStepCount ?? 0} step(s) = Then; the following {step.elseStepCount ?? 0} = Else.
+                            Both rejoin after. Example: If answered → WhatsApp A (then 1) / WhatsApp B (else 1).
+                          </p>
+                        </div>
+                      )}
+                      {(step.thenStepCount ?? 0) === 0 && (step.elseStepCount ?? 0) === 0 && (
+                        <p className="text-[10px] text-muted-foreground">
+                          Gate mode: if this isn’t true, the path stops. Switch to Then / Else for two paths.
+                        </p>
+                      )}
                     </div>
                   ) : step.type === "make_call" ? (
                     <div className="space-y-2">
@@ -576,6 +715,35 @@ export function CallPlanStepEditor({ steps, agentId, onChange, readOnly = false 
           Add what happens next — Call, WhatsApp, Email, Wait, Meet, Update list, If…, or Stop.
         </p>
       )}
+
+      <div className="rounded-lg border border-border/50 bg-muted/10 px-3 py-2.5 space-y-2">
+        <p className="text-[11px] text-muted-foreground leading-relaxed">
+          <span className="font-medium text-foreground">Retries:</span>{" "}
+          plan steps handle “no answer → wait → call again.” Mid-call drops use the agent’s{" "}
+          <Link
+            href={agentId > 0 ? `/app/agents/${agentId}?section=advanced` : "/app/agents"}
+            className="underline underline-offset-2 hover:text-foreground"
+          >
+            Auto-redial
+          </Link>
+          .
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8 text-xs gap-1.5"
+          disabled={agentId <= 0}
+          onClick={() => {
+            const block = noAnswerRetryBlock(agentId);
+            onChange([...steps, ...block]);
+            setExpandedId(block[0]?.id ?? null);
+          }}
+        >
+          <PhoneForwarded className="h-3.5 w-3.5" />
+          Add: no answer → wait 1 day → call again
+        </Button>
+      </div>
 
       <div className="relative">
         <Button

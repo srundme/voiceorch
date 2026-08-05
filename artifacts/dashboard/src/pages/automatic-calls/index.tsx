@@ -67,7 +67,7 @@ export default function AutomaticCallsPage() {
           <Sheet className="h-8 w-8 mx-auto text-muted-foreground/60" />
           <p className="text-sm font-medium">No Google Sheets yet</p>
           <p className="text-xs text-muted-foreground max-w-md mx-auto">
-            Connect a sheet under Connections, map columns, then attach it to a call plan (Keep live).
+            Connect a sheet under Connections, map columns, then attach it to a call plan — drain the list or drip new rows.
           </p>
           <Button asChild size="sm" className="mt-2">
             <Link href="/app/automatic-calls/new">Connect sheet</Link>

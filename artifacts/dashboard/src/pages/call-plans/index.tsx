@@ -130,7 +130,7 @@ export default function CallPlansPage() {
   const [agentId, setAgentId] = useState<string>("");
   const [leadSource, setLeadSource] = useState<LeadSourceId>("list");
   const [templateId, setTemplateId] = useState<CallPlanTemplateId>("lead_followup");
-  /** For Google Sheet source: Start once (batch) or Keep live (same sheet keeps feeding). */
+  /** For Google Sheet source: drain list once, or drip new rows into the same queue. */
   const [sheetRunMode, setSheetRunMode] = useState<"once" | "live">("live");
 
   const agentsQ = useListAgents({
@@ -364,9 +364,9 @@ export default function CallPlansPage() {
                         : "border-border/50 hover:bg-muted/30",
                     )}
                   >
-                    <p className="text-[12px] font-medium">Import once</p>
+                    <p className="text-[12px] font-medium">Drain this list</p>
                     <p className="text-[10px] text-muted-foreground mt-0.5 leading-snug">
-                      Queue current rows — dials up to your account concurrency.
+                      Queue today’s rows once — dial at concurrency until done.
                     </p>
                   </button>
                   <button
@@ -379,9 +379,9 @@ export default function CallPlansPage() {
                         : "border-border/50 hover:bg-muted/30",
                     )}
                   >
-                    <p className="text-[12px] font-medium">Keep live</p>
+                    <p className="text-[12px] font-medium">Drip new rows</p>
                     <p className="text-[10px] text-muted-foreground mt-0.5 leading-snug">
-                      New rows on this same sheet keep entering the plan.
+                      Keep watching the sheet — new rows enter the same queue.
                     </p>
                   </button>
                 </div>

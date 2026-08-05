@@ -290,6 +290,20 @@ router.patch("/journeys/:id", requireAuth, async (req, res): Promise<void> => {
     logger.warn({ err, journeyId: id }, "journey: failed to sync backing workflow on patch");
   }
 
+  // Push calling hours onto the hidden workflow campaign (campaign dial gate).
+  try {
+    const settings = (j!.settings ?? {}) as JourneySettings;
+    const { syncCallingHoursForAgent } = await import("../services/workflow-dial-queue.js");
+    await syncCallingHoursForAgent(clerkId, j!.agentId, {
+      isCallingHoursEnabled: settings.isCallingHoursEnabled,
+      businessHoursStart: settings.businessHoursStart,
+      businessHoursEnd: settings.businessHoursEnd,
+      timezone: settings.timezone,
+    });
+  } catch (err) {
+    logger.warn({ err, journeyId: id }, "journey: failed to sync calling hours");
+  }
+
   const [fresh] = await db.select().from(journeysTable).where(eq(journeysTable.id, id)).limit(1);
   res.json(serializeJourney(fresh!));
 });
@@ -637,6 +651,18 @@ router.post("/journeys/:id/start", requireAuth, async (req, res): Promise<void> 
     .where(and(eq(workflowsTable.id, workflowId), eq(workflowsTable.userId, clerkId)))
     .limit(1);
   if (!workflow) { res.status(500).json({ error: "Backing workflow missing" }); return; }
+
+  // Arm campaign dial gate with this plan's calling hours (same as People campaigns).
+  {
+    const s = (freshJourney!.settings ?? {}) as JourneySettings;
+    const { syncCallingHoursForAgent } = await import("../services/workflow-dial-queue.js");
+    await syncCallingHoursForAgent(clerkId, freshJourney!.agentId, {
+      isCallingHoursEnabled: s.isCallingHoursEnabled,
+      businessHoursStart: s.businessHoursStart,
+      businessHoursEnd: s.businessHoursEnd,
+      timezone: s.timezone,
+    });
+  }
 
   // First slice into the pipeline; auto-feed continues the rest.
   const slice = await loadCallPlanPeopleSlice({

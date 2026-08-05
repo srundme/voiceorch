@@ -14,7 +14,7 @@ import {
   customFetch,
 } from "@workspace/api-client-react";
 import {
-  Loader2, Pause, Play, Save, Trash2, ExternalLink, Users, Square,
+  Loader2, Pause, Play, Save, Trash2, ExternalLink, Users, Square, Clock,
 } from "lucide-react";
 import { StripePage } from "@/components/stripe-page";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -47,7 +48,25 @@ type CallPlanSettings = {
   startOffset?: number;
   startSourceTotal?: number;
   autoFeed?: boolean;
+  isCallingHoursEnabled?: boolean;
+  businessHoursStart?: number | null;
+  businessHoursEnd?: number | null;
+  timezone?: string | null;
 };
+
+const CALL_PLAN_TIMEZONES = [
+  "Asia/Kolkata",
+  "Asia/Dubai",
+  "Asia/Singapore",
+  "Europe/London",
+  "America/New_York",
+  "UTC",
+];
+
+const HOUR_OPTIONS = Array.from({ length: 24 }, (_, h) => ({
+  value: String(h),
+  label: `${String(h).padStart(2, "0")}:00`,
+}));
 
 type CallPlan = {
   id: number;
@@ -116,6 +135,10 @@ export default function CallPlanDetailPage() {
   const [manualPhones, setManualPhones] = useState("");
   const [peopleMode, setPeopleMode] = useState<"campaign" | "sheet" | "manual">("campaign");
   const [runMode, setRunMode] = useState<"once" | "live">("once");
+  const [callingHoursEnabled, setCallingHoursEnabled] = useState(true);
+  const [hoursStart, setHoursStart] = useState(9);
+  const [hoursEnd, setHoursEnd] = useState(19);
+  const [timezone, setTimezone] = useState("Asia/Kolkata");
   const [dirty, setDirty] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [forceOpen, setForceOpen] = useState(false);
@@ -194,6 +217,18 @@ export default function CallPlanDetailPage() {
       setPeopleMode(peopleSrc);
     }
     setRunMode(plan.settings?.runMode === "live" ? "live" : "once");
+    setCallingHoursEnabled(plan.settings?.isCallingHoursEnabled !== false);
+    setHoursStart(
+      typeof plan.settings?.businessHoursStart === "number" ? plan.settings.businessHoursStart : 9,
+    );
+    setHoursEnd(
+      typeof plan.settings?.businessHoursEnd === "number" ? plan.settings.businessHoursEnd : 19,
+    );
+    setTimezone(
+      typeof plan.settings?.timezone === "string" && plan.settings.timezone
+        ? plan.settings.timezone
+        : "Asia/Kolkata",
+    );
     const t = plan.trigger?.type;
     setIntakeMode(t === "form_lead" || t === "instagram_lead" ? t : "manual");
     setHookUrl(plan.hookUrl ?? (plan.publicToken ? `/api/workflows/hook/${plan.publicToken}` : null));
@@ -235,6 +270,10 @@ export default function CallPlanDetailPage() {
               ? sheetPipelineId
               : null,
             runMode: peopleMode === "sheet" ? runMode : "once",
+            isCallingHoursEnabled: callingHoursEnabled,
+            businessHoursStart: callingHoursEnabled ? hoursStart : null,
+            businessHoursEnd: callingHoursEnabled ? hoursEnd : null,
+            timezone,
           },
           trigger: { type: intakeMode },
         }),
@@ -376,10 +415,10 @@ export default function CallPlanDetailPage() {
     onSuccess: () => {
       setRunMode("once");
       qc.invalidateQueries({ queryKey: ["call-plans", planId] });
-      toast({ title: "Live stopped", description: "New sheet rows will no longer enter this plan." });
+      toast({ title: "Drip stopped", description: "New sheet rows will no longer enter this plan." });
     },
     onError: (err) => {
-      toast({ title: "Could not stop live", description: formatApiError(err), variant: "destructive" });
+      toast({ title: "Could not stop drip", description: formatApiError(err), variant: "destructive" });
     },
   });
 
@@ -491,7 +530,7 @@ export default function CallPlanDetailPage() {
               onClick={() => stopLive.mutate()}
             >
               {stopLive.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Square className="size-3.5" />}
-              Stop live
+              Stop drip
             </Button>
           )}
           {showContinue && (
@@ -513,7 +552,7 @@ export default function CallPlanDetailPage() {
             onClick={() => { void handleStartClick(); }}
           >
             {startBusy ? <Loader2 className="size-3.5 animate-spin" /> : <Play className="size-3.5" />}
-            {peopleMode === "sheet" && runMode === "live" ? "Start live" : "Start queue"}
+            {peopleMode === "sheet" && runMode === "live" ? "Start drip" : "Start queue"}
           </Button>
         </div>
       }
@@ -620,7 +659,7 @@ export default function CallPlanDetailPage() {
                 >
                   Google Sheet
                   <span className="mt-0.5 block text-[9px] font-normal text-muted-foreground leading-snug">
-                    Import + same sheet live
+                    Drain list or drip new rows
                   </span>
                 </button>
                 <button
@@ -730,8 +769,10 @@ export default function CallPlanDetailPage() {
                           : "border-border/50 hover:bg-muted/30",
                       )}
                     >
-                      <p className="font-medium">Start queue</p>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">Current rows · concurrency dial</p>
+                      <p className="font-medium">Drain this list</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">
+                        Queue today’s rows once — dial at concurrency until done
+                      </p>
                     </button>
                     <button
                       type="button"
@@ -743,28 +784,44 @@ export default function CallPlanDetailPage() {
                           : "border-border/50 hover:bg-muted/30",
                       )}
                     >
-                      <p className="font-medium">Keep live</p>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">New rows keep entering</p>
+                      <p className="font-medium">Drip new rows</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">
+                        Keep watching the sheet — new rows enter the same queue
+                      </p>
                     </button>
                   </div>
                   {sheetPipelines.length > 0 && (
-                    <p className="text-[10px] text-muted-foreground">
-                      {runMode === "live"
-                        ? "Same sheet for import and Keep live — new rows keep entering. Dials respect your account concurrency."
-                        : "Queues current sheet rows and dials up to your account concurrency; the rest feed automatically. Or switch to Keep live for new rows."}
-                      {" "}
-                      Add an “Update the list” step to write status back to this same sheet.
-                      {" "}
-                      <Link href="/app/automatic-calls/new" className="underline underline-offset-2">
-                        Add another sheet
-                      </Link>
-                    </p>
+                    <div className="rounded-lg border border-border/50 bg-muted/15 px-3 py-2.5 text-[10px] text-muted-foreground leading-relaxed space-y-1">
+                      {runMode === "live" ? (
+                        <>
+                          <p>
+                            <span className="font-medium text-foreground">Drip:</span>{" "}
+                            SnapServe watches this sheet. New rows join the dial queue (same concurrency + calling hours). Already-processed rows are not re-dialed.
+                          </p>
+                          <p>Use when leads keep arriving in the spreadsheet.</p>
+                        </>
+                      ) : (
+                        <>
+                          <p>
+                            <span className="font-medium text-foreground">Drain:</span>{" "}
+                            Start queues everyone currently on the sheet, then stops when the list is done. No new rows after Start (unless you Start again).
+                          </p>
+                          <p>Use for a fixed batch — like a CSV list.</p>
+                        </>
+                      )}
+                      <p>
+                        Add an “Update the list” step to write status back.{" "}
+                        <Link href="/app/automatic-calls/new" className="underline underline-offset-2">
+                          Add another sheet
+                        </Link>
+                      </p>
+                    </div>
                   )}
                   {peopleMode === "sheet" && (
                     <p className="text-[10px] text-muted-foreground tabular-nums">
                       Sheet cursor: row {plan.settings?.sheetCursorRow ?? 1}
                       {" · "}
-                      Keep live {runMode === "live" ? "on" : "off"}
+                      Drip {runMode === "live" ? "on" : "off"}
                     </p>
                   )}
                 </div>
@@ -781,6 +838,73 @@ export default function CallPlanDetailPage() {
                     One phone per line. Queued and dialed up to your account concurrency; leftover numbers feed automatically.
                   </p>
                 </div>
+              )}
+            </section>
+
+            <section className="space-y-3 rounded-xl border border-border/60 bg-card/30 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-start gap-2 min-w-0">
+                  <Clock className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                  <div>
+                    <h2 className="text-sm font-semibold">Calling hours</h2>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      Queue holds outside this window — same gate as People campaigns.
+                    </p>
+                  </div>
+                </div>
+                <Switch
+                  checked={callingHoursEnabled}
+                  onCheckedChange={(v) => { setCallingHoursEnabled(v); setDirty(true); }}
+                />
+              </div>
+              {callingHoursEnabled && (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px]">Start</Label>
+                    <Select
+                      value={String(hoursStart)}
+                      onValueChange={(v) => { setHoursStart(Number(v)); setDirty(true); }}
+                    >
+                      <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {HOUR_OPTIONS.map((h) => (
+                          <SelectItem key={h.value} value={h.value} className="text-xs">{h.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px]">End</Label>
+                    <Select
+                      value={String(hoursEnd)}
+                      onValueChange={(v) => { setHoursEnd(Number(v)); setDirty(true); }}
+                    >
+                      <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {HOUR_OPTIONS.map((h) => (
+                          <SelectItem key={h.value} value={h.value} className="text-xs">{h.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px]">Timezone</Label>
+                    <Select
+                      value={timezone}
+                      onValueChange={(v) => { setTimezone(v); setDirty(true); }}
+                    >
+                      <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {CALL_PLAN_TIMEZONES.map((tz) => (
+                          <SelectItem key={tz} value={tz} className="text-xs">{tz}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
+              {!callingHoursEnabled && (
+                <p className="text-[10px] text-muted-foreground">24/7 — queue dials whenever concurrency is free.</p>
               )}
             </section>
 

@@ -49,13 +49,27 @@ export async function countActiveWorkflowCallsForUser(clerkUserId: string): Prom
   return Number(row?.c ?? 0);
 }
 
+export type WorkflowCallingHours = {
+  isCallingHoursEnabled?: boolean;
+  businessHoursStart?: number | null;
+  businessHoursEnd?: number | null;
+  timezone?: string | null;
+};
+
+function clampHour(n: unknown, fallback: number): number {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return fallback;
+  return Math.min(23, Math.max(0, Math.floor(v)));
+}
+
 /**
- * Keep workflow campaign.concurrentCallLimit + dialable status aligned with
- * the account ceiling so campaign rolling refill can run.
+ * Keep workflow campaign concurrency + dialable status (+ optional calling hours)
+ * aligned so campaign rolling refill / isCampaignDialable work like People campaigns.
  */
 export async function syncWorkflowCampaignConcurrency(
   campaign: Campaign,
   clerkUserId: string,
+  hours?: WorkflowCallingHours | null,
 ): Promise<Campaign> {
   const limit = await getUserConcurrentLimit(clerkUserId);
   const needsLimit = campaign.concurrentCallLimit !== limit;
@@ -63,7 +77,36 @@ export async function syncWorkflowCampaignConcurrency(
   const needsStatus = campaign.status === "paused" || campaign.status === "completed"
     || campaign.status === "stopped" || campaign.status === "cancelled";
 
-  if (!needsLimit && !needsStatus && campaign.isActive) return campaign;
+  const hoursPatch: Partial<Campaign> = {};
+  if (hours != null) {
+    const enabled = hours.isCallingHoursEnabled !== false;
+    if (enabled) {
+      const start = clampHour(hours.businessHoursStart, 9);
+      const end = clampHour(hours.businessHoursEnd, 19);
+      const tz = typeof hours.timezone === "string" && hours.timezone.trim()
+        ? hours.timezone.trim()
+        : "Asia/Kolkata";
+      if (
+        campaign.isCallingHoursEnabled !== true
+        || campaign.businessHoursStart !== start
+        || campaign.businessHoursEnd !== end
+        || campaign.timezone !== tz
+      ) {
+        hoursPatch.isCallingHoursEnabled = true;
+        hoursPatch.businessHoursStart = start;
+        hoursPatch.businessHoursEnd = end;
+        hoursPatch.timezone = tz;
+      }
+    } else if (campaign.isCallingHoursEnabled !== false) {
+      hoursPatch.isCallingHoursEnabled = false;
+      hoursPatch.businessHoursStart = null;
+      hoursPatch.businessHoursEnd = null;
+    }
+  }
+
+  if (!needsLimit && !needsStatus && campaign.isActive && Object.keys(hoursPatch).length === 0) {
+    return campaign;
+  }
 
   const [updated] = await db
     .update(campaignsTable)
@@ -71,10 +114,28 @@ export async function syncWorkflowCampaignConcurrency(
       ...(needsLimit ? { concurrentCallLimit: limit } : {}),
       ...(needsStatus ? { status: "active" } : {}),
       isActive: true,
+      ...hoursPatch,
     })
     .where(eq(campaignsTable.id, campaign.id))
     .returning();
   return updated ?? campaign;
+}
+
+/** Push a call plan's calling hours onto every workflow campaign for that agent. */
+export async function syncCallingHoursForAgent(
+  clerkUserId: string,
+  agentId: number,
+  hours: WorkflowCallingHours,
+): Promise<void> {
+  const campaigns = await db.select().from(campaignsTable)
+    .where(and(
+      eq(campaignsTable.userId, clerkUserId),
+      eq(campaignsTable.agentId, agentId),
+      eq(campaignsTable.leadSource, "workflow"),
+    ));
+  for (const campaign of campaigns) {
+    await syncWorkflowCampaignConcurrency(campaign, clerkUserId, hours);
+  }
 }
 
 /** One long-running batch per workflow campaign — same role as a People batch. */

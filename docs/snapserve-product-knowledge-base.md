@@ -13,14 +13,14 @@ SnapServe lets a business:
 
 1. Create an **agent** (who talks on phone and/or in meetings)  
 2. Make a **call plan** (ordered steps for each person)  
-3. Attach **people** (CSV lists)  
-4. Wire **connections** once (Sheets, WhatsApp, email, website form, Meta)
+3. Attach **people** (list, sheet, or paste) and **Start queue**  
+4. Wire **connections** once (Sheets, WhatsApp, email, website form, Meta, phone)
 
-SnapServe runs the work, logs **History**, and bills by wallet / minutes.
+SnapServe dials at concurrency (and calling hours), logs **History**, and bills by wallet / minutes.
 
 **One-line product model:**
 
-> You create an **agent** → you make a **call plan** → you attach **people** → you wire **connections** → SnapServe runs the rest.
+> You create an **agent** → you make a **call plan** → you attach **people** → **Start queue** → SnapServe dials at your concurrency (and calling hours).
 
 Journeys, campaigns, and dial engines still power execution under the hood. Product language prefers **Call plans**, **People**, **History**, and **Connections** — not “Journey”, “Automation”, or “Dial flows” as primary labels.
 
@@ -46,7 +46,7 @@ Journeys, campaigns, and dial engines still power execution under the hood. Prod
    - People = who to dial / message  
    - Connections = account wiring used by plans and agents  
 
-2. **Retries / “call me back” live on the Agent**, not on the call plan.
+2. **Retries:** plan steps can express **no answer → wait → call again**; agent **Auto-redial** (Advanced) is the mid-call / immediate redial setting. Link both clearly in the plan editor.
 
 3. **Provider and model names stay visible** (Sarvam, Gemini, Cartesia, Vobiz, etc.).
 
@@ -54,7 +54,7 @@ Journeys, campaigns, and dial engines still power execution under the hood. Prod
 
 5. **Email = Brevo bring-your-own only** — SnapServe does not provide managed email.
 
-6. Agent-scoped deep pages (Agent channels, Meet, Memory) use `?agentId=` + an agent picker.
+6. Agent-scoped deep pages (**Meetings**, **Memory**) use `?agentId=` + an agent picker. Phone / WhatsApp / email wiring lives under **Connections** (not a primary “Agent channels” nav).
 
 ---
 
@@ -97,7 +97,7 @@ MORE
 | `/app/callbacks` | `/app/history?tab=callbacks` |
 | `/app/transfers` | `/app/history?tab=transfers` |
 
-**Deep-links kept** (not primary nav): `/app/channels` (Agent channels), `/app/whatsapp`, `/app/meet`, campaign / sheet detail routes.
+**Deep-links kept** (not primary nav): `/app/channels` redirects into Connections / Meetings, `/app/whatsapp`, `/app/meet`, campaign / sheet detail routes.
 
 ---
 
@@ -132,7 +132,7 @@ MORE
 | Builder | Route `/app/agents/:id` |
 | Call plan | Journey + workflow under the hood; UI = `/app/call-plans/:id` |
 | People lists / sheets / forms | Legacy campaign / automatic-call / webhook engines; UI = `/app/people` |
-| Agent channels / Meet / Memory | Query `?agentId=` + agent picker |
+| Meetings / Memory | Query `?agentId=` + agent picker; phone/WA/email via **Connections** |
 | Phone numbers | Number assigned to `agentId` (or squad) |
 | Knowledge | Sources attached on agent (`knowledgeSourceIds`) |
 | Live production | Published **Version** snapshot (not unsaved draft) |
@@ -172,7 +172,7 @@ Phone + meetings enables meeting join and a separate **In meetings** prompt.
 | **Advanced** | Engine timing, limits, post-call webhook, dispositions, India compliance |
 | **Versions** | Draft / Production snapshots — compare, restore, publish |
 
-Meeting **join / delegate / memory** toggles live under **Agent channels → Meetings** (deep-link from Connections / Meet), not as a second prompt editor there.
+Meeting **join / delegate / memory** toggles live under **Meetings** (Connections → Meet / `/app/meet?agentId=`), not as a second prompt editor in the Builder.
 
 ### Tools tab
 
@@ -180,8 +180,8 @@ Meeting **join / delegate / memory** toggles live under **Agent channels → Mee
 |----------------|---------|
 | **Booking** (one switch) | Book / check / list / reschedule / cancel — needs Scheduling calendar + event type |
 | **End call** | Hang up politely |
-| **Send email** | Mid-call email via Brevo (Agent channels → Email) |
-| **Send WhatsApp** | Mid-call WhatsApp (channel must be connected) |
+| **Send email** | Mid-call email via Brevo (Connections → Email) |
+| **Send WhatsApp** | Mid-call WhatsApp (Connections → WhatsApp must be connected) |
 | **Call transfer** | Warm transfer to a human number |
 | **Custom HTTP tools** | User-defined webhooks with JSON schema |
 | **Call recording** | Record conversations |
@@ -220,14 +220,14 @@ A call plan is an **ordered timeline of steps** for each person — not a node g
 |------|---------|
 | **Call them** | Dial with the plan’s agent; optional **Team** for mid-call handoffs |
 | **Send WhatsApp** | Template-style follow-up (needs WhatsApp connected) |
-| **Send email** | Brevo email (needs Agent channels → Email) |
+| **Send email** | Brevo email (needs Connections → Email) |
 | **Wait** | Pause (minutes / hours / days) |
 | **Join a meeting** | Bot joins Meet / Zoom / Teams from a link on the person |
 | **Update the list** | Write status back to the Sheet row (when people came from a sheet) |
-| **If…** | Continue only when a condition is true (else this person’s path stops). Plain language: answered / didn’t answer / succeeded / custom |
+| **If…** | Two modes: **Gate** (false → stop) or **Then / Else paths** (e.g. answered → WhatsApp A, else → WhatsApp B). Plain language conditions: answered / didn’t answer / succeeded / custom |
 | **Stop** | End this person’s path |
 
-Retries and call-backs are **agent** settings — not plan steps.
+**Retries:** plan editor surfaces **no answer → wait → call again** as steps; agent **Auto-redial** remains on Builder → Advanced for immediate redials.
 
 ### People on a plan
 
@@ -235,14 +235,20 @@ Retries and call-backs are **agent** settings — not plan steps.
 - **Paste phones** — one-off numbers  
 - **Google Sheet** — attach a sheet pipeline  
 
-### Run modes
+### Dial queue
+
+**Start queue** feeds people into a concurrency dial queue (same engine as campaigns): dials up to the account **concurrent limit**, auto-feeds the rest, respects plan **calling hours** (start/end + timezone). Watch **Activity** for queued / dialing.
+
+### Sheet run modes
 
 | Mode | Behaviour |
 |------|-----------|
-| **Start once** | Run the attached people through the plan in **batches of 100**; use **Continue** for the next batch |
-| **Keep live** | For Sheet people — keep watching new/updated rows (uses a **sheet cursor** so already-processed rows are not re-run) |
+| **Drain this list** | Queue current sheet rows once; dial until done. No new rows after Start (unless you Start again). |
+| **Drip new rows** | Keep watching the sheet; new rows enter the same queue (sheet cursor skips already-processed rows). |
 
-**Pause / Resume** — stop or restart an active plan without deleting it.
+List / paste people always use the drain/queue path (Start queue).
+
+**Pause / Resume** — stop or restart an active plan without deleting it. **Stop drip** — stop new sheet rows from entering.
 
 ### Intake on a plan
 
@@ -312,7 +318,7 @@ Call detail: transcript, recording (if enabled), disposition, cost, agent.
 - Bookings, calendars (e.g. Google Calendar), event types, availability, conferencing  
 - Public booking page: `/book/:slug`  
 
-**Connection:** Tools → Booking uses the agent’s linked calendar + event type. Agent channels → Booking shows readiness.
+**Connection:** Tools → Booking uses the agent’s linked calendar + event type. Connections / Meetings show calendar readiness.
 
 ---
 
@@ -322,7 +328,7 @@ Call detail: transcript, recording (if enabled), disposition, cost, agent.
 
 - Paste Google Meet / Zoom / Teams URL → launch bot  
 - Meeting prompt: Builder → Prompt → In meetings  
-- Join / delegate: Agent channels → Meetings  
+- Join / delegate: Meetings (Connections → Meet)  
 
 ---
 
@@ -404,22 +410,22 @@ Default India stack (when not BYO): Sarvam ASR, Google LLM, Cartesia/Sarvam TTS,
 ### B — Go live on phone
 
 1. Connections → Phone numbers → buy / verify  
-2. Assign number to agent (Phone Numbers or Agent channels → Phone)  
+2. Assign number to agent (Phone Numbers or Connections → Phone)  
 3. Inbound rings this agent; outbound uses this caller ID  
 
 ### C — Call plan: list → call → WhatsApp
 
 1. Create / pick agent  
-2. People → Lists / CSV → upload bound to agent  
-3. Call plans → new plan → steps: Call → WhatsApp → Wait…  
-4. Attach list → **Start once**  
-5. Watch plan results + History  
+2. Call plans → new plan → steps: Call → WhatsApp → Wait…  
+3. People → attach list / paste / sheet  
+4. **Start queue** (respects concurrency + calling hours)  
+5. Watch plan Activity + History  
 
-### D — Sheet keep-live
+### D — Sheet drip vs drain
 
 1. Connections → Google Sheets → connect  
-2. Set up sheet auto-dial (`/app/automatic-calls/new` or Connections → Sheets)  
-3. Call plan → attach sheet → **Keep live**  
+2. Set up sheet (`/app/automatic-calls/new` or Connections → Sheets)  
+3. Call plan → attach sheet → **Drain this list** (batch) or **Drip new rows** (ongoing)  
 4. Optional: **Update the list** step writes status back  
 
 ### E — Website form → call plan
@@ -432,7 +438,7 @@ Default India stack (when not BYO): Sarvam ASR, Google LLM, Cartesia/Sarvam TTS,
 
 1. Scheduling: calendar + event type  
 2. Builder → Tools → Booking ON  
-3. Agent books slots mid-call; optional Meet join via Agent channels → Meetings  
+3. Agent books slots mid-call; optional Meet join via Meetings (Connections → Meet)  
 
 ### G — Team handoffs
 
@@ -453,11 +459,11 @@ Default India stack (when not BYO): Sarvam ASR, Google LLM, Cartesia/Sarvam TTS,
 
 ### Design principles
 
-1. First teach **Agent → Call plan → People → Connections → History**.  
-2. Do not revive **Automation / Dial flows / Journey / Activity** as primary nav labels.  
+1. First teach **Agent → Call plan → People → Start queue**.  
+2. Do not revive **Automation / Dial flows / Journey / Agent channels** as primary nav labels.  
 3. Prefer flat full pages; one job per screen.  
-4. Cross-link generously (plan → People, Connections → Agent channels, Meet → Prompt).  
-5. Empty states point to the next step (create agent → phone → call plan → people).  
+4. Cross-link generously (plan → People, Connections → Meetings, Meet → Prompt).  
+5. Empty states point to the next step (agent → call plan → people → start queue).  
 
 ### Surfaces that must feel like one family
 
@@ -475,19 +481,21 @@ Builder is a focused editor. MORE and Settings are secondary / administrative.
 | Dual prompts (calls / meetings) | Yes | Builder → Prompt / Overview |
 | Voice stack + cloning | Yes | Builder → Voice, Providers |
 | Mid-call tools | Yes | Builder → Tools |
-| Booking suite | Yes | Tools + Scheduling + Agent channels |
+| Booking suite | Yes | Tools + Scheduling + Connections |
 | Voicemail AMD | Yes | Builder → Voicemail |
 | Engine / barge-in / VAD | Yes | Builder → Advanced |
 | Versions / publish | Yes | Builder → Versions |
 | Live browser / phone test | Yes | Builder toolbar |
 | Knowledge bases | Yes | Knowledge + Builder Overview |
 | Phone buy / assign / KYC | Yes | Phone Numbers + Connections |
-| WhatsApp Meta / BYO | Yes | WhatsApp + Agent channels |
-| Email via Brevo | Yes | Agent channels → Email |
-| Meetings join | Yes | Meet + Agent channels → Meetings |
+| WhatsApp Meta / BYO | Yes | Connections → WhatsApp |
+| Email via Brevo | Yes | Connections → Email |
+| Meetings join | Yes | Connections → Meet / Meetings |
 | Call plans timeline | Yes | Call plans |
-| If… (plain language) | Yes | Call plans steps |
-| Start once / Keep live | Yes | Call plans |
+| If… Then / Else | Yes | Call plans steps |
+| Calling hours on plans | Yes | Call plan settings |
+| Dial queue (concurrency) | Yes | Call plans Start queue |
+| Drain list / Drip new rows | Yes | Call plans (sheet people) |
 | Sheet write-back step | Yes | Call plans |
 | People lists / CSV | Yes | People |
 | Google Sheets people | Yes | Connections |
@@ -514,15 +522,17 @@ Builder is a focused editor. MORE and Settings are secondary / administrative.
 | **Agent** | AI voice persona (prompt, voice, tools, published version) |
 | **Builder** | UI to configure how the agent speaks |
 | **Call plan** | Ordered steps for each person (product front door for journeys) |
-| **People** | Who you reach — CSV lists |
-| **Connections** | Shared wiring — Sheets, WhatsApp, email, website form, Meta |
+| **People** | Who you reach — CSV lists, paste, or sheets on a plan |
+| **Connections** | Shared wiring — Sheets, WhatsApp, email, website form, Meta, phone |
 | **History** | Calls, callbacks, transfers (what happened) |
-| **Agent channels** | Per-agent phone / WA / email / meetings / booking deep page |
+| **Meetings** | Per-agent meet join / delegate (deep page with `?agentId=`) |
+| **Dial queue** | Concurrency-limited outbound dialing for a call plan (campaign engine under the hood) |
+| **Drain / Drip** | Sheet modes: queue current rows once vs keep feeding new rows |
 | **Team / Squad** | Multi-agent handoff group |
 | **Production version** | Published snapshot used on live calls |
 | **Webcall** | Browser live test |
 | **BYO** | Bring your own (keys / telephony / Brevo / BSP) |
-| **Journey / campaign** | Internal engine names — prefer Call plan / People in product copy |
+| **Journey / campaign** | Internal engine names — prefer Call plan / People / dial queue in product copy |
 
 ---
 
@@ -534,25 +544,25 @@ Builder is a focused editor. MORE and Settings are secondary / administrative.
 
 - Call plans IA sidebar and redirects  
 - Builder focused on speaking behaviour (not a second workflow canvas)  
-- Retries on Agent, not on plans  
+- Plan retries as steps + agent Auto-redial linked clearly  
 - Visible provider/model names  
 - Booking as one switch; Email as Brevo-only  
 - Current color theme  
 
 **Primary screens**
 
-1. Home (what’s running + create CTAs)  
-2. Call plans (timeline editor)  
+1. Home (what’s running + Agent → Call plan → People → Start queue)  
+2. Call plans (timeline editor + dial queue)  
 3. Agents / Builder (dual prompt + team strip)  
 4. People  
-5. Connections  
+5. Connections (incl. Meetings)  
 6. History  
 
 **Success criteria**
 
-- New user can create an agent and start a call plan without training  
-- User never needs “Journey / Automation / Dial flows” words to succeed  
-- No node graph; no retry controls on the plan  
+- New user can create an agent, make a plan, add people, and start the queue without training  
+- User never needs “Journey / Automation / Dial flows / Agent channels” words to succeed  
+- No node graph; If… supports Then / Else paths  
 - Cross-links make Agent ↔ Plan ↔ People ↔ Connections obvious  
 
 ---

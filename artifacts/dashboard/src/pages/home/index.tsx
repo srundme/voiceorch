@@ -24,7 +24,6 @@ import {
   useListAgents,
   useListCalls,
   useListCampaigns,
-  useListPhoneNumbers,
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { StripePage } from "@/components/stripe-page";
@@ -85,7 +84,6 @@ export default function HomePage() {
   const campaignsQ = useListCampaigns({
     query: { queryKey: getListCampaignsQueryKey(), staleTime: 30_000 },
   });
-  const phonesQ = useListPhoneNumbers();
   const walletQ = useGetWallet();
   const pipelinesQ = useQuery({
     queryKey: ["automatic-calls"],
@@ -96,7 +94,6 @@ export default function HomePage() {
   const agents = Array.isArray(agentsQ.data) ? agentsQ.data : (agentsQ.data as any)?.agents ?? [];
   const calls = Array.isArray(callsQ.data) ? callsQ.data : (callsQ.data as any)?.calls ?? [];
   const campaigns = Array.isArray(campaignsQ.data) ? campaignsQ.data : [];
-  const phones = Array.isArray(phonesQ.data) ? phonesQ.data : [];
   const pipelines: AutoPipeline[] = pipelinesQ.data ?? [];
   const activeCampaigns = campaigns.filter((campaign: any) => campaign.status === "active" || campaign.isActive);
   const activePipelines = pipelines.filter((pipeline) => pipeline.status === "running");
@@ -130,12 +127,11 @@ export default function HomePage() {
   const runningPlans = plans.filter((p) => p.status === "active").slice(0, 6);
 
   const hasAgent = agents.length > 0;
-  const hasPhone = phones.length > 0;
   const hasPlan = plans.length > 0;
   const setup = [
     { label: "Create an agent", done: hasAgent, href: "/app/agents?create=1" },
-    { label: "Connect a phone number", done: hasPhone, href: "/app/phone-numbers" },
     { label: "Make a call plan", done: hasPlan, href: "/app/call-plans" },
+    { label: "Add people & start the queue", done: hasPlan && runningPlans.length > 0, href: hasPlan ? `/app/call-plans/${plans[0]!.id}` : "/app/call-plans" },
   ];
   const setupDone = setup.every((item) => item.done);
 
@@ -222,7 +218,7 @@ export default function HomePage() {
             </div>
             <h1 className="text-2xl font-semibold tracking-[-0.03em]">Create your first agent</h1>
             <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
-              Who talks on the phone. Then make a call plan for what happens next.
+              Default path: Agent → Call plan → People → Start queue.
             </p>
           </div>
           <div className="grid gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-2">
@@ -290,16 +286,54 @@ export default function HomePage() {
           </div>
           {recentReach.length === 0 ? (
             <div className="px-3.5 py-10 text-center">
-              <p className="text-[12px] text-muted-foreground">Nothing running yet.</p>
-              <div className="mt-3 flex justify-center gap-2">
-                <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => navigate("/app/call-plans")}>
-                  <ListOrdered className="size-3.5" />
-                  Make a call plan
-                </Button>
-                <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={() => navigate("/app/agents?create=1")}>
-                  <Plus className="size-3.5" />
-                  New agent
-                </Button>
+              <p className="text-[12px] font-medium text-foreground">Nothing in the queue yet</p>
+              <p className="mt-1.5 text-[11px] text-muted-foreground leading-relaxed max-w-sm mx-auto">
+                Agent → Call plan → People → Start queue. That’s the default path.
+              </p>
+              <ol className="mt-4 mx-auto max-w-xs space-y-1.5 text-left text-[11px] text-muted-foreground">
+                <li className="flex gap-2">
+                  <span className="tabular-nums text-foreground/70">1.</span>
+                  {hasAgent ? "Agent ready" : "Create an agent"}
+                </li>
+                <li className="flex gap-2">
+                  <span className="tabular-nums text-foreground/70">2.</span>
+                  {hasPlan ? "Call plan ready" : "Make a call plan"}
+                </li>
+                <li className="flex gap-2">
+                  <span className="tabular-nums text-foreground/70">3.</span>
+                  Attach people (list, sheet, or paste)
+                </li>
+                <li className="flex gap-2">
+                  <span className="tabular-nums text-foreground/70">4.</span>
+                  Start queue
+                </li>
+              </ol>
+              <div className="mt-4 flex justify-center gap-2">
+                {!hasAgent ? (
+                  <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => navigate("/app/agents?create=1")}>
+                    <Plus className="size-3.5" />
+                    Create agent
+                  </Button>
+                ) : !hasPlan ? (
+                  <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => navigate("/app/call-plans")}>
+                    <ListOrdered className="size-3.5" />
+                    Make a call plan
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    className="h-8 text-xs gap-1.5"
+                    onClick={() => navigate(`/app/call-plans/${plans[0]!.id}`)}
+                  >
+                    <ListOrdered className="size-3.5" />
+                    Open plan · add people
+                  </Button>
+                )}
+                {hasAgent && (
+                  <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={() => navigate("/app/call-plans")}>
+                    All call plans
+                  </Button>
+                )}
               </div>
             </div>
           ) : (
@@ -362,7 +396,7 @@ export default function HomePage() {
             <section className="rounded-lg border border-border bg-card">
               <div className="border-b border-border px-3.5 py-3">
                 <h2 className="text-[11px] font-semibold">Finish setup</h2>
-                <p className="mt-0.5 text-[10px] text-muted-foreground">Agent → phone → call plan.</p>
+                <p className="mt-0.5 text-[10px] text-muted-foreground">Agent → Call plan → People → Start queue.</p>
               </div>
               <div className="p-2">
                 {setup.map((item, index) => (

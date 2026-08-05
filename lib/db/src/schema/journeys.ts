@@ -71,6 +71,17 @@ export interface JourneySettings {
   autoFeed?: boolean;
   /** Pasted phones for manual Start (kept so auto-feed can continue the list). */
   manualPhones?: string[];
+  /**
+   * Calling hours — synced onto the hidden workflow campaign so the campaign
+   * dial gate (`isCampaignDialable`) holds the queue outside this window.
+   */
+  isCallingHoursEnabled?: boolean;
+  /** Hour 0–23 inclusive start (local to timezone). */
+  businessHoursStart?: number | null;
+  /** Hour 0–23 exclusive end. */
+  businessHoursEnd?: number | null;
+  /** IANA timezone for the window (default Asia/Kolkata when unset). */
+  timezone?: string | null;
 }
 
 export const journeysTable = pgTable("journeys", {

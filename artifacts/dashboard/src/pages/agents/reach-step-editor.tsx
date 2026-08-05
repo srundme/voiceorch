@@ -54,6 +54,10 @@ export type ReachStep = {
   field?: string;
   op?: string;
   value?: string;
+  /** Call-plan if/else: steps after condition for the true path. */
+  thenStepCount?: number;
+  /** Call-plan if/else: steps after then-block for the false path. */
+  elseStepCount?: number;
   delaySeconds?: number;
   callbackDelayDays?: number;
   url?: string;

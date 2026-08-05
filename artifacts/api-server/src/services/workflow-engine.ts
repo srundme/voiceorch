@@ -241,6 +241,16 @@ export async function advanceRun(runId: number): Promise<void> {
   let idx = run.currentStepIndex;
 
   while (idx < steps.length) {
+    // After a then-branch, skip the else-block to rejoin.
+    const joinAt = Number(context["__branchJoinAt"]);
+    const elseCount = Math.max(0, Math.floor(Number(context["__branchElseCount"] ?? 0)));
+    if (Number.isFinite(joinAt) && idx === joinAt && elseCount > 0) {
+      delete context["__branchJoinAt"];
+      delete context["__branchElseCount"];
+      idx += elseCount;
+      continue;
+    }
+
     const step = steps[idx]!;
     try {
       if (step.type === "make_call") {
@@ -252,24 +262,67 @@ export async function advanceRun(runId: number): Promise<void> {
         return;
       }
       if (step.type === "condition") {
-        if (!evalCondition(step, context)) {
-          logger.info({ runId, stepIdx: idx }, "workflow: condition false — ending run");
-          recordStepAudit(context, {
-            type: step.field === "__stop" ? "stop" : "condition",
-            status: "ok",
-            reason: step.field === "__stop" ? "Stop" : "Condition false — path ended",
-            stepIndex: idx,
-          });
+        if (step.field === "__stop") {
+          recordStepAudit(context, { type: "stop", status: "ok", reason: "Stop", stepIndex: idx });
           await finishRun(run.id, context, "completed");
           return;
         }
+
+        const ok = evalCondition(step, context);
+        const thenN = Math.max(0, Math.floor(Number(step.thenStepCount ?? 0)));
+        const elseN = Math.max(0, Math.floor(Number(step.elseStepCount ?? 0)));
+        const branched = thenN > 0 || elseN > 0;
+
+        if (!branched) {
+          // Legacy gate: false ends the person’s path.
+          if (!ok) {
+            logger.info({ runId, stepIdx: idx }, "workflow: condition false — ending run");
+            recordStepAudit(context, {
+              type: "condition",
+              status: "ok",
+              reason: "Condition false — path ended",
+              stepIndex: idx,
+            });
+            await finishRun(run.id, context, "completed");
+            return;
+          }
+          recordStepAudit(context, {
+            type: "condition",
+            status: "ok",
+            reason: "Condition true — continue",
+            stepIndex: idx,
+          });
+          idx++;
+          continue;
+        }
+
+        // If / else: [condition][then × thenN][else × elseN][rejoin…]
+        if (ok) {
+          recordStepAudit(context, {
+            type: "condition",
+            status: "ok",
+            reason: `Then branch (${thenN} step${thenN === 1 ? "" : "s"})`,
+            stepIndex: idx,
+          });
+          // After the then-block, skip the else-block.
+          if (elseN > 0) {
+            context["__branchJoinAt"] = idx + 1 + thenN;
+            context["__branchElseCount"] = elseN;
+          }
+          idx++;
+          continue;
+        }
+
         recordStepAudit(context, {
           type: "condition",
           status: "ok",
-          reason: "Condition true — continue",
+          reason: elseN > 0
+            ? `Else branch (${elseN} step${elseN === 1 ? "" : "s"})`
+            : "Condition false — skip then (no else)",
           stepIndex: idx,
         });
-        idx++;
+        // Skip then-block; land on else (or rejoin if elseN=0).
+        idx = idx + 1 + thenN;
         continue;
       }
       if (step.type === "send_webhook") {
@@ -343,7 +396,35 @@ async function beginCall(runId: number, userId: string, step: WorkflowStep, cont
       ? step.squadId
       : null;
   let campaign = await getOrCreateWorkflowCampaign(userId, step.agentId, squadId);
-  campaign = await syncWorkflowCampaignConcurrency(campaign, userId);
+  let hours: {
+    isCallingHoursEnabled?: boolean;
+    businessHoursStart?: number | null;
+    businessHoursEnd?: number | null;
+    timezone?: string | null;
+  } | null = null;
+  const planIdRaw = context["callPlanId"];
+  const planId = typeof planIdRaw === "number" ? planIdRaw : Number(planIdRaw);
+  if (Number.isFinite(planId) && planId > 0) {
+    const [plan] = await db.select({ settings: journeysTable.settings })
+      .from(journeysTable)
+      .where(and(eq(journeysTable.id, planId), eq(journeysTable.userId, userId)))
+      .limit(1);
+    if (plan?.settings) {
+      const s = plan.settings as {
+        isCallingHoursEnabled?: boolean;
+        businessHoursStart?: number | null;
+        businessHoursEnd?: number | null;
+        timezone?: string | null;
+      };
+      hours = {
+        isCallingHoursEnabled: s.isCallingHoursEnabled,
+        businessHoursStart: s.businessHoursStart,
+        businessHoursEnd: s.businessHoursEnd,
+        timezone: s.timezone,
+      };
+    }
+  }
+  campaign = await syncWorkflowCampaignConcurrency(campaign, userId, hours);
   const batch = await getOrCreateWorkflowRunningBatch(campaign.id);
   const leadData = flattenPrimitives(context);
   const [lead] = await db.insert(campaignLeadsTable).values({

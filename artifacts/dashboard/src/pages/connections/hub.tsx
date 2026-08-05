@@ -278,7 +278,7 @@ export default function ConnectionsPage() {
     return (
       <StripePage
         title="Google Sheets"
-        description="Connect once, then attach a sheet to a call plan (Keep live)."
+        description="Connect once, then attach a sheet to a call plan — drain the list or drip new rows."
         back={{ href: "/app/connections", label: "Connections" }}
       >
         <div className="max-w-lg space-y-4">
@@ -315,7 +315,7 @@ export default function ConnectionsPage() {
               ) : (
                 <p className="text-[13px] text-muted-foreground">
                   Connect the Google account that owns your lead sheet. Then attach it on a call plan
-                  (Keep live) or{" "}
+                  (drain this list, or drip new rows) or{" "}
                   <Link href="/app/call-plans" className="underline underline-offset-2">
                     create a plan
                   </Link>
