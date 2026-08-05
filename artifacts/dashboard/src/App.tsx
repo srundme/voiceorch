@@ -88,6 +88,7 @@ import HomePage             from "@/pages/home/index";
 import ChannelsPage         from "@/pages/channels/index";
 import CallPlansPage        from "@/pages/call-plans/index";
 import CallPlanDetailPage   from "@/pages/call-plans/[id]";
+import CallPlanActivityPage from "@/pages/call-plans/activity";
 import PeoplePage           from "@/pages/people/index";
 import CommandCenterRedirect from "@/pages/command-center/index";
 import MemoryPage           from "@/pages/memory/index";
@@ -300,6 +301,7 @@ function AppRoutes() {
       <Switch>
         <Route path="/app" component={AppRoot} />
         <Route path="/app/home" component={HomePage} />
+        <Route path="/app/call-plans/:id/activity" component={CallPlanActivityPage} />
         <Route path="/app/call-plans/:id" component={CallPlanDetailPage} />
         <Route path="/app/call-plans" component={CallPlansPage} />
         <Route path="/app/people" component={PeoplePage} />

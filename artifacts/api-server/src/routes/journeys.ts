@@ -8,7 +8,7 @@
 
 import { Router, type IRouter } from "express";
 import { randomBytes } from "node:crypto";
-import { and, desc, eq } from "drizzle-orm";
+import { and, count, desc, eq, inArray, isNotNull, or, sql, type SQL } from "drizzle-orm";
 import {
   db,
   journeysTable,
@@ -811,25 +811,127 @@ router.post("/journeys/:id/stop-live", requireAuth, async (req, res): Promise<vo
 
 // ── Runs (via backing workflow) ──────────────────────────────────────────────
 
-router.get("/journeys/:id/runs", requireAuth, async (req, res): Promise<void> => {
-  const clerkId = (req as any).clerkUserId as string;
-  const id = parseInt(String(req.params["id"]), 10);
-  const journey = await loadOwnedJourney(clerkId, id);
-  if (!journey) { res.status(404).json({ error: "Journey not found" }); return; }
-  if (!journey.workflowId) { res.json([]); return; }
+type RunStatusFilter = "all" | "in_progress" | "waiting" | "completed" | "failed" | "with_call";
 
-  const runs = await db.select().from(workflowRunsTable)
-    .where(and(
-      eq(workflowRunsTable.workflowId, journey.workflowId),
-      eq(workflowRunsTable.userId, clerkId),
-    ))
-    .orderBy(desc(workflowRunsTable.createdAt))
-    .limit(200);
+const IN_PROGRESS_STATUSES = ["running", "pending"] as const;
+const WAITING_STATUSES = ["waiting_call", "waiting_delay"] as const;
+const ACTIVE_STATUSES = [...IN_PROGRESS_STATUSES, ...WAITING_STATUSES] as const;
 
-  res.json(runs.map((r) => ({
+function parseRunStatusFilter(raw: unknown): RunStatusFilter {
+  const v = String(raw ?? "all");
+  if (
+    v === "in_progress" || v === "waiting" || v === "completed"
+    || v === "failed" || v === "with_call" || v === "all"
+  ) return v;
+  return "all";
+}
+
+function runsBaseWhere(workflowId: number, clerkId: string): SQL {
+  return and(
+    eq(workflowRunsTable.workflowId, workflowId),
+    eq(workflowRunsTable.userId, clerkId),
+  )!;
+}
+
+function runsFilterWhere(status: RunStatusFilter, q: string): SQL | undefined {
+  const parts: SQL[] = [];
+  if (status === "in_progress") {
+    parts.push(inArray(workflowRunsTable.status, [...ACTIVE_STATUSES]));
+  } else if (status === "waiting") {
+    parts.push(inArray(workflowRunsTable.status, [...WAITING_STATUSES]));
+  } else if (status === "completed") {
+    parts.push(eq(workflowRunsTable.status, "completed"));
+  } else if (status === "failed") {
+    parts.push(eq(workflowRunsTable.status, "failed"));
+  } else if (status === "with_call") {
+    parts.push(or(
+      isNotNull(workflowRunsTable.callId),
+      sql`coalesce((${workflowRunsTable.context}->'call'->>'callId')::int, 0) > 0`,
+    )!);
+  }
+  const needle = q.trim();
+  if (needle) {
+    const like = `%${needle.replace(/[%_]/g, "\\$&")}%`;
+    parts.push(or(
+      sql`coalesce(${workflowRunsTable.context}->>'name', '') ilike ${like}`,
+      sql`coalesce(${workflowRunsTable.context}->>'phone', '') ilike ${like}`,
+      sql`cast(${workflowRunsTable.id} as text) like ${like}`,
+    )!);
+  }
+  if (parts.length === 0) return undefined;
+  return and(...parts);
+}
+
+type StepAuditLean = {
+  type?: string;
+  status?: string;
+  reason?: string;
+  at?: string;
+  stepIndex?: number;
+};
+
+function leanCallFromContext(ctx: Record<string, unknown> | null) {
+  if (!ctx || typeof ctx.call !== "object" || ctx.call === null) return null;
+  const c = ctx.call as Record<string, unknown>;
+  return {
+    callId: typeof c.callId === "number" ? c.callId : undefined,
+    duration: typeof c.duration === "number" ? c.duration : undefined,
+    connected: typeof c.connected === "boolean" ? c.connected : undefined,
+    status: typeof c.status === "string" ? c.status : undefined,
+    summary: typeof c.summary === "string" ? c.summary.slice(0, 200) : undefined,
+    disposition: typeof c.disposition === "string" ? c.disposition : undefined,
+  };
+}
+
+function leanLastStep(ctx: Record<string, unknown> | null): StepAuditLean | null {
+  if (!ctx) return null;
+  if (ctx.lastStep && typeof ctx.lastStep === "object") {
+    const s = ctx.lastStep as StepAuditLean;
+    return {
+      type: s.type,
+      status: s.status,
+      reason: typeof s.reason === "string" ? s.reason.slice(0, 200) : undefined,
+      at: s.at,
+      stepIndex: s.stepIndex,
+    };
+  }
+  if (Array.isArray(ctx.steps) && ctx.steps.length > 0) {
+    const last = ctx.steps[ctx.steps.length - 1];
+    if (last && typeof last === "object") {
+      const s = last as StepAuditLean;
+      return {
+        type: s.type,
+        status: s.status,
+        reason: typeof s.reason === "string" ? s.reason.slice(0, 200) : undefined,
+        at: s.at,
+        stepIndex: s.stepIndex,
+      };
+    }
+  }
+  return null;
+}
+
+function leanStepTrail(ctx: Record<string, unknown> | null): StepAuditLean[] {
+  if (!ctx || !Array.isArray(ctx.steps)) return [];
+  return ctx.steps
+    .filter((s): s is StepAuditLean => !!s && typeof s === "object")
+    .map((s) => ({
+      type: s.type,
+      status: s.status,
+      reason: typeof s.reason === "string" ? s.reason.slice(0, 200) : undefined,
+      at: s.at,
+      stepIndex: s.stepIndex,
+    }));
+}
+
+function serializeLeanRun(r: typeof workflowRunsTable.$inferSelect) {
+  const ctx = (r.context && typeof r.context === "object") ? r.context as Record<string, unknown> : null;
+  const name = typeof ctx?.name === "string" ? ctx.name : "";
+  const phone = typeof ctx?.phone === "string" ? ctx.phone : "";
+  const call = leanCallFromContext(ctx);
+  return {
     id: r.id,
     status: r.status,
-    context: r.context,
     currentStepIndex: r.currentStepIndex,
     leadId: r.leadId,
     callId: r.callId,
@@ -838,7 +940,213 @@ router.get("/journeys/:id/runs", requireAuth, async (req, res): Promise<void> =>
     resumeAt: r.resumeAt,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
-  })));
+    name,
+    phone,
+    call,
+    lastStep: leanLastStep(ctx),
+    stepTrail: leanStepTrail(ctx),
+    /** @deprecated use lean fields — kept empty for old clients that expect context */
+    context: {
+      name,
+      phone,
+      call,
+      lastStep: leanLastStep(ctx),
+      steps: leanStepTrail(ctx),
+    } as Record<string, unknown>,
+  };
+}
+
+router.get("/journeys/:id/runs/stats", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+  const id = parseInt(String(req.params["id"]), 10);
+  const journey = await loadOwnedJourney(clerkId, id);
+  if (!journey) { res.status(404).json({ error: "Journey not found" }); return; }
+  if (!journey.workflowId) {
+    res.json({
+      started: 0,
+      inProgress: 0,
+      waiting: 0,
+      completed: 0,
+      failed: 0,
+      withCall: 0,
+      connected: 0,
+      connectRate: null,
+      avgDurationSec: null,
+      stepFunnel: [],
+      stepCount: (journey.steps ?? []).length,
+    });
+    return;
+  }
+
+  const base = runsBaseWhere(journey.workflowId, clerkId);
+  const [agg] = await db
+    .select({
+      started: count(),
+      inProgress: sql<number>`count(*) filter (where ${workflowRunsTable.status} in ('running', 'pending', 'waiting_call', 'waiting_delay'))::int`,
+      waiting: sql<number>`count(*) filter (where ${workflowRunsTable.status} in ('waiting_call', 'waiting_delay'))::int`,
+      completed: sql<number>`count(*) filter (where ${workflowRunsTable.status} = 'completed')::int`,
+      failed: sql<number>`count(*) filter (where ${workflowRunsTable.status} = 'failed')::int`,
+      withCall: sql<number>`count(*) filter (where ${workflowRunsTable.callId} is not null or coalesce((${workflowRunsTable.context}->'call'->>'callId')::int, 0) > 0)::int`,
+      connected: sql<number>`count(*) filter (where (${workflowRunsTable.context}->'call'->>'connected') = 'true')::int`,
+      avgDurationSec: sql<number | null>`avg(nullif((${workflowRunsTable.context}->'call'->>'duration')::float, 0)) filter (where ${workflowRunsTable.callId} is not null or coalesce((${workflowRunsTable.context}->'call'->>'callId')::int, 0) > 0)`,
+    })
+    .from(workflowRunsTable)
+    .where(base);
+
+  const funnelRows = await db
+    .select({
+      stepIndex: workflowRunsTable.currentStepIndex,
+      count: count(),
+      failed: sql<number>`count(*) filter (where ${workflowRunsTable.status} = 'failed')::int`,
+      completed: sql<number>`count(*) filter (where ${workflowRunsTable.status} = 'completed')::int`,
+    })
+    .from(workflowRunsTable)
+    .where(base)
+    .groupBy(workflowRunsTable.currentStepIndex)
+    .orderBy(workflowRunsTable.currentStepIndex);
+
+  const stepCount = Math.max((journey.steps ?? []).length, 1);
+  const byIndex = new Map(funnelRows.map((r) => [r.stepIndex, r]));
+
+  // Reached counts: runs whose currentStepIndex >= i (or completed)
+  const reachedResult = await db.execute(sql`
+    select s.step_index, count(*)::int as reached
+    from generate_series(0, ${stepCount - 1}) as s(step_index)
+    join workflow_runs r
+      on r.workflow_id = ${journey.workflowId}
+     and r.user_id = ${clerkId}
+     and (r.current_step_index >= s.step_index or r.status = 'completed')
+    group by s.step_index
+    order by s.step_index
+  `);
+  const reachedMap = new Map(
+    (reachedResult.rows as Array<{ step_index: number; reached: number }>).map((r) => [
+      Number(r.step_index),
+      Number(r.reached),
+    ]),
+  );
+  const stepFunnel = Array.from({ length: stepCount }, (_, stepIndex) => {
+    const row = byIndex.get(stepIndex);
+    return {
+      stepIndex,
+      type: (journey.steps ?? [])[stepIndex]?.type ?? null,
+      label: (journey.steps ?? [])[stepIndex]?.label ?? null,
+      reached: reachedMap.get(stepIndex) ?? 0,
+      atStep: Number(row?.count ?? 0),
+      failed: Number(row?.failed ?? 0),
+      completedAtOrPast: Number(row?.completed ?? 0),
+    };
+  });
+
+  const started = Number(agg?.started ?? 0);
+  const withCall = Number(agg?.withCall ?? 0);
+  const connected = Number(agg?.connected ?? 0);
+  const avgRaw = agg?.avgDurationSec;
+  res.json({
+    started,
+    inProgress: Number(agg?.inProgress ?? 0),
+    waiting: Number(agg?.waiting ?? 0),
+    completed: Number(agg?.completed ?? 0),
+    failed: Number(agg?.failed ?? 0),
+    withCall,
+    connected,
+    connectRate: withCall > 0 ? Math.round((connected / withCall) * 1000) / 10 : null,
+    avgDurationSec: avgRaw != null && Number.isFinite(Number(avgRaw))
+      ? Math.round(Number(avgRaw))
+      : null,
+    stepFunnel,
+    stepCount: (journey.steps ?? []).length,
+  });
+});
+
+router.get("/journeys/:id/runs/export", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+  const id = parseInt(String(req.params["id"]), 10);
+  const journey = await loadOwnedJourney(clerkId, id);
+  if (!journey) { res.status(404).json({ error: "Journey not found" }); return; }
+  if (!journey.workflowId) {
+    res.status(200).type("text/csv").send("Person,Phone,Status,Step,CallId,Duration,Last step,Updated\n");
+    return;
+  }
+
+  const status = parseRunStatusFilter(req.query["status"]);
+  const q = typeof req.query["q"] === "string" ? req.query["q"] : "";
+  const filter = runsFilterWhere(status, q);
+  const where = filter ? and(runsBaseWhere(journey.workflowId, clerkId), filter) : runsBaseWhere(journey.workflowId, clerkId);
+
+  const runs = await db.select().from(workflowRunsTable)
+    .where(where)
+    .orderBy(desc(workflowRunsTable.updatedAt))
+    .limit(5000);
+
+  const steps = journey.steps ?? [];
+  const csvEscape = (value: string) => (/[",\n\r]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value);
+  const lines = ["Person,Phone,Status,Step,CallId,Duration,Last step,Updated"];
+  for (const r of runs) {
+    const lean = serializeLeanRun(r);
+    const stepN = Math.min(r.currentStepIndex + 1, Math.max(steps.length, 1));
+    const stepType = steps[r.currentStepIndex]?.type?.replace(/_/g, " ") ?? "";
+    const callId = lean.callId ?? lean.call?.callId ?? "";
+    const duration = lean.call?.duration != null && lean.call.duration > 0
+      ? String(Math.round(lean.call.duration))
+      : "";
+    const last = lean.lastStep
+      ? `${lean.lastStep.type ?? ""}${lean.lastStep.status ? ` ${lean.lastStep.status}` : ""}${lean.lastStep.reason ? ` — ${lean.lastStep.reason}` : ""}`
+      : "";
+    lines.push([
+      lean.name || "—",
+      lean.phone,
+      String(r.status).replace(/_/g, " "),
+      `${stepN}/${Math.max(steps.length, 1)}${stepType ? ` ${stepType}` : ""}`,
+      callId !== "" ? String(callId) : "",
+      duration,
+      last.trim(),
+      r.updatedAt?.toISOString?.() ?? String(r.updatedAt),
+    ].map((c) => csvEscape(String(c))).join(","));
+  }
+
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  res.setHeader("Content-Disposition", `attachment; filename="call-plan-${id}-runs-${stamp}.csv"`);
+  res.status(200).type("text/csv").send(lines.join("\n"));
+});
+
+router.get("/journeys/:id/runs", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+  const id = parseInt(String(req.params["id"]), 10);
+  const journey = await loadOwnedJourney(clerkId, id);
+  if (!journey) { res.status(404).json({ error: "Journey not found" }); return; }
+  if (!journey.workflowId) {
+    res.json({ runs: [], total: 0, limit: 50, offset: 0 });
+    return;
+  }
+
+  const status = parseRunStatusFilter(req.query["status"]);
+  const q = typeof req.query["q"] === "string" ? req.query["q"] : "";
+  const limitRaw = parseInt(String(req.query["limit"] ?? "50"), 10);
+  const offsetRaw = parseInt(String(req.query["offset"] ?? "0"), 10);
+  const limit = Number.isFinite(limitRaw) ? Math.min(100, Math.max(1, limitRaw)) : 50;
+  const offset = Number.isFinite(offsetRaw) ? Math.max(0, offsetRaw) : 0;
+
+  const filter = runsFilterWhere(status, q);
+  const where = filter ? and(runsBaseWhere(journey.workflowId, clerkId), filter) : runsBaseWhere(journey.workflowId, clerkId);
+
+  const [totalRow] = await db
+    .select({ total: count() })
+    .from(workflowRunsTable)
+    .where(where);
+
+  const runs = await db.select().from(workflowRunsTable)
+    .where(where)
+    .orderBy(desc(workflowRunsTable.updatedAt))
+    .limit(limit)
+    .offset(offset);
+
+  res.json({
+    runs: runs.map(serializeLeanRun),
+    total: Number(totalRow?.total ?? 0),
+    limit,
+    offset,
+  });
 });
 
 // ── Unified follow-ups (scheduled callbacks for this agent) ──────────────────

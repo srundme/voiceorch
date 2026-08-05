@@ -174,7 +174,12 @@ export function JourneyPanel({
   const { data: runs = [], refetch: refetchRuns } = useQuery({
     queryKey: ["journey-runs", selected?.id],
     enabled: !!selected?.id,
-    queryFn: () => customFetch<JourneyRun[]>(`${DASH_API}/journeys/${selected!.id}/runs`),
+    queryFn: async () => {
+      const page = await customFetch<{ runs: JourneyRun[] }>(
+        `${DASH_API}/journeys/${selected!.id}/runs?limit=50&offset=0`,
+      );
+      return page.runs ?? [];
+    },
     refetchInterval: selected?.status === "active" ? 10_000 : false,
   });
 

@@ -1,14 +1,17 @@
 /**
  * Call plan activity — campaign-style progress + call log for one plan.
- * Uses GET /journeys/:id/runs (poll) and CallDetailDrawer for History.
+ * Fetches paginated GET /journeys/:id/runs + /runs/stats (poll while open).
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { formatDistanceToNow, format, parseISO } from "date-fns";
 import {
   Activity, Phone, CheckCircle2, XCircle, Clock, Search, RefreshCw, ExternalLink, Download,
+  ChevronLeft, ChevronRight, ArrowUpRight,
 } from "lucide-react";
+import { customFetch } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -16,10 +19,29 @@ import { CallDetailDrawer } from "@/components/call-detail-drawer";
 import { cn } from "@/lib/utils";
 import type { CallPlanStep } from "./step-editor";
 
+const DASH_API = `${import.meta.env.BASE_URL.replace(/\/$/, "")}/api`;
+
+export type StepAudit = {
+  type?: string;
+  status?: string;
+  reason?: string;
+  at?: string;
+  stepIndex?: number;
+};
+
+export type PlanRunCall = {
+  callId?: number;
+  duration?: number;
+  connected?: boolean;
+  status?: string;
+  summary?: string;
+  disposition?: string;
+};
+
+/** Lean run row from paginated API (context is a slim projection). */
 export type PlanRun = {
   id: number;
   status: string;
-  context: Record<string, unknown> | null;
   currentStepIndex: number;
   leadId?: number | null;
   callId?: number | null;
@@ -28,6 +50,41 @@ export type PlanRun = {
   resumeAt?: string | null;
   createdAt: string;
   updatedAt: string;
+  name?: string;
+  phone?: string;
+  call?: PlanRunCall | null;
+  lastStep?: StepAudit | null;
+  stepTrail?: StepAudit[];
+  context?: Record<string, unknown> | null;
+};
+
+export type PlanRunStats = {
+  started: number;
+  inProgress: number;
+  waiting: number;
+  completed: number;
+  failed: number;
+  withCall: number;
+  connected: number;
+  connectRate: number | null;
+  avgDurationSec: number | null;
+  stepFunnel: Array<{
+    stepIndex: number;
+    type: string | null;
+    label: string | null;
+    reached: number;
+    atStep: number;
+    failed: number;
+    completedAtOrPast: number;
+  }>;
+  stepCount: number;
+};
+
+type RunsPage = {
+  runs: PlanRun[];
+  total: number;
+  limit: number;
+  offset: number;
 };
 
 type RunFilter =
@@ -38,30 +95,10 @@ type RunFilter =
   | "failed"
   | "with_call";
 
-type CallCtx = {
-  connected?: boolean;
-  status?: string;
-  duration?: number;
-  transcript?: string;
-  summary?: string;
-  disposition?: string;
-  callId?: number;
-};
-
-type StepAudit = {
-  type?: string;
-  status?: string;
-  reason?: string;
-  at?: string;
-  stepIndex?: number;
-};
-
-function lastStepAudit(ctx: Record<string, unknown> | null): StepAudit | null {
-  if (!ctx) return null;
-  if (ctx.lastStep && typeof ctx.lastStep === "object") return ctx.lastStep as StepAudit;
-  if (Array.isArray(ctx.steps) && ctx.steps.length > 0) {
-    const last = ctx.steps[ctx.steps.length - 1];
-    if (last && typeof last === "object") return last as StepAudit;
+function lastStepAudit(run: PlanRun): StepAudit | null {
+  if (run.lastStep) return run.lastStep;
+  if (run.context?.lastStep && typeof run.context.lastStep === "object") {
+    return run.context.lastStep as StepAudit;
   }
   return null;
 }
@@ -79,9 +116,12 @@ function formatStepAudit(audit: StepAudit | null): string | null {
   return label;
 }
 
-function stepAuditTrail(ctx: Record<string, unknown> | null): StepAudit[] {
-  if (!ctx || !Array.isArray(ctx.steps)) return [];
-  return ctx.steps.filter((s): s is StepAudit => !!s && typeof s === "object");
+function stepAuditTrail(run: PlanRun): StepAudit[] {
+  if (run.stepTrail?.length) return run.stepTrail;
+  if (run.context && Array.isArray(run.context.steps)) {
+    return run.context.steps.filter((s): s is StepAudit => !!s && typeof s === "object");
+  }
+  return [];
 }
 
 function statusClass(status: string) {
@@ -102,25 +142,26 @@ function statusClass(status: string) {
   return "border-border/50 bg-muted/30 text-muted-foreground";
 }
 
-function personName(ctx: Record<string, unknown> | null): string {
-  if (!ctx) return "—";
-  const name = typeof ctx.name === "string" ? ctx.name.trim() : "";
+function personName(run: PlanRun): string {
+  const name = (run.name ?? (typeof run.context?.name === "string" ? run.context.name : "")).trim();
   return name || "—";
 }
 
-function personPhone(ctx: Record<string, unknown> | null): string {
-  if (!ctx) return "";
-  return typeof ctx.phone === "string" ? ctx.phone : "";
+function personPhone(run: PlanRun): string {
+  return run.phone ?? (typeof run.context?.phone === "string" ? run.context.phone : "");
 }
 
-function callFromContext(ctx: Record<string, unknown> | null): CallCtx | null {
-  if (!ctx || typeof ctx.call !== "object" || ctx.call === null) return null;
-  return ctx.call as CallCtx;
+function callFromRun(run: PlanRun): PlanRunCall | null {
+  if (run.call) return run.call;
+  if (run.context?.call && typeof run.context.call === "object") {
+    return run.context.call as PlanRunCall;
+  }
+  return null;
 }
 
 function resolveCallId(run: PlanRun): number | null {
   if (typeof run.callId === "number" && run.callId > 0) return run.callId;
-  const c = callFromContext(run.context);
+  const c = callFromRun(run);
   if (typeof c?.callId === "number" && c.callId > 0) return c.callId;
   return null;
 }
@@ -150,43 +191,6 @@ function isWaiting(status: string) {
   return status === "waiting_call" || status === "waiting_delay";
 }
 
-function csvEscape(value: string): string {
-  if (/[",\n\r]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
-  return value;
-}
-
-function exportRunsCsv(runs: PlanRun[], steps: CallPlanStep[]) {
-  const header = ["Person", "Phone", "Status", "Step", "CallId", "Duration", "Last step", "Updated"];
-  const lines = [header.join(",")];
-  for (const run of runs) {
-    const call = callFromContext(run.context);
-    const callId = resolveCallId(run);
-    const audit = lastStepAudit(run.context);
-    const auditLabel = formatStepAudit(audit) ?? "";
-    const stepN = Math.min(run.currentStepIndex + 1, Math.max(steps.length, 1));
-    const stepType = steps[run.currentStepIndex]?.type?.replace(/_/g, " ") ?? "";
-    const duration = typeof call?.duration === "number" ? call.duration : null;
-    const row = [
-      personName(run.context),
-      personPhone(run.context),
-      run.status.replace(/_/g, " "),
-      `${stepN}/${Math.max(steps.length, 1)}${stepType ? ` ${stepType}` : ""}`,
-      callId != null ? String(callId) : "",
-      duration != null && duration > 0 ? String(Math.round(duration)) : "",
-      auditLabel,
-      run.updatedAt,
-    ].map((c) => csvEscape(c));
-    lines.push(row.join(","));
-  }
-  const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `call-plan-runs-${format(new Date(), "yyyyMMdd-HHmm")}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
 const FILTERS: { id: RunFilter; label: string }[] = [
   { id: "all", label: "All" },
   { id: "in_progress", label: "In progress" },
@@ -196,61 +200,156 @@ const FILTERS: { id: RunFilter; label: string }[] = [
   { id: "with_call", label: "Has call" },
 ];
 
+const PAGE_SIZE = 50;
+
+export function usePlanRunStats(
+  planId: number,
+  opts?: { enabled?: boolean; poll?: boolean },
+) {
+  const enabled = opts?.enabled !== false;
+  const poll = opts?.poll === true;
+  return useQuery({
+    queryKey: ["call-plans", planId, "runs-stats"],
+    queryFn: () => customFetch<PlanRunStats>(`${DASH_API}/journeys/${planId}/runs/stats`),
+    enabled: enabled && Number.isFinite(planId) && planId > 0,
+    refetchInterval: poll ? 8_000 : false,
+    staleTime: poll ? 5_000 : 30_000,
+  });
+}
+
+/** Compact summary for the plan editor — stats + Open activity. */
+export function CallPlanActivitySummary({
+  planId,
+  totalRuns,
+}: {
+  planId: number;
+  totalRuns?: number;
+}) {
+  const statsQ = usePlanRunStats(planId, { poll: false });
+  const stats = statsQ.data;
+  const started = stats?.started ?? totalRuns ?? 0;
+  const isLive = (stats?.inProgress ?? 0) > 0;
+
+  return (
+    <section className="overflow-hidden rounded-xl border border-border/60 bg-card/40">
+      <div className="flex flex-wrap items-start justify-between gap-3 px-4 py-3 sm:px-5">
+        <div>
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-semibold">Activity &amp; call log</h2>
+            {isLive && (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-400">
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+                  <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                </span>
+                Live
+              </span>
+            )}
+          </div>
+          <p className="text-[11px] text-muted-foreground mt-0.5">
+            Progress for everyone on this plan — open the full log for filters, funnel, and export.
+          </p>
+        </div>
+        <Button asChild size="sm" className="h-8 gap-1.5 text-[11px]">
+          <Link href={`/app/call-plans/${planId}/activity`}>
+            Open activity
+            <ArrowUpRight className="h-3.5 w-3.5" />
+          </Link>
+        </Button>
+      </div>
+      <div className="grid grid-cols-2 gap-2 border-t border-border/40 p-3 sm:grid-cols-5 sm:px-4">
+        {[
+          { label: "Started", value: started, accent: "text-foreground" },
+          { label: "In progress", value: stats?.inProgress ?? 0, accent: "text-amber-400" },
+          { label: "Completed", value: stats?.completed ?? 0, accent: "text-emerald-400" },
+          { label: "Failed", value: stats?.failed ?? 0, accent: "text-destructive" },
+          { label: "Calls", value: stats?.withCall ?? 0, accent: "text-sky-400" },
+        ].map((card) => (
+          <div
+            key={card.label}
+            className="rounded-lg border border-border/50 bg-muted/10 px-3 py-2.5"
+          >
+            <span className="text-[10px] uppercase tracking-wide text-muted-foreground">{card.label}</span>
+            <p className={cn("mt-1 text-lg font-semibold tabular-nums", card.accent)}>
+              {statsQ.isLoading ? "—" : card.value}
+            </p>
+          </div>
+        ))}
+      </div>
+      {stats && (stats.connectRate != null || stats.avgDurationSec != null) && (
+        <p className="border-t border-border/40 px-4 py-2 text-[10px] text-muted-foreground sm:px-5">
+          {stats.connectRate != null ? `${stats.connectRate}% connect rate` : null}
+          {stats.connectRate != null && stats.avgDurationSec != null ? " · " : null}
+          {stats.avgDurationSec != null ? `avg call ${formatDuration(stats.avgDurationSec)}` : null}
+        </p>
+      )}
+    </section>
+  );
+}
+
 export function CallPlanActivityPanel({
-  runs,
+  planId,
   steps,
   totalRuns,
-  loading,
-  refreshing,
-  onRefresh,
+  showBackLink = false,
 }: {
-  runs: PlanRun[];
+  planId: number;
   steps: CallPlanStep[];
   totalRuns?: number;
-  loading?: boolean;
-  refreshing?: boolean;
-  onRefresh: () => void;
+  showBackLink?: boolean;
 }) {
   const [filter, setFilter] = useState<RunFilter>("all");
   const [search, setSearch] = useState("");
+  const [debouncedQ, setDebouncedQ] = useState("");
+  const [page, setPage] = useState(0);
   const [drawerCallId, setDrawerCallId] = useState<number | null>(null);
   const [drawerIndex, setDrawerIndex] = useState(0);
   const [expandedRunId, setExpandedRunId] = useState<number | null>(null);
 
-  const kpis = useMemo(() => {
-    const started = runs.length;
-    const inProgress = runs.filter((r) => isInProgress(r.status) || isWaiting(r.status)).length;
-    const completed = runs.filter((r) => r.status === "completed").length;
-    const failed = runs.filter((r) => r.status === "failed").length;
-    const withCall = runs.filter((r) => resolveCallId(r) != null).length;
-    return { started, inProgress, completed, failed, withCall };
-  }, [runs]);
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setDebouncedQ(search);
+      setPage(0);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [search]);
 
-  const filtered = useMemo(() => {
-    let rows = runs;
-    if (filter === "in_progress") {
-      rows = rows.filter((r) => isInProgress(r.status) || isWaiting(r.status));
-    } else if (filter === "waiting") {
-      rows = rows.filter((r) => isWaiting(r.status));
-    }
-    else if (filter === "completed") rows = rows.filter((r) => r.status === "completed");
-    else if (filter === "failed") rows = rows.filter((r) => r.status === "failed");
-    else if (filter === "with_call") rows = rows.filter((r) => resolveCallId(r) != null);
+  const statsQ = usePlanRunStats(planId, { poll: true });
+  const stats = statsQ.data;
 
-    const q = search.trim().toLowerCase();
-    if (q) {
-      rows = rows.filter((r) => {
-        const name = personName(r.context).toLowerCase();
-        const phone = personPhone(r.context).toLowerCase();
-        return name.includes(q) || phone.includes(q) || String(r.id).includes(q);
+  const runsQ = useQuery({
+    queryKey: ["call-plans", planId, "runs", filter, debouncedQ, page],
+    queryFn: () => {
+      const params = new URLSearchParams({
+        limit: String(PAGE_SIZE),
+        offset: String(page * PAGE_SIZE),
+        status: filter,
       });
-    }
-    return rows;
-  }, [runs, filter, search]);
+      if (debouncedQ.trim()) params.set("q", debouncedQ.trim());
+      return customFetch<RunsPage>(`${DASH_API}/journeys/${planId}/runs?${params}`);
+    },
+    enabled: Number.isFinite(planId) && planId > 0,
+    refetchInterval: 8_000,
+    staleTime: 4_000,
+  });
+
+  const runs = runsQ.data?.runs ?? [];
+  const total = runsQ.data?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const loading = runsQ.isLoading || statsQ.isLoading;
+  const refreshing = (runsQ.isFetching || statsQ.isFetching) && !loading;
+
+  const kpis = useMemo(() => ({
+    started: stats?.started ?? totalRuns ?? 0,
+    inProgress: stats?.inProgress ?? 0,
+    completed: stats?.completed ?? 0,
+    failed: stats?.failed ?? 0,
+    withCall: stats?.withCall ?? 0,
+  }), [stats, totalRuns]);
 
   const callRows = useMemo(
-    () => filtered.map((r, i) => ({ run: r, callId: resolveCallId(r), index: i })).filter((x) => x.callId != null),
-    [filtered],
+    () => runs.map((r, i) => ({ run: r, callId: resolveCallId(r), index: i })).filter((x) => x.callId != null),
+    [runs],
   );
 
   function openCall(run: PlanRun) {
@@ -268,6 +367,32 @@ export function CallPlanActivityPanel({
     setDrawerCallId(callRows[next]!.callId!);
   }
 
+  function refresh() {
+    void runsQ.refetch();
+    void statsQ.refetch();
+  }
+
+  async function exportCsv() {
+    const params = new URLSearchParams({ status: filter });
+    if (debouncedQ.trim()) params.set("q", debouncedQ.trim());
+    try {
+      const text = await customFetch<string>(`${DASH_API}/journeys/${planId}/runs/export?${params}`, {
+        responseType: "text",
+      });
+      const blob = new Blob([typeof text === "string" ? text : String(text)], {
+        type: "text/csv;charset=utf-8",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `call-plan-${planId}-runs-${format(new Date(), "yyyyMMdd-HHmm")}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      // ignore — button stays enabled for retry
+    }
+  }
+
   const kpiCards = [
     { key: "all" as RunFilter, label: "Started", value: kpis.started, icon: Activity, accent: "text-foreground" },
     { key: "in_progress" as RunFilter, label: "In progress", value: kpis.inProgress, icon: Clock, accent: "text-amber-400" },
@@ -277,11 +402,22 @@ export function CallPlanActivityPanel({
   ];
 
   const isLive = kpis.inProgress > 0;
+  const funnel = stats?.stepFunnel ?? [];
+  const funnelMax = Math.max(1, ...funnel.map((f) => f.reached));
 
   return (
     <section className="overflow-hidden rounded-xl border border-border/60 bg-card/40">
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border/50 px-4 py-3 sm:px-5">
         <div>
+          {showBackLink && (
+            <Link
+              href={`/app/call-plans/${planId}`}
+              className="mb-1 inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
+            >
+              <ChevronLeft className="h-3 w-3" />
+              Back to plan
+            </Link>
+          )}
           <div className="flex items-center gap-2">
             <h2 className="text-sm font-semibold">Activity &amp; call log</h2>
             {isLive && (
@@ -296,9 +432,7 @@ export function CallPlanActivityPanel({
           </div>
           <p className="text-[11px] text-muted-foreground mt-0.5">
             Live progress for everyone walking this plan
-            {typeof totalRuns === "number" && totalRuns > runs.length
-              ? ` · showing latest ${runs.length} of ${totalRuns}`
-              : ""}
+            {typeof totalRuns === "number" && totalRuns > 0 ? ` · ${totalRuns} started` : ""}
             . Open a row to see the full call.
           </p>
         </div>
@@ -308,8 +442,8 @@ export function CallPlanActivityPanel({
             variant="outline"
             size="sm"
             className="h-8 gap-1.5 text-[11px]"
-            onClick={() => exportRunsCsv(runs, steps)}
-            disabled={loading || runs.length === 0}
+            onClick={exportCsv}
+            disabled={loading || kpis.started === 0}
           >
             <Download className="h-3.5 w-3.5" />
             Export CSV
@@ -319,7 +453,7 @@ export function CallPlanActivityPanel({
             variant="outline"
             size="sm"
             className="h-8 gap-1.5 text-[11px]"
-            onClick={onRefresh}
+            onClick={refresh}
             disabled={refreshing}
           >
             <RefreshCw className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} />
@@ -332,12 +466,15 @@ export function CallPlanActivityPanel({
       <div className="grid grid-cols-2 gap-2 border-b border-border/40 p-3 sm:grid-cols-5 sm:px-4">
         {kpiCards.map((card) => {
           const Icon = card.icon;
-          const active = filter === card.key || (card.key === "all" && filter === "all");
+          const active = filter === card.key;
           return (
             <button
               key={card.key}
               type="button"
-              onClick={() => setFilter(card.key)}
+              onClick={() => {
+                setFilter(card.key);
+                setPage(0);
+              }}
               className={cn(
                 "rounded-lg border px-3 py-2.5 text-left transition-colors",
                 active
@@ -350,12 +487,85 @@ export function CallPlanActivityPanel({
                 <Icon className={cn("h-3.5 w-3.5", card.accent)} />
               </div>
               <p className={cn("mt-1 text-lg font-semibold tabular-nums", card.accent)}>
-                {loading ? "—" : card.value}
+                {statsQ.isLoading ? "—" : card.value}
               </p>
             </button>
           );
         })}
       </div>
+
+      {/* Analysis */}
+      {(stats?.connectRate != null || funnel.some((f) => f.reached > 0)) && (
+        <div className="border-b border-border/40 px-4 py-3 sm:px-5 space-y-3">
+          <div className="flex flex-wrap gap-4 text-[11px] text-muted-foreground">
+            {stats?.connectRate != null && (
+              <span>
+                <span className="font-medium text-foreground tabular-nums">{stats.connectRate}%</span>
+                {" "}connect rate
+                <span className="text-muted-foreground/60">
+                  {" "}({stats.connected}/{stats.withCall} calls)
+                </span>
+              </span>
+            )}
+            {stats?.avgDurationSec != null && (
+              <span>
+                Avg duration{" "}
+                <span className="font-medium text-foreground tabular-nums">
+                  {formatDuration(stats.avgDurationSec)}
+                </span>
+              </span>
+            )}
+            {stats != null && (
+              <span>
+                Completed{" "}
+                <span className="font-medium text-foreground tabular-nums">{stats.completed}</span>
+                {stats.started > 0 ? (
+                  <span className="text-muted-foreground/60">
+                    {" "}({Math.round((stats.completed / stats.started) * 100)}%)
+                  </span>
+                ) : null}
+              </span>
+            )}
+          </div>
+          {funnel.length > 0 && funnel.some((f) => f.reached > 0) && (
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/70 mb-2">
+                Step funnel
+              </p>
+              <ul className="space-y-1.5">
+                {funnel.map((f) => {
+                  const pct = Math.round((f.reached / funnelMax) * 100);
+                  const typeLabel = (f.label?.trim() || f.type?.replace(/_/g, " ") || `Step ${f.stepIndex + 1}`);
+                  return (
+                    <li key={f.stepIndex} className="flex items-center gap-2 text-[11px]">
+                      <span className="w-4 shrink-0 tabular-nums text-muted-foreground/50">
+                        {f.stepIndex + 1}
+                      </span>
+                      <span className="w-28 sm:w-40 truncate capitalize text-muted-foreground">
+                        {typeLabel}
+                      </span>
+                      <div className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-muted/40">
+                        <div
+                          className="absolute inset-y-0 left-0 rounded-full bg-sky-500/70"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                      <span className="w-10 shrink-0 text-right tabular-nums font-medium">
+                        {f.reached}
+                      </span>
+                      {f.failed > 0 && (
+                        <span className="w-12 shrink-0 text-right tabular-nums text-destructive text-[10px]">
+                          {f.failed} fail
+                        </span>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-2 border-b border-border/40 px-3 py-2.5 sm:px-4">
@@ -364,7 +574,10 @@ export function CallPlanActivityPanel({
             <button
               key={f.id}
               type="button"
-              onClick={() => setFilter(f.id)}
+              onClick={() => {
+                setFilter(f.id);
+                setPage(0);
+              }}
               className={cn(
                 "h-7 rounded-md px-2.5 text-[11px] transition-colors",
                 filter === f.id
@@ -386,7 +599,7 @@ export function CallPlanActivityPanel({
           />
         </div>
         <span className="text-[10px] tabular-nums text-muted-foreground/50">
-          {filtered.length} shown
+          {total} match{total === 1 ? "" : "es"}
         </span>
       </div>
 
@@ -408,30 +621,30 @@ export function CallPlanActivityPanel({
               <div key={i} className="h-12 animate-pulse rounded-md bg-muted/40" />
             ))}
           </div>
-        ) : filtered.length === 0 ? (
+        ) : runs.length === 0 ? (
           <div className="flex min-h-[220px] flex-col items-center justify-center gap-2 px-6 py-12 text-center">
             <Activity className="h-6 w-6 text-muted-foreground/30" />
             <p className="text-[13px] font-medium text-foreground/80">
-              {runs.length === 0 ? "Nothing started yet" : "No rows match this filter"}
+              {kpis.started === 0 ? "Nothing started yet" : "No rows match this filter"}
             </p>
             <p className="max-w-sm text-[11px] text-muted-foreground leading-relaxed">
-              {runs.length === 0
+              {kpis.started === 0
                 ? "Press Start once. Each person walking this plan shows here with step progress, call outcome, and a link to the full History record."
                 : "Clear search or pick another status tab."}
             </p>
           </div>
         ) : (
           <ul className="min-w-[720px] divide-y divide-border/40">
-            {filtered.map((run) => {
+            {runs.map((run) => {
               const stepN = Math.min(run.currentStepIndex + 1, Math.max(steps.length, 1));
               const stepLabel = steps[run.currentStepIndex]?.type?.replace(/_/g, " ");
-              const call = callFromContext(run.context);
+              const call = callFromRun(run);
               const callId = resolveCallId(run);
-              const phone = personPhone(run.context);
+              const phone = personPhone(run);
               const duration = typeof call?.duration === "number" ? call.duration : null;
-              const audit = lastStepAudit(run.context);
+              const audit = lastStepAudit(run);
               const auditLabel = formatStepAudit(audit);
-              const trail = stepAuditTrail(run.context);
+              const trail = stepAuditTrail(run);
               const outcome =
                 auditLabel ||
                 call?.summary?.trim() ||
@@ -461,90 +674,90 @@ export function CallPlanActivityPanel({
                       }
                     }}
                   >
-                  <div className="min-w-0">
-                    <p className="font-medium truncate">{personName(run.context)}</p>
-                    <p className="text-[10px] text-muted-foreground truncate mt-0.5">
-                      {phone || `Run #${run.id}`}
-                      {run.triggeredBy ? ` · ${run.triggeredBy.replace(/_/g, " ")}` : ""}
-                    </p>
-                  </div>
-                  <div className="min-w-0">
-                    <p className="tabular-nums text-[11px]">
-                      {stepN}/{Math.max(steps.length, 1)}
-                    </p>
-                    {stepLabel && (
-                      <p className="text-[10px] text-muted-foreground capitalize truncate">{stepLabel}</p>
-                    )}
-                    {run.status === "waiting_delay" && run.resumeAt && (
-                      <p className="text-[10px] text-amber-400/80 truncate">
-                        resumes {formatTs(run.resumeAt)}
+                    <div className="min-w-0">
+                      <p className="font-medium truncate">{personName(run)}</p>
+                      <p className="text-[10px] text-muted-foreground truncate mt-0.5">
+                        {phone || `Run #${run.id}`}
+                        {run.triggeredBy ? ` · ${run.triggeredBy.replace(/_/g, " ")}` : ""}
                       </p>
-                    )}
-                  </div>
-                  <div>
-                    <Badge
-                      variant="outline"
-                      className={cn("text-[10px] h-5 px-1.5 capitalize", statusClass(run.status))}
-                    >
-                      {run.status.replace(/_/g, " ")}
-                    </Badge>
-                  </div>
-                  <div className="min-w-0 text-[11px]">
-                    {callId != null ? (
-                      <span className="font-mono text-sky-400/90">#{callId}</span>
-                    ) : (
-                      <span className="text-muted-foreground/40">—</span>
-                    )}
-                  </div>
-                  <div className="tabular-nums text-[11px] text-muted-foreground">
-                    {formatDuration(duration)}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[11px] text-muted-foreground truncate">{formatTs(run.updatedAt)}</p>
-                    {auditLabel && (
-                      <p
-                        className={cn(
-                          "text-[10px] truncate mt-0.5 font-medium",
-                          audit?.status === "failed"
-                            ? "text-destructive"
-                            : audit?.status === "skipped"
-                              ? "text-amber-400"
-                              : audit?.status === "sent" || audit?.status === "joined"
-                                ? "text-emerald-400/90"
-                                : isInProgress(run.status) || isWaiting(run.status)
-                                  ? "text-sky-400/90"
-                                  : "text-muted-foreground/80",
-                        )}
-                        title={auditLabel}
-                      >
-                        {auditLabel}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="tabular-nums text-[11px]">
+                        {stepN}/{Math.max(steps.length, 1)}
                       </p>
-                    )}
-                    {!auditLabel && outcome && (
-                      <p
-                        className="text-[10px] truncate mt-0.5 text-muted-foreground/70"
-                        title={outcome}
+                      {stepLabel && (
+                        <p className="text-[10px] text-muted-foreground capitalize truncate">{stepLabel}</p>
+                      )}
+                      {run.status === "waiting_delay" && run.resumeAt && (
+                        <p className="text-[10px] text-amber-400/80 truncate">
+                          resumes {formatTs(run.resumeAt)}
+                        </p>
+                      )}
+                    </div>
+                    <div>
+                      <Badge
+                        variant="outline"
+                        className={cn("text-[10px] h-5 px-1.5 capitalize", statusClass(run.status))}
                       >
-                        {outcome}
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex justify-end gap-1">
-                    {callId != null ? (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 gap-1 px-2 text-[10px]"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openCall(run);
-                        }}
-                      >
-                        Open <ExternalLink className="h-3 w-3" />
-                      </Button>
-                    ) : null}
-                  </div>
+                        {run.status.replace(/_/g, " ")}
+                      </Badge>
+                    </div>
+                    <div className="min-w-0 text-[11px]">
+                      {callId != null ? (
+                        <span className="font-mono text-sky-400/90">#{callId}</span>
+                      ) : (
+                        <span className="text-muted-foreground/40">—</span>
+                      )}
+                    </div>
+                    <div className="tabular-nums text-[11px] text-muted-foreground">
+                      {formatDuration(duration)}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[11px] text-muted-foreground truncate">{formatTs(run.updatedAt)}</p>
+                      {auditLabel && (
+                        <p
+                          className={cn(
+                            "text-[10px] truncate mt-0.5 font-medium",
+                            audit?.status === "failed"
+                              ? "text-destructive"
+                              : audit?.status === "skipped"
+                                ? "text-amber-400"
+                                : audit?.status === "sent" || audit?.status === "joined"
+                                  ? "text-emerald-400/90"
+                                  : isInProgress(run.status) || isWaiting(run.status)
+                                    ? "text-sky-400/90"
+                                    : "text-muted-foreground/80",
+                          )}
+                          title={auditLabel}
+                        >
+                          {auditLabel}
+                        </p>
+                      )}
+                      {!auditLabel && outcome && (
+                        <p
+                          className="text-[10px] truncate mt-0.5 text-muted-foreground/70"
+                          title={outcome}
+                        >
+                          {outcome}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex justify-end gap-1">
+                      {callId != null ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 gap-1 px-2 text-[10px]"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openCall(run);
+                          }}
+                        >
+                          Open <ExternalLink className="h-3 w-3" />
+                        </Button>
+                      ) : null}
+                    </div>
                   </div>
                   {expanded && trail.length > 0 && (
                     <ol className="mt-2 space-y-1 border-t border-border/30 pt-2 pl-1">
@@ -579,6 +792,33 @@ export function CallPlanActivityPanel({
           Full transcripts and recordings open in the call drawer, or browse{" "}
           <Link href="/app/history" className="underline underline-offset-2">History</Link>.
         </p>
+        {total > PAGE_SIZE && (
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 px-2 text-[11px]"
+              disabled={page <= 0}
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+            </Button>
+            <span className="text-[10px] tabular-nums text-muted-foreground">
+              {page + 1} / {totalPages}
+            </span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 px-2 text-[11px]"
+              disabled={page + 1 >= totalPages}
+              onClick={() => setPage((p) => p + 1)}
+            >
+              <ChevronRight className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        )}
       </div>
 
       <CallDetailDrawer

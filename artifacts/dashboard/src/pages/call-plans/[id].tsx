@@ -1,6 +1,6 @@
 /**
- * Call plan detail — people + timeline + Start once + activity/call log.
- * Backed by journeys / workflow engine.
+ * Call plan detail — people + timeline + Start once.
+ * Full activity/call log lives on /app/call-plans/:id/activity.
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -33,7 +33,7 @@ import { useToast } from "@/hooks/use-toast";
 import { formatApiError } from "@/lib/format-api-error";
 import { cn } from "@/lib/utils";
 import { CallPlanStepEditor, type CallPlanStep } from "./step-editor";
-import { CallPlanActivityPanel, type PlanRun } from "./activity-panel";
+import { CallPlanActivitySummary } from "./activity-panel";
 
 const _DASH_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const DASH_API = `${_DASH_BASE}/api`;
@@ -151,13 +151,6 @@ export default function CallPlanDetailPage() {
     queryKey: ["call-plans", planId],
     queryFn: () => customFetch<CallPlan>(`${DASH_API}/journeys/${planId}`),
     enabled: Number.isFinite(planId) && planId > 0,
-  });
-
-  const runsQ = useQuery({
-    queryKey: ["call-plans", planId, "runs"],
-    queryFn: () => customFetch<PlanRun[]>(`${DASH_API}/journeys/${planId}/runs`),
-    enabled: Number.isFinite(planId) && planId > 0,
-    refetchInterval: 8_000,
   });
 
   const waReadyQ = useQuery({
@@ -420,7 +413,6 @@ export default function CallPlanDetailPage() {
   }
 
   const plan = planQ.data;
-  const runs = runsQ.data ?? [];
   const selectedCampaign = campaigns.find((c) => String(c.id) === campaignId);
   const settingsOffset = typeof plan.settings?.startOffset === "number" ? plan.settings.startOffset : 0;
   const settingsTotal = typeof plan.settings?.startSourceTotal === "number" ? plan.settings.startSourceTotal : 0;
@@ -876,15 +868,8 @@ export default function CallPlanDetailPage() {
           </div>
         </div>
 
-        {/* Full-width activity log — campaign-style progress + call detail */}
-        <CallPlanActivityPanel
-          runs={runs}
-          steps={steps}
-          totalRuns={plan.totalRuns}
-          loading={runsQ.isLoading}
-          refreshing={runsQ.isFetching && !runsQ.isLoading}
-          onRefresh={() => { void runsQ.refetch(); }}
-        />
+        {/* Compact activity summary — full log on dedicated page */}
+        <CallPlanActivitySummary planId={plan.id} totalRuns={plan.totalRuns} />
       </div>
 
       <AlertDialog open={previewOpen} onOpenChange={setPreviewOpen}>
