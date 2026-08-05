@@ -404,7 +404,7 @@ function StatCard({
   return (
     <Link href={href}>
       <a className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3.5 hover:border-primary/30 hover:bg-accent/40 transition-colors group">
-        <div className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 ${iconClassName ?? "bg-primary/10"}`}>
+        <div className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 ${iconClassName ?? "bg-muted text-muted-foreground"}`}>
           <Icon className="h-4 w-4" />
         </div>
         <div className="flex-1 min-w-0">
@@ -444,28 +444,28 @@ function QuickOverview() {
           label="Phone Numbers"
           value={`${activePhoneNumbers} Active`}
           href="/app/phone-numbers"
-          iconClassName="bg-emerald-500/10 text-emerald-500"
+          iconClassName="bg-muted text-muted-foreground"
         />
         <StatCard
           icon={KeyRound}
           label="API Keys"
           value={`${activeApiKeys} Active`}
           href="/app/api-keys"
-          iconClassName="bg-violet-500/10 text-violet-500"
+          iconClassName="bg-muted text-muted-foreground"
         />
         <StatCard
           icon={Webhook}
           label="Webhooks"
           value={`${configuredWebhooks} Configured`}
           href="/app/webhooks"
-          iconClassName="bg-amber-500/10 text-amber-500"
+          iconClassName="bg-muted text-muted-foreground"
         />
         <StatCard
           icon={Wallet}
           label="Wallet Balance"
           value={balance}
           href="/app/wallet"
-          iconClassName="bg-sky-500/10 text-sky-500"
+          iconClassName="bg-muted text-muted-foreground"
         />
       </div>
     </div>
@@ -542,7 +542,7 @@ function CategoryGrid({ onOpenGeneral }: { onOpenGeneral: () => void }) {
         icon={User}
         title="Account"
         description="Manage your profile and password."
-        iconClassName="bg-violet-500/10 text-violet-500"
+        iconClassName="bg-muted text-muted-foreground"
         links={[
           { icon: User, label: "Profile", href: "/app/settings/profile" },
           { icon: Lock, label: "Change Password", onClick: onOpenGeneral },
@@ -552,7 +552,7 @@ function CategoryGrid({ onOpenGeneral }: { onOpenGeneral: () => void }) {
         icon={Terminal}
         title="API & Developers"
         description="Manage API keys and developer integrations."
-        iconClassName="bg-emerald-500/10 text-emerald-500"
+        iconClassName="bg-muted text-muted-foreground"
         links={[
           { icon: KeyRound, label: "API Keys", href: "/app/api-keys" },
           { icon: Webhook, label: "Webhooks", href: "/app/webhooks" },
@@ -562,7 +562,7 @@ function CategoryGrid({ onOpenGeneral }: { onOpenGeneral: () => void }) {
         icon={Phone}
         title="Telephony"
         description="Configure providers and manage phone numbers."
-        iconClassName="bg-sky-500/10 text-sky-500"
+        iconClassName="bg-muted text-muted-foreground"
         links={[
           { icon: Layers, label: "Providers", href: "/app/providers" },
           { icon: Phone, label: "Phone Numbers", href: "/app/phone-numbers" },
@@ -572,7 +572,7 @@ function CategoryGrid({ onOpenGeneral }: { onOpenGeneral: () => void }) {
         icon={Sparkles}
         title="AI Configuration"
         description="Configure AI providers and voices for your agents."
-        iconClassName="bg-pink-500/10 text-pink-500"
+        iconClassName="bg-muted text-muted-foreground"
         links={[
           { icon: Mic2, label: "Voices", href: "/app/voices" },
           { icon: Layers, label: "AI Providers (BYOP)", href: "/app/providers" },
@@ -582,7 +582,7 @@ function CategoryGrid({ onOpenGeneral }: { onOpenGeneral: () => void }) {
         icon={CreditCard}
         title="Billing & Usage"
         description="Manage wallet, usage and your subscription."
-        iconClassName="bg-amber-500/10 text-amber-600"
+        iconClassName="bg-muted text-muted-foreground"
         links={[
           { icon: Wallet, label: "Wallet", href: "/app/wallet" },
           { icon: BarChart3, label: "Usage", href: "/app/usage" },
@@ -593,7 +593,7 @@ function CategoryGrid({ onOpenGeneral }: { onOpenGeneral: () => void }) {
         icon={Shield}
         title="Security"
         description="Secure your account and manage sessions."
-        iconClassName="bg-rose-500/10 text-rose-500"
+        iconClassName="bg-muted text-muted-foreground"
         links={[
           { icon: ScrollText, label: "Audit Logs", href: "/app/activity" },
         ]}
