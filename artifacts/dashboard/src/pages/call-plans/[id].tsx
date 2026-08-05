@@ -185,12 +185,16 @@ export default function CallPlanDetailPage() {
     setSteps(Array.isArray(plan.steps) ? plan.steps : []);
     const cid = plan.settings?.campaignId;
     const sid = plan.settings?.sheetPipelineId;
+    const peopleSrc = plan.settings?.peopleSource;
     if (sid) {
       setSheetPipelineId(String(sid));
       setPeopleMode("sheet");
     } else if (cid != null && Number(cid) > 0) {
       setCampaignId(String(cid));
       setPeopleMode("campaign");
+    } else if (peopleSrc === "sheet" || peopleSrc === "manual" || peopleSrc === "campaign") {
+      // From create flow: lead source chosen before anything is attached yet.
+      setPeopleMode(peopleSrc);
     }
     setRunMode(plan.settings?.runMode === "live" ? "live" : "once");
     const t = plan.trigger?.type;
@@ -606,6 +610,9 @@ export default function CallPlanDetailPage() {
                   )}
                 >
                   Google Sheet
+                  <span className="mt-0.5 block text-[9px] font-normal text-muted-foreground leading-snug">
+                    Import + same sheet live
+                  </span>
                 </button>
                 <button
                   type="button"
@@ -666,7 +673,7 @@ export default function CallPlanDetailPage() {
                   ) : sheetPipelines.length === 0 ? (
                     <div className="space-y-2 rounded-lg border border-dashed border-border/70 bg-muted/20 p-3">
                       <p className="text-[11px] text-muted-foreground leading-relaxed">
-                        Connect Google under Connections, then create a sheet pipeline to use here.
+                        Connect Google under Connections, then set up one sheet — SnapServe imports those leads and can keep using that same sheet for new rows and status write-back.
                       </p>
                       <div className="flex flex-wrap gap-2">
                         <Button asChild size="sm" className="h-8 text-xs">
@@ -726,8 +733,10 @@ export default function CallPlanDetailPage() {
                   {sheetPipelines.length > 0 && (
                     <p className="text-[10px] text-muted-foreground">
                       {runMode === "live"
-                        ? "Press Start live to arm — even with zero rows now. New sheet rows (up to 25 every ~15s) walk this plan from step 1. Starts up to 100 people per click — Continue for more."
-                        : "Starts up to 100 people per click — Continue for more."}
+                        ? "Same sheet for import and Keep live — new rows (up to 25 every ~15s) walk this plan. Starts up to 100 people per click — Continue for more."
+                        : "Imports current rows from this sheet (up to 100 per click). Keep the sheet attached to Continue or switch to Keep live for new rows."}
+                      {" "}
+                      Add an “Update the list” step to write status back to this same sheet.
                       {" "}
                       <Link href="/app/automatic-calls/new" className="underline underline-offset-2">
                         Add another sheet

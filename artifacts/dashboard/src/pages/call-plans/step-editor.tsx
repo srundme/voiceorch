@@ -637,80 +637,212 @@ function displayWaitLabel(seconds: number): string {
   return `Wait ${seconds}s`;
 }
 
-/** Default Call → WhatsApp → Wait starter for new plans. */
+/* ── Complete call-plan recipes ──────────────────────────────────────────── */
+
+function callStep(agentId: number, label = "Call them"): CallPlanStep {
+  return { ...defaultStep("make_call", agentId), label };
+}
+
+function ifNoAnswer(agentId: number): CallPlanStep {
+  return {
+    ...defaultStep("condition", agentId),
+    field: "call.connected",
+    op: "eq",
+    value: "false",
+    label: "If they didn’t answer",
+  };
+}
+
+function waStep(
+  agentId: number,
+  hint: "call_summary" | "booking_confirmed" | "callback_scheduled",
+  label: string,
+): CallPlanStep {
+  return {
+    ...defaultStep("send_whatsapp", agentId),
+    whatsappHint: hint,
+    label,
+  };
+}
+
+function waitDays(agentId: number, days: number): CallPlanStep {
+  const n = Math.max(1, Math.floor(days));
+  return {
+    ...defaultStep("delay", agentId),
+    delaySeconds: n * 86400,
+    label: n === 1 ? "Wait 1 day" : `Wait ${n} days`,
+  };
+}
+
+function updateList(agentId: number, statusValue: string, label = "Update the list"): CallPlanStep {
+  return {
+    ...defaultStep("update_sheet", agentId),
+    label,
+    sheetStatusColumn: "Status",
+    sheetStatusValue: statusValue,
+  };
+}
+
+function scheduleCallback(agentId: number, days = 1): CallPlanStep {
+  return {
+    ...defaultStep("schedule_callback", agentId),
+    label: days === 1 ? "Schedule callback (1 day)" : `Schedule callback (${days} days)`,
+    callbackDelayDays: days,
+  };
+}
+
+/** Default Call → WhatsApp → Wait starter for blank plans. */
 export function defaultCallPlanSteps(agentId: number): CallPlanStep[] {
   return [
-    { ...defaultStep("make_call", agentId), label: "Call them" },
-    { ...defaultStep("send_whatsapp", agentId), label: "Send WhatsApp" },
-    { ...defaultStep("delay", agentId), delaySeconds: 86400, label: "Wait 1 day" },
+    callStep(agentId),
+    waStep(agentId, "call_summary", "Send WhatsApp summary"),
+    waitDays(agentId, 1),
+    stopStep(),
   ];
 }
 
-export type CallPlanTemplateId = "lead_followup" | "soft_nudge" | "sheet_live" | "blank";
+export type CallPlanTemplateId =
+  | "lead_followup"
+  | "soft_nudge"
+  | "sheet_live"
+  | "form_followup"
+  | "callback_rescue"
+  | "blank";
+
+/** Lead-source affinity for filtering recipes in the create dialog. */
+export type CallPlanPeopleHint = "campaign" | "sheet" | "manual" | "form" | "meta" | "any";
 
 export const CALL_PLAN_TEMPLATES: Array<{
   id: CallPlanTemplateId;
   title: string;
   blurb: string;
-  peopleHint: "campaign" | "sheet";
+  peopleHint: CallPlanPeopleHint;
   runMode?: "once" | "live";
 }> = [
   {
     id: "lead_followup",
     title: "Lead follow-up",
-    blurb: "Call → if no answer, WhatsApp → wait 1 day → call again",
+    blurb: "Call → if no answer, WhatsApp → wait 1 day → call again → WhatsApp → stop",
     peopleHint: "campaign",
   },
   {
     id: "soft_nudge",
     title: "Soft nudge",
-    blurb: "Call → WhatsApp → wait 2 days → stop",
-    peopleHint: "campaign",
+    blurb: "Call → WhatsApp → wait 2 days → call again → stop",
+    peopleHint: "manual",
   },
   {
     id: "sheet_live",
-    title: "Sheet live dial",
-    blurb: "Call → update the sheet (Keep live)",
+    title: "Sheet dial + write-back",
+    blurb: "Call → WhatsApp if no answer → update same sheet → wait → call again → update sheet → stop",
     peopleHint: "sheet",
     runMode: "live",
   },
   {
+    id: "form_followup",
+    title: "Form / Meta lead",
+    blurb: "Call new form lead → if no answer, WhatsApp → wait → call again → stop",
+    peopleHint: "form",
+  },
+  {
+    id: "callback_rescue",
+    title: "Callback rescue",
+    blurb: "Call → if no answer, schedule callback + WhatsApp → stop",
+    peopleHint: "any",
+  },
+  {
     id: "blank",
     title: "Start blank",
-    blurb: "Call → WhatsApp → Wait (edit freely)",
-    peopleHint: "campaign",
+    blurb: "Call → WhatsApp → Wait → Stop (edit freely)",
+    peopleHint: "any",
   },
 ];
 
 export function stepsForTemplate(id: CallPlanTemplateId, agentId: number): CallPlanStep[] {
-  if (id === "lead_followup") {
-    return [
-      { ...defaultStep("make_call", agentId), label: "Call them" },
-      {
-        ...defaultStep("condition", agentId),
-        field: "call.connected",
-        op: "eq",
-        value: "false",
-        label: "If they didn’t answer",
-      },
-      { ...defaultStep("send_whatsapp", agentId), label: "Send WhatsApp" },
-      { ...defaultStep("delay", agentId), delaySeconds: 86400, label: "Wait 1 day" },
-      { ...defaultStep("make_call", agentId), label: "Call again" },
-    ];
+  switch (id) {
+    case "lead_followup":
+      // Full two-touch: miss → WhatsApp → wait → retry → miss again → WhatsApp → stop
+      return [
+        callStep(agentId, "Call them"),
+        ifNoAnswer(agentId),
+        waStep(agentId, "call_summary", "WhatsApp — we tried to reach you"),
+        waitDays(agentId, 1),
+        callStep(agentId, "Call again"),
+        ifNoAnswer(agentId),
+        waStep(agentId, "call_summary", "WhatsApp — follow-up"),
+        stopStep(),
+      ];
+
+    case "soft_nudge":
+      return [
+        callStep(agentId, "Call them"),
+        waStep(agentId, "call_summary", "WhatsApp summary"),
+        waitDays(agentId, 2),
+        callStep(agentId, "Call again"),
+        waStep(agentId, "call_summary", "WhatsApp nudge"),
+        stopStep(),
+      ];
+
+    case "sheet_live":
+      // Same Google Sheet: always write Status after first dial, then miss → WA → retry
+      return [
+        callStep(agentId, "Call them"),
+        updateList(agentId, "Dialed", "Update sheet — after first call"),
+        ifNoAnswer(agentId),
+        waStep(agentId, "call_summary", "WhatsApp — we tried to reach you"),
+        waitDays(agentId, 1),
+        callStep(agentId, "Call again"),
+        updateList(agentId, "Retried", "Update sheet — after 2nd call"),
+        stopStep(),
+      ];
+
+    case "form_followup":
+      // Website form / Meta Lead Ads intake
+      return [
+        callStep(agentId, "Call new lead"),
+        ifNoAnswer(agentId),
+        waStep(agentId, "call_summary", "WhatsApp — thanks for your enquiry"),
+        waitDays(agentId, 1),
+        callStep(agentId, "Call again"),
+        ifNoAnswer(agentId),
+        waStep(agentId, "callback_scheduled", "WhatsApp — we’ll call you back"),
+        stopStep(),
+      ];
+
+    case "callback_rescue":
+      return [
+        callStep(agentId, "Call them"),
+        ifNoAnswer(agentId),
+        scheduleCallback(agentId, 1),
+        waStep(agentId, "callback_scheduled", "WhatsApp — callback scheduled"),
+        stopStep(),
+      ];
+
+    case "blank":
+    default:
+      return defaultCallPlanSteps(agentId);
   }
-  if (id === "soft_nudge") {
-    return [
-      { ...defaultStep("make_call", agentId), label: "Call them" },
-      { ...defaultStep("send_whatsapp", agentId), label: "Send WhatsApp" },
-      { ...defaultStep("delay", agentId), delaySeconds: 172800, label: "Wait 2 days" },
-      stopStep(),
-    ];
+}
+
+/** Recipes that fit a lead-source choice in the create dialog. */
+export function templatesForLeadSource(
+  source: "list" | "sheet" | "paste" | "website" | "meta",
+): typeof CALL_PLAN_TEMPLATES {
+  if (source === "sheet") {
+    return CALL_PLAN_TEMPLATES.filter((t) => t.id === "sheet_live" || t.id === "blank" || t.id === "callback_rescue");
   }
-  if (id === "sheet_live") {
-    return [
-      { ...defaultStep("make_call", agentId), label: "Call them" },
-      { ...defaultStep("update_sheet", agentId), label: "Update the list" },
-    ];
+  if (source === "website" || source === "meta") {
+    return CALL_PLAN_TEMPLATES.filter(
+      (t) => t.id === "form_followup" || t.id === "lead_followup" || t.id === "callback_rescue" || t.id === "blank",
+    );
   }
-  return defaultCallPlanSteps(agentId);
+  if (source === "paste") {
+    return CALL_PLAN_TEMPLATES.filter(
+      (t) => t.id === "soft_nudge" || t.id === "lead_followup" || t.id === "callback_rescue" || t.id === "blank",
+    );
+  }
+  // list / CSV
+  return CALL_PLAN_TEMPLATES.filter(
+    (t) => t.id === "lead_followup" || t.id === "soft_nudge" || t.id === "callback_rescue" || t.id === "blank",
+  );
 }
