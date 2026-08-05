@@ -646,7 +646,7 @@ export function CallPlanActivityPanel({
             </p>
             <p className="max-w-sm text-[11px] text-muted-foreground leading-relaxed">
               {kpis.started === 0
-                ? "Press Start queue. People dial up to your account concurrency; progress, outcomes, and History links show here."
+                ? "Press Start queue. Leads dial up to your account concurrency; progress, outcomes, and History links show here."
                 : "Clear search or pick another status tab."}
             </p>
           </div>

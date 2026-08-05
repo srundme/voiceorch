@@ -137,7 +137,7 @@ export function PlanVibeDialog({ open, onOpenChange, agents, defaultAgentId, onC
             Build with AI
           </DialogTitle>
           <DialogDescription>
-            Describe who to reach and what should happen. We’ll draft people source + steps — you attach people and Start queue.
+            Describe who to reach and what should happen. We’ll draft lead source + steps — you attach leads and Start queue.
           </DialogDescription>
         </DialogHeader>
 
@@ -200,7 +200,7 @@ export function PlanVibeDialog({ open, onOpenChange, agents, defaultAgentId, onC
               <p className="text-[12px] text-muted-foreground leading-relaxed">{draft.summary}</p>
               <div className="flex flex-wrap gap-2 text-[11px]">
                 <span className="rounded-md border border-border/60 bg-background px-2 py-1">
-                  People: {srcTitle}
+                  Leads: {srcTitle}
                 </span>
                 <span className="rounded-md border border-border/60 bg-background px-2 py-1">
                   Recipe: {tplTitle}
@@ -213,7 +213,7 @@ export function PlanVibeDialog({ open, onOpenChange, agents, defaultAgentId, onC
               </div>
               <div className="grid gap-2 sm:grid-cols-2">
                 <div className="space-y-1">
-                  <Label className="text-[11px]">People source</Label>
+                  <Label className="text-[11px]">Lead source</Label>
                   <Select
                     value={draft.leadSource}
                     onValueChange={(v) => {

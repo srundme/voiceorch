@@ -308,7 +308,7 @@ export default function CallPlanDetailPage() {
       if (!sheetPipelineId) throw new Error("Pick a Sheet list");
       body.sheetPipelineId = sheetPipelineId;
     } else {
-      if (!campaignId) throw new Error("Pick a people list");
+      if (!campaignId) throw new Error("Pick a lead list");
       body.campaignId = Number(campaignId);
     }
     return body;
@@ -347,7 +347,7 @@ export default function CallPlanDetailPage() {
         ? `${res.started} started now — new sheet rows will keep entering.`
         : res.autoFeed || res.queue
           ? `Queued ${res.started}${total > 0 ? ` of ${total}` : ""} — dials up to your concurrency${conc != null ? ` (${conc})` : ""}; the rest feed automatically.`
-          : `${res.started} ${res.started === 1 ? "person" : "people"} walking this plan${
+          : `${res.started} ${res.started === 1 ? "lead" : "leads"} walking this plan${
               res.skipped ? ` · ${res.skipped} already walked (skipped)` : ""
             }.`;
       toast({
@@ -475,7 +475,7 @@ export default function CallPlanDetailPage() {
   return (
     <StripePage
       title={name || plan.name}
-      description="Attach people → Start queue. Steps run for each person."
+      description="Attach leads → Start queue. Steps run for each lead."
       back={{ href: "/app/call-plans", label: "Call plans" }}
       actions={
         <div className="flex flex-wrap items-center gap-2">
@@ -597,7 +597,7 @@ export default function CallPlanDetailPage() {
           return !peopleReady && plan.status === "draft" ? (
             <div className="rounded-xl border border-border/70 bg-muted/20 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-[13px] font-medium">Next: attach people</p>
+                <p className="text-[13px] font-medium">Next: attach leads</p>
                 <p className="text-[11px] text-muted-foreground mt-0.5">
                   Pick a list, sheet, or paste numbers — then Start queue.
                 </p>
@@ -616,13 +616,13 @@ export default function CallPlanDetailPage() {
         })()}
 
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] lg:items-start">
-          {/* People first — then settings */}
+          {/* Leads first — then settings */}
           <div className="space-y-5 min-w-0">
             <section className="space-y-3 rounded-xl border border-border/60 bg-card/40 p-4 ring-1 ring-border/40">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <Users className="h-4 w-4 text-muted-foreground" />
-                  <h2 className="text-sm font-semibold">People</h2>
+                  <h2 className="text-sm font-semibold">Leads</h2>
                 </div>
                 <p className="text-[10px] text-muted-foreground tabular-nums">1 · attach</p>
               </div>
@@ -675,7 +675,7 @@ export default function CallPlanDetailPage() {
                     onValueChange={(v) => { setCampaignId(v); setDirty(true); }}
                   >
                     <SelectTrigger className="h-9 text-xs">
-                      <SelectValue placeholder={campaigns.length ? "Choose a list…" : "Upload a list in People first"} />
+                      <SelectValue placeholder={campaigns.length ? "Choose a list…" : "Upload a list in Leads first"} />
                     </SelectTrigger>
                     <SelectContent>
                       {campaigns.map((c) => (
@@ -701,7 +701,7 @@ export default function CallPlanDetailPage() {
                         <>
                           No list yet?{" "}
                           <Link href="/app/people" className="underline underline-offset-2">
-                            Upload CSV under People
+                            Upload CSV under Leads
                           </Link>
                           .
                         </>
@@ -1034,7 +1034,7 @@ export default function CallPlanDetailPage() {
                 <div>
                   <h2 className="text-sm font-semibold">What happens next</h2>
                   <p className="text-[11px] text-muted-foreground mt-0.5">
-                    Ordered steps for each person. No flowchart.
+                    Ordered steps for each lead. No flowchart.
                   </p>
                 </div>
                 <p className="text-[10px] text-muted-foreground tabular-nums shrink-0">2 · steps</p>
@@ -1070,7 +1070,7 @@ export default function CallPlanDetailPage() {
       <AlertDialog open={previewOpen} onOpenChange={setPreviewOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Some people already walked this plan</AlertDialogTitle>
+            <AlertDialogTitle>Some leads already walked this plan</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-2 text-sm text-muted-foreground">
                 <p>
@@ -1120,7 +1120,7 @@ export default function CallPlanDetailPage() {
       <AlertDialog open={forceOpen} onOpenChange={setForceOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Re-dial people already on this plan?</AlertDialogTitle>
+            <AlertDialogTitle>Re-dial leads already on this plan?</AlertDialogTitle>
             <AlertDialogDescription>
               Everyone in this list already walked this plan. Start again only if you want to call them again.
             </AlertDialogDescription>

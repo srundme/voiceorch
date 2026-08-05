@@ -131,7 +131,7 @@ export default function HomePage() {
   const setup = [
     { label: "Create an agent", done: hasAgent, href: "/app/agents?create=1" },
     { label: "Make a call plan", done: hasPlan, href: "/app/call-plans" },
-    { label: "Add people & start the queue", done: hasPlan && runningPlans.length > 0, href: hasPlan ? `/app/call-plans/${plans[0]!.id}` : "/app/call-plans" },
+    { label: "Add leads & start the queue", done: hasPlan && runningPlans.length > 0, href: hasPlan ? `/app/call-plans/${plans[0]!.id}` : "/app/call-plans" },
   ];
   const setupDone = setup.every((item) => item.done);
 
@@ -169,7 +169,7 @@ export default function HomePage() {
       name: plan.name,
       detail: plan.totalRuns > 0
         ? `${plan.totalRuns} run${plan.totalRuns === 1 ? "" : "s"} · live`
-        : "Live — waiting for people",
+        : "Live — waiting for leads",
       href: `/app/call-plans/${plan.id}`,
       status: plan.status,
       icon: ListOrdered,
@@ -185,7 +185,7 @@ export default function HomePage() {
     ...activeCampaigns.map((campaign: any) => ({
       id: `flow-${campaign.id}`,
       name: campaign.name,
-      detail: "People list",
+      detail: "Lead list",
       href: `/app/campaigns/${campaign.id}`,
       status: campaign.status ?? "active",
       icon: Zap,
@@ -218,7 +218,7 @@ export default function HomePage() {
             </div>
             <h1 className="text-2xl font-semibold tracking-[-0.03em]">Create your first agent</h1>
             <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
-              Default path: Agent → Call plan → People → Start queue.
+              Default path: Agent → Call plan → Leads → Start queue.
             </p>
           </div>
           <div className="grid gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-2">
@@ -288,7 +288,7 @@ export default function HomePage() {
             <div className="px-3.5 py-10 text-center">
               <p className="text-[12px] font-medium text-foreground">Nothing in the queue yet</p>
               <p className="mt-1.5 text-[11px] text-muted-foreground leading-relaxed max-w-sm mx-auto">
-                Agent → Call plan → People → Start queue. That’s the default path.
+                Agent → Call plan → Leads → Start queue. That’s the default path.
               </p>
               <ol className="mt-4 mx-auto max-w-xs space-y-1.5 text-left text-[11px] text-muted-foreground">
                 <li className="flex gap-2">
@@ -301,7 +301,7 @@ export default function HomePage() {
                 </li>
                 <li className="flex gap-2">
                   <span className="tabular-nums text-foreground/70">3.</span>
-                  Attach people (list, sheet, or paste)
+                  Attach leads (list, sheet, or paste)
                 </li>
                 <li className="flex gap-2">
                   <span className="tabular-nums text-foreground/70">4.</span>
@@ -326,7 +326,7 @@ export default function HomePage() {
                     onClick={() => navigate(`/app/call-plans/${plans[0]!.id}`)}
                   >
                     <ListOrdered className="size-3.5" />
-                    Open plan · add people
+                    Open plan · add leads
                   </Button>
                 )}
                 {hasAgent && (
@@ -396,7 +396,7 @@ export default function HomePage() {
             <section className="rounded-lg border border-border bg-card">
               <div className="border-b border-border px-3.5 py-3">
                 <h2 className="text-[11px] font-semibold">Finish setup</h2>
-                <p className="mt-0.5 text-[10px] text-muted-foreground">Agent → Call plan → People → Start queue.</p>
+                <p className="mt-0.5 text-[10px] text-muted-foreground">Agent → Call plan → Leads → Start queue.</p>
               </div>
               <div className="p-2">
                 {setup.map((item, index) => (

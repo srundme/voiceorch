@@ -22,7 +22,7 @@ SnapServe dials at concurrency (and calling hours), logs **History**, and bills 
 
 > You create an **agent** → you make a **call plan** → you attach **people** → **Start queue** → SnapServe dials at your concurrency (and calling hours).
 
-Journeys, campaigns, and dial engines still power execution under the hood. Product language prefers **Call plans**, **People**, **History**, and **Connections** — not “Journey”, “Automation”, or “Dial flows” as primary labels.
+Journeys, campaigns, and dial engines still power execution under the hood. Product language prefers **Call plans**, **Leads**, **History**, and **Connections** — not “Journey”, “Automation”, or “Dial flows” as primary labels.
 
 ---
 
@@ -32,7 +32,7 @@ Journeys, campaigns, and dial engines still power execution under the hood. Prod
 |-------|-----|------------------|
 | **Agent** | Who talks — prompt, voice, tools, versions | **Agents** → Agent Builder |
 | **Call plan** | What happens next for each person (ordered steps) | **Call plans** |
-| **People** | Who to reach — CSV lists | **People** |
+| **Leads** | Who to reach — CSV lists | **Leads** |
 | **Connections** | Shared wiring — Sheets, WhatsApp, email, website form, Meta | **Connections** |
 | **History** | What happened — calls, callbacks, transfers | **History** |
 | **Intelligence** | Knowledge, memory, teams, analytics, scheduling | MORE section |
@@ -40,10 +40,10 @@ Journeys, campaigns, and dial engines still power execution under the hood. Prod
 
 ### Hard product rules
 
-1. **Agent ≠ Call plan ≠ People ≠ Connections**  
+1. **Agent ≠ Call plan ≠ Leads ≠ Connections**  
    - Agent = runtime (prompt / voice / tools / engine / versions)  
    - Call plan = ordered steps (call → WhatsApp → wait → if… → meet → stop)  
-   - People = who to dial / message  
+   - Leads = who to dial / message  
    - Connections = account wiring used by plans and agents  
 
 2. **Retries:** plan steps can express **no answer → wait → call again**; agent **Auto-redial** (Advanced) is the mid-call / immediate redial setting. Link both clearly in the plan editor.
@@ -64,7 +64,7 @@ Journeys, campaigns, and dial engines still power execution under the hood. Prod
 Home
 Call plans
 Agents
-People
+Leads
 Connections
 History
 
@@ -104,7 +104,7 @@ MORE
 ## 4. Core objects and how they connect
 
 ```
-     Connections          People
+     Connections          Leads
      (Sheets, WA,         (CSV lists
       email, website,      only)
       Meta)
@@ -131,7 +131,7 @@ MORE
 |---------|-----|
 | Builder | Route `/app/agents/:id` |
 | Call plan | Journey + workflow under the hood; UI = `/app/call-plans/:id` |
-| People lists / sheets / forms | Legacy campaign / automatic-call / webhook engines; UI = `/app/people` |
+| Lead lists / sheets / forms | Legacy campaign / automatic-call / webhook engines; UI = `/app/people` (labeled Leads) |
 | Meetings / Memory | Query `?agentId=` + agent picker; phone/WA/email via **Connections** |
 | Phone numbers | Number assigned to `agentId` (or squad) |
 | Knowledge | Sources attached on agent (`knowledgeSourceIds`) |
@@ -219,7 +219,7 @@ A call plan is an **ordered timeline of steps** for each person — not a node g
 Two doors on Call plans:
 
 1. **Build with AI** — describe the path in plain language; SnapServe drafts people source + recipe (then you attach people and Start queue).  
-2. **Compose** — guided steps: Agent → People source → Recipe → Name.
+2. **Compose** — guided steps: Agent → Lead source → Recipe → Name.
 
 Agent **Vibe** (`/app/vibe`) still builds agents only; plan Vibe is on Call plans.
 
@@ -238,9 +238,9 @@ Agent **Vibe** (`/app/vibe`) still builds agents only; plan Vibe is on Call plan
 
 **Retries:** plan editor surfaces **no answer → wait → call again** as steps; agent **Auto-redial** remains on Builder → Advanced for immediate redials.
 
-### People on a plan
+### Leads on a plan
 
-- **CSV / list** — attach a People list  
+- **CSV / list** — attach a Lead list  
 - **Paste phones** — one-off numbers  
 - **Google Sheet** — attach a sheet pipeline  
 
@@ -276,11 +276,11 @@ Per-person / run progress on the plan detail page (**Activity**); export via **C
 
 ---
 
-## 7. People (who you reach)
+## 7. Leads (who you reach)
 
 **Route:** `/app/people`  
 
-CSV / list people only. Create a list → upload CSV batches → attach to a **call plan** → Start.
+CSV / list leads only. Create a list → upload CSV batches → attach to a **call plan** → Start queue.
 
 Website forms, Google Sheets auto-dial, and Meta Lead Ads live under **Connections** — not on this page.
 
@@ -426,7 +426,7 @@ Default India stack (when not BYO): Sarvam ASR, Google LLM, Cartesia/Sarvam TTS,
 
 1. Create / pick agent  
 2. Call plans → new plan → steps: Call → WhatsApp → Wait…  
-3. People → attach list / paste / sheet  
+3. Leads → attach list / paste / sheet  
 4. **Start queue** (respects concurrency + calling hours)  
 5. Watch plan Activity + History  
 
@@ -464,19 +464,19 @@ Default India stack (when not BYO): Sarvam ASR, Google LLM, Cartesia/Sarvam TTS,
 - **Sidebar** = Call plans IA  
 - **StripePage** = one page title + one-line description + actions  
 - **AgentContextBar** = agent Select on agent-scoped deep pages  
-- **Tabs** under the header for People, History, Phone Numbers, Settings, etc.  
+- **Tabs** under the header for Leads, History, Phone Numbers, Settings, etc.  
 
 ### Design principles
 
-1. First teach **Agent → Call plan → People → Start queue**.  
+1. First teach **Agent → Call plan → Leads → Start queue**.  
 2. Do not revive **Automation / Dial flows / Journey / Agent channels** as primary nav labels.  
 3. Prefer flat full pages; one job per screen.  
-4. Cross-link generously (plan → People, Connections → Meetings, Meet → Prompt).  
+4. Cross-link generously (plan → Leads, Connections → Meetings, Meet → Prompt).  
 5. Empty states point to the next step (agent → call plan → people → start queue).  
 
 ### Surfaces that must feel like one family
 
-Home · Call plans · Agents · People · Connections · History  
+Home · Call plans · Agents · Leads · Connections · History  
 
 Builder is a focused editor. MORE and Settings are secondary / administrative.
 
@@ -506,7 +506,7 @@ Builder is a focused editor. MORE and Settings are secondary / administrative.
 | Dial queue (concurrency) | Yes | Call plans Start queue |
 | Drain list / Drip new rows | Yes | Call plans (sheet people) |
 | Sheet write-back step | Yes | Call plans |
-| People lists / CSV | Yes | People |
+| Lead lists / CSV | Yes | Leads |
 | Google Sheets people | Yes | Connections |
 | Website forms / Meta leads | Yes | Connections |
 | CRM (HubSpot, Zoho) | Yes | Connections |
@@ -531,7 +531,7 @@ Builder is a focused editor. MORE and Settings are secondary / administrative.
 | **Agent** | AI voice persona (prompt, voice, tools, published version) |
 | **Builder** | UI to configure how the agent speaks |
 | **Call plan** | Ordered steps for each person (product front door for journeys) |
-| **People** | Who you reach — CSV lists, paste, or sheets on a plan |
+| **Leads** | Who you reach — CSV lists, paste, or sheets on a plan |
 | **Connections** | Shared wiring — Sheets, WhatsApp, email, website form, Meta, phone |
 | **History** | Calls, callbacks, transfers (what happened) |
 | **Meetings** | Per-agent meet join / delegate (deep page with `?agentId=`) |
@@ -541,7 +541,7 @@ Builder is a focused editor. MORE and Settings are secondary / administrative.
 | **Production version** | Published snapshot used on live calls |
 | **Webcall** | Browser live test |
 | **BYO** | Bring your own (keys / telephony / Brevo / BSP) |
-| **Journey / campaign** | Internal engine names — prefer Call plan / People / dial queue in product copy |
+| **Journey / campaign** | Internal engine names — prefer Call plan / Leads / dial queue in product copy |
 
 ---
 
@@ -560,10 +560,10 @@ Builder is a focused editor. MORE and Settings are secondary / administrative.
 
 **Primary screens**
 
-1. Home (what’s running + Agent → Call plan → People → Start queue)  
+1. Home (what’s running + Agent → Call plan → Leads → Start queue)  
 2. Call plans (timeline editor + dial queue)  
 3. Agents / Builder (dual prompt + team strip)  
-4. People  
+4. Leads  
 5. Connections (incl. Meetings)  
 6. History  
 
@@ -572,7 +572,7 @@ Builder is a focused editor. MORE and Settings are secondary / administrative.
 - New user can create an agent, make a plan, add people, and start the queue without training  
 - User never needs “Journey / Automation / Dial flows / Agent channels” words to succeed  
 - No node graph; If… supports Then / Else paths  
-- Cross-links make Agent ↔ Plan ↔ People ↔ Connections obvious  
+- Cross-links make Agent ↔ Plan ↔ Leads ↔ Connections obvious  
 
 ---
 

@@ -1301,7 +1301,7 @@ export default function CampaignsPage({
               loading={isLoading}
             />
             <MetricCard
-              label="People in lists"
+              label="Leads in lists"
               value={listStats?.totalLeads ?? 0}
               sub="Across all CSV lists"
               icon={<Users />}
@@ -1363,7 +1363,7 @@ export default function CampaignsPage({
               type="button"
               onClick={() => setHelpOpen(true)}
               className="h-9 w-9 rounded-lg border border-border bg-muted/40 hover:bg-muted/70 flex items-center justify-center text-muted-foreground hover:text-foreground transition-all"
-              title="People list guide"
+              title="Lead list guide"
             >
               <HelpCircle className="h-4 w-4" />
             </button>
@@ -1475,7 +1475,7 @@ export default function CampaignsPage({
                       </div>
                       <h3 className="text-base font-semibold text-foreground mb-1.5">Upload a CSV list</h3>
                       <p className="text-xs text-muted-foreground/60 max-w-sm mx-auto leading-relaxed">
-                        People is for CSV lists only. Attach a list to a call plan, then Start.
+                        Leads is for CSV lists only. Attach a list to a call plan, then Start queue.
                         Website forms, Sheets, and Meta live under Connections.
                       </p>
                     </div>
@@ -1626,7 +1626,7 @@ export default function CampaignsPage({
           <SheetHeader className="pb-4 border-b border-border/60">
             <SheetTitle className="flex items-center gap-2 text-base">
               <Megaphone className="h-4 w-4 text-primary/60" />
-              People list guide
+              Lead list guide
             </SheetTitle>
             <p className="text-[11px] text-muted-foreground/60 leading-relaxed mt-1">
               How lists bind people to an agent and a call plan.
@@ -1715,7 +1715,7 @@ export default function CampaignsPage({
               <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/40 mb-3">Lists vs. Batches</p>
               <div className="rounded-xl border border-border/60 bg-card/60 p-4 space-y-3">
                 {[
-                  { icon: <Megaphone className="h-3.5 w-3.5 text-primary/50" />, term: "People list", def: "Who you reach. Defines the agent, number, calling hours, and retry rules." },
+                  { icon: <Megaphone className="h-3.5 w-3.5 text-primary/50" />, term: "Lead list", def: "Who you reach. Defines the agent, number, calling hours, and retry rules." },
                   { icon: <Layers className="h-3.5 w-3.5 text-amber-400" />, term: "Batch", def: "One group of leads added at a particular time. A list can have unlimited batches — each is tracked independently." },
                 ].map(item => (
                   <div key={item.term} className="flex gap-3">

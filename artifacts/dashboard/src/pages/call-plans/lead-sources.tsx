@@ -22,8 +22,8 @@ export type LeadSource = {
 export const LEAD_SOURCES: LeadSource[] = [
   {
     id: "list",
-    title: "People list (CSV)",
-    blurb: "Upload under People, then attach on the plan.",
+    title: "Lead list (CSV)",
+    blurb: "Upload under Leads, then attach on the plan.",
     icon: <Users className="size-4" />,
     defaultTemplate: "lead_followup",
     peopleSource: "campaign",

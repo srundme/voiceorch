@@ -87,7 +87,7 @@ export function classifyCallPlanPrompt(prompt: string): CallPlanVibeDraft {
       : leadSource === "paste" ? "pasted numbers"
         : leadSource === "website" ? "website form"
           : leadSource === "meta" ? "Meta leads"
-            : "People list";
+            : "Lead list";
 
   const sheetNote =
     leadSource === "sheet"

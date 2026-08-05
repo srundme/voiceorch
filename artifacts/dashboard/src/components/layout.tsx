@@ -99,7 +99,7 @@ interface NavGroup {
 
 /**
  * Call-plans IA (Phase 4).
- * Primary: Home · Call plans · Agents · People · Connections · History
+ * Primary: Home · Call plans · Agents · Leads · Connections · History
  * Journeys / Automation / Dial flows / legacy Channels routes are redirected, not deleted.
  */
 const NAV_GROUPS: NavGroup[] = [
@@ -108,7 +108,7 @@ const NAV_GROUPS: NavGroup[] = [
       { name: "Home",        href: "/app/home",        icon: Home },
       { name: "Call plans",  href: "/app/call-plans",  icon: ListOrdered },
       { name: "Agents",      href: "/app/agents",      icon: Bot },
-      { name: "People",      href: "/app/people",      icon: Users },
+      { name: "Leads",       href: "/app/people",      icon: Users },
       { name: "Connections", href: "/app/connections", icon: PlugZap },
       { name: "History",     href: "/app/history",     icon: Phone, callbackBadge: true },
     ],

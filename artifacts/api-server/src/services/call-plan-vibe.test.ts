@@ -14,6 +14,11 @@ describe("classifyCallPlanPrompt", () => {
     expect(d.templateId).toBe("lead_followup");
   });
 
+  it("summarizes list source as Lead list", () => {
+    const d = classifyCallPlanPrompt("Call my CSV list and WhatsApp if no answer");
+    expect(d.summary).toMatch(/Lead list/i);
+  });
+
   it("maps website form leads", () => {
     const d = classifyCallPlanPrompt("Website form leads — call then follow up");
     expect(d.leadSource).toBe("website");

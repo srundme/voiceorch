@@ -2531,6 +2531,27 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
     },
   ] as const;
 
+  const transferIdx = nativeToolIndex("call_transfer");
+  const transferOn = transferIdx >= 0;
+
+  const toggleCallTransfer = (on: boolean) => {
+    const idx = nativeToolIndex("call_transfer");
+    if (on) {
+      if (idx < 0) {
+        append({
+          type: "call_transfer" as any,
+          name: "transfer_to_human",
+          description: "Transfer the call to a human agent when the caller requests it or the issue cannot be resolved automatically.",
+          transferTo: "",
+          warmHandoffMessage: "",
+          transferMode: "cold",
+        });
+      }
+    } else if (idx >= 0) {
+      remove(idx);
+    }
+  };
+
   const colorMap: Record<string, { border: string; bg: string; iconBg: string; iconText: string; label: string; badge: string; badgeText: string; active: string }> = {
     emerald: { border: "border-emerald-500/40", bg: "bg-emerald-500/10", iconBg: "bg-emerald-500/15", iconText: "text-emerald-600 dark:text-emerald-400", label: "text-emerald-700 dark:text-emerald-300", badge: "bg-emerald-500/20", badgeText: "text-emerald-700 dark:text-emerald-300", active: "" },
     sky:     { border: "border-sky-500/40",     bg: "bg-sky-500/10",     iconBg: "bg-sky-500/15",     iconText: "text-sky-600 dark:text-sky-400",     label: "text-sky-700 dark:text-sky-300",     badge: "bg-sky-500/20",     badgeText: "text-sky-700 dark:text-sky-300",     active: "" },
@@ -2795,6 +2816,78 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
           );
         })}
 
+        {/* Call Transfer — platform tool (not under Custom Tools) */}
+        <div className={cn("rounded-xl border transition-all duration-150", transferOn ? "border-border/70 bg-card/40" : "border-border/40 bg-card/20")}>
+          <div className="w-full text-left p-4 flex items-start gap-3">
+            <div className="mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center shrink-0 bg-muted/30">
+              <PhoneForwarded className={cn("h-4 w-4", transferOn ? "text-foreground/70" : "text-muted-foreground/35")} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-0.5">
+                <span className="text-xs font-semibold text-foreground/80">Call Transfer</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground/60 leading-relaxed">
+                Warm or cold transfer to a human number when the caller asks or the agent can’t resolve the issue.
+              </p>
+            </div>
+            <div className="shrink-0 mt-1">
+              <Switch checked={transferOn} onCheckedChange={(v) => toggleCallTransfer(v)} />
+            </div>
+          </div>
+          {transferOn && transferIdx >= 0 && (
+            <div className="space-y-3 border-t border-border/30 px-4 pb-4 pt-3">
+              <div className="grid grid-cols-2 gap-3">
+                <FormField control={form.control} name={`tools.${transferIdx}.name`} render={({ field: f }) => (
+                  <FormItem className="space-y-1">
+                    <FormLabel className="text-[10px] text-muted-foreground">Function Name</FormLabel>
+                    <FormControl><Input placeholder="transfer_to_human" className="h-8 text-xs" {...f} /></FormControl>
+                    <FormMessage className="text-[10px]" />
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name={`tools.${transferIdx}.transferTo`} render={({ field: f }) => (
+                  <FormItem className="space-y-1">
+                    <FormLabel className="text-[10px] text-muted-foreground">Transfer To</FormLabel>
+                    <FormControl><Input placeholder="+12125551234" className="h-8 text-xs" {...f} /></FormControl>
+                  </FormItem>
+                )} />
+              </div>
+              <FormField control={form.control} name={`tools.${transferIdx}.description`} render={({ field: f }) => (
+                <FormItem className="space-y-1">
+                  <FormLabel className="text-[10px] text-muted-foreground">Description (shown to LLM)</FormLabel>
+                  <FormControl><Textarea className="min-h-[60px] text-xs resize-none" placeholder="When should the LLM transfer?" {...f} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name={`tools.${transferIdx}.warmHandoffMessage`} render={({ field: f }) => (
+                <FormItem className="space-y-1">
+                  <FormLabel className="text-[10px] text-muted-foreground">Warm Handoff Message</FormLabel>
+                  <FormControl><Input placeholder="Connecting you with a specialist now…" className="h-8 text-xs" {...f} /></FormControl>
+                </FormItem>
+              )} />
+              <FormField control={form.control} name={`tools.${transferIdx}.transferMode`} render={({ field: f }) => (
+                <FormItem className="space-y-1">
+                  <FormLabel className="text-[10px] text-muted-foreground">Transfer Mode</FormLabel>
+                  <Select value={f.value ?? "cold"} onValueChange={f.onChange}>
+                    <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="cold" className="text-xs">Cold — connect immediately</SelectItem>
+                      <SelectItem value="warm_summary" className="text-xs">Warm — brief the agent first (context-aware)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </FormItem>
+              )} />
+              {form.watch(`tools.${transferIdx}.transferMode`) === "warm_summary" && (
+                <FormField control={form.control} name={`tools.${transferIdx}.summaryPrompt`} render={({ field: f }) => (
+                  <FormItem className="space-y-1">
+                    <FormLabel className="text-[10px] text-muted-foreground">Briefing Prompt (optional)</FormLabel>
+                    <FormControl><Textarea className="min-h-[60px] text-xs resize-none" placeholder="Default: customer name, core issue, urgency, and key context the agent needs." {...f} /></FormControl>
+                  </FormItem>
+                )} />
+              )}
+            </div>
+          )}
+        </div>
+
         <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-1 mt-4">Recording</p>
         {/* Call Recording card */}
         <div className={cn("rounded-xl border transition-all duration-150", recordingEnabled ? "border-border/70 bg-card/40" : "border-border/40 bg-card/20")}>
@@ -2902,45 +2995,36 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
       </div>
       </div>
 
-      {/* ── Custom Tools ─── */}
+      {/* ── Custom Tools (webhooks only — Call Transfer lives under Platform Tools) ─── */}
       <div>
         <div className="flex items-center justify-between mb-3">
           <div>
             <h3 className="text-sm font-semibold mb-0.5">Custom Tools</h3>
-            <p className="text-xs text-muted-foreground">Functions the LLM can invoke mid-conversation</p>
+            <p className="text-xs text-muted-foreground">Your own HTTP functions the LLM can invoke mid-conversation</p>
           </div>
-          <div className="flex gap-2">
-            <Button type="button" variant="outline" size="sm" className="h-7 text-xs"
-              onClick={() => append({ type: "call_transfer", name: "transfer_to_human", description: "Transfer to a human agent.", transferTo: "", warmHandoffMessage: "" })}>
-              <PhoneForwarded className="h-3.5 w-3.5 mr-1" /> Call Transfer
-            </Button>
-            <Button type="button" variant="outline" size="sm" className="h-7 text-xs"
-              onClick={() => append({ type: "webhook", name: "custom_action", description: "Invoke when caller requests a specific action.", url: "", method: "POST", secret: "", preToolMessage: "One moment…", parameters: [] })}>
-              <Webhook className="h-3.5 w-3.5 mr-1" /> Custom Function
-            </Button>
-          </div>
+          <Button type="button" variant="outline" size="sm" className="h-7 text-xs"
+            onClick={() => append({ type: "webhook", name: "custom_action", description: "Invoke when caller requests a specific action.", url: "", method: "POST", secret: "", preToolMessage: "One moment…", parameters: [] })}>
+            <Webhook className="h-3.5 w-3.5 mr-1" /> Custom Function
+          </Button>
         </div>
 
-        {(form.watch("tools") ?? []).filter((t: { type: string }) => t.type === "call_transfer" || t.type === "webhook").length === 0 ? (
+        {(form.watch("tools") ?? []).filter((t: { type: string }) => t.type === "webhook").length === 0 ? (
           <div className="rounded-xl border border-dashed border-border/50 p-8 text-center">
             <Wrench className="h-7 w-7 text-muted-foreground/20 mx-auto mb-2" />
             <p className="text-sm font-medium text-muted-foreground/50">No custom tools</p>
-            <p className="text-xs text-muted-foreground/30 mt-0.5">Add a Call Transfer or Custom Function above</p>
+            <p className="text-xs text-muted-foreground/30 mt-0.5">Add a Custom Function above</p>
           </div>
         ) : (
           <div className="space-y-3">
             {fields.flatMap((field, index) => {
               const toolType = form.watch(`tools.${index}.type`);
-              if (toolType !== "call_transfer" && toolType !== "webhook") return [];
+              if (toolType !== "webhook") return [];
               return (
                 <div key={field.id} className="rounded-xl border border-border/60 bg-card/30 p-4 space-y-3">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      {toolType === "webhook"
-                        ? <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground"><Webhook className="h-3 w-3" />Custom Function</span>
-                        : <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground"><PhoneForwarded className="h-3 w-3" />Call Transfer</span>
-                      }
-                    </div>
+                    <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                      <Webhook className="h-3 w-3" />Custom Function
+                    </span>
                     <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => remove(index)}>
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
@@ -2953,21 +3037,12 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                         <FormMessage className="text-[10px]" />
                       </FormItem>
                     )} />
-                    {toolType === "webhook" ? (
-                      <FormField control={form.control} name={`tools.${index}.preToolMessage`} render={({ field: f }) => (
-                        <FormItem className="space-y-1">
-                          <FormLabel className="text-[10px] text-muted-foreground">Pre-call Message</FormLabel>
-                          <FormControl><Input placeholder="One moment…" className="h-8 text-xs" {...f} /></FormControl>
-                        </FormItem>
-                      )} />
-                    ) : (
-                      <FormField control={form.control} name={`tools.${index}.transferTo`} render={({ field: f }) => (
-                        <FormItem className="space-y-1">
-                          <FormLabel className="text-[10px] text-muted-foreground">Transfer To</FormLabel>
-                          <FormControl><Input placeholder="+12125551234" className="h-8 text-xs" {...f} /></FormControl>
-                        </FormItem>
-                      )} />
-                    )}
+                    <FormField control={form.control} name={`tools.${index}.preToolMessage`} render={({ field: f }) => (
+                      <FormItem className="space-y-1">
+                        <FormLabel className="text-[10px] text-muted-foreground">Pre-call Message</FormLabel>
+                        <FormControl><Input placeholder="One moment…" className="h-8 text-xs" {...f} /></FormControl>
+                      </FormItem>
+                    )} />
                   </div>
                   <FormField control={form.control} name={`tools.${index}.description`} render={({ field: f }) => (
                     <FormItem className="space-y-1">
@@ -2976,69 +3051,37 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                       <FormMessage />
                     </FormItem>
                   )} />
-                  {toolType === "webhook" && (
-                    <div className="space-y-3">
-                      <div className="grid grid-cols-[1fr_100px] gap-2">
-                        <FormField control={form.control} name={`tools.${index}.url`} render={({ field: f }) => (
-                          <FormItem className="space-y-1">
-                            <FormLabel className="text-[10px] text-muted-foreground">Endpoint URL</FormLabel>
-                            <FormControl><Input placeholder="https://your-api.com/webhook" className="h-8 text-xs" {...f} /></FormControl>
-                          </FormItem>
-                        )} />
-                        <FormField control={form.control} name={`tools.${index}.method`} render={({ field: f }) => (
-                          <FormItem className="space-y-1">
-                            <FormLabel className="text-[10px] text-muted-foreground">Method</FormLabel>
-                            <Select value={f.value ?? "POST"} onValueChange={f.onChange}>
-                              <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="POST" className="text-xs">POST</SelectItem>
-                                <SelectItem value="GET" className="text-xs">GET</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </FormItem>
-                        )} />
-                      </div>
-                      <FormField control={form.control} name={`tools.${index}.secret`} render={({ field: f }) => (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-[1fr_100px] gap-2">
+                      <FormField control={form.control} name={`tools.${index}.url`} render={({ field: f }) => (
                         <FormItem className="space-y-1">
-                          <FormLabel className="text-[10px] text-muted-foreground">X-Webhook-Secret (optional)</FormLabel>
-                          <FormControl><Input type="password" placeholder="shared-secret" className="h-8 text-xs" {...f} /></FormControl>
+                          <FormLabel className="text-[10px] text-muted-foreground">Endpoint URL</FormLabel>
+                          <FormControl><Input placeholder="https://your-api.com/webhook" className="h-8 text-xs" {...f} /></FormControl>
                         </FormItem>
                       )} />
-                      <div className="border-t border-border/40 pt-3">
-                        <WebhookParamsEditor control={form.control} toolIndex={index} />
-                      </div>
-                    </div>
-                  )}
-                  {toolType === "call_transfer" && (
-                    <div className="space-y-3">
-                      <FormField control={form.control} name={`tools.${index}.warmHandoffMessage`} render={({ field: f }) => (
+                      <FormField control={form.control} name={`tools.${index}.method`} render={({ field: f }) => (
                         <FormItem className="space-y-1">
-                          <FormLabel className="text-[10px] text-muted-foreground">Warm Handoff Message</FormLabel>
-                          <FormControl><Input placeholder="Connecting you with a specialist now…" className="h-8 text-xs" {...f} /></FormControl>
-                        </FormItem>
-                      )} />
-                      <FormField control={form.control} name={`tools.${index}.transferMode`} render={({ field: f }) => (
-                        <FormItem className="space-y-1">
-                          <FormLabel className="text-[10px] text-muted-foreground">Transfer Mode</FormLabel>
-                          <Select value={f.value ?? "cold"} onValueChange={f.onChange}>
+                          <FormLabel className="text-[10px] text-muted-foreground">Method</FormLabel>
+                          <Select value={f.value ?? "POST"} onValueChange={f.onChange}>
                             <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="cold" className="text-xs">Cold — connect immediately</SelectItem>
-                              <SelectItem value="warm_summary" className="text-xs">Warm — brief the agent first (context-aware)</SelectItem>
+                              <SelectItem value="POST" className="text-xs">POST</SelectItem>
+                              <SelectItem value="GET" className="text-xs">GET</SelectItem>
                             </SelectContent>
                           </Select>
                         </FormItem>
                       )} />
-                      {form.watch(`tools.${index}.transferMode`) === "warm_summary" && (
-                        <FormField control={form.control} name={`tools.${index}.summaryPrompt`} render={({ field: f }) => (
-                          <FormItem className="space-y-1">
-                            <FormLabel className="text-[10px] text-muted-foreground">Briefing Prompt (optional)</FormLabel>
-                            <FormControl><Textarea className="min-h-[60px] text-xs resize-none" placeholder="Default: customer name, core issue, urgency, and key context the agent needs." {...f} /></FormControl>
-                          </FormItem>
-                        )} />
-                      )}
                     </div>
-                  )}
+                    <FormField control={form.control} name={`tools.${index}.secret`} render={({ field: f }) => (
+                      <FormItem className="space-y-1">
+                        <FormLabel className="text-[10px] text-muted-foreground">X-Webhook-Secret (optional)</FormLabel>
+                        <FormControl><Input type="password" placeholder="shared-secret" className="h-8 text-xs" {...f} /></FormControl>
+                      </FormItem>
+                    )} />
+                    <div className="border-t border-border/40 pt-3">
+                      <WebhookParamsEditor control={form.control} toolIndex={index} />
+                    </div>
+                  </div>
                 </div>
               );
             })}

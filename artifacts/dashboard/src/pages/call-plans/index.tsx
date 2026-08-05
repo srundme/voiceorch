@@ -53,7 +53,7 @@ type CallPlan = {
 
 type WizardStep = 0 | 1 | 2 | 3;
 
-const WIZARD_LABELS = ["Agent", "People", "Steps", "Name"];
+const WIZARD_LABELS = ["Agent", "Leads", "Steps", "Name"];
 
 function statusClass(status: string) {
   if (status === "active") return "border-emerald-500/25 bg-emerald-500/10 text-emerald-400";
@@ -161,7 +161,7 @@ export default function CallPlansPage() {
   return (
     <StripePage
       title="Call plans"
-      description="Agent → Call plan → People → Start queue."
+      description="Agent → Call plan → Leads → Start queue."
       back={{ href: "/app/home", label: "Home" }}
       actions={
         <div className="flex flex-wrap items-center gap-2">
@@ -185,7 +185,7 @@ export default function CallPlansPage() {
           <ListOrdered className="mb-3 size-5 text-muted-foreground" />
           <p className="text-sm font-medium">No call plans yet</p>
           <p className="mt-1.5 max-w-sm text-[13px] text-muted-foreground leading-relaxed">
-            Default path: create an agent, make a plan, attach people, Start queue.
+            Default path: create an agent, make a plan, attach leads, Start queue.
           </p>
           <ol className="mt-5 w-full max-w-sm space-y-2 text-left">
             {[
@@ -204,7 +204,7 @@ export default function CallPlansPage() {
                 "Agent ready"
               ),
               "Compose a plan or Build with AI",
-              "Attach people (list, sheet, or paste)",
+              "Attach leads (list, sheet, or paste)",
               "Start queue",
             ].map((step, i) => (
               <li key={i} className="flex items-start gap-2.5 text-[12px] text-muted-foreground">
@@ -331,7 +331,7 @@ export default function CallPlansPage() {
 
             {wizardStep === 1 && (
               <div className="space-y-1.5">
-                <Label>Where do people come from?</Label>
+                <Label>Where do leads come from?</Label>
                 <div className="grid gap-1.5">
                   {LEAD_SOURCES.map((s) => (
                     <button
@@ -440,7 +440,7 @@ export default function CallPlansPage() {
                     {agents.find((a) => String(a.id) === agentId)?.name ?? "—"}
                   </p>
                   <p>
-                    <span className="font-medium text-foreground">People:</span> {selectedSource.title}
+                    <span className="font-medium text-foreground">Leads:</span> {selectedSource.title}
                     {leadSource === "sheet"
                       ? ` · ${sheetRunMode === "live" ? "Drip" : "Drain"}`
                       : ""}
@@ -449,7 +449,7 @@ export default function CallPlansPage() {
                     <span className="font-medium text-foreground">Steps:</span>{" "}
                     {CALL_PLAN_TEMPLATES.find((t) => t.id === templateId)?.title}
                   </p>
-                  <p className="pt-1">Next: attach people on the plan, then Start queue.</p>
+                  <p className="pt-1">Next: attach leads on the plan, then Start queue.</p>
                 </div>
               </div>
             )}

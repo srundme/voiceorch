@@ -890,7 +890,7 @@ function WebhookTable({
         {/* Table header */}
         <div className="flex items-center gap-3 border-b border-border/50 bg-muted/30 px-3.5 py-2">
           <div className="w-7 shrink-0" />
-          <div className="flex-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">People list</div>
+          <div className="flex-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Lead list</div>
           <div className="hidden max-w-[220px] flex-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground sm:block">Webhook URL</div>
           <div className="hidden w-28 text-right text-[10px] font-semibold uppercase tracking-widest text-muted-foreground md:block">Last Event</div>
           {/* Date sort toggle */}
@@ -2321,7 +2321,7 @@ export default function ConnectionsPage() {
                 <div className="min-w-0 flex-1">
                   <p className="text-[13px] font-medium">Google Sheets</p>
                   <p className="truncate text-[11px] text-muted-foreground">
-                    Connect once — use under People → Google Sheet
+                    Connect once — use under Leads / call plans → Google Sheet
                   </p>
                 </div>
                 <Button size="sm" className="h-8 px-2.5 text-[11px]" onClick={() => void connectSheets()}>
@@ -2369,7 +2369,7 @@ export default function ConnectionsPage() {
         <p className="px-0.5 text-[11px] text-muted-foreground">
           Advanced intake URLs. For most setups use{" "}
           <button type="button" className="underline underline-offset-2" onClick={() => navigate("/app/people?tab=lead-sources")}>
-            People → Website forms
+            Leads → Website forms
           </button>
           .
         </p>
@@ -2384,14 +2384,14 @@ export default function ConnectionsPage() {
           ) : webhookConnections.length === 0 ? (
             <div className="px-3.5 py-6 text-center">
               <p className="text-[12px] text-muted-foreground">
-                No webhook connections yet. Create a people list or a call plan intake URL.
+                No webhook connections yet. Create a lead list or a call plan intake URL.
               </p>
               <div className="mt-3 flex justify-center gap-2">
                 <Button size="sm" variant="outline" className="h-8 text-[11px]" onClick={() => navigate("/app/call-plans")}>
                   Call plans
                 </Button>
                 <Button size="sm" className="h-8 text-[11px]" onClick={() => navigate("/app/people")}>
-                  People
+                  Leads
                 </Button>
               </div>
             </div>
