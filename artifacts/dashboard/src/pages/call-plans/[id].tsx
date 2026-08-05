@@ -475,7 +475,7 @@ export default function CallPlanDetailPage() {
   return (
     <StripePage
       title={name || plan.name}
-      description="People → what happens next → Start. Missed calls use the agent’s settings."
+      description="Attach people → Start queue. Steps run for each person."
       back={{ href: "/app/call-plans", label: "Call plans" }}
       actions={
         <div className="flex flex-wrap items-center gap-2">
@@ -588,51 +588,43 @@ export default function CallPlanDetailPage() {
             )}
           </div>
         )}
-        <div className="grid gap-5 lg:grid-cols-2 lg:items-start">
-          {/* Meta + people */}
-          <div className="space-y-5 min-w-0">
-            <section className="space-y-3 rounded-xl border border-border/60 bg-card/30 p-4">
-              <div className="space-y-1.5">
-                <Label className="text-[11px]">Plan name</Label>
-                <Input
-                  className="h-9"
-                  value={name}
-                  onChange={(e) => { setName(e.target.value); setDirty(true); }}
-                />
+        {(() => {
+          const peopleReady =
+            (peopleMode === "campaign" && Boolean(campaignId))
+            || (peopleMode === "sheet" && Boolean(sheetPipelineId))
+            || (peopleMode === "manual" && manualPhones.trim().length > 0)
+            || intakeMode !== "manual";
+          return !peopleReady && plan.status === "draft" ? (
+            <div className="rounded-xl border border-border/70 bg-muted/20 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[13px] font-medium">Next: attach people</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Pick a list, sheet, or paste numbers — then Start queue.
+                </p>
               </div>
-              <div className="space-y-1.5">
-                <Label className="text-[11px]">Agent who talks</Label>
-                <Select
-                  value={agentId != null ? String(agentId) : undefined}
-                  onValueChange={(v) => {
-                    setAgentId(Number(v));
-                    setDirty(true);
-                  }}
-                >
-                  <SelectTrigger className="h-9">
-                    <SelectValue placeholder="Choose agent…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {agents.map((a) => (
-                      <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {agentId != null && (
-                  <Link
-                    href={`/app/agents/${agentId}`}
-                    className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
-                  >
-                    Edit agent <ExternalLink className="h-3 w-3" />
-                  </Link>
-                )}
-              </div>
-            </section>
+              <Button
+                size="sm"
+                className="h-8 gap-1.5 shrink-0"
+                disabled={startBusy || steps.length === 0}
+                onClick={() => { void handleStartClick(); }}
+              >
+                <Play className="size-3.5" />
+                Start queue
+              </Button>
+            </div>
+          ) : null;
+        })()}
 
-            <section className="space-y-3 rounded-xl border border-border/60 bg-card/30 p-4">
-              <div className="flex items-center gap-2">
-                <Users className="h-4 w-4 text-muted-foreground" />
-                <h2 className="text-sm font-semibold">People</h2>
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] lg:items-start">
+          {/* People first — then settings */}
+          <div className="space-y-5 min-w-0">
+            <section className="space-y-3 rounded-xl border border-border/60 bg-card/40 p-4 ring-1 ring-border/40">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Users className="h-4 w-4 text-muted-foreground" />
+                  <h2 className="text-sm font-semibold">People</h2>
+                </div>
+                <p className="text-[10px] text-muted-foreground tabular-nums">1 · attach</p>
               </div>
               <div className="grid grid-cols-3 gap-2">
                 <button
@@ -841,157 +833,211 @@ export default function CallPlanDetailPage() {
               )}
             </section>
 
-            <section className="space-y-3 rounded-xl border border-border/60 bg-card/30 p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-start gap-2 min-w-0">
-                  <Clock className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-                  <div>
-                    <h2 className="text-sm font-semibold">Calling hours</h2>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">
-                      Queue holds outside this window — same gate as People campaigns.
-                    </p>
-                  </div>
+            <section className="space-y-3 rounded-xl border border-border/50 bg-card/20 p-3.5">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label className="text-[11px]">Plan name</Label>
+                  <Input
+                    className="h-9"
+                    value={name}
+                    onChange={(e) => { setName(e.target.value); setDirty(true); }}
+                  />
                 </div>
-                <Switch
-                  checked={callingHoursEnabled}
-                  onCheckedChange={(v) => { setCallingHoursEnabled(v); setDirty(true); }}
-                />
-              </div>
-              {callingHoursEnabled && (
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div className="space-y-1.5">
-                    <Label className="text-[11px]">Start</Label>
-                    <Select
-                      value={String(hoursStart)}
-                      onValueChange={(v) => { setHoursStart(Number(v)); setDirty(true); }}
-                    >
-                      <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {HOUR_OPTIONS.map((h) => (
-                          <SelectItem key={h.value} value={h.value} className="text-xs">{h.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-[11px]">End</Label>
-                    <Select
-                      value={String(hoursEnd)}
-                      onValueChange={(v) => { setHoursEnd(Number(v)); setDirty(true); }}
-                    >
-                      <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {HOUR_OPTIONS.map((h) => (
-                          <SelectItem key={h.value} value={h.value} className="text-xs">{h.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-[11px]">Timezone</Label>
-                    <Select
-                      value={timezone}
-                      onValueChange={(v) => { setTimezone(v); setDirty(true); }}
-                    >
-                      <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {CALL_PLAN_TIMEZONES.map((tz) => (
-                          <SelectItem key={tz} value={tz} className="text-xs">{tz}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              )}
-              {!callingHoursEnabled && (
-                <p className="text-[10px] text-muted-foreground">24/7 — queue dials whenever concurrency is free.</p>
-              )}
-            </section>
-
-            <section className="space-y-3 rounded-xl border border-border/60 bg-card/30 p-4">
-              <div>
-                <h2 className="text-sm font-semibold">Also start from intake</h2>
-                <p className="text-[11px] text-muted-foreground mt-0.5">
-                  Optional — new website or Meta leads can walk this plan automatically (save to apply).
-                </p>
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                {(
-                  [
-                    { id: "manual" as const, label: "Manual / Start only" },
-                    { id: "form_lead" as const, label: "Website form" },
-                    { id: "instagram_lead" as const, label: "Meta Lead Ads" },
-                  ] as const
-                ).map((opt) => (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    onClick={() => { setIntakeMode(opt.id); setDirty(true); }}
-                    className={cn(
-                      "rounded-lg border px-2.5 py-2.5 text-left text-[11px]",
-                      intakeMode === opt.id
-                        ? "border-primary/40 bg-primary/5 font-medium"
-                        : "border-border/50 hover:bg-muted/30",
-                    )}
+                <div className="space-y-1.5">
+                  <Label className="text-[11px]">Agent who talks</Label>
+                  <Select
+                    value={agentId != null ? String(agentId) : undefined}
+                    onValueChange={(v) => {
+                      setAgentId(Number(v));
+                      setDirty(true);
+                    }}
                   >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-              {intakeMode !== "manual" && (
-                <div className="space-y-2">
-                  {hookUrl ? (
-                    <div className="space-y-1">
-                      <Label className="text-[11px]">Hook URL</Label>
-                      <div className="flex gap-2">
-                        <Input
-                          className="h-8 text-[11px] font-mono"
-                          readOnly
-                          value={typeof window !== "undefined" ? `${window.location.origin}${hookUrl}` : hookUrl}
-                        />
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="h-8 shrink-0 text-[11px]"
-                          onClick={() => {
-                            const full = `${window.location.origin}${hookUrl}`;
-                            void navigator.clipboard.writeText(full);
-                            toast({ title: "Hook URL copied" });
-                          }}
-                        >
-                          Copy
-                        </Button>
-                      </div>
-                      <p className="text-[10px] text-muted-foreground">
-                        Save the plan first if this is empty after enabling. Point your{" "}
-                        <Link
-                          href={intakeMode === "form_lead" ? "/app/connections?setup=website" : "/app/connections?setup=meta"}
-                          className="underline underline-offset-2"
-                        >
-                          {intakeMode === "form_lead" ? "Website form" : "Meta"} connection
-                        </Link>{" "}
-                        here, or POST leads to this URL.
-                      </p>
-                    </div>
-                  ) : (
-                    <p className="text-[11px] text-amber-400">
-                      Save the plan to mint a hook URL for {intakeMode === "form_lead" ? "website" : "Meta"} leads.
-                    </p>
+                    <SelectTrigger className="h-9">
+                      <SelectValue placeholder="Choose agent…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {agents.map((a) => (
+                        <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {agentId != null && (
+                    <Link
+                      href={`/app/agents/${agentId}`}
+                      className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
+                    >
+                      Edit agent <ExternalLink className="h-3 w-3" />
+                    </Link>
                   )}
                 </div>
-              )}
+              </div>
             </section>
+
+            <details className="group rounded-xl border border-border/50 bg-card/20 open:bg-card/30">
+              <summary className="cursor-pointer list-none px-3.5 py-3 flex items-center justify-between gap-2 text-[12px] font-medium [&::-webkit-details-marker]:hidden">
+                <span className="flex items-center gap-2 text-muted-foreground group-open:text-foreground">
+                  <Clock className="h-3.5 w-3.5" />
+                  More settings
+                  <span className="font-normal text-[10px]">
+                    Calling hours
+                    {callingHoursEnabled ? " on" : ""}
+                    {intakeMode !== "manual" ? " · intake" : ""}
+                  </span>
+                </span>
+                <span className="text-[10px] text-muted-foreground group-open:hidden">Show</span>
+                <span className="text-[10px] text-muted-foreground hidden group-open:inline">Hide</span>
+              </summary>
+              <div className="space-y-4 border-t border-border/50 px-3.5 py-3.5">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-[12px] font-semibold">Calling hours</h3>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">
+                        Queue holds outside this window.
+                      </p>
+                    </div>
+                    <Switch
+                      checked={callingHoursEnabled}
+                      onCheckedChange={(v) => { setCallingHoursEnabled(v); setDirty(true); }}
+                    />
+                  </div>
+                  {callingHoursEnabled && (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="space-y-1.5">
+                        <Label className="text-[11px]">Start</Label>
+                        <Select
+                          value={String(hoursStart)}
+                          onValueChange={(v) => { setHoursStart(Number(v)); setDirty(true); }}
+                        >
+                          <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {HOUR_OPTIONS.map((h) => (
+                              <SelectItem key={h.value} value={h.value} className="text-xs">{h.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-[11px]">End</Label>
+                        <Select
+                          value={String(hoursEnd)}
+                          onValueChange={(v) => { setHoursEnd(Number(v)); setDirty(true); }}
+                        >
+                          <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {HOUR_OPTIONS.map((h) => (
+                              <SelectItem key={h.value} value={h.value} className="text-xs">{h.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-[11px]">Timezone</Label>
+                        <Select
+                          value={timezone}
+                          onValueChange={(v) => { setTimezone(v); setDirty(true); }}
+                        >
+                          <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {CALL_PLAN_TIMEZONES.map((tz) => (
+                              <SelectItem key={tz} value={tz} className="text-xs">{tz}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-3 border-t border-border/40 pt-3">
+                  <div>
+                    <h3 className="text-[12px] font-semibold">Also start from intake</h3>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                      Optional — website or Meta leads can enter this plan (save to apply).
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(
+                      [
+                        { id: "manual" as const, label: "Manual / Start only" },
+                        { id: "form_lead" as const, label: "Website form" },
+                        { id: "instagram_lead" as const, label: "Meta Lead Ads" },
+                      ] as const
+                    ).map((opt) => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => { setIntakeMode(opt.id); setDirty(true); }}
+                        className={cn(
+                          "rounded-lg border px-2.5 py-2.5 text-left text-[11px]",
+                          intakeMode === opt.id
+                            ? "border-primary/40 bg-primary/5 font-medium"
+                            : "border-border/50 hover:bg-muted/30",
+                        )}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                  {intakeMode !== "manual" && (
+                    <div className="space-y-2">
+                      {hookUrl ? (
+                        <div className="space-y-1">
+                          <Label className="text-[11px]">Hook URL</Label>
+                          <div className="flex gap-2">
+                            <Input
+                              className="h-8 text-[11px] font-mono"
+                              readOnly
+                              value={typeof window !== "undefined" ? `${window.location.origin}${hookUrl}` : hookUrl}
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-8 shrink-0 text-[11px]"
+                              onClick={() => {
+                                const full = `${window.location.origin}${hookUrl}`;
+                                void navigator.clipboard.writeText(full);
+                                toast({ title: "Hook URL copied" });
+                              }}
+                            >
+                              Copy
+                            </Button>
+                          </div>
+                          <p className="text-[10px] text-muted-foreground">
+                            Point your{" "}
+                            <Link
+                              href={intakeMode === "form_lead" ? "/app/connections?setup=website" : "/app/connections?setup=meta"}
+                              className="underline underline-offset-2"
+                            >
+                              {intakeMode === "form_lead" ? "Website form" : "Meta"} connection
+                            </Link>{" "}
+                            here.
+                          </p>
+                        </div>
+                      ) : (
+                        <p className="text-[11px] text-amber-400">
+                          Save the plan to mint a hook URL for {intakeMode === "form_lead" ? "website" : "Meta"} leads.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </details>
           </div>
 
           {/* Steps */}
           <div className="space-y-5 min-w-0">
-            <section className="space-y-3 rounded-xl border border-border/60 bg-card/30 p-4">
-              <div>
-                <h2 className="text-sm font-semibold">What happens next</h2>
-                <p className="text-[11px] text-muted-foreground mt-0.5">
-                  Ordered steps. Drag with the arrows. No flowchart.
-                </p>
+            <section className="space-y-3 rounded-xl border border-border/60 bg-card/40 p-4 ring-1 ring-border/40">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <h2 className="text-sm font-semibold">What happens next</h2>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    Ordered steps for each person. No flowchart.
+                  </p>
+                </div>
+                <p className="text-[10px] text-muted-foreground tabular-nums shrink-0">2 · steps</p>
               </div>
               {agentId != null ? (
                 <CallPlanStepEditor

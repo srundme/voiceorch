@@ -214,6 +214,15 @@ Meeting **join / delegate / memory** toggles live under **Meetings** (Connection
 
 A call plan is an **ordered timeline of steps** for each person — not a node graph, not a use-case gallery.
 
+### Create
+
+Two doors on Call plans:
+
+1. **Build with AI** — describe the path in plain language; SnapServe drafts people source + recipe (then you attach people and Start queue).  
+2. **Compose** — guided steps: Agent → People source → Recipe → Name.
+
+Agent **Vibe** (`/app/vibe`) still builds agents only; plan Vibe is on Call plans.
+
 ### Step palette
 
 | Step | Meaning |
