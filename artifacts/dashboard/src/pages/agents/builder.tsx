@@ -1439,7 +1439,7 @@ function PromptTab({ form }: { form: any }) {
             </FormItem>
           )} />
           <p className="text-[11px] text-muted-foreground">
-            Join / delegate settings stay under Channels → Meetings.
+            Join / delegate settings live under Meetings.
           </p>
         </TabsContent>
       </Tabs>
@@ -2518,7 +2518,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
       icon: <Mail className="h-4 w-4" />,
       color: "sky",
       label: "Send Email",
-      description: "Lets the agent email the caller mid-call using Channels → Email (your Brevo). Asks for their address, then sends the channel template.",
+      description: "Lets the agent email the caller mid-call using Connections → Email (your Brevo). Asks for their address, then sends the email template.",
       needsEventType: false,
     },
     {
@@ -4120,7 +4120,7 @@ function AnalysisTab({
       <section className="space-y-2">
         <h2 className="text-base font-semibold tracking-tight">Journey</h2>
         <p className="text-[12px] text-muted-foreground max-w-3xl">
-          Attach one auto-pilot sequence to this agent: lead in → call → WhatsApp/email/callback. Channels hold WhatsApp &amp; Email; CRM webhook and disposition live under Advanced → Integrations.
+          Attach one auto-pilot sequence to this agent: lead in → call → WhatsApp/email/callback. WhatsApp &amp; Email live under Connections; CRM webhook and disposition live under Advanced → Integrations.
         </p>
       </section>
 
@@ -6648,7 +6648,7 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
       : step === "surfaces" ? "Phone only, or phone plus video meetings with a separate prompt."
         : composition === "team"
           ? "We’ll create this agent, then open team setup so you can add teammates."
-          : "You can edit prompts and channels anytime.";
+          : "You can edit prompts and connections anytime.";
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose(); }}>

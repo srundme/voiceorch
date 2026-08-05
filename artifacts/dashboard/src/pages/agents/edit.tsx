@@ -223,7 +223,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     agentConfig["voiceStack"] = "classic";
   }
   // Meeting-room prompt (Builder Talk → In meetings). Deep-merged on the server
-  // so Channels whoJoins / delegate / memory toggles are preserved.
+  // so Meetings whoJoins / delegate / memory toggles are preserved.
   if (meetingPrompt !== undefined) {
     agentConfig["meetings"] = { meetingPrompt: meetingPrompt ?? "" };
   }
@@ -561,7 +561,7 @@ export default function AgentEdit() {
       icon: <Mail className="h-4 w-4" />,
       color: "sky",
       label: "Send Email",
-      description: "Lets the agent email the caller mid-call using Channels → Email (your Brevo). Collects their address, then sends the channel template.",
+      description: "Lets the agent email the caller mid-call using Connections → Email (your Brevo). Collects their address, then sends the email template.",
     },
     {
       type: "send_whatsapp",

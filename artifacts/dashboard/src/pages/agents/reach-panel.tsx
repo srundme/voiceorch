@@ -217,14 +217,14 @@ export function ReachPanel({
                   onClick={onOpenChannels}
                   className="underline underline-offset-2 hover:text-foreground"
                 >
-                  Channels
+                  Connections
                 </button>
               ) : (
                 <Link
-                  href={`/app/channels?agentId=${agentId}`}
+                  href="/app/connections"
                   className="underline underline-offset-2 hover:text-foreground"
                 >
-                  Channels
+                  Connections
                 </Link>
               )}
               .
@@ -240,11 +240,11 @@ export function ReachPanel({
             Credentials live in{" "}
             {onOpenChannels ? (
               <button type="button" onClick={onOpenChannels} className="underline underline-offset-2 hover:text-foreground">
-                Channels
+                Connections
               </button>
             ) : (
-              <Link href={`/app/channels?agentId=${agentId}`} className="underline underline-offset-2 hover:text-foreground">
-                Channels
+              <Link href="/app/connections" className="underline underline-offset-2 hover:text-foreground">
+                Connections
               </Link>
             )}
             .
@@ -359,7 +359,7 @@ export function ReachPanel({
             <Link href="/app/squads" className="underline underline-offset-2 hover:text-foreground">
               squad
             </Link>
-            . Channel credentials live under Channels.
+            . Credentials live under Connections.
           </p>
         </div>
         <JourneyPanel

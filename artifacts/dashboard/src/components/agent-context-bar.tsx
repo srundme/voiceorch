@@ -24,7 +24,7 @@ function agentIdFromSearch(search: string): number | null {
 
 /**
  * Shared agent selection synced to `?agentId=`.
- * Use on Automation, Channels, Meet, Memory, and similar agent-scoped pages.
+ * Use on Automation, Meet, Memory, and similar agent-scoped pages.
  */
 export function useAgentFromSearch(): {
   agents: Agent[];

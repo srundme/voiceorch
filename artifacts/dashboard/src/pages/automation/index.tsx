@@ -71,8 +71,8 @@ export default function AutomationPage() {
           agentName={agent?.name}
           webhookUrl={webhookUrl}
           embedded
-          onOpenChannels={() => navigate(`/app/channels?agentId=${selectedId}`)}
-          onConfigureEmail={() => navigate(`/app/channels?agentId=${selectedId}&channel=email`)}
+          onOpenChannels={() => navigate("/app/connections?setup=whatsapp")}
+          onConfigureEmail={() => navigate("/app/connections?setup=email")}
         />
       )}
     </StripePage>

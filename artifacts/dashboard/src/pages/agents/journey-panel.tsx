@@ -491,7 +491,7 @@ export function JourneyPanel({
               waReady ? "border-emerald-500/30 text-emerald-400" : "border-amber-500/30 text-amber-400",
             )}
           >
-            WhatsApp {waReady ? "ready" : "set up in Channels"}
+            WhatsApp {waReady ? "ready" : "set up in Connections"}
           </button>
           <button
             type="button"
@@ -501,7 +501,7 @@ export function JourneyPanel({
               emailReady ? "border-emerald-500/30 text-emerald-400" : "border-border/50 text-muted-foreground",
             )}
           >
-            Email {emailReady ? "ready" : "optional · Channels"}
+            Email {emailReady ? "ready" : "optional · Connections"}
           </button>
         </div>
       </section>
@@ -700,8 +700,8 @@ export function JourneyPanel({
                 <div>
                   <p className="text-xs font-medium">WhatsApp after call</p>
                   <p className="text-[10px] text-muted-foreground">
-                    {waReady ? "Uses Channels → WhatsApp" : (
-                      <button type="button" className="text-amber-400 underline" onClick={() => onOpenChannels?.()}>Set up WhatsApp in Channels</button>
+                    {waReady ? "Uses Connections → WhatsApp" : (
+                      <button type="button" className="text-amber-400 underline" onClick={() => onOpenChannels?.()}>Set up WhatsApp in Connections</button>
                     )}
                   </p>
                 </div>
@@ -711,8 +711,8 @@ export function JourneyPanel({
                 <div>
                   <p className="text-xs font-medium">Email after call</p>
                   <p className="text-[10px] text-muted-foreground">
-                    {emailReady ? "Uses Channels → Email" : (
-                      <button type="button" className="text-amber-400 underline" onClick={() => onConfigureEmail?.()}>Set up Email in Channels</button>
+                    {emailReady ? "Uses Connections → Email" : (
+                      <button type="button" className="text-amber-400 underline" onClick={() => onConfigureEmail?.()}>Set up Email in Connections</button>
                     )}
                   </p>
                 </div>

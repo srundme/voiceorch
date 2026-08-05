@@ -523,7 +523,7 @@ function StepFields({
             <Textarea
               className="min-h-[72px] text-xs font-mono"
               value={step.emailBody ?? ""}
-              placeholder="Optional — leave blank to use Channels → Email template"
+              placeholder="Optional — leave blank to use Connections → Email template"
               onChange={(e) => onPatch({ emailBody: e.target.value || undefined })}
             />
           </div>

@@ -1,8 +1,6 @@
 /**
- * Channels → Meetings (Phase 4).
- *
- * Join / delegate / memory toggles live here.
- * Meeting prompt is owned by Agent Builder → Prompt / Talk (In meetings).
+ * Meeting join / delegate / memory toggles (Meetings page).
+ * Meeting prompt is owned by Agent → Prompt → In meetings.
  */
 
 import { useEffect, useState } from "react";
@@ -60,7 +58,14 @@ function readMeetings(agent: any): MeetingsForm {
   };
 }
 
-export function MeetingsChannelCard({ agentId }: { agentId: number }) {
+export function MeetingsChannelCard({
+  agentId,
+  showJoinLink = true,
+}: {
+  agentId: number;
+  /** Hide when already on the Meetings join page. */
+  showJoinLink?: boolean;
+}) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const agentQ = useGetAgent(agentId, {
@@ -141,9 +146,11 @@ export function MeetingsChannelCard({ agentId }: { agentId: number }) {
             Meet, Zoom, Teams — who joins and what context is passed.
           </p>
         </div>
-        <Button asChild type="button" variant="outline" size="sm" className="h-8 shrink-0 text-xs">
-          <Link href={`/app/meet?agentId=${agentId}`}>Join now</Link>
-        </Button>
+        {showJoinLink ? (
+          <Button asChild type="button" variant="outline" size="sm" className="h-8 shrink-0 text-xs">
+            <Link href={`/app/meet?agentId=${agentId}`}>Join now</Link>
+          </Button>
+        ) : null}
       </div>
 
       {!loaded || agentQ.isLoading ? (

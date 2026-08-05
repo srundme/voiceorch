@@ -100,7 +100,7 @@ interface NavGroup {
 /**
  * Call-plans IA (Phase 4).
  * Primary: Home · Call plans · Agents · People · Connections · History
- * Journeys / Automation / Dial flows / Channels peers are redirected, not deleted.
+ * Journeys / Automation / Dial flows / legacy Channels routes are redirected, not deleted.
  */
 const NAV_GROUPS: NavGroup[] = [
   {

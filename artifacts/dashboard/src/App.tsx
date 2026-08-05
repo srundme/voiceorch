@@ -85,7 +85,7 @@ import VoicesPage           from "@/pages/voices";
 import TestSimulatorPage    from "@/pages/test-simulator";
 import VibePage             from "@/pages/vibe";
 import HomePage             from "@/pages/home/index";
-import ChannelsPage         from "@/pages/channels/index";
+import ChannelsRedirectPage from "@/pages/channels/index";
 import CallPlansPage        from "@/pages/call-plans/index";
 import CallPlanDetailPage   from "@/pages/call-plans/[id]";
 import CallPlanActivityPage from "@/pages/call-plans/activity";
@@ -309,8 +309,8 @@ function AppRoutes() {
         <Route path="/app/automation">
           <TabRedirect to="/app/call-plans" />
         </Route>
-        {/* Channels kept for Connections / Meet deep-links; removed from primary nav */}
-        <Route path="/app/channels" component={ChannelsPage} />
+        {/* Channels product surface removed — redirect legacy links */}
+        <Route path="/app/channels" component={ChannelsRedirectPage} />
         <Route path="/app/command-center" component={CommandCenterRedirect} />
         <Route path="/app/analytics" component={AnalyticsPage} />
 
