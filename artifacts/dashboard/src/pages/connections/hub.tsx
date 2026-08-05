@@ -75,12 +75,14 @@ function CardMark({ card }: { card: ConnCard }) {
   if (card.brand) {
     return <BrandLogoBadge brand={card.brand} size={22} className="!h-11 !w-11 !rounded-xl" />;
   }
+  // White badge matches BrandLogoBadge; icons must be dark ink — text-foreground
+  // is light in dark mode and disappears on bg-white (Calendar / Website form).
   return (
     <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-black/5 bg-white shadow-sm">
       {card.icon === "calendar" ? (
-        <Calendar className="size-5 text-foreground/70" />
+        <Calendar className="size-5 text-neutral-800" strokeWidth={1.75} />
       ) : (
-        <Globe className="size-5 text-foreground/70" />
+        <Globe className="size-5 text-neutral-800" strokeWidth={1.75} />
       )}
     </div>
   );
