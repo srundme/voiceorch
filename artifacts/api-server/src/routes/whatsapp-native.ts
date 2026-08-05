@@ -81,6 +81,7 @@ function formatChannel(row: WhatsappChannel) {
     status: row.status,
     lastError: row.lastError,
     active: row.active,
+    templateCatalog: Array.isArray(row.templateCatalog) ? row.templateCatalog : [],
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -390,6 +391,18 @@ router.post("/whatsapp/channel/own", requireAuth, async (req, res): Promise<void
     throw err;
   }
   logger.info({ userId, vobizChannelId }, "whatsapp-native: own channel connected");
+
+  // Best-effort: fetch + persist APPROVED template catalog for Builder picks.
+  if (row) {
+    try {
+      const { refreshOwnChannelTemplateCatalog } = await import("./whatsapp-extras.js");
+      const catalog = await refreshOwnChannelTemplateCatalog(row, userId);
+      row = { ...row, templateCatalog: catalog };
+    } catch (err) {
+      logger.warn({ err, userId }, "whatsapp-native: catalog fetch on connect failed");
+    }
+  }
+
   res.status(201).json(formatChannel(row!));
 });
 

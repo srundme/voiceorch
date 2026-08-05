@@ -112,12 +112,15 @@ export function buildWhatsappCallEndedPayload(opts: {
   };
 }
 
-/** Resolve BSP template name from a connection's templates map. */
+/** Resolve BSP template name: hint → default → call_summary. */
 export function resolveConnectionTemplateName(
   templates: Record<string, string | undefined> | null | undefined,
   hint: string,
 ): string | undefined {
   if (!templates || typeof templates !== "object") return undefined;
-  const name = templates[hint];
-  return typeof name === "string" && name.trim() ? name.trim() : undefined;
+  const pick = (key: string): string | undefined => {
+    const name = templates[key];
+    return typeof name === "string" && name.trim() ? name.trim() : undefined;
+  };
+  return pick(hint) ?? pick("default") ?? pick("call_summary");
 }

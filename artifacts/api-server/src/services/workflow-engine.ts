@@ -571,6 +571,9 @@ async function doSendWhatsapp(
   const params = rawParams.map((p) => interpolateTemplate(p, context));
   const callId = typeof callObj["callId"] === "number" ? callObj["callId"] : null;
 
+  const agentIdRaw = typeof step.agentId === "number" && step.agentId > 0
+    ? step.agentId
+    : Number(context["agentId"] ?? callObj["agentId"] ?? 0);
   const result = await sendWhatsappTemplate({
     channel,
     ctx,
@@ -578,6 +581,7 @@ async function doSendWhatsapp(
     hint,
     params,
     callId,
+    agentId: Number.isFinite(agentIdRaw) && agentIdRaw > 0 ? agentIdRaw : null,
   });
   if (!result.ok && !result.skipped) {
     throw new Error(result.error ?? "send_whatsapp failed");

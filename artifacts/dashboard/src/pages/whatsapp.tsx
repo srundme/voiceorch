@@ -39,10 +39,12 @@ type WaConnection = {
   postCallEnabled: boolean;
   buttonIds: string[];
   templates?: {
+    default?: string;
     call_summary?: string;
     booking_confirmed?: string;
     callback_scheduled?: string;
   };
+  templateCatalog?: MetaTplInfo[];
   metaConnected?: boolean;
   metaPhoneNumberId?: string | null;
   metaWabaId?: string | null;
@@ -1069,6 +1071,7 @@ export default function WhatsAppPage() {
   const [outboundUrl, setOutboundUrl] = useState("");
   const [requestCall, setRequestCall] = useState(true);
   const [postCall, setPostCall] = useState(true);
+  const [tplDefault, setTplDefault] = useState("");
   const [tplSummary, setTplSummary] = useState("");
   const [tplBooking, setTplBooking] = useState("");
   const [tplCallback, setTplCallback] = useState("");
@@ -1083,6 +1086,7 @@ export default function WhatsAppPage() {
   const [metaTplList, setMetaTplList] = useState<MetaTplInfo[] | null>(null);
   const [metaFetching, setMetaFetching] = useState(false);
   const [metaPhoneInfo, setMetaPhoneInfo] = useState<string | null>(null);
+  const [metaSelDefault, setMetaSelDefault] = useState("");   // JSON of MetaTplChoice or ""
   const [metaSelSummary, setMetaSelSummary] = useState("");   // JSON of MetaTplChoice or ""
   const [metaSelBooking, setMetaSelBooking] = useState("");
   const [metaSelCallback, setMetaSelCallback] = useState("");
@@ -1106,11 +1110,13 @@ export default function WhatsAppPage() {
         },
       );
       setMetaTplList(res.templates);
-      // Auto-pick the first approved template for Call summary so the
+      // Auto-pick the first approved template for Default + Call summary so the
       // connection works out of the box — user can still change it.
-      if (res.templates.length > 0 && !metaSelSummary) {
+      if (res.templates.length > 0) {
         const first = res.templates[0]!;
-        setMetaSelSummary(JSON.stringify({ name: first.name, language: first.language, paramCount: first.paramCount }));
+        const opt = JSON.stringify({ name: first.name, language: first.language, paramCount: first.paramCount });
+        if (!metaSelDefault) setMetaSelDefault(opt);
+        if (!metaSelSummary) setMetaSelSummary(opt);
       }
       if (res.phone) {
         setMetaPhoneInfo(`✓ ${res.phone.verifiedName ?? ""} ${res.phone.displayPhone ?? ""}`.trim());
@@ -1133,6 +1139,7 @@ export default function WhatsAppPage() {
       try { return s ? (JSON.parse(s) as MetaTplChoice) : null; } catch { return null; }
     };
     const out: Record<string, MetaTplChoice> = {};
+    const d = parse(metaSelDefault); if (d) out.default = d;
     const s = parse(metaSelSummary); if (s) out.call_summary = s;
     const b = parse(metaSelBooking); if (b) out.booking_confirmed = b;
     const c = parse(metaSelCallback); if (c) out.callback_scheduled = c;
@@ -1222,11 +1229,12 @@ export default function WhatsAppPage() {
       {metaTplList && (
         <div className="rounded-md border border-border/50 p-3 space-y-2">
           <p className="text-xs font-medium">Link templates ({metaTplList.length} approved found)</p>
+          {renderMetaTplSelect("Default (fallback)", metaSelDefault, setMetaSelDefault)}
           {renderMetaTplSelect("Call summary", metaSelSummary, setMetaSelSummary)}
           {renderMetaTplSelect("Booking confirmed", metaSelBooking, setMetaSelBooking)}
           {renderMetaTplSelect("Callback scheduled", metaSelCallback, setMetaSelCallback)}
           <p className="text-[10px] text-muted-foreground">
-            Variables are filled in order: business name, then summary / meeting time. Pick templates with 1–3 variables.
+            Default is used when an outcome isn’t mapped. Variables: business name, then summary / meeting time.
           </p>
         </div>
       )}
@@ -1234,6 +1242,7 @@ export default function WhatsAppPage() {
   );
 
   const templatesPayload = () => ({
+    ...(tplDefault.trim() ? { default: tplDefault.trim() } : {}),
     ...(tplSummary.trim() ? { call_summary: tplSummary.trim() } : {}),
     ...(tplBooking.trim() ? { booking_confirmed: tplBooking.trim() } : {}),
     ...(tplCallback.trim() ? { callback_scheduled: tplCallback.trim() } : {}),
@@ -1245,6 +1254,7 @@ export default function WhatsAppPage() {
     setOutboundUrl("");
     setRequestCall(true);
     setPostCall(true);
+    setTplDefault("");
     setTplSummary("");
     setTplBooking("");
     setTplCallback("");
@@ -1254,6 +1264,7 @@ export default function WhatsAppPage() {
     setMetaWabaId("");
     setMetaTplList(null);
     setMetaPhoneInfo(null);
+    setMetaSelDefault("");
     setMetaSelSummary("");
     setMetaSelBooking("");
     setMetaSelCallback("");
@@ -1392,9 +1403,14 @@ export default function WhatsAppPage() {
                           setMetaApiBase((c as any).metaApiBase ?? "");
                           setMetaTplList(null);
                           setMetaPhoneInfo(null);
+                          setMetaSelDefault(c.metaTemplates?.default ? JSON.stringify(c.metaTemplates.default) : "");
                           setMetaSelSummary(c.metaTemplates?.call_summary ? JSON.stringify(c.metaTemplates.call_summary) : "");
                           setMetaSelBooking(c.metaTemplates?.booking_confirmed ? JSON.stringify(c.metaTemplates.booking_confirmed) : "");
                           setMetaSelCallback(c.metaTemplates?.callback_scheduled ? JSON.stringify(c.metaTemplates.callback_scheduled) : "");
+                          // Prefill catalog from saved connection so picks work without re-fetch.
+                          const savedCat = (c as { templateCatalog?: MetaTplInfo[] }).templateCatalog;
+                          if (Array.isArray(savedCat) && savedCat.length) setMetaTplList(savedCat as MetaTplInfo[]);
+                          setTplDefault(c.templates?.default ?? "");
                           setTplSummary(c.templates?.call_summary ?? "");
                           setTplBooking(c.templates?.booking_confirmed ?? "");
                           setTplCallback(c.templates?.callback_scheduled ?? "");
@@ -1535,6 +1551,10 @@ export default function WhatsAppPage() {
             <div className="rounded-md border border-border/50 p-3 space-y-2">
               <p className="text-xs font-medium">Template names (from your BSP)</p>
               <div>
+                <Label className="text-[10px] text-muted-foreground">Default (fallback)</Label>
+                <Input className="mt-1 h-8 text-xs font-mono" placeholder="ss_default" value={tplDefault} onChange={(e) => setTplDefault(e.target.value)} />
+              </div>
+              <div>
                 <Label className="text-[10px] text-muted-foreground">Call summary</Label>
                 <Input className="mt-1 h-8 text-xs font-mono" placeholder="ss_call_summary" value={tplSummary} onChange={(e) => setTplSummary(e.target.value)} />
               </div>
@@ -1601,6 +1621,10 @@ export default function WhatsAppPage() {
             </div>
             <div className="rounded-md border border-border/50 p-3 space-y-2">
               <p className="text-xs font-medium">Template names (from your BSP)</p>
+              <div>
+                <Label className="text-[10px] text-muted-foreground">Default (fallback)</Label>
+                <Input className="mt-1 h-8 text-xs font-mono" value={tplDefault} onChange={(e) => setTplDefault(e.target.value)} />
+              </div>
               <div>
                 <Label className="text-[10px] text-muted-foreground">Call summary</Label>
                 <Input className="mt-1 h-8 text-xs font-mono" value={tplSummary} onChange={(e) => setTplSummary(e.target.value)} />

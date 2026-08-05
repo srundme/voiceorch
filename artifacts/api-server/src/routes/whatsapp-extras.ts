@@ -17,10 +17,12 @@ import { randomBytes } from "node:crypto";
 import { and, desc, eq, inArray, ne } from "drizzle-orm";
 import {
   db,
+  agentsTable,
   phoneNumbersTable,
   whatsappAssetsTable,
   whatsappByonVerificationsTable,
   whatsappChannelsTable,
+  type WaTemplateCatalogEntry,
   type WhatsappByonVerification,
   type WhatsappChannel,
 } from "@workspace/db";
@@ -34,6 +36,12 @@ import {
   toPlusE164,
   vobizApiCall,
 } from "../services/whatsapp/vobiz.js";
+import {
+  hasAgentTemplatePicks,
+  loadAgentWaTemplates,
+  normalizeAgentWaTemplates,
+  upsertAgentWaTemplates,
+} from "../services/whatsapp/agent-templates.js";
 
 const router: IRouter = Router();
 
@@ -466,6 +474,64 @@ function parseTemplateList(json: Record<string, any> | null): Array<Record<strin
   }));
 }
 
+function countBodyParams(components: unknown): number {
+  if (!Array.isArray(components)) return 0;
+  const body = components.find((c: any) => String(c?.type ?? "").toUpperCase() === "BODY");
+  const text = typeof body?.text === "string" ? body.text : "";
+  const params = new Set<string>();
+  for (const m of text.matchAll(/\{\{\s*(\d+)\s*\}\}/g)) params.add(m[1]!);
+  return params.size;
+}
+
+function toChannelCatalog(list: Array<Record<string, any>>): WaTemplateCatalogEntry[] {
+  const out: WaTemplateCatalogEntry[] = [];
+  for (const t of list) {
+    const name = typeof t.name === "string" ? t.name : null;
+    const language = typeof t.language === "string" ? t.language : null;
+    if (!name || !language) continue;
+    const status = String(t.status ?? "unknown").toUpperCase();
+    if (status !== "APPROVED" && status !== "PLATFORM_MANAGED") continue;
+    out.push({
+      name,
+      language,
+      status,
+      paramCount: countBodyParams(t.components),
+      category: typeof t.category === "string" ? t.category : null,
+    });
+  }
+  return out;
+}
+
+async function persistChannelCatalog(
+  channelId: string,
+  catalog: WaTemplateCatalogEntry[],
+): Promise<void> {
+  await db.update(whatsappChannelsTable)
+    .set({ templateCatalog: catalog, updatedAt: new Date() })
+    .where(eq(whatsappChannelsTable.id, channelId));
+}
+
+/** Fetch VoBiz templates for an own channel and persist the APPROVED catalog. */
+export async function refreshOwnChannelTemplateCatalog(
+  channel: WhatsappChannel,
+  userId: string,
+): Promise<WaTemplateCatalogEntry[]> {
+  if (channel.mode !== "own" || !channel.vobizChannelId) return [];
+  const creds = await getOwnCredsForUser(userId);
+  if (!creds) return [];
+  const r = await vobizApiCall(
+    creds, "GET",
+    `/messaging/channels/${encodeURIComponent(channel.vobizChannelId)}/templates`,
+  );
+  if (!r.ok) {
+    logger.warn({ userId, status: r.status }, "whatsapp: catalog refresh failed");
+    return Array.isArray(channel.templateCatalog) ? channel.templateCatalog : [];
+  }
+  const catalog = toChannelCatalog(parseTemplateList(r.json));
+  await persistChannelCatalog(channel.id, catalog);
+  return catalog;
+}
+
 router.get("/whatsapp/templates", requireAuth, async (req, res): Promise<void> => {
   const userId = (req as any).clerkUserId as string;
   const channel = await getUserChannel(userId);
@@ -475,13 +541,16 @@ router.get("/whatsapp/templates", requireAuth, async (req, res): Promise<void> =
   }
   if (channel.mode !== "own") {
     const catalog = await getTemplateCatalog();
-    res.json({
-      mode: "shared",
-      templates: Object.entries(catalog).map(([hint, t]) => ({
-        id: null, name: t.name, category: "UTILITY", language: t.lang,
-        status: "platform_managed", hint,
-      })),
-    });
+    const templates = Object.entries(catalog).map(([hint, t]) => ({
+      id: null, name: t.name, category: "UTILITY", language: t.lang,
+      status: "platform_managed", hint, paramCount: 0,
+    }));
+    const templateCatalog = toChannelCatalog(templates);
+    // Mirror platform catalog onto the channel for Builder reads.
+    if (templateCatalog.length) {
+      await persistChannelCatalog(channel.id, templateCatalog).catch(() => {});
+    }
+    res.json({ mode: "shared", templates, templateCatalog });
     return;
   }
   if (!channel.vobizChannelId) {
@@ -498,7 +567,12 @@ router.get("/whatsapp/templates", requireAuth, async (req, res): Promise<void> =
     res.status(502).json({ error: `Could not list templates: ${sanitizeVobizError(r.rawText || `HTTP ${r.status}`)}` });
     return;
   }
-  res.json({ mode: "own", templates: parseTemplateList(r.json) });
+  const templates = parseTemplateList(r.json);
+  const templateCatalog = toChannelCatalog(templates);
+  await persistChannelCatalog(channel.id, templateCatalog).catch((err) =>
+    logger.warn({ err }, "whatsapp: catalog persist on list failed"),
+  );
+  res.json({ mode: "own", templates, templateCatalog });
 });
 
 router.post("/whatsapp/templates", requireAuth, async (req, res): Promise<void> => {
@@ -583,7 +657,66 @@ router.post("/whatsapp/templates/sync", requireAuth, async (req, res): Promise<v
     res.status(502).json({ error: `Sync failed: ${sanitizeVobizError(r.rawText || `HTTP ${r.status}`)}` });
     return;
   }
-  res.json({ ok: true });
+  // Re-list and persist APPROVED catalog after Meta sync.
+  const templateCatalog = await refreshOwnChannelTemplateCatalog(channel, userId);
+  res.json({ ok: true, templateCatalog });
+});
+
+/* ── Per-agent template picks (native channel) ───────────────────────────── */
+
+router.get("/whatsapp/agents/:agentId/templates", requireAuth, async (req, res): Promise<void> => {
+  const userId = (req as any).clerkUserId as string;
+  const agentId = Number(req.params["agentId"]);
+  if (!Number.isFinite(agentId)) {
+    res.status(400).json({ error: "Invalid agent id" });
+    return;
+  }
+  const [agent] = await db
+    .select({ id: agentsTable.id })
+    .from(agentsTable)
+    .where(and(eq(agentsTable.id, agentId), eq(agentsTable.userId, userId)))
+    .limit(1);
+  if (!agent) {
+    res.status(404).json({ error: "Agent not found" });
+    return;
+  }
+  const channel = await getUserChannel(userId);
+  const templates = await loadAgentWaTemplates(userId, agentId);
+  res.json({
+    agentId,
+    templates,
+    needsTemplates: !hasAgentTemplatePicks(templates),
+    templateCatalog: Array.isArray(channel?.templateCatalog) ? channel!.templateCatalog : [],
+    channelMode: channel?.mode ?? null,
+  });
+});
+
+router.put("/whatsapp/agents/:agentId/templates", requireAuth, async (req, res): Promise<void> => {
+  const userId = (req as any).clerkUserId as string;
+  const agentId = Number(req.params["agentId"]);
+  if (!Number.isFinite(agentId)) {
+    res.status(400).json({ error: "Invalid agent id" });
+    return;
+  }
+  const [agent] = await db
+    .select({ id: agentsTable.id })
+    .from(agentsTable)
+    .where(and(eq(agentsTable.id, agentId), eq(agentsTable.userId, userId)))
+    .limit(1);
+  if (!agent) {
+    res.status(404).json({ error: "Agent not found" });
+    return;
+  }
+  const templates = await upsertAgentWaTemplates(
+    userId,
+    agentId,
+    normalizeAgentWaTemplates(req.body?.templates ?? req.body),
+  );
+  res.json({
+    agentId,
+    templates,
+    needsTemplates: !hasAgentTemplatePicks(templates),
+  });
 });
 
 /* ── Brochure assets ──────────────────────────────────────────────────────── */

@@ -310,6 +310,7 @@ export async function dispatchWhatsappCallEnded(
     hint: hint === "booking_confirmed" && !meetingTime ? "call_summary" : hint,
     params,
     callId,
+    agentId: call.agentId ?? null,
   });
 }
 
@@ -458,6 +459,7 @@ export async function sendMidCallWhatsapp(opts: {
     hint: safeHint,
     params,
     callId: opts.callId,
+    agentId: opts.agentId,
   });
   if (!result.ok) return { ok: false, error: result.error ?? "send failed", via: "native" };
   return { ok: true, via: "native" };

@@ -12,11 +12,31 @@ import { campaignsTable } from "./campaigns";
  *   so they can send a WhatsApp template via their own BSP.
  */
 
-/** Template names the user created in their BSP, keyed by SnapServe hint. */
+/** Template names the user created in their BSP, keyed by SnapServe hint (+ default). */
 export type WhatsappConnectionTemplates = {
+  default?: string;
   call_summary?: string;
   booking_confirmed?: string;
   callback_scheduled?: string;
+};
+
+/** Approved-template catalog entry persisted on connect / sync. */
+export type WaTemplateCatalogEntry = {
+  name: string;
+  language: string;
+  status: string;
+  paramCount: number;
+  category?: string | null;
+  bodyPreview?: string;
+};
+
+/** Per-agent Meta/native template picks (default + three outcomes). */
+export type WaTplChoice = { name: string; language: string; paramCount: number };
+export type AgentWaTemplates = {
+  default?: WaTplChoice;
+  call_summary?: WaTplChoice;
+  booking_confirmed?: WaTplChoice;
+  callback_scheduled?: WaTplChoice;
 };
 
 export const whatsappConnectionsTable = pgTable("whatsapp_connections", {
@@ -56,8 +76,10 @@ export const whatsappConnectionsTable = pgTable("whatsapp_connections", {
   metaWabaId: text("meta_waba_id"),
   /** Optional Graph-compatible API base URL (BSP proxy panels e.g. whatsapi.in). Null = graph.facebook.com. */
   metaApiBase: text("meta_api_base"),
-  /** Hint → approved Meta template picked by the user (fetched live from Graph API). */
-  metaTemplates: jsonb("meta_templates").$type<Record<string, { name: string; language: string; paramCount: number }>>().notNull().default({}),
+  /** Hint → approved Meta template picked by the user (`default` + outcome hints). */
+  metaTemplates: jsonb("meta_templates").$type<AgentWaTemplates>().notNull().default({}),
+  /** Full APPROVED template catalog last fetched from Meta/WABA for this connection. */
+  templateCatalog: jsonb("template_catalog").$type<WaTemplateCatalogEntry[]>().notNull().default([]),
   active: boolean("active").notNull().default(true),
   lastInboundAt: timestamp("last_inbound_at", { withTimezone: true }),
   lastOutboundAt: timestamp("last_outbound_at", { withTimezone: true }),
@@ -111,6 +133,8 @@ export const whatsappChannelsTable = pgTable("whatsapp_channels", {
   status: text("status").notNull().default("active"), // active | pending | error | disabled
   lastError: text("last_error"),
   active: boolean("active").notNull().default(true),
+  /** Full APPROVED template catalog last fetched from VoBiz / Meta for this channel. */
+  templateCatalog: jsonb("template_catalog").$type<WaTemplateCatalogEntry[]>().notNull().default([]),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 }, (t) => [
@@ -119,6 +143,23 @@ export const whatsappChannelsTable = pgTable("whatsapp_channels", {
   uniqueIndex("wa_channels_vobiz_channel_unique").on(t.vobizChannelId)
     .where(sql`vobiz_channel_id is not null`),
 ]);
+
+/**
+ * Per-agent WhatsApp template picks when using the user-scoped native VoBiz channel
+ * (Meta/BYO picks live on whatsapp_connections.meta_templates instead).
+ */
+export const whatsappAgentTemplatesTable = pgTable("whatsapp_agent_templates", {
+  agentId: integer("agent_id").primaryKey().references(() => agentsTable.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull(),
+  templates: jsonb("templates").$type<AgentWaTemplates>().notNull().default({}),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+}, (t) => [
+  index("wa_agent_templates_user_id_idx").on(t.userId),
+]);
+
+export type WhatsappAgentTemplates = typeof whatsappAgentTemplatesTable.$inferSelect;
+export type InsertWhatsappAgentTemplates = typeof whatsappAgentTemplatesTable.$inferInsert;
 
 /** Native WhatsApp message log + delivery-status tracking (✓✓ in dashboard). */
 export const whatsappMessagesTable = pgTable("whatsapp_messages", {

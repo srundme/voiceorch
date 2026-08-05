@@ -22,7 +22,12 @@ import {
 } from "../services/whatsapp/normalize.js";
 import { dialOutboundAgent, OutboundDialError } from "../services/outbound-agent-dial.js";
 import { encryptKey, decryptKey } from "../lib/crypto.js";
-import { fetchMetaTemplates, verifyMetaPhoneNumber, type MetaTemplateChoice } from "../services/whatsapp/meta.js";
+import {
+  fetchMetaTemplates,
+  toTemplateCatalog,
+  verifyMetaPhoneNumber,
+  type MetaTemplateChoice,
+} from "../services/whatsapp/meta.js";
 
 const router: IRouter = Router();
 
@@ -52,6 +57,7 @@ function formatConnection(row: typeof whatsappConnectionsTable.$inferSelect, opt
     metaWabaId: row.metaWabaId,
     metaApiBase: row.metaApiBase ?? null,
     metaTemplates: row.metaTemplates ?? {},
+    templateCatalog: Array.isArray(row.templateCatalog) ? row.templateCatalog : [],
     active: row.active,
     lastInboundAt: row.lastInboundAt?.toISOString() ?? null,
     lastOutboundAt: row.lastOutboundAt?.toISOString() ?? null,
@@ -62,6 +68,7 @@ function formatConnection(row: typeof whatsappConnectionsTable.$inferSelect, opt
 }
 
 function normalizeTemplates(raw: unknown): {
+  default?: string;
   call_summary?: string;
   booking_confirmed?: string;
   callback_scheduled?: string;
@@ -69,11 +76,12 @@ function normalizeTemplates(raw: unknown): {
   if (!raw || typeof raw !== "object") return {};
   const o = raw as Record<string, unknown>;
   const out: {
+    default?: string;
     call_summary?: string;
     booking_confirmed?: string;
     callback_scheduled?: string;
   } = {};
-  for (const key of ["call_summary", "booking_confirmed", "callback_scheduled"] as const) {
+  for (const key of ["default", "call_summary", "booking_confirmed", "callback_scheduled"] as const) {
     const v = o[key];
     if (typeof v === "string" && v.trim()) out[key] = v.trim();
   }
@@ -83,7 +91,7 @@ function normalizeTemplates(raw: unknown): {
 function normalizeMetaTemplates(raw: unknown): Record<string, MetaTemplateChoice> {
   if (!raw || typeof raw !== "object") return {};
   const out: Record<string, MetaTemplateChoice> = {};
-  for (const key of ["call_summary", "booking_confirmed", "callback_scheduled"]) {
+  for (const key of ["default", "call_summary", "booking_confirmed", "callback_scheduled"]) {
     const v = (raw as Record<string, unknown>)[key];
     if (!v || typeof v !== "object") continue;
     const o = v as Record<string, unknown>;
@@ -96,6 +104,25 @@ function normalizeMetaTemplates(raw: unknown): Record<string, MetaTemplateChoice
     }
   }
   return out;
+}
+
+/** Fetch Meta templates and persist APPROVED catalog on the connection (best-effort). */
+async function persistMetaCatalogForConnection(
+  connectionId: string,
+  userId: string,
+  token: string,
+  wabaId: string,
+  apiBase: string | null,
+): Promise<ReturnType<typeof toTemplateCatalog>> {
+  const templates = await fetchMetaTemplates(token, wabaId, apiBase);
+  const catalog = toTemplateCatalog(templates);
+  await db.update(whatsappConnectionsTable)
+    .set({ templateCatalog: catalog, updatedAt: new Date() })
+    .where(and(
+      eq(whatsappConnectionsTable.id, connectionId),
+      eq(whatsappConnectionsTable.userId, userId),
+    ));
+  return catalog;
 }
 
 function toE164India(raw: string): string {
@@ -211,7 +238,7 @@ router.post("/whatsapp/connections", requireAuth, async (req, res): Promise<void
   const inboundToken = randomBytes(20).toString("hex");
   const outboundSecret = `whsec_${randomBytes(24).toString("hex")}`;
 
-  const [row] = await db.insert(whatsappConnectionsTable).values({
+  let [row] = await db.insert(whatsappConnectionsTable).values({
     userId,
     name: (body.name ?? "WhatsApp").trim() || "WhatsApp",
     agentId,
@@ -232,6 +259,19 @@ router.post("/whatsapp/connections", requireAuth, async (req, res): Promise<void
     metaTemplates: normalizeMetaTemplates(body.metaTemplates),
     active: true,
   }).returning();
+
+  // Auto-fetch + persist approved catalog when Meta creds were provided.
+  if (row?.metaAccessToken && row.metaWabaId) {
+    try {
+      const token = decryptKey(row.metaAccessToken);
+      const catalog = await persistMetaCatalogForConnection(
+        row.id, userId, token, row.metaWabaId, row.metaApiBase,
+      );
+      row = { ...row, templateCatalog: catalog };
+    } catch (err) {
+      logger.warn({ err, connectionId: row.id }, "whatsapp: catalog fetch on create failed");
+    }
+  }
 
   res.status(201).json(formatConnection(row!, { includeSecret: true }));
 });
@@ -287,7 +327,7 @@ router.patch("/whatsapp/connections/:id", requireAuth, async (req, res): Promise
   }
   if (body["metaTemplates"] !== undefined) updates.metaTemplates = normalizeMetaTemplates(body["metaTemplates"]);
 
-  const [row] = await db.update(whatsappConnectionsTable)
+  let [row] = await db.update(whatsappConnectionsTable)
     .set(updates)
     .where(and(eq(whatsappConnectionsTable.id, id), eq(whatsappConnectionsTable.userId, userId)))
     .returning();
@@ -295,6 +335,23 @@ router.patch("/whatsapp/connections/:id", requireAuth, async (req, res): Promise
   if (!row) {
     res.status(404).json({ error: "Connection not found" });
     return;
+  }
+
+  // Refresh catalog when Meta creds change or catalog is still empty.
+  const catalogEmpty = !Array.isArray(row.templateCatalog) || row.templateCatalog.length === 0;
+  const metaTouched = body["metaAccessToken"] !== undefined
+    || body["metaWabaId"] !== undefined
+    || body["metaApiBase"] !== undefined;
+  if (row.metaAccessToken && row.metaWabaId && (metaTouched || catalogEmpty)) {
+    try {
+      const token = decryptKey(row.metaAccessToken);
+      const catalog = await persistMetaCatalogForConnection(
+        row.id, userId, token, row.metaWabaId, row.metaApiBase,
+      );
+      row = { ...row, templateCatalog: catalog };
+    } catch (err) {
+      logger.warn({ err, connectionId: row.id }, "whatsapp: catalog fetch on patch failed");
+    }
   }
 
   res.json(formatConnection(row, {
@@ -374,8 +431,21 @@ router.post("/whatsapp/meta/templates", requireAuth, async (req, res): Promise<v
       res.status(400).json({ error: `Phone number ID check failed: ${phoneCheck.error}` });
       return;
     }
+    const approved = templates.filter((t) => t.status === "APPROVED");
+    const catalog = toTemplateCatalog(templates);
+    // Persist catalog on the connection when we know which one was used.
+    if (body.connectionId) {
+      await db.update(whatsappConnectionsTable)
+        .set({ templateCatalog: catalog, updatedAt: new Date() })
+        .where(and(
+          eq(whatsappConnectionsTable.id, String(body.connectionId)),
+          eq(whatsappConnectionsTable.userId, userId),
+        ))
+        .catch((err) => logger.warn({ err }, "whatsapp-meta: catalog persist failed"));
+    }
     res.json({
-      templates: templates.filter((t) => t.status === "APPROVED"),
+      templates: approved,
+      templateCatalog: catalog,
       allCount: templates.length,
       phone: phoneCheck && phoneCheck.ok
         ? { displayPhone: phoneCheck.displayPhone, verifiedName: phoneCheck.verifiedName }

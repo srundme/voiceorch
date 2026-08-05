@@ -624,6 +624,13 @@
       "when": 1790400000000,
       "tag": "0088_knowledge_crawl_failed_urls",
       "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1790500000000,
+      "tag": "0089_whatsapp_template_catalog",
+      "breakpoints": true
     }
   ]
 }
