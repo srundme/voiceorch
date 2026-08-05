@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSearch } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { customFetch, useListAgents } from "@workspace/api-client-react";
 import { StripePage } from "@/components/stripe-page";
@@ -1049,6 +1050,8 @@ function BspAdopterGuide() {
 export default function WhatsAppPage() {
   const { toast } = useToast();
   const qc = useQueryClient();
+  const search = useSearch();
+  const urlAgentId = Number(new URLSearchParams(search).get("agentId") || "");
   const { data: agentsData } = useListAgents({});
   const agents = useMemo(
     () => (agentsData ?? []).map((a) => ({ id: a.id, name: a.name })),
@@ -1067,7 +1070,14 @@ export default function WhatsAppPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editConn, setEditConn] = useState<WaConnection | null>(null);
   const [name, setName] = useState("WhatsApp");
-  const [agentId, setAgentId] = useState<number | "">("");
+  const [agentId, setAgentId] = useState<number | "">(
+    Number.isFinite(urlAgentId) && urlAgentId > 0 ? urlAgentId : "",
+  );
+
+  // Prefill agent when opened from Builder Channels (?agentId=).
+  useEffect(() => {
+    if (Number.isFinite(urlAgentId) && urlAgentId > 0) setAgentId(urlAgentId);
+  }, [urlAgentId]);
   const [outboundUrl, setOutboundUrl] = useState("");
   const [requestCall, setRequestCall] = useState(true);
   const [postCall, setPostCall] = useState(true);

@@ -18,6 +18,7 @@ import { EmailChannelCard, useEmailChannelReady } from "@/pages/agents/email-cha
 import FromWebsitePage from "@/pages/campaigns/from-website";
 import MetaLeadsPage from "@/pages/meta-leads";
 import { ConnectionsCalendarSetup } from "@/pages/connections/calendar-setup";
+import WhatsAppPage from "@/pages/whatsapp";
 import { useListCalendars, useListEventTypes } from "@workspace/api-client-react";
 
 type SetupId = "sheets" | "whatsapp" | "email" | "website" | "meta" | "calendar" | null;
@@ -49,7 +50,6 @@ const CARDS: ConnCard[] = [
     brand: "whatsapp",
     title: "WhatsApp",
     blurb: "Send follow-ups after calls from your call plan.",
-    href: "/app/whatsapp",
   },
   {
     id: "email",
@@ -173,7 +173,15 @@ export default function ConnectionsPage() {
       customFetch<{ channel: { active?: boolean } | null }>("/api/whatsapp/channel"),
     staleTime: 60_000,
   });
-  const waReady = !!waData?.channel?.active;
+  const { data: waConnections } = useQuery({
+    queryKey: ["connections-whatsapp-connections"],
+    queryFn: () =>
+      customFetch<{ connections: Array<{ active?: boolean }> }>("/api/whatsapp/connections"),
+    staleTime: 60_000,
+  });
+  const waReady =
+    !!waData?.channel?.active
+    || (waConnections?.connections ?? []).some((c) => c.active);
 
   const { data: connections = [] } = useListConnections();
   const websiteReady = connections.some((c) => c.type === "webhook");
@@ -195,6 +203,11 @@ export default function ConnectionsPage() {
 
   if (setup === "calendar") {
     return <ConnectionsCalendarSetup />;
+  }
+
+  // Same pattern as email/meta/sheets — stay under Connections (?setup=whatsapp).
+  if (setup === "whatsapp") {
+    return <WhatsAppPage />;
   }
 
   if (setup === "email") {

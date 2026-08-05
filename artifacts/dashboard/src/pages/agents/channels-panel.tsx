@@ -228,7 +228,9 @@ export function ChannelsPanel({
                   variant="outline"
                   size="sm"
                   className="h-8 text-xs"
-                  onClick={() => navigate(`/app/whatsapp${agent?.id ? `?agentId=${agent.id}` : ""}`)}
+                  onClick={() => navigate(
+                    `/app/connections?setup=whatsapp${agent?.id ? `&agentId=${agent.id}` : ""}`,
+                  )}
                 >
                   Configure
                 </Button>
@@ -295,7 +297,9 @@ export function ChannelsPanel({
                     type="button"
                     size="sm"
                     className="mt-3 h-8"
-                    onClick={() => navigate(`/app/whatsapp${agent?.id ? `?agentId=${agent.id}` : ""}`)}
+                    onClick={() => navigate(
+                      `/app/connections?setup=whatsapp${agent?.id ? `&agentId=${agent.id}` : ""}`,
+                    )}
                   >
                     Set up WhatsApp
                   </Button>

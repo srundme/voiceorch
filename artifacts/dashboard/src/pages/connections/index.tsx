@@ -2276,7 +2276,7 @@ export default function ConnectionsPage() {
       <section className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         {[
           { label: "Phone numbers", href: "/app/phone-numbers", hint: "DIDs & caller ID" },
-          { label: "WhatsApp", href: "/app/whatsapp", hint: "Templates & channel" },
+          { label: "WhatsApp", href: "/app/connections?setup=whatsapp", hint: "Templates & channel" },
           { label: "Meetings", href: "/app/meet", hint: "Join Meet / Zoom / Teams" },
           { label: "Agent channels", href: "/app/channels", hint: "Email & meeting join" },
         ].map((card) => (
