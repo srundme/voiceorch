@@ -29,7 +29,7 @@ import type { AudioProcessResult } from "./audioPool.js";
 import type { AgentConfig, AgentTool, ConversationTurn, LLMAdapter, LLMUsage, SessionConfig, StreamSTT, STTConfig, ToolDefinition } from "./types.js";
 import { resolveGoodbyeMessage } from "./types.js";
 import type { VoiceSession } from "./voice-session.js";
-import { retrieveKbContext, retrieveKbContextMultiEx, resolveKbTurnBudgetMs, type KbRetrievalResult } from "./kb-retrieval.js";
+import { retrieveKbContext, retrieveKbContextMultiEx, resolveKbTurnBudgetMs, isPureNonLatinQuery, type KbRetrievalResult } from "./kb-retrieval.js";
 import { KRUTRIM_AUTO_SUMMARY_TITLE } from "../services/kb-source-summary.js";
 import { getBackchannelFillers, pickBackchannelFiller, rememberFillerPhrase, type BackchannelFillerOptions } from "./backchannel.js";
 import { ConversationHistory } from "./conversation-history.js";
@@ -293,10 +293,6 @@ function isLlmLeadingAck(sentence: string): boolean {
     "సరే", "ಸರಿ", "ശരി",
   ]);
   return ACK_WORDS.has(t);
-}
-
-function isPureNonLatinQuery(q: string): boolean {
-  return /\p{L}/u.test(q) && !/[A-Za-z]/.test(q);
 }
 
 /** BCP-47 locale → display name used in LLM language-switch instructions. */

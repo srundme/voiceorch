@@ -15,8 +15,12 @@ import {
   useUpdateKnowledgeEntry,
   useDeleteKnowledgeEntry,
   useSearchKnowledge,
+  useListAgents,
+  useAttachKnowledgeSourceToAgent,
   getListKnowledgeSourcesQueryKey,
   getGetKnowledgeSourceQueryKey,
+  getListAgentsQueryKey,
+  customFetch,
 } from "@workspace/api-client-react";
 import type {
   KnowledgeSource,
@@ -49,17 +53,26 @@ const TYPE_META: Record<string, { label: string; icon: React.ReactNode; color: s
 };
 
 const STATUS_META: Record<string, { label: string; color: string; spin?: boolean }> = {
-  active:     { label: "Active",       color: "text-emerald-400" },
+  active:     { label: "Ready",        color: "text-emerald-400" },
   ready:      { label: "Ready",        color: "text-emerald-400" },
-  partial:    { label: "Partial",      color: "text-amber-400" },
-  validating: { label: "Validating…",  color: "text-amber-400", spin: true },
+  partial:    { label: "Needs attention", color: "text-amber-400" },
+  validating: { label: "Checking…",    color: "text-amber-400", spin: true },
   processing: { label: "Processing…",  color: "text-amber-400", spin: true },
-  crawling:   { label: "Crawling…",    color: "text-amber-400", spin: true },
-  error:      { label: "Error",        color: "text-red-400" },
+  crawling:   { label: "Importing…",   color: "text-amber-400", spin: true },
+  error:      { label: "Failed",       color: "text-red-400" },
   failed:     { label: "Failed",       color: "text-red-400" },
 };
 
 const NON_TERMINAL_STATUSES = new Set(["validating", "processing", "crawling"]);
+
+/** List/detail rows may include enrichments from the API (optional for older clients). */
+type KnowledgeSourceView = KnowledgeSource & {
+  indexing?: boolean;
+  needsAttention?: boolean;
+  failedPageCount?: number;
+  attachedAgentCount?: number;
+  embeddedCount?: number;
+};
 
 /* ── Source Card ─────────────────────────────────────────────────────────── */
 
@@ -68,33 +81,47 @@ function SourceCard({
   onClick,
   onDelete,
 }: {
-  source: KnowledgeSource;
+  source: KnowledgeSourceView;
   onClick: () => void;
   onDelete: () => void;
 }) {
   const meta = TYPE_META[source.type] ?? TYPE_META["text"]!;
-  const st = STATUS_META[source.status] ?? STATUS_META["active"]!;
+  const st = source.indexing
+    ? { label: "Indexing…", color: "text-amber-400", spin: true as const }
+    : source.needsAttention
+      ? { label: "Needs attention", color: "text-amber-400", spin: false as const }
+      : (STATUS_META[source.status] ?? STATUS_META["ready"]!);
 
   return (
     <div
       onClick={onClick}
       className="group relative bg-card border border-border rounded-xl p-5 cursor-pointer hover:border-primary/40 hover:bg-accent/30 transition-all"
     >
-      {/* Type badge */}
-      <div className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium border mb-3 ${meta.color}`}>
+      {/* Type as secondary chip — pack name is the hero */}
+      <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-medium border mb-2 ${meta.color}`}>
         {meta.icon}
         {meta.label}
       </div>
 
       <h3 className="font-semibold text-sm mb-1 truncate pr-6">{source.name}</h3>
 
-      <div className="flex items-center gap-3 text-xs text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
         <span className={`flex items-center gap-1 ${st.color}`}>
           {st.spin && <Loader2 className="w-3 h-3 animate-spin" />}
           {st.label}
         </span>
         <span>·</span>
-        <span>{source.entryCount} {source.entryCount === 1 ? "entry" : "entries"}</span>
+        <span>{source.entryCount} {source.entryCount === 1 ? "piece" : "pieces"}</span>
+        {typeof source.attachedAgentCount === "number" && (
+          <>
+            <span>·</span>
+            <span>
+              {source.attachedAgentCount === 0
+                ? "Not on an agent yet"
+                : `${source.attachedAgentCount} agent${source.attachedAgentCount === 1 ? "" : "s"}`}
+            </span>
+          </>
+        )}
         <span>·</span>
         <span>{formatDistanceToNow(new Date(source.createdAt), { addSuffix: true })}</span>
       </div>
@@ -106,7 +133,7 @@ function SourceCard({
       <button
         onClick={(e) => { e.stopPropagation(); onDelete(); }}
         className="absolute top-3 right-8 p-1 rounded text-muted-foreground/0 group-hover:text-muted-foreground/60 hover:!text-red-400 transition-colors"
-        title="Delete source"
+        title="Delete"
       >
         <Trash2 className="w-3.5 h-3.5" />
       </button>
@@ -131,7 +158,7 @@ function CreateSourceModal({ open, onClose }: CreateSourceModalProps) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { getToken } = useAuth();
-  const [step, setStep] = useState<"type" | "details">("type");
+  const [step, setStep] = useState<"type" | "details" | "attach">("type");
   const [selectedType, setSelectedType] = useState<SourceType>("faq");
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
@@ -140,8 +167,15 @@ function CreateSourceModal({ open, onClose }: CreateSourceModalProps) {
   const [faqs, setFaqs] = useState<FaqPair[]>([{ q: "", a: "" }]);
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [createdSourceId, setCreatedSourceId] = useState<number | null>(null);
+  const [selectedAgentIds, setSelectedAgentIds] = useState<number[]>([]);
+  const [attaching, setAttaching] = useState(false);
 
   const create = useCreateKnowledgeSource();
+  const attach = useAttachKnowledgeSourceToAgent();
+  const { data: agents, isLoading: agentsLoading } = useListAgents({
+    query: { queryKey: getListAgentsQueryKey(), enabled: step === "attach" },
+  });
 
   function reset() {
     setStep("type");
@@ -152,9 +186,19 @@ function CreateSourceModal({ open, onClose }: CreateSourceModalProps) {
     setFaqs([{ q: "", a: "" }]);
     setFile(null);
     setUploading(false);
+    setCreatedSourceId(null);
+    setSelectedAgentIds([]);
+    setAttaching(false);
   }
 
   function handleClose() { reset(); onClose(); }
+
+  function goToAttach(sourceId: number) {
+    setCreatedSourceId(sourceId);
+    setSelectedAgentIds([]);
+    setStep("attach");
+    void queryClient.invalidateQueries({ queryKey: getListKnowledgeSourcesQueryKey() });
+  }
 
   async function handleFileUpload() {
     if (!name.trim()) { toast({ title: "Name is required", variant: "destructive" }); return; }
@@ -175,9 +219,10 @@ function CreateSourceModal({ open, onClose }: CreateSourceModalProps) {
         try { const body = await res.json(); if (body?.error) msg = body.error; } catch { /* ignore */ }
         throw new Error(msg);
       }
-      await queryClient.invalidateQueries({ queryKey: getListKnowledgeSourcesQueryKey() });
-      toast({ title: "Document uploaded", description: "Text extracted into knowledge entries." });
-      handleClose();
+      const body = await res.json() as { id?: number };
+      if (!body?.id) throw new Error("Upload succeeded but no knowledge id returned");
+      toast({ title: "Document uploaded", description: "Next: pick which agents can use it." });
+      goToAttach(body.id);
     } catch (err) {
       toast({ title: "Failed to upload", description: formatApiError(err), variant: "destructive" });
     } finally {
@@ -204,7 +249,7 @@ function CreateSourceModal({ open, onClose }: CreateSourceModalProps) {
     }
 
     try {
-      await create.mutateAsync({
+      const created = await create.mutateAsync({
         data: {
           name: name.trim(),
           type: selectedType as unknown as KnowledgeSourceInputType,
@@ -212,32 +257,90 @@ function CreateSourceModal({ open, onClose }: CreateSourceModalProps) {
           entries: selectedType !== "website" ? entries : undefined,
         },
       });
-      await queryClient.invalidateQueries({ queryKey: getListKnowledgeSourcesQueryKey() });
-      toast({ title: "Knowledge source created" });
-      handleClose();
+      toast({
+        title: "Knowledge pack created",
+        description: selectedType === "website"
+          ? "Importing pages — you can attach agents now or later."
+          : "Next: pick which agents can use it.",
+      });
+      goToAttach(created.id);
     } catch (err) {
       toast({ title: "Failed to create", description: formatApiError(err), variant: "destructive" });
     }
   }
 
+  async function handleAttachFinish() {
+    if (!createdSourceId) { handleClose(); return; }
+    if (!selectedAgentIds.length) {
+      toast({ title: "Knowledge pack ready", description: "Attach it anytime from an agent’s Knowledge section." });
+      handleClose();
+      return;
+    }
+    setAttaching(true);
+    let attached = 0;
+    let deferred = 0;
+    try {
+      for (const agentId of selectedAgentIds) {
+        try {
+          await attach.mutateAsync({ id: createdSourceId, agentId });
+          attached += 1;
+        } catch (err: unknown) {
+          const status = typeof err === "object" && err && "status" in err
+            ? Number((err as { status: number }).status)
+            : undefined;
+          if (status === 409) deferred += 1;
+          else throw err;
+        }
+      }
+      await queryClient.invalidateQueries({ queryKey: getListKnowledgeSourcesQueryKey() });
+      if (attached > 0) {
+        toast({
+          title: `Attached to ${attached} agent${attached === 1 ? "" : "s"}`,
+          description: deferred > 0
+            ? "Some agents will get it after the website finishes importing — attach again from the agent if needed."
+            : undefined,
+        });
+      } else if (deferred > 0) {
+        toast({
+          title: "Still importing",
+          description: "Attach again from the agent once this pack shows Ready.",
+        });
+      }
+      handleClose();
+    } catch (err) {
+      toast({ title: "Couldn’t attach", description: formatApiError(err), variant: "destructive" });
+    } finally {
+      setAttaching(false);
+    }
+  }
+
   const typeChoices: Array<{ type: SourceType; label: string; desc: string; icon: React.ReactNode }> = [
-    { type: "faq", label: "FAQ", desc: "Question & Answer pairs", icon: <HelpCircle className="w-5 h-5 text-violet-400" /> },
-    { type: "text", label: "Paste Text", desc: "Paste any information directly", icon: <AlignLeft className="w-5 h-5 text-blue-400" /> },
-    { type: "file", label: "File Upload", desc: "PDF, DOCX, TXT, CSV, or Markdown", icon: <FileText className="w-5 h-5 text-amber-400" /> },
-    { type: "website", label: "Website", desc: "Import from a URL", icon: <Globe className="w-5 h-5 text-emerald-400" /> },
+    { type: "faq", label: "Q&A", desc: "Common questions and answers", icon: <HelpCircle className="w-5 h-5 text-violet-400" /> },
+    { type: "text", label: "Paste text", desc: "Paste facts or policies", icon: <AlignLeft className="w-5 h-5 text-blue-400" /> },
+    { type: "file", label: "Upload a file", desc: "PDF, Word, text, CSV, or Markdown", icon: <FileText className="w-5 h-5 text-amber-400" /> },
+    { type: "website", label: "Website link", desc: "Import pages from a URL", icon: <Globe className="w-5 h-5 text-emerald-400" /> },
   ];
+
+  const stepTitle =
+    step === "type" ? "Add knowledge"
+    : step === "attach" ? "Attach to agents"
+    : `Add ${TYPE_META[selectedType]?.label?.toLowerCase() ?? "content"}`;
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); }}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>
-            {step === "type" ? "Add Knowledge Source" : `New ${TYPE_META[selectedType]?.label} Source`}
-          </DialogTitle>
+          <DialogTitle>{stepTitle}</DialogTitle>
+          {step === "attach" && (
+            <p className="text-xs text-muted-foreground pt-1">
+              Optional — choose which agents should use “{name.trim() || "this pack"}”.
+            </p>
+          )}
         </DialogHeader>
 
         {step === "type" ? (
           <div className="space-y-2 py-2">
+            <p className="text-xs text-muted-foreground mb-2">1. Name your pack → 2. Add content → 3. Attach to an agent</p>
             {typeChoices.map(({ type, label, desc, icon }) => (
               <button
                 key={type}
@@ -253,10 +356,47 @@ function CreateSourceModal({ open, onClose }: CreateSourceModalProps) {
               </button>
             ))}
           </div>
+        ) : step === "attach" ? (
+          <div className="space-y-3 py-2 max-h-72 overflow-y-auto">
+            {agentsLoading ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground py-6 justify-center">
+                <Loader2 className="w-4 h-4 animate-spin" /> Loading agents…
+              </div>
+            ) : !agents?.length ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">
+                No agents yet. Create an agent, then attach this pack from Knowledge on the agent.
+              </p>
+            ) : (
+              agents.map((agent) => {
+                const checked = selectedAgentIds.includes(agent.id);
+                return (
+                  <button
+                    key={agent.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedAgentIds((ids) =>
+                        checked ? ids.filter((id) => id !== agent.id) : [...ids, agent.id],
+                      );
+                    }}
+                    className={`w-full flex items-center gap-3 p-3 rounded-lg border text-left transition-all ${
+                      checked ? "border-primary/50 bg-primary/5" : "border-border hover:border-primary/30"
+                    }`}
+                  >
+                    <div className={`flex h-4 w-4 items-center justify-center rounded border shrink-0 ${
+                      checked ? "bg-primary border-primary text-primary-foreground" : "border-border"
+                    }`}>
+                      {checked && <CheckCircle2 className="h-3 w-3" />}
+                    </div>
+                    <span className="text-sm font-medium truncate">{agent.name}</span>
+                  </button>
+                );
+              })
+            )}
+          </div>
         ) : (
           <div className="space-y-4 py-2">
             <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Source Name</label>
+              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Pack name</label>
               <Input
                 placeholder={selectedType === "faq" ? "e.g. Business FAQs" : selectedType === "website" ? "e.g. Product Docs" : "e.g. Company Policy"}
                 value={name}
@@ -391,10 +531,19 @@ function CreateSourceModal({ open, onClose }: CreateSourceModalProps) {
           {step === "type" && (
             <Button variant="outline" onClick={handleClose}>Cancel</Button>
           )}
+          {step === "attach" && (
+            <Button variant="outline" onClick={handleClose} disabled={attaching}>Skip for now</Button>
+          )}
           {step === "details" && (
             <Button onClick={handleSubmit} disabled={create.isPending || uploading}>
               {(create.isPending || uploading) && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              {selectedType === "website" ? "Import Website" : selectedType === "file" ? "Upload Document" : "Create Source"}
+              {selectedType === "website" ? "Continue" : selectedType === "file" ? "Upload & continue" : "Continue"}
+            </Button>
+          )}
+          {step === "attach" && (
+            <Button onClick={handleAttachFinish} disabled={attaching}>
+              {attaching && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              {selectedAgentIds.length ? `Attach to ${selectedAgentIds.length}` : "Done"}
             </Button>
           )}
         </DialogFooter>
@@ -563,16 +712,21 @@ function TestPanel({ sourceId }: { sourceId: number }) {
     await search.mutateAsync({ id: sourceId, data: { query: query.trim(), limit: 5 } });
   }
 
+  const data = search.data as (typeof search.data & { mode?: string; sameAsLiveCalls?: boolean }) | undefined;
+
   return (
     <div className="border border-border rounded-xl p-5 bg-card space-y-4">
       <div className="flex items-center gap-2">
         <FlaskConical className="w-4 h-4 text-primary" />
-        <h3 className="font-semibold text-sm">Test AI Knowledge</h3>
+        <div>
+          <h3 className="font-semibold text-sm">Test search</h3>
+          <p className="text-[11px] text-muted-foreground">Uses the same search as live calls</p>
+        </div>
       </div>
 
       <div className="flex gap-2">
         <Input
-          placeholder="Ask a question…"
+          placeholder="Ask what a caller might ask…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") handleSearch(); }}
@@ -583,42 +737,38 @@ function TestPanel({ sourceId }: { sourceId: number }) {
         </Button>
       </div>
 
-      {search.data && (
+      {data && (
         <div className="space-y-4">
-          {/* Generated Answer */}
           <div className="bg-primary/5 border border-primary/20 rounded-lg p-4">
             <div className="flex items-center gap-2 mb-2">
               <Brain className="w-3.5 h-3.5 text-primary" />
-              <span className="text-xs font-medium text-primary">Generated Answer</span>
+              <span className="text-xs font-medium text-primary">
+                What the agent would see
+                {data.mode ? <span className="text-muted-foreground font-normal"> · {data.mode}</span> : null}
+              </span>
             </div>
-            <p className="text-sm leading-relaxed whitespace-pre-wrap">{search.data.answer}</p>
+            <p className="text-sm leading-relaxed whitespace-pre-wrap">
+              {data.answer || "No matching knowledge for this question."}
+            </p>
           </div>
 
-          {/* Matched Entries */}
-          {search.data.matchedEntries.length > 0 ? (
+          {data.matchedEntries.length > 0 ? (
             <div>
               <p className="text-xs font-medium text-muted-foreground mb-2">
-                Knowledge Sources Used ({search.data.matchedEntries.length} matched {search.data.matchedEntries.length === 1 ? "entry" : "entries"})
+                Matched pieces ({data.matchedEntries.length})
               </p>
               <div className="space-y-2">
-                {search.data.matchedEntries.map((m, i) => (
+                {data.matchedEntries.map((m, i) => (
                   <div key={m.entry.id} className="bg-muted/50 rounded-lg p-3 text-sm border border-border">
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-xs font-medium text-muted-foreground">
-                        {m.entry.title ?? `Entry ${i + 1}`}
+                        {m.entry.title ?? `Piece ${i + 1}`}
                       </span>
                       <span className="text-xs text-muted-foreground/60">
-                        Score: {(m.rank * 100).toFixed(0)}
+                        Rank {(m.rank * 100).toFixed(0)}
                       </span>
                     </div>
-                    {m.snippet ? (
-                      <p
-                        className="text-muted-foreground text-xs leading-relaxed"
-                        dangerouslySetInnerHTML={{ __html: m.snippet.replace(/<mark>/g, '<mark class="bg-yellow-400/30 text-foreground not-italic">') }}
-                      />
-                    ) : (
-                      <p className="text-muted-foreground text-xs leading-relaxed line-clamp-3">{m.entry.content}</p>
-                    )}
+                    <p className="text-muted-foreground text-xs leading-relaxed line-clamp-3">{m.entry.content}</p>
                   </div>
                 ))}
               </div>
@@ -626,7 +776,7 @@ function TestPanel({ sourceId }: { sourceId: number }) {
           ) : (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <XCircle className="w-4 h-4 text-amber-400" />
-              No matching entries found. Try different keywords.
+              No matching pieces. Try different wording.
             </div>
           )}
         </div>
@@ -642,6 +792,7 @@ function DetailView({ sourceId, onBack }: { sourceId: number; onBack: () => void
   const { data, isLoading } = useGetKnowledgeSource(sourceId);
   const del = useDeleteKnowledgeSource();
   const { toast } = useToast();
+  const [retrying, setRetrying] = useState(false);
 
   function refresh() {
     queryClient.invalidateQueries({ queryKey: getGetKnowledgeSourceQueryKey(sourceId) });
@@ -660,9 +811,13 @@ function DetailView({ sourceId, onBack }: { sourceId: number; onBack: () => void
 
   if (!data) return <div className="text-muted-foreground text-sm">Source not found.</div>;
 
-  const source = data as KnowledgeSourceDetail;
+  const source = data as KnowledgeSourceDetail & KnowledgeSourceView;
   const meta = TYPE_META[source.type] ?? TYPE_META["text"]!;
-  const st = STATUS_META[source.status] ?? STATUS_META["active"]!;
+  const st = source.indexing
+    ? { label: "Indexing…", color: "text-amber-400", spin: true as const }
+    : source.needsAttention
+      ? { label: "Needs attention", color: "text-amber-400", spin: false as const }
+      : (STATUS_META[source.status] ?? STATUS_META["ready"]!);
 
   return (
     <div className="space-y-6">
@@ -678,62 +833,102 @@ function DetailView({ sourceId, onBack }: { sourceId: number; onBack: () => void
           <div>
             <div className="flex items-center gap-2 mb-0.5">
               <h2 className="text-lg font-semibold">{source.name}</h2>
-              <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded border ${meta.color}`}>
+              <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded border ${meta.color}`}>
                 {meta.icon}
                 {meta.label}
               </span>
             </div>
             <p className={`text-xs flex items-center gap-1 ${st.color}`}>
               {st.spin && <Loader2 className="w-3 h-3 animate-spin" />}
-              {st.label} · {source.entryCount} {source.entryCount === 1 ? "entry" : "entries"}
+              {st.label} · {source.entryCount} {source.entryCount === 1 ? "piece" : "pieces"}
+              {typeof source.attachedAgentCount === "number"
+                ? ` · ${source.attachedAgentCount === 0 ? "not on an agent yet" : `${source.attachedAgentCount} agent${source.attachedAgentCount === 1 ? "" : "s"}`}`
+                : null}
             </p>
           </div>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          className="text-red-400 border-red-500/20 hover:bg-red-500/10 hover:text-red-400"
-          onClick={async () => {
-            try {
-              await del.mutateAsync({ id: source.id });
-              queryClient.invalidateQueries({ queryKey: getListKnowledgeSourcesQueryKey() });
-              onBack();
-            } catch (err) {
-              toast({ title: "Failed to delete", description: formatApiError(err), variant: "destructive" });
-            }
-          }}
-          disabled={del.isPending}
-        >
-          {del.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5 mr-1.5" />}
-          Delete Source
-        </Button>
+        <div className="flex items-center gap-2">
+          {source.type === "website" && (source.needsAttention || source.status === "partial") && (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={retrying || source.status === "crawling"}
+              onClick={async () => {
+                setRetrying(true);
+                try {
+                  await customFetch(`/api/knowledge-sources/${source.id}/retry-crawl`, { method: "POST" });
+                  toast({ title: "Retry started", description: "We’ll re-fetch the pages that failed." });
+                  refresh();
+                } catch (err) {
+                  toast({ title: "Retry failed", description: formatApiError(err), variant: "destructive" });
+                } finally {
+                  setRetrying(false);
+                }
+              }}
+            >
+              {retrying ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : null}
+              Retry failed pages
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-red-400 border-red-500/20 hover:bg-red-500/10 hover:text-red-400"
+            onClick={async () => {
+              try {
+                await del.mutateAsync({ id: source.id });
+                queryClient.invalidateQueries({ queryKey: getListKnowledgeSourcesQueryKey() });
+                onBack();
+              } catch (err) {
+                toast({ title: "Failed to delete", description: formatApiError(err), variant: "destructive" });
+              }
+            }}
+            disabled={del.isPending}
+          >
+            {del.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5 mr-1.5" />}
+            Delete
+          </Button>
+        </div>
       </div>
 
       {/* Status banners */}
       {source.status === "validating" && (
         <div className="flex items-center gap-3 bg-amber-500/10 border border-amber-500/20 rounded-lg px-4 py-3 text-sm text-amber-400">
           <Loader2 className="w-4 h-4 animate-spin shrink-0" />
-          Checking URL… Validating that the website is reachable and safe to index.
+          Checking the website address…
         </div>
       )}
       {source.status === "processing" && (
         <div className="flex items-center gap-3 bg-amber-500/10 border border-amber-500/20 rounded-lg px-4 py-3 text-sm text-amber-400">
           <Loader2 className="w-4 h-4 animate-spin shrink-0" />
-          {source.type === "website" ? "Website fetched — discovering internal pages…" : "Indexing content…"}
+          {source.type === "website" ? "Website fetched — finding pages…" : "Preparing your knowledge…"}
         </div>
       )}
       {source.status === "crawling" && (
         <div className="flex items-center gap-3 bg-amber-500/10 border border-amber-500/20 rounded-lg px-4 py-3 text-sm text-amber-400">
           <Loader2 className="w-4 h-4 animate-spin shrink-0" />
-          Crawling website pages. Entries will appear once complete. Refresh to check.
+          Importing website pages. This updates automatically.
+        </div>
+      )}
+      {(source.needsAttention || source.status === "partial") && source.status !== "crawling" && (
+        <div className="flex items-start gap-3 bg-amber-500/10 border border-amber-500/20 rounded-lg px-4 py-3 text-sm text-amber-400">
+          <XCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-medium">Needs attention</p>
+            <p className="text-amber-400/80 text-xs mt-0.5">
+              Some website pages didn’t import
+              {source.failedPageCount ? ` (${source.failedPageCount})` : ""}.
+              Use Retry failed pages, or add the missing content as text.
+            </p>
+          </div>
         </div>
       )}
       {(source.status === "error" || source.status === "failed") && (
         <div className="flex items-center gap-3 bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-3 text-sm text-red-400">
           <XCircle className="w-4 h-4 shrink-0" />
           {source.type === "website"
-            ? "Website crawl failed. Check that the URL is publicly accessible and try again."
-            : "Ingestion failed. Delete this source and try again."}
+            ? "Website import failed. Check that the URL is public and try again."
+            : "Import failed. Delete this pack and try again."}
         </div>
       )}
 
@@ -787,10 +982,13 @@ export default function KnowledgeBasePage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  // Auto-poll every 3 s while any source is still processing or crawling
+  // Auto-poll every 3 s while importing or embeddings still catching up
   React.useEffect(() => {
-    const hasNonTerminal = sources?.some((s) => NON_TERMINAL_STATUSES.has(s.status));
-    if (!hasNonTerminal) return;
+    const views = (sources ?? []) as KnowledgeSourceView[];
+    const shouldPoll = views.some(
+      (s) => NON_TERMINAL_STATUSES.has(s.status) || s.indexing,
+    );
+    if (!shouldPoll) return;
     const timer = setInterval(() => {
       queryClient.invalidateQueries({ queryKey: getListKnowledgeSourcesQueryKey() });
     }, 3000);
@@ -808,12 +1006,12 @@ export default function KnowledgeBasePage() {
 
   return (
     <StripePage
-      title="Agent Knowledge"
-      description="Build reusable knowledge sources from FAQs, text, documents, and websites — then attach them to any agent."
+      title="Knowledge"
+      description="Teach your agents facts from text, files, or a website — then attach a pack on the agent."
       actions={
         <Button size="sm" className="h-8 text-xs gap-1.5 rounded-lg" onClick={() => setCreateOpen(true)}>
           <Plus className="w-3.5 h-3.5" />
-          Add Knowledge
+          Add knowledge
         </Button>
       }
     >
@@ -826,17 +1024,17 @@ export default function KnowledgeBasePage() {
         <EmptyState
           variant="hero"
           icon={<BookOpen />}
-          title="No knowledge sources yet"
-          description="Add FAQs, paste text, upload a document, or import from a website to ground your voice agents."
+          title="No knowledge yet"
+          description="Paste text, upload a document, or import a website — then attach it on an agent so callers get accurate answers."
           action={{
-            label: "Add your first source",
+            label: "Add your first pack",
             onClick: () => setCreateOpen(true),
             icon: <Plus className="w-3.5 h-3.5" />,
           }}
         />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {sources.map((source) => (
+          {(sources as KnowledgeSourceView[]).map((source) => (
             <SourceCard
               key={source.id}
               source={source}
@@ -852,11 +1050,11 @@ export default function KnowledgeBasePage() {
         <div className="flex flex-wrap gap-5 pt-3 mt-5 border-t border-border/50 text-xs text-muted-foreground/70">
           <span className="flex items-center gap-1.5">
             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-            {sources.length} knowledge {sources.length === 1 ? "source" : "sources"}
+            {sources.length} knowledge {sources.length === 1 ? "pack" : "packs"}
           </span>
           <span className="flex items-center gap-1.5">
             <FileText className="w-3.5 h-3.5 text-sky-400" />
-            {sources.reduce((s, x) => s + x.entryCount, 0)} total entries
+            {sources.reduce((s, x) => s + x.entryCount, 0)} total pieces
           </span>
         </div>
       )}
