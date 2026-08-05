@@ -198,11 +198,20 @@ router.post("/agents", requireAuth, clientContext, denyManagedClient, async (req
   if (insertAgentConfig["asrEndpointingSilenceMs"] == null) {
     insertAgentConfig["asrEndpointingSilenceMs"] = engineDefaults["asrEndpointingSilenceMs"];
   }
-  if (insertAgentConfig["ttsMinSentenceChars"] == null) insertAgentConfig["ttsMinSentenceChars"] = 18;
+  if (insertAgentConfig["ttsMinSentenceChars"] == null) {
+    insertAgentConfig["ttsMinSentenceChars"] = engineDefaults["ttsMinSentenceChars"];
+  }
   if (insertAgentConfig["incrementalDelay"] == null) {
     insertAgentConfig["incrementalDelay"] = engineDefaults["incrementalDelay"];
   }
-  if (insertAgentConfig["llmMaxTokens"] == null) insertAgentConfig["llmMaxTokens"] = 200;
+  if (insertAgentConfig["llmMaxTokens"] == null) {
+    const llmProv = String(insertData["llmProvider"] ?? "").toLowerCase();
+    insertAgentConfig["llmMaxTokens"] = llmProv === "sarvam" ? 500 : 200;
+  }
+  if (insertAgentConfig["reasoningEffort"] === undefined && String(insertData["llmProvider"] ?? "").toLowerCase() === "sarvam") {
+    // Voice default: thinking off — "low" leaked English CoT into TTS.
+    insertAgentConfig["reasoningEffort"] = null;
+  }
   if (insertAgentConfig["bargeInEnergyThreshold"] == null) {
     insertAgentConfig["bargeInEnergyThreshold"] = engineDefaults["bargeInEnergyThreshold"];
   }
@@ -364,6 +373,16 @@ router.patch("/agents/:id", requireAuth, clientContext, denyManagedClient, async
       const existingCal = (existing.agentConfig as AgentConfig)?.calendarCapability;
       if (incomingCal != null && existingCal != null) {
         merged.calendarCapability = { ...existingCal, ...incomingCal };
+      }
+      // Deep-merge meetings so Builder Talk → Meet prompt doesn't wipe
+      // Channels → Meetings whoJoins / delegate / memory toggles.
+      const incomingMeet = (updateData.agentConfig as AgentConfig)?.meetings;
+      const existingMeet = (existing.agentConfig as AgentConfig)?.meetings;
+      if (incomingMeet != null && typeof incomingMeet === "object") {
+        merged.meetings = {
+          ...(existingMeet && typeof existingMeet === "object" ? existingMeet : {}),
+          ...incomingMeet,
+        };
       }
       // IRDAI advisory prompt check (informational only — never blocks the save).
       // When IRDAI is enabled, statically analyze the resulting system prompt

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { useLocation, Link } from "wouter";
+import { useLocation } from "wouter";
 import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
 import {
   useListConnections,
@@ -36,7 +36,7 @@ import {
   Zap, Sheet, Radio, X, ChevronDown, ChevronRight,
   ArrowRight, ExternalLink, Lock, RefreshCw, Eye, EyeOff,
   Phone, User, Mail, Loader2, Check, Link2, Link2Off, Building2, Code2, Search,
-  Activity, KeyRound, ChevronLeft, ArrowUp, ArrowDown, MessageCircle,
+  Activity, KeyRound, ChevronLeft, ArrowUp, ArrowDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { StripePage } from "@/components/stripe-page";
@@ -890,7 +890,7 @@ function WebhookTable({
         {/* Table header */}
         <div className="flex items-center gap-3 border-b border-border/50 bg-muted/30 px-3.5 py-2">
           <div className="w-7 shrink-0" />
-          <div className="flex-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Campaign Studio</div>
+          <div className="flex-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">People list</div>
           <div className="hidden max-w-[220px] flex-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground sm:block">Webhook URL</div>
           <div className="hidden w-28 text-right text-[10px] font-semibold uppercase tracking-widest text-muted-foreground md:block">Last Event</div>
           {/* Date sort toggle */}
@@ -906,7 +906,7 @@ function WebhookTable({
 
         {pageRows.length === 0 ? (
           <div className="flex items-center justify-center py-8 text-xs text-muted-foreground">
-            {search ? `No campaign studios match "${search}"` : "No webhook connections yet"}
+            {search ? `No lists match "${search}"` : "No webhook connections yet"}
           </div>
         ) : (
           pageRows.map(c => (
@@ -1479,7 +1479,7 @@ export function CrmImportDialog({
 
             {!defaultCampaignId && (
               <div className="space-y-1.5">
-                <Label className="text-xs">Destination campaign studio</Label>
+                <Label className="text-xs">Destination dial flow</Label>
                 <select
                   value={campaignId ?? ""}
                   onChange={e => setCampaignId(e.target.value ? Number(e.target.value) : null)}
@@ -2249,28 +2249,6 @@ export default function ConnectionsPage() {
     }
   }, [qc, toast]);
 
-  const [metaOpen, setMetaOpen] = useState(false);
-  const [metaForm, setMetaForm] = useState({ pageName: "", formId: "", formName: "", accessToken: "" });
-
-  const saveMetaIntegration = useMutation({
-    mutationFn: async () => {
-      const r = await fetch("/api/meta/integrations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(metaForm),
-      });
-      if (!r.ok) { const e = await r.json(); throw new Error(e.error ?? "Failed to save Meta integration"); }
-      return r.json() as Promise<{ webhookUrl: string }>;
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["meta-integrations"] });
-      setMetaOpen(false);
-      setMetaForm({ pageName: "", formId: "", formName: "", accessToken: "" });
-      toast({ title: "Meta Integration Saved!", description: "Connected Meta Ads Lead Form successfully." });
-    },
-    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
-  });
-
   const handleRefresh = useCallback(async () => {
     await qc.invalidateQueries({ queryKey: getListConnectionsQueryKey() });
     await refetch();
@@ -2278,8 +2256,9 @@ export default function ConnectionsPage() {
 
   return (
     <StripePage
-      title="Integrations"
-      description="CRM, Google Sheets, and dial-flow webhooks — credentials for Automation to use."
+      title="Connections"
+      description="Connect phone, WhatsApp, Sheets, and CRM once. Call plans and agents use what’s here."
+      back={{ href: "/app/home", label: "Home" }}
       actions={
         <Button
           size="sm"
@@ -2293,6 +2272,26 @@ export default function ConnectionsPage() {
       }
       contentClassName="space-y-4"
     >
+      {/* Channel shortcuts — stay on Connections job: wires, not People */}
+      <section className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        {[
+          { label: "Phone numbers", href: "/app/phone-numbers", hint: "DIDs & caller ID" },
+          { label: "WhatsApp", href: "/app/connections?setup=whatsapp", hint: "Templates & channel" },
+          { label: "Meetings", href: "/app/meet", hint: "Join Meet / Zoom / Teams" },
+          { label: "Agent channels", href: "/app/channels", hint: "Email & meeting join" },
+        ].map((card) => (
+          <button
+            key={card.href}
+            type="button"
+            onClick={() => navigate(card.href)}
+            className="rounded-lg border border-border/60 bg-card px-3 py-2.5 text-left hover:bg-muted/30 transition-colors"
+          >
+            <p className="text-[12px] font-medium">{card.label}</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">{card.hint}</p>
+          </button>
+        ))}
+      </section>
+
       {/* Connected accounts — CRM + Sheets as dense rows */}
       <section className="space-y-2">
         <div className="flex items-center justify-between gap-2 px-0.5">
@@ -2322,7 +2321,7 @@ export default function ConnectionsPage() {
                 <div className="min-w-0 flex-1">
                   <p className="text-[13px] font-medium">Google Sheets</p>
                   <p className="truncate text-[11px] text-muted-foreground">
-                    Watch a sheet, dial leads, write results back
+                    Connect once — use under People → Google Sheet
                   </p>
                 </div>
                 <Button size="sm" className="h-8 px-2.5 text-[11px]" onClick={() => void connectSheets()}>
@@ -2356,85 +2355,55 @@ export default function ConnectionsPage() {
               ))
             )}
           </div>
-
-          {/* Meta Lead Ads row */}
-          <div className="border-t border-border/70">
-            <div className="flex min-h-12 items-center gap-3 px-3.5 py-2.5">
-              <BrandLogoBadge brand="meta" size={18} />
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <p className="text-[13px] font-medium">Meta Lead Ads (Facebook & Instagram)</p>
-                  <span className="inline-flex items-center gap-1 text-[10px] text-emerald-500">
-                    <span className="size-1.5 rounded-full bg-emerald-500" />
-                    Live Ready
-                  </span>
-                </div>
-                <p className="truncate text-[11px] text-muted-foreground">
-                  Auto-call leads submitted on Facebook/Instagram Lead Forms in real-time
-                </p>
-              </div>
-              <Button size="sm" variant="outline" className="h-8 px-2.5 text-[11px]" onClick={() => setMetaOpen(true)}>
-                Configure Meta Ads
-              </Button>
-            </div>
-          </div>
-
-          {/* WhatsApp link row */}
-          <div className="border-t border-border/70">
-            <div className="flex min-h-12 items-center gap-3 px-3.5 py-2.5">
-              <MessageCircle className="size-4.5 text-emerald-500" />
-              <div className="min-w-0 flex-1">
-                <p className="text-[13px] font-medium">WhatsApp</p>
-                <p className="truncate text-[11px] text-muted-foreground">
-                  Connect your agent to WhatsApp for inbound/outbound messaging
-                </p>
-              </div>
-              <Button size="sm" variant="outline" className="h-8 px-2.5 text-[11px]" asChild>
-                <Link href="/app/whatsapp">Configure</Link>
-              </Button>
-            </div>
-          </div>
         </div>
       </section>
 
-      {/* Dial-flow webhooks */}
+      {/* Lead webhooks (advanced — website forms live under People) */}
       <section className="space-y-2">
         <div className="flex items-center justify-between px-0.5">
-          <div>
-            <h2 className="text-[11px] font-semibold">Dial-flow webhooks</h2>
-            <p className="text-[11px] text-muted-foreground">
-              Webhooks mapped to specific campaign studio instances or automations.
-            </p>
-          </div>
-          <span className="text-[11px] font-medium text-muted-foreground">
-            {webhookConnections.length} webhook{webhookConnections.length === 1 ? "" : "s"}
+          <h2 className="text-[11px] font-semibold">Lead webhooks</h2>
+          <span className="text-[10px] text-muted-foreground">
+            {webhookConnections.length} webhook{webhookConnections.length !== 1 ? "s" : ""}
           </span>
         </div>
+        <p className="px-0.5 text-[11px] text-muted-foreground">
+          Advanced intake URLs. For most setups use{" "}
+          <button type="button" className="underline underline-offset-2" onClick={() => navigate("/app/people?tab=lead-sources")}>
+            People → Website forms
+          </button>
+          .
+        </p>
 
-        {webhookConnections.length === 0 ? (
-          <div className="rounded-lg border border-border bg-card p-6 text-center">
-            <p className="text-xs font-medium text-muted-foreground">
-              No webhook connections yet. Create a campaign studio or open Automation to get a lead intake URL.
-            </p>
-            <div className="mt-3 flex items-center justify-center gap-2">
-              <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => navigate("/app/automation")}>
-                Open Automation
-              </Button>
-              <Button size="sm" className="h-8 text-xs" onClick={() => navigate("/app/campaigns")}>
-                Campaign Studios
-              </Button>
+        <div className="overflow-hidden rounded-lg border border-border bg-card">
+          {isLoading ? (
+            <div className="space-y-0 divide-y divide-border/70">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-10 animate-pulse bg-muted/20" />
+              ))}
             </div>
-          </div>
-        ) : (
-          <div className="overflow-hidden rounded-lg border border-border bg-card">
+          ) : webhookConnections.length === 0 ? (
+            <div className="px-3.5 py-6 text-center">
+              <p className="text-[12px] text-muted-foreground">
+                No webhook connections yet. Create a people list or a call plan intake URL.
+              </p>
+              <div className="mt-3 flex justify-center gap-2">
+                <Button size="sm" variant="outline" className="h-8 text-[11px]" onClick={() => navigate("/app/call-plans")}>
+                  Call plans
+                </Button>
+                <Button size="sm" className="h-8 text-[11px]" onClick={() => navigate("/app/people")}>
+                  People
+                </Button>
+              </div>
+            </div>
+          ) : (
             <WebhookTable
               connections={webhookConnections}
               onRefresh={handleRefresh}
               newEventIds={newEventIds}
               flat
             />
-          </div>
-        )}
+          )}
+        </div>
       </section>
 
       {/* Meta Lead Ads — only if connected */}
@@ -2449,13 +2418,16 @@ export default function ConnectionsPage() {
         </section>
       )}
 
-      {/* Developer API & Webhook Docs */}
-      <details className="group rounded-lg border border-border/70 bg-card">
-        <summary className="flex cursor-pointer items-center justify-between p-3 text-xs font-medium text-muted-foreground hover:text-foreground">
-          <span>More ways to connect</span>
-          <ChevronRight className="size-3.5 transition-transform group-open:rotate-90" />
+      {/* More — collapsed */}
+      <details className="group rounded-lg border border-border bg-card [&_summary::-webkit-details-marker]:hidden">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3.5 py-3 select-none">
+          <div className="min-w-0">
+            <p className="text-[12px] font-medium">More ways to connect</p>
+            <p className="text-[11px] text-muted-foreground">Zapier, Make, generic webhooks — coming soon</p>
+          </div>
+          <ChevronDown className="size-4 shrink-0 text-muted-foreground/50 transition-transform group-open:rotate-180" />
         </summary>
-        <div className="grid grid-cols-1 gap-3 border-t border-border/70 p-3 sm:grid-cols-2">
+        <div className="space-y-2.5 border-t border-border/70 px-3.5 py-3">
           <RecipeCard
             comingSoon
             icon={<BrandLogo brand="zapier" size={15} />}

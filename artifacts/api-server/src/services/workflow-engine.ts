@@ -19,6 +19,7 @@
 import {
   db, workflowsTable, workflowRunsTable, campaignsTable, campaignLeadsTable,
   callsTable, agentsTable, phoneNumbersTable, journeysTable,
+  sheetAutoCallPipelinesTable,
   type Workflow, type WorkflowRun, type WorkflowStep,
 } from "@workspace/db";
 import { eq, and, sql } from "drizzle-orm";
@@ -36,12 +37,41 @@ import {
 } from "./whatsapp/vobiz.js";
 import { sendChannelEmail } from "./email-channel.js";
 import { interpolateTemplate } from "./template-vars.js";
+import { launchMeetingBotForAgent } from "./meeting-bot-launch.js";
+import { updateSheetRowByIndex } from "./google-sheets.js";
 
 const CALL_TIMEOUT_MS = 20 * 60 * 1000; // give up waiting on a call after 20 min
 
 // ── Context helpers ──────────────────────────────────────────────────────────
 
 type Ctx = Record<string, unknown>;
+
+type StepAuditStatus = "sent" | "skipped" | "failed" | "ok" | "joined";
+
+type StepAuditEntry = {
+  type: string;
+  status: StepAuditStatus;
+  reason?: string;
+  at: string;
+  stepIndex?: number;
+};
+
+/** Append a per-step outcome onto run context for Activity / call-plan transparency. */
+function recordStepAudit(
+  context: Ctx,
+  entry: Omit<StepAuditEntry, "at"> & { at?: string },
+): void {
+  const prev = Array.isArray(context["steps"]) ? (context["steps"] as StepAuditEntry[]) : [];
+  const next: StepAuditEntry = {
+    type: entry.type,
+    status: entry.status,
+    ...(entry.reason ? { reason: entry.reason } : {}),
+    ...(typeof entry.stepIndex === "number" ? { stepIndex: entry.stepIndex } : {}),
+    at: entry.at ?? new Date().toISOString(),
+  };
+  context["steps"] = [...prev, next];
+  context["lastStep"] = next;
+}
 
 function getPath(ctx: Ctx, path: string): unknown {
   if (!path) return undefined;
@@ -215,37 +245,73 @@ export async function advanceRun(runId: number): Promise<void> {
       if (step.type === "condition") {
         if (!evalCondition(step, context)) {
           logger.info({ runId, stepIdx: idx }, "workflow: condition false — ending run");
+          recordStepAudit(context, {
+            type: step.field === "__stop" ? "stop" : "condition",
+            status: "ok",
+            reason: step.field === "__stop" ? "Stop" : "Condition false — path ended",
+            stepIndex: idx,
+          });
           await finishRun(run.id, context, "completed");
           return;
         }
+        recordStepAudit(context, {
+          type: "condition",
+          status: "ok",
+          reason: "Condition true — continue",
+          stepIndex: idx,
+        });
         idx++;
         continue;
       }
       if (step.type === "send_webhook") {
         await doWebhook(step, context);
+        recordStepAudit(context, { type: "send_webhook", status: "ok", stepIndex: idx });
         idx++;
         continue;
       }
       if (step.type === "schedule_callback") {
         await doScheduleCallback(workflow.userId, step, context);
+        recordStepAudit(context, { type: "schedule_callback", status: "ok", stepIndex: idx });
         idx++;
         continue;
       }
       if (step.type === "send_whatsapp") {
-        await doSendWhatsapp(workflow.userId, step, context);
+        await doSendWhatsapp(workflow.userId, step, context, idx);
         idx++;
         continue;
       }
       if (step.type === "send_email") {
-        await doSendEmail(workflow.userId, step, context);
+        await doSendEmail(workflow.userId, step, context, idx);
+        idx++;
+        continue;
+      }
+      if (step.type === "join_meeting") {
+        await doJoinMeeting(workflow.userId, step, context, idx);
+        idx++;
+        continue;
+      }
+      if (step.type === "update_sheet") {
+        await doUpdateSheet(workflow.userId, step, context, idx);
         idx++;
         continue;
       }
       // Unknown step type — skip.
+      recordStepAudit(context, {
+        type: step.type,
+        status: "skipped",
+        reason: "Unknown step type",
+        stepIndex: idx,
+      });
       idx++;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       logger.error({ runId, stepIdx: idx, err }, "workflow: step failed");
+      recordStepAudit(context, {
+        type: step.type,
+        status: "failed",
+        reason: msg,
+        stepIndex: idx,
+      });
       await db.update(workflowRunsTable)
         .set({ status: "failed", error: `Step ${idx} (${step.type}): ${msg}`, context, currentStepIndex: idx, updatedAt: new Date() })
         .where(eq(workflowRunsTable.id, run.id));
@@ -285,6 +351,7 @@ async function beginCall(runId: number, userId: string, step: WorkflowStep, cont
   }).returning();
 
   // Park BEFORE dialing so the poller resumes at the step AFTER make_call.
+  recordStepAudit(context, { type: "make_call", status: "ok", reason: "Dialing", stepIndex: idx });
   await db.update(workflowRunsTable)
     .set({ status: "waiting_call", leadId: lead!.id, currentStepIndex: idx + 1, context, updatedAt: new Date() })
     .where(eq(workflowRunsTable.id, runId));
@@ -351,6 +418,11 @@ export async function resumeWaitingCallRuns(): Promise<void> {
 
       if (await claimRun(run.id, "waiting_call")) {
         const context = { ...(run.context ?? {}), call: result };
+        recordStepAudit(context, {
+          type: "make_call",
+          status: result.connected === true ? "ok" : "skipped",
+          reason: result.connected === true ? "Connected" : "No answer / not connected",
+        });
         await db.update(workflowRunsTable)
           .set({ context, callId, updatedAt: new Date() })
           .where(eq(workflowRunsTable.id, run.id));
@@ -372,6 +444,12 @@ function isTerminalCall(call: typeof callsTable.$inferSelect): boolean {
 async function beginDelay(runId: number, step: WorkflowStep, context: Ctx, idx: number): Promise<void> {
   const secs = Math.max(0, Number(step.delaySeconds ?? 0));
   const resumeAt = new Date(Date.now() + secs * 1000);
+  recordStepAudit(context, {
+    type: "delay",
+    status: "ok",
+    reason: `Wait ${secs}s`,
+    stepIndex: idx,
+  });
   await db.update(workflowRunsTable)
     .set({ status: "waiting_delay", resumeAt, currentStepIndex: idx + 1, context, updatedAt: new Date() })
     .where(eq(workflowRunsTable.id, runId));
@@ -444,19 +522,36 @@ async function doScheduleCallback(userId: string, step: WorkflowStep, context: C
   logger.info({ agentId, phone: phoneRaw, scheduledAt, callbackId: id }, "workflow: schedule_callback queued");
 }
 
-async function doSendWhatsapp(userId: string, step: WorkflowStep, context: Ctx): Promise<void> {
+async function doSendWhatsapp(
+  userId: string,
+  step: WorkflowStep,
+  context: Ctx,
+  stepIndex?: number,
+): Promise<void> {
   const phoneRaw = toStr(getPath(context, step.phoneField ?? "phone") || context["phone"]);
   if (!phoneRaw.trim()) throw new Error("send_whatsapp: no phone number in context");
 
   const channel = await getActiveChannel(userId);
   if (!channel) {
     logger.warn({ userId }, "workflow: send_whatsapp skipped — no active WhatsApp channel");
+    recordStepAudit(context, {
+      type: "send_whatsapp",
+      status: "skipped",
+      reason: "WhatsApp not connected",
+      stepIndex,
+    });
     return;
   }
 
   const ctx = await resolveSendContext(channel, () => getOwnCredsForUser(userId));
   if ("error" in ctx) {
     logger.warn({ userId, err: ctx.error }, "workflow: send_whatsapp skipped — send context error");
+    recordStepAudit(context, {
+      type: "send_whatsapp",
+      status: "skipped",
+      reason: String(ctx.error),
+      stepIndex,
+    });
     return;
   }
 
@@ -476,6 +571,14 @@ async function doSendWhatsapp(userId: string, step: WorkflowStep, context: Ctx):
   const params = rawParams.map((p) => interpolateTemplate(p, context));
   const callId = typeof callObj["callId"] === "number" ? callObj["callId"] : null;
 
+  const agentIdRaw = typeof step.agentId === "number" && step.agentId > 0
+    ? step.agentId
+    : Number(context["agentId"] ?? callObj["agentId"] ?? 0);
+  // Explicit catalog pick on the step wins — any Meta/VoBiz template name.
+  const explicit = step.whatsappTemplate;
+  const templateOverride = explicit?.name && explicit.language
+    ? { name: explicit.name.trim(), lang: explicit.language.trim() }
+    : undefined;
   const result = await sendWhatsappTemplate({
     channel,
     ctx,
@@ -483,17 +586,40 @@ async function doSendWhatsapp(userId: string, step: WorkflowStep, context: Ctx):
     hint,
     params,
     callId,
+    agentId: Number.isFinite(agentIdRaw) && agentIdRaw > 0 ? agentIdRaw : null,
+    templateOverride,
   });
   if (!result.ok && !result.skipped) {
     throw new Error(result.error ?? "send_whatsapp failed");
   }
+  if (result.skipped) {
+    recordStepAudit(context, {
+      type: "send_whatsapp",
+      status: "skipped",
+      reason: result.error ?? "Template send skipped",
+      stepIndex,
+    });
+  } else {
+    recordStepAudit(context, { type: "send_whatsapp", status: "sent", stepIndex });
+  }
   logger.info({ userId, hint, ok: result.ok, skipped: result.skipped }, "workflow: send_whatsapp done");
 }
 
-async function doSendEmail(userId: string, step: WorkflowStep, context: Ctx): Promise<void> {
+async function doSendEmail(
+  userId: string,
+  step: WorkflowStep,
+  context: Ctx,
+  stepIndex?: number,
+): Promise<void> {
   const to = toStr(getPath(context, step.emailField ?? "email") || context["email"]);
   if (!to.trim()) {
     logger.warn({ userId }, "workflow: send_email skipped — no email in context");
+    recordStepAudit(context, {
+      type: "send_email",
+      status: "skipped",
+      reason: "No email on person",
+      stepIndex,
+    });
     return;
   }
   const callObj = (context["call"] && typeof context["call"] === "object")
@@ -522,7 +648,132 @@ async function doSendEmail(userId: string, step: WorkflowStep, context: Ctx): Pr
   if (!result.ok && !result.skipped) {
     throw new Error(result.error ?? "send_email failed");
   }
+  if (result.skipped) {
+    recordStepAudit(context, {
+      type: "send_email",
+      status: "skipped",
+      reason: result.error ?? "Email channel inactive",
+      stepIndex,
+    });
+  } else {
+    recordStepAudit(context, { type: "send_email", status: "sent", stepIndex });
+  }
   logger.info({ userId, ok: result.ok, skipped: result.skipped }, "workflow: send_email done");
+}
+
+async function doJoinMeeting(
+  userId: string,
+  step: WorkflowStep,
+  context: Ctx,
+  stepIndex?: number,
+): Promise<void> {
+  const field = step.meetingUrlField?.trim();
+  const meetingUrl = toStr(
+    (field ? getPath(context, field) : undefined)
+      || context["meetingUrl"]
+      || context["meetLink"]
+      || context["meeting_url"]
+      || context["meet_link"]
+      || "",
+  ).trim();
+  if (!meetingUrl) {
+    logger.warn({ userId }, "workflow: join_meeting skipped — no meeting URL in context");
+    recordStepAudit(context, {
+      type: "join_meeting",
+      status: "skipped",
+      reason: "No meeting URL on person",
+      stepIndex,
+    });
+    return;
+  }
+  if (!process.env["RECALL_API_KEY"]) {
+    throw new Error("Meeting bots are not configured (missing Recall API key)");
+  }
+
+  const configuredAgentId =
+    typeof step.agentId === "number" && step.agentId > 0
+      ? step.agentId
+      : Number(context["agentId"] ?? 0);
+  if (!Number.isInteger(configuredAgentId) || configuredAgentId <= 0) {
+    throw new Error("join_meeting step missing agentId");
+  }
+
+  const result = await launchMeetingBotForAgent({
+    userId,
+    configuredAgentId,
+    meetingUrl,
+  });
+  context["meetingBotId"] = result.botId;
+  context["meetingRuntimeAgentId"] = result.runtimeAgentId;
+  recordStepAudit(context, { type: "join_meeting", status: "joined", stepIndex });
+  logger.info(
+    { userId, botId: result.botId, agentId: result.runtimeAgentId },
+    "workflow: join_meeting dispatched",
+  );
+}
+
+async function doUpdateSheet(
+  userId: string,
+  step: WorkflowStep,
+  context: Ctx,
+  stepIndex?: number,
+): Promise<void> {
+  const pipelineId = toStr(
+    context["__sheet_pipeline_id"]
+      || context["sheetPipelineId"]
+      || context["sheet_pipeline_id"]
+      || "",
+  ).trim();
+  const rowRaw = context["__sheet_row_index"] ?? context["sheetRowIndex"] ?? context["sheet_row_index"];
+  const sheetRowIndex = typeof rowRaw === "number" ? rowRaw : Number(rowRaw);
+  if (!pipelineId || !Number.isFinite(sheetRowIndex) || sheetRowIndex < 2) {
+    logger.warn({ userId, pipelineId, sheetRowIndex }, "workflow: update_sheet skipped — no sheet row in context");
+    recordStepAudit(context, {
+      type: "update_sheet",
+      status: "skipped",
+      reason: "No sheet row on this person",
+      stepIndex,
+    });
+    return;
+  }
+
+  const [pipeline] = await db.select().from(sheetAutoCallPipelinesTable)
+    .where(and(
+      eq(sheetAutoCallPipelinesTable.id, pipelineId),
+      eq(sheetAutoCallPipelinesTable.userId, userId),
+    ))
+    .limit(1);
+  if (!pipeline) {
+    logger.warn({ userId, pipelineId }, "workflow: update_sheet skipped — pipeline not found");
+    recordStepAudit(context, {
+      type: "update_sheet",
+      status: "skipped",
+      reason: "Sheet pipeline not found",
+      stepIndex,
+    });
+    return;
+  }
+
+  const callObj = (context["call"] && typeof context["call"] === "object")
+    ? (context["call"] as Record<string, unknown>)
+    : {};
+  const col = (step.sheetStatusColumn?.trim() || "Status");
+  const value = (
+    step.sheetStatusValue?.trim()
+    || toStr(callObj["disposition"] || callObj["status"] || context["disposition"] || "")
+    || "Updated"
+  ).slice(0, 200);
+
+  await updateSheetRowByIndex(
+    userId,
+    pipeline.connectionId,
+    pipeline.spreadsheetId,
+    pipeline.sheetName,
+    sheetRowIndex,
+    { [col]: value },
+  );
+  recordStepAudit(context, { type: "update_sheet", status: "ok", reason: `${col}=${value}`, stepIndex });
+  logger.info({ userId, pipelineId, sheetRowIndex, col, value }, "workflow: update_sheet done");
 }
 
 // ── atomic claim helpers ─────────────────────────────────────────────────────

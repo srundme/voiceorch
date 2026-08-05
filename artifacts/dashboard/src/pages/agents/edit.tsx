@@ -109,6 +109,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     sarvamSttMode, kbBakedOnly, schedulingCalendarId, schedulingEventTypeId,
     sarvamHighVadSensitivity, sarvamSpeechEndFlushMs, sarvamIncompleteHoldMs,
     voiceStack, geminiLiveVoiceName, geminiLiveThinkingLevel,
+    agentComposition, agentSurfaces, meetingPrompt,
     // Inbound/outbound phone number assignment is read-only in the agent form —
     // it's managed exclusively from the Phone Numbers page now. Never forward
     // these to the server: they're populated from the agent's own (potentially
@@ -164,10 +165,10 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     agentConfig["asrEndpointingSilenceMs"] = clampEndpointingMs(asrEndpointingSilenceMs);
   }
   if (sarvamSttMode) agentConfig["sarvamSttMode"] = sarvamSttMode;
-  // Always persist Sarvam STT latency knobs (UI is source of truth; snappy defaults).
-  agentConfig["sarvamHighVadSensitivity"] = sarvamHighVadSensitivity === true;
-  agentConfig["sarvamSpeechEndFlushMs"] = clampSarvamSpeechEndFlushMs(sarvamSpeechEndFlushMs);
-  agentConfig["sarvamIncompleteHoldMs"] = clampSarvamIncompleteHoldMs(sarvamIncompleteHoldMs);
+  // Saaras owns turn-taking — persist high-VAD only; hold knobs forced off.
+  agentConfig["sarvamHighVadSensitivity"] = sarvamHighVadSensitivity !== false;
+  agentConfig["sarvamSpeechEndFlushMs"] = 0;
+  agentConfig["sarvamIncompleteHoldMs"] = 0;
   if (kbBakedOnly) agentConfig["kbBakedOnly"] = true;
   // Always persist speed so Sarvam pace / Cartesia speed stay UI-owned (1.0 clears prior boost).
   agentConfig["ttsSpeed"] = ttsSpeed != null && Number.isFinite(ttsSpeed) ? ttsSpeed : 1;
@@ -175,7 +176,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   // update, so omitting it when the field is blanked would silently keep the
   // old cap forever — "leave blank for default" would never actually work.
   agentConfig["llmMaxTokens"] = llmMaxTokens ?? null;
-  if (ttsMinSentenceChars != null && ttsMinSentenceChars !== 18) agentConfig["ttsMinSentenceChars"] = ttsMinSentenceChars;
+  if (ttsMinSentenceChars != null && ttsMinSentenceChars !== 5) agentConfig["ttsMinSentenceChars"] = ttsMinSentenceChars;
   agentConfig["incrementalDelay"] = clampLinearDelayMs(linearDelayMs);
   agentConfig["fragmentCoalesceListeningMs"] = clampFragmentCoalesceListeningMs(fragmentCoalesceListeningMs);
   agentConfig["fragmentCoalescePlayingMs"] = clampFragmentCoalescePlayingMs(fragmentCoalescePlayingMs);
@@ -186,9 +187,9 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   };
   agentConfig["startSpeakingPlan"] = {
     waitSeconds:            startSpeakingWaitSecs          ?? 0,
-    onPunctuationSeconds:   startSpeakingOnPunctuationSecs ?? 0.1,
-    onNoPunctuationSeconds: startSpeakingOnNoPunctuationSecs ?? 0.1,
-    onNumberSeconds:        startSpeakingOnNumberSecs      ?? 0.1,
+    onPunctuationSeconds:   startSpeakingOnPunctuationSecs ?? 0,
+    onNoPunctuationSeconds: startSpeakingOnNoPunctuationSecs ?? 0,
+    onNumberSeconds:        startSpeakingOnNumberSecs      ?? 0,
   };
   {
     // Bolna parity: one "words before interrupt" drives word-count AND energy floor.
@@ -220,6 +221,11 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     };
   } else if (voiceStack === "classic") {
     agentConfig["voiceStack"] = "classic";
+  }
+  // Meeting-room prompt (Builder Talk → In meetings). Deep-merged on the server
+  // so Channels whoJoins / delegate / memory toggles are preserved.
+  if (meetingPrompt !== undefined) {
+    agentConfig["meetings"] = { meetingPrompt: meetingPrompt ?? "" };
   }
 
   const NATIVE_BOOKING_TYPES = new Set(["native_booking", "native_check_availability", "native_list_bookings", "native_reschedule", "native_cancel"]);
@@ -419,7 +425,7 @@ export default function AgentEdit() {
       language: "en-US", asrLanguage: "", backchannelingEnabled: true, backchannelingFrequency: 0.5,
       webhookUrl: "", webhookSecret: "", noiseCancellationEnabled: true,
       ambientNoiseEnabled: false, ambientNoiseTrack: "", ambientNoiseVolume: 1.0,
-      promptVariables: [], vadSilenceMs: 350, bargeInEnabled: true, bargeInEnergyThreshold: 1200, bargeInMinFrames: 4, micSensitivity: "normal",
+      promptVariables: [], vadSilenceMs: 350, bargeInEnabled: true, bargeInEnergyThreshold: 1800, bargeInMinFrames: 4, micSensitivity: "low",
       timezone: "",
       autoSwitchToEnglish: false,
       languageAutoDetect: false,
@@ -440,20 +446,20 @@ export default function AgentEdit() {
       stagedPromptCoreIdentity: "",
       asrEndpointingSilenceMs: 250,
       llmMaxTokens: null,
-      ttsMinSentenceChars: 18,
+      ttsMinSentenceChars: 5,
       ttsSpeed: 1,
       linearDelayMs: 0,
-      fragmentCoalesceListeningMs: 250,
-      fragmentCoalescePlayingMs: 1000,
+      fragmentCoalesceListeningMs: 0,
+      fragmentCoalescePlayingMs: 0,
       telephonyTailDrainMs: 400,
-      sarvamHighVadSensitivity: false,
-      sarvamSpeechEndFlushMs: 80,
-      sarvamIncompleteHoldMs: 700,
+      sarvamHighVadSensitivity: true,
+      sarvamSpeechEndFlushMs: 0,
+      sarvamIncompleteHoldMs: 0,
       kbBakedOnly: false,
       startSpeakingWaitSecs: 0,
-      startSpeakingOnPunctuationSecs: 0.1,
-      startSpeakingOnNoPunctuationSecs: 0.1,
-      startSpeakingOnNumberSecs: 0.1,
+      startSpeakingOnPunctuationSecs: 0,
+      startSpeakingOnNoPunctuationSecs: 0,
+      startSpeakingOnNumberSecs: 0,
       stopSpeakingNumWords: 3,
       stopSpeakingVoiceSecs: 0.45,
       stopSpeakingBackOffSecs: 1,
@@ -464,6 +470,9 @@ export default function AgentEdit() {
       voiceStack: "classic",
       geminiLiveVoiceName: "Kore",
       geminiLiveThinkingLevel: "minimal",
+      agentComposition: "single",
+      agentSurfaces: "phone",
+      meetingPrompt: "",
     },
   });
 
@@ -682,7 +691,7 @@ export default function AgentEdit() {
       bargeInEnabled:           ((agent as any).agentConfig?.bargeInEnabled as boolean | undefined) ?? true,
       bargeInEnergyThreshold:   clampBargeInEnergyThreshold((agent as any).agentConfig?.bargeInEnergyThreshold as number | undefined),
       bargeInMinFrames:         ((agent as any).agentConfig?.bargeInMinFrames as number | undefined) ?? 4,
-      micSensitivity:           (((agent as any).agentConfig?.micSensitivity as AgentFormValues["micSensitivity"] | undefined) ?? "normal"),
+      micSensitivity:           (((agent as any).agentConfig?.micSensitivity as AgentFormValues["micSensitivity"] | undefined) ?? "low"),
       timezone:                 ((agent as any).agentConfig?.timezone as string | undefined) ?? "",
       autoSwitchToEnglish:      ((agent as any).agentConfig?.autoSwitchToEnglish as boolean | undefined) ?? false,
       languageAutoDetect:       ((agent as any).agentConfig?.languageAutoDetect as boolean | undefined) ?? false,
@@ -706,7 +715,7 @@ export default function AgentEdit() {
       stagedPromptCoreIdentity: (agent as any).stagedPromptCoreIdentity ?? "",
       asrEndpointingSilenceMs: clampEndpointingMs((agent as any).agentConfig?.asrEndpointingSilenceMs as number | undefined),
       llmMaxTokens: ((agent as any).agentConfig?.llmMaxTokens as number | null | undefined) ?? null,
-      ttsMinSentenceChars: ((agent as any).agentConfig?.ttsMinSentenceChars as number | undefined) ?? 18,
+      ttsMinSentenceChars: ((agent as any).agentConfig?.ttsMinSentenceChars as number | undefined) ?? 5,
       linearDelayMs: clampLinearDelayMs((agent as any).agentConfig?.incrementalDelay as number | undefined),
       fragmentCoalesceListeningMs: clampFragmentCoalesceListeningMs((agent as any).agentConfig?.fragmentCoalesceListeningMs as number | undefined),
       fragmentCoalescePlayingMs: clampFragmentCoalescePlayingMs((agent as any).agentConfig?.fragmentCoalescePlayingMs as number | undefined),
@@ -716,9 +725,9 @@ export default function AgentEdit() {
       sarvamIncompleteHoldMs: clampSarvamIncompleteHoldMs((agent as any).agentConfig?.sarvamIncompleteHoldMs as number | undefined),
       kbBakedOnly: ((agent as any).agentConfig?.kbBakedOnly as boolean | undefined) ?? false,
       startSpeakingWaitSecs:            ((agent as any).agentConfig?.startSpeakingPlan?.waitSeconds as number | undefined)            ?? 0,
-      startSpeakingOnPunctuationSecs:   ((agent as any).agentConfig?.startSpeakingPlan?.onPunctuationSeconds as number | undefined)   ?? 0.1,
-      startSpeakingOnNoPunctuationSecs: ((agent as any).agentConfig?.startSpeakingPlan?.onNoPunctuationSeconds as number | undefined) ?? 0.1,
-      startSpeakingOnNumberSecs:        ((agent as any).agentConfig?.startSpeakingPlan?.onNumberSeconds as number | undefined)        ?? 0.1,
+      startSpeakingOnPunctuationSecs:   ((agent as any).agentConfig?.startSpeakingPlan?.onPunctuationSeconds as number | undefined)   ?? 0,
+      startSpeakingOnNoPunctuationSecs: ((agent as any).agentConfig?.startSpeakingPlan?.onNoPunctuationSeconds as number | undefined) ?? 0,
+      startSpeakingOnNumberSecs:        ((agent as any).agentConfig?.startSpeakingPlan?.onNumberSeconds as number | undefined)        ?? 0,
       stopSpeakingNumWords: (() => {
         const fromWords = (agent as any).agentConfig?.wordsForInterruption as number | undefined;
         const fromPlan = (agent as any).agentConfig?.stopSpeakingPlan?.numWords as number | undefined;
@@ -743,6 +752,11 @@ export default function AgentEdit() {
       voiceStack:               (((agent as any).agentConfig?.voiceStack as string | undefined) === "gemini_live" ? "gemini_live" : "classic") as AgentFormValues["voiceStack"],
       geminiLiveVoiceName:      ((agent as any).agentConfig?.geminiLive?.voiceName as string | undefined) ?? "Kore",
       geminiLiveThinkingLevel:  ((agent as any).agentConfig?.geminiLive?.thinkingLevel as AgentFormValues["geminiLiveThinkingLevel"] | undefined) ?? "minimal",
+      agentComposition: "single",
+      agentSurfaces: ((agent as any).agentConfig?.meetings?.enabled === true ? "phone_and_meet" : "phone") as AgentFormValues["agentSurfaces"],
+      meetingPrompt: typeof (agent as any).agentConfig?.meetings?.meetingPrompt === "string"
+        ? (agent as any).agentConfig.meetings.meetingPrompt
+        : "",
     });
     const cfg = (agent as any).agentConfig;
     if (cfg?.voiceStack === "gemini_live") {
@@ -917,10 +931,27 @@ export default function AgentEdit() {
               <CardContent className="space-y-4">
                 <FormField control={form.control} name="systemPrompt" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>System Prompt</FormLabel>
+                    <FormLabel>Call prompt</FormLabel>
                     <FormControl>
                       <Textarea placeholder="You are a helpful assistant..." className="min-h-[120px] font-mono text-sm" {...field} />
                     </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="meetingPrompt" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Meeting prompt</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Optional. Leave blank to reuse the call prompt in Meet/Zoom/Teams…"
+                        className="min-h-[100px] font-mono text-sm"
+                        {...field}
+                        value={field.value ?? ""}
+                      />
+                    </FormControl>
+                    <FormDescription className="text-xs">
+                      Used when this agent joins a video meeting. Blank falls back to the call prompt.
+                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )} />
@@ -1608,7 +1639,7 @@ export default function AgentEdit() {
                         }} />
                     </FormControl>
                     <FormDescription className="text-[11px]">
-                      Cap on reply length per turn. <strong>Too low cuts sentences mid-word.</strong> Blank = voice default (200). Tamil/Hindi/Indic scripts use 2–4× more tokens than English — use 200–300 there. Gemini 3.x "thinking" overhead is compensated automatically.
+                      Cap on reply length per turn. <strong>Too low cuts sentences mid-word.</strong> Blank = voice default (200; <strong>500 for Sarvam</strong> — reasoning needs headroom). Tamil/Hindi use more tokens than English.
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -1618,11 +1649,11 @@ export default function AgentEdit() {
                     <FormLabel>TTS Early Dispatch Threshold (chars)</FormLabel>
                     <FormControl>
                       <Input type="number" min={5} max={200} step={5}
-                        value={field.value ?? 18}
+                        value={field.value ?? 5}
                         onChange={e => field.onChange(parseInt(e.target.value, 10))} />
                     </FormControl>
                     <FormDescription className="text-[11px]">
-                      Min chars before a comma-clause triggers an early TTS request mid-LLM-stream. <strong>Lower = TTS fires earlier.</strong> Default: 18 (voice). Range: 5–200.
+                      Min chars before a comma-clause triggers an early TTS request mid-LLM-stream. <strong>Lower = TTS fires earlier.</strong> Default: 5 (trust stream). Range: 5–200.
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -1712,39 +1743,11 @@ export default function AgentEdit() {
                         <FormLabel>Detect pauses quickly</FormLabel>
                         <div className="flex items-center gap-3 pt-2">
                           <Switch checked={!!field.value} onCheckedChange={field.onChange} />
-                          <span className="text-sm text-muted-foreground">{field.value ? "On (faster)" : "Off (more patient)"}</span>
+                          <span className="text-sm text-muted-foreground">{field.value ? "On (Saaras VAD)" : "Off (more patient)"}</span>
                         </div>
                         <FormDescription className="text-[11px]">
-                          Default <strong>Off</strong> — avoids cutting callers mid-sentence on phone audio. Turn on only if replies feel too slow.
+                          Default <strong>On</strong> — Saaras VAD owns end-of-speech. Turn off only if callers get cut mid-sentence on noisy lines.
                         </FormDescription>
-                      </FormItem>
-                    )} />
-                    <FormField control={form.control} name="sarvamSpeechEndFlushMs" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Reply kickoff delay (ms)</FormLabel>
-                        <FormControl>
-                          <Input type="number" min={0} max={200} step={10}
-                            value={field.value ?? 80}
-                            onChange={e => field.onChange(parseInt(e.target.value, 10))} />
-                        </FormControl>
-                        <FormDescription className="text-[11px]">
-                          Tiny pause after the caller finishes before the agent starts thinking. Default <strong>80</strong>.
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                    <FormField control={form.control} name="sarvamIncompleteHoldMs" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Wait for unfinished thoughts (ms)</FormLabel>
-                        <FormControl>
-                          <Input type="number" min={50} max={1000} step={10}
-                            value={field.value ?? 700}
-                            onChange={e => field.onChange(parseInt(e.target.value, 10))} />
-                        </FormControl>
-                        <FormDescription className="text-[11px]">
-                          Extra wait when someone seems mid-sentence (e.g. “I want…”). Default <strong>700</strong>. Raise if callers get cut off while thinking.
-                        </FormDescription>
-                        <FormMessage />
                       </FormItem>
                     )} />
                   </div>
@@ -1754,15 +1757,15 @@ export default function AgentEdit() {
               <div className="mt-6">
                 <p className="text-sm font-medium text-foreground mb-0.5">Response Timing — Start Speaking Delays</p>
                 <p className="text-[11px] text-muted-foreground mb-4">
-                  How long the agent waits after end-of-turn detection before it starts speaking. Values are applied exactly as set here (no silent pipeline cap).
+                  Extra wait after STT final before the LLM. Default <strong>0</strong> — STT already decided end-of-turn. Raise only for OTP/number dictation edge cases.
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                   {(
                     [
-                      { name: "startSpeakingWaitSecs",            label: "Base Wait",            desc: "Flat extra pause before any response. 0 = off.", default: 0, step: 0.1, max: 5 },
-                      { name: "startSpeakingOnPunctuationSecs",   label: "After Punctuation",    desc: "Extra delay when turn ends with . ? ! or ।. Default 0.1s.", default: 0.1, step: 0.05, max: 3 },
-                      { name: "startSpeakingOnNoPunctuationSecs", label: "After No Punctuation", desc: "Extra delay when no terminal punctuation. Default 0.1s — raise if callers trail off mid-sentence.", default: 0.1, step: 0.05, max: 3 },
-                      { name: "startSpeakingOnNumberSecs",        label: "After Number",         desc: "Extra delay when turn ends with a digit. Default 0.1s — raise to avoid cutting off phone/OTP numbers.", default: 0.1, step: 0.05, max: 3 },
+                      { name: "startSpeakingWaitSecs",            label: "Base Wait",            desc: "Flat extra pause before any response. 0 = off (recommended).", default: 0, step: 0.1, max: 5 },
+                      { name: "startSpeakingOnPunctuationSecs",   label: "After Punctuation",    desc: "Extra delay when turn ends with . ? ! or ।. Default 0.", default: 0, step: 0.05, max: 3 },
+                      { name: "startSpeakingOnNoPunctuationSecs", label: "After No Punctuation", desc: "Extra delay when no terminal punctuation. Default 0 — raise if callers trail off mid-sentence.", default: 0, step: 0.05, max: 3 },
+                      { name: "startSpeakingOnNumberSecs",        label: "After Number",         desc: "Extra delay when turn ends with a digit. Default 0 — raise to avoid cutting off phone/OTP numbers.", default: 0, step: 0.05, max: 3 },
                     ] as const
                   ).map(({ name, label, desc, default: def, step, max }) => (
                     <FormField key={name} control={form.control} name={name} render={({ field }) => (

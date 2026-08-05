@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { makeThinkFilter, stripReasoningBlocks } from "./reasoningFilter.js";
+import {
+  makeThinkFilter,
+  stripReasoningBlocks,
+  stripLeakedMonologue,
+  isLeakedMonologueClause,
+} from "./reasoningFilter.js";
 
 // Helper: stream a full reply through the token filter in arbitrary chunks and
 // collect the visible (spoken) output.
@@ -50,7 +55,7 @@ describe("stripReasoningBlocks (whole-string)", () => {
   });
 
   it("removes an unclosed trailing block to end of string", () => {
-    expect(stripReasoningBlocks("Hello <think>never closed...")).toBe("Hello ");
+    expect(stripReasoningBlocks("Hello <think>never closed...")).toBe("Hello");
   });
 
   it("removes all recognised tag types", () => {
@@ -67,5 +72,37 @@ describe("stripReasoningBlocks (whole-string)", () => {
     expect(stripReasoningBlocks("Just a normal sentence.")).toBe(
       "Just a normal sentence.",
     );
+  });
+
+  it("keeps Indic speech after English chain-of-thought (call 5646)", () => {
+    const leaked =
+      'The user said "ம் இருக்கு" which means yes.\n\nAccording to the flow:\n- Stage 2\n\nLet me present the expo.\n\nSuper! இது August twenty ninth-ல நடக்கும்';
+    expect(stripReasoningBlocks(leaked)).toMatch(/^Super! இது/);
+  });
+
+  it("drops pure English planning with no speech", () => {
+    const dumped =
+      "The user wants me to act as a Tamil-speaking AI assistant in a call flow scenario. Let me analyze the constraints:\n\n1. IDENTITY: If earlier compliance requires stating I'm an AI I must do so. According to the flow I should open with hello only.";
+    expect(stripReasoningBlocks(dumped)).toBe("");
+  });
+});
+
+describe("stripLeakedMonologue", () => {
+  it("extracts draft after say-something-like", () => {
+    expect(
+      stripLeakedMonologue('Let me say something like: "ஹலோ, எப்படி இருக்கீங்க?"'),
+    ).toBe("ஹலோ, எப்படி இருக்கீங்க?");
+  });
+});
+
+describe("isLeakedMonologueClause", () => {
+  it("flags English CoT clauses", () => {
+    expect(isLeakedMonologueClause("The user wants me to act as a Tamil-speaking AI assistant.")).toBe(true);
+    expect(isLeakedMonologueClause("Let me analyze the constraints.")).toBe(true);
+  });
+
+  it("keeps real speech", () => {
+    expect(isLeakedMonologueClause("ஹலோ, எப்படி இருக்கீங்க?")).toBe(false);
+    expect(isLeakedMonologueClause("Sure, I can help with that.")).toBe(false);
   });
 });

@@ -20,8 +20,11 @@ import {
   clampSarvamIncompleteHoldMs,
   clampSarvamSpeechEndFlushMs,
   resolveSarvamHighVadSensitivity,
+  FRAGMENT_COALESCE_DEFAULTS,
+  resolveStartSpeakingPlan,
+  resolveTtsMinSentenceChars,
 } from "@workspace/db/call-engine-defaults";
-import { resolveMicSensitivity, getMicSensitivityThresholds } from "../orchestration/mic-sensitivity.js";
+import { resolveMicSensitivity, resolveBargeInEnergyThreshold } from "../orchestration/mic-sensitivity.js";
 import { optionalMs } from "../orchestration/stt-tuning.js";
 import { getAttachedSourceIds } from "../orchestration/kb-retrieval.js";
 import type { AgentConfig, AgentTool, SessionTransport } from "../orchestration/types.js";
@@ -134,6 +137,7 @@ async function buildTargetAgentConfig(
   const voiceStack = resolveVoiceStack(agentCfg["voiceStack"] as string | undefined);
   const micSensitivity = resolveMicSensitivity(agentCfg["micSensitivity"] as string | undefined);
 
+  const isSarvamLlm = (agent.llmProvider ?? "").toLowerCase() === "sarvam";
   const agentConfig: AgentConfig = {
     id: agent.id,
     name: agent.name,
@@ -148,10 +152,16 @@ async function buildTargetAgentConfig(
       // cap identical across a mid-call squad handoff for legacy-config agents.
       maxTokens: (() => {
         const v = "llmMaxTokens" in agentCfg ? agentCfg["llmMaxTokens"] : agentCfg["maxTokens"];
-        return typeof v === "number" && v > 0 ? v : 200;
+        if (typeof v === "number" && v > 0) return v;
+        return isSarvamLlm ? 500 : 200;
       })(),
       presencePenalty: 0.3,
       frequencyPenalty: 0.3,
+      ...(agentCfg["reasoningEffort"] === "medium" || agentCfg["reasoningEffort"] === "high"
+        ? { reasoningEffort: agentCfg["reasoningEffort"] as "medium" | "high" }
+        : isSarvamLlm
+          ? { reasoningEffort: null }
+          : {}),
     },
     maxDuration: agent.maxDuration ?? 600,
     asrProvider: agent.asrProvider,
@@ -213,8 +223,7 @@ async function buildTargetAgentConfig(
     webhookSecret: (agentCfg["webhookSecret"] as string | undefined) ?? null,
     vadSilenceMs: (agentCfg["vadSilenceMs"] as number | undefined) ?? 350,
     bargeInEnabled: (agentCfg["bargeInEnabled"] as boolean | undefined) ?? true,
-    bargeInEnergyThreshold: (agentCfg["bargeInEnergyThreshold"] as number | undefined)
-      ?? getMicSensitivityThresholds(micSensitivity).bargeInEnergyThreshold,
+    bargeInEnergyThreshold: resolveBargeInEnergyThreshold(agentCfg["bargeInEnergyThreshold"]),
     bargeInMinFrames: (agentCfg["bargeInMinFrames"] as number | undefined) ?? 4,
     bargeInEchoGraceMs: (agentCfg["bargeInEchoGraceMs"] as number | undefined) ?? 600,
     micSensitivity,
@@ -232,25 +241,9 @@ async function buildTargetAgentConfig(
       return v === 350 ? 0 : Math.max(0, Math.min(1500, Math.round(v)));
     })(),
     hangupAfterLlmCall: false,
-    startSpeakingPlan: (() => {
-      const raw = agentCfg["startSpeakingPlan"] as AgentConfig["startSpeakingPlan"] | undefined;
-      const plan = raw ?? {
-        waitSeconds: 0,
-        onPunctuationSeconds: 0.1,
-        onNoPunctuationSeconds: 0.1,
-        onNumberSeconds: 0.1,
-      };
-      return {
-        waitSeconds: plan.waitSeconds ?? 0,
-        onPunctuationSeconds: plan.onPunctuationSeconds ?? 0.1,
-        onNoPunctuationSeconds: plan.onNoPunctuationSeconds === 1.5
-          ? 0.1
-          : (plan.onNoPunctuationSeconds ?? 0.1),
-        onNumberSeconds: plan.onNumberSeconds === 0.5
-          ? 0.1
-          : (plan.onNumberSeconds ?? 0.1),
-      };
-    })(),
+    startSpeakingPlan: resolveStartSpeakingPlan(
+      agentCfg["startSpeakingPlan"] as AgentConfig["startSpeakingPlan"] | undefined,
+    ),
     stopSpeakingPlan: null,
     compliance: null,
     contextWindowTurns: agent.contextWindowTurns ?? null,
@@ -261,15 +254,17 @@ async function buildTargetAgentConfig(
     stagedPromptCoreIdentity: agent.stagedPromptCoreIdentity ?? null,
     asrEndpointingSilenceMs: (agentCfg["asrEndpointingSilenceMs"] as number | undefined) ?? 250,
     llmMaxTokens: (agentCfg["llmMaxTokens"] as number | null | undefined) ?? null,
-    ttsMinSentenceChars: (agentCfg["ttsMinSentenceChars"] as number | undefined) ?? 18,
+    ttsMinSentenceChars: resolveTtsMinSentenceChars(
+      agentCfg["ttsMinSentenceChars"] as number | undefined,
+    ),
     fragmentCoalesceListeningMs: (() => {
       const v = agentCfg["fragmentCoalesceListeningMs"];
-      if (typeof v !== "number" || !Number.isFinite(v)) return 150;
+      if (typeof v !== "number" || !Number.isFinite(v)) return FRAGMENT_COALESCE_DEFAULTS.listeningMs;
       return Math.max(0, Math.min(2000, Math.round(v)));
     })(),
     fragmentCoalescePlayingMs: (() => {
       const v = agentCfg["fragmentCoalescePlayingMs"];
-      if (typeof v !== "number" || !Number.isFinite(v)) return 800;
+      if (typeof v !== "number" || !Number.isFinite(v)) return FRAGMENT_COALESCE_DEFAULTS.playingMs;
       return Math.max(0, Math.min(3000, Math.round(v)));
     })(),
     telephonyTailDrainMs: (() => {

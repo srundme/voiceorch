@@ -1,31 +1,31 @@
 /**
  * Channels → Meetings (Phase 4).
  *
- * Configure how THIS agent participates in Meet/Zoom/Teams: own meeting prompt,
- * or hand the room to a delegate agent, plus memory/context toggles.
- * Saved on agentConfig.meetings — does not touch the call system prompt field.
+ * Join / delegate / memory toggles live here.
+ * Meeting prompt is owned by Agent Builder → Prompt / Talk (In meetings).
  */
 
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import {
   useGetAgent,
   useListAgents,
   useUpdateAgent,
   getGetAgentQueryKey,
   getListAgentsQueryKey,
+  customFetch,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError } from "@/lib/format-api-error";
-import { Loader2, Save } from "lucide-react";
+import { ExternalLink, FileText, Loader2, Save } from "lucide-react";
 
 export type MeetingsForm = {
   enabled: boolean;
@@ -71,6 +71,13 @@ export function MeetingsChannelCard({ agentId }: { agentId: number }) {
   });
   const update = useUpdateAgent();
 
+  const identityQ = useQuery({
+    queryKey: ["meet-bot-identity"],
+    queryFn: () =>
+      customFetch<{ botEmail: string | null; signedInGoogleMeet: boolean }>("/api/meet-bots/identity"),
+    staleTime: 60_000,
+  });
+
   const [form, setForm] = useState<MeetingsForm>(EMPTY);
   const [loaded, setLoaded] = useState(false);
 
@@ -85,6 +92,7 @@ export function MeetingsChannelCard({ agentId }: { agentId: number }) {
     name: string;
   }>;
   const others = agents.filter((a) => a.id !== agentId);
+  const meetPromptPreview = form.meetingPrompt.trim();
 
   const set = (patch: Partial<MeetingsForm>) => setForm((prev) => ({ ...prev, ...patch }));
 
@@ -105,7 +113,8 @@ export function MeetingsChannelCard({ agentId }: { agentId: number }) {
             meetings: {
               enabled: form.enabled,
               whoJoins: form.whoJoins,
-              meetingPrompt: form.meetingPrompt.trim(),
+              // Prompt is owned by Builder — keep existing value on channel save.
+              meetingPrompt: form.meetingPrompt,
               delegateAgentId:
                 form.whoJoins === "delegate" && form.delegateAgentId
                   ? Number(form.delegateAgentId)
@@ -129,7 +138,7 @@ export function MeetingsChannelCard({ agentId }: { agentId: number }) {
         <div className="min-w-0">
           <h3 className="text-sm font-semibold">Meetings</h3>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Meet, Zoom, Teams — meeting prompt, or delegate another agent.
+            Meet, Zoom, Teams — who joins and what context is passed.
           </p>
         </div>
         <Button asChild type="button" variant="outline" size="sm" className="h-8 shrink-0 text-xs">
@@ -151,6 +160,23 @@ export function MeetingsChannelCard({ agentId }: { agentId: number }) {
             <Switch checked={form.enabled} onCheckedChange={(v) => set({ enabled: v })} />
           </div>
 
+          {identityQ.data && (
+            <div className="rounded-md border border-border/60 bg-muted/20 px-3 py-2.5 text-[11px] text-muted-foreground leading-relaxed">
+              {identityQ.data.botEmail ? (
+                <>
+                  Bot joins as{" "}
+                  <span className="font-mono text-foreground">{identityQ.data.botEmail}</span>
+                  {" — "}admit this address, or add it to the Meet invite.
+                </>
+              ) : (
+                <>
+                  Managed meeting agent joins as a guest. Google Meet may ask the host to admit it by
+                  the agent&apos;s name (no email shown).
+                </>
+              )}
+            </div>
+          )}
+
           {form.enabled && (
             <>
               <div className="space-y-2">
@@ -166,7 +192,7 @@ export function MeetingsChannelCard({ agentId }: { agentId: number }) {
                     }
                   >
                     <p className="text-[12px] font-medium">This agent</p>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">Use a meeting-specific prompt</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">Uses the meeting prompt from Builder</p>
                   </button>
                   <button
                     type="button"
@@ -184,18 +210,24 @@ export function MeetingsChannelCard({ agentId }: { agentId: number }) {
               </div>
 
               {form.whoJoins === "self" ? (
-                <div className="space-y-1.5">
-                  <Label className="text-[11px]">Meeting prompt</Label>
-                  <Textarea
-                    rows={5}
-                    className="text-xs resize-y min-h-[100px]"
-                    placeholder="Optional. Leave blank to use the call prompt. Example: You are in a live video meeting — be concise, greet attendees by name when known, don’t hang up with a phone farewell…"
-                    value={form.meetingPrompt}
-                    onChange={(e) => set({ meetingPrompt: e.target.value })}
-                  />
-                  <p className="text-[10px] text-muted-foreground">
-                    Separate from the Prompt tab (calls). Memory and call context can still be attached below.
-                  </p>
+                <div className="rounded-lg border border-border/50 bg-muted/20 px-3 py-3 space-y-2">
+                  <div className="flex items-start gap-2">
+                    <FileText className="h-3.5 w-3.5 mt-0.5 text-muted-foreground shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[12px] font-medium">Meeting prompt</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">
+                        {meetPromptPreview
+                          ? `${meetPromptPreview.slice(0, 120)}${meetPromptPreview.length > 120 ? "…" : ""}`
+                          : "Not set — meetings will use the call prompt."}
+                      </p>
+                    </div>
+                  </div>
+                  <Button asChild type="button" variant="outline" size="sm" className="h-8 text-xs gap-1.5">
+                    <Link href={`/app/agents/${agentId}?section=prompt`}>
+                      Edit in Builder
+                      <ExternalLink className="h-3 w-3" />
+                    </Link>
+                  </Button>
                 </div>
               ) : (
                 <div className="space-y-1.5">
@@ -216,7 +248,12 @@ export function MeetingsChannelCard({ agentId }: { agentId: number }) {
                     </SelectContent>
                   </Select>
                   <p className="text-[10px] text-muted-foreground">
-                    That agent’s meeting prompt (or call prompt) is used in the room.
+                    That agent’s meeting prompt (or call prompt) is used in the room.{" "}
+                    {form.delegateAgentId ? (
+                      <Link href={`/app/agents/${form.delegateAgentId}?section=prompt`} className="underline underline-offset-2">
+                        Edit their prompt
+                      </Link>
+                    ) : null}
                   </p>
                 </div>
               )}

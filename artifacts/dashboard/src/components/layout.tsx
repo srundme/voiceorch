@@ -8,7 +8,7 @@ import {
   Menu, ChevronDown, ChevronLeft, ChevronRight,
   LogOut, Bell, Search, SlidersHorizontal, BookOpen, PlugZap, Sun, Moon, Sparkles,
   Plus, X, Wand2, Wrench, Megaphone, Calendar, Video, MessageCircle,
-  Brain, Users, BarChart3,
+  Brain, Users, BarChart3, ListOrdered, GitBranch,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -98,41 +98,29 @@ interface NavGroup {
 }
 
 /**
- * Full-page Stripe IA (see docs/snapserve-agent-centric-ia.md).
- * Builder = agent runtime only; Automation / Channels are separate Operate surfaces.
- * Every product surface is first-class in the sidebar.
+ * Call-plans IA (Phase 4).
+ * Primary: Home · Call plans · Agents · People · Connections · History
+ * Journeys / Automation / Dial flows / Channels peers are redirected, not deleted.
  */
 const NAV_GROUPS: NavGroup[] = [
   {
     items: [
-      { name: "Home",   href: "/app/home",   icon: Home },
-      { name: "Agents", href: "/app/agents", icon: Bot },
+      { name: "Home",        href: "/app/home",        icon: Home },
+      { name: "Call plans",  href: "/app/call-plans",  icon: ListOrdered },
+      { name: "Agents",      href: "/app/agents",      icon: Bot },
+      { name: "People",      href: "/app/people",      icon: Users },
+      { name: "Connections", href: "/app/connections", icon: PlugZap },
+      { name: "History",     href: "/app/history",     icon: Phone, callbackBadge: true },
     ],
   },
   {
-    group: "OPERATE",
-    items: [
-      { name: "Campaigns",     href: "/app/campaigns",     icon: Megaphone },
-      { name: "Automation",    href: "/app/automation",    icon: Workflow },
-      { name: "Phone Numbers", href: "/app/phone-numbers", icon: Hash },
-      { name: "Calls",         href: "/app/calls",         icon: Phone, callbackBadge: true },
-    ],
-  },
-  {
-    group: "CONNECT",
-    items: [
-      { name: "Integrations", href: "/app/connections",  icon: PlugZap },
-      { name: "Scheduling",   href: "/app/scheduling",   icon: Calendar },
-      { name: "Meet",         href: "/app/meet",         icon: Video },
-    ],
-  },
-  {
-    group: "INTELLIGENCE",
+    group: "MORE",
     items: [
       { name: "Knowledge",  href: "/app/knowledge-bases", icon: BookOpen },
       { name: "Memory",     href: "/app/memory",          icon: Brain },
-      { name: "Squads",     href: "/app/squads",          icon: Users },
+      { name: "Squads",     href: "/app/squads",          icon: GitBranch },
       { name: "Analytics",  href: "/app/analytics",       icon: BarChart3 },
+      { name: "Bookings", href: "/app/scheduling",      icon: Calendar },
     ],
   },
 ];
@@ -146,15 +134,11 @@ const NAV_GROUPS: NavGroup[] = [
 const MANAGED_CLIENT_NAV: NavGroup[] = [
   {
     items: [
-      { name: "Home",   href: "/app/home",   icon: Home },
-      { name: "Agents", href: "/app/agents", icon: Bot },
-    ],
-  },
-  {
-    group: "OPERATE",
-    items: [
-      { name: "Calls",         href: "/app/calls",         icon: Phone, callbackBadge: true },
-      { name: "Phone Numbers", href: "/app/phone-numbers", icon: Hash },
+      { name: "Home",        href: "/app/home",        icon: Home },
+      { name: "Call plans",  href: "/app/call-plans",  icon: ListOrdered },
+      { name: "Agents",      href: "/app/agents",      icon: Bot },
+      { name: "History",     href: "/app/history",     icon: Phone, callbackBadge: true },
+      { name: "Connections", href: "/app/connections", icon: PlugZap },
     ],
   },
 ];
@@ -249,11 +233,11 @@ function WalletChip({ compact = false }: { compact?: boolean }) {
   );
 }
 
-/* ─ Notification bell ───────────────────────────────────────────────────────── */
+/* ─── Notification bell ──────────────────────────────────────────────────── */
 function BellButton() {
   return (
-    <button className="p-2 rounded-xl text-muted-foreground/60 hover:text-foreground hover:bg-accent transition-colors relative">
-      <Bell className="w-4 h-4" />
+    <button className="p-2 rounded-lg text-muted-foreground/50 hover:text-foreground hover:bg-accent transition-colors relative">
+      <Bell className="w-[15px] h-[15px]" />
     </button>
   );
 }
@@ -271,15 +255,15 @@ function SidebarUser({ collapsed }: { collapsed: boolean }) {
     <div className="relative">
       <button
         onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-2.5 w-full p-2 rounded-xl hover:bg-accent transition-colors"
+        className="flex items-center gap-2 w-full px-2.5 py-2 rounded-lg hover:bg-accent transition-colors"
       >
-        <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
-          <span className="text-[11px] font-bold text-primary">{initials}</span>
+        <div className="w-6 h-6 rounded-md bg-elevated border border-border flex items-center justify-center shrink-0">
+          <span className="text-[10px] font-semibold text-foreground/70">{initials}</span>
         </div>
         {!collapsed && (
           <>
-            <span className="flex-1 text-left text-[13px] font-semibold text-foreground truncate">{name}</span>
-            <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground/50 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
+            <span className="flex-1 text-left text-[12.5px] font-medium text-foreground max-w-[110px] truncate">{name}</span>
+            <ChevronDown className={`w-3 h-3 text-muted-foreground/40 transition-transform duration-150 shrink-0 ${open ? "rotate-180" : ""}`} />
           </>
         )}
       </button>
@@ -287,18 +271,18 @@ function SidebarUser({ collapsed }: { collapsed: boolean }) {
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 bottom-full mb-2 w-[220px] rounded-2xl border border-border bg-popover shadow-xl p-1 z-50">
-            <div className="px-3 py-2 border-b border-border mb-1">
-              <p className="text-[13px] font-bold text-foreground truncate">{name}</p>
-              {email && <p className="text-[11px] text-muted-foreground truncate">{email}</p>}
+          <div className="absolute left-0 bottom-full mb-1.5 w-[200px] rounded-xl border border-border bg-popover shadow-xl overflow-hidden z-50">
+            <div className="px-3.5 py-2.5 border-b border-border">
+              <p className="text-[12.5px] font-semibold text-foreground truncate">{name}</p>
+              {email && <p className="text-[10.5px] text-muted-foreground/60 truncate mt-0.5">{email}</p>}
             </div>
             <Link href="/app/settings">
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="flex items-center gap-3 px-3 py-2 w-full text-left text-[13px] text-muted-foreground rounded-lg hover:bg-accent hover:text-foreground transition-colors"
+                className="flex items-center gap-2.5 px-3.5 py-2.5 w-full text-left text-[13px] text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
               >
-                <Settings className="w-4 h-4" />
+                <Settings className="w-3.5 h-3.5" />
                 Settings
               </button>
             </Link>
@@ -308,16 +292,16 @@ function SidebarUser({ collapsed }: { collapsed: boolean }) {
                 setTheme(theme === "dark" ? "light" : "dark");
                 setOpen(false);
               }}
-              className="flex items-center gap-3 px-3 py-2 w-full text-left text-[13px] text-muted-foreground rounded-lg hover:bg-accent hover:text-foreground transition-colors"
+              className="flex items-center gap-2.5 px-3.5 py-2.5 w-full text-left text-[13px] text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
             >
-              {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+              {theme === "dark" ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
               {theme === "dark" ? "Light appearance" : "Dark appearance"}
             </button>
             <button
               onClick={() => { void signOut(); setOpen(false); }}
-              className="flex items-center gap-3 px-3 py-2 w-full text-left text-[13px] text-destructive rounded-lg hover:bg-destructive/10 transition-colors"
+              className="flex items-center gap-2.5 px-3.5 py-2.5 w-full text-left text-[13px] text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
             >
-              <LogOut className="w-4 h-4" />
+              <LogOut className="w-3.5 h-3.5" />
               Sign out
             </button>
           </div>
@@ -330,14 +314,33 @@ function SidebarUser({ collapsed }: { collapsed: boolean }) {
 /* ─── Utility strip (desktop) — no page title; pages own their h1 via StripePage */
 function UtilityStrip() {
   return (
-    <div className="flex h-14 shrink-0 items-center justify-end gap-2 border-b border-border/50 bg-background/80 backdrop-blur-md px-6">
+    <div className="flex h-10 shrink-0 items-center justify-end gap-1 border-b border-border/70 bg-background px-4">
       <ThemeToggle />
       <BellButton />
     </div>
   );
 }
 
-/* ─ Single nav item ────────────────────────────────────────────────────────────────── */
+/* ─── Single nav item ────────────────────────────────────────────────────── */
+function navItemIsActive(location: string, href: string): boolean {
+  if (href === "/app") return false;
+  if (location.startsWith(href)) return true;
+  // Phase 4 aliases — old URLs still work; highlight the new home.
+  if (href === "/app/history" && (location.startsWith("/app/calls") || location.startsWith("/app/history"))) return true;
+  if (href === "/app/people" && (location.startsWith("/app/people") || location.startsWith("/app/campaigns"))) return true;
+  if (
+    href === "/app/connections"
+    && (
+      location.startsWith("/app/connections")
+      || location.startsWith("/app/whatsapp")
+      || location.startsWith("/app/meta-leads")
+      || location.startsWith("/app/automatic-calls")
+    )
+  ) return true;
+  if (href === "/app/call-plans" && (location.startsWith("/app/call-plans") || location.startsWith("/app/automation"))) return true;
+  return false;
+}
+
 function NavItemEl({
   item, collapsed, indent = false, onClick, badge = 0,
 }: {
@@ -348,48 +351,41 @@ function NavItemEl({
   badge?: number;
 }) {
   const [location] = useLocation();
-  const isActive = location.startsWith(item.href) && item.href !== "/app";
+  const isActive = navItemIsActive(location, item.href);
 
   return (
     <Link href={item.href} onClick={onClick}>
       <div
-        className={cn(
-          "relative flex h-9 items-center gap-3 rounded-xl px-3 text-[13px] font-medium transition-all duration-100 cursor-pointer select-none group",
-          indent ? "pl-3" : "",
+        className={[
+          "relative flex h-8 items-center gap-2 rounded-md px-2 text-[12px] transition-colors duration-100 cursor-pointer select-none",
+          indent ? "pl-2" : "",
           isActive
-            ? "bg-primary/10 text-primary"
-            : "text-muted-foreground hover:bg-foreground/[0.05] hover:text-foreground",
-        )}
+            ? "bg-foreground/[0.065] text-foreground font-medium"
+            : "text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground",
+        ].join(" ")}
       >
-        {/* Active indicator */}
-        {isActive && (
-          <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-r-full bg-primary" />
-        )}
         <item.icon
-          className={cn(
-            "size-4 shrink-0 transition-colors",
-            isActive ? "text-primary" : "text-muted-foreground/60 group-hover:text-foreground"
-          )}
+          className={`size-3.5 shrink-0 ${isActive ? "text-foreground" : "text-muted-foreground/75"}`}
         />
         {!collapsed && (
           <>
             <span className="truncate flex-1">{item.name}</span>
             {badge > 0 && (
-              <span className="inline-flex min-w-[18px] items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none text-white bg-amber-500 shadow-sm">
+              <span className="inline-flex min-w-4 items-center justify-center rounded px-1 text-[9px] font-medium leading-4 text-amber-600">
                 {badge > 99 ? "99+" : badge}
               </span>
             )}
           </>
         )}
         {collapsed && badge > 0 && (
-          <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-amber-500 border border-sidebar" />
+          <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-amber-500" />
         )}
       </div>
     </Link>
   );
 }
 
-/* ─ Sidebar content ────────────────────────────────────────────────────────────────── */
+/* ─── Sidebar content ────────────────────────────────────────────────────── */
 function SidebarContent({
   collapsed,
   onToggleCollapse,
@@ -424,6 +420,7 @@ function SidebarContent({
     });
   };
 
+  // Partner hub nav (gated) + white-label branding for partner-managed clients.
   const { data: partnerCtx } = usePartnerContext();
   const isManagedClient = partnerCtx?.isManagedClient === true;
   const navGroups: NavGroup[] = isManagedClient
@@ -440,49 +437,53 @@ function SidebarContent({
 
   return (
     <div className="flex h-full flex-col border-r border-sidebar-border bg-sidebar">
-      {/* ── Brand / Workspace identity ── */}
+      {/* Workspace identity */}
       <div className={cn(
-        "flex h-14 shrink-0 items-center gap-2 border-b border-sidebar-border px-3",
-        collapsed && "justify-center px-2",
+        "flex h-12 shrink-0 items-center gap-1.5 border-b border-sidebar-border px-2.5",
+        collapsed && "justify-center px-1.5",
       )}>
-        <Link href="/app" onClick={onNavClick} className="flex items-center gap-2.5 flex-1 min-w-0 overflow-hidden">
+        <Link href="/app" onClick={onNavClick} className="flex items-center gap-2 flex-1 min-w-0 overflow-hidden">
           {partnerCtx?.branding ? (
+            /* White-label: partner-linked clients see their partner's brand here. */
             <>
               {partnerCtx.branding.logoUrl ? (
                 <img
                   src={partnerCtx.branding.logoUrl}
                   alt={partnerCtx.branding.companyName}
-                  className="size-7 shrink-0 rounded-xl bg-elevated object-contain"
+                className="size-6 shrink-0 rounded-md bg-elevated object-contain"
                 />
               ) : (
-                <span className="flex size-7 shrink-0 items-center justify-center rounded-xl border border-sidebar-border bg-background text-[12px] font-bold">
+                <span className="flex size-6 shrink-0 items-center justify-center rounded-md border border-sidebar-border bg-background text-[11px] font-semibold">
                   {partnerCtx.branding.companyName.charAt(0).toUpperCase()}
                 </span>
               )}
               {!collapsed && (
-                <span className="truncate text-[14px] font-bold leading-none text-foreground tracking-tight">
+                <span
+                    className="truncate text-[13px] font-semibold leading-none text-foreground"
+                  style={{ fontFamily: "system-ui, sans-serif", letterSpacing: "-0.02em" }}
+                >
                   {partnerCtx.branding.companyName}
                 </span>
               )}
             </>
           ) : (
             <>
-              <SnapServeIcon size={22} className="shrink-0 self-center text-foreground" />
+              <SnapServeIcon size={20} className="shrink-0 self-center text-foreground" />
               {!collapsed && (
                 <span className="flex min-w-0 flex-col gap-0.5 py-0.5">
                   <span
-                    className="whitespace-nowrap text-[14px] leading-none text-foreground"
-                    style={{ fontFamily: "system-ui, sans-serif", letterSpacing: "-0.03em" }}
+                    className="whitespace-nowrap text-[13px] leading-none text-foreground"
+                    style={{ fontFamily: "system-ui, sans-serif", letterSpacing: "-0.02em" }}
                     aria-label="SnapServe"
                   >
-                    <span style={{ fontWeight: 800 }}>Snap</span>
-                    <span style={{ fontWeight: 400, opacity: 0.5 }}>Serve</span>
+                    <span style={{ fontWeight: 700 }}>Snap</span>
+                    <span style={{ fontWeight: 400, opacity: 0.55 }}>Serve</span>
                   </span>
                   <PoweredBySarvam variant="inline" className="justify-start" />
                 </span>
               )}
               {!collapsed && partnerCtx?.isPartner && (
-                <span className="shrink-0 self-center rounded-md border border-emerald-500/25 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider leading-none text-emerald-600 bg-emerald-500/10">
+                <span className="shrink-0 self-center rounded border border-emerald-500/25 px-1 py-0.5 text-[8px] font-semibold uppercase tracking-wider leading-none text-emerald-600">
                   Partner
                 </span>
               )}
@@ -492,64 +493,61 @@ function SidebarContent({
         {onToggleCollapse && (
           <button
             onClick={onToggleCollapse}
-            className="shrink-0 rounded-lg p-1.5 text-muted-foreground/50 transition-colors hover:bg-foreground/[0.06] hover:text-foreground"
-            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            className="shrink-0 rounded-md p-1 text-muted-foreground/55 transition-colors hover:bg-foreground/[0.04] hover:text-foreground"
+            title={collapsed ? "Expand" : "Collapse"}
           >
-            {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+            {collapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
           </button>
         )}
       </div>
 
-      {/* ── Search ── */}
-      <div className="shrink-0 px-2.5 pt-3 pb-1">
+      {/* Search */}
+      <div className="shrink-0 px-2 pt-2 pb-1">
         <button
           onClick={onSearchOpen}
-          className={cn(
-            "flex h-9 w-full items-center gap-2.5 rounded-xl border border-border/60 bg-muted/30 px-3 text-[12.5px] text-muted-foreground/60 transition-colors hover:border-border hover:bg-muted/60 hover:text-foreground",
-            collapsed ? "justify-center px-0" : ""
-          )}
+          className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-[12px] text-muted-foreground transition-colors hover:bg-foreground/[0.04] hover:text-foreground"
         >
-          <Search className="w-3.5 h-3.5 shrink-0" />
+          <Search className="w-[14px] h-[14px] shrink-0 text-muted-foreground/70" />
           {!collapsed && (
             <>
               <span className="flex-1 text-left">Search…</span>
-              <kbd className="rounded-md border border-border bg-background px-1.5 py-0.5 text-[9px] font-semibold text-muted-foreground/50">⌘K</kbd>
+              <kbd className="rounded border border-border bg-background px-1 py-0.5 text-[8px] font-medium text-muted-foreground/55">⌘K</kbd>
             </>
           )}
         </button>
       </div>
 
-      {/* ── New agent CTA ── */}
+      {/* + New agent CTA (hidden for managed clients — the partner builds their agents) */}
       {!isManagedClient && (
-        <div className="shrink-0 px-2.5 pb-3">
-          <button
-            type="button"
-            onClick={() => { onNavClick?.(); onNewAgent?.(); }}
-            className={cn(
-              "flex h-9 w-full cursor-pointer select-none items-center gap-2.5 rounded-xl bg-primary px-3 text-[13px] font-semibold text-primary-foreground transition-all hover:bg-primary/90 shadow-sm shadow-primary/20",
-              collapsed ? "justify-center" : ""
-            )}
-          >
-            <Plus className="size-4 shrink-0" />
-            {!collapsed && <span>New Agent</span>}
-          </button>
-        </div>
+      <div className="shrink-0 px-2 pb-2">
+        <button
+          type="button"
+          onClick={() => { onNavClick?.(); onNewAgent?.(); }}
+          className={cn(
+            "flex h-8 w-full cursor-pointer select-none items-center gap-2 rounded-md bg-primary px-2 text-[12px] font-medium text-primary-foreground transition-colors hover:bg-primary/90",
+            collapsed ? "justify-center" : ""
+          )}
+        >
+          <Plus className="size-3.5 shrink-0" />
+          {!collapsed && <span>New agent</span>}
+        </button>
+      </div>
       )}
 
-      {/* ── Primary nav ── */}
-      <div className="min-h-0 flex-1 overflow-y-auto px-2.5 py-0.5 space-y-0.5">
+      {/* Primary nav */}
+      <div className="min-h-0 flex-1 overflow-y-auto px-2 py-1">
         {navGroups.map((group, gi) => (
           <div key={gi}>
-            {gi > 0 && <div className="h-4" />}
+            {gi > 0 && <div className="h-3" />}
 
             {/* Group label */}
             {group.group && !collapsed && (
-              <p className="mb-1.5 px-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/40 select-none">
+              <p className="mb-1 px-2 text-[9px] font-semibold uppercase tracking-[0.13em] text-muted-foreground/55 select-none">
                 {group.group}
               </p>
             )}
 
-            <div className="flex flex-col gap-0.5">
+            <div className="flex flex-col gap-px">
               {group.items.map(item => (
                 <NavItemEl
                   key={item.href}
@@ -564,37 +562,37 @@ function SidebarContent({
         ))}
 
         {/* Settings divider */}
-        <div className="h-4" />
+        <div className="h-3" />
 
         {/* Settings toggle */}
         <button
           onClick={toggleSettings}
-          className={cn(
-            "flex h-9 w-full cursor-pointer select-none items-center gap-3 rounded-xl px-3 text-[13px] font-medium transition-colors duration-100",
+          className={[
+            "flex h-8 w-full cursor-pointer select-none items-center gap-2 rounded-md px-2 text-[12px] transition-colors duration-100",
             isInSettings
-              ? "bg-primary/10 text-primary"
-              : "text-muted-foreground hover:bg-foreground/[0.05] hover:text-foreground",
-          )}
+              ? "text-foreground font-medium"
+              : "text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground",
+          ].join(" ")}
         >
-          <SlidersHorizontal className={cn("size-4 shrink-0", isInSettings ? "text-primary" : "text-muted-foreground/60")} />
+          <SlidersHorizontal className={`size-3.5 shrink-0 ${isInSettings ? "text-foreground" : "text-muted-foreground/75"}`} />
           {!collapsed && (
             <>
               <span className="flex-1 text-left">Settings</span>
-              <ChevronDown className={cn("w-3.5 h-3.5 text-muted-foreground/40 transition-transform duration-200", settingsOpen ? "rotate-180" : "")} />
+              <ChevronDown className={`w-3 h-3 text-muted-foreground/55 transition-transform duration-150 ${settingsOpen ? "rotate-180" : ""}`} />
             </>
           )}
         </button>
 
-        {/* Settings sub-items */}
+        {/* Settings items */}
         {settingsOpen && !collapsed && (
-          <div className="ml-4 mt-0.5 flex flex-col gap-0.5 border-l-2 border-border/60 pl-3">
+          <div className="ml-2.5 mt-0.5 flex flex-col gap-px border-l border-sidebar-border pl-2.5">
             {settingsItems.map(item => (
               <NavItemEl key={item.href} item={item} collapsed={false} indent onClick={onNavClick} />
             ))}
           </div>
         )}
         {settingsOpen && collapsed && (
-          <div className="flex flex-col gap-0.5 mt-0.5">
+          <div className="flex flex-col gap-px mt-0.5">
             {settingsItems.map(item => (
               <NavItemEl key={item.href} item={item} collapsed onClick={onNavClick} />
             ))}
@@ -602,52 +600,54 @@ function SidebarContent({
         )}
       </div>
 
-      {/* ── Footer ── */}
-      <div className="shrink-0 border-t border-sidebar-border px-2.5 py-2 space-y-1">
-        {/* Partner branding */}
+      {/* Quiet account footer */}
+      <div className="shrink-0 border-t border-sidebar-border px-2 pt-1">
+        {/* Partner white-label branding (clients of a partner).
+            Intentionally NOT “Powered by Sarvam” — partner attribution wins. */}
         {partnerCtx?.branding && (
-          <div className="flex items-center gap-2 px-2.5 py-1">
+          <div className="pt-1.5 flex items-center gap-2 px-2.5">
             {partnerCtx.branding.logoUrl && (
               <img src={partnerCtx.branding.logoUrl} alt="" className="h-4 w-4 rounded object-contain shrink-0" />
             )}
             {!collapsed && (
-              <span className="text-[10px] text-muted-foreground/50 truncate">
+              <span className="text-[10px] text-muted-foreground/55 truncate">
                 Powered by {partnerCtx.branding.companyName}
               </span>
             )}
           </div>
         )}
-
-        {/* Docs */}
-        <Link
-          href="/docs"
-          onClick={onNavClick}
-          className={cn(
-            "flex h-9 w-full items-center gap-3 rounded-xl px-3 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-foreground/[0.05] hover:text-foreground",
-            collapsed ? "justify-center" : ""
-          )}
-        >
-          <BookOpen className="w-4 h-4 shrink-0 text-muted-foreground/60" />
-          {!collapsed && <span>Documentation</span>}
-        </Link>
+        <div className="pb-0.5">
+          <Link
+            href="/docs"
+            onClick={onNavClick}
+            className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-[12px] text-muted-foreground transition-colors hover:bg-foreground/[0.04] hover:text-foreground"
+          >
+            <BookOpen className="w-[14px] h-[14px] shrink-0 text-muted-foreground/70" />
+            {!collapsed && <span>Documentation</span>}
+          </Link>
+        </div>
 
         {/* Wallet chip */}
-        <WalletChip compact={collapsed} />
+        <div className="pb-1 px-0">
+          <WalletChip compact={collapsed} />
+        </div>
 
         {/* User profile */}
-        <SidebarUser collapsed={collapsed} />
+        <div className="pb-1.5">
+          <SidebarUser collapsed={collapsed} />
+        </div>
       </div>
     </div>
   );
 }
 
-/* ─ Mobile bottom nav ──────────────────────────────────────────────────────────────── */
+/* ─── Mobile bottom nav ──────────────────────────────────────────────────── */
 const MOBILE_BOTTOM_NAV_ITEMS = [
-  { name: "Home",     href: "/app/home",   icon: Home },
-  { name: "Create",   href: null,          icon: Sparkles },
-  { name: "Agents",   href: "/app/agents", icon: Bot },
-  { name: "Calls",    href: "/app/calls",  icon: Phone },
-  { name: "Wallet",   href: "/app/wallet", icon: Wallet },
+  { name: "Home",   href: "/app/home",       icon: Home },
+  { name: "Plans",  href: "/app/call-plans", icon: ListOrdered },
+  { name: "Create", href: null,              icon: Sparkles }, // opens modal
+  { name: "Agents", href: "/app/agents",     icon: Bot },
+  { name: "History", href: "/app/history",   icon: Phone },
 ] as const;
 
 function MobileBottomNav({ onNewAgent }: { onNewAgent?: () => void }) {
@@ -658,10 +658,10 @@ function MobileBottomNav({ onNewAgent }: { onNewAgent?: () => void }) {
     : [...MOBILE_BOTTOM_NAV_ITEMS];
   return (
     <nav
-      className="md:hidden fixed bottom-0 left-0 right-0 z-30 border-t border-border bg-sidebar/98 backdrop-blur-xl pb-safe"
+      className="md:hidden fixed bottom-0 left-0 right-0 z-30 border-t border-border bg-sidebar/95 backdrop-blur-md pb-safe"
       aria-label="Primary"
     >
-      <div className={cn("grid h-16", items.length === 4 ? "grid-cols-4" : "grid-cols-5")}>
+      <div className={cn("grid h-14", items.length === 4 ? "grid-cols-4" : "grid-cols-5")}>
         {items.map((item) => {
           if (item.href === null) {
             return (
@@ -669,12 +669,10 @@ function MobileBottomNav({ onNewAgent }: { onNewAgent?: () => void }) {
                 key={item.name}
                 type="button"
                 onClick={() => onNewAgent?.()}
-                className="flex flex-col items-center justify-center gap-1 min-h-[44px] text-muted-foreground/70"
+                className="flex flex-col items-center justify-center gap-0.5 min-h-[44px] text-muted-foreground/70"
               >
-                <div className="h-8 w-8 rounded-xl bg-primary flex items-center justify-center shadow-sm shadow-primary/30">
-                  <item.icon className="h-4 w-4 text-primary-foreground" />
-                </div>
-                <span className="text-[9px] font-semibold leading-none text-primary">{item.name}</span>
+                <item.icon className="h-5 w-5" />
+                <span className="text-[10px] font-medium leading-none">{item.name}</span>
               </button>
             );
           }
@@ -879,7 +877,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const isManagedClient = partnerCtx?.isManagedClient === true;
   useEffect(() => {
     if (!isManagedClient) return;
-    const allowed = ["/app/home", "/app/agents", "/app/calls", "/app/phone-numbers", "/app/wallet", "/app/settings"];
+    const allowed = [
+      "/app/home",
+      "/app/call-plans",
+      "/app/agents",
+      "/app/history",
+      "/app/calls",
+      "/app/connections",
+      "/app/phone-numbers",
+      "/app/wallet",
+      "/app/settings",
+    ];
     if (location === "/app" || allowed.some((p) => location === p || location.startsWith(p + "/"))) return;
     navigate("/app/home", { replace: true });
   }, [isManagedClient, location, navigate]);
@@ -897,7 +905,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     });
   };
 
-  const sidebarW = collapsed ? "w-[56px]" : "w-[236px]";
+  const sidebarW = collapsed ? "w-[52px]" : "w-[216px]";
   const openNewAgent = () => setNewAgentOpen(true);
 
   return (
@@ -946,6 +954,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             )}
           </Link>
           <div className="ml-auto flex items-center gap-0.5">
+            <ThemeToggle />
             <MobileTopbarUser />
           </div>
         </div>
@@ -982,7 +991,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
         {/* Voice-a-thon top notification */}
         <VoiceathonTopBanner />
 
-        {/* Utility strip removed as per user request */}
+        {/* Utility strip — desktop only; hide on full-bleed builder surfaces */}
+        {!location.startsWith("/app/agents") && !location.startsWith("/app/vibe") && (
+          <div className="hidden md:block">
+            <UtilityStrip />
+          </div>
+        )}
 
         {/* Scrollable content */}
         <div className="flex-1 overflow-y-auto min-h-0 overscroll-y-contain">

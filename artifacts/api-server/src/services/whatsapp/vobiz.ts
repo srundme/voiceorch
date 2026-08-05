@@ -162,6 +162,10 @@ export interface SendTemplateArgs {
   /** Ordered body parameters (already meaningful for the template). */
   params: string[];
   callId?: number | null;
+  /** When set, prefer this agent's saved template picks over platform catalog. */
+  agentId?: number | null;
+  /** Explicit override (wins over agent picks + platform catalog). */
+  templateOverride?: TemplateRef;
   enforceCap?: boolean;          // default true for shared tier
 }
 
@@ -190,8 +194,16 @@ export async function sendWhatsappTemplate(args: SendTemplateArgs): Promise<Send
     }
   }
 
-  const catalog = await getTemplateCatalog();
-  const tpl = catalog[hint];
+  let tpl: TemplateRef;
+  if (args.templateOverride?.name) {
+    tpl = args.templateOverride;
+  } else if (args.agentId != null && Number.isFinite(args.agentId)) {
+    const { resolveNativeTemplateForAgent } = await import("./agent-templates.js");
+    tpl = await resolveNativeTemplateForAgent(channel.userId, args.agentId, hint);
+  } else {
+    const catalog = await getTemplateCatalog();
+    tpl = catalog[hint] ?? catalog.call_summary;
+  }
   const params = args.params.map((p) => sanitizeParam(p));
 
   const [row] = await db.insert(whatsappMessagesTable).values({

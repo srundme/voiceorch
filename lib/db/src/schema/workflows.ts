@@ -33,7 +33,11 @@ export type WorkflowStepType =
   | "send_webhook"
   | "schedule_callback"
   | "send_whatsapp"
-  | "send_email";
+  | "send_email"
+  /** Call plans Phase 3 — dispatch Meet/Zoom/Teams bot. */
+  | "join_meeting"
+  /** Call plans Phase 3 — write status back to the linked Sheet row. */
+  | "update_sheet";
 
 export interface WorkflowStep {
   /** Stable id within the workflow (used for run bookkeeping). */
@@ -66,8 +70,18 @@ export interface WorkflowStep {
   callbackDelayDays?: number;
   notes?: string;
 
-  // ── send_whatsapp (native VoBiz template send) ───────────────────────────────
+  // ── send_whatsapp (native VoBiz / Meta template send) ───────────────────────
+  /**
+   * SnapServe send-moment hint (NOT a Meta template name). Used for param
+   * defaults and to look up the agent's mapped template when whatsappTemplate
+   * is unset. Real Meta names come from the user's catalog.
+   */
   whatsappHint?: "call_summary" | "booking_confirmed" | "callback_scheduled";
+  /**
+   * Explicit approved template from the user's WABA catalog (any name/language).
+   * When set, this wins over hint → agent slot mapping.
+   */
+  whatsappTemplate?: { name: string; language: string; paramCount?: number };
   /** Optional body params; defaults are derived from call context. Supports {{vars}}. */
   whatsappParams?: string[];
 
@@ -76,6 +90,16 @@ export interface WorkflowStep {
   emailField?: string;
   emailSubject?: string;
   emailBody?: string;
+
+  // ── join_meeting ────────────────────────────────────────────────────────────
+  /** Context key for Meet/Zoom/Teams URL (default tries meetingUrl, meetLink). */
+  meetingUrlField?: string;
+
+  // ── update_sheet ────────────────────────────────────────────────────────────
+  /** Header name to write (default "Status"). */
+  sheetStatusColumn?: string;
+  /** Literal status, or leave blank to use call disposition / step label. */
+  sheetStatusValue?: string;
 }
 
 export const workflowsTable = pgTable("workflows", {

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Mic, MicOff, PhoneOff, Phone, Loader2, AlertCircle, X } from "lucide-react";
+import { Mic, MicOff, PhoneOff, Phone, Loader2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SiriWave } from "@/components/ui/siri-wave";
+import { cn } from "@/lib/utils";
 
 /**
  * Webcall 2.0 — browser "Live Test" transport for an agent.
@@ -12,6 +14,27 @@ import { Button } from "@/components/ui/button";
 
 type CallState = "idle" | "connecting" | "live" | "ending" | "error";
 type Line = { id: number; speaker: "user" | "agent"; text: string };
+
+const INDIC_SCRIPT_RE =
+  /[\u0900-\u097F\u0980-\u09FF\u0A00-\u0A7F\u0A80-\u0AFF\u0B00-\u0B7F\u0B80-\u0BFF\u0C00-\u0C7F\u0C80-\u0CFF\u0D00-\u0D7F]/;
+
+const COT_CAPTION_RE =
+  /^(The user |Let me |According to |Wait[, ]|Actually[, ]|Looking |Since (they|the caller) |So I should |I (need to|already|should) |Based on |IDENTITY|FACTS|Stage \d)/i;
+
+/** Drop English chain-of-thought / prompt leaks from live captions. */
+function isSpeakableCaption(text: string): boolean {
+  const t = text.trim();
+  if (!t || t.length < 2) return false;
+  if (COT_CAPTION_RE.test(t)) return false;
+  if (/\b(Let me analyze|According to the flow|constraints:)\b/i.test(t) && !INDIC_SCRIPT_RE.test(t)) {
+    return false;
+  }
+  // Long English-only dumps that look like planning, not speech.
+  if (t.length > 160 && !INDIC_SCRIPT_RE.test(t) && /\b(I should|flow|Stage)\b/i.test(t)) {
+    return false;
+  }
+  return true;
+}
 
 // Inlined AudioWorklet processor.
 const CAPTURE_WORKLET = `
@@ -69,7 +92,6 @@ export function WebcallPanel({
   const mutedRef       = useRef(false);
   const callIdRef      = useRef<number | null>(null);
   const doneRef        = useRef(false);
-  const scrollEndRef   = useRef<HTMLDivElement | null>(null);
   const ignoreAudioUntilRef = useRef(0);
 
   const teardown = useCallback(() => {
@@ -243,9 +265,9 @@ export function WebcallPanel({
             break;
           }
           case "transcript":
-            if (msg.speaker && msg.text) {
-              const line: Line = { id: lineIdRef.current++, speaker: msg.speaker, text: msg.text };
-              setLines((prev) => [...prev, line]);
+            if (msg.speaker && msg.text && isSpeakableCaption(msg.text)) {
+              const line: Line = { id: lineIdRef.current++, speaker: msg.speaker, text: msg.text.trim() };
+              setLines((prev) => [...prev.slice(-2), line]);
             }
             break;
           case "clear":
@@ -320,111 +342,132 @@ export function WebcallPanel({
   }, [autoStart, state, start]);
 
   useEffect(() => () => { doneRef.current = true; teardown(); }, [teardown]);
-  useEffect(() => { scrollEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [lines]);
+
+  // Esc dismisses the floating shell (parent owns chrome — no X / agent title here).
+  useEffect(() => {
+    if (!onClose) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (state === "live" || state === "connecting" || state === "ending") {
+        end();
+        return;
+      }
+      onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose, state, end]);
 
   const active = state === "live" || state === "connecting" || state === "ending";
+  /** Wave while speaking / live; fluid dots while idle or connecting. */
+  const waveVariant = state === "live" ? "wave" : "fluid-dots";
+  const waveSize = compact ? 280 : 340;
+  /** Single live caption — latest speakable line only (no chat stack). */
+  const caption = [...lines].reverse().find((l) => isSpeakableCaption(l.text)) ?? null;
+
+  const statusHint =
+    state === "connecting" ? "Connecting…"
+      : state === "ending" ? "Ending…"
+        : state === "live" && !caption ? "Listening"
+          : state === "idle" ? "Press Start to talk"
+            : null;
 
   return (
-    <div className={compact ? "h-full flex flex-col" : "p-5 max-w-3xl"}>
-      <div className={`bg-card border border-border rounded-2xl overflow-hidden flex flex-col${compact ? " flex-1" : ""}`} style={compact ? undefined : { height: "calc(100dvh - 9rem)" }}>
-        {/* Header */}
-        <div className="flex items-center gap-3 px-4 h-12 shrink-0 border-b border-border">
-          <span className={
-            "h-2 w-2 rounded-full " +
-            (state === "live" ? "bg-emerald-500 animate-pulse"
-              : state === "connecting" || state === "ending" ? "bg-amber-500 animate-pulse"
-              : state === "error" ? "bg-red-500"
-              : "bg-muted-foreground/40")
-          } />
-          <div className="min-w-0 flex-1">
-            <p className="text-[13px] font-semibold text-foreground truncate">
-              {shareToken ? agentName : `Live Test — ${agentName}`}
-            </p>
-            <p className="text-[10.5px] text-muted-foreground/60">
-              {state === "idle"       && "Talk to your agent right in the browser"}
-              {state === "connecting" && "Connecting…"}
-              {state === "live"       && "Connected — start speaking"}
-              {state === "ending"     && "Ending call…"}
-              {state === "error"      && "Call ended with an error"}
-            </p>
-          </div>
-          {onClose && (
-            <button onClick={onClose} className="ml-auto shrink-0 p-1 rounded hover:bg-muted/60 text-muted-foreground/60 hover:text-foreground transition-colors" title="Close">
-              <X className="h-3.5 w-3.5" />
-            </button>
+    <div
+      className={cn(
+        "relative flex min-h-0 flex-col items-center justify-center bg-transparent",
+        compact ? "h-auto w-auto" : "mx-auto h-full max-w-sm",
+      )}
+      style={!compact ? { height: "calc(100dvh - 6rem)" } : undefined}
+      role="region"
+      aria-label={agentName ? `Live test — ${agentName}` : "Live test"}
+    >
+      <div className="relative z-10 flex flex-col items-center justify-center gap-6 px-2">
+        <div
+          className={cn(
+            "pointer-events-none transition-all duration-700 ease-out",
+            active ? "scale-100 opacity-100" : "scale-95 opacity-80",
           )}
+        >
+          <SiriWave
+            variant={waveVariant}
+            size={waveSize}
+            renderScale={compact ? 0.75 : 0.85}
+            aria-hidden
+          />
         </div>
 
-        {/* Transcript */}
-        <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-2.5">
-          {lines.length === 0 && (
-            <div className="h-full flex flex-col items-center justify-center text-center gap-2 text-muted-foreground/50">
-              <Phone className="h-7 w-7 opacity-40" />
-              <p className="text-[12px]">
-                {active ? "Listening… say hello to your agent." : "Press Start call to begin a live voice test."}
-              </p>
-            </div>
-          )}
-          {lines.map((l) => (
-            <div key={l.id} className={"flex " + (l.speaker === "user" ? "justify-end" : "justify-start")}>
-              <div className={
-                "max-w-[80%] rounded-2xl px-3.5 py-2 text-[12.5px] leading-relaxed " +
-                (l.speaker === "user"
-                  ? "bg-primary text-primary-foreground rounded-br-sm"
-                  : "bg-elevated border border-border text-foreground rounded-bl-sm")
-              }>
-                <span className="block text-[9px] uppercase tracking-wide opacity-50 mb-0.5">
-                  {l.speaker === "user" ? "You" : agentName}
-                </span>
-                {l.text}
-              </div>
-            </div>
-          ))}
-          <div ref={scrollEndRef} />
+        <div className="pointer-events-none flex min-h-[2.75rem] w-full max-w-[17rem] items-center justify-center px-1">
+          {caption ? (
+            <p
+              key={caption.id}
+              className="webcall-caption-in w-full text-center text-[14px] font-medium leading-snug tracking-tight text-foreground/90 text-pretty"
+            >
+              {caption.text}
+            </p>
+          ) : statusHint ? (
+            <p
+              className={cn(
+                "text-center",
+                state === "live"
+                  ? "text-[10px] uppercase tracking-[0.2em] text-foreground/25"
+                  : "text-[12px] text-muted-foreground/45",
+              )}
+            >
+              {statusHint}
+            </p>
+          ) : null}
         </div>
+      </div>
 
-        {/* Non-fatal notice banner (call still live, e.g. voice synthesis failing) */}
-        {notice && !error && (
-          <div className="px-4 py-2 border-t border-border flex items-center gap-2 text-[11.5px] text-amber-400 bg-amber-500/5">
-            <AlertCircle className="h-3.5 w-3.5 shrink-0" /> {notice}
-          </div>
-        )}
+      {(notice || error) && (
+        <div
+          className={cn(
+            "relative z-20 mt-3 flex max-w-[17rem] items-center gap-2 px-1 text-[11.5px]",
+            error ? "text-red-400" : "text-amber-400",
+          )}
+        >
+          <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+          <span className="text-pretty">{error ?? notice}</span>
+        </div>
+      )}
 
-        {/* Error banner */}
-        {error && (
-          <div className="px-4 py-2 border-t border-border flex items-center gap-2 text-[11.5px] text-red-400 bg-red-500/5">
-            <AlertCircle className="h-3.5 w-3.5 shrink-0" /> {error}
-          </div>
-        )}
-
-        {/* Controls */}
-        <div className="shrink-0 border-t border-border p-3 flex items-center justify-center gap-2.5">
-          {state === "idle" || state === "error" ? (
-            <Button onClick={() => void start()} className="h-10 px-5 gap-2 rounded-full text-[13px]">
-              <Phone className="h-4 w-4" /> Start call
+      <div className="relative z-20 mt-5 flex items-center justify-center gap-3">
+        {state === "idle" || state === "error" ? (
+          <Button
+            onClick={() => void start()}
+            className="h-11 gap-2 rounded-full px-6 text-[13px] shadow-lg"
+          >
+            <Phone className="h-4 w-4" /> Start call
+          </Button>
+        ) : (
+          <>
+            <Button
+              onClick={toggleMute}
+              variant="outline"
+              disabled={state !== "live"}
+              className={cn(
+                "h-11 w-11 rounded-full border-border/40 bg-background/40 p-0 text-foreground/80 shadow-md backdrop-blur-md hover:bg-background/70",
+                muted && "border-amber-400/40 bg-amber-500/15 text-amber-500",
+              )}
+              title={muted ? "Unmute" : "Mute"}
+            >
+              {muted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
             </Button>
-          ) : (
-            <>
-              <Button
-                onClick={toggleMute}
-                variant="outline"
-                disabled={state !== "live"}
-                className={"h-10 w-10 p-0 rounded-full border-border " + (muted ? "bg-amber-500/10 text-amber-400" : "text-muted-foreground")}
-                title={muted ? "Unmute" : "Mute"}
-              >
-                {muted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-              </Button>
-              <Button
-                onClick={end}
-                disabled={state === "ending"}
-                className="h-10 px-5 gap-2 rounded-full text-[13px] bg-red-500 hover:bg-red-600 text-white"
-              >
-                {state === "ending" ? <Loader2 className="h-4 w-4 animate-spin" /> : <PhoneOff className="h-4 w-4" />}
-                {state === "connecting" ? "Connecting…" : "End call"}
-              </Button>
-            </>
-          )}
-        </div>
+            <Button
+              onClick={end}
+              disabled={state === "ending"}
+              className="h-11 gap-2 rounded-full bg-red-500 px-5 text-[13px] text-white shadow-lg hover:bg-red-600"
+            >
+              {state === "ending" ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <PhoneOff className="h-4 w-4" />
+              )}
+              {state === "connecting" ? "Connecting…" : "End call"}
+            </Button>
+          </>
+        )}
       </div>
     </div>
   );

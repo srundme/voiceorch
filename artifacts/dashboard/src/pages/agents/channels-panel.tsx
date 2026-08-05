@@ -18,6 +18,11 @@ import { cn } from "@/lib/utils";
 import { EmailChannelCard, useEmailChannelReady } from "./email-channel-card";
 import { MeetingsChannelCard } from "./meetings-channel-card";
 import { AgentInboundPanel } from "./agent-inbound-panel";
+import {
+  AgentWhatsappTemplatePicks,
+  type AgentWaTemplates,
+  type WaCatalogEntry,
+} from "@/components/whatsapp/agent-template-picks";
 
 const _DASH_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const DASH_API = `${_DASH_BASE}/api`;
@@ -28,6 +33,7 @@ type BuilderWhatsappChannel = {
   businessName?: string | null;
   mode?: string | null;
   phoneE164?: string | null;
+  templateCatalog?: WaCatalogEntry[];
 };
 
 type BuilderWhatsappResponse = {
@@ -35,10 +41,14 @@ type BuilderWhatsappResponse = {
 };
 
 type BuilderWhatsappConnection = {
+  id: string;
   active: boolean;
   agentId: number | null;
   name?: string | null;
   metaPhoneNumberId?: string | null;
+  metaConnected?: boolean;
+  metaTemplates?: AgentWaTemplates;
+  templateCatalog?: WaCatalogEntry[];
 };
 
 export type ChannelId = "phone" | "whatsapp" | "email" | "meetings" | "booking";
@@ -218,7 +228,9 @@ export function ChannelsPanel({
                   variant="outline"
                   size="sm"
                   className="h-8 text-xs"
-                  onClick={() => navigate(`/app/whatsapp${agent?.id ? `?agentId=${agent.id}` : ""}`)}
+                  onClick={() => navigate(
+                    `/app/connections?setup=whatsapp${agent?.id ? `&agentId=${agent.id}` : ""}`,
+                  )}
                 >
                   Configure
                 </Button>
@@ -226,35 +238,54 @@ export function ChannelsPanel({
               {waLoading ? (
                 <Skeleton className="h-16 w-full rounded-md" />
               ) : agentConnection ? (
-                <div className="flex items-center justify-between border-y border-border py-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-[13px] font-medium">
-                      {agentConnection.name || "WhatsApp connection"}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {agentConnection.metaPhoneNumberId
-                        ? "WhatsApp Business · Meta API"
-                        : "BSP webhook connection"}
-                    </p>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between border-y border-border py-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-[13px] font-medium">
+                        {agentConnection.name || "WhatsApp connection"}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {agentConnection.metaPhoneNumberId || agentConnection.metaConnected
+                          ? "WhatsApp Business · Meta API"
+                          : "BSP webhook connection"}
+                      </p>
+                    </div>
+                    <StatusBadge ready readyLabel="Active" emptyLabel="Inactive" />
                   </div>
-                  <StatusBadge ready readyLabel="Active" emptyLabel="Inactive" />
+                  {(agentConnection.metaPhoneNumberId || agentConnection.metaConnected) && agent?.id ? (
+                    <AgentWhatsappTemplatePicks
+                      agentId={agent.id}
+                      connectionId={agentConnection.id}
+                      initialTemplates={agentConnection.metaTemplates}
+                      initialCatalog={agentConnection.templateCatalog}
+                    />
+                  ) : null}
                 </div>
               ) : waData?.channel ? (
-                <div className="flex items-center justify-between border-y border-border py-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-[13px] font-medium">
-                      {waData.channel.businessName || "WhatsApp channel"}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {waData.channel.mode === "own" ? "Own number" : "Legacy Instant channel"}
-                      {waData.channel.phoneE164 ? ` · ${waData.channel.phoneE164}` : ""}
-                    </p>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between border-y border-border py-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-[13px] font-medium">
+                        {waData.channel.businessName || "WhatsApp channel"}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {waData.channel.mode === "own" ? "Own number" : "Legacy Instant channel"}
+                        {waData.channel.phoneE164 ? ` · ${waData.channel.phoneE164}` : ""}
+                      </p>
+                    </div>
+                    <StatusBadge
+                      ready={waData.channel.active}
+                      readyLabel={waData.channel.status || "Active"}
+                      emptyLabel="Inactive"
+                    />
                   </div>
-                  <StatusBadge
-                    ready={waData.channel.active}
-                    readyLabel={waData.channel.status || "Active"}
-                    emptyLabel="Inactive"
-                  />
+                  {agent?.id ? (
+                    <AgentWhatsappTemplatePicks
+                      agentId={agent.id}
+                      nativeMode
+                      initialCatalog={waData.channel.templateCatalog}
+                    />
+                  ) : null}
                 </div>
               ) : (
                 <div className="border-y border-border py-5">
@@ -266,7 +297,9 @@ export function ChannelsPanel({
                     type="button"
                     size="sm"
                     className="mt-3 h-8"
-                    onClick={() => navigate(`/app/whatsapp${agent?.id ? `?agentId=${agent.id}` : ""}`)}
+                    onClick={() => navigate(
+                      `/app/connections?setup=whatsapp${agent?.id ? `&agentId=${agent.id}` : ""}`,
+                    )}
                   >
                     Set up WhatsApp
                   </Button>

@@ -12,7 +12,7 @@ import { isCallerFarewellUtterance as isCallerFarewellUtteranceShared } from "./
 import { shouldSwitchSttLang } from "./stt-language-switch.js";
 import { EAGER_PARTIAL_STABLE_MS, isEagerCommitReady, isSpeculativeHit } from "./eager-stt.js";
 import type { SttFinalMetadata } from "./adapters/stt/base.js";
-import { makeThinkFilter, stripReasoningBlocks, stripJsonMessageWrapper } from "./reasoningFilter.js";
+import { makeThinkFilter, stripReasoningBlocks, stripJsonMessageWrapper, isLeakedMonologueClause } from "./reasoningFilter.js";
 import { createSTTAdapter } from "./adapters/stt/index.js";
 import { resolveSarvamSttMode } from "./adapters/stt/sarvam-mode.js";
 import { toReadableError, envInt, parseJsonObject } from "./utils.js";
@@ -29,7 +29,7 @@ import type { AudioProcessResult } from "./audioPool.js";
 import type { AgentConfig, AgentTool, ConversationTurn, LLMAdapter, LLMUsage, SessionConfig, StreamSTT, STTConfig, ToolDefinition } from "./types.js";
 import { resolveGoodbyeMessage } from "./types.js";
 import type { VoiceSession } from "./voice-session.js";
-import { retrieveKbContext, retrieveKbContextMultiEx, resolveKbTurnBudgetMs, type KbRetrievalResult } from "./kb-retrieval.js";
+import { retrieveKbContext, retrieveKbContextMultiEx, resolveKbTurnBudgetMs, isPureNonLatinQuery, type KbRetrievalResult } from "./kb-retrieval.js";
 import { KRUTRIM_AUTO_SUMMARY_TITLE } from "../services/kb-source-summary.js";
 import { getBackchannelFillers, pickBackchannelFiller, rememberFillerPhrase, type BackchannelFillerOptions } from "./backchannel.js";
 import { ConversationHistory } from "./conversation-history.js";
@@ -51,7 +51,7 @@ import {
   isAffirmationOnlyUtterance,
   type TurnCloseReason,
 } from "./endpointing.js";
-import { checkTranscriptQuality, pickClarificationPhrase, isSemanticInterrupt, isAccidentalInterruptPhrase, shouldHoldFragmentForCoalesce, isUltraShortNoiseFragment, isCallerAudioDifficulty, isFalseInterruptionScrap, isTopicClarificationAsk, isBackchannelOnlyUtterance, normalizeSttPhonetics, isNearDuplicateUtterance } from "./transcriptQuality.js";
+import { checkTranscriptQuality, pickClarificationPhrase, isSemanticInterrupt, isAccidentalInterruptPhrase, shouldHoldFragmentForCoalesce, isUltraShortNoiseFragment, isCallerAudioDifficulty, isFalseInterruptionScrap, isTopicClarificationAsk, isBackchannelOnlyUtterance, normalizeSttPhonetics, isNearDuplicateUtterance, coalescePendingTranscripts } from "./transcriptQuality.js";
 import { buildInterruptionHint, joinHeardSentences, resolveSpokenForHistory, estimateHeardPrefix, composeHeardWithMid } from "./bargeHeard.js";
 import { resolveSttTuning, type SttTuning } from "./stt-tuning.js";
 import { getCachedFillerPcm, setCachedFillerPcm } from "./fillerPcmCache.js";
@@ -132,10 +132,10 @@ const FILLER_THRESHOLD_MS     = 350;    // play a filler phrase if LLM has not r
                                         // token within this window (and backchannel didn't fire)
 const DEAD_AIR_FILLER_CANCEL_MS = 500; // skip dead-air filler playback if LLM first token
                                         // arrives within this window after filler was enqueued
-const FRAGMENT_COALESCE_MS_DEFAULT = 1000;  // fallback when agentConfig omits playing coalesce — keep in sync with FRAGMENT_COALESCE_DEFAULTS.playingMs (lib/db)
+const FRAGMENT_COALESCE_MS_DEFAULT = 0;  // fallback when agentConfig omits playing coalesce — keep in sync with FRAGMENT_COALESCE_DEFAULTS.playingMs (lib/db)
 /** Listening-side hold for ack fragments ("Yes Ma'am") — was 150ms; call 4856
  *  flushed before the caller finished "…how are you?" → zigzag replies. */
-const FRAGMENT_COALESCE_LISTENING_MS_DEFAULT = 250;
+const FRAGMENT_COALESCE_LISTENING_MS_DEFAULT = 0;
 const VAD_FLUSH_COOLDOWN_MS   = 5000;   // min interval between backstop flushes — keeps the flush strictly anomaly-only
 /** Lost-turn recovery: when the streaming socket loses an utterance entirely, re-run
  *  the buffered caller audio through batch STT rather than leaving dead air.
@@ -196,11 +196,6 @@ const BARGE_IN_ECHO_FLOOR_MIN_SAMPLES = Number(process.env.BARGE_IN_ECHO_FLOOR_M
 const BARGE_IN_STREAMING_MIN_FRAMES = Number(process.env.BARGE_IN_STREAMING_MIN_FRAMES ?? 10); // ~200 ms of sustained above-bar speech to fire (streaming path)
 /** Floor for telephony energy barge-in — agents with bargeInEnergyThreshold=300 (VAD floor) false-trigger constantly. */
 const BARGE_IN_TELEPHONY_MIN_ENERGY = Number(process.env.BARGE_IN_TELEPHONY_MIN_ENERGY ?? 800);
-// Browser webcall: the browser's hardware/OS AEC already cancels the agent's own TTS before the
-// audio reaches the pipeline, so the telephony anti-echo bar (1200) is unnecessary and too high
-// for a typical browser mic. Use a lower threshold so a normal speaking volume can interrupt.
-// Env-tunable; a user-configured bargeInEnergyThreshold BELOW this value is still honoured.
-const BARGE_IN_WEBCALL_AEC_THRESHOLD = Number(process.env.BARGE_IN_WEBCALL_AEC_THRESHOLD ?? 400);
 // ── Content-based self-echo rejection (carrier echo on the Live Call path) ─────
 // On the Vobiz telephony path the carrier echoes the agent's own TTS back to us
 // AFTER the time-based echo-grace windows expire, so STT finalizes it as a
@@ -298,10 +293,6 @@ function isLlmLeadingAck(sentence: string): boolean {
     "సరే", "ಸರಿ", "ശരി",
   ]);
   return ACK_WORDS.has(t);
-}
-
-function isPureNonLatinQuery(q: string): boolean {
-  return /\p{L}/u.test(q) && !/[A-Za-z]/.test(q);
 }
 
 /** BCP-47 locale → display name used in LLM language-switch instructions. */
@@ -1407,8 +1398,11 @@ export class OrchestrationPipeline implements VoiceSession {
     this.eagerPartialText = "";
   }
 
-  /** Schedule eager LLM when a partial stabilizes (Bolna Flux EagerEndOfTurn analogue). */
+  /** Schedule eager LLM when a partial stabilizes (Bolna Flux EagerEndOfTurn analogue).
+   * DISABLED: mid-utterance partials second-guess STT. Trust provider speech_end only
+   * (handleSttSpeechEnd / speech_end_partial). Re-enable with EAGER_STABLE_PARTIAL=1. */
   private scheduleEagerLlm(partial: string): void {
+    if (process.env["EAGER_STABLE_PARTIAL"] !== "1") return;
     if (this.isPlaying || this.isSendingTtsAudio || this.closed || this.isProcessing) return;
     if (this._specLlmState) return;
     // Turn 1 allowed: the greeting response is the most latency-sensitive turn.
@@ -2055,15 +2049,10 @@ export class OrchestrationPipeline implements VoiceSession {
       );
       this.bargeInEnergyThreshold = BARGE_IN_TELEPHONY_MIN_ENERGY;
     }
-    // Mic Sensitivity — one lever that scales the noise gate ratio, the
-    // hasSpeechEnergy() VAD floor, and (when not already overridden by an
-    // explicit bargeInEnergyThreshold) the barge-in bars. See mic-sensitivity.ts.
-    // "normal" keeps the webcall AEC cap on the env-tunable knob exactly as
-    // before micSensitivity existed; only "low"/"high" scale it.
+    // Mic Sensitivity — product default is always Low (not in Builder). Scales
+    // noise gate, VAD floor, and barge-in bars. See mic-sensitivity.ts.
     const resolvedSensitivity = resolveMicSensitivity(config.agentConfig.micSensitivity);
-    this.micThresholds = resolvedSensitivity === "normal"
-      ? { ...getMicSensitivityThresholds("normal"), webcallAecThreshold: BARGE_IN_WEBCALL_AEC_THRESHOLD }
-      : getMicSensitivityThresholds(resolvedSensitivity);
+    this.micThresholds = getMicSensitivityThresholds(resolvedSensitivity);
     // P1-J: Stop Speaking Plan overrides barge-in params when configured
     this.stopSpeakingPlanConfigured = !!config.agentConfig.stopSpeakingPlan;
     if (config.agentConfig.stopSpeakingPlan) {
@@ -2155,8 +2144,6 @@ export class OrchestrationPipeline implements VoiceSession {
           ...parseJsonObject(providerExtraConfig),
           mode: resolveSarvamSttMode(sttCfg.language, this.agent.sarvamSttMode),
           highVadSensitivity: this.agent.sarvamHighVadSensitivity,
-          speechEndFlushMs: this.agent.sarvamSpeechEndFlushMs,
-          incompleteHoldMs: this.agent.sarvamIncompleteHoldMs,
           firstTurnMinSpeechMs: this.agent.sarvamFirstTurnMinSpeechMs,
           endOfSpeechSilenceMs: this.agent.sarvamEndOfSpeechSilenceMs,
         })
@@ -3053,6 +3040,18 @@ export class OrchestrationPipeline implements VoiceSession {
       return;
     }
 
+    // Greeting (and any other isProcessing window) can leave orphans in the queue
+    // without draining. A fresh final must not jump ahead of those — that is how
+    // call 5677 answered "ஆமா" while "ஹலோ"/"ambulance" sat 13–20s behind.
+    if (this.pendingTranscriptQueue.length > 0) {
+      this.pendingTranscriptQueue.push({ text: transcript, emittedAt: sttEmittedAt, closeReason });
+      const merged = this.drainPendingTranscripts();
+      if (!merged) return;
+      transcript = merged.text;
+      sttEmittedAt = merged.emittedAt;
+      closeReason = merged.closeReason;
+    }
+
     this.isProcessing = true;
     try {
       await this.processTurn(transcript, 0);
@@ -3066,7 +3065,7 @@ export class OrchestrationPipeline implements VoiceSession {
       // If the call ended (transfer or end_call) while this turn was processing,
       // do NOT drain the pending queue — those transcripts must be discarded.
       if (this.closed) return;
-      const next = this.pendingTranscriptQueue.shift();
+      const next = this.drainPendingTranscripts();
       if (next) {
         void this.handleStreamingTranscript(next.text, next.emittedAt, next.closeReason);
       } else if (!this.closed) {
@@ -3074,6 +3073,36 @@ export class OrchestrationPipeline implements VoiceSession {
         this.safetyNet.beginListening();
       }
     }
+  }
+
+  /**
+   * Collapse everything the caller said during the previous turn into ONE next turn.
+   *
+   * Draining a single entry per completed turn cannot keep up: a turn costs several
+   * seconds (LLM + TTS + playback) while the caller can produce several finals in
+   * that window, so the backlog grows monotonically and every reply answers an
+   * utterance the caller has already moved past (call 5677: the ambulance question
+   * reached the LLM 13s late, the follow-up 20s late; call 5676 peaked at 40s).
+   * Merging bounds the staleness to at most one turn.
+   */
+  private drainPendingTranscripts(): { text: string; emittedAt: number; closeReason: TurnCloseReason } | null {
+    const queued = this.pendingTranscriptQueue;
+    if (queued.length === 0) return null;
+    this.pendingTranscriptQueue = [];
+    const coalesced = coalescePendingTranscripts(queued);
+    if (!coalesced) return null;
+    if (queued.length > 1) {
+      logger.info(
+        {
+          callId: this.config.callId,
+          queuedCount: queued.length,
+          oldestAgeMs: Date.now() - queued[0].emittedAt,
+          transcript: coalesced.text.slice(0, 160),
+        },
+        "Coalesced queued STT finals into a single turn — caller spoke during previous turn",
+      );
+    }
+    return coalesced;
   }
 
   /**
@@ -4571,6 +4600,15 @@ export class OrchestrationPipeline implements VoiceSession {
       // Greeting has been delivered (or failed) — the next caller audio is their
       // intro turn. Arm detection now so we sample THAT, not the greeting echo.
       this.armGenderDetection();
+      // Speech during the greeting is queued (isProcessing=true) but used to be
+      // left undrained — the next final then jumped the queue (call 5677). Drain
+      // coalesced leftovers now so the first reply matches what the caller said.
+      if (!this.closed) {
+        const next = this.drainPendingTranscripts();
+        if (next) {
+          void this.handleStreamingTranscript(next.text, next.emittedAt, next.closeReason);
+        }
+      }
     }
   }
 
@@ -6707,6 +6745,13 @@ export class OrchestrationPipeline implements VoiceSession {
 
     const enqueue = (text: string, sequenceId: number = this.activeAgentSequenceId): void => {
       if (this.bargeInRequested) return;
+      if (isLeakedMonologueClause(text)) {
+        logger.info(
+          { callId: this.config.callId, evt: "llm_monologue_clause_suppressed", textSnippet: text.slice(0, 120) },
+          "Pipeline: dropped leaked English chain-of-thought clause before TTS",
+        );
+        return;
+      }
       if (llmFirstTokenAt !== null && this._tTurnLlmFirstClause === null) {
         this._tTurnLlmFirstClause = performance.now();
       }
@@ -8735,6 +8780,13 @@ export class OrchestrationPipeline implements VoiceSession {
 
     const enqueue = (text: string, sequenceId: number = this.activeAgentSequenceId): void => {
       if (this.bargeInRequested) return;
+      if (isLeakedMonologueClause(text)) {
+        logger.info(
+          { callId: this.config.callId, evt: "llm_monologue_clause_suppressed", textSnippet: text.slice(0, 120) },
+          "Pipeline: dropped leaked English chain-of-thought clause before TTS",
+        );
+        return;
+      }
       // Extract any leading <emotion value="…"/> tag so the clean sentence goes
       // to TTS while the emotion array is forwarded to Cartesia's voice controls.
       const { emotion, text: cleanText } = extractEmotionTag(text);

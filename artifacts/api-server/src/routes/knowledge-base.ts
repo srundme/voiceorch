@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, and, sql, inArray } from "drizzle-orm";
-import { db, knowledgeSourcesTable, knowledgeEntriesTable, platformSettingsTable, agentsTable, agentKnowledgeSourcesTable } from "@workspace/db";
+import { db, knowledgeSourcesTable, knowledgeEntriesTable, agentsTable, agentKnowledgeSourcesTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { clientContext, denyManagedClient } from "../middlewares/clientContext.js";
 import { logger } from "../lib/logger.js";
@@ -8,6 +8,11 @@ import { ingestKbTextEntries, type KbEntryInput } from "../services/kb-ingest.js
 import { isKbVectorReady, kickKbEmbedWorker } from "../services/kb-embeddings.js";
 import { kickKrutrimSummaryWorker } from "../services/kb-source-summary.js";
 import { extractPdfChunksWithGemini } from "../services/kb-pdf-extract.js";
+import {
+  buildKnowledgeSearchPayload,
+  isPureNonLatinQuery,
+  retrieveKbContextMultiEx,
+} from "../orchestration/kb-retrieval.js";
 import multer from "multer";
 import mammoth from "mammoth";
 import { createRequire } from "node:module";
@@ -99,15 +104,76 @@ async function extractDocumentText(file: Express.Multer.File): Promise<string> {
 
 /* ── Helpers ─────────────────────────────────────────────────────────────── */
 
-/** Fetch the managed Qwen API key (platform_settings → env fallback) */
-async function getQwenKey(): Promise<string | null> {
+function parseFailedUrls(raw: string | null | undefined): string[] {
+  if (!raw?.trim()) return [];
   try {
-    const [row] = await db.select().from(platformSettingsTable).where(eq(platformSettingsTable.key, "managed_qwen_key"));
-    const dbVal = (row?.value ?? "").trim();
-    if (dbVal) return dbVal;
-  } catch { /* fall through */ }
-  const envVal = (process.env["GROQ_API_KEY"] ?? "").trim();
-  return envVal || null;
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed) ? parsed.filter((u): u is string => typeof u === "string" && !!u.trim()) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Enrich list/detail rows with embed progress + attach counts for the dashboard. */
+async function enrichKnowledgeSources<T extends { id: number; status: string; entryCount: number; crawlFailedUrls?: string | null; type: string }>(
+  sources: T[],
+): Promise<Array<T & {
+  embeddedCount: number;
+  indexing: boolean;
+  needsAttention: boolean;
+  failedPageCount: number;
+  attachedAgentCount: number;
+}>> {
+  if (!sources.length) return [];
+  const ids = sources.map((s) => s.id);
+  const vectorReady = isKbVectorReady();
+
+  const embedCounts = new Map<number, number>();
+  if (vectorReady) {
+    try {
+      const rows = await db.execute<{ sourceId: number; embedded: string }>(sql`
+        SELECT source_id AS "sourceId",
+          count(*) FILTER (WHERE embedding IS NOT NULL)::text AS embedded
+        FROM knowledge_entries
+        WHERE source_id IN (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})
+        GROUP BY source_id
+      `);
+      for (const r of rows.rows) {
+        embedCounts.set(Number(r.sourceId), Number(r.embedded) || 0);
+      }
+    } catch {
+      /* embedding column missing — treat as fully indexed for UI */
+    }
+  }
+
+  const attachRows = await db
+    .select({
+      sourceId: agentKnowledgeSourcesTable.sourceId,
+      n: sql<number>`count(*)::int`,
+    })
+    .from(agentKnowledgeSourcesTable)
+    .where(inArray(agentKnowledgeSourcesTable.sourceId, ids))
+    .groupBy(agentKnowledgeSourcesTable.sourceId);
+  const attachCounts = new Map(attachRows.map((r) => [r.sourceId, Number(r.n) || 0]));
+
+  const terminalOk = new Set(["ready", "partial", "active"]);
+  return sources.map((s) => {
+    const failed = parseFailedUrls(s.crawlFailedUrls);
+    const embeddedCount = vectorReady ? (embedCounts.get(s.id) ?? 0) : s.entryCount;
+    const indexing =
+      terminalOk.has(s.status)
+      && s.entryCount > 0
+      && vectorReady
+      && embeddedCount < s.entryCount;
+    return {
+      ...s,
+      embeddedCount,
+      indexing,
+      needsAttention: s.status === "partial" || failed.length > 0,
+      failedPageCount: failed.length,
+      attachedAgentCount: attachCounts.get(s.id) ?? 0,
+    };
+  });
 }
 
 /** Strip HTML tags, boilerplate sections, and collapse whitespace */
@@ -288,7 +354,7 @@ router.get("/knowledge-sources", requireAuth, clientContext, async (req, res) =>
     .from(knowledgeSourcesTable)
     .where(eq(knowledgeSourcesTable.userId, userId))
     .orderBy(sql`created_at DESC`);
-  res.json(sources);
+  res.json(await enrichKnowledgeSources(sources));
 });
 
 /* ── Create ──────────────────────────────────────────────────────────────── */
@@ -422,6 +488,7 @@ router.post("/knowledge-sources", requireAuth, clientContext, denyManagedClient,
 
       let successCount = 0;
       let failCount    = 0;
+      const failedUrls: string[] = [];
 
       // ── 6. Insert homepage entry ──────────────────────────────────────────
       if (homepageText.trim()) {
@@ -430,9 +497,13 @@ router.post("/knowledge-sources", requireAuth, clientContext, denyManagedClient,
           title:    homepageTitle,
           content:  homepageText,
           keywords: seedUrl,
-        }).then(() => { successCount++; }).catch(() => { failCount++; });
+        }).then(() => { successCount++; }).catch(() => {
+          failCount++;
+          failedUrls.push(seedUrl);
+        });
       } else {
         failCount++;
+        failedUrls.push(seedUrl);
       }
 
       // ── 6. Fetch and index internal pages ─────────────────────────────────
@@ -451,7 +522,7 @@ router.post("/knowledge-sources", requireAuth, clientContext, denyManagedClient,
           if (meta && meta !== title) parts.push(meta);
           if (body.length > title.length + 20) parts.push(body.slice(0, 12_000));
           const text  = parts.join("\n\n").slice(0, 15_000);
-          if (!text.trim()) { failCount++; continue; }
+          if (!text.trim()) { failCount++; failedUrls.push(pageUrl); continue; }
 
           await db.insert(knowledgeEntriesTable).values({
             sourceId, userId, title, content: text, keywords: pageUrl,
@@ -459,6 +530,7 @@ router.post("/knowledge-sources", requireAuth, clientContext, denyManagedClient,
           successCount++;
         } catch (err) {
           failCount++;
+          failedUrls.push(pageUrl);
           logger.warn({ err, pageUrl, sourceId }, "KB crawler: page fetch failed");
         }
       }
@@ -468,7 +540,12 @@ router.post("/knowledge-sources", requireAuth, clientContext, denyManagedClient,
         : failCount > 0 ? "partial"
         : "ready";
       await db.update(knowledgeSourcesTable)
-        .set({ status: finalStatus, entryCount: successCount, updatedAt: new Date() })
+        .set({
+          status: finalStatus,
+          entryCount: successCount,
+          crawlFailedUrls: failedUrls.length ? JSON.stringify(failedUrls) : null,
+          updatedAt: new Date(),
+        })
         .where(eq(knowledgeSourcesTable.id, sourceId));
       logger.info({ sourceId, url: seedUrl, successCount, failCount, finalStatus }, "KB website crawl complete");
       kickKbEmbedWorker();
@@ -657,7 +734,8 @@ router.get("/knowledge-sources/:id", requireAuth, clientContext, async (req, res
     .where(eq(knowledgeEntriesTable.sourceId, id))
     .orderBy(sql`created_at ASC`);
 
-  res.json({ ...source, entries });
+  const [enriched] = await enrichKnowledgeSources([source]);
+  res.json({ ...enriched, entries });
 });
 
 /* ── Update (rename) ─────────────────────────────────────────────────────── */
@@ -821,7 +899,7 @@ router.post("/knowledge-sources/:id/attach-agent/:agentId", requireAuth, clientC
   res.json({ attached: true });
 });
 
-/* ── Search (test panel) ─────────────────────────────────────────────────── */
+/* ── Search (test panel) — same hybrid RAG path as live calls ────────────── */
 
 router.post("/knowledge-sources/:id/search", requireAuth, clientContext, async (req, res) => {
   const userId = (req as any).clerkUserId as string;
@@ -837,108 +915,131 @@ router.post("/knowledge-sources/:id/search", requireAuth, clientContext, async (
   if (!source) { res.status(404).json({ error: "Not found" }); return; }
 
   const q = query.trim();
+  const skipFts = isPureNonLatinQuery(q);
+  const result = await retrieveKbContextMultiEx([sourceId], q, 20, { skipFts });
+  res.json(buildKnowledgeSearchPayload(result));
+});
 
-  // Load ALL entries (up to 200) — Qwen reads everything directly, no keyword guessing
-  const allEntries = await db
-    .select(entryCols)
+/* ── Retry failed website pages ──────────────────────────────────────────── */
+
+router.post("/knowledge-sources/:id/retry-crawl", requireAuth, clientContext, denyManagedClient, async (req, res) => {
+  const userId = (req as any).clerkUserId as string;
+  const sourceId = Number(req.params["id"]);
+  if (!Number.isFinite(sourceId)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const [source] = await db
+    .select()
+    .from(knowledgeSourcesTable)
+    .where(and(eq(knowledgeSourcesTable.id, sourceId), eq(knowledgeSourcesTable.userId, userId)));
+  if (!source) { res.status(404).json({ error: "Not found" }); return; }
+  if (source.type !== "website") {
+    res.status(400).json({ error: "Retry crawl is only for website knowledge" });
+    return;
+  }
+
+  let failedUrls = parseFailedUrls(source.crawlFailedUrls);
+  // Fallback: rediscover from seed + skip already-indexed keywords.
+  const existing = await db
+    .select({ keywords: knowledgeEntriesTable.keywords })
     .from(knowledgeEntriesTable)
-    .where(and(
-      eq(knowledgeEntriesTable.sourceId, sourceId),
-      eq(knowledgeEntriesTable.userId, userId),
-    ))
-    .limit(200);
-
-  if (!allEntries.length) {
-    res.json({ answer: "This knowledge source has no entries yet.", matchedEntries: [] });
+    .where(eq(knowledgeEntriesTable.sourceId, sourceId));
+  const indexed = new Set(
+    existing.map((e) => (e.keywords ?? "").trim()).filter((u) => /^https?:\/\//i.test(u)),
+  );
+  const seedUrl = [...indexed][0] ?? failedUrls[0];
+  if (!seedUrl) {
+    res.status(400).json({ error: "No website URL to retry from" });
     return;
   }
 
-  const qwenKey = await getQwenKey();
-  if (!qwenKey) {
-    // No LLM key — return raw entries so the caller can display them
-    res.json({
-      answer: allEntries.map(e => e.title ? `${e.title}: ${e.content}` : e.content).join("\n\n"),
-      matchedEntries: allEntries.map(e => ({ entry: e, rank: 0.5, snippet: null })),
-    });
-    return;
-  }
+  await db.update(knowledgeSourcesTable)
+    .set({ status: "crawling", updatedAt: new Date() })
+    .where(eq(knowledgeSourcesTable.id, sourceId));
 
-  // Build full knowledge context — Qwen reads all entries and decides what's relevant
-  const context = allEntries
-    .map((e, i) => [
-      `[${i}]`,
-      e.title ? `Title: ${e.title}` : null,
-      `Content: ${e.content}`,
-      e.keywords ? `Keywords: ${e.keywords}` : null,
-    ].filter(Boolean).join("\n"))
-    .join("\n\n---\n\n");
+  res.json({ started: true, pendingUrls: failedUrls.length || "rediscover" });
 
-  const prompt = `You are a helpful knowledge base assistant. Read all the knowledge entries below and answer the user's question accurately.
-
-Knowledge Entries:
-${context}
-
-User Question: ${q}
-
-Instructions:
-- Answer using ONLY information from the knowledge entries above.
-- Also return which entry indices (0-based numbers from [0], [1], etc.) are relevant.
-- If the answer is not covered, set answer to "I don't have information about this in my knowledge base."
-- Respond with ONLY valid JSON, no markdown, no explanation outside the JSON:
-{"answer":"...","relevantIndices":[0,1]}`;
-
-  try {
-    const qwenRes = await fetch(
-      "https://api.groq.com/openai/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${qwenKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "qwen/qwen3-32b",
-          temperature: 0.3,
-          max_tokens: 1024,
-          response_format: { type: "json_object" },
-          messages: [
-            { role: "system", content: "You are a helpful knowledge base assistant. Always respond with valid JSON only." },
-            { role: "user", content: prompt },
-          ],
-        }),
-      },
-    );
-
-    if (!qwenRes.ok) {
-      throw new Error(`Qwen API error: ${qwenRes.status}`);
+  const CRAWLER_UA = "Mozilla/5.0 (compatible; VoiceOrch-KB-Crawler/1.0)";
+  void (async () => {
+    let baseUrl: URL;
+    try { baseUrl = new URL(seedUrl); } catch {
+      await db.update(knowledgeSourcesTable)
+        .set({ status: "failed", updatedAt: new Date() })
+        .where(eq(knowledgeSourcesTable.id, sourceId));
+      return;
     }
 
-    const data = (await qwenRes.json()) as { choices?: Array<{ message?: { content?: string } }> };
-    const text = data?.choices?.[0]?.message?.content?.trim() ?? "";
-
-    let answer = "Unable to process the question.";
-    let relevantIndices: number[] = [];
-
-    try {
-      const parsed = JSON.parse(text) as { answer?: string; relevantIndices?: number[] };
-      answer = parsed.answer?.trim() || answer;
-      relevantIndices = Array.isArray(parsed.relevantIndices) ? parsed.relevantIndices : [];
-    } catch {
-      answer = text;
+    if (!failedUrls.length) {
+      try {
+        const r = await safeFetch(seedUrl, {
+          headers: { "User-Agent": CRAWLER_UA },
+          signal: AbortSignal.timeout(15_000),
+        }, SAFE_FETCH_MAX_REDIRECTS, baseUrl.hostname);
+        if (r.ok) {
+          const html = await r.text();
+          failedUrls = extractSameOriginLinks(html, baseUrl).filter((u) => !indexed.has(u));
+        }
+      } catch (err) {
+        logger.warn({ err, sourceId }, "KB retry-crawl: rediscover failed");
+      }
     }
 
-    const matchedEntries = relevantIndices
-      .filter(i => Number.isInteger(i) && i >= 0 && i < allEntries.length)
-      .map(i => ({ entry: allEntries[i]!, rank: 1.0, snippet: null }));
+    const stillFailed: string[] = [];
+    let added = 0;
+    for (const pageUrl of failedUrls.slice(0, 30)) {
+      if (indexed.has(pageUrl)) continue;
+      try {
+        const r = await safeFetch(pageUrl, {
+          headers: { "User-Agent": CRAWLER_UA },
+          signal: AbortSignal.timeout(10_000),
+        }, SAFE_FETCH_MAX_REDIRECTS, baseUrl.hostname);
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const html = await r.text();
+        const title = extractTitle(html) || pageUrl;
+        const meta = extractMetaDescription(html);
+        const body = stripHtml(html);
+        const parts: string[] = [title];
+        if (meta && meta !== title) parts.push(meta);
+        if (body.length > title.length + 20) parts.push(body.slice(0, 12_000));
+        const text = parts.join("\n\n").slice(0, 15_000);
+        if (!text.trim()) { stillFailed.push(pageUrl); continue; }
+        await db.insert(knowledgeEntriesTable).values({
+          sourceId, userId, title, content: text, keywords: pageUrl,
+        });
+        indexed.add(pageUrl);
+        added++;
+      } catch (err) {
+        stillFailed.push(pageUrl);
+        logger.warn({ err, pageUrl, sourceId }, "KB retry-crawl: page failed");
+      }
+    }
 
-    res.json({ answer, matchedEntries });
-  } catch (err) {
-    logger.warn({ err }, "KB search LLM failed");
-    res.json({
-      answer: allEntries.map(e => e.title ? `${e.title}: ${e.content}` : e.content).join("\n\n"),
-      matchedEntries: allEntries.map(e => ({ entry: e, rank: 0.5, snippet: null })),
-    });
-  }
+    await syncEntryCount(sourceId);
+    const [countRow] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(knowledgeEntriesTable)
+      .where(eq(knowledgeEntriesTable.sourceId, sourceId));
+    const entryCount = Number(countRow?.n) || 0;
+    const finalStatus = entryCount === 0 ? "failed"
+      : stillFailed.length > 0 ? "partial"
+      : "ready";
+    await db.update(knowledgeSourcesTable)
+      .set({
+        status: finalStatus,
+        entryCount,
+        crawlFailedUrls: stillFailed.length ? JSON.stringify(stillFailed) : null,
+        updatedAt: new Date(),
+      })
+      .where(eq(knowledgeSourcesTable.id, sourceId));
+    logger.info({ sourceId, added, stillFailed: stillFailed.length, finalStatus }, "KB retry-crawl complete");
+    kickKbEmbedWorker();
+    kickKrutrimSummaryWorker();
+  })().catch((err) => {
+    logger.warn({ err, sourceId }, "KB retry-crawl unhandled");
+    db.update(knowledgeSourcesTable)
+      .set({ status: "partial", updatedAt: new Date() })
+      .where(eq(knowledgeSourcesTable.id, sourceId))
+      .catch(() => {});
+  });
 });
 
 export default router;

@@ -414,7 +414,7 @@ export interface AgentConfig {
   asrEndpointingSilenceMs: number;
   /** Cap LLM output tokens to reduce response latency. null = model default. */
   llmMaxTokens: number | null;
-  /** Min chars before a comma-clause triggers an early TTS dispatch (default 15). */
+  /** Min chars before a comma-clause triggers an early TTS dispatch (default 5). */
   ttsMinSentenceChars: number;
   /**
    * Hold window (ms) for short ack/fragment STT finals while the agent is silent.

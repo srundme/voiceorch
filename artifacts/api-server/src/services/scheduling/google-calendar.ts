@@ -584,6 +584,13 @@ export async function createCalendarEvent(params: {
   for (const email of hostAttendeeEmails(params.hostEmail, params.additionalHosts, params.attendeeEmail)) {
     attendees.push({ email });
   }
+  const meetBotEmail = (process.env["RECALL_BOT_EMAIL"] ?? "").trim().toLowerCase();
+  if (
+    meetBotEmail
+    && !attendees.some((a) => a.email.toLowerCase() === meetBotEmail)
+  ) {
+    attendees.push({ email: meetBotEmail, displayName: "SnapServe meeting agent" });
+  }
 
   // Use local datetime strings (no Z/offset) + timeZone field — this is the correct
   // Google Calendar API format. Passing .toISOString() (UTC with Z) alongside timeZone
@@ -740,6 +747,13 @@ export async function updateCalendarEvent(params: {
     ];
     for (const email of hostAttendeeEmails(params.hostEmail, params.additionalHosts, params.attendeeEmail)) {
       attendees.push({ email });
+    }
+    const meetBotEmail = (process.env["RECALL_BOT_EMAIL"] ?? "").trim().toLowerCase();
+    if (
+      meetBotEmail
+      && !attendees.some((a) => a.email.toLowerCase() === meetBotEmail)
+    ) {
+      attendees.push({ email: meetBotEmail, displayName: "SnapServe meeting agent" });
     }
     requestBody["attendees"] = attendees;
   }

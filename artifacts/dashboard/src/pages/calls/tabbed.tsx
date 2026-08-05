@@ -1,5 +1,5 @@
 /**
- * /app/calls — Activity (calls, callbacks, transfers)
+ * /app/history (and legacy /app/calls) — what happened.
  */
 import { useLocation, useSearch } from "wouter";
 import { StripePage } from "@/components/stripe-page";
@@ -7,22 +7,17 @@ import { cn } from "@/lib/utils";
 import CallsList from "./index";
 import CallbacksPage from "@/pages/callbacks";
 import TransfersPage from "@/pages/transfers";
-import { AutomationHistoryLogs } from "@/pages/automation/automation-history-logs";
-import { useAgentFromSearch } from "@/components/agent-context-bar";
 
 const TABS = [
-  { key: "all-calls", label: "All calls" },
+  { key: "all-calls", label: "Calls" },
   { key: "callbacks", label: "Callbacks" },
   { key: "transfers", label: "Transfers" },
-  { key: "automations", label: "Automations & Meet" },
 ] as const;
 
 export default function CallsTabPage() {
   const [, navigate] = useLocation();
   const search = useSearch();
-  const { agents, selectedId } = useAgentFromSearch();
-  const activeKey =
-    new URLSearchParams(search).get("tab") ?? "all-calls";
+  const activeKey = new URLSearchParams(search).get("tab") ?? "all-calls";
   const active = TABS.some((t) => t.key === activeKey) ? activeKey : "all-calls";
 
   const setTab = (key: string) => {
@@ -31,12 +26,11 @@ export default function CallsTabPage() {
     navigate(`${window.location.pathname}?${sp.toString()}`);
   };
 
-  const defaultAgentId = selectedId ?? agents[0]?.id ?? 1;
-
   return (
     <StripePage
-      title="Activity"
-      description="Calls, callbacks, transfers, and automations across your agents."
+      title="History"
+      description="Calls, callbacks, and transfers — what happened for each person."
+      back={{ href: "/app/home", label: "Home" }}
       fullBleed
       contentClassName="!px-0 !py-0 max-w-none"
       tabs={
@@ -65,7 +59,6 @@ export default function CallsTabPage() {
       {active === "all-calls" && <CallsList />}
       {active === "callbacks" && <CallbacksPage />}
       {active === "transfers" && <TransfersPage />}
-      {active === "automations" && <AutomationHistoryLogs agentId={defaultAgentId} />}
     </StripePage>
   );
 }

@@ -23,17 +23,8 @@ import {
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
-
-const SCHED_TABS = [
-  { label: "Bookings", href: `${BASE}/app/scheduling`, exact: true },
-  { label: "Calendars", href: `${BASE}/app/scheduling/calendars` },
-  { label: "Event Types", href: `${BASE}/app/scheduling/event-types` },
-  { label: "Availability", href: `${BASE}/app/scheduling/availability` },
-  { label: "Conferencing", href: `${BASE}/app/scheduling/conferencing` },
-] as const;
 
 function statusBadge(status: string) {
   switch (status) {
@@ -114,7 +105,7 @@ function CalSyncBadge({ status, error }: { status: Booking["calendarSyncStatus"]
 }
 
 export default function SchedulingPage() {
-  const [location, navigate] = useLocation();
+  const [, navigate] = useLocation();
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [calendarFilter, setCalendarFilter] = useState<string>("all");
   const [sourceFilter, setSourceFilter] = useState<string>("all");
@@ -143,41 +134,23 @@ export default function SchedulingPage() {
             size="sm"
             variant="outline"
             className="h-8 text-xs gap-1.5 rounded-lg"
-            onClick={() => navigate(`${BASE}/app/scheduling/calendars`)}
+            onClick={() => navigate(`${BASE}/app/connections?setup=calendar`)}
           >
             <Plus className="h-3.5 w-3.5" />
             Set up calendar
           </Button>
         }
-        tabs={
-          <div className="flex items-center gap-0 -mx-1 overflow-x-auto">
-            {SCHED_TABS.map((tab) => {
-              const exact = "exact" in tab && tab.exact;
-              const active = exact
-                ? location === tab.href || location === `${tab.href}/`
-                : location.startsWith(tab.href);
-              return (
-                <Link key={tab.href} href={tab.href}>
-                  <button
-                    type="button"
-                    className={cn(
-                      "relative px-3 pb-3 text-[13px] font-medium transition-colors whitespace-nowrap",
-                      active
-                        ? "text-foreground"
-                        : "text-muted-foreground hover:text-foreground/80",
-                    )}
-                  >
-                    {tab.label}
-                    {active && (
-                      <span className="absolute inset-x-1 bottom-0 h-0.5 rounded-full bg-foreground" />
-                    )}
-                  </button>
-                </Link>
-              );
-            })}
-          </div>
-        }
       >
+        <p className="mb-4 text-[11px] text-muted-foreground">
+          Calendar setup lives under{" "}
+          <a
+            href={`${BASE}/app/connections?setup=calendar`}
+            className="underline underline-offset-2 text-foreground/80 hover:text-foreground"
+          >
+            Connections → Calendar &amp; booking
+          </a>
+          .
+        </p>
         <div className="mb-4 flex gap-2 items-center flex-wrap">
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="w-[140px] h-8 text-xs">
@@ -248,11 +221,11 @@ export default function SchedulingPage() {
                   description={
                     statusFilter !== "all" || sourceFilter !== "all" || syncFilter !== "all" || calendarFilter !== "all"
                       ? "No bookings match these filters. Try clearing them."
-                      : "When agents book appointments mid-call, they'll show up here."
+                      : "When agents book appointments mid-call, they'll show up here. Set up under Connections → Calendar & booking."
                   }
                   action={{
-                    label: "Open calendars",
-                    onClick: () => navigate(`${BASE}/app/scheduling/calendars`),
+                    label: "Set up calendar",
+                    onClick: () => navigate(`${BASE}/app/connections?setup=calendar`),
                     icon: <Calendar className="h-3.5 w-3.5" />,
                   }}
                 />
@@ -313,16 +286,16 @@ export default function SchedulingPage() {
                         description={
                           statusFilter !== "all" || sourceFilter !== "all" || syncFilter !== "all" || calendarFilter !== "all"
                             ? "No bookings match these filters. Try clearing them."
-                            : "When agents book appointments mid-call, they'll show up here. Start by connecting a calendar and event type."
+                            : "When agents book appointments mid-call, they'll show up here. Set up under Connections → Calendar & booking."
                         }
                         action={{
-                          label: "Open calendars",
-                          onClick: () => navigate(`${BASE}/app/scheduling/calendars`),
+                          label: "Set up calendar",
+                          onClick: () => navigate(`${BASE}/app/connections?setup=calendar`),
                           icon: <Calendar className="h-3.5 w-3.5" />,
                         }}
                         secondaryAction={{
-                          label: "Event types",
-                          onClick: () => navigate(`${BASE}/app/scheduling/event-types`),
+                          label: "Advanced settings",
+                          onClick: () => navigate(`${BASE}/app/scheduling/calendars`),
                         }}
                       />
                     </TableCell>

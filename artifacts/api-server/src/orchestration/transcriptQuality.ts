@@ -686,3 +686,60 @@ export function normalizeSttPhonetics(text: string): string {
   return s;
 }
 
+/** Upper bound on how many queued finals get merged into the next turn. */
+export const MAX_COALESCED_TRANSCRIPTS = 2;
+/**
+ * Drop queued finals older than this relative to the newest entry. Greeting-era
+ * leftovers (call 5677: "ஹலோ" processed 15s late ahead of the ambulance ask)
+ * otherwise dilute or displace the caller's current intent.
+ */
+export const PENDING_TRANSCRIPT_MAX_AGE_BEHIND_NEWEST_MS = 8_000;
+
+export interface PendingTranscriptEntry<TCloseReason = string> {
+  text: string;
+  emittedAt: number;
+  closeReason: TCloseReason;
+}
+
+/**
+ * Collapse STT finals that piled up while a turn (or greeting) was in flight
+ * into a single next turn: drop stale/backchannel/duplicate parts, keep the
+ * newest intent. Pure helper so call-5677-style backlog can be unit-tested.
+ */
+export function coalescePendingTranscripts<TCloseReason>(
+  queued: ReadonlyArray<PendingTranscriptEntry<TCloseReason>>,
+  opts?: {
+    maxParts?: number;
+    maxAgeBehindNewestMs?: number;
+  },
+): PendingTranscriptEntry<TCloseReason> | null {
+  if (queued.length === 0) return null;
+  const last = queued[queued.length - 1];
+  const maxParts = opts?.maxParts ?? MAX_COALESCED_TRANSCRIPTS;
+  const maxAgeBehindNewestMs =
+    opts?.maxAgeBehindNewestMs ?? PENDING_TRANSCRIPT_MAX_AGE_BEHIND_NEWEST_MS;
+
+  const fresh = queued.filter(
+    (e) => last.emittedAt - e.emittedAt <= maxAgeBehindNewestMs,
+  );
+  const candidates = fresh.length > 0 ? fresh : [last];
+  if (candidates.length === 1) return candidates[0];
+
+  const parts: string[] = [];
+  for (const { text } of candidates) {
+    const t = text.trim();
+    if (!t) continue;
+    // Bare acks add no intent once merged with real speech, and leading with one
+    // biases the LLM toward acknowledging instead of answering the question.
+    if (isBackchannelOnlyUtterance(t)) continue;
+    if (parts.length > 0 && isNearDuplicateUtterance(parts[parts.length - 1], t)) continue;
+    parts.push(t);
+  }
+  // All acks — the newest one still represents the caller's turn.
+  if (parts.length === 0) return last;
+  // Only the tail carries the caller's current intent; older fragments are context
+  // at best and contradicted self-corrections at worst ("no no, ambulance").
+  const merged = parts.slice(-maxParts).join(" ");
+  return { text: merged, emittedAt: last.emittedAt, closeReason: last.closeReason };
+}
+

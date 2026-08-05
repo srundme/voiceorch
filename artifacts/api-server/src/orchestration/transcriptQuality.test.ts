@@ -11,6 +11,7 @@ import {
   isAccidentalInterruptPhrase,
   isBackchannelOnlyUtterance,
   normalizeSttPhonetics,
+  coalescePendingTranscripts,
 } from "./transcriptQuality.js";
 import { isAffirmationOnlyUtterance } from "./endpointing.js";
 
@@ -201,6 +202,60 @@ describe("isAccidentalInterruptPhrase", () => {
       expect(normalizeSttPhonetics("c o d e m a t e a i at gmail dot com")).toBe("codemateai@gmail.com");
       expect(normalizeSttPhonetics("k a r t h i k underscore zero one at gmail dot com")).toBe("karthik_01@gmail.com");
       expect(normalizeSttPhonetics("g o p i n w r k at gmail dot com")).toBe("gopinwrk@gmail.com");
+    });
+  });
+
+  describe("coalescePendingTranscripts — call 5677 backlog", () => {
+    const cr = "stt_final" as const;
+
+    it("returns null for an empty queue", () => {
+      expect(coalescePendingTranscripts([])).toBeNull();
+    });
+
+    it("returns the single entry unchanged", () => {
+      const only = { text: "இப்போ இந்த ஆம்புலன்ஸ்.", emittedAt: 1000, closeReason: cr };
+      expect(coalescePendingTranscripts([only])).toEqual(only);
+    });
+
+    it("drops greeting-era leftovers older than the newest ask", () => {
+      const t0 = 1_000_000;
+      const coalesced = coalescePendingTranscripts([
+        { text: "ஹலோ.", emittedAt: t0, closeReason: cr },
+        { text: "ஓகே.", emittedAt: t0 + 2_000, closeReason: cr },
+        { text: "இப்போ இந்த ஆம்புலன்ஸ்.", emittedAt: t0 + 15_000, closeReason: cr },
+        { text: "ஆ அந்த சார்ஜஸ்லாம் கவர் ஆகுமா", emittedAt: t0 + 18_000, closeReason: cr },
+      ]);
+      expect(coalesced?.text).toBe("இப்போ இந்த ஆம்புலன்ஸ். ஆ அந்த சார்ஜஸ்லாம் கவர் ஆகுமா");
+      expect(coalesced?.emittedAt).toBe(t0 + 18_000);
+    });
+
+    it("skips backchannels when merging with a real question", () => {
+      const t0 = 1_000_000;
+      const coalesced = coalescePendingTranscripts([
+        { text: "Okay.", emittedAt: t0, closeReason: cr },
+        { text: "ஆமா.", emittedAt: t0 + 500, closeReason: cr },
+        { text: "does ambulance cover charges?", emittedAt: t0 + 1_000, closeReason: cr },
+      ]);
+      expect(coalesced?.text).toBe("does ambulance cover charges?");
+    });
+
+    it("keeps only the newest two meaningful parts", () => {
+      const t0 = 1_000_000;
+      const coalesced = coalescePendingTranscripts([
+        { text: "first question about coins", emittedAt: t0, closeReason: cr },
+        { text: "second about wellness", emittedAt: t0 + 1_000, closeReason: cr },
+        { text: "third about ambulance", emittedAt: t0 + 2_000, closeReason: cr },
+      ]);
+      expect(coalesced?.text).toBe("second about wellness third about ambulance");
+    });
+
+    it("falls back to the newest ack when the queue is all backchannels", () => {
+      const t0 = 1_000_000;
+      const coalesced = coalescePendingTranscripts([
+        { text: "Okay.", emittedAt: t0, closeReason: cr },
+        { text: "ஆமா.", emittedAt: t0 + 500, closeReason: cr },
+      ]);
+      expect(coalesced?.text).toBe("ஆமா.");
     });
   });
 });

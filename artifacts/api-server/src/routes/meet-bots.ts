@@ -17,6 +17,7 @@ import {
   createRecallBot,
   getRecallBot,
   leaveRecallBot,
+  getMeetBotIdentity,
 } from "../services/meet-bots.js";
 import {
   createMeetRoster,
@@ -73,6 +74,11 @@ router.post("/meet-bots/recall-events", (req, res) => {
   } catch (err) {
     logger.warn({ err }, "Recall participant event handling failed");
   }
+});
+
+// ── Authed: bot identity (email for admit / calendar invites) ────────────────
+router.get("/meet-bots/identity", requireAuth, (_req, res) => {
+  res.json(getMeetBotIdentity());
 });
 
 // ── Authed: launch a bot ─────────────────────────────────────────────────────

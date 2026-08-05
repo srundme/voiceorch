@@ -472,10 +472,14 @@ export function VoiceAssistant() {
     "Diagnose my agent",
   ];
 
+  // The agent builder is a dense editing surface — a draggable launcher parked
+  // over it covers form controls, so only surface the assistant once it's open.
+  const hideLauncher = /^\/app\/agents\/[^/]+/.test(location);
+
   return (
     <>
       {/* ── Floating button ──────────────────────────────────────────────────── */}
-      {!open && (
+      {!open && !hideLauncher && (
         <button
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}

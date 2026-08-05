@@ -334,8 +334,6 @@ export class SarvamSTT implements STTAdapter {
   private readonly mode: SarvamSttMode;
   private readonly explicitMode: string | null;
   private readonly highVadSensitivity: boolean;
-  private readonly speechEndFlushMs: number;
-  private readonly incompleteHoldMs: number;
   /** Wall-clock VAD windows; converted to frames at connect time (see msToVadFrames). */
   private readonly firstTurnMinSpeechMs: number;
   private readonly endOfSpeechSilenceMs: number | null;
@@ -357,8 +355,6 @@ export class SarvamSTT implements STTAdapter {
       ? (JSON.parse(extraConfig) as {
           mode?: string;
           highVadSensitivity?: boolean;
-          speechEndFlushMs?: number;
-          incompleteHoldMs?: number;
           firstTurnMinSpeechMs?: number | null;
           endOfSpeechSilenceMs?: number | null;
         })
@@ -388,20 +384,6 @@ export class SarvamSTT implements STTAdapter {
       typeof extra.highVadSensitivity === "boolean"
         ? extra.highVadSensitivity
         : true;
-    this.speechEndFlushMs =
-      typeof extra.speechEndFlushMs === "number" &&
-      Number.isFinite(extra.speechEndFlushMs)
-        ? Math.max(0, Math.min(200, Math.round(extra.speechEndFlushMs)))
-        : 80;
-    // Prefer agent UI value; env SARVAM_COALESCE_INCOMPLETE_MS remains a deploy-wide override.
-    const envIncomplete = envInt("SARVAM_COALESCE_INCOMPLETE_MS", -1);
-    this.incompleteHoldMs =
-      envIncomplete >= 0
-        ? Math.max(50, Math.min(1000, envIncomplete))
-        : typeof extra.incompleteHoldMs === "number" &&
-            Number.isFinite(extra.incompleteHoldMs)
-          ? Math.max(50, Math.min(1000, Math.round(extra.incompleteHoldMs)))
-          : 350;
 
     // VAD windows are configured in milliseconds and converted to frames against
     // the live sample rate, so one value behaves identically on 8kHz telephony and
@@ -426,8 +408,6 @@ export class SarvamSTT implements STTAdapter {
         model: this.model,
         explicitMode: this.explicitMode,
         highVadSensitivity: this.highVadSensitivity,
-        speechEndFlushMs: this.speechEndFlushMs,
-        incompleteHoldMs: this.incompleteHoldMs,
         sampleRate: this.sampleRate,
         vadFrameMs: vadFrameMs(this.sampleRate),
         firstTurnMinSpeechMs: this.firstTurnMinSpeechMs,
@@ -553,7 +533,6 @@ export class SarvamSTT implements STTAdapter {
     const MAX_QUEUE_BYTES = sampleRate * 2 * 16; // 16s of audio (512KB @16k, 256KB @8k)
     let queueTrimLogged = false; // throttle: log queue trim at most once per reconnect episode
     let speechEndAt = 0; // timestamp of last END_SPEECH event for latency tracking
-    let speechEndReceived = false; // true once speech_end fires; reset on speech_start
     let lastRequestId: string | undefined; // latest request_id seen — attached to transcript/error logs for Sarvam support
 
     // Closure variables for the onSpeechStart / onSpeechEnd callbacks. Declared here
@@ -562,387 +541,9 @@ export class SarvamSTT implements STTAdapter {
     let _onSpeechStart: (() => void) | null = null;
     let _onSpeechEnd: (() => void) | null = null;
 
-    // ── Transcript coalescing holds ──────────────────────────────────────────
-    // Two UI-configurable timers drive coalescing (an older adaptive pause-history
-    // system was removed as dead code — it was only ever referenced in logs):
-    // Incomplete mid-thought hold — Latency Tuning UI. Platform default is 700ms
-    // (SARVAM_STT_LATENCY_DEFAULTS.incompleteHoldMs); the adapter falls back to
-    // 350ms only when no agent config is supplied at all. Env
-    // SARVAM_COALESCE_INCOMPLETE_MS overrides both when set.
-    const COALESCE_INCOMPLETE_MS = this.incompleteHoldMs;
-    const SPEECH_END_FLUSH_MS = this.speechEndFlushMs;
-    let transcriptArrivedAt = 0; // wall-clock ms when last transcript buffered
-    let coalesceMergedSegments = 0; // # of Sarvam segments folded into current buf
-
-    /**
-     * Common single-word utterances that are COMPLETE responses — acknowledgements,
-     * affirmatives, negatives, greetings — in English, Tamil, and Hindi. These bypass
-     * the COALESCE_INCOMPLETE_MS hold so "yes" / "ஆம்" / "हाँ" dispatches in ~30 ms
-     * (the normal speech_end fast-path) instead of waiting 800+ ms for "more words".
-     */
-    const COMPLETE_SINGLE_WORDS = new Set([
-      // English — affirmatives / negatives / acknowledgements / greetings
-      "yes",
-      "no",
-      "ok",
-      "okay",
-      "sure",
-      "fine",
-      "right",
-      "correct",
-      "wrong",
-      "good",
-      "great",
-      "perfect",
-      "excellent",
-      "absolutely",
-      "definitely",
-      "yeah",
-      "yep",
-      "yup",
-      "nope",
-      "nah",
-      "alright",
-      "hello",
-      "hi",
-      "hey",
-      "bye",
-      "goodbye",
-      "thanks",
-      "thank",
-      "thankyou",
-      "done",
-      "stop",
-      "cancel",
-      "confirm",
-      "proceed",
-      "continue",
-      "next",
-      "back",
-      "send",
-      "wait",
-      "hold",
-      "go",
-      "start",
-      "begin",
-      "end",
-      "one",
-      "two",
-      "three",
-      "four",
-      "five",
-      "six",
-      "seven",
-      "eight",
-      "nine",
-      "ten",
-      "first",
-      "second",
-      "third",
-      "morning",
-      "evening",
-      "afternoon",
-      "now",
-      "later",
-      "help",
-      "please",
-      "understood",
-      "noted",
-      "agree",
-      "disagree",
-      // Tamil — affirmatives / negatives / acknowledgements / greetings
-      "ஆம்",
-      "இல்ல",
-      "இல்லை",
-      "சரி",
-      "ஓகே",
-      "ஹலோ",
-      "ஹலொ",
-      "நன்றி",
-      "சரிங்க",
-      "ஆமாம்",
-      "இல்லங்க",
-      "ஓகேங்க",
-      "சரிங்கள",
-      "புரிஞ்சது",
-      "தெரியும்",
-      "தெரியல",
-      "வேண்டாம்",
-      "வேணும்",
-      "கொஞ்சம்",
-      "நல்லது",
-      "ஆகும்",
-      "ஆகாது",
-      // Hindi — affirmatives / negatives / acknowledgements / greetings
-      "हाँ",
-      "हां",
-      "नहीं",
-      "ना",
-      "ठीक",
-      "ओके",
-      "हेलो",
-      "हाँजी",
-      "हांजी",
-      "जी",
-      "जी।",
-      "जी,",
-      "धन्यवाद",
-      "शुक्रिया",
-      "बताओ",
-      "आगे",
-      "समझा",
-      "समझी",
-      "पता",
-      "नहीं।",
-      "बिल्कुल",
-      "ज़रूर",
-      "ज़रूरी",
-      // Telugu, Kannada, Malayalam common acks
-      "అవును",
-      "కాదు",
-      "సరే",
-      "ఓకే",
-      "హలో",
-      "ಹೌದು",
-      "ಇಲ್ಲ",
-      "ಸರಿ",
-      "ಓಕೆ",
-      "ಹಲೋ",
-      "അതെ",
-      "ഇല്ല",
-      "ശരി",
-      "ഓകെ",
-      "ഹലോ",
-    ]);
-
-    /** Single-word dangling connectors that genuinely indicate the caller was cut off mid-thought. */
-    const DANGLING_SINGLE_CONNECTORS = new Set([
-      "and",
-      "or",
-      "but",
-      "because",
-      "although",
-      "though",
-      "with",
-      "for",
-      "from",
-      "into",
-      "through",
-      "of",
-      "to",
-      " ke",
-      " ki",
-      " ka",
-      " ko",
-      " mein",
-      " pe",
-      " par",
-      " se",
-      " ne",
-      " aur",
-      " lekin",
-      " jo",
-      " kyunki",
-      " jab",
-      "ஆனால்",
-      "அல்லது",
-      "ஏனெனில்",
-      "மற்றும்",
-      "எனவே",
-      "அப்புறம்",
-      "இருந்தாலும்",
-      "சொல்லி",
-      "பண்ணி",
-      "வந்து",
-    ]);
-
-    /**
-     * Returns true when the transcript looks like a mid-sentence fragment that the
-     * caller is still formulating. Triggers COALESCE_INCOMPLETE_MS hold instead of
-     * the adaptive window so the caller can finish their thought.
-     *
-     * Patterns detected (Tamil-aware + generic):
-     *   • Single dangling connector (e.g. "and", "but", "ஆனா") — incomplete
-     *   • Single content word (name, number, noun, answer)      — COMPLETE (emits immediately)
-     *   • Ends with Tamil possessive suffix    — உங்களோட, என்னோட, அதோட, …
-     *   • Ends with Tamil case markers         — -ஐ, -க்கு, -கிட்ட, -ல, -னால, …
-     *   • Ends with common connective words    — "and", "or", "but", "also", "with"
-     *   • All-caps abbreviation (e.g. "DTDC") — likely partial proper noun phrase
-     */
-    function looksIncomplete(text: string): boolean {
-      const t = text.trim();
-      const words = t.split(/\s+/);
-      if (words.length === 0) return false;
-      // Single word: only return true if it is a known dangling connector ("and", "but", "ஆனா" etc.)
-      // All other single words (names, numbers, nouns, greetings, yes/no) emit IMMEDIATELY.
-      if (words.length === 1) {
-        const w = words[0].toLowerCase().replace(/[।,!?.]+$/, "");
-        return (
-          DANGLING_SINGLE_CONNECTORS.has(w) ||
-          DANGLING_SINGLE_CONNECTORS.has(words[0])
-        );
-      }
-      const last = words[words.length - 1];
-      // Tamil possessive / genitive suffixes → more to come
-      if (/[ஓோ]ட$|உடைய$|களோட$/.test(last)) return true;
-      // Tamil dative, locative, instrumental markers
-      if (/க்கு$|கிட்ட$|கிட்டே$|னால$|னாலே$|ஐ$/.test(last)) return true;
-      // Tamil conjunctive participial (connector) forms — ALWAYS signal more is coming:
-      //   -ந்து  : வந்து (having come), போந்து, கொண்டு (with)
-      //   -ட்டு  : போட்டு (having placed), விட்டு (having let), ஆட்டு…
-      //   -ணி/-ல்லி/-ண்ணி : சொல்லி (having said), பண்ணி (having done)
-      //   -ய்    : போய் (having gone), வாய்
-      //   -ட்டு also covers viṭṭu (விட்டு) and poṭṭu (போட்டு) naturally
-      if (/ந்து$|ட்டு$|ண்ணி$|ல்லி$|ணி$|னி$/.test(last)) return true;
-      if (/ய்$/.test(last) && last.length > 2) return true; // போய், வாய் — skip 2-char words like "ஒய்"
-      // Tamil relative-participial / adverbial forms
-      if (/ன்ற$|கிற$|வந்த$|போன$/.test(last)) return true;
-      // 2-word utterance where the FIRST word ends with a case marker AND the second
-      // word is NOT a complete verb form → predicate is missing.
-      // "எனக்கு வந்து" → incomplete ✓
-      // "நாளைக்கு வருவேன்" → complete (second=verb) — should NOT fire
-      if (words.length === 2) {
-        const first = words[0];
-        const second = words[1];
-        // Tamil finite verb endings that make a 2-word sentence self-contained:
-        //   -வேன்/-ேன் (1ps past/future), -லாம் (hortative), -ல்ல/-ல்லை (negative),
-        //   -ஆம்/-ஆகும் (equative), -ார்/-ார்கள் (3p), -கும்/-கிறது (neuter/future)
-        const secondIsFiniteVerb =
-          /ேன்$|வேன்$|ோம்$|லாம்$|ல்ல$|ல்லை$|ஆம்$|ார்$|ார்கள்$|கும்$|கிறது$|றேன்$|கிறேன்$/.test(
-            second,
-          );
-        if (
-          !secondIsFiniteVerb &&
-          /க்கு$|கிட்ட$|கிட்டே$|ஐ$|னால$|ஆல$/.test(first)
-        )
-          return true;
-      }
-      // Also check if FIRST word (not just last) is a connector/incomplete form.
-      // e.g. "போய் சொல்லு" — "போய்" is conjunctive and signals more context.
-      const first = words[0];
-      if (/ந்து$|ட்டு$|ண்ணி$|ல்லி$/.test(first)) return true;
-      if (/ய்$/.test(first) && first.length > 2) return true;
-      // Hindi/Hinglish possessives & case markers
-      if (/\bका$|\bकी$|\bके$|\bको$|\bसे$|\bमें$|\bने$|\bपर$/u.test(last))
-        return true;
-      // Generic English connectives that signal more is coming
-      if (/^(and|or|but|also|with|for|of|to|the|a|an|in|on|at)$/i.test(last))
-        return true;
-      // English transitive / mental-state verbs that virtually always need a
-      // following object or complement. A bare utterance ending in one of these
-      // (no terminal punctuation, no object yet) means the caller is still
-      // mid-thought — e.g. "I want" → "I want to know the pricing…". Confirmed
-      // from call-1659: "I want" was flushed as a complete turn and produced a
-      // garbled follow-on ("I want a No good. worth pricing"). Skip this check
-      // when the text already ends with terminal punctuation — STT smart_format
-      // already judged it complete.
-      if (!/[.?!]$/.test(t)) {
-        const NEEDS_OBJECT_VERBS = new Set([
-          "want",
-          "need",
-          "like",
-          "love",
-          "hate",
-          "have",
-          "get",
-          "know",
-          "think",
-          "mean",
-          "see",
-          "hear",
-          "feel",
-          "believe",
-          "wish",
-          "hope",
-          "prefer",
-          "use",
-          "try",
-          "check",
-          "understand",
-          "remember",
-          "ask",
-          "tell",
-          "show",
-          "give",
-          "take",
-          "make",
-          "do",
-          "call",
-          "book",
-          "send",
-          "discuss",
-          "explain",
-          "mention",
-          "consider",
-          "suggest",
-          "recommend",
-        ]);
-        if (NEEDS_OBJECT_VERBS.has(last.toLowerCase())) return true;
-      }
-      // All-caps token ≥ 2 chars (e.g. "DTDC", "KYC") — check both first and last word
-      if (/^[A-Z]{2,}$/.test(last) || /^[A-Z]{2,}$/.test(first)) return true;
-      // Tamil interrogative words — ALWAYS require a predicate; can never end a sentence.
-      // எந்த (which), என்ன (what), எப்ப/எப்போ (when), எங்க/எங்கே (where),
-      // யாரு/யார் (who), எவ்வளவு (how much), எப்படி (how), ஏன் (why),
-      // எது (which one), எதுக்கு (for what), எதாவது (anything/which)
-      if (
-        /^(எந்த|என்ன|எப்ப|எப்போ|எங்க|எங்கே|யாரு|யார்|எவ்வளவு|எப்படி|ஏன்|எது|எதுக்கு|எதாவது|எத்தனை|எத்தன|எவன்|எவள்|எவங்க)$/.test(
-          last,
-        )
-      )
-        return true;
-      // Hindi interrogatives: क्या, कब, कहाँ, कैसे, कौन, कितना, क्यों
-      if (/^(क्या|कब|कहाँ|कैसे|कौन|कितना|क्यों|किसका|किसकी|किसके)$/.test(last))
-        return true;
-      return false;
-    }
-
-    let coalesceBuf = "";
-    let coalesceMeta: SttFinalMetadata | undefined;
-    let coalesceLang: string | undefined;
-    let coalesceTimer: ReturnType<typeof setTimeout> | null = null;
-
-    const emitPartial = () => {
-      const text = coalesceBuf.trim();
-      if (!text) return;
-      onTranscript(text, false, coalesceLang, {
-        ...coalesceMeta,
-        pendingPartial: true,
-        speechEndReceived,
-      });
-    };
-
-    /** @returns true when a transcript was actually emitted (buffer was non-empty). */
-    const emitCoalesced = (): boolean => {
-      coalesceTimer = null;
-      if (!coalesceBuf) return false;
-      const text = coalesceBuf;
-      const lang = coalesceLang;
-      const segments = coalesceMergedSegments;
-      const meta: SttFinalMetadata = {
-        ...coalesceMeta,
-        mergedSegments: segments,
-        pauseCount: Math.max(0, segments - 1),
-      };
-      coalesceBuf = "";
-      coalesceMeta = undefined;
-      coalesceLang = undefined;
-      coalesceMergedSegments = 0;
-      transcriptArrivedAt = 0;
-
-      logger.info(
-        {
-          text: text.slice(0, 120),
-          segments,
-          detectedLang: lang,
-        },
-        "Sarvam STT: emitting adaptive-coalesced transcript",
-      );
-      onTranscript(text, true, lang, meta);
-      return true;
-    };
-
-    // ── WebSocket health monitoring ───────────────────────────────────────────
+    // ── Transcript commit ────────────────────────────────────────────────────
+    // Saaras owns turn boundaries (vad_signals END_SPEECH + transcript).
+    // Passthrough: emit finals immediately; END_SPEECH only fires onSpeechEnd.
     // A socket can go ZOMBIE — readyState OPEN but dead — without ever emitting
     // "close", so it has to be detected actively. The hard part is that on this
     // protocol INBOUND SILENCE IS NOT EVIDENCE OF ANYTHING: Sarvam emits nothing
@@ -1089,10 +690,8 @@ export class SarvamSTT implements STTAdapter {
         lastPongAt = Date.now();
         lastPingAt = Date.now();
         queueTrimLogged = false; // re-arm queue-trim log for this reconnect episode
-        // Reset VAD state: a stale speechEndReceived=true would send post-reconnect
-        // transcripts down the 30ms fast-flush path before any fresh speech_end fires.
+        // Reset VAD state so a stale in-speech flag does not survive across reconnects.
         inSpeechSegment = false;
-        speechEndReceived = false;
         logger.info(
           { langCode, model, mode },
           "Sarvam streaming STT: WebSocket opened",
@@ -1134,7 +733,6 @@ export class SarvamSTT implements STTAdapter {
           (msg.type === "events" && msg.data?.signal_type === "START_SPEECH")
         ) {
           inSpeechSegment = true;
-          speechEndReceived = false; // caller is speaking again; clear the speech_end flag
           // Stall tracking: time the run from the FIRST un-transcribed speech_start,
           // not the latest. Restarting the clock on every speech_start is precisely
           // how a stalled engine kept the window open indefinitely (call 5439).
@@ -1142,17 +740,6 @@ export class SarvamSTT implements STTAdapter {
           if (awaitingTranscriptSince === 0) awaitingTranscriptSince = Date.now();
           _onSpeechStart?.();
           logger.debug({ langCode }, "Sarvam STT: speech start");
-          // If we are holding a transcript and the user resumed speaking, cancel
-          // the emit timer and wait for the next transcript to append before emitting.
-          if (coalesceTimer && coalesceBuf) {
-            clearTimeout(coalesceTimer);
-            coalesceTimer = null;
-            transcriptArrivedAt = 0;
-            logger.debug(
-              { langCode },
-              "Sarvam STT: coalesce hold cancelled — speech resumed",
-            );
-          }
           return;
         }
         if (
@@ -1160,29 +747,11 @@ export class SarvamSTT implements STTAdapter {
           (msg.type === "events" && msg.data?.signal_type === "END_SPEECH")
         ) {
           inSpeechSegment = false;
-          speechEndReceived = true;
           speechEndAt = Date.now();
           // Sarvam owes us a transcript from here. This is the ONLY point at which
           // inbound silence is evidence of anything — see the heartbeat check.
           transcriptOwedSince = Date.now();
           logger.debug({ langCode }, "Sarvam STT: speech end");
-          // Fast-path when transcript is ALREADY buffered (multi-segment coalescing):
-          // caller has stopped talking — shorten any running timer to the
-          // UI-configured SPEECH_END_FLUSH_MS (default 30ms).
-          if (coalesceBuf && coalesceTimer) {
-            clearTimeout(coalesceTimer);
-            // speech_end received: caller has stopped speaking — flush (UI-configured)
-            coalesceTimer = setTimeout(emitCoalesced, SPEECH_END_FLUSH_MS);
-            emitPartial();
-            logger.debug(
-              {
-                langCode,
-                buf: coalesceBuf.slice(0, 60),
-                flushMs: SPEECH_END_FLUSH_MS,
-              },
-              "Sarvam STT: speech_end received — flushing coalesce buffer",
-            );
-          }
           _onSpeechEnd?.();
           return;
         }
@@ -1198,7 +767,6 @@ export class SarvamSTT implements STTAdapter {
           clearStallState();
           const text = stripDiarizationLabels(msg.data?.transcript ?? "");
           // Capture the language Sarvam identified for this segment (saaras:v3 LID).
-          // Last seen language_code wins across coalesced segments; reset in emitCoalesced().
           //
           // IMPORTANT: only forward the reported code when it DIFFERS from the
           // init language (langCode). When Sarvam is initialised with
@@ -1207,7 +775,7 @@ export class SarvamSTT implements STTAdapter {
           // the init-language echoed back. Forwarding that echo would suppress
           // detectScriptLanguage() in the pipeline: the pipeline short-circuits on
           // a non-null sttLang and never reads Unicode script blocks in the
-          // transcript. Leaving coalesceLang undefined on "same-as-init" responses
+          // transcript. Leaving detectedLang undefined on "same-as-init" responses
           // lets detectScriptLanguage() run and catch actual Indic-script characters
           // (Tamil, Hindi, etc.) in the transcript text.
           const reportedLang = msg.data?.language_code;
@@ -1226,9 +794,8 @@ export class SarvamSTT implements STTAdapter {
             },
             "Sarvam STT: language_code on transcript message",
           );
-          if (reportedLang && reportedLang !== langCode) {
-            coalesceLang = reportedLang;
-          }
+          const detectedLang =
+            reportedLang && reportedLang !== langCode ? reportedLang : undefined;
           if (!text) return;
           const meta: SttFinalMetadata = {
             endDetectToFinalMs:
@@ -1242,39 +809,13 @@ export class SarvamSTT implements STTAdapter {
               mode,
               endDetectToFinalMs: meta.endDetectToFinalMs,
               requestId: lastRequestId,
+              detectedLang,
             },
-            "Sarvam STT: final transcript (buffering for adaptive coalesce)",
+            "Sarvam STT: final transcript",
           );
           speechEndAt = 0;
-          // Append to coalesce buffer (may already have a prior partial).
-          coalesceBuf = coalesceBuf ? coalesceBuf + " " + text : text;
-          coalesceMeta = meta; // keep latest latency measurement
-          coalesceMergedSegments++;
-          transcriptArrivedAt = Date.now(); // start of the hold window
-          // (Re-)arm the emit timer.
-          // Timer selection after each transcript segment:
-          // • speech_end already received → SPEECH_END_FLUSH_MS (UI, default 30).
-          // • incomplete mid-thought → COALESCE_INCOMPLETE_MS (UI, default 700).
-          // • complete transcript, speech_end not yet → SPEECH_END_FLUSH_MS.
-          if (coalesceTimer) clearTimeout(coalesceTimer);
-          const incomplete = looksIncomplete(coalesceBuf);
-          // Even after speech_end, an incomplete-looking buffer needs the longer hold —
-          // Sarvam's tight VAD (~64ms) fires speech_end on natural thinking pauses.
-          // Without this, "I want" flushes before "to know the pricing" arrives.
-          const holdMs = incomplete
-            ? Math.max(SPEECH_END_FLUSH_MS, COALESCE_INCOMPLETE_MS)
-            : SPEECH_END_FLUSH_MS;
-          logger.debug(
-            {
-              langCode,
-              buf: coalesceBuf.slice(0, 60),
-              holdMs,
-              speechEndReceived,
-            },
-            "Sarvam STT: scheduling coalesce emit",
-          );
-          coalesceTimer = setTimeout(emitCoalesced, holdMs);
-          emitPartial();
+          // Saaras owns turn-taking — emit finals immediately (no SnapServe hold).
+          onTranscript(text, true, detectedLang, meta);
           return;
         }
 
@@ -1383,16 +924,13 @@ export class SarvamSTT implements STTAdapter {
       // because this drains local buffers rather than endpointing. Do not add call
       // sites that finalize turns.
       flush(): boolean {
-        // Emit any held coalesced transcript immediately (don't wait for the timer).
-        // emitCoalesced() is a no-op on an empty buffer, so always call it — this
-        // handles the edge case where coalesceBuf is non-empty but coalesceTimer is null.
-        if (coalesceTimer) clearTimeout(coalesceTimer);
-        const emitted = emitCoalesced();
+        // No local transcript buffer in Saaras-passthrough mode — flush is a no-op
+        // for held text. We still track empty flushes for stall/reconnect detection.
+        const emitted = false;
 
         // Note: We deliberately do NOT send the JSON `flush: true` packet to Sarvam's
         // streaming endpoint here. Manual flushes corrupt Sarvam's internal context window
         // (causing subsequent audio to be missed or garbage transcripts to be generated).
-        // Clearing the local timers and emitting held transcripts is sufficient.
         logger.debug(
           { langCode, emitted },
           "Sarvam STT: local buffers flushed (socket flush bypassed)",
@@ -1428,11 +966,6 @@ export class SarvamSTT implements STTAdapter {
           { from: prev, to: next, mode, model },
           "Sarvam STT: live language switch — reconnecting stream with new language hint",
         );
-        // Drain any transcript held in the OLD language before switching.
-        if (coalesceTimer) {
-          clearTimeout(coalesceTimer);
-          emitCoalesced();
-        }
         if (
           ws &&
           (ws.readyState === WebSocket.OPEN ||
@@ -1455,11 +988,6 @@ export class SarvamSTT implements STTAdapter {
         // openSocket() will pick up the new langCode via buildWsUrl().
       },
       close(): void {
-        // Drain the coalesce buffer before closing so no transcript is lost.
-        if (coalesceTimer) {
-          clearTimeout(coalesceTimer);
-          emitCoalesced();
-        }
         intentionallyClosed = true;
         if (reconnectTimer) {
           clearTimeout(reconnectTimer);
@@ -1474,7 +1002,7 @@ export class SarvamSTT implements STTAdapter {
         }
       },
       getPendingTranscript(): string {
-        return coalesceBuf.trim();
+        return "";
       },
     };
 

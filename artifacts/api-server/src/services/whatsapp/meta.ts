@@ -208,20 +208,41 @@ export async function sendMetaTemplate(opts: {
   }
 }
 
-/** Resolve the template choice for a hint, falling back to call_summary. */
+/**
+ * Resolve the template choice for a hint:
+ * 1) hint-specific pick  2) `default`  3) `call_summary`  4) any linked slot.
+ */
 export function resolveMetaTemplate(
   metaTemplates: Record<string, MetaTemplateChoice | undefined> | null | undefined,
   hint: string,
 ): MetaTemplateChoice | null {
   if (!metaTemplates || typeof metaTemplates !== "object") return null;
-  const direct = metaTemplates[hint];
-  if (direct?.name && direct.language) return direct;
-  const fallback = metaTemplates["call_summary"];
-  if (fallback?.name && fallback.language) return fallback;
-  // Last resort: any linked template on any slot — sending something beats
-  // silently failing when the user only linked e.g. booking_confirmed.
-  for (const v of Object.values(metaTemplates)) {
-    if (v?.name && v.language) return v;
-  }
-  return null;
+  const pick = (key: string): MetaTemplateChoice | null => {
+    const v = metaTemplates[key];
+    return v?.name && v.language ? v : null;
+  };
+  return (
+    pick(hint)
+    ?? pick("default")
+    ?? pick("call_summary")
+    // Last resort: any linked template on any slot — sending something beats
+    // silently failing when the user only linked e.g. booking_confirmed.
+    ?? Object.values(metaTemplates).find((v) => v?.name && v.language) ?? null
+  );
+}
+
+/** Map Meta fetch results to the persisted catalog shape (APPROVED only). */
+export function toTemplateCatalog(
+  templates: MetaTemplateInfo[],
+): Array<{ name: string; language: string; status: string; paramCount: number; category?: string | null; bodyPreview?: string }> {
+  return templates
+    .filter((t) => t.status === "APPROVED")
+    .map((t) => ({
+      name: t.name,
+      language: t.language,
+      status: t.status,
+      paramCount: t.paramCount,
+      category: t.category,
+      bodyPreview: t.bodyPreview,
+    }));
 }

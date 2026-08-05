@@ -746,7 +746,7 @@ export function JourneyPanel({
                   {saveSettings.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
                   Save follow-ups
                 </Button>
-                <Button type="button" variant="ghost" size="sm" className="h-8 text-xs" onClick={() => navigate("/app/whatsapp")}>
+                <Button type="button" variant="ghost" size="sm" className="h-8 text-xs" onClick={() => navigate("/app/connections?setup=whatsapp")}>
                   WhatsApp page
                 </Button>
                 <Button type="button" variant="ghost" size="sm" className="h-8 text-xs" onClick={() => navigate("/app/callbacks")}>

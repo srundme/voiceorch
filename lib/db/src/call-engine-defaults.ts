@@ -16,21 +16,48 @@ export const CALL_ENGINE_SAFE = {
   legacyIncrementalDelay: 350,
   legacyNoPunctuationSeconds: 1.5,
   legacyNumberSeconds: 0.5,
-  snappyNoPunctuationSeconds: 0.1,
-  snappyNumberSeconds: 0.1,
+  /** Prior "snappy" 100ms waits — still a second endpointing layer after STT final. */
+  legacySnappySpeakingSeconds: 0.1,
+  /**
+   * Trust STT final: no SnapServe content-based wait before LLM.
+   * Providers already decide speech-end; punctuation heuristics are ours alone.
+   */
+  trustSpeakingSeconds: 0,
 } as const;
 
-/** Sarvam STT latency knobs — patient defaults (call 4940 premature VAD chops). */
+/**
+ * TTS early-dispatch threshold. Providers stream tokens; SnapServe must chunk
+ * for TTS APIs (multi-vendor glue) but should not wait for a long "complete" clause.
+ */
+export const TTS_STREAM_DEFAULTS = {
+  /** Speak as soon as a short clause is ready (.!? / comma). */
+  minSentenceChars: 5,
+  /** Prior platform defaults that delayed first audio. */
+  legacyMinSentenceChars: [15, 18] as const,
+} as const;
+
+/** Sarvam STT — trust Saaras VAD; no SnapServe artificial holds. */
 export const SARVAM_STT_LATENCY_DEFAULTS = {
-  /** OFF by default — ON (~128ms silence) cuts mid-utterance on PSTN. */
-  highVadSensitivity: false,
-  /** Pause after speech_end before emitting final. */
-  speechEndFlushMs: 80,
-  /** Hold mid-thought fragments before speech_end. */
-  incompleteHoldMs: 700,
+  /** Match Sarvam docs / LiveKit agents: STT owns end-of-speech. */
+  highVadSensitivity: true,
+  /** Emit immediately when Saaras ends speech / returns transcript. */
+  speechEndFlushMs: 0,
+  /** Do not second-guess Saaras with mid-thought coalesce holds. */
+  incompleteHoldMs: 0,
 } as const;
 
-/** Prior snappy insert defaults — rewritten to patient values on normalize/session. */
+/**
+ * Prior "patient" platform defaults (post call-4940) that added hundreds of ms
+ * of dead air on top of Saaras VAD — rewritten to Saaras-native on normalize.
+ */
+export const SARVAM_STT_LATENCY_LEGACY_PATIENT = {
+  highVadSensitivity: false,
+  speechEndFlushMs: 80,
+  incompleteHoldMs: 700,
+  fragmentCoalesceListeningMs: 250,
+} as const;
+
+/** Older snappy insert defaults (pre-patient). */
 export const SARVAM_STT_LATENCY_LEGACY_SNAPPY = {
   highVadSensitivity: true,
   speechEndFlushMs: 0,
@@ -38,13 +65,10 @@ export const SARVAM_STT_LATENCY_LEGACY_SNAPPY = {
   fragmentCoalesceListeningMs: 150,
 } as const;
 
+/** Pipeline fragment coalesce — off by default; Saaras (and most STTs) already segment turns. */
 export const FRAGMENT_COALESCE_DEFAULTS = {
-  // listeningMs 500→250 (Aug 2026): "yes"/"okay" while the agent is silent is
-  // usually the caller's ANSWER; 500ms of hold read as dead air on every short
-  // reply. 250ms still catches Sarvam speech-resume (VAD start arrives in
-  // ~100-300ms), which extends the window when the caller keeps talking.
-  listeningMs: 250,
-  playingMs: 1000,
+  listeningMs: 0,
+  playingMs: 0,
 } as const;
 
 export function clampSarvamSpeechEndFlushMs(value: number | null | undefined): number {
@@ -54,7 +78,7 @@ export function clampSarvamSpeechEndFlushMs(value: number | null | undefined): n
 
 export function clampSarvamIncompleteHoldMs(value: number | null | undefined): number {
   const v = typeof value === "number" && Number.isFinite(value) ? value : SARVAM_STT_LATENCY_DEFAULTS.incompleteHoldMs;
-  return Math.max(50, Math.min(1000, Math.round(v)));
+  return Math.max(0, Math.min(1000, Math.round(v)));
 }
 
 export function resolveSarvamHighVadSensitivity(value: unknown): boolean {
@@ -150,16 +174,25 @@ export function normalizeCallEngineAgentConfig(
     cfg["incrementalDelay"] = CALL_ENGINE_SAFE.incrementalDelay;
   }
 
-  // Rewrite legacy snappy Sarvam STT defaults that caused premature VAD chops (call 4940).
-  // Only when the agent still has the old insert triplet — leave intentional custom tuning alone.
+  // Rewrite legacy patient Sarvam STT defaults that stacked artificial holds on
+  // top of Saaras VAD. Only when the agent still has the old platform triplet —
+  // leave intentional custom tuning alone.
   const sarvamHigh = cfg["sarvamHighVadSensitivity"];
   const sarvamFlush = cfg["sarvamSpeechEndFlushMs"];
   const sarvamHold = cfg["sarvamIncompleteHoldMs"];
-  const stillSnappySarvam =
-    (sarvamHigh === true || sarvamHigh === undefined)
-    && (sarvamFlush === SARVAM_STT_LATENCY_LEGACY_SNAPPY.speechEndFlushMs || sarvamFlush === undefined)
-    && (sarvamHold === SARVAM_STT_LATENCY_LEGACY_SNAPPY.incompleteHoldMs || sarvamHold === undefined);
-  if (stillSnappySarvam) {
+  const stillPatientSarvam =
+    (sarvamHigh === false || sarvamHigh === undefined)
+    && (sarvamFlush === SARVAM_STT_LATENCY_LEGACY_PATIENT.speechEndFlushMs || sarvamFlush === undefined)
+    && (sarvamHold === SARVAM_STT_LATENCY_LEGACY_PATIENT.incompleteHoldMs || sarvamHold === undefined);
+  // Older insert profiles that still layered SnapServe holds on Saaras.
+  const stillLegacyHoldProfile =
+    (sarvamHold === SARVAM_STT_LATENCY_LEGACY_SNAPPY.incompleteHoldMs || sarvamHold === 220)
+    && (
+      sarvamFlush === SARVAM_STT_LATENCY_LEGACY_SNAPPY.speechEndFlushMs
+      || sarvamFlush === 30
+      || sarvamFlush === undefined
+    );
+  if (stillPatientSarvam || stillLegacyHoldProfile) {
     if (cfg["sarvamHighVadSensitivity"] !== SARVAM_STT_LATENCY_DEFAULTS.highVadSensitivity) {
       reasons.push(
         `sarvamHighVadSensitivity ${String(sarvamHigh ?? "∅")}→${SARVAM_STT_LATENCY_DEFAULTS.highVadSensitivity}`,
@@ -181,17 +214,18 @@ export function normalizeCallEngineAgentConfig(
   }
 
   const fragListen = cfg["fragmentCoalesceListeningMs"];
-  // NOTE: the previous platform default (500) is migrated once via DB migration,
-  // NOT here — a per-session rewrite would silently override users who
-  // deliberately set 500 in the dashboard afterwards.
-  if (fragListen === SARVAM_STT_LATENCY_LEGACY_SNAPPY.fragmentCoalesceListeningMs) {
+  if (
+    fragListen === SARVAM_STT_LATENCY_LEGACY_SNAPPY.fragmentCoalesceListeningMs
+    || fragListen === SARVAM_STT_LATENCY_LEGACY_PATIENT.fragmentCoalesceListeningMs
+    || fragListen === 500
+  ) {
     reasons.push(
       `fragmentCoalesceListeningMs ${fragListen}→${FRAGMENT_COALESCE_DEFAULTS.listeningMs}`,
     );
     cfg["fragmentCoalesceListeningMs"] = FRAGMENT_COALESCE_DEFAULTS.listeningMs;
   }
   const fragPlay = cfg["fragmentCoalescePlayingMs"];
-  if (fragPlay === 800) {
+  if (fragPlay === 800 || fragPlay === 1000) {
     reasons.push(`fragmentCoalescePlayingMs ${fragPlay}→${FRAGMENT_COALESCE_DEFAULTS.playingMs}`);
     cfg["fragmentCoalescePlayingMs"] = FRAGMENT_COALESCE_DEFAULTS.playingMs;
   }
@@ -200,28 +234,42 @@ export function normalizeCallEngineAgentConfig(
   if (sspRaw && typeof sspRaw === "object") {
     const ssp = { ...(sspRaw as Record<string, unknown>) };
     let sspChanged = false;
-    if (ssp["onNoPunctuationSeconds"] === CALL_ENGINE_SAFE.legacyNoPunctuationSeconds) {
-      reasons.push(
-        `startSpeakingPlan.onNoPunctuationSeconds ${CALL_ENGINE_SAFE.legacyNoPunctuationSeconds}→${CALL_ENGINE_SAFE.snappyNoPunctuationSeconds}`,
-      );
-      ssp["onNoPunctuationSeconds"] = CALL_ENGINE_SAFE.snappyNoPunctuationSeconds;
-      sspChanged = true;
-    }
-    if (ssp["onNumberSeconds"] === CALL_ENGINE_SAFE.legacyNumberSeconds) {
-      reasons.push(
-        `startSpeakingPlan.onNumberSeconds ${CALL_ENGINE_SAFE.legacyNumberSeconds}→${CALL_ENGINE_SAFE.snappyNumberSeconds}`,
-      );
-      ssp["onNumberSeconds"] = CALL_ENGINE_SAFE.snappyNumberSeconds;
-      sspChanged = true;
+    const trustSpeakingKeys = [
+      "waitSeconds",
+      "onPunctuationSeconds",
+      "onNoPunctuationSeconds",
+      "onNumberSeconds",
+    ] as const;
+    const legacySpeakingValues = new Set<number>([
+      CALL_ENGINE_SAFE.legacyNoPunctuationSeconds,
+      CALL_ENGINE_SAFE.legacyNumberSeconds,
+      CALL_ENGINE_SAFE.legacySnappySpeakingSeconds,
+    ]);
+    for (const key of trustSpeakingKeys) {
+      const v = ssp[key];
+      if (typeof v === "number" && legacySpeakingValues.has(v)) {
+        reasons.push(`startSpeakingPlan.${key} ${v}→${CALL_ENGINE_SAFE.trustSpeakingSeconds}`);
+        ssp[key] = CALL_ENGINE_SAFE.trustSpeakingSeconds;
+        sspChanged = true;
+      }
     }
     if (sspChanged) cfg["startSpeakingPlan"] = ssp;
+  }
+
+  const ttsMin = cfg["ttsMinSentenceChars"];
+  if (
+    typeof ttsMin === "number"
+    && (TTS_STREAM_DEFAULTS.legacyMinSentenceChars as readonly number[]).includes(ttsMin)
+  ) {
+    reasons.push(`ttsMinSentenceChars ${ttsMin}→${TTS_STREAM_DEFAULTS.minSentenceChars}`);
+    cfg["ttsMinSentenceChars"] = TTS_STREAM_DEFAULTS.minSentenceChars;
   }
 
   const uniqueReasons = [...new Set(reasons)];
   return { changed: uniqueReasons.length > 0, config: cfg, reasons: uniqueReasons };
 }
 
-/** Defaults for INSERT / Vibe create — Bolna Call Engine Balanced (snappy latency). */
+/** Defaults for INSERT / Vibe create — trust provider turn-taking; no second waits. */
 export function callEngineInsertDefaults(): Record<string, unknown> {
   return {
     asrEndpointingSilenceMs: CALL_ENGINE_SAFE.asrEndpointingSilenceMs,
@@ -229,11 +277,12 @@ export function callEngineInsertDefaults(): Record<string, unknown> {
     bargeInEnergyThreshold: CALL_ENGINE_SAFE.bargeInEnergyThreshold,
     wordsForInterruption: CALL_ENGINE_SAFE.wordsForInterruption,
     startSpeakingPlan: {
-      waitSeconds: 0,
-      onPunctuationSeconds: 0.1,
-      onNoPunctuationSeconds: CALL_ENGINE_SAFE.snappyNoPunctuationSeconds,
-      onNumberSeconds: CALL_ENGINE_SAFE.snappyNumberSeconds,
+      waitSeconds: CALL_ENGINE_SAFE.trustSpeakingSeconds,
+      onPunctuationSeconds: CALL_ENGINE_SAFE.trustSpeakingSeconds,
+      onNoPunctuationSeconds: CALL_ENGINE_SAFE.trustSpeakingSeconds,
+      onNumberSeconds: CALL_ENGINE_SAFE.trustSpeakingSeconds,
     },
+    ttsMinSentenceChars: TTS_STREAM_DEFAULTS.minSentenceChars,
     fragmentCoalesceListeningMs: FRAGMENT_COALESCE_DEFAULTS.listeningMs,
     fragmentCoalescePlayingMs: FRAGMENT_COALESCE_DEFAULTS.playingMs,
     telephonyTailDrainMs: 400,
@@ -246,4 +295,47 @@ export function callEngineInsertDefaults(): Record<string, unknown> {
       backOffSeconds: 1,
     },
   };
+}
+
+/** Runtime rewrite: platform speaking waits → trust STT final (0). Custom values kept. */
+export function resolveStartSpeakingPlan(
+  raw: {
+    waitSeconds?: number;
+    onPunctuationSeconds?: number;
+    onNoPunctuationSeconds?: number;
+    onNumberSeconds?: number;
+  } | null | undefined,
+): {
+  waitSeconds: number;
+  onPunctuationSeconds: number;
+  onNoPunctuationSeconds: number;
+  onNumberSeconds: number;
+} {
+  const legacy = new Set<number>([
+    CALL_ENGINE_SAFE.legacyNoPunctuationSeconds,
+    CALL_ENGINE_SAFE.legacyNumberSeconds,
+    CALL_ENGINE_SAFE.legacySnappySpeakingSeconds,
+  ]);
+  const trust = (v: number | undefined): number => {
+    if (typeof v !== "number" || !Number.isFinite(v)) return CALL_ENGINE_SAFE.trustSpeakingSeconds;
+    if (legacy.has(v)) return CALL_ENGINE_SAFE.trustSpeakingSeconds;
+    return Math.max(0, v);
+  };
+  return {
+    waitSeconds: trust(raw?.waitSeconds),
+    onPunctuationSeconds: trust(raw?.onPunctuationSeconds),
+    onNoPunctuationSeconds: trust(raw?.onNoPunctuationSeconds),
+    onNumberSeconds: trust(raw?.onNumberSeconds),
+  };
+}
+
+/** Runtime rewrite: platform TTS clause waits (15/18) → early dispatch (5). */
+export function resolveTtsMinSentenceChars(value: number | null | undefined): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return TTS_STREAM_DEFAULTS.minSentenceChars;
+  }
+  if ((TTS_STREAM_DEFAULTS.legacyMinSentenceChars as readonly number[]).includes(value)) {
+    return TTS_STREAM_DEFAULTS.minSentenceChars;
+  }
+  return Math.max(1, Math.min(200, Math.round(value)));
 }

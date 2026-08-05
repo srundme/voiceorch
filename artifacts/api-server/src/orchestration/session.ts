@@ -26,13 +26,15 @@ import {
   resolveSarvamHighVadSensitivity,
   normalizeCallEngineAgentConfig,
   FRAGMENT_COALESCE_DEFAULTS,
+  resolveStartSpeakingPlan,
+  resolveTtsMinSentenceChars,
 } from "@workspace/db/call-engine-defaults";
 import { withDbRetry } from "./db-retry.js";
 import { CONVERSATION_DISCIPLINE_BLOCK } from "./conversationDiscipline.js";
 import { transcriptHasFarewellEnding } from "./callFarewell.js";
 import { buildLeadContextBlock, resolvePromptVariables } from "./prompt-vars.js";
 import { createLLMAdapter } from "./adapters/llm/index.js";
-import { resolveMicSensitivity, getMicSensitivityThresholds } from "./mic-sensitivity.js";
+import { resolveMicSensitivity, resolveBargeInEnergyThreshold } from "./mic-sensitivity.js";
 import { loadPcmLoop, TRACK_PARAMS } from "./ambient.js";
 import type { AgentConfig, AgentTool, TelephonyProvider, SessionTransport, PipelineMetrics } from "./types.js";
 import { logger } from "../lib/logger.js";
@@ -513,7 +515,12 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
   // so the voice default is now 200. This is a protective cap, not a target —
   // typical turns end naturally at 30-80 tokens, so raising it does not slow
   // normal replies; it only stops long ones being cut mid-sentence.
-  const VOICE_DEFAULT_MAX_TOKENS = Number(process.env.VOICE_DEFAULT_MAX_TOKENS ?? 200);
+  // Voice default max tokens. Sarvam thinking is OFF by default for live calls
+  // (reasoning leaks into spoken audio). Keep a healthy spoken-content budget.
+  const isSarvamLlm = (agent.llmProvider ?? "").toLowerCase() === "sarvam";
+  const VOICE_DEFAULT_MAX_TOKENS = Number(
+    process.env.VOICE_DEFAULT_MAX_TOKENS ?? (isSarvamLlm ? 500 : 200),
+  );
   // "llmMaxTokens" present-but-null is an explicit "reset to default" from the
   // dashboard/admin (the update route MERGES agentConfig, so the key persists
   // once written). Only consult the legacy "maxTokens" key when the new key is
@@ -546,9 +553,14 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
       ...(typeof agentCfg["seed"] === "number" ? { seed: agentCfg["seed"] as number } : {}),
       ...(typeof agentCfg["stop"] === "string" || Array.isArray(agentCfg["stop"]) ? { stop: agentCfg["stop"] as string | string[] } : {}),
       ...(typeof agentCfg["wikiGrounding"] === "boolean" ? { wikiGrounding: agentCfg["wikiGrounding"] as boolean } : {}),
-      ...(agentCfg["reasoningEffort"] === null || ["low", "medium", "high"].includes(agentCfg["reasoningEffort"] as string)
-        ? { reasoningEffort: agentCfg["reasoningEffort"] as "low" | "medium" | "high" | null }
-        : {}),
+      // Voice: thinking OFF unless the agent explicitly opts into medium/high.
+      // Historical default "low" streamed English CoT into TTS (call 5646).
+      // Treat stored "low" the same as off for live calls; null disables.
+      ...(agentCfg["reasoningEffort"] === "medium" || agentCfg["reasoningEffort"] === "high"
+        ? { reasoningEffort: agentCfg["reasoningEffort"] as "medium" | "high" }
+        : isSarvamLlm
+          ? { reasoningEffort: null }
+          : {}),
     },
     maxDuration: agent.maxDuration ?? 600,
     asrProvider: agent.asrProvider,
@@ -631,11 +643,10 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     // P1-D: VAD / Barge-in tuning (defaults match the hardcoded pipeline constants)
     vadSilenceMs:           (agentCfg["vadSilenceMs"]           as number  | undefined) ?? 350,
     bargeInEnabled:         (agentCfg["bargeInEnabled"]         as boolean | undefined) ?? true,
-    // bargeInEnergyThreshold's default (when not explicitly overridden) tracks
-    // micSensitivity so "Low"/"High" actually move the barge-in bar, not just
-    // the noise gate / VAD floor. An explicit override always wins.
-    bargeInEnergyThreshold: (agentCfg["bargeInEnergyThreshold"] as number  | undefined)
-      ?? getMicSensitivityThresholds(resolveMicSensitivity(agentCfg["micSensitivity"] as string | undefined)).bargeInEnergyThreshold,
+    // Mic Sensitivity is not in Builder — all calls use Low. Legacy saved
+    // bargeInEnergyThreshold=1200 (Normal form default) is rewritten to Low's
+    // 1800 so existing agents pick it up without a UI re-save (call 5718).
+    bargeInEnergyThreshold: resolveBargeInEnergyThreshold(agentCfg["bargeInEnergyThreshold"]),
     bargeInMinFrames:       (agentCfg["bargeInMinFrames"]       as number  | undefined) ?? 4,
     bargeInEchoGraceMs:     (agentCfg["bargeInEchoGraceMs"]    as number  | undefined) ?? 600,
     micSensitivity:         resolveMicSensitivity(agentCfg["micSensitivity"] as string | undefined),
@@ -668,26 +679,10 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     sarvamIndicNumbers:   agentCfg["sarvamIndicNumbers"] !== false,
     // P1-H: Call lifecycle
     hangupAfterLlmCall: (agentCfg["hangupAfterLlmCall"] as boolean | undefined) ?? false,
-    // P1-I: Start Speaking Plan — snappy defaults; rewrite legacy 1.5/0.5 footguns.
-    startSpeakingPlan: (() => {
-      const raw = agentCfg["startSpeakingPlan"] as AgentConfig["startSpeakingPlan"] | undefined;
-      const plan = raw ?? {
-        waitSeconds: 0,
-        onPunctuationSeconds: 0.1,
-        onNoPunctuationSeconds: 0.1,
-        onNumberSeconds: 0.1,
-      };
-      return {
-        waitSeconds: plan.waitSeconds ?? 0,
-        onPunctuationSeconds: plan.onPunctuationSeconds ?? 0.1,
-        onNoPunctuationSeconds: plan.onNoPunctuationSeconds === 1.5
-          ? 0.1
-          : (plan.onNoPunctuationSeconds ?? 0.1),
-        onNumberSeconds: plan.onNumberSeconds === 0.5
-          ? 0.1
-          : (plan.onNumberSeconds ?? 0.1),
-      };
-    })(),
+    // P1-I: Start Speaking Plan — trust STT final (0); rewrite platform 0.1/1.5/0.5 waits.
+    startSpeakingPlan: resolveStartSpeakingPlan(
+      agentCfg["startSpeakingPlan"] as AgentConfig["startSpeakingPlan"] | undefined,
+    ),
     // P1-J: Stop Speaking Plan
     stopSpeakingPlan: (agentCfg["stopSpeakingPlan"] as AgentConfig["stopSpeakingPlan"]) ?? null,
     // P1-K: Compliance
@@ -702,7 +697,9 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     // Latency tuning
     asrEndpointingSilenceMs: (agentCfg["asrEndpointingSilenceMs"] as number | undefined) ?? 250,
     llmMaxTokens: (agentCfg["llmMaxTokens"] as number | null | undefined) ?? null,
-    ttsMinSentenceChars: (agentCfg["ttsMinSentenceChars"] as number | undefined) ?? 18,
+    ttsMinSentenceChars: resolveTtsMinSentenceChars(
+      agentCfg["ttsMinSentenceChars"] as number | undefined,
+    ),
     fragmentCoalesceListeningMs: (() => {
       const v = agentCfg["fragmentCoalesceListeningMs"];
       if (typeof v !== "number" || !Number.isFinite(v)) return FRAGMENT_COALESCE_DEFAULTS.listeningMs;

@@ -1,16 +1,16 @@
 import React, { useEffect, useState, useMemo, useRef } from "react";
 import { diffWords, diffWordsWithSpace } from "diff";
-import { useLocation, useParams, useSearch } from "wouter";
+import { useLocation, useParams, useSearch, Link } from "wouter";
 import {
   Bot, Plus, Search, Phone, Mic, Brain, Webhook, PhoneForwarded,
   Save, MoreHorizontal, Trash2, Settings, FileText, Wrench,
   VoicemailIcon, SlidersHorizontal, TestTube2, ChevronRight, ChevronLeft,
   Volume2, Check, X, Pencil, ChevronDown, List, Globe, BarChart3,
-  User2, Sparkles, BookOpen, ToggleLeft, ToggleRight, Tag, Loader2, Square, AudioLines,
+  User2, Users, Sparkles, BookOpen, ToggleLeft, ToggleRight, Tag, Loader2, Square, AudioLines,
   Play, Pause,
   Timer, ShieldCheck, Layers, Gauge, MicOff, HelpCircle, PhoneOff, Mail, MessageCircle,
   History, GitBranch, Eye, RotateCcw, ChevronUp, AlertTriangle, ArrowLeftRight,
-  Upload, Archive, Info, AlertCircle, Calendar, Star,
+  Upload, Archive, Info, AlertCircle, Calendar, Star, Video,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { motion } from "framer-motion";
@@ -74,6 +74,7 @@ import {
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Progress } from "@/components/ui/progress";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError, mapApiErrors, isDestinationUnverifiedError } from "@/lib/format-api-error";
@@ -96,6 +97,7 @@ import { AgentInboundPanel } from "./agent-inbound-panel";
 import {
   PropertyRow,
   StatusDot,
+  WorkspaceInspector,
   WorkspaceSegmentNav,
   type WorkspaceNavItem,
 } from "@/components/workspace/workspace";
@@ -453,11 +455,18 @@ const SECTION_FIELDS: Record<CardSection, string[]> = {
 
 /* ── Overview ───────────────────────────────────────────────────────────────── */
 
-function OverviewTab({ form, agent }: { form: any; agent: any }) {
+function OverviewTab({
+  form,
+  agent,
+  onGoToPrompt,
+}: {
+  form: any;
+  agent: any;
+  onGoToPrompt?: () => void;
+}) {
   const [openSection, setOpenSection] = useState<CardSection | null>(null);
   const [confirmDiscardSection, setConfirmDiscardSection] = useState<CardSection | null>(null);
   const sectionSnapshotRef = useRef<{ values: Record<string, any>; voiceCustomMode: boolean }>({ values: {}, voiceCustomMode: false });
-  const [generateOpen, setGenerateOpen] = useState(false);
   const [cloneOpen, setCloneOpen] = useState(false);
   const queryClient = useQueryClient();
 
@@ -676,29 +685,132 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
 
   const savePipelineDialog = () => setOpenSection(null);
 
-  const agentName = form.watch("name") as string | undefined;
+  const greetingMessage = String(form.watch("greetingMessage") ?? "").trim();
+  const systemPrompt = String(form.watch("systemPrompt") ?? "").trim();
+  const knowledgeIds = (form.watch("knowledgeSourceIds") ?? []) as number[];
+  const voiceReady = isGeminiLive
+    ? true
+    : Boolean(ttsVoice && ttsVoice !== "__custom__");
+  const promptReady = systemPrompt.length >= 40;
+  const greetingReady = greetingMessage.length >= 4;
+
+  const { data: overviewPhones } = useListPhoneNumbers({
+    query: { queryKey: getListPhoneNumbersQueryKey(), staleTime: 60_000 },
+  });
+  const assignedPhone = useMemo(() => {
+    const list = Array.isArray(overviewPhones) ? overviewPhones : [];
+    return list.find((p: any) => p.agentId === agent?.id);
+  }, [overviewPhones, agent?.id]);
+  const phoneReady = Boolean(assignedPhone || form.watch("preferredManagedNumber"));
+
+  const readinessItems = [
+    {
+      id: "prompt",
+      label: "Call prompt",
+      ready: promptReady,
+      detail: promptReady ? `${systemPrompt.length.toLocaleString()} chars` : "Add instructions on Prompt",
+      action: onGoToPrompt,
+    },
+    {
+      id: "greeting",
+      label: "Welcome message",
+      ready: greetingReady,
+      detail: greetingReady ? "Set" : "Configure on Prompt",
+      action: onGoToPrompt,
+    },
+    {
+      id: "voice",
+      label: "Voice",
+      ready: voiceReady,
+      detail: isGeminiLive ? (geminiLiveVoiceName || "Kore") : (ttsVoiceLabel || "Select a voice"),
+      action: () => openPipelineDialog("voice"),
+    },
+    {
+      id: "phone",
+      label: "Phone number",
+      ready: phoneReady,
+      detail: phoneReady
+        ? (assignedPhone?.number ?? form.watch("preferredManagedNumber") ?? "Assigned")
+        : "Assign below",
+    },
+    {
+      id: "knowledge",
+      label: "Knowledge",
+      ready: knowledgeIds.length > 0,
+      detail: knowledgeIds.length > 0 ? `${knowledgeIds.length} source${knowledgeIds.length === 1 ? "" : "s"}` : "Optional",
+      optional: true,
+    },
+  ] as const;
+
+  const requiredReady = readinessItems.filter((i) => !("optional" in i && i.optional)).every((i) => i.ready);
 
   return (
     <div className="flex flex-col">
-      <GeneratePromptSheet
-        open={generateOpen}
-        onOpenChange={setGenerateOpen}
-        defaultAgentName={agentName ?? agent?.name ?? ""}
-        defaultLanguage={language ?? "en-US"}
-        currentPrompt={form.watch("systemPrompt") ?? ""}
-        onApply={(prompt, meta) => {
-          form.setValue("systemPrompt", prompt, { shouldDirty: true });
-          form.setValue("systemPromptGenMeta", meta, { shouldDirty: true });
-        }}
-      />
-
-      {/* ── Studio overview: pipeline → welcome → canvas ─────────────────────── */}
+      {/* ── Readiness dashboard ──────────────────────────────────────────────── */}
       <div className="relative min-w-0">
-        <div className="p-5 sm:p-6 space-y-6 max-w-3xl">
-          {/* Pipeline chips — top of Overview */}
+        <div className="space-y-6 p-5 sm:p-6">
+          <section className="space-y-3">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div className="space-y-0.5">
+                <h2 className="text-[15px] font-semibold tracking-[-0.02em]">Readiness</h2>
+                <p className="text-[12px] text-muted-foreground">
+                  {requiredReady
+                    ? "Core setup looks ready — edit prompts anytime on the Prompt tab."
+                    : "Finish these items before going live."}
+                </p>
+              </div>
+              {onGoToPrompt && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 gap-1.5 text-xs"
+                  onClick={onGoToPrompt}
+                >
+                  <FileText className="size-3.5" />
+                  Edit prompt
+                </Button>
+              )}
+            </div>
+            <ul className="divide-y divide-border/70 overflow-hidden rounded-xl border border-border/60 bg-card/40">
+              {readinessItems.map((item) => (
+                <li key={item.id} className="flex items-center gap-3 px-3.5 py-2.5">
+                  <span
+                    className={cn(
+                      "flex size-6 shrink-0 items-center justify-center rounded-full",
+                      item.ready
+                        ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                        : "optional" in item && item.optional
+                          ? "bg-muted text-muted-foreground"
+                          : "bg-amber-500/15 text-amber-700 dark:text-amber-400",
+                    )}
+                  >
+                    {item.ready ? <Check className="size-3.5" /> : <AlertCircle className="size-3.5" />}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[13px] font-medium text-foreground">{item.label}</p>
+                    <p className="truncate text-[11px] text-muted-foreground">{item.detail}</p>
+                  </div>
+                  {"action" in item && item.action && !item.ready && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 shrink-0 px-2 text-[11px]"
+                      onClick={item.action}
+                    >
+                      Fix
+                    </Button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </section>
+
+          {/* Pipeline chips */}
           <section className="space-y-2.5">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/55">Pipeline</p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
               <AgentConfigCard
                 icon={isGeminiLive ? <Globe /> : <Mic />}
                 label={isGeminiLive ? "Language" : "Transcriber"}
@@ -726,106 +838,19 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
             </div>
           </section>
 
-          {/* Welcome / first message */}
-          <section className="space-y-3">
-            <div className="flex items-center gap-2">
-              <div className="flex size-5 shrink-0 items-center justify-center rounded-md border border-border bg-background shadow-[inset_0_1px_1px_rgba(0,0,0,0.04)]">
-                <span className="text-[9px]">👋</span>
-              </div>
-              <div>
-                <h3 className="text-[13px] font-semibold tracking-[-0.01em] text-foreground leading-none">Agent Welcome Message</h3>
-                <p className="text-[11px] text-muted-foreground mt-0.5">What callers hear at the start of the call.</p>
-              </div>
-            </div>
-            <div className="space-y-3 rounded-xl border border-border/60 bg-card/50 p-4 shadow-sm">
-              <div className="flex items-center justify-between gap-3">
-                <Label className="text-[12px] font-medium text-foreground/90">Who speaks first</Label>
-                <FormField control={form.control} name="firstSpeaker" render={({ field }) => (
-                  <Select value={field.value === "user" ? "user" : "assistant"} onValueChange={field.onChange}>
-                    <SelectTrigger className="h-8 w-48 rounded-lg text-[12px] shrink-0 border-border/60 shadow-sm">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent position="popper">
-                      <SelectItem value="assistant" className="text-[13px]">Assistant speaks first</SelectItem>
-                      <SelectItem value="user" className="text-[13px]">User speaks first</SelectItem>
-                    </SelectContent>
-                  </Select>
-                )} />
-              </div>
-              <FormField control={form.control} name="greetingMessage" render={({ field }) => (
-                <FormItem className="space-y-0">
-                  <FormControl>
-                    <Textarea
-                      className="min-h-[72px] max-h-[100px] text-[13px] leading-relaxed resize-none rounded-lg border-border/50 bg-background/70 px-3.5 py-2.5 shadow-none focus-visible:ring-0 focus-visible:border-foreground/25"
-                      placeholder="Hello, how can I help?"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage className="text-[10px]" />
-                </FormItem>
-              )} />
-            </div>
-          </section>
+          {agent?.id != null && (
+            <section className="space-y-2.5">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/55">Team</p>
+              <AgentTeamStrip agentId={agent.id} compact />
+            </section>
+          )}
 
-          {/* Canvas — system prompt */}
-          <section className="space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <div className="flex size-5 shrink-0 items-center justify-center rounded-md border border-border bg-background shadow-[inset_0_1px_1px_rgba(0,0,0,0.04)]">
-                  <span className="text-[9px]">📝</span>
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-[13px] font-semibold tracking-[-0.01em] text-foreground leading-none">Canvas</h3>
-                    <Badge variant="secondary" className="text-[10px] font-medium px-1.5 py-0 h-5 rounded-md">
-                      {langLabel}
-                    </Badge>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground mt-0.5 max-w-lg">
-                    How the agent talks, what it sells, and the rules it never breaks.
-                  </p>
-                </div>
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-8 shrink-0 text-xs gap-1.5 rounded-lg"
-                onClick={() => setGenerateOpen(true)}
-              >
-                <Sparkles className="w-3 h-3" />
-                Generate
-              </Button>
-            </div>
-            <div className="rounded-xl border border-border/60 bg-card/50 overflow-hidden shadow-sm">
-              <div className="flex items-center justify-between border-b border-border/50 px-4 py-2">
-                <span className="text-[10px] font-medium text-muted-foreground/70 uppercase tracking-[0.1em]">System Prompt</span>
-                <span className="text-[10px] tabular-nums text-muted-foreground/50">
-                  {(form.watch("systemPrompt") ?? "").length} chars
-                </span>
-              </div>
-              <FormField control={form.control} name="systemPrompt" render={({ field }) => (
-                <FormItem className="space-y-0">
-                  <FormControl>
-                    <Textarea
-                      className="min-h-[320px] text-[13px] resize-none font-mono leading-[1.75] rounded-none border-0 bg-transparent px-4 pt-4 pb-3 shadow-none focus-visible:ring-0"
-                      placeholder="You are a helpful voice assistant…"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage className="text-[10px] px-4 pb-2" />
-                </FormItem>
-              )} />
-            </div>
-          </section>
-
-          {/* Phone assign — mobile/tablet only; desktop uses the action rail */}
+          {/* Phone number — assign on the agent (not Connections) */}
           {agent?.id != null && (
             <AgentInboundPanel
               agentId={agent.id}
               preferredManagedNumber={form.watch("preferredManagedNumber")}
               telephonyProvider={form.watch("telephonyProvider")}
-              className="xl:hidden"
             />
           )}
 
@@ -1232,7 +1257,7 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
           {/* Knowledge */}
           <section className="space-y-3 pb-4">
             <div className="space-y-0.5">
-              <h3 className="text-base font-semibold tracking-tight text-foreground">Knowledge</h3>
+              <h3 className="text-[15px] font-semibold tracking-tight text-foreground">Knowledge</h3>
               <p className="text-[12px] text-muted-foreground">
                 Documents the agent can search during conversations.
               </p>
@@ -1258,8 +1283,6 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
 
         </div>
       </div>
-
-
     </div>
   );
 }
@@ -1269,9 +1292,13 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
 function PromptTab({ form }: { form: any }) {
   const { fields: pvFields, append: pvAppend, remove: pvRemove } = useFieldArray({ control: form.control, name: "promptVariables" });
   const [generateOpen, setGenerateOpen] = useState(false);
+  const [promptSurface, setPromptSurface] = useState<"calls" | "meetings">("calls");
   const agentName  = form.watch("name")     as string | undefined;
   const agentLang  = form.watch("language") as string | undefined;
-  const promptLen = String(form.watch("systemPrompt") ?? "").length;
+  const callPromptLen = String(form.watch("systemPrompt") ?? "").length;
+  const meetPromptLen = String(form.watch("meetingPrompt") ?? "").length;
+  const promptLen = promptSurface === "calls" ? callPromptLen : meetPromptLen;
+  const langLabel = LANGUAGES.find(l => l.value === agentLang)?.label ?? agentLang ?? "Language";
 
   return (
     <div className="relative flex min-h-full flex-col gap-6 px-4 py-5 sm:px-6 lg:px-8">
@@ -1284,53 +1311,138 @@ function PromptTab({ form }: { form: any }) {
         onApply={(prompt, meta) => {
           form.setValue("systemPrompt", prompt, { shouldDirty: true });
           form.setValue("systemPromptGenMeta", meta, { shouldDirty: true });
+          setPromptSurface("calls");
         }}
       />
 
+      <section className="space-y-3">
+        <div className="space-y-0.5">
+          <h2 className="text-[15px] font-semibold tracking-[-0.02em]">Welcome</h2>
+          <p className="text-[12px] text-muted-foreground">
+            What callers hear at the start of the call.
+          </p>
+        </div>
+        <div className="space-y-3 overflow-hidden rounded-lg border border-border bg-card p-3.5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <Label className="text-[12px] font-medium text-foreground/90">Who speaks first</Label>
+            <FormField control={form.control} name="firstSpeaker" render={({ field }) => (
+              <Select value={field.value === "user" ? "user" : "assistant"} onValueChange={field.onChange}>
+                <SelectTrigger className="h-8 w-48 shrink-0 border-border/50 text-[12px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent position="popper">
+                  <SelectItem value="assistant" className="text-[13px]">Assistant speaks first</SelectItem>
+                  <SelectItem value="user" className="text-[13px]">User speaks first</SelectItem>
+                </SelectContent>
+              </Select>
+            )} />
+          </div>
+          <FormField control={form.control} name="greetingMessage" render={({ field }) => (
+            <FormItem className="space-y-0">
+              <FormControl>
+                <Textarea
+                  className="min-h-[72px] max-h-[120px] resize-none rounded-lg border-border/40 bg-background/50 px-3.5 py-2.5 text-[13px] leading-relaxed shadow-none focus-visible:border-foreground/20 focus-visible:ring-0"
+                  placeholder="Hello, how can I help?"
+                  {...field}
+                />
+              </FormControl>
+              <FormMessage className="text-[10px]" />
+            </FormItem>
+          )} />
+        </div>
+      </section>
+
       <div className="flex items-end justify-between gap-4">
         <div>
-          <h2 className="text-[15px] font-semibold tracking-[-0.02em]">Prompt</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-[15px] font-semibold tracking-[-0.02em]">Talk</h2>
+            <Badge variant="secondary" className="h-5 rounded-md px-1.5 py-0 text-[10px] font-medium">
+              {langLabel}
+            </Badge>
+          </div>
           <p className="mt-0.5 text-[12px] text-muted-foreground">
-            Core instructions for every turn.
+            Separate instructions for phone calls and video meetings.
           </p>
         </div>
         <div className="flex items-center gap-2">
           <span className="hidden text-[10px] tabular-nums text-muted-foreground sm:inline">
             {promptLen.toLocaleString()} chars
           </span>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-8 gap-1.5 text-[11px]"
-            onClick={() => setGenerateOpen(true)}
-          >
-            <Sparkles className="size-3.5" />
-            Generate
-          </Button>
+          {promptSurface === "calls" && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1.5 text-[11px]"
+              onClick={() => setGenerateOpen(true)}
+            >
+              <Sparkles className="size-3.5" />
+              Generate
+            </Button>
+          )}
         </div>
       </div>
 
-      <FormField control={form.control} name="systemPrompt" render={({ field }) => (
-        <FormItem className="space-y-0">
-          <FormControl>
-            <div className="overflow-hidden rounded-lg border border-border bg-card">
-              <div className="flex h-9 items-center justify-between border-b border-border/70 bg-muted/20 px-3">
-                <span className="text-[10px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
-                  System prompt
-                </span>
-                <span className="font-mono text-[10px] text-muted-foreground/70">markdown · plain text</span>
-              </div>
-              <Textarea
-                className="min-h-[min(52vh,520px)] resize-y rounded-none border-0 bg-transparent px-3.5 py-3.5 font-mono text-[12.5px] leading-6 shadow-none focus-visible:ring-0"
-                placeholder="You are a helpful voice assistant…"
-                {...field}
-              />
-            </div>
-          </FormControl>
-          <FormMessage className="mt-2" />
-        </FormItem>
-      )} />
+      <Tabs value={promptSurface} onValueChange={(v) => setPromptSurface(v as "calls" | "meetings")} className="w-full">
+        <TabsList className="h-9 w-full sm:w-auto grid grid-cols-2 sm:inline-flex">
+          <TabsTrigger value="calls" className="gap-1.5 text-xs">
+            <Phone className="h-3.5 w-3.5" />
+            On calls
+          </TabsTrigger>
+          <TabsTrigger value="meetings" className="gap-1.5 text-xs">
+            <Video className="h-3.5 w-3.5" />
+            In meetings
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="calls" className="mt-3">
+          <FormField control={form.control} name="systemPrompt" render={({ field }) => (
+            <FormItem className="space-y-0">
+              <FormControl>
+                <div className="overflow-hidden rounded-lg border border-border bg-card">
+                  <div className="flex h-9 items-center justify-between border-b border-border/70 bg-muted/20 px-3">
+                    <span className="text-[10px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
+                      Call prompt
+                    </span>
+                    <span className="font-mono text-[10px] text-muted-foreground/70">markdown · plain text</span>
+                  </div>
+                  <Textarea
+                    className="min-h-[min(48vh,480px)] resize-y rounded-none border-0 bg-transparent px-3.5 py-3.5 font-mono text-[12.5px] leading-6 shadow-none focus-visible:ring-0"
+                    placeholder="You are a helpful voice assistant on phone calls…"
+                    {...field}
+                  />
+                </div>
+              </FormControl>
+              <FormMessage className="mt-2" />
+            </FormItem>
+          )} />
+        </TabsContent>
+        <TabsContent value="meetings" className="mt-3 space-y-2">
+          <FormField control={form.control} name="meetingPrompt" render={({ field }) => (
+            <FormItem className="space-y-0">
+              <FormControl>
+                <div className="overflow-hidden rounded-lg border border-border bg-card">
+                  <div className="flex h-9 items-center justify-between border-b border-border/70 bg-muted/20 px-3">
+                    <span className="text-[10px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
+                      Meeting prompt
+                    </span>
+                    <span className="font-mono text-[10px] text-muted-foreground/70">blank = use call prompt</span>
+                  </div>
+                  <Textarea
+                    className="min-h-[min(48vh,480px)] resize-y rounded-none border-0 bg-transparent px-3.5 py-3.5 font-mono text-[12.5px] leading-6 shadow-none focus-visible:ring-0"
+                    placeholder="Optional. Leave blank to reuse the call prompt…"
+                    {...field}
+                    value={field.value ?? ""}
+                  />
+                </div>
+              </FormControl>
+              <FormMessage className="mt-2" />
+            </FormItem>
+          )} />
+          <p className="text-[11px] text-muted-foreground">
+            Join / delegate settings stay under Channels → Meetings.
+          </p>
+        </TabsContent>
+      </Tabs>
 
       <section className="overflow-hidden rounded-lg border border-border bg-card">
         <div className="border-b border-border/70 px-3.5 py-2.5">
@@ -1740,13 +1852,13 @@ function VoiceTab({ form }: { form: any }) {
   );
 
   return (
-    <div className="relative p-6 space-y-8 max-w-3xl">
+    <div className="relative flex min-h-full flex-col gap-8 px-4 py-5 sm:px-6 lg:px-8">
 
       {/* ── SPEAKING ── */}
       <section className="space-y-4">
         <div>
-          <h3 className="text-[13px] font-semibold text-foreground tracking-tight">Speaking</h3>
-          <p className="text-[11px] text-muted-foreground mt-0.5">
+          <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Speaking</h3>
+          <p className="mt-0.5 text-[12px] text-muted-foreground">
             How the agent sounds on the call — provider, voice, speed, and model.
           </p>
         </div>
@@ -1995,8 +2107,8 @@ function VoiceTab({ form }: { form: any }) {
       {/* ── LISTEN ── */}
       <section className="space-y-4">
         <div>
-          <h3 className="text-[13px] font-semibold text-foreground tracking-tight">Listening</h3>
-          <p className="text-[11px] text-muted-foreground mt-0.5">
+          <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Listening</h3>
+          <p className="mt-0.5 text-[12px] text-muted-foreground">
             How the agent hears the caller — noise cancel, backchannels, and ambient bed.
           </p>
         </div>
@@ -2111,8 +2223,7 @@ function VoiceCallFeelPresets({ form }: { form: any }) {
         && linearMs === p.linearDelayMs
         && interruptWords === p.stopSpeakingNumWords
         && (asrProviderVal !== "sarvam"
-          || ((form.watch("sarvamHighVadSensitivity") ?? false) === p.sarvamHighVadSensitivity
-            && (form.watch("sarvamIncompleteHoldMs") ?? 700) === p.sarvamIncompleteHoldMs))
+          || (form.watch("sarvamHighVadSensitivity") ?? false) === p.sarvamHighVadSensitivity)
       ) return key;
     }
     return "custom";
@@ -2126,14 +2237,13 @@ function VoiceCallFeelPresets({ form }: { form: any }) {
     form.setValue("stopSpeakingVoiceSecs", voiceSecondsFromInterruptWords(p.stopSpeakingNumWords), { shouldDirty: true });
     // Sarvam pause-detection is part of the preset — Fast without it leaves a ~2s turn tax.
     form.setValue("sarvamHighVadSensitivity", p.sarvamHighVadSensitivity, { shouldDirty: true });
-    form.setValue("sarvamIncompleteHoldMs", p.sarvamIncompleteHoldMs, { shouldDirty: true });
   };
 
   return (
     <section className="space-y-3">
       <div>
-        <h3 className="text-[13px] font-semibold text-foreground tracking-tight">Phone feel</h3>
-        <p className="text-[11px] text-muted-foreground mt-0.5">
+        <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Phone feel</h3>
+        <p className="mt-0.5 text-[12px] text-muted-foreground">
           How quickly the agent takes the turn — same Call Engine knobs as Advanced → Engine.
         </p>
         {asrProviderVal === "sarvam" && (
@@ -2295,11 +2405,11 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
       if (!agentId) {
         toast({ title: "Save agent first", description: "Save this agent before configuring calendar tools.", variant: "destructive" });
       } else if (!agentCalendar) {
-        toast({ title: "No calendar configured", description: "No calendar configured for this agent. Go to Settings → Calendar to set one up.", variant: "destructive" });
+        toast({ title: "No calendar configured", description: "Finish Calendar & booking under Connections first.", variant: "destructive" });
       } else if (!(agentCalendar as any).connectedGoogleEmail) {
-        toast({ title: "No Google account connected", description: `Connect a Google account to the "${agentCalendar.name}" calendar in Scheduling.`, variant: "destructive" });
+        toast({ title: "Google not connected", description: `Connect Google for "${agentCalendar.name}" under Connections → Calendar & booking.`, variant: "destructive" });
       } else if ((agentEventTypes ?? []).length === 0) {
-        toast({ title: "No event types found", description: "Create an event type in Scheduling before using booking.", variant: "destructive" });
+        toast({ title: "No meeting set up", description: "Create a meeting under Connections → Calendar & booking before using booking.", variant: "destructive" });
       }
     } else {
       replace(current.filter((t: any) => !(BOOKING_TYPES as readonly string[]).includes(t.type)));
@@ -2431,12 +2541,12 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
   };
 
   return (
-    <div className="relative p-6 space-y-6">
+    <div className="relative flex min-h-full flex-col gap-6 px-4 py-5 sm:px-6 lg:px-8">
 
       {/* ── Platform Tools ─── */}
       <div>
-        <h3 className="text-sm font-semibold mb-0.5">Platform Tools</h3>
-        <p className="text-xs text-muted-foreground mb-3">Built-in capabilities you can enable for this agent</p>
+        <h3 className="text-[15px] font-semibold tracking-[-0.02em]">Platform Tools</h3>
+        <p className="mb-3 mt-0.5 text-[12px] text-muted-foreground">Built-in capabilities you can enable for this agent</p>
 
         <div className="space-y-2">
 
@@ -2489,8 +2599,14 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                 <div className="min-w-0 flex-1 space-y-1">
                   <p className="text-[11px] text-muted-foreground/70">
                     {agentCalendar ? (
-                      <>Calendar: <span className="font-medium text-foreground/80">{agentCalendar.name}</span></>
-                    ) : "Event type used by booking"}
+                      <>
+                        Calendar: <span className="font-medium text-foreground/80">{agentCalendar.name}</span>
+                        <span className="text-muted-foreground/50"> · </span>
+                        Meeting callers can book
+                      </>
+                    ) : (
+                      "Meeting callers can book"
+                    )}
                   </p>
                   <Select
                     value={schedulingEventTypeId != null ? String(schedulingEventTypeId) : "__none__"}
@@ -2498,7 +2614,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                     disabled={!calendarIdForEt}
                   >
                     <SelectTrigger className="h-7 bg-background/50 text-xs">
-                      <SelectValue placeholder="Any event type">
+                      <SelectValue placeholder="Any meeting">
                         {schedulingEventTypeId != null
                           ? agentEventTypes == null
                             ? "Loading…"
@@ -2509,14 +2625,20 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                       </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="__none__" className="text-xs text-muted-foreground">Any event type</SelectItem>
+                      <SelectItem value="__none__" className="text-xs text-muted-foreground">Any meeting</SelectItem>
                       {(agentEventTypes ?? []).map((et: any) => (
                         <SelectItem key={et.id} value={String(et.id)} className="text-xs">{et.title || et.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                  {calendarIdForEt && (agentEventTypes ?? []).length === 0 && (
-                    <p className="text-[10px] text-amber-400/80">No event types yet. Create one in Scheduling → Event Types.</p>
+                  {(!calendarIdForEt || (agentEventTypes ?? []).length === 0) && (
+                    <p className="text-[10px] text-amber-400/80">
+                      {!calendarIdForEt ? "No calendar yet. " : "No meeting yet. "}
+                      <a href="/app/connections?setup=calendar" className="underline underline-offset-2">
+                        Finish Calendar & booking setup
+                      </a>
+                      .
+                    </p>
                   )}
                 </div>
               </div>
@@ -2526,9 +2648,21 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                   {!agentId ? (
                     <p className="text-[10px] text-amber-400/80">Save agent first to link calendar tools.</p>
                   ) : !agentCalendar ? (
-                    <p className="text-[10px] text-amber-400/80">No calendar found for this agent.</p>
+                    <p className="text-[10px] text-amber-400/80">
+                      No calendar found for this agent.{" "}
+                      <a href="/app/connections?setup=calendar" className="underline underline-offset-2">
+                        Finish calendar setup
+                      </a>
+                      .
+                    </p>
                   ) : !(agentCalendar as any).connectedGoogleEmail ? (
-                    <span className="text-[10px] text-amber-400/80">No Google account connected.</span>
+                    <span className="text-[10px] text-amber-400/80">
+                      No Google account connected.{" "}
+                      <a href="/app/connections?setup=calendar" className="underline underline-offset-2">
+                        Finish calendar setup
+                      </a>
+                      .
+                    </span>
                   ) : (
                     <span className="text-[10px] text-muted-foreground/60">
                       {(agentCalendar as any).connectedGoogleAccountsCount > 1
@@ -2921,7 +3055,7 @@ function VoicemailTab({ form }: { form: any }) {
   const mode   = form.watch("machineDetectionMode");
   const action = form.watch("voicemailAction");
   return (
-    <div className="relative max-w-xl space-y-5 px-4 py-6 sm:px-6">
+    <div className="relative w-full max-w-xl space-y-5 px-4 py-5 sm:px-6 lg:px-8">
       <div>
         <h3 className="text-[15px] font-semibold tracking-[-0.02em]">Voicemail</h3>
         <p className="mt-1 text-[12px] text-muted-foreground">
@@ -3086,8 +3220,7 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
         && linearMs === p.linearDelayMs
         && interruptWords === p.stopSpeakingNumWords
         && (asrProviderVal !== "sarvam"
-          || ((form.watch("sarvamHighVadSensitivity") ?? false) === p.sarvamHighVadSensitivity
-            && (form.watch("sarvamIncompleteHoldMs") ?? 700) === p.sarvamIncompleteHoldMs))
+          || (form.watch("sarvamHighVadSensitivity") ?? false) === p.sarvamHighVadSensitivity)
       ) return key;
     }
     return "custom";
@@ -3101,7 +3234,6 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
     form.setValue("stopSpeakingVoiceSecs", voiceSecondsFromInterruptWords(p.stopSpeakingNumWords), { shouldDirty: true });
     // Sarvam pause-detection is part of the preset — Fast without it leaves a ~2s turn tax.
     form.setValue("sarvamHighVadSensitivity", p.sarvamHighVadSensitivity, { shouldDirty: true });
-    form.setValue("sarvamIncompleteHoldMs", p.sarvamIncompleteHoldMs, { shouldDirty: true });
   };
 
   const nav: { id: AdvSection; icon: React.ReactNode; label: string }[] = [
@@ -3114,7 +3246,7 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
   return (
     <div className="flex flex-col">
       {/* ── Sub-nav ── */}
-      <div className="flex items-center gap-1 px-4 pt-4 pb-3 border-b border-border/40 flex-shrink-0">
+      <div className="flex flex-shrink-0 items-center gap-1 border-b border-border/40 px-4 pb-3 pt-4 sm:px-6 lg:px-8">
         {nav.map(n => (
           <button
             key={n.id}
@@ -3134,14 +3266,14 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
       </div>
 
       {/* ── Content ── */}
-      <div className="px-5 py-5 space-y-4">
+      <div className="space-y-4 px-4 py-5 sm:px-6 lg:px-8">
 
         {/* ── ENGINE ── */}
         {section === "engine" && (
           <>
             <div>
-              <h3 className="text-[13px] font-semibold text-foreground">Call Engine</h3>
-              <p className="text-[11px] text-muted-foreground mt-0.5">
+              <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Call Engine</h3>
+              <p className="mt-0.5 text-[12px] text-muted-foreground">
                 The few knobs that actually drive live calls — interrupt words, when the turn ends, and how long to wait before the agent speaks.
               </p>
             </div>
@@ -3243,7 +3375,7 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                           <div>
                             <FormLabel className="text-[12px] font-medium text-foreground/90">Detect pauses quickly</FormLabel>
                             <p className="text-[10px] text-muted-foreground/70 mt-0.5">
-                              Set automatically by the Endpointing slider (under 200ms = on). On = ~0.13s pause detection, off = patient ~1s+.
+                              Saaras VAD owns end-of-speech. On = faster pause detection (default).
                             </p>
                           </div>
                           <FormControl>
@@ -3251,26 +3383,6 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                           </FormControl>
                         </FormItem>
                       )} />
-                      <AdvSlider
-                        form={form}
-                        name="sarvamSpeechEndFlushMs"
-                        label="Reply kickoff delay"
-                        hint="Tiny pause after the caller finishes before the agent starts thinking. Default 80ms."
-                        min={0}
-                        max={200}
-                        step={10}
-                        fmt={(v) => `${v}ms`}
-                      />
-                      <AdvSlider
-                        form={form}
-                        name="sarvamIncompleteHoldMs"
-                        label="Wait for unfinished thoughts"
-                        hint="Extra wait when someone seems mid-sentence (e.g. “I want…”). Default 700ms."
-                        min={50}
-                        max={1000}
-                        step={10}
-                        fmt={(v) => `${v}ms`}
-                      />
                     </>
                   )}
 
@@ -3278,7 +3390,7 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                     form={form}
                     name="fragmentCoalesceListeningMs"
                     label="Fragment hold (listening)"
-                    hint="Hold short STT fragments while agent is silent. 0 = off. Default 250ms."
+                    hint="Hold short STT fragments while agent is silent. 0 = off (default — trust STT VAD)."
                     min={0}
                     max={2000}
                     step={50}
@@ -3289,7 +3401,7 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                     form={form}
                     name="fragmentCoalescePlayingMs"
                     label="Fragment hold (playing)"
-                    hint="Hold short acks while agent is speaking. 0 = off. Default 1000ms."
+                    hint="Hold short acks while agent is speaking. 0 = off (default — trust STT VAD)."
                     min={0}
                     max={3000}
                     step={50}
@@ -3344,7 +3456,7 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
           <>
             {/* ── Auto-Redial on Drop ── */}
             <div>
-              <h3 className="text-[13px] font-semibold text-foreground">Auto-Redial on Drop</h3>
+              <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Auto-Redial on Drop</h3>
               <p className="text-[11px] text-muted-foreground mt-0.5">
                 When a call ends unexpectedly (network drop, accidental hang-up), automatically schedule a callback to the same number.
               </p>
@@ -3391,7 +3503,7 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
             </div>
 
             <div>
-              <h3 className="text-[13px] font-semibold text-foreground">Call Limits</h3>
+              <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Call Limits</h3>
               <p className="text-[11px] text-muted-foreground mt-0.5">
                 Hard cut-off for call duration. Silence check-in lives on Engine.
               </p>
@@ -3447,7 +3559,7 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
         {section === "compliance" && (
           <>
             <div>
-              <h3 className="text-[13px] font-semibold text-foreground">Compliance Frameworks</h3>
+              <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Compliance Frameworks</h3>
               <p className="text-[11px] text-muted-foreground mt-0.5">
                 Regulatory disclosures injected into the system prompt at runtime. Enable the frameworks that apply to your use-case.
               </p>
@@ -3543,7 +3655,7 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                         <li>A <span className="font-medium text-foreground">data-purpose disclosure</span> is added to the agent's prompt.</li>
                         <li>Personal data in transcripts is <span className="font-medium text-foreground">flagged for redaction</span> in analytics.</li>
                         <li>Call data is <span className="font-medium text-foreground">automatically anonymized</span> after the retention period (default 180 days).</li>
-                        <li>Campaign Studios using this agent require a <span className="font-medium text-foreground">documented consent basis</span> before launch.</li>
+                        <li>Dial flows using this agent require a <span className="font-medium text-foreground">documented consent basis</span> before launch.</li>
                       </ul>
                       <p className="text-[11px] text-muted-foreground/80">
                         These are audit and privacy safeguards only — they never block or delay calls from dialing.
@@ -3606,7 +3718,7 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
         {section === "integrations" && (
           <>
             <div>
-              <h3 className="text-[13px] font-semibold text-foreground">CRM / post-call webhook</h3>
+              <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">CRM / post-call webhook</h3>
               <p className="text-[11px] text-muted-foreground mt-0.5">
                 Notify your CRM or Zap after a call ends. Separate from Journey lead intake — leave blank if you only need intake.
               </p>
@@ -3885,7 +3997,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
       <div>
         <div className="flex items-center gap-2 mb-1">
           <Tag className="h-4 w-4 text-amber-400" />
-          <h3 className="text-[13px] font-semibold text-foreground">Call Disposition</h3>
+          <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Call Disposition</h3>
         </div>
         <p className="text-[11px] text-muted-foreground mt-0.5">
           Save the agent first to define disposition categories.
@@ -3899,7 +4011,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
       <div className="flex items-center justify-between mb-1">
         <div className="flex items-center gap-2">
           <Tag className="h-4 w-4 text-amber-400" />
-          <h3 className="text-[13px] font-semibold text-foreground">Call Disposition</h3>
+          <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Call Disposition</h3>
         </div>
         <Button
           type="button"
@@ -4240,7 +4352,7 @@ const FIELD_LABELS: Record<string, string> = {
   tools: "Tools",
   knowledgeSourceIds: "Knowledge Sources",
   schedulingCalendarId: "Scheduling Calendar",
-  schedulingEventTypeId: "Event Type",
+  schedulingEventTypeId: "Meeting",
   "agentConfig.complianceDpdp": "DPDP Compliance",
   "agentConfig.complianceIrdai": "IRDAI Compliance",
   "agentConfig.complianceTrai": "TRAI Compliance",
@@ -5612,16 +5724,16 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
       backchannelingFrequency: 0.5, webhookUrl: "",
       webhookSecret: "", noiseCancellationEnabled: true,
       ambientNoiseEnabled: false, ambientNoiseTrack: "", ambientNoiseVolume: 1.0, promptVariables: [],
-      vadSilenceMs: 350, bargeInEnabled: true, bargeInEnergyThreshold: 1200,
-      bargeInMinFrames: 4, micSensitivity: "normal", timezone: "", machineDetectionMode: "disabled",
+      vadSilenceMs: 350, bargeInEnabled: true, bargeInEnergyThreshold: 1800,
+      bargeInMinFrames: 4, micSensitivity: "low", timezone: "", machineDetectionMode: "disabled",
       voicemailAction: "hangup",
       voicemailMessage: "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.",
       voicemailLeadInSeconds: 2,
       tools: [], genderDetectionEnabled: false, voiceMemoryEnabled: false, recordingEnabled: true, languageAutoDetect: false,
       multilingualLanguages: [], sarvamIndicNumbers: true,
       autoSwitchToEnglish: false,
-      startSpeakingWaitSecs: 0, startSpeakingOnPunctuationSecs: 0.1,
-      startSpeakingOnNoPunctuationSecs: 0.1, startSpeakingOnNumberSecs: 0.1,
+      startSpeakingWaitSecs: 0, startSpeakingOnPunctuationSecs: 0,
+      startSpeakingOnNoPunctuationSecs: 0, startSpeakingOnNumberSecs: 0,
       stopSpeakingNumWords: 1, stopSpeakingVoiceSecs: 0.2, stopSpeakingBackOffSecs: 1,
       complianceIrdai: false, complianceDpdp: false, complianceTrai: false,
       knowledgeSourceIds: [],
@@ -5635,15 +5747,15 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
       preferredManagedNumber: null,
       asrEndpointingSilenceMs: 250,
       llmMaxTokens: 200,
-      ttsMinSentenceChars: 18,
+      ttsMinSentenceChars: 5,
       ttsSpeed: 1,
       linearDelayMs: 0,
-      fragmentCoalesceListeningMs: 250,
-      fragmentCoalescePlayingMs: 1000,
+      fragmentCoalesceListeningMs: 0,
+      fragmentCoalescePlayingMs: 0,
       telephonyTailDrainMs: 400,
-      sarvamHighVadSensitivity: false,
-      sarvamSpeechEndFlushMs: 80,
-      sarvamIncompleteHoldMs: 700,
+      sarvamHighVadSensitivity: true,
+      sarvamSpeechEndFlushMs: 0,
+      sarvamIncompleteHoldMs: 0,
       kbBakedOnly: false,
       autoRedialEnabled: true,
       autoRedialMaxAttempts: 3,
@@ -5652,6 +5764,9 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
       voiceStack: "classic",
       geminiLiveVoiceName: "Kore",
       geminiLiveThinkingLevel: "minimal",
+      agentComposition: "single",
+      agentSurfaces: "phone",
+      meetingPrompt: "",
     },
   });
 
@@ -5727,9 +5842,9 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
       promptVariables:          ((agent as any).agentConfig?.promptVariables ?? []) as AgentFormValues["promptVariables"],
       vadSilenceMs:             (agent as any).agentConfig?.vadSilenceMs ?? 350,
       bargeInEnabled:           (agent as any).agentConfig?.bargeInEnabled ?? true,
-      bargeInEnergyThreshold:   clampBargeInEnergyThreshold((agent as any).agentConfig?.bargeInEnergyThreshold ?? 1200),
+      bargeInEnergyThreshold:   clampBargeInEnergyThreshold((agent as any).agentConfig?.bargeInEnergyThreshold ?? 1800),
       bargeInMinFrames:         (agent as any).agentConfig?.bargeInMinFrames ?? 4,
-      micSensitivity:           ((agent as any).agentConfig?.micSensitivity ?? "normal") as AgentFormValues["micSensitivity"],
+      micSensitivity:           ((agent as any).agentConfig?.micSensitivity ?? "low") as AgentFormValues["micSensitivity"],
       timezone:                 (agent as any).agentConfig?.timezone ?? "",
       machineDetectionMode:     ((agent as any).agentConfig?.machineDetectionMode ?? "disabled") as AgentFormValues["machineDetectionMode"],
       voicemailAction:          ((agent as any).agentConfig?.voicemailAction ?? "hangup") as AgentFormValues["voicemailAction"],
@@ -5746,9 +5861,9 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
       sarvamIndicNumbers:       (agent as any).agentConfig?.sarvamIndicNumbers !== false,
       autoSwitchToEnglish:      (agent as any).agentConfig?.autoSwitchToEnglish ?? false,
       startSpeakingWaitSecs:            (agent as any).agentConfig?.startSpeakingPlan?.waitSeconds            ?? 0,
-      startSpeakingOnPunctuationSecs:   (agent as any).agentConfig?.startSpeakingPlan?.onPunctuationSeconds   ?? 0.1,
-      startSpeakingOnNoPunctuationSecs: (agent as any).agentConfig?.startSpeakingPlan?.onNoPunctuationSeconds ?? 0.1,
-      startSpeakingOnNumberSecs:        (agent as any).agentConfig?.startSpeakingPlan?.onNumberSeconds        ?? 0.1,
+      startSpeakingOnPunctuationSecs:   (agent as any).agentConfig?.startSpeakingPlan?.onPunctuationSeconds   ?? 0,
+      startSpeakingOnNoPunctuationSecs: (agent as any).agentConfig?.startSpeakingPlan?.onNoPunctuationSeconds ?? 0,
+      startSpeakingOnNumberSecs:        (agent as any).agentConfig?.startSpeakingPlan?.onNumberSeconds        ?? 0,
       stopSpeakingNumWords: (() => {
         const fromWords = (agent as any).agentConfig?.wordsForInterruption;
         const fromPlan = (agent as any).agentConfig?.stopSpeakingPlan?.numWords;
@@ -5778,15 +5893,15 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
       preferredManagedNumber:          ((agent as any).agentConfig?.preferredManagedNumber as string | undefined) ?? null,
       asrEndpointingSilenceMs:         clampEndpointingMs((agent as any).agentConfig?.asrEndpointingSilenceMs ?? 250),
       llmMaxTokens:                    (agent as any).agentConfig?.llmMaxTokens ?? null,
-      ttsMinSentenceChars:             (agent as any).agentConfig?.ttsMinSentenceChars ?? 15,
+      ttsMinSentenceChars:             (agent as any).agentConfig?.ttsMinSentenceChars ?? 5,
       ttsSpeed:                        (agent as any).agentConfig?.ttsSpeed ?? 1,
       linearDelayMs:                   clampLinearDelayMs((agent as any).agentConfig?.incrementalDelay ?? 0),
       fragmentCoalesceListeningMs:     clampFragmentCoalesceListeningMs((agent as any).agentConfig?.fragmentCoalesceListeningMs),
       fragmentCoalescePlayingMs:       clampFragmentCoalescePlayingMs((agent as any).agentConfig?.fragmentCoalescePlayingMs),
       telephonyTailDrainMs:            clampTelephonyTailDrainMs((agent as any).agentConfig?.telephonyTailDrainMs),
-      sarvamHighVadSensitivity:        ((agent as any).agentConfig?.sarvamHighVadSensitivity as boolean | undefined) === true,
-      sarvamSpeechEndFlushMs:          clampSarvamSpeechEndFlushMs((agent as any).agentConfig?.sarvamSpeechEndFlushMs),
-      sarvamIncompleteHoldMs:          clampSarvamIncompleteHoldMs((agent as any).agentConfig?.sarvamIncompleteHoldMs),
+      sarvamHighVadSensitivity:        ((agent as any).agentConfig?.sarvamHighVadSensitivity as boolean | undefined) !== false,
+      sarvamSpeechEndFlushMs:          0,
+      sarvamIncompleteHoldMs:          0,
       kbBakedOnly:                     ((agent as any).agentConfig?.kbBakedOnly as boolean | undefined) ?? false,
       autoRedialEnabled:      (agent as any).agentConfig?.autoRedial?.enabled ?? false,
       autoRedialMaxAttempts:  (agent as any).agentConfig?.autoRedial?.maxAttempts  ?? 3,
@@ -5796,6 +5911,11 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
       voiceStack:               (((agent as any).agentConfig?.voiceStack as string | undefined) === "gemini_live" ? "gemini_live" : "classic") as AgentFormValues["voiceStack"],
       geminiLiveVoiceName:      ((agent as any).agentConfig?.geminiLive?.voiceName as string | undefined) ?? "Kore",
       geminiLiveThinkingLevel:  ((agent as any).agentConfig?.geminiLive?.thinkingLevel as AgentFormValues["geminiLiveThinkingLevel"] | undefined) ?? "minimal",
+      agentComposition: "single",
+      agentSurfaces: ((agent as any).agentConfig?.meetings?.enabled === true ? "phone_and_meet" : "phone") as AgentFormValues["agentSurfaces"],
+      meetingPrompt: typeof (agent as any).agentConfig?.meetings?.meetingPrompt === "string"
+        ? (agent as any).agentConfig.meetings.meetingPrompt
+        : "",
     });
     if ((agent as any).agentConfig?.voiceStack === "gemini_live") {
       form.setValue("llmProvider", "google");
@@ -5870,6 +5990,7 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
         voicemailMessage:         "voicemail",
         voicemailLeadInSeconds:   "voicemail",
         systemPrompt:             "prompt",
+        meetingPrompt:            "prompt",
         temperature:              "prompt",
         greetingMessage:          "overview",
         name:                     "overview",
@@ -6091,7 +6212,7 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
         </div>
       </header>
 
-      {/* Rename Agent dialog */}
+      {/* Rename Agent dialog — team strip lives on Overview */}
       <Dialog open={renameDialogOpen} onOpenChange={setRenameDialogOpen}>
         <DialogContent className="sm:max-w-[440px]">
           <DialogHeader>
@@ -6119,17 +6240,19 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
       {showWebcall && (
         <div
           className={cn(
-            "fixed z-50 flex flex-col overflow-hidden bg-background shadow-2xl",
-            "inset-0 rounded-none",
-            "md:inset-auto md:bottom-4 md:right-4 md:h-[560px] md:w-[420px] md:rounded-xl",
+            "pointer-events-none fixed inset-x-0 bottom-6 z-50 flex justify-center bg-transparent pb-safe",
+            "md:inset-auto md:bottom-10 md:right-10 md:justify-end",
           )}
         >
-          <WebcallPanel
-            agentId={agent.id}
-            agentName={agent.name ?? "Agent"}
-            compact
-            onClose={() => setShowWebcall(false)}
-          />
+          {/* Frameless float — wave + controls only (close via Live test toggle / Esc) */}
+          <div className="pointer-events-auto">
+            <WebcallPanel
+              agentId={agent.id}
+              agentName={agent.name ?? "Agent"}
+              compact
+              onClose={() => setShowWebcall(false)}
+            />
+          </div>
         </div>
       )}
 
@@ -6143,25 +6266,44 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
           />
 
           <div ref={tabContentRef} className="min-h-0 flex-1 overflow-y-auto">
-            <form
-              onSubmit={(e) => e.preventDefault()}
+            <div
               className={cn(
-                "builder-workspace-content mx-auto min-h-full w-full",
-                activeTab === "prompt" || activeTab === "voice" || activeTab === "advanced"
-                  ? "max-w-[980px]"
-                  : activeTab === "tools"
-                    ? "max-w-[920px]"
-                    : "max-w-[860px]",
+                "builder-workspace-shell mx-auto flex min-h-full w-full",
+                activeTab === "prompt" || activeTab === "overview"
+                  ? "max-w-[1200px]"
+                  : activeTab === "versions"
+                    ? "max-w-[1000px]"
+                    : "max-w-[1100px]",
               )}
             >
-              {activeTab === "overview"  && <OverviewTab form={form} agent={agent} />}
-              {activeTab === "prompt"    && <PromptTab form={form} />}
-              {activeTab === "voice"     && <VoiceTab form={form} />}
-              {activeTab === "tools"     && <ToolsTab form={form} agentId={agentId} />}
-              {activeTab === "voicemail" && <VoicemailTab form={form} />}
-              {activeTab === "advanced"  && <AdvancedTab form={form} agent={agent} />}
-              {activeTab === "versions"  && <VersionsTab agentId={agent.id} />}
-            </form>
+              <form
+                onSubmit={(e) => e.preventDefault()}
+                className={cn(
+                  "builder-workspace-content min-h-full min-w-0 flex-1",
+                  activeTab === "prompt" && "lg:max-w-[calc(100%-296px)]",
+                )}
+              >
+                {activeTab === "overview"  && (
+                  <OverviewTab
+                    form={form}
+                    agent={agent}
+                    onGoToPrompt={() => handleTabClick("prompt")}
+                  />
+                )}
+                {activeTab === "prompt"    && <PromptTab form={form} />}
+                {activeTab === "voice"     && <VoiceTab form={form} />}
+                {activeTab === "tools"     && <ToolsTab form={form} agentId={agentId} />}
+                {activeTab === "voicemail" && <VoicemailTab form={form} />}
+                {activeTab === "advanced"  && <AdvancedTab form={form} agent={agent} />}
+                {activeTab === "versions"  && <VersionsTab agentId={agent.id} />}
+              </form>
+
+              {activeTab === "prompt" && (
+                <div className="sticky top-0 hidden h-[calc(100vh-7.5rem)] shrink-0 self-start lg:block">
+                  <PromptReadinessAside form={form} agent={agent} onLiveTest={() => setShowWebcall(true)} />
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Mobile-only sticky actions */}
@@ -6262,28 +6404,183 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
 
 /* ── Empty state ────────────────────────────────────────────────────────────── */
 
+function PromptReadinessAside({
+  form,
+  agent,
+  onLiveTest,
+}: {
+  form: any;
+  agent: any;
+  onLiveTest?: () => void;
+}) {
+  const systemPrompt = String(form.watch("systemPrompt") ?? "").trim();
+  const greeting = String(form.watch("greetingMessage") ?? "").trim();
+  const meetingPrompt = String(form.watch("meetingPrompt") ?? "").trim();
+  const firstSpeaker = form.watch("firstSpeaker") === "user" ? "User first" : "Assistant first";
+  const ttsVoice = form.watch("ttsVoice");
+  const isGeminiLive = isGeminiLiveAgent({
+    llmModel: form.watch("llmModel"),
+    voiceStack: form.watch("voiceStack"),
+  });
+  const voiceOk = isGeminiLive || Boolean(ttsVoice && ttsVoice !== "__custom__");
+
+  const rows = [
+    { label: "Welcome", ready: greeting.length >= 4, detail: firstSpeaker },
+    { label: "Call prompt", ready: systemPrompt.length >= 40, detail: `${systemPrompt.length.toLocaleString()} chars` },
+    { label: "Meeting prompt", ready: meetingPrompt.length > 0, detail: meetingPrompt ? `${meetingPrompt.length.toLocaleString()} chars` : "Uses call prompt", optional: true },
+    { label: "Voice", ready: voiceOk, detail: voiceOk ? "Set" : "Missing" },
+  ];
+
+  return (
+    <WorkspaceInspector title="At a glance" className="h-full bg-muted/[0.08]">
+      <div className="space-y-4">
+        <div className="space-y-1">
+          <p className="truncate text-[13px] font-medium">{agent?.name ?? "Agent"}</p>
+          <p className="inline-flex items-center gap-1.5 text-[11px] capitalize text-muted-foreground">
+            <StatusDot tone={agent?.status === "active" ? "success" : "neutral"} />
+            {agent?.status === "active" ? "Live" : "Draft"}
+          </p>
+        </div>
+        <ul className="space-y-2">
+          {rows.map((row) => (
+            <li key={row.label} className="flex items-start gap-2.5 rounded-lg border border-border/60 bg-background/60 px-2.5 py-2">
+              <span
+                className={cn(
+                  "mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full",
+                  row.ready
+                    ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                    : row.optional
+                      ? "bg-muted text-muted-foreground"
+                      : "bg-amber-500/15 text-amber-700 dark:text-amber-400",
+                )}
+              >
+                {row.ready ? <Check className="size-3" /> : <AlertCircle className="size-3" />}
+              </span>
+              <div className="min-w-0">
+                <p className="text-[12px] font-medium">{row.label}</p>
+                <p className="truncate text-[10px] text-muted-foreground">{row.detail}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
+        {onLiveTest && (
+          <Button type="button" variant="outline" size="sm" className="h-8 w-full gap-1.5 text-[11px]" onClick={onLiveTest}>
+            <Play className="size-3.5" />
+            Live test
+          </Button>
+        )}
+        <p className="text-[10px] leading-relaxed text-muted-foreground">
+          Save from the header when you are done. Overview shows phone, pipeline, and knowledge readiness.
+        </p>
+      </div>
+    </WorkspaceInspector>
+  );
+}
+
+function AgentTeamStrip({ agentId, compact }: { agentId: number; compact?: boolean }) {
+  const [, navigate] = useLocation();
+  const squadsQ = useQuery({
+    queryKey: ["agent-team-strip", agentId],
+    queryFn: () => customFetch<Array<{
+      id: number;
+      name: string;
+      status: string;
+      members: Array<{ agentId: number; roleName: string; agentName?: string | null }>;
+    }>>("/api/squads"),
+    staleTime: 30_000,
+  });
+  const teams = (squadsQ.data ?? []).filter((s) =>
+    s.members?.some((m) => m.agentId === agentId),
+  );
+
+  if (squadsQ.isLoading) return null;
+
+  const shell = cn(
+    compact
+      ? "flex flex-wrap items-center gap-2 rounded-xl border border-border/60 bg-card/40 px-3 py-2.5"
+      : "flex shrink-0 flex-wrap items-center gap-2 border-b border-border/70 bg-muted/15 px-3 py-1.5 sm:px-5",
+  );
+
+  if (teams.length === 0) {
+    return (
+      <div className={shell}>
+        <Users className="size-3.5 shrink-0 text-muted-foreground" />
+        <p className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">
+          Solo agent — not on a team yet.
+        </p>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="h-7 shrink-0 gap-1 px-2 text-[11px]"
+          onClick={() => navigate(`/app/squads?seedAgent=${agentId}`)}
+        >
+          <Plus className="size-3" />
+          Add to team
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className={shell}>
+      <Users className="size-3.5 shrink-0 text-muted-foreground" />
+      {!compact && <span className="text-[11px] text-muted-foreground">Team</span>}
+      {teams.map((team) => {
+        const role = team.members.find((m) => m.agentId === agentId)?.roleName;
+        const mates = team.members
+          .filter((m) => m.agentId !== agentId)
+          .map((m) => m.agentName || m.roleName)
+          .slice(0, 3);
+        return (
+          <button
+            key={team.id}
+            type="button"
+            onClick={() => navigate(`/app/squads/${team.id}`)}
+            className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-border/70 bg-background px-2 py-0.5 text-[11px] hover:bg-muted/40"
+            title={mates.length ? `With ${mates.join(", ")}` : team.name}
+          >
+            <GitBranch className="size-3 shrink-0 text-muted-foreground" />
+            <span className="truncate font-medium">{team.name}</span>
+            {role ? <span className="truncate text-muted-foreground">· {role}</span> : null}
+          </button>
+        );
+      })}
+      <Button
+        type="button"
+        size="sm"
+        variant="ghost"
+        className="h-7 shrink-0 gap-1 px-2 text-[11px] text-muted-foreground"
+        onClick={() => navigate("/app/squads")}
+      >
+        Manage
+      </Button>
+    </div>
+  );
+}
+
 function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [, navigate] = useLocation();
   const queryClient = useQueryClient();
-  const [step, setStep] = useState<"pick" | "scratch">("pick");
+  const { toast } = useToast();
+  const [step, setStep] = useState<"compose" | "surfaces" | "name">("compose");
+  const [composition, setComposition] = useState<"single" | "team">("single");
+  const [surfaces, setSurfaces] = useState<"phone" | "phone_and_meet">("phone");
   const [agentName, setAgentName] = useState("");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
   const handleClose = () => {
     if (creating) return;
-    setStep("pick");
+    setStep("compose");
+    setComposition("single");
+    setSurfaces("phone");
     setAgentName("");
     setCreateError(null);
     onClose();
   };
 
-  const handleVibe = () => {
-    handleClose();
-    navigate("/app/vibe");
-  };
-
-  const handleScratch = async () => {
+  const handleCreate = async () => {
     setCreating(true);
     setCreateError(null);
     try {
@@ -6306,6 +6603,17 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
         ttsModel: "bulbul:v3",
         ttsVoice: "priya",
       };
+      if (surfaces === "phone_and_meet") {
+        body.agentConfig = {
+          meetings: {
+            enabled: true,
+            whoJoins: "self",
+            meetingPrompt: "",
+            passMemory: true,
+            passCallContext: true,
+          },
+        };
+      }
 
       const result = await customFetch<{ id: number }>(`${DASH_API}/agents`, {
         method: "POST",
@@ -6314,7 +6622,15 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
       });
       await queryClient.invalidateQueries({ queryKey: getListAgentsQueryKey() });
       handleClose();
-      navigate(`/app/agents/${result.id}`);
+      if (composition === "team") {
+        toast({
+          title: "First agent ready",
+          description: "Add teammates and name the team — then they can hand off mid-call.",
+        });
+        navigate(`/app/squads?seedAgent=${result.id}`);
+      } else {
+        navigate(`/app/agents/${result.id}`);
+      }
     } catch (err: any) {
       const issueMsg = Array.isArray(err?.issues) ? err.issues.map((i: any) => `${i.path.join(".")}: ${i.message}`).join(", ") : "";
       setCreateError(issueMsg ? `Validation failed: ${issueMsg}` : (err?.message ?? "Failed to create agent. Please try again."));
@@ -6323,51 +6639,117 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
     }
   };
 
+  const stepTitle =
+    step === "compose" ? "Who is this for?"
+      : step === "surfaces" ? "Where will they talk?"
+        : "Name your agent";
+  const stepDesc =
+    step === "compose" ? "Start with one agent, or plan a handoff team."
+      : step === "surfaces" ? "Phone only, or phone plus video meetings with a separate prompt."
+        : composition === "team"
+          ? "We’ll create this agent, then open team setup so you can add teammates."
+          : "You can edit prompts and channels anytime.";
+
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
+    <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose(); }}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>
-            {step === "pick" && "Create a new agent"}
-            {step === "scratch" && "Configure new agent"}
-          </DialogTitle>
-          <DialogDescription>
-            {step === "pick" && "Build with AI for a guided setup, or configure manually from scratch."}
-            {step === "scratch" && "Name your agent. You can edit settings anytime."}
-          </DialogDescription>
+          <DialogTitle>{stepTitle}</DialogTitle>
+          <DialogDescription>{stepDesc}</DialogDescription>
         </DialogHeader>
 
-        {step === "pick" ? (
+        {step === "compose" && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 py-2">
             <button
-              onClick={handleVibe}
-              className="group relative flex flex-col items-center gap-2 rounded-xl border-2 border-primary/40 bg-primary/5 p-5 text-center hover:border-primary hover:bg-primary/10 transition-colors"
+              type="button"
+              onClick={() => { setComposition("single"); setStep("surfaces"); }}
+              className={cn(
+                "group flex flex-col items-center gap-2 rounded-xl border p-5 text-center transition-colors",
+                composition === "single"
+                  ? "border-primary/40 bg-primary/5 hover:border-primary"
+                  : "border-border/60 bg-card hover:border-primary/50 hover:bg-primary/5",
+              )}
             >
-              <span className="absolute top-2 right-2 text-[10px] font-semibold uppercase tracking-wide text-primary bg-primary/10 px-1.5 py-0.5 rounded">
-                Recommended
-              </span>
-              <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
-                <Sparkles className="h-5 w-5 text-primary" />
+              <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                <User2 className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <p className="text-sm font-semibold">Build with AI</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Guided conversational setup</p>
+                <p className="text-sm font-semibold">One agent</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Single voice personality</p>
               </div>
             </button>
             <button
-              onClick={() => setStep("scratch")}
-              className="group flex flex-col items-center gap-2 rounded-xl border border-border/60 bg-card p-5 text-center hover:border-primary/50 hover:bg-primary/5 transition-colors"
+              type="button"
+              onClick={() => { setComposition("team"); setStep("surfaces"); }}
+              className={cn(
+                "group flex flex-col items-center gap-2 rounded-xl border p-5 text-center transition-colors",
+                composition === "team"
+                  ? "border-primary/40 bg-primary/5 hover:border-primary"
+                  : "border-border/60 bg-card hover:border-primary/50 hover:bg-primary/5",
+              )}
             >
-              <div className="h-10 w-10 rounded-xl bg-muted flex items-center justify-center group-hover:bg-muted/80 transition-colors">
-                <Settings className="h-5 w-5 text-muted-foreground" />
+              <div className="h-10 w-10 rounded-xl bg-muted flex items-center justify-center group-hover:bg-muted/80">
+                <Users className="h-5 w-5 text-muted-foreground" />
               </div>
               <div>
-                <p className="text-sm font-semibold">Build from scratch</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Full manual configuration</p>
+                <p className="text-sm font-semibold">Team</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Handoffs across agents</p>
               </div>
             </button>
+            <button
+              type="button"
+              onClick={() => { handleClose(); navigate("/app/vibe"); }}
+              className="sm:col-span-2 flex items-center justify-center gap-2 rounded-lg border border-dashed border-border/60 px-3 py-2.5 text-xs text-muted-foreground hover:border-primary/40 hover:text-foreground transition-colors"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              Or build with AI (guided)
+            </button>
           </div>
-        ) : (
+        )}
+
+        {step === "surfaces" && (
+          <div className="space-y-4 py-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setSurfaces("phone")}
+                className={cn(
+                  "flex flex-col items-start gap-1.5 rounded-xl border p-4 text-left transition-colors",
+                  surfaces === "phone"
+                    ? "border-primary/40 bg-primary/5"
+                    : "border-border/60 hover:border-primary/40 hover:bg-primary/5",
+                )}
+              >
+                <Phone className="h-4 w-4 text-primary" />
+                <p className="text-sm font-semibold">Phone</p>
+                <p className="text-[11px] text-muted-foreground leading-snug">Inbound / outbound voice calls</p>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSurfaces("phone_and_meet")}
+                className={cn(
+                  "flex flex-col items-start gap-1.5 rounded-xl border p-4 text-left transition-colors",
+                  surfaces === "phone_and_meet"
+                    ? "border-primary/40 bg-primary/5"
+                    : "border-border/60 hover:border-primary/40 hover:bg-primary/5",
+                )}
+              >
+                <div className="flex items-center gap-1.5">
+                  <Phone className="h-4 w-4 text-primary" />
+                  <Video className="h-4 w-4 text-primary" />
+                </div>
+                <p className="text-sm font-semibold">Phone + meetings</p>
+                <p className="text-[11px] text-muted-foreground leading-snug">Dual prompts — calls and Meet/Zoom</p>
+              </button>
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setStep("compose")}>Back</Button>
+              <Button onClick={() => setStep("name")}>Continue</Button>
+            </DialogFooter>
+          </div>
+        )}
+
+        {step === "name" && (
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
               <Label htmlFor="scratch-name">Agent name</Label>
@@ -6376,16 +6758,20 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
                 placeholder="e.g. Support Representative"
                 value={agentName}
                 onChange={e => setAgentName(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && void handleScratch()}
+                onKeyDown={e => e.key === "Enter" && void handleCreate()}
                 autoFocus
               />
             </div>
-
+            <p className="text-[11px] text-muted-foreground">
+              {composition === "single" ? "One agent" : "Team (first agent)"}
+              {" · "}
+              {surfaces === "phone" ? "Phone" : "Phone + meetings"}
+            </p>
             {createError && <p className="text-xs text-destructive">{createError}</p>}
             <DialogFooter>
-              <Button variant="ghost" onClick={() => setStep("pick")} disabled={creating}>Back</Button>
-              <Button onClick={() => void handleScratch()} disabled={creating}>
-                {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create agent"}
+              <Button variant="ghost" onClick={() => setStep("surfaces")} disabled={creating}>Back</Button>
+              <Button onClick={() => void handleCreate()} disabled={creating}>
+                {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : composition === "team" ? "Create & assemble team" : "Create agent"}
               </Button>
             </DialogFooter>
           </div>
@@ -6406,15 +6792,15 @@ function StudioEmptyCanvas({ onCreate }: { onCreate: () => void }) {
         <div className="space-y-1.5">
           <h2 className="text-lg font-semibold tracking-tight">Select an agent</h2>
           <p className="text-sm text-muted-foreground leading-relaxed">
-            Pick one from the list, or create a new agent with AI or manual setup.
+            Pick one from the list, or create a new agent for phone — or phone plus meetings.
           </p>
         </div>
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-2 pt-1 w-full max-w-sm mx-auto">
-          <Button className="h-11 min-h-11 rounded-xl gap-1.5 text-xs w-full sm:w-auto" onClick={() => navigate("/app/vibe")}>
-            <Sparkles className="h-3.5 w-3.5" /> Build with AI
+          <Button className="h-11 min-h-11 rounded-xl gap-1.5 text-xs w-full sm:w-auto" onClick={onCreate}>
+            <Plus className="h-3.5 w-3.5" /> New agent
           </Button>
-          <Button variant="outline" className="h-11 min-h-11 rounded-xl gap-1.5 text-xs w-full sm:w-auto" onClick={onCreate}>
-            <Plus className="h-3.5 w-3.5" /> Manual setup
+          <Button variant="outline" className="h-11 min-h-11 rounded-xl gap-1.5 text-xs w-full sm:w-auto" onClick={() => navigate("/app/vibe")}>
+            <Sparkles className="h-3.5 w-3.5" /> Build with AI
           </Button>
         </div>
       </div>

@@ -400,7 +400,40 @@ function LeadsTab({ campaignId, batchId, maxAttempts, agentId }: { campaignId: n
   return (
     <div className="flex flex-col h-full">
 
-
+      {/* ── What is a Batch? explainer strip ── */}
+      {infoOpen && (
+        <div className="mx-4 mt-3 rounded-xl border border-blue-500/20 bg-blue-500/[0.04] overflow-hidden">
+          <div className="flex items-start gap-3 px-4 py-3">
+            <Info className="h-3.5 w-3.5 text-blue-400 shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold text-foreground/80 mb-1.5">What is a Batch?</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-[11px] text-muted-foreground/70 leading-relaxed">
+                <div>
+                  <span className="font-semibold text-foreground/60 flex items-center gap-1 mb-0.5"><Package className="h-3 w-3 shrink-0" />A batch = one upload</span>
+                  Each time you add leads to a campaign, that group is called a batch.
+                  One campaign can have many batches — "Week 1 list", "Re-engagement list", etc.
+                </div>
+                <div>
+                  <span className="font-semibold text-foreground/60 flex items-center gap-1 mb-0.5"><Lock className="h-3 w-3 shrink-0" />Fully isolated</span>
+                  Each batch tracks its own progress, retries, and results independently.
+                  Pausing or stopping one batch never affects another.
+                </div>
+                <div>
+                  <span className="font-semibold text-foreground/60 flex items-center gap-1 mb-0.5"><BarChart2 className="h-3 w-3 shrink-0" />This view = one batch</span>
+                  You're looking at a single batch workspace. Use the Attempts, Duration, and Cost
+                  columns to see exactly what happened on each call.
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={() => { setInfoOpen(false); localStorage.setItem("batch-info-dismissed", "1"); }}
+              className="text-muted-foreground/30 hover:text-muted-foreground transition-colors shrink-0 mt-0.5"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-3 border-b border-border/30">
@@ -790,9 +823,9 @@ export default function BatchWorkspacePage() {
               <DetailNav
                 className="mb-0.5"
                 backTo={`/app/campaigns/${campaignId}`}
-                backLabel="Back to campaign studio"
+                backLabel="Back to People"
                 crumbs={[
-                  { label: "Campaign Studios", href: "/app/campaigns" },
+                  { label: "People", href: "/app/people" },
                   { label: header?.campaign.name ?? "…", href: `/app/campaigns/${campaignId}` },
                   { label: header?.batch.name ?? "Batch" },
                 ]}

@@ -1,108 +1,128 @@
 # SnapServe — Complete Product Knowledge Base
 
-**Audience:** External UI/UX designers and product partners  
+**Audience:** External UI/UX designers, product partners, and internal agents  
 **Product:** SnapServe (`app.snapserve.ai`) — Indic-first AI voice agent platform  
 **Last updated:** August 2026  
-**Purpose:** Full feature map, Agent Builder structure, and how every surface connects to an agent
+**Purpose:** Full feature map under the **Call plans IA** — how agents, plans, people, and connections fit together
 
 ---
 
 ## 1. What SnapServe is
 
-SnapServe lets a business create a **voice agent**, teach it how to talk, then attach:
+SnapServe lets a business:
 
-1. **How work reaches it** (forms, sheets, lists, dial rules, journeys)  
-2. **How it talks back** (phone, WhatsApp, email, meetings, booking)
+1. Create an **agent** (who talks on phone and/or in meetings)  
+2. Make a **call plan** (ordered steps for each person)  
+3. Attach **people** (CSV lists)  
+4. Wire **connections** once (Sheets, WhatsApp, email, website form, Meta)
 
-SnapServe runs the calls, logs activity, and bills by wallet/minutes.
+SnapServe runs the work, logs **History**, and bills by wallet / minutes.
 
 **One-line product model:**
 
-> You create an **agent** → you teach it how to speak → you attach **Automation** and **Channels** → SnapServe runs the rest.
+> You create an **agent** → you make a **call plan** → you attach **people** → you wire **connections** → SnapServe runs the rest.
+
+Journeys, campaigns, and dial engines still power execution under the hood. Product language prefers **Call plans**, **People**, **History**, and **Connections** — not “Journey”, “Automation”, or “Dial flows” as primary labels.
 
 ---
 
 ## 2. Mental model (critical for UX)
 
-Everything revolves around the **Agent**.
-
 | Layer | Job | Where in the app |
 |-------|-----|------------------|
-| **Build** | Teach the agent to speak (prompt, voice, tools, engine) | **Agents** → Agent Builder |
-| **Operate** | Bring work to the agent and watch results | Activity, Automation, Dial flows, Phone Numbers |
-| **Connect** | Give the agent ways to communicate | Channels, Integrations, Scheduling, Meet, WhatsApp |
-| **Intelligence** | Knowledge, memory, multi-agent teams, analytics | Knowledge, Memory, Squads, Analytics |
-| **Settings** | Workspace, keys, billing | Workspace, Providers, Developers, Billing |
+| **Agent** | Who talks — prompt, voice, tools, versions | **Agents** → Agent Builder |
+| **Call plan** | What happens next for each person (ordered steps) | **Call plans** |
+| **People** | Who to reach — CSV lists | **People** |
+| **Connections** | Shared wiring — Sheets, WhatsApp, email, website form, Meta | **Connections** |
+| **History** | What happened — calls, callbacks, transfers | **History** |
+| **Intelligence** | Knowledge, memory, teams, analytics, scheduling | MORE section |
+| **Settings** | Workspace, keys, billing | Workspace · Providers · Developers · Billing |
 
-### Hard product rules (do not mix these in UX)
+### Hard product rules
 
-1. **Agent Builder ≠ Automation ≠ Channels**  
-   - Builder = agent runtime only (prompt / voice / tools / engine / versions)  
-   - Automation = how leads reach the agent  
-   - Channels = how the agent communicates  
+1. **Agent ≠ Call plan ≠ People ≠ Connections**  
+   - Agent = runtime (prompt / voice / tools / engine / versions)  
+   - Call plan = ordered steps (call → WhatsApp → wait → if… → meet → stop)  
+   - People = who to dial / message  
+   - Connections = account wiring used by plans and agents  
 
-2. **Booking = one suite switch** in Tools (not five separate toggles in the UI).
+2. **Retries / “call me back” live on the Agent**, not on the call plan.
 
-3. **Email = Brevo bring-your-own only** — SnapServe does not provide managed email.
+3. **Provider and model names stay visible** (Sarvam, Gemini, Cartesia, Vobiz, etc.).
 
-4. Agent-scoped pages use a shared **agent picker** (`?agentId=`). Switching agent keeps you on the same page.
+4. **Booking = one suite switch** in Tools (not five separate toggles).
+
+5. **Email = Brevo bring-your-own only** — SnapServe does not provide managed email.
+
+6. Agent-scoped deep pages (Agent channels, Meet, Memory) use `?agentId=` + an agent picker.
 
 ---
 
-## 3. App navigation (current IA)
+## 3. App navigation (Call plans IA)
 
 ```
 Home
+Call plans
 Agents
+People
+Connections
+History
 
-OPERATE
-  Activity          — calls, callbacks, transfers
-  Automation        — sources, call rules, journeys (per agent)
-  Dial flows        — list dial / sheet dial / website forms
-  Phone Numbers     — buy, assign, KYC
-
-CONNECT
-  Channels          — phone, WhatsApp, email, meetings, booking (per agent)
-  Integrations      — CRM, Google Sheets, webhooks
-  Scheduling        — calendars, event types, bookings
-  Meet              — send agent into Meet / Zoom / Teams
-  WhatsApp          — WhatsApp channel admin
-
-INTELLIGENCE
-  Knowledge         — FAQ / text / website / files for agents
-  Memory            — per-caller facts & history (per agent)
-  Squads            — multi-agent handoff teams
-  Analytics         — KPIs and trends
+MORE
+  Knowledge
+  Memory
+  Squads
+  Analytics
+  Scheduling
 
 ── Settings ──
   Workspace · Providers · Developers · Billing
 ```
 
+**Mobile bottom:** Home · Plans · Create · Agents · History  
+
 **Partner accounts** also see **Partner Hub**.  
-**Managed clients** (run by a partner) see a trimmed nav: Home, Agents, Activity, Phone Numbers, Workspace, Billing — partner builds automation/channels for them.
+
+**Managed clients** (run by a partner) see a trimmed nav: Home · Call plans · Agents · History · Connections · Wallet · Workspace.
+
+### Legacy URLs (redirected, not deleted)
+
+| Old | New home |
+|-----|----------|
+| `/app/automation` | `/app/call-plans` |
+| `/app/campaigns` | `/app/people` |
+| `/app/automatic-calls` (list) | `/app/connections?setup=sheets` |
+| `/app/meta-leads` | `/app/connections?setup=meta` |
+| `/app/calls`, `/app/activity` | `/app/history` |
+| `/app/callbacks` | `/app/history?tab=callbacks` |
+| `/app/transfers` | `/app/history?tab=transfers` |
+
+**Deep-links kept** (not primary nav): `/app/channels` (Agent channels), `/app/whatsapp`, `/app/meet`, campaign / sheet detail routes.
 
 ---
 
 ## 4. Core objects and how they connect
 
 ```
-                    ┌─────────────┐
-                    │   Agent     │  ← center of the product
-                    └──────┬──────┘
-           ┌───────────────┼───────────────┐
-           │               │               │
-     ┌─────▼─────┐   ┌─────▼─────┐   ┌─────▼─────┐
-     │ Automation│   │ Channels  │   │  Tools /  │
-     │ (Reach)   │   │           │   │ Knowledge │
-     └─────┬─────┘   └─────┬─────┘   └───────────┘
-           │               │
-     Dial flows      Phone / WA /
-     Sheets / Forms  Email / Meet /
-     Journeys        Booking
-           │
-     ┌─────▼─────┐
-     │  Calls    │ → Activity, Analytics, Memory, Wallet
-     └───────────┘
+     Connections          People
+     (Sheets, WA,         (CSV lists
+      email, website,      only)
+      Meta)
+           │                     │
+           └──────────┬──────────┘
+                      ▼
+              ┌───────────────┐
+              │  Call plan    │  ordered steps per person
+              └───────┬───────┘
+                      │ uses
+                      ▼
+              ┌───────────────┐
+              │    Agent      │  who talks (+ optional Team / Squad)
+              └───────┬───────┘
+                      ▼
+              ┌───────────────┐
+              │   History     │  calls, callbacks, transfers
+              └───────────────┘
 ```
 
 ### Binding mechanism
@@ -110,9 +130,10 @@ INTELLIGENCE
 | Binding | How |
 |---------|-----|
 | Builder | Route `/app/agents/:id` |
-| Automation, Channels, Meet, Memory | Query `?agentId=` + agent picker |
-| Campaigns / sheet pipelines / journeys | Foreign key `agentId` on the flow |
-| Phone numbers | Number assigned to `agentId` |
+| Call plan | Journey + workflow under the hood; UI = `/app/call-plans/:id` |
+| People lists / sheets / forms | Legacy campaign / automatic-call / webhook engines; UI = `/app/people` |
+| Agent channels / Meet / Memory | Query `?agentId=` + agent picker |
+| Phone numbers | Number assigned to `agentId` (or squad) |
 | Knowledge | Sources attached on agent (`knowledgeSourceIds`) |
 | Live production | Published **Version** snapshot (not unsaved draft) |
 
@@ -120,37 +141,46 @@ INTELLIGENCE
 
 ## 5. Agent Builder (current shape)
 
-**Route:** `/app/agents` → opens last/first agent → `/app/agents/:id`  
-**Create:** Home / sidebar “New agent” → Vibe Build (AI) or manual configure.
+**Route:** `/app/agents` → `/app/agents/:id`  
+**Create:** Home / Agents → create wizard, or Vibe Build (`/app/vibe`).
+
+### Create wizard
+
+1. **Who** — One agent **or** Team (first agent, then assemble on Squads)  
+2. **Where** — Phone **or** Phone + meetings  
+3. **Name** — create → Builder, or Squads with `?seedAgent=` for teams  
+
+Phone + meetings enables meeting join and a separate **In meetings** prompt.
 
 ### Builder chrome
 
-- Back, agent name (rename), Live/Draft status, Unsaved
-- Actions: Phone test, Live test (browser webcall), Save
-- More: Publish version, Refine with AI, Delete
-- Horizontal segment tabs (below header)
+- Back, agent name (rename), Live/Draft, Unsaved  
+- **Team strip** — which Squads this agent belongs to, or “Add to team”  
+- Actions: Phone test, Live test (browser webcall), Save  
+- More: Publish version, Refine with AI, Delete  
+- Horizontal segment tabs  
 
-### Builder tabs (ONLY these)
+### Builder tabs
 
 | Tab | What the user does |
 |-----|--------------------|
-| **Overview** | Pipeline chips (ASR / LLM / Voice), greeting, prompt preview, attach knowledge sources, quick health |
-| **Prompt** | Full system prompt, AI generate, prompt variables, timezone, end-call phrases |
-| **Voice** | ASR + LLM + TTS stack, voice picker/cloning, ambient noise, speech rate; Gemini Live vs classic |
+| **Overview** | Pipeline chips (ASR / LLM / Voice), greeting, **Talk** preview with **On calls \| In meetings**, knowledge sources |
+| **Prompt** | Dual surfaces: **On calls** and **In meetings** (`meetingPrompt`); variables, timezone, end-call phrases |
+| **Voice** | ASR + LLM + TTS stack, voice picker/cloning, ambient noise; Gemini Live vs classic |
 | **Tools** | Mid-call capabilities (see below) |
 | **Voicemail** | Outbound answering-machine detect: hang up or leave TTS message |
-| **Advanced** | Engine timing, limits, post-call webhook, dispositions, India compliance (IRDAI / DPDP / TRAI) |
+| **Advanced** | Engine timing, limits, post-call webhook, dispositions, India compliance |
 | **Versions** | Draft / Production snapshots — compare, restore, publish |
 
-**Not in Builder anymore:** Automation (Reach) and Channels. Those live as separate sidebar pages.
+Meeting **join / delegate / memory** toggles live under **Agent channels → Meetings** (deep-link from Connections / Meet), not as a second prompt editor there.
 
-### Tools tab (capabilities the agent can use mid-call)
+### Tools tab
 
 | Tool / control | Purpose |
 |----------------|---------|
-| **Booking** (one switch) | Enables book / check availability / list / reschedule / cancel — needs Scheduling calendar + event type |
-| **End call** | Agent can hang up politely |
-| **Send email** | Mid-call email via Brevo (Channels → Email must be set) |
+| **Booking** (one switch) | Book / check / list / reschedule / cancel — needs Scheduling calendar + event type |
+| **End call** | Hang up politely |
+| **Send email** | Mid-call email via Brevo (Agent channels → Email) |
 | **Send WhatsApp** | Mid-call WhatsApp (channel must be connected) |
 | **Call transfer** | Warm transfer to a human number |
 | **Custom HTTP tools** | User-defined webhooks with JSON schema |
@@ -158,171 +188,149 @@ INTELLIGENCE
 | **Gender detection** | Optional signal |
 | **Voice memory** | Remember facts about the caller across calls |
 
-### Advanced tab (engine & ops)
+### Advanced tab
 
-- **Engine:** Fast / Balanced / Patient presets, barge-in, endpointing, VAD tuning  
-- **Limits:** max duration, auto-redial, telephony provider (Vobiz managed / Plivo / Twilio BYO)  
-- **Analytics / Integrations:** post-call CRM webhook URL + HMAC; disposition categories  
+- **Engine:** Fast / Balanced / Patient, barge-in, endpointing, VAD  
+- **Limits:** max duration, auto-redial, telephony (Vobiz / Plivo / Twilio BYO)  
+- **Analytics / Integrations:** post-call CRM webhook + HMAC; dispositions  
 - **Compliance:** optional Indian regulatory prompt injections  
 
 ### Versions
 
 - **Save** updates the working draft  
 - **Publish** promotes draft → **Production** (what live calls use)  
-- Previous Production becomes a frozen published snapshot  
 
 ### How users create an agent
 
-1. **Vibe Build** (`/app/vibe`) — describe the use case; AI scaffolds prompt/voice  
-2. **Manual** — empty agent → fill Prompt / Voice / Tools  
-3. **Refine with AI** — from builder, reopen Vibe against an existing agent  
+1. **Create wizard** — one / team · phone / phone+meet  
+2. **Vibe Build** — describe the job; AI scaffolds prompt/voice  
+3. **Refine with AI** — reopen Vibe against an existing agent  
 
 ---
 
-## 6. Automation (how work reaches the agent)
+## 6. Call plans (what happens next)
 
-**Route:** `/app/automation?agentId=`  
-**UI:** Agent picker + Reach panel
+**Routes:** `/app/call-plans`, `/app/call-plans/:id`  
 
-Automation answers: *“When should this agent place or receive work?”*
+A call plan is an **ordered timeline of steps** for each person — not a node graph, not a use-case gallery.
 
-### Source presets (common journeys)
+### Step palette
 
-| Preset | What happens |
-|--------|----------------|
-| **Website form → Call** | Form posts to webhook → lead → instant dial |
-| **Google Sheet → Call** | New/updated rows enqueue outbound calls |
-| **Upload list → Call** | CSV / list campaign batches |
-| **Join a meeting** | Deep-link to Meet with this agent |
-| **Call rules** | Retries, quiet hours, concurrency, delays |
-| **After-call sequence (Journey)** | WhatsApp / email / wait / callback / webhook after the call |
-| **Custom sequence** | Custom journey step editor |
+| Step | Meaning |
+|------|---------|
+| **Call them** | Dial with the plan’s agent; optional **Team** for mid-call handoffs |
+| **Send WhatsApp** | Template-style follow-up (needs WhatsApp connected) |
+| **Send email** | Brevo email (needs Agent channels → Email) |
+| **Wait** | Pause (minutes / hours / days) |
+| **Join a meeting** | Bot joins Meet / Zoom / Teams from a link on the person |
+| **Update the list** | Write status back to the Sheet row (when people came from a sheet) |
+| **If…** | Continue only when a condition is true (else this person’s path stops). Plain language: answered / didn’t answer / succeeded / custom |
+| **Stop** | End this person’s path |
 
-### Armed flows
+Retries and call-backs are **agent** settings — not plan steps.
 
-Shows active campaigns and sheet pipelines for the selected agent, with status and deep links into Dial flows.
+### People on a plan
 
-### Call rules (agent defaults + per-flow overrides)
+- **CSV / list** — attach a People list  
+- **Paste phones** — one-off numbers  
+- **Google Sheet** — attach a sheet pipeline  
 
-- Max attempts, retry delay, call delay  
-- Concurrent call limit  
-- Business hours + timezone  
-- Auto-redial on drop  
+### Run modes
 
-### Journeys (after-call sequences)
+| Mode | Behaviour |
+|------|-----------|
+| **Start once** | Run the attached people through the plan in **batches of 100**; use **Continue** for the next batch |
+| **Keep live** | For Sheet people — keep watching new/updated rows (uses a **sheet cursor** so already-processed rows are not re-run) |
 
-Multi-step workflows on the agent:
+**Pause / Resume** — stop or restart an active plan without deleting it.
 
-- Steps: Call, Wait, WhatsApp, Email, Callback, Webhook, conditionals, Squad handoff  
-- Triggers: e.g. no-answer, interested, always after call  
-- Status: draft / active / paused  
+### Intake on a plan
 
----
+Optional intake sources on the plan itself (in addition to attached lists/sheets):
 
-## 7. Channels (how the agent communicates)
+- **Website form** — form webhook leads enter this plan  
+- **Meta Lead Ads** — Meta form submissions enter this plan  
 
-**Route:** `/app/channels?agentId=&channel=`  
-**Tabs:** Phone · WhatsApp · Email · Meetings · Booking  
+Configure the form/Meta connection under **Connections**, then enable intake on the plan.
 
-| Channel | What it configures |
-|---------|-------------------|
-| **Phone** | Assign purchased/managed number for inbound + outbound caller ID; trial line for limited testing; link to Phone Numbers |
-| **WhatsApp** | Status of Meta Business / BYO BSP connection; open WhatsApp admin to configure |
-| **Email** | Brevo API key + verified from-address + templates/variables (BYO only) |
-| **Meetings** | Meeting-specific prompt; or delegate another agent; pass memory / call context into the room |
-| **Booking** | Readiness for calendar + event type; links to Scheduling and Builder → Tools → Booking |
+### Results
+
+Per-person / run progress on the plan detail page (**Activity**); export via **CSV**. Full call outcomes also in **History**.
+
+**Under the hood:** journeys + workflows. Product copy says **Call plans**.
 
 ---
 
-## 8. Dial flows (account-wide campaigns)
+## 7. People (who you reach)
 
-**Route:** `/app/campaigns`  
-**Tabs:**
+**Route:** `/app/people`  
 
-| Tab | Purpose |
-|-----|---------|
-| **List dials** | CSV/list outbound campaigns, batches, leads |
-| **Sheet dial** | Google Sheets automatic-call pipelines |
-| **From Website** | Website webhook campaigns + Meta Lead Ads |
+CSV / list people only. Create a list → upload CSV batches → attach to a **call plan** → Start.
 
-Every dial flow is bound to an **agentId** — that agent’s Production config handles the call.
+Website forms, Google Sheets auto-dial, and Meta Lead Ads live under **Connections** — not on this page.
 
-Detail routes: campaign detail, batch wizard, lead profile, sheet pipeline detail.
+Detail routes for list / batch / lead still exist under `/app/campaigns/:id` for deep work.
 
 ---
 
-## 9. Integrations
+## 8. Connections (wire once)
 
 **Route:** `/app/connections`  
-Account-level credentials used by Automation / Dial flows:
 
-- **CRM:** HubSpot, Zoho — OAuth, field mapping, import to campaigns, writeback  
-- **Google Sheets:** OAuth for sheet dial  
-- **Webhooks:** listen/capture sample payload, map fields to agent variables  
-- **Meta Lead Ads:** forms → instant dial  
-- Recipes for Zapier / Make  
+Five integrations only — brand logos, Ready / Set up:
 
-**Note:** Per-agent post-call CRM webhook also exists under Builder → Advanced. Integrations page = shared connectors; Advanced = that agent’s outbound post-call URL.
+1. **Google Sheets**  
+2. **WhatsApp**  
+3. **Email (Brevo)** — BYO key  
+4. **Website form**  
+5. **Meta Lead Ads**  
 
----
+Phone numbers are **not** here — assign on **Agents → Overview**.
 
-## 10. Phone Numbers
-
-**Route:** `/app/phone-numbers`  
-
-| Tab | Purpose |
-|-----|---------|
-| **My numbers** | List, assign/unassign to agents, release |
-| **Buy number** | Purchase DIDs (India-focused; KYC may be required) |
-| **Verification** | KYC / identity verification |
-
-Without an assigned number: inbound won’t ring the agent; outbound uses a shared trial line with daily caps (unless BYO telephony).
+Deep setup: `/app/connections?setup=sheets|email|website|meta` · WhatsApp → `/app/whatsapp`.
 
 ---
 
-## 11. Activity
+## 9. History
 
-**Route:** `/app/calls`  
+**Route:** `/app/history` (legacy `/app/calls` still works)  
 
 | Tab | Purpose |
 |-----|---------|
-| **All calls** | Full call log, filters, export, detail |
+| **Calls** | Full call log, filters, export, detail |
 | **Callbacks** | Scheduled callbacks + auto-redials |
 | **Transfers** | Human transfer history |
 
-Call detail includes transcript, recording (if enabled), disposition, cost, agent.
+Call detail: transcript, recording (if enabled), disposition, cost, agent.
 
 ---
 
 ## 12. Scheduling & Booking
 
-**Route:** `/app/scheduling`  
+**Route:** `/app/scheduling` (MORE)  
 
-- Bookings list  
-- Calendars (e.g. Google Calendar sync)  
-- Event types (duration, buffers, public booking page `/book/:slug`)  
-- Availability  
-- Conferencing (Meet / Zoom / Teams links for bookings)  
+- Bookings, calendars (e.g. Google Calendar), event types, availability, conferencing  
+- Public booking page: `/book/:slug`  
 
-**Connection to agent:** Tools → Booking suite uses the agent’s linked calendar + event type. Channels → Booking shows readiness.
+**Connection:** Tools → Booking uses the agent’s linked calendar + event type. Agent channels → Booking shows readiness.
 
 ---
 
 ## 13. Meet
 
-**Route:** `/app/meet?agentId=`  
+**Route:** `/app/meet?agentId=` (from Connections)  
 
-- Paste Google Meet / Zoom / Teams URL  
-- Launch bot with selected agent  
-- Meeting behaviour configured under Channels → Meetings (prompt or delegate agent)
+- Paste Google Meet / Zoom / Teams URL → launch bot  
+- Meeting prompt: Builder → Prompt → In meetings  
+- Join / delegate: Agent channels → Meetings  
 
 ---
 
 ## 14. WhatsApp
 
-**Route:** `/app/whatsapp`  
+**Route:** `/app/whatsapp` (from Connections)  
 
-Standalone admin for Meta Business API and BYO BSP connections, templates, and agent binding. Channels → WhatsApp shows readiness and deep-links here. Instant (shared SnapServe) WhatsApp is no longer offered for new enrollments.
+Meta Business API and BYO BSP admin, templates, agent binding. Instant (shared SnapServe) WhatsApp is not offered for new enrollments.
 
 ---
 
@@ -330,14 +338,7 @@ Standalone admin for Meta Business API and BYO BSP connections, templates, and a
 
 **Route:** `/app/knowledge-bases`  
 
-Sources:
-
-- FAQ  
-- Free text  
-- Website crawl  
-- File upload  
-
-Attach sources to an agent on Builder → Overview. Agent can ground answers on that content during calls.
+FAQ · free text · website crawl · file upload. Attach on Builder → Overview.
 
 ---
 
@@ -345,25 +346,19 @@ Attach sources to an agent on Builder → Overview. Agent can ground answers on 
 
 **Route:** `/app/memory?agentId=&caller=`  
 
-Per-agent, per-caller:
-
-- Facts the agent remembered  
-- Call episodes / history  
-- Edit notes, delete facts, reset memory  
-
-Requires Voice memory enabled in Tools for capture during calls.
+Per-agent, per-caller facts and episodes. Requires Voice memory in Tools.
 
 ---
 
-## 17. Squads
+## 17. Squads (Teams)
 
-**Route:** `/app/squads`  
+**Route:** `/app/squads` (MORE)  
 
-Multi-agent teams:
+Multi-agent teams for mid-call handoffs and shared caller memory.
 
-- Supervisor / specialist roles  
-- Handoff instructions  
-- Attach to journey Call steps or dial flows for live specialist handoff  
+- Create from Agents → Team wizard (`?seedAgent=`) or Squads → New team  
+- Team strip on Agent Builder shows membership  
+- Call plan **Call** step can dial with a team for live handoffs  
 
 ---
 
@@ -371,7 +366,7 @@ Multi-agent teams:
 
 **Route:** `/app/analytics`  
 
-Workspace KPIs: leads, connected, booked, transferred, rates, daily trends; filter by campaign. Per-agent analytics also available.
+Workspace KPIs and trends; filter by campaign / flow. Per-agent analytics available.
 
 ---
 
@@ -380,9 +375,9 @@ Workspace KPIs: leads, connected, booked, transferred, rates, daily trends; filt
 | Page | Contents |
 |------|----------|
 | **Workspace** | Profile, workspace settings, Team |
-| **Providers** | Voices library + BYO ASR / LLM / TTS / telephony API keys |
+| **Providers** | Voices library + BYO ASR / LLM / TTS / telephony keys |
 | **Developers** | API keys (`sk_live_…`), workspace webhooks |
-| **Billing** | Wallet balance, Razorpay top-up, auto-pay, GST/invoices, Usage |
+| **Billing** | Wallet, Razorpay top-up, auto-pay, GST/invoices, Usage |
 
 Default India stack (when not BYO): Sarvam ASR, Google LLM, Cartesia/Sarvam TTS, Vobiz telephony.
 
@@ -392,72 +387,83 @@ Default India stack (when not BYO): Sarvam ASR, Google LLM, Cartesia/Sarvam TTS,
 
 | Role | Experience |
 |------|------------|
-| **Partner** | Partner Hub: invite clients, wallets, earnings, “Act as client” to build on their account |
-| **Managed client** | Trimmed UI — can test agents and see activity/numbers; cannot configure Automation/Channels/Integrations themselves |
+| **Partner** | Partner Hub: invite clients, wallets, earnings, “Act as client” |
+| **Managed client** | Trimmed UI — Home, Call plans, Agents, History, Connections; partner builds deeper config for them |
 
 ---
 
 ## 21. End-to-end user journeys
 
-### Journey A — Create → teach → go live
+### A — Create agent → go live
 
-1. Create agent (Vibe or manual)  
-2. Builder: Prompt + Voice + Tools  
-3. Live test (browser) and/or Phone test  
+1. Create agent (wizard or Vibe) — phone or phone + meetings  
+2. Builder: Prompt (calls / meetings) + Voice + Tools  
+3. Live test and/or Phone test  
 4. Publish version → Production  
-5. Agent status: Live  
 
-### Journey B — Go live on phone
+### B — Go live on phone
 
-1. Buy / verify phone number  
-2. Channels → Phone → assign number to agent  
+1. Connections → Phone numbers → buy / verify  
+2. Assign number to agent (Phone Numbers or Agent channels → Phone)  
 3. Inbound rings this agent; outbound uses this caller ID  
 
-### Journey C — Website form → instant call
+### C — Call plan: list → call → WhatsApp
 
-1. Integrations / Dial flows → From Website → create webhook campaign bound to agent  
-2. Paste webhook into website form  
-3. Form submit → lead → agent dials  
-4. Optional: Automation → Journey for WhatsApp/email follow-up  
+1. Create / pick agent  
+2. People → Lists / CSV → upload bound to agent  
+3. Call plans → new plan → steps: Call → WhatsApp → Wait…  
+4. Attach list → **Start once**  
+5. Watch plan results + History  
 
-### Journey D — Google Sheet dialer
+### D — Sheet keep-live
 
-1. Integrations → connect Google Sheets  
-2. Automation → Sheet → Call (or Dial flows → Sheet dial)  
-3. Map columns; start pipeline  
-4. Monitor Activity + Analytics  
+1. Connections → Google Sheets → connect  
+2. Set up sheet auto-dial (`/app/automatic-calls/new` or Connections → Sheets)  
+3. Call plan → attach sheet → **Keep live**  
+4. Optional: **Update the list** step writes status back  
 
-### Journey E — Book meetings from calls
+### E — Website form → call plan
+
+1. Connections → Website form → create webhook bound to agent  
+2. Paste webhook into the site form  
+3. Attach / use with a call plan for dial + follow-ups  
+
+### F — Book meetings from calls
 
 1. Scheduling: calendar + event type  
 2. Builder → Tools → Booking ON  
-3. Channels → Booking shows linked  
-4. Agent books slots mid-call; optional Meet join via Channels → Meetings  
+3. Agent books slots mid-call; optional Meet join via Agent channels → Meetings  
+
+### G — Team handoffs
+
+1. Create → Team (or Squads → New team) with 2+ agents  
+2. On a call plan Call step, pick the **Team**  
+3. Agents hand off mid-call with shared memory  
 
 ---
 
-## 22. UX structure notes for designers
+## 22. UX structure notes
 
-### Current chrome system
+### Chrome system
 
-- **Sidebar** = global IA  
-- **StripePage** = one page title + one-line description + actions (no second global title bar)  
-- **AgentContextBar** = agent Select + “Edit agent” on agent-scoped pages  
-- **Tabs** under the page header for multi-section screens (Activity, Dial flows, Settings, etc.)  
+- **Sidebar** = Call plans IA  
+- **StripePage** = one page title + one-line description + actions  
+- **AgentContextBar** = agent Select on agent-scoped deep pages  
+- **Tabs** under the header for People, History, Phone Numbers, Settings, etc.  
 
-### Design principles the product expects
+### Design principles
 
-1. **Agent is always visible** when configuring Automation / Channels / Meet / Memory.  
-2. **Do not put Automation or Channels back inside Builder** — separation is intentional.  
-3. Prefer **flat full pages** over nested card-in-card chrome.  
-4. Show **connection** between surfaces with clear cross-links (e.g. Channels → Manage numbers, Automation → Open Dial flows).  
-5. Empty states should point to the next required step (create agent → buy number → wire source).  
+1. First teach **Agent → Call plan → People → Connections → History**.  
+2. Do not revive **Automation / Dial flows / Journey / Activity** as primary nav labels.  
+3. Prefer flat full pages; one job per screen.  
+4. Cross-link generously (plan → People, Connections → Agent channels, Meet → Prompt).  
+5. Empty states point to the next step (create agent → phone → call plan → people).  
 
 ### Surfaces that must feel like one family
 
-Home · Automation · Channels · Integrations · Activity · Dial flows · Phone Numbers  
+Home · Call plans · Agents · People · Connections · History  
 
-These are the Operate/Connect spine. Builder is a focused editor; Settings are administrative.
+Builder is a focused editor. MORE and Settings are secondary / administrative.
 
 ---
 
@@ -465,33 +471,33 @@ These are the Operate/Connect spine. Builder is a focused editor; Settings are a
 
 | Feature | Exists | Primary surface |
 |---------|--------|-----------------|
-| Agent create (manual / Vibe AI) | Yes | Agents, Vibe |
-| Prompt + variables | Yes | Builder → Prompt |
+| Agent create (wizard / Vibe) | Yes | Agents, Vibe |
+| Dual prompts (calls / meetings) | Yes | Builder → Prompt / Overview |
 | Voice stack + cloning | Yes | Builder → Voice, Providers |
 | Mid-call tools | Yes | Builder → Tools |
-| Booking suite | Yes | Tools + Scheduling + Channels |
+| Booking suite | Yes | Tools + Scheduling + Agent channels |
 | Voicemail AMD | Yes | Builder → Voicemail |
 | Engine / barge-in / VAD | Yes | Builder → Advanced |
 | Versions / publish | Yes | Builder → Versions |
-| Live browser test | Yes | Builder toolbar |
-| Outbound phone test | Yes | Builder toolbar |
+| Live browser / phone test | Yes | Builder toolbar |
 | Knowledge bases | Yes | Knowledge + Builder Overview |
-| Phone buy / assign / KYC | Yes | Phone Numbers + Channels |
-| WhatsApp Meta Business / BYO | Yes | WhatsApp + Channels |
-| Email via Brevo | Yes | Channels → Email |
-| Meetings join (Meet/Zoom/Teams) | Yes | Meet + Channels → Meetings |
-| Website form → call | Yes | Dial flows + Automation |
-| CSV / list campaigns | Yes | Dial flows |
-| Google Sheets dialer | Yes | Dial flows + Integrations |
-| Meta Lead Ads | Yes | Dial flows / Integrations |
-| Call rules / quiet hours | Yes | Automation |
-| After-call journeys | Yes | Automation |
-| CRM (HubSpot, Zoho) | Yes | Integrations |
+| Phone buy / assign / KYC | Yes | Phone Numbers + Connections |
+| WhatsApp Meta / BYO | Yes | WhatsApp + Agent channels |
+| Email via Brevo | Yes | Agent channels → Email |
+| Meetings join | Yes | Meet + Agent channels → Meetings |
+| Call plans timeline | Yes | Call plans |
+| If… (plain language) | Yes | Call plans steps |
+| Start once / Keep live | Yes | Call plans |
+| Sheet write-back step | Yes | Call plans |
+| People lists / CSV | Yes | People |
+| Google Sheets people | Yes | Connections |
+| Website forms / Meta leads | Yes | Connections |
+| CRM (HubSpot, Zoho) | Yes | Connections |
 | Post-call webhook | Yes | Builder Advanced |
 | Dispositions | Yes | Builder Advanced |
-| Call logs / callbacks / transfers | Yes | Activity |
-| Caller memory | Yes | Memory + Tools toggle |
-| Squads / handoffs | Yes | Squads + Journeys |
+| Call logs / callbacks / transfers | Yes | History |
+| Caller memory | Yes | Memory + Tools |
+| Teams / squads / handoffs | Yes | Squads + Call plan Call step + Builder strip |
 | Scheduling / public book page | Yes | Scheduling |
 | Analytics | Yes | Analytics |
 | Wallet / usage | Yes | Billing |
@@ -505,52 +511,50 @@ These are the Operate/Connect spine. Builder is a focused editor; Settings are a
 
 | Term | Meaning |
 |------|---------|
-| **Agent** | The AI voice persona (prompt, voice, tools, published version) |
-| **Builder** | UI to configure the agent’s speaking behaviour |
-| **Automation / Reach** | How leads and dial rules reach an agent |
-| **Channels** | Communication rails: phone, WA, email, meetings, booking |
-| **Dial flow / Campaign** | Outbound list, sheet, or website intake bound to an agent |
-| **Journey** | After-call multi-step sequence |
+| **Agent** | AI voice persona (prompt, voice, tools, published version) |
+| **Builder** | UI to configure how the agent speaks |
+| **Call plan** | Ordered steps for each person (product front door for journeys) |
+| **People** | Who you reach — CSV lists |
+| **Connections** | Shared wiring — Sheets, WhatsApp, email, website form, Meta |
+| **History** | Calls, callbacks, transfers (what happened) |
+| **Agent channels** | Per-agent phone / WA / email / meetings / booking deep page |
+| **Team / Squad** | Multi-agent handoff group |
 | **Production version** | Published snapshot used on live calls |
-| **Webcall** | Browser-based live test of the agent |
-| **Squad** | Multi-agent team for specialist handoffs |
+| **Webcall** | Browser live test |
 | **BYO** | Bring your own (keys / telephony / Brevo / BSP) |
+| **Journey / campaign** | Internal engine names — prefer Call plan / People in product copy |
 
 ---
 
-## 25. Suggested UX redesign brief (for outside help)
+## 25. UX redesign brief (current target)
 
-**Goal:** Make SnapServe feel structured, connected, and professional — Stripe-quality full pages, agent always at the center.
+**Goal:** SnapServe feels like voice orchestration you compose — agents talk, call plans decide what happens next.
 
 **Must preserve**
 
-- Builder vs Automation vs Channels separation  
-- Full sidebar discoverability of product surfaces  
-- Agent picker on agent-scoped pages  
+- Call plans IA sidebar and redirects  
+- Builder focused on speaking behaviour (not a second workflow canvas)  
+- Retries on Agent, not on plans  
+- Visible provider/model names  
 - Booking as one switch; Email as Brevo-only  
+- Current color theme  
 
-**Problems to solve**
+**Primary screens**
 
-- Users don’t see how Builder → Channels → Automation → Dial flows connect  
-- Dense / uneven visual hierarchy across pages  
-- Setup path (agent → number → source → journey) is easy to lose  
-
-**Primary screens to redesign first**
-
-1. Home (setup + health)  
-2. Agent Builder  
-3. Automation  
-4. Channels  
-5. Dial flows  
-6. Activity  
+1. Home (what’s running + create CTAs)  
+2. Call plans (timeline editor)  
+3. Agents / Builder (dual prompt + team strip)  
+4. People  
+5. Connections  
+6. History  
 
 **Success criteria**
 
-- New user can create an agent and place a test call in &lt; 10 minutes  
-- User can answer: “Which agent am I configuring?” on every Operate/Connect page  
-- No duplicate page titles; clear one-job-per-screen  
-- Cross-links make the agent connection obvious without dumping everything into Builder  
+- New user can create an agent and start a call plan without training  
+- User never needs “Journey / Automation / Dial flows” words to succeed  
+- No node graph; no retry controls on the plan  
+- Cross-links make Agent ↔ Plan ↔ People ↔ Connections obvious  
 
 ---
 
-*This document describes the shipped product model as of the Stripe-style full-page UX rebuild. Internal API field names (e.g. `campaign`, `campaignId`) may still use legacy naming.*
+*This document describes the shipped Call plans IA (Phases 1–5). Internal API field names (e.g. `journey`, `campaign`, `campaignId`) may still use legacy naming.*

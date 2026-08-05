@@ -25,6 +25,11 @@ export const knowledgeSourcesTable = pgTable("knowledge_sources", {
    * needs a compressed pinned summary to cover a large KB within budget.
    */
   krutrimSummaryHash: text("krutrim_summary_hash"),
+  /**
+   * JSON array of page URLs that failed during the last website crawl.
+   * Used by retry-crawl and the Needs-attention UI. NULL for non-website sources.
+   */
+  crawlFailedUrls: text("crawl_failed_urls"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

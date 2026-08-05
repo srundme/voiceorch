@@ -156,6 +156,7 @@ export async function createRecallBot(opts: {
   eventsUrl?: string;
   eventsList?: string[];
 }): Promise<RecallBotSummary> {
+  const loginGroupId = (process.env["RECALL_GOOGLE_LOGIN_GROUP_ID"] ?? "").trim();
   const res = await recallFetch("/bot/", {
     method: "POST",
     body: JSON.stringify({
@@ -175,6 +176,16 @@ export async function createRecallBot(opts: {
         zoom: "web_4_core",
         microsoft_teams: "web_4_core",
       },
+      // Signed-in Google Meet bot so the admit screen shows a real email address
+      // instead of an anonymous guest with no address.
+      ...(loginGroupId
+        ? {
+            google_meet: {
+              google_login_group_id: loginGroupId,
+              login_required: true,
+            },
+          }
+        : {}),
       // Speaker identification: subscribe to real-time participant events
       // (join/leave/speech_on/...) delivered as webhooks to our server.
       ...(opts.eventsUrl && opts.eventsList?.length
@@ -193,6 +204,16 @@ export async function createRecallBot(opts: {
     throw new Error(`Recall create bot failed (${res.status}): ${text.slice(0, 300)}`);
   }
   return summarizeBot(await res.json());
+}
+
+/** Workspace Meet bot identity for UI + calendar invites. */
+export function getMeetBotIdentity(): {
+  botEmail: string | null;
+  signedInGoogleMeet: boolean;
+} {
+  const botEmail = (process.env["RECALL_BOT_EMAIL"] ?? "").trim() || null;
+  const signedInGoogleMeet = !!(process.env["RECALL_GOOGLE_LOGIN_GROUP_ID"] ?? "").trim();
+  return { botEmail, signedInGoogleMeet };
 }
 
 export async function getRecallBot(botId: string): Promise<RecallBotSummary> {

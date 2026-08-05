@@ -2,6 +2,22 @@ import { db, knowledgeEntriesTable, agentKnowledgeSourcesTable } from "@workspac
 import { desc, eq, inArray, sql } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
 import { embedKbQuery, isKbVectorReady } from "../services/kb-embeddings.js";
+import {
+  buildLexicalSearchTerms,
+  classifyKbRetrievalMode,
+  isPureNonLatinQuery,
+  rrfMergeLists,
+  type KbRetrievalSource,
+} from "./kb-lexical.js";
+
+export {
+  buildLexicalSearchTerms,
+  isPureNonLatinQuery,
+  rrfMergeLists,
+  classifyKbRetrievalMode,
+  buildKnowledgeSearchPayload,
+} from "./kb-lexical.js";
+export type { KbRetrievalSource, KbSearchEntry } from "./kb-lexical.js";
 
 /**
  * Hard ceiling on KB entries sent to the LLM.
@@ -13,8 +29,8 @@ const MAX_KB_ENTRIES = 200;
 
 /** Max candidates pulled from the vector search before RRF merge. */
 const VECTOR_TOP_K = 12;
-/** Reciprocal-rank-fusion constant (standard value). */
-const RRF_K = 60;
+/** Max candidates from Indic-safe ILIKE / substring lexical fallback. */
+const LEXICAL_TOP_K = 20;
 
 /** Separator between formatted entries (and between per-source blocks). */
 const ENTRY_SEP = "\n\n---\n\n";
@@ -298,33 +314,40 @@ async function vectorSearch(sourceIds: number[], query: string, limit: number): 
   return rows.rows as EntryRow[];
 }
 
-/** Reciprocal-rank fusion of two ranked lists (equal weights), de-duped by id. */
+/**
+ * Indic-safe lexical fallback when English FTS is skipped or returns nothing.
+ * Case-insensitive substring match over title/content/keywords (no pg_trgm required).
+ */
+async function lexicalSearch(sourceIds: number[], query: string, limit: number): Promise<EntryRow[]> {
+  const terms = buildLexicalSearchTerms(query);
+  if (!terms.length) return [];
+  // Rank: prefer title hits, then shorter content (more focused chunks).
+  const likeClauses = terms.map(
+    (t) => sql`(
+      coalesce(title, '') ILIKE ${"%" + t + "%"}
+      OR content ILIKE ${"%" + t + "%"}
+      OR coalesce(keywords, '') ILIKE ${"%" + t + "%"}
+    )`,
+  );
+  const rows = await db.execute<EntryRow>(sql`
+    SELECT id, source_id AS "sourceId", title, content, keywords
+    FROM knowledge_entries
+    WHERE source_id IN (${sql.join(sourceIds.map((id) => sql`${id}`), sql`, `)})
+      AND (${sql.join(likeClauses, sql` OR `)})
+    ORDER BY
+      CASE WHEN title ILIKE ${"%" + terms[0]! + "%"} THEN 0 ELSE 1 END,
+      length(content) ASC,
+      id ASC
+    LIMIT ${limit}
+  `);
+  return rows.rows as EntryRow[];
+}
+
 function rrfMerge(listA: EntryRow[], listB: EntryRow[], topK: number): EntryRow[] {
-  const scores = new Map<number, { row: EntryRow; score: number }>();
-  const add = (list: EntryRow[]) => {
-    list.forEach((row, i) => {
-      const prev = scores.get(row.id);
-      const s = 1 / (RRF_K + i + 1);
-      if (prev) prev.score += s;
-      else scores.set(row.id, { row, score: s });
-    });
-  };
-  add(listA);
-  add(listB);
-  return Array.from(scores.values())
-    .sort((a, b) => b.score - a.score || a.row.id - b.row.id)
-    .slice(0, topK)
-    .map((x) => x.row);
+  return rrfMergeLists([listA, listB], topK);
 }
 
 /* ── Public API ──────────────────────────────────────────────────────────── */
-
-/**
- * How a per-turn KB retrieval result was produced (for execution-log
- * diagnostics). "prefetch" is assigned by the pipeline when the speech-start
- * full dump wins the turn over the live query retrieval.
- */
-export type KbRetrievalSource = "hybrid" | "fts" | "vector" | "dump" | "prefetch" | "none";
 
 export interface KbRetrievalResult {
   /** Prompt-injectable context block ("" = no hit). */
@@ -337,6 +360,8 @@ export interface KbRetrievalResult {
   contributingSourceIds?: number[];
   /** Dump paths only: true when the char/entry budget cut any source's content. */
   truncated?: boolean;
+  /** Ranked entry rows (dashboard test search / diagnostics). */
+  entries?: EntryRow[];
 }
 
 export interface KbRetrievalOpts {
@@ -453,36 +478,57 @@ export async function retrieveKbContextMultiEx(
   }
 
   try {
-    // Vector + FTS run concurrently; vector failure yields [] (pure FTS).
-    // skipFts (pure non-Latin query) goes straight to vector-only.
+    // Vector + FTS run concurrently; vector failure yields [].
+    // Pure non-Latin skips English FTS; we then run Indic-safe lexical fallback.
     const [vecRowsRaw, ftsRowsRaw] = await Promise.all([
       vectorSearch(unique, q, VECTOR_TOP_K).catch((err) => {
-        logger.warn({ err: String(err), sourceIds: unique }, "KB vector search failed — FTS-only this turn");
+        logger.warn({ err: String(err), sourceIds: unique }, "KB vector search failed — lexical/FTS this turn");
         return [] as EntryRow[];
       }),
-      opts.skipFts ? Promise.resolve([] as EntryRow[]) : ftsSearch(unique, q, cap),
+      opts.skipFts ? Promise.resolve([] as EntryRow[]) : ftsSearch(unique, q, cap).catch((err) => {
+        logger.warn({ err: String(err), sourceIds: unique }, "KB FTS search failed");
+        return [] as EntryRow[];
+      }),
     ]);
     const excluded = opts.excludeTitles?.length ? new Set(opts.excludeTitles) : null;
     const dropExcluded = (rows: EntryRow[]) => excluded ? rows.filter((r) => !r.title || !excluded.has(r.title)) : rows;
     const vecRows = dropExcluded(vecRowsRaw);
     const ftsRows = dropExcluded(ftsRowsRaw);
-    const merged = rrfMerge(vecRows, ftsRows, cap);
-    const source: KbRetrievalSource =
-      vecRows.length && ftsRows.length ? "hybrid"
-      : vecRows.length ? "vector"
-      : ftsRows.length ? "fts"
-      : "none";
+
+    let lexicalRows: EntryRow[] = [];
+    if (opts.skipFts || ftsRows.length === 0) {
+      lexicalRows = dropExcluded(
+        await lexicalSearch(unique, q, LEXICAL_TOP_K).catch((err) => {
+          logger.warn({ err: String(err), sourceIds: unique }, "KB lexical search failed");
+          return [] as EntryRow[];
+        }),
+      );
+    }
+
+    const lists = [vecRows, ftsRows, lexicalRows].filter((l) => l.length > 0);
+    const merged = lists.length ? rrfMergeLists(lists, cap) : [];
+    const source = classifyKbRetrievalMode(vecRows.length, ftsRows.length, lexicalRows.length);
     const contributingSourceIds = rowSourceIds(merged);
     logger.info(
-      { sourceIds: unique, mode: source, skipFts: opts.skipFts === true, vecHits: vecRows.length, ftsHits: ftsRows.length, merged: merged.length, contributingSourceIds, ms: Date.now() - t0 },
+      {
+        sourceIds: unique,
+        mode: source,
+        skipFts: opts.skipFts === true,
+        vecHits: vecRows.length,
+        ftsHits: ftsRows.length,
+        lexicalHits: lexicalRows.length,
+        merged: merged.length,
+        contributingSourceIds,
+        ms: Date.now() - t0,
+      },
       "KB retrieval",
     );
     const text = merged.length ? formatEntries(merged) : "";
     kbCacheSet(cacheKey, text, source, contributingSourceIds);
-    return { text, source, latencyMs: Date.now() - t0, contributingSourceIds };
+    return { text, source, latencyMs: Date.now() - t0, contributingSourceIds, entries: merged };
   } catch (err) {
     logger.warn({ err, sourceIds: unique }, "KB context load failed");
-    return { text: "", source: "none", latencyMs: Date.now() - t0 };
+    return { text: "", source: "none", latencyMs: Date.now() - t0, entries: [] };
   }
 }
 
