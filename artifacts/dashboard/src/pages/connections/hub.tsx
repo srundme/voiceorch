@@ -13,7 +13,7 @@ import { BrandLogo, BrandLogoBadge, type BrandSlug } from "@/components/brand-lo
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { ArrowRight, Check, Globe, Loader2, Calendar } from "lucide-react";
+import { ArrowRight, Check, Globe, Loader2, Calendar, Video } from "lucide-react";
 import { EmailChannelCard, useEmailChannelReady } from "@/pages/agents/email-channel-card";
 import FromWebsitePage from "@/pages/campaigns/from-website";
 import MetaLeadsPage from "@/pages/meta-leads";
@@ -24,47 +24,65 @@ import { useListCalendars, useListEventTypes } from "@workspace/api-client-react
 type SetupId = "sheets" | "whatsapp" | "email" | "website" | "meta" | "calendar" | null;
 
 type ConnCard = {
-  id: Exclude<SetupId, null>;
+  id: string;
+  /** Inline setup panel under Connections (?setup=…) */
+  setupId?: Exclude<SetupId, null>;
   brand?: BrandSlug;
-  icon?: "globe" | "calendar";
+  icon?: "globe" | "calendar" | "video";
   title: string;
   blurb: string;
+  /** Navigate away (e.g. Meeting bots paste-link page) */
   href?: string;
+  cta?: string;
 };
 
 const CARDS: ConnCard[] = [
   {
     id: "sheets",
+    setupId: "sheets",
     brand: "googleSheets",
     title: "Google Sheets",
     blurb: "Watch a sheet and feed people into a call plan.",
   },
   {
     id: "calendar",
+    setupId: "calendar",
     icon: "calendar",
     title: "Calendar & booking",
     blurb: "Google Calendar setup for mid-call appointments.",
   },
   {
+    id: "meetings",
+    icon: "video",
+    title: "Meetings",
+    blurb: "Paste a Meet / Zoom / Teams link and send an agent into the call.",
+    href: "/app/meet",
+    cta: "Join with link",
+  },
+  {
     id: "whatsapp",
+    setupId: "whatsapp",
     brand: "whatsapp",
     title: "WhatsApp",
     blurb: "Send follow-ups after calls from your call plan.",
   },
   {
     id: "email",
+    setupId: "email",
     brand: "brevo",
     title: "Email (Brevo)",
     blurb: "Bring your Brevo key to email people mid-plan.",
   },
   {
     id: "website",
+    setupId: "website",
     icon: "globe",
     title: "Website form",
     blurb: "Form submit → person enters your call plan.",
   },
   {
     id: "meta",
+    setupId: "meta",
     brand: "meta",
     title: "Meta Lead Ads",
     blurb: "New Meta form leads enter your call plan.",
@@ -81,6 +99,8 @@ function CardMark({ card }: { card: ConnCard }) {
     <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-black/5 bg-white shadow-sm">
       {card.icon === "calendar" ? (
         <Calendar className="size-5 text-neutral-800" strokeWidth={1.75} />
+      ) : card.icon === "video" ? (
+        <Video className="size-5 text-neutral-800" strokeWidth={1.75} />
       ) : (
         <Globe className="size-5 text-neutral-800" strokeWidth={1.75} />
       )}
@@ -108,15 +128,15 @@ export default function ConnectionsPage() {
   const [, navigate] = useLocation();
   const search = useSearch();
   const setupParam = new URLSearchParams(search).get("setup") as SetupId;
-  const [setup, setSetup] = useState<SetupId>(
-    setupParam && CARDS.some((c) => c.id === setupParam) ? setupParam : null,
-  );
+  const isSetupId = (v: string | null): v is Exclude<SetupId, null> =>
+    !!v && ["sheets", "whatsapp", "email", "website", "meta", "calendar"].includes(v);
+  const [setup, setSetup] = useState<SetupId>(isSetupId(setupParam) ? setupParam : null);
   const { toast } = useToast();
   const qc = useQueryClient();
   const emailReady = useEmailChannelReady();
 
   useEffect(() => {
-    if (setupParam && CARDS.some((c) => c.id === setupParam)) setSetup(setupParam);
+    if (isSetupId(setupParam)) setSetup(setupParam);
   }, [setupParam]);
 
   const openSetup = (id: SetupId) => {
@@ -326,12 +346,17 @@ export default function ConnectionsPage() {
   return (
     <StripePage
       title="Connections"
-      description="Wire the tools your call plans use — Sheets, calendar, WhatsApp, email, and lead forms."
+      description="Wire the tools your call plans use — Sheets, calendar, meetings, WhatsApp, email, and lead forms."
       back={{ href: "/app/home", label: "Home" }}
     >
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {CARDS.map((card) => {
-          const ready = readyMap[card.id];
+          const ready = card.setupId ? readyMap[card.setupId] : true;
+          const chipLabel = card.href
+            ? "Open"
+            : ready
+              ? "Ready"
+              : "Set up";
           return (
             <button
               key={card.id}
@@ -341,7 +366,7 @@ export default function ConnectionsPage() {
                   navigate(card.href);
                   return;
                 }
-                openSetup(card.id);
+                if (card.setupId) openSetup(card.setupId);
               }}
               className={cn(
                 "group flex flex-col items-start gap-4 rounded-2xl border border-border bg-card p-5 text-left",
@@ -350,14 +375,14 @@ export default function ConnectionsPage() {
             >
               <div className="flex w-full items-start justify-between gap-3">
                 <CardMark card={card} />
-                <StatusChip ready={ready} label={ready ? "Ready" : "Set up"} />
+                <StatusChip ready={ready} label={chipLabel} />
               </div>
               <div className="min-w-0 space-y-1">
                 <p className="text-[15px] font-semibold tracking-tight">{card.title}</p>
                 <p className="text-[12px] leading-relaxed text-muted-foreground">{card.blurb}</p>
               </div>
               <span className="mt-auto inline-flex items-center gap-1 text-[12px] font-medium text-muted-foreground group-hover:text-foreground">
-                {ready ? "Manage" : "Connect"}
+                {card.cta ?? (ready ? "Manage" : "Connect")}
                 <ArrowRight className="size-3.5 opacity-60 transition-transform group-hover:translate-x-0.5" />
               </span>
             </button>
@@ -370,7 +395,7 @@ export default function ConnectionsPage() {
         <Link href="/app/agents" className="underline underline-offset-2 hover:text-foreground">
           Agents
         </Link>{" "}
-        → Overview to assign a number.
+        → Overview to assign a number. For meetings-only, use a dedicated agent (no phone) and paste the link under Meetings.
       </p>
     </StripePage>
   );

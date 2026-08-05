@@ -66,13 +66,27 @@ export default function MeetPage() {
 
   return (
     <StripePage
-      title="Meeting Bots"
-      description="Send a voice agent into a Google Meet, Zoom, or Teams meeting. Meeting prompt lives on the agent; join settings are under Agent channels → Meetings."
+      title="Meetings"
+      description="Paste a Google Meet, Zoom, or Teams link and send an agent into the call."
       back={{ href: "/app/connections", label: "Connections" }}
       actions={
         <AgentContextBar agents={agents} selectedId={selectedId} onChange={setAgentId} />
       }
     >
+      <div className="max-w-xl space-y-3 rounded-lg border border-border bg-muted/20 px-4 py-3 text-[12px] text-muted-foreground leading-relaxed">
+        <p className="font-medium text-foreground text-[13px]">How to use</p>
+        <ol className="list-decimal pl-4 space-y-1">
+          <li>
+            Pick an agent above (use a dedicated meetings agent if you want it separate from phone calls — no phone number required).
+          </li>
+          <li>
+            Set the <span className="text-foreground">In meetings</span> prompt on the agent, and turn on{" "}
+            <span className="text-foreground">Channels → Meetings</span>.
+          </li>
+          <li>Paste the meeting link below and click Join meeting. Admit the bot if the host asks.</li>
+        </ol>
+      </div>
+
       <div className="max-w-xl space-y-4 rounded-lg border p-4">
         {agentId ? (
           <p className="text-[11px] text-muted-foreground">
@@ -87,7 +101,9 @@ export default function MeetPage() {
             </a>
             .
           </p>
-        ) : null}
+        ) : (
+          <p className="text-[11px] text-muted-foreground">Select an agent first.</p>
+        )}
         {identityQ.data?.botEmail ? (
           <p className="text-[11px] text-muted-foreground leading-relaxed">
             Bot joins as <span className="font-mono text-foreground">{identityQ.data.botEmail}</span>
