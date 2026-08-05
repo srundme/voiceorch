@@ -1852,13 +1852,13 @@ function VoiceTab({ form }: { form: any }) {
   );
 
   return (
-    <div className="relative p-6 space-y-8 max-w-3xl">
+    <div className="relative flex min-h-full flex-col gap-8 px-4 py-5 sm:px-6 lg:px-8">
 
       {/* ── SPEAKING ── */}
       <section className="space-y-4">
         <div>
-          <h3 className="text-[13px] font-semibold text-foreground tracking-tight">Speaking</h3>
-          <p className="text-[11px] text-muted-foreground mt-0.5">
+          <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Speaking</h3>
+          <p className="mt-0.5 text-[12px] text-muted-foreground">
             How the agent sounds on the call — provider, voice, speed, and model.
           </p>
         </div>
@@ -2107,8 +2107,8 @@ function VoiceTab({ form }: { form: any }) {
       {/* ── LISTEN ── */}
       <section className="space-y-4">
         <div>
-          <h3 className="text-[13px] font-semibold text-foreground tracking-tight">Listening</h3>
-          <p className="text-[11px] text-muted-foreground mt-0.5">
+          <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Listening</h3>
+          <p className="mt-0.5 text-[12px] text-muted-foreground">
             How the agent hears the caller — noise cancel, backchannels, and ambient bed.
           </p>
         </div>
@@ -2242,8 +2242,8 @@ function VoiceCallFeelPresets({ form }: { form: any }) {
   return (
     <section className="space-y-3">
       <div>
-        <h3 className="text-[13px] font-semibold text-foreground tracking-tight">Phone feel</h3>
-        <p className="text-[11px] text-muted-foreground mt-0.5">
+        <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Phone feel</h3>
+        <p className="mt-0.5 text-[12px] text-muted-foreground">
           How quickly the agent takes the turn — same Call Engine knobs as Advanced → Engine.
         </p>
         {asrProviderVal === "sarvam" && (
@@ -2541,12 +2541,12 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
   };
 
   return (
-    <div className="relative p-6 space-y-6">
+    <div className="relative flex min-h-full flex-col gap-6 px-4 py-5 sm:px-6 lg:px-8">
 
       {/* ── Platform Tools ─── */}
       <div>
-        <h3 className="text-sm font-semibold mb-0.5">Platform Tools</h3>
-        <p className="text-xs text-muted-foreground mb-3">Built-in capabilities you can enable for this agent</p>
+        <h3 className="text-[15px] font-semibold tracking-[-0.02em]">Platform Tools</h3>
+        <p className="mb-3 mt-0.5 text-[12px] text-muted-foreground">Built-in capabilities you can enable for this agent</p>
 
         <div className="space-y-2">
 
@@ -3049,7 +3049,7 @@ function VoicemailTab({ form }: { form: any }) {
   const mode   = form.watch("machineDetectionMode");
   const action = form.watch("voicemailAction");
   return (
-    <div className="relative max-w-xl space-y-5 px-4 py-6 sm:px-6">
+    <div className="relative w-full max-w-xl space-y-5 px-4 py-5 sm:px-6 lg:px-8">
       <div>
         <h3 className="text-[15px] font-semibold tracking-[-0.02em]">Voicemail</h3>
         <p className="mt-1 text-[12px] text-muted-foreground">
@@ -3240,7 +3240,7 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
   return (
     <div className="flex flex-col">
       {/* ── Sub-nav ── */}
-      <div className="flex items-center gap-1 px-4 pt-4 pb-3 border-b border-border/40 flex-shrink-0">
+      <div className="flex flex-shrink-0 items-center gap-1 border-b border-border/40 px-4 pb-3 pt-4 sm:px-6 lg:px-8">
         {nav.map(n => (
           <button
             key={n.id}
@@ -3260,14 +3260,14 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
       </div>
 
       {/* ── Content ── */}
-      <div className="px-5 py-5 space-y-4">
+      <div className="space-y-4 px-4 py-5 sm:px-6 lg:px-8">
 
         {/* ── ENGINE ── */}
         {section === "engine" && (
           <>
             <div>
-              <h3 className="text-[13px] font-semibold text-foreground">Call Engine</h3>
-              <p className="text-[11px] text-muted-foreground mt-0.5">
+              <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Call Engine</h3>
+              <p className="mt-0.5 text-[12px] text-muted-foreground">
                 The few knobs that actually drive live calls — interrupt words, when the turn ends, and how long to wait before the agent speaks.
               </p>
             </div>
@@ -3450,7 +3450,7 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
           <>
             {/* ── Auto-Redial on Drop ── */}
             <div>
-              <h3 className="text-[13px] font-semibold text-foreground">Auto-Redial on Drop</h3>
+              <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Auto-Redial on Drop</h3>
               <p className="text-[11px] text-muted-foreground mt-0.5">
                 When a call ends unexpectedly (network drop, accidental hang-up), automatically schedule a callback to the same number.
               </p>
@@ -3497,7 +3497,7 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
             </div>
 
             <div>
-              <h3 className="text-[13px] font-semibold text-foreground">Call Limits</h3>
+              <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Call Limits</h3>
               <p className="text-[11px] text-muted-foreground mt-0.5">
                 Hard cut-off for call duration. Silence check-in lives on Engine.
               </p>
@@ -3553,7 +3553,7 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
         {section === "compliance" && (
           <>
             <div>
-              <h3 className="text-[13px] font-semibold text-foreground">Compliance Frameworks</h3>
+              <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Compliance Frameworks</h3>
               <p className="text-[11px] text-muted-foreground mt-0.5">
                 Regulatory disclosures injected into the system prompt at runtime. Enable the frameworks that apply to your use-case.
               </p>
@@ -3712,7 +3712,7 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
         {section === "integrations" && (
           <>
             <div>
-              <h3 className="text-[13px] font-semibold text-foreground">CRM / post-call webhook</h3>
+              <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">CRM / post-call webhook</h3>
               <p className="text-[11px] text-muted-foreground mt-0.5">
                 Notify your CRM or Zap after a call ends. Separate from Journey lead intake — leave blank if you only need intake.
               </p>
@@ -3991,7 +3991,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
       <div>
         <div className="flex items-center gap-2 mb-1">
           <Tag className="h-4 w-4 text-amber-400" />
-          <h3 className="text-[13px] font-semibold text-foreground">Call Disposition</h3>
+          <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Call Disposition</h3>
         </div>
         <p className="text-[11px] text-muted-foreground mt-0.5">
           Save the agent first to define disposition categories.
@@ -4005,7 +4005,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
       <div className="flex items-center justify-between mb-1">
         <div className="flex items-center gap-2">
           <Tag className="h-4 w-4 text-amber-400" />
-          <h3 className="text-[13px] font-semibold text-foreground">Call Disposition</h3>
+          <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Call Disposition</h3>
         </div>
         <Button
           type="button"
@@ -6265,11 +6265,9 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
                 "builder-workspace-shell mx-auto flex min-h-full w-full",
                 activeTab === "prompt" || activeTab === "overview"
                   ? "max-w-[1200px]"
-                  : activeTab === "voice" || activeTab === "advanced"
-                    ? "max-w-[980px]"
-                    : activeTab === "tools"
-                      ? "max-w-[920px]"
-                      : "max-w-[860px]",
+                  : activeTab === "versions"
+                    ? "max-w-[1000px]"
+                    : "max-w-[1100px]",
               )}
             >
               <form
