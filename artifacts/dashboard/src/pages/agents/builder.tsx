@@ -97,6 +97,7 @@ import { AgentInboundPanel } from "./agent-inbound-panel";
 import {
   PropertyRow,
   StatusDot,
+  WorkspaceInspector,
   WorkspaceSegmentNav,
   type WorkspaceNavItem,
 } from "@/components/workspace/workspace";
@@ -454,11 +455,18 @@ const SECTION_FIELDS: Record<CardSection, string[]> = {
 
 /* ── Overview ───────────────────────────────────────────────────────────────── */
 
-function OverviewTab({ form, agent }: { form: any; agent: any }) {
+function OverviewTab({
+  form,
+  agent,
+  onGoToPrompt,
+}: {
+  form: any;
+  agent: any;
+  onGoToPrompt?: () => void;
+}) {
   const [openSection, setOpenSection] = useState<CardSection | null>(null);
   const [confirmDiscardSection, setConfirmDiscardSection] = useState<CardSection | null>(null);
   const sectionSnapshotRef = useRef<{ values: Record<string, any>; voiceCustomMode: boolean }>({ values: {}, voiceCustomMode: false });
-  const [generateOpen, setGenerateOpen] = useState(false);
   const [cloneOpen, setCloneOpen] = useState(false);
   const queryClient = useQueryClient();
 
@@ -677,29 +685,132 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
 
   const savePipelineDialog = () => setOpenSection(null);
 
-  const agentName = form.watch("name") as string | undefined;
+  const greetingMessage = String(form.watch("greetingMessage") ?? "").trim();
+  const systemPrompt = String(form.watch("systemPrompt") ?? "").trim();
+  const knowledgeIds = (form.watch("knowledgeSourceIds") ?? []) as number[];
+  const voiceReady = isGeminiLive
+    ? true
+    : Boolean(ttsVoice && ttsVoice !== "__custom__");
+  const promptReady = systemPrompt.length >= 40;
+  const greetingReady = greetingMessage.length >= 4;
+
+  const { data: overviewPhones } = useListPhoneNumbers({
+    query: { queryKey: getListPhoneNumbersQueryKey(), staleTime: 60_000 },
+  });
+  const assignedPhone = useMemo(() => {
+    const list = Array.isArray(overviewPhones) ? overviewPhones : [];
+    return list.find((p: any) => p.agentId === agent?.id);
+  }, [overviewPhones, agent?.id]);
+  const phoneReady = Boolean(assignedPhone || form.watch("preferredManagedNumber"));
+
+  const readinessItems = [
+    {
+      id: "prompt",
+      label: "Call prompt",
+      ready: promptReady,
+      detail: promptReady ? `${systemPrompt.length.toLocaleString()} chars` : "Add instructions on Prompt",
+      action: onGoToPrompt,
+    },
+    {
+      id: "greeting",
+      label: "Welcome message",
+      ready: greetingReady,
+      detail: greetingReady ? "Set" : "Configure on Prompt",
+      action: onGoToPrompt,
+    },
+    {
+      id: "voice",
+      label: "Voice",
+      ready: voiceReady,
+      detail: isGeminiLive ? (geminiLiveVoiceName || "Kore") : (ttsVoiceLabel || "Select a voice"),
+      action: () => openPipelineDialog("voice"),
+    },
+    {
+      id: "phone",
+      label: "Phone number",
+      ready: phoneReady,
+      detail: phoneReady
+        ? (assignedPhone?.number ?? form.watch("preferredManagedNumber") ?? "Assigned")
+        : "Assign below",
+    },
+    {
+      id: "knowledge",
+      label: "Knowledge",
+      ready: knowledgeIds.length > 0,
+      detail: knowledgeIds.length > 0 ? `${knowledgeIds.length} source${knowledgeIds.length === 1 ? "" : "s"}` : "Optional",
+      optional: true,
+    },
+  ] as const;
+
+  const requiredReady = readinessItems.filter((i) => !("optional" in i && i.optional)).every((i) => i.ready);
 
   return (
     <div className="flex flex-col">
-      <GeneratePromptSheet
-        open={generateOpen}
-        onOpenChange={setGenerateOpen}
-        defaultAgentName={agentName ?? agent?.name ?? ""}
-        defaultLanguage={language ?? "en-US"}
-        currentPrompt={form.watch("systemPrompt") ?? ""}
-        onApply={(prompt, meta) => {
-          form.setValue("systemPrompt", prompt, { shouldDirty: true });
-          form.setValue("systemPromptGenMeta", meta, { shouldDirty: true });
-        }}
-      />
-
-      {/* ── Studio overview: pipeline → welcome → canvas ─────────────────────── */}
+      {/* ── Readiness dashboard ──────────────────────────────────────────────── */}
       <div className="relative min-w-0">
-        <div className="p-5 sm:p-6 space-y-6 max-w-3xl">
-          {/* Pipeline chips — top of Overview */}
+        <div className="space-y-6 p-5 sm:p-6">
+          <section className="space-y-3">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div className="space-y-0.5">
+                <h2 className="text-[15px] font-semibold tracking-[-0.02em]">Readiness</h2>
+                <p className="text-[12px] text-muted-foreground">
+                  {requiredReady
+                    ? "Core setup looks ready — edit prompts anytime on the Prompt tab."
+                    : "Finish these items before going live."}
+                </p>
+              </div>
+              {onGoToPrompt && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 gap-1.5 text-xs"
+                  onClick={onGoToPrompt}
+                >
+                  <FileText className="size-3.5" />
+                  Edit prompt
+                </Button>
+              )}
+            </div>
+            <ul className="divide-y divide-border/70 overflow-hidden rounded-xl border border-border/60 bg-card/40">
+              {readinessItems.map((item) => (
+                <li key={item.id} className="flex items-center gap-3 px-3.5 py-2.5">
+                  <span
+                    className={cn(
+                      "flex size-6 shrink-0 items-center justify-center rounded-full",
+                      item.ready
+                        ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                        : "optional" in item && item.optional
+                          ? "bg-muted text-muted-foreground"
+                          : "bg-amber-500/15 text-amber-700 dark:text-amber-400",
+                    )}
+                  >
+                    {item.ready ? <Check className="size-3.5" /> : <AlertCircle className="size-3.5" />}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[13px] font-medium text-foreground">{item.label}</p>
+                    <p className="truncate text-[11px] text-muted-foreground">{item.detail}</p>
+                  </div>
+                  {"action" in item && item.action && !item.ready && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 shrink-0 px-2 text-[11px]"
+                      onClick={item.action}
+                    >
+                      Fix
+                    </Button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </section>
+
+          {/* Pipeline chips */}
           <section className="space-y-2.5">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/55">Pipeline</p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
               <AgentConfigCard
                 icon={isGeminiLive ? <Globe /> : <Mic />}
                 label={isGeminiLive ? "Language" : "Transcriber"}
@@ -727,116 +838,12 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
             </div>
           </section>
 
-          {/* Welcome / first message */}
-          <section className="space-y-3">
-            <div className="space-y-0.5">
-              <h3 className="text-base font-semibold tracking-tight text-foreground">Agent Welcome Message</h3>
-              <p className="text-[12px] text-muted-foreground">What callers hear at the start of the call.</p>
-            </div>
-            <div className="space-y-3 rounded-xl border border-border/50 bg-card/30 p-4">
-              <div className="flex items-center justify-between gap-3">
-                <Label className="text-[12px] font-medium text-foreground/90">Who speaks first</Label>
-                <FormField control={form.control} name="firstSpeaker" render={({ field }) => (
-                  <Select value={field.value === "user" ? "user" : "assistant"} onValueChange={field.onChange}>
-                    <SelectTrigger className="h-8 w-48 rounded-lg text-[12px] shrink-0 border-border/50">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent position="popper">
-                      <SelectItem value="assistant" className="text-[13px]">Assistant speaks first</SelectItem>
-                      <SelectItem value="user" className="text-[13px]">User speaks first</SelectItem>
-                    </SelectContent>
-                  </Select>
-                )} />
-              </div>
-              <FormField control={form.control} name="greetingMessage" render={({ field }) => (
-                <FormItem className="space-y-0">
-                  <FormControl>
-                    <Textarea
-                      className="min-h-[64px] max-h-[88px] text-[13px] leading-relaxed resize-none rounded-lg border-border/40 bg-background/50 px-3.5 py-2.5 shadow-none focus-visible:ring-0 focus-visible:border-foreground/20"
-                      placeholder="Hello, how can I help?"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage className="text-[10px]" />
-                </FormItem>
-              )} />
-            </div>
-          </section>
-
-          {/* Canvas — call + meeting prompts */}
-          <section className="space-y-3">
-            <div className="flex items-start justify-between gap-3">
-              <div className="space-y-0.5">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-base font-semibold tracking-tight text-foreground">Talk</h3>
-                  <Badge variant="secondary" className="text-[10px] font-medium px-1.5 py-0 h-5 rounded-md">
-                    {langLabel}
-                  </Badge>
-                </div>
-                <p className="text-[12px] text-muted-foreground max-w-lg">
-                  Separate instructions for phone calls and video meetings.
-                </p>
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-8 shrink-0 text-xs gap-1.5 rounded-lg"
-                onClick={() => setGenerateOpen(true)}
-              >
-                <Sparkles className="w-3 h-3" />
-                Generate
-              </Button>
-            </div>
-            <Tabs defaultValue="calls" className="w-full">
-              <TabsList className="h-9 w-full sm:w-auto grid grid-cols-2 sm:inline-flex">
-                <TabsTrigger value="calls" className="gap-1.5 text-xs">
-                  <Phone className="h-3.5 w-3.5" />
-                  On calls
-                </TabsTrigger>
-                <TabsTrigger value="meetings" className="gap-1.5 text-xs">
-                  <Video className="h-3.5 w-3.5" />
-                  In meetings
-                </TabsTrigger>
-              </TabsList>
-              <TabsContent value="calls" className="mt-3">
-                <div className="rounded-xl border border-border/50 bg-card/40 overflow-hidden shadow-sm">
-                  <FormField control={form.control} name="systemPrompt" render={({ field }) => (
-                    <FormItem className="space-y-0">
-                      <FormControl>
-                        <Textarea
-                          className="min-h-[280px] text-[13px] resize-none font-mono leading-[1.75] rounded-none border-0 bg-transparent px-4 pt-4 pb-3 shadow-none focus-visible:ring-0"
-                          placeholder="You are a helpful voice assistant on phone calls…"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage className="text-[10px] px-4 pb-2" />
-                    </FormItem>
-                  )} />
-                </div>
-              </TabsContent>
-              <TabsContent value="meetings" className="mt-3 space-y-2">
-                <div className="rounded-xl border border-border/50 bg-card/40 overflow-hidden shadow-sm">
-                  <FormField control={form.control} name="meetingPrompt" render={({ field }) => (
-                    <FormItem className="space-y-0">
-                      <FormControl>
-                        <Textarea
-                          className="min-h-[280px] text-[13px] resize-none font-mono leading-[1.75] rounded-none border-0 bg-transparent px-4 pt-4 pb-3 shadow-none focus-visible:ring-0"
-                          placeholder="Optional. Leave blank to reuse the call prompt. Example: You are in a live video meeting — be concise, greet attendees by name…"
-                          {...field}
-                          value={field.value ?? ""}
-                        />
-                      </FormControl>
-                      <FormMessage className="text-[10px] px-4 pb-2" />
-                    </FormItem>
-                  )} />
-                </div>
-                <p className="text-[11px] text-muted-foreground px-0.5">
-                  Used when this agent joins Meet / Zoom / Teams. Channel join settings live under Channels → Meetings.
-                </p>
-              </TabsContent>
-            </Tabs>
-          </section>
+          {agent?.id != null && (
+            <section className="space-y-2.5">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/55">Team</p>
+              <AgentTeamStrip agentId={agent.id} compact />
+            </section>
+          )}
 
           {/* Phone number — assign on the agent (not Connections) */}
           {agent?.id != null && (
@@ -1250,7 +1257,7 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
           {/* Knowledge */}
           <section className="space-y-3 pb-4">
             <div className="space-y-0.5">
-              <h3 className="text-base font-semibold tracking-tight text-foreground">Knowledge</h3>
+              <h3 className="text-[15px] font-semibold tracking-tight text-foreground">Knowledge</h3>
               <p className="text-[12px] text-muted-foreground">
                 Documents the agent can search during conversations.
               </p>
@@ -1276,8 +1283,6 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
 
         </div>
       </div>
-
-
     </div>
   );
 }
@@ -1293,6 +1298,7 @@ function PromptTab({ form }: { form: any }) {
   const callPromptLen = String(form.watch("systemPrompt") ?? "").length;
   const meetPromptLen = String(form.watch("meetingPrompt") ?? "").length;
   const promptLen = promptSurface === "calls" ? callPromptLen : meetPromptLen;
+  const langLabel = LANGUAGES.find(l => l.value === agentLang)?.label ?? agentLang ?? "Language";
 
   return (
     <div className="relative flex min-h-full flex-col gap-6 px-4 py-5 sm:px-6 lg:px-8">
@@ -1309,11 +1315,53 @@ function PromptTab({ form }: { form: any }) {
         }}
       />
 
+      <section className="space-y-3">
+        <div className="space-y-0.5">
+          <h2 className="text-[15px] font-semibold tracking-[-0.02em]">Welcome</h2>
+          <p className="text-[12px] text-muted-foreground">
+            What callers hear at the start of the call.
+          </p>
+        </div>
+        <div className="space-y-3 overflow-hidden rounded-lg border border-border bg-card p-3.5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <Label className="text-[12px] font-medium text-foreground/90">Who speaks first</Label>
+            <FormField control={form.control} name="firstSpeaker" render={({ field }) => (
+              <Select value={field.value === "user" ? "user" : "assistant"} onValueChange={field.onChange}>
+                <SelectTrigger className="h-8 w-48 shrink-0 border-border/50 text-[12px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent position="popper">
+                  <SelectItem value="assistant" className="text-[13px]">Assistant speaks first</SelectItem>
+                  <SelectItem value="user" className="text-[13px]">User speaks first</SelectItem>
+                </SelectContent>
+              </Select>
+            )} />
+          </div>
+          <FormField control={form.control} name="greetingMessage" render={({ field }) => (
+            <FormItem className="space-y-0">
+              <FormControl>
+                <Textarea
+                  className="min-h-[72px] max-h-[120px] resize-none rounded-lg border-border/40 bg-background/50 px-3.5 py-2.5 text-[13px] leading-relaxed shadow-none focus-visible:border-foreground/20 focus-visible:ring-0"
+                  placeholder="Hello, how can I help?"
+                  {...field}
+                />
+              </FormControl>
+              <FormMessage className="text-[10px]" />
+            </FormItem>
+          )} />
+        </div>
+      </section>
+
       <div className="flex items-end justify-between gap-4">
         <div>
-          <h2 className="text-[15px] font-semibold tracking-[-0.02em]">Prompt</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-[15px] font-semibold tracking-[-0.02em]">Talk</h2>
+            <Badge variant="secondary" className="h-5 rounded-md px-1.5 py-0 text-[10px] font-medium">
+              {langLabel}
+            </Badge>
+          </div>
           <p className="mt-0.5 text-[12px] text-muted-foreground">
-            On calls and in meetings — edit each surface separately.
+            Separate instructions for phone calls and video meetings.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -1358,7 +1406,7 @@ function PromptTab({ form }: { form: any }) {
                     <span className="font-mono text-[10px] text-muted-foreground/70">markdown · plain text</span>
                   </div>
                   <Textarea
-                    className="min-h-[min(52vh,520px)] resize-y rounded-none border-0 bg-transparent px-3.5 py-3.5 font-mono text-[12.5px] leading-6 shadow-none focus-visible:ring-0"
+                    className="min-h-[min(48vh,480px)] resize-y rounded-none border-0 bg-transparent px-3.5 py-3.5 font-mono text-[12.5px] leading-6 shadow-none focus-visible:ring-0"
                     placeholder="You are a helpful voice assistant on phone calls…"
                     {...field}
                   />
@@ -1380,7 +1428,7 @@ function PromptTab({ form }: { form: any }) {
                     <span className="font-mono text-[10px] text-muted-foreground/70">blank = use call prompt</span>
                   </div>
                   <Textarea
-                    className="min-h-[min(52vh,520px)] resize-y rounded-none border-0 bg-transparent px-3.5 py-3.5 font-mono text-[12.5px] leading-6 shadow-none focus-visible:ring-0"
+                    className="min-h-[min(48vh,480px)] resize-y rounded-none border-0 bg-transparent px-3.5 py-3.5 font-mono text-[12.5px] leading-6 shadow-none focus-visible:ring-0"
                     placeholder="Optional. Leave blank to reuse the call prompt…"
                     {...field}
                     value={field.value ?? ""}
@@ -6158,9 +6206,7 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
         </div>
       </header>
 
-      <AgentTeamStrip agentId={agent.id} />
-
-      {/* Rename Agent dialog */}
+      {/* Rename Agent dialog — team strip lives on Overview */}
       <Dialog open={renameDialogOpen} onOpenChange={setRenameDialogOpen}>
         <DialogContent className="sm:max-w-[440px]">
           <DialogHeader>
@@ -6214,25 +6260,46 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
           />
 
           <div ref={tabContentRef} className="min-h-0 flex-1 overflow-y-auto">
-            <form
-              onSubmit={(e) => e.preventDefault()}
+            <div
               className={cn(
-                "builder-workspace-content mx-auto min-h-full w-full",
-                activeTab === "prompt" || activeTab === "voice" || activeTab === "advanced"
-                  ? "max-w-[980px]"
-                  : activeTab === "tools"
-                    ? "max-w-[920px]"
-                    : "max-w-[860px]",
+                "builder-workspace-shell mx-auto flex min-h-full w-full",
+                activeTab === "prompt" || activeTab === "overview"
+                  ? "max-w-[1200px]"
+                  : activeTab === "voice" || activeTab === "advanced"
+                    ? "max-w-[980px]"
+                    : activeTab === "tools"
+                      ? "max-w-[920px]"
+                      : "max-w-[860px]",
               )}
             >
-              {activeTab === "overview"  && <OverviewTab form={form} agent={agent} />}
-              {activeTab === "prompt"    && <PromptTab form={form} />}
-              {activeTab === "voice"     && <VoiceTab form={form} />}
-              {activeTab === "tools"     && <ToolsTab form={form} agentId={agentId} />}
-              {activeTab === "voicemail" && <VoicemailTab form={form} />}
-              {activeTab === "advanced"  && <AdvancedTab form={form} agent={agent} />}
-              {activeTab === "versions"  && <VersionsTab agentId={agent.id} />}
-            </form>
+              <form
+                onSubmit={(e) => e.preventDefault()}
+                className={cn(
+                  "builder-workspace-content min-h-full min-w-0 flex-1",
+                  activeTab === "prompt" && "lg:max-w-[calc(100%-296px)]",
+                )}
+              >
+                {activeTab === "overview"  && (
+                  <OverviewTab
+                    form={form}
+                    agent={agent}
+                    onGoToPrompt={() => handleTabClick("prompt")}
+                  />
+                )}
+                {activeTab === "prompt"    && <PromptTab form={form} />}
+                {activeTab === "voice"     && <VoiceTab form={form} />}
+                {activeTab === "tools"     && <ToolsTab form={form} agentId={agentId} />}
+                {activeTab === "voicemail" && <VoicemailTab form={form} />}
+                {activeTab === "advanced"  && <AdvancedTab form={form} agent={agent} />}
+                {activeTab === "versions"  && <VersionsTab agentId={agent.id} />}
+              </form>
+
+              {activeTab === "prompt" && (
+                <div className="sticky top-0 hidden h-[calc(100vh-7.5rem)] shrink-0 self-start lg:block">
+                  <PromptReadinessAside form={form} agent={agent} onLiveTest={() => setShowWebcall(true)} />
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Mobile-only sticky actions */}
@@ -6333,7 +6400,80 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
 
 /* ── Empty state ────────────────────────────────────────────────────────────── */
 
-function AgentTeamStrip({ agentId }: { agentId: number }) {
+function PromptReadinessAside({
+  form,
+  agent,
+  onLiveTest,
+}: {
+  form: any;
+  agent: any;
+  onLiveTest?: () => void;
+}) {
+  const systemPrompt = String(form.watch("systemPrompt") ?? "").trim();
+  const greeting = String(form.watch("greetingMessage") ?? "").trim();
+  const meetingPrompt = String(form.watch("meetingPrompt") ?? "").trim();
+  const firstSpeaker = form.watch("firstSpeaker") === "user" ? "User first" : "Assistant first";
+  const ttsVoice = form.watch("ttsVoice");
+  const isGeminiLive = isGeminiLiveAgent({
+    llmModel: form.watch("llmModel"),
+    voiceStack: form.watch("voiceStack"),
+  });
+  const voiceOk = isGeminiLive || Boolean(ttsVoice && ttsVoice !== "__custom__");
+
+  const rows = [
+    { label: "Welcome", ready: greeting.length >= 4, detail: firstSpeaker },
+    { label: "Call prompt", ready: systemPrompt.length >= 40, detail: `${systemPrompt.length.toLocaleString()} chars` },
+    { label: "Meeting prompt", ready: meetingPrompt.length > 0, detail: meetingPrompt ? `${meetingPrompt.length.toLocaleString()} chars` : "Uses call prompt", optional: true },
+    { label: "Voice", ready: voiceOk, detail: voiceOk ? "Set" : "Missing" },
+  ];
+
+  return (
+    <WorkspaceInspector title="At a glance" className="h-full bg-muted/[0.08]">
+      <div className="space-y-4">
+        <div className="space-y-1">
+          <p className="truncate text-[13px] font-medium">{agent?.name ?? "Agent"}</p>
+          <p className="inline-flex items-center gap-1.5 text-[11px] capitalize text-muted-foreground">
+            <StatusDot tone={agent?.status === "active" ? "success" : "neutral"} />
+            {agent?.status === "active" ? "Live" : "Draft"}
+          </p>
+        </div>
+        <ul className="space-y-2">
+          {rows.map((row) => (
+            <li key={row.label} className="flex items-start gap-2.5 rounded-lg border border-border/60 bg-background/60 px-2.5 py-2">
+              <span
+                className={cn(
+                  "mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full",
+                  row.ready
+                    ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                    : row.optional
+                      ? "bg-muted text-muted-foreground"
+                      : "bg-amber-500/15 text-amber-700 dark:text-amber-400",
+                )}
+              >
+                {row.ready ? <Check className="size-3" /> : <AlertCircle className="size-3" />}
+              </span>
+              <div className="min-w-0">
+                <p className="text-[12px] font-medium">{row.label}</p>
+                <p className="truncate text-[10px] text-muted-foreground">{row.detail}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
+        {onLiveTest && (
+          <Button type="button" variant="outline" size="sm" className="h-8 w-full gap-1.5 text-[11px]" onClick={onLiveTest}>
+            <Play className="size-3.5" />
+            Live test
+          </Button>
+        )}
+        <p className="text-[10px] leading-relaxed text-muted-foreground">
+          Save from the header when you are done. Overview shows phone, pipeline, and knowledge readiness.
+        </p>
+      </div>
+    </WorkspaceInspector>
+  );
+}
+
+function AgentTeamStrip({ agentId, compact }: { agentId: number; compact?: boolean }) {
   const [, navigate] = useLocation();
   const squadsQ = useQuery({
     queryKey: ["agent-team-strip", agentId],
@@ -6351,9 +6491,15 @@ function AgentTeamStrip({ agentId }: { agentId: number }) {
 
   if (squadsQ.isLoading) return null;
 
+  const shell = cn(
+    compact
+      ? "flex flex-wrap items-center gap-2 rounded-xl border border-border/60 bg-card/40 px-3 py-2.5"
+      : "flex shrink-0 flex-wrap items-center gap-2 border-b border-border/70 bg-muted/15 px-3 py-1.5 sm:px-5",
+  );
+
   if (teams.length === 0) {
     return (
-      <div className="flex shrink-0 items-center gap-2 border-b border-border/70 bg-muted/15 px-3 py-1.5 sm:px-5">
+      <div className={shell}>
         <Users className="size-3.5 shrink-0 text-muted-foreground" />
         <p className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">
           Solo agent — not on a team yet.
@@ -6373,9 +6519,9 @@ function AgentTeamStrip({ agentId }: { agentId: number }) {
   }
 
   return (
-    <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border/70 bg-muted/15 px-3 py-1.5 sm:px-5">
+    <div className={shell}>
       <Users className="size-3.5 shrink-0 text-muted-foreground" />
-      <span className="text-[11px] text-muted-foreground">Team</span>
+      {!compact && <span className="text-[11px] text-muted-foreground">Team</span>}
       {teams.map((team) => {
         const role = team.members.find((m) => m.agentId === agentId)?.roleName;
         const mates = team.members
