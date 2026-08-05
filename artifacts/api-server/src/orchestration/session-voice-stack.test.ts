@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AgentConfig } from "./types.js";
 import { resolveVoiceStack } from "./adapters/live/gemini-live-voices.js";
 
@@ -88,5 +88,47 @@ describe("session voice stack routing", () => {
         providerKeys: new Map(),
       }),
     ).toThrow(/Google API key/i);
+  });
+});
+
+describe("GeminiLivePipeline carrier keepalive", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("feeds the VoBiz bridge while the model is silent, and stops on close", () => {
+    vi.useFakeTimers();
+    const onAudioOut = vi.fn();
+    const pipeline = new GeminiLivePipeline({
+      ...minimalSessionConfig(minimalAgentConfig()),
+      telephonyProvider: "vobiz",
+      onAudioOut,
+    });
+
+    // VoBiz drops the call after ~2 s of an idle bridge — frames must arrive
+    // well before that even though Gemini has not spoken yet.
+    vi.advanceTimersByTime(1000);
+    expect(onAudioOut).toHaveBeenCalled();
+    expect((onAudioOut.mock.calls[0]![0] as Buffer).length).toBe(320); // 20 ms @ 8 kHz PCM16
+
+    pipeline.close();
+    onAudioOut.mockClear();
+    vi.advanceTimersByTime(1000);
+    expect(onAudioOut).not.toHaveBeenCalled();
+  });
+
+  it("stays silent on mulaw carriers when the agent has no ambient bed", () => {
+    vi.useFakeTimers();
+    const onAudioOut = vi.fn();
+    const pipeline = new GeminiLivePipeline({
+      ...minimalSessionConfig(minimalAgentConfig()),
+      telephonyProvider: "twilio",
+      rawPcmOutput: false,
+      onAudioOut,
+    });
+
+    vi.advanceTimersByTime(1000);
+    expect(onAudioOut).not.toHaveBeenCalled();
+    pipeline.close();
   });
 });

@@ -15,6 +15,13 @@ import {
   encodeMulaw,
   upsample8to16,
 } from "../../audio.js";
+import {
+  AmbientNoiseStream,
+  FileAmbientNoiseStream,
+  TRACK_PARAMS,
+  loadPcmLoop,
+  peekCachedPcmLoop,
+} from "../../ambient.js";
 import { logger } from "../../../lib/logger.js";
 import { buildToolDefs } from "../../../services/tool-executor.js";
 import {
@@ -78,6 +85,22 @@ export class GeminiLivePipeline implements VoiceSession {
   private static readonly FRAME_MS = 20;
   private static readonly LEAD_MS = 240; // frames allowed ahead of real time (carrier jitter buffer)
 
+  // ── Carrier keepalive / ambient bed ──────────────────────────────────────
+  // Gemini Live only emits audio while the model is actually speaking, so the
+  // wait for the greeting and every conversational pause left the outbound leg
+  // completely idle. VoBiz drops the call (hangup 4010) when the audio bridge
+  // receives nothing for ~2 s even with keepCallAlive="true" — long enough that
+  // Live agents went silent before the greeting ever arrived. This mirrors the
+  // classic pipeline's watchdog: fill genuine gaps with the agent's ambient bed
+  // (or PCM zeros on VoBiz), and stay quiet while real frames are flowing so
+  // two senders never interleave on the same 20 ms cadence.
+  private ambientStream: AmbientNoiseStream | FileAmbientNoiseStream | null = null;
+  private keepaliveTimer: ReturnType<typeof setInterval> | null = null;
+  private lastRealFrameAt = 0;
+  private readonly startedAtMs = Date.now();
+  private firstFrameLogged = false;
+  private static readonly KEEPALIVE_FILL_GAP_MS = 500;
+
   // Serialize server-message handling: tool calls await inside the handler, and
   // firing handlers unordered lets late audio/transcripts overtake an
   // interruption (stale-answer symptom).
@@ -97,6 +120,70 @@ export class GeminiLivePipeline implements VoiceSession {
     if (config.answeredAt) {
       this.recording.anchorStart(config.answeredAt);
     }
+    this.initAmbient();
+    this.startKeepalive();
+  }
+
+  /** Sample rate of the raw-PCM output leg (8000 unless a webcall client
+   *  negotiated HD 16k). Only meaningful when rawPcmOutput is true. */
+  private pcmOutRate(): number {
+    return this.config.rawPcmOutput ? (this.config.rawPcmOutputRate ?? 8000) : 8000;
+  }
+
+  private initAmbient(): void {
+    const track = this.agent.ambientNoiseTrack;
+    if (!this.agent.ambientNoiseEnabled || !track) return;
+    const volume = Math.max(0, Math.min(1,
+      typeof this.agent.ambientNoiseVolume === "number" && Number.isFinite(this.agent.ambientNoiseVolume)
+        ? this.agent.ambientNoiseVolume
+        : 1.0,
+    ));
+
+    if (Object.prototype.hasOwnProperty.call(TRACK_PARAMS, track)) {
+      this.ambientStream = new AmbientNoiseStream(track, volume);
+      return;
+    }
+    const cached = peekCachedPcmLoop(track);
+    if (cached) {
+      this.ambientStream = new FileAmbientNoiseStream(cached, volume);
+      return;
+    }
+    loadPcmLoop(track)
+      .then((pcm) => {
+        if (!this.closed) this.ambientStream = new FileAmbientNoiseStream(pcm, volume);
+      })
+      .catch((err) => {
+        logger.error({ callId: this.config.callId, track, err }, "Gemini Live: ambient load failed — keepalive falls back to silence");
+      });
+  }
+
+  private startKeepalive(): void {
+    const isVobiz = this.config.telephonyProvider === "vobiz";
+    const silenceFrame = Buffer.alloc(
+      this.config.rawPcmOutput
+        ? (this.pcmOutRate() / 1000) * GeminiLivePipeline.FRAME_MS * 2
+        : GeminiLivePipeline.FRAME_MS * 8,
+      0,
+    );
+
+    const timer = setInterval(() => {
+      if (this.closed) return;
+      // Real audio flowing → the pump owns the wire; stay silent.
+      if (Date.now() - this.lastRealFrameAt < GeminiLivePipeline.KEEPALIVE_FILL_GAP_MS) return;
+      if (this.ambientStream) {
+        this.config.onAudioOut(this.nextAmbientFrame(this.ambientStream));
+      } else if (isVobiz) {
+        this.config.onAudioOut(silenceFrame);
+      }
+    }, GeminiLivePipeline.FRAME_MS);
+    (timer as unknown as { unref?: () => void }).unref?.();
+    this.keepaliveTimer = timer;
+  }
+
+  private nextAmbientFrame(stream: AmbientNoiseStream | FileAmbientNoiseStream): Buffer {
+    if (!this.config.rawPcmOutput) return stream.nextMulawChunk();
+    const pcm8k = stream.nextPcmChunk();
+    return this.pcmOutRate() === 16000 ? upsample8to16(pcm8k) : pcm8k;
   }
 
   onAudioIn(mulawChunk: Buffer): void {
@@ -202,6 +289,10 @@ export class GeminiLivePipeline implements VoiceSession {
     if (this.closed) return;
     this.closed = true;
     this.stopPump();
+    if (this.keepaliveTimer) {
+      clearInterval(this.keepaliveTimer);
+      this.keepaliveTimer = null;
+    }
     this.outFrames8k.length = 0;
     try {
       this.session?.close();
@@ -377,8 +468,18 @@ export class GeminiLivePipeline implements VoiceSession {
       const pcm8k = this.outFrames8k.shift()!;
       this.framesSent++;
       this.isPlayingOut = true;
+      this.lastRealFrameAt = Date.now();
+      if (!this.firstFrameLogged) {
+        this.firstFrameLogged = true;
+        logger.info(
+          { callId: this.config.callId, bootMs: this.lastRealFrameAt - this.startedAtMs },
+          "Gemini Live: first agent audio on the wire",
+        );
+      }
       this.recording.addAgentChunk(pcm8k); // record at playback time, not arrival time
-      const out = this.config.rawPcmOutput ? pcm8k : encodeMulaw(pcm8k);
+      const out = this.config.rawPcmOutput
+        ? (this.pcmOutRate() === 16000 ? upsample8to16(pcm8k) : pcm8k)
+        : encodeMulaw(pcm8k);
       this.config.onAudioOut(out);
     }
   }
