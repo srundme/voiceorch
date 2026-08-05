@@ -1288,53 +1288,23 @@ export default function CampaignsPage({
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden">
       {/* Stats + actions (parent StripePage owns the page title) */}
-      <div className="shrink-0 space-y-4 border-b border-border px-4 sm:px-6 py-4">
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          {isFetching && !isLoading && (
-            <span className="mr-auto text-[11px] text-muted-foreground">Refreshing…</span>
-          )}
-          <button
-            type="button"
-            onClick={() => setHelpOpen(true)}
-            className="h-8 w-8 rounded-lg border border-border/60 bg-muted/40 hover:bg-muted/70 flex items-center justify-center text-muted-foreground/50 hover:text-foreground transition-all"
-            title="People list guide"
-          >
-            <HelpCircle className="h-3.5 w-3.5" />
-          </button>
-          {!listsMode && (
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8 text-xs gap-1.5 rounded-lg"
-              onClick={() => {
-                const token = localStorage.getItem("voiceorch:session");
-                const url = `${BASE}/api/campaigns/export.csv${token ? `?token=${encodeURIComponent(token)}` : ""}`;
-                window.open(url, "_blank");
-              }}
-            >
-              <FileText className="h-3.5 w-3.5" /> Export
-            </Button>
-          )}
-          <Button size="sm" className="h-8 text-xs gap-1.5 rounded-lg" onClick={() => setCreateOpen(true)}>
-            <Plus className="h-3.5 w-3.5" /> New list
-          </Button>
-        </div>
+      <div className="shrink-0 border-b border-border px-4 sm:px-6 py-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-stretch lg:gap-3">
+          <div className="min-w-0 flex-1">
         {listsMode ? (
           <MetricStrip cols={2}>
             <MetricCard
               label="Lists"
               value={listStats?.listCount ?? 0}
               sub={`${listStats?.activeLists ?? 0} active`}
-              icon={<Upload className="h-4 w-4 text-emerald-500" />}
-              accent={(listStats?.listCount ?? 0) > 0 ? "text-emerald-500" : undefined}
+              icon={<Upload />}
               loading={isLoading}
             />
             <MetricCard
               label="People in lists"
               value={listStats?.totalLeads ?? 0}
               sub="Across all CSV lists"
-              icon={<Users className="h-4 w-4 text-violet-500" />}
-              accent={(listStats?.totalLeads ?? 0) > 0 ? "text-violet-500" : undefined}
+              icon={<Users />}
               loading={isLoading}
             />
           </MetricStrip>
@@ -1343,52 +1313,79 @@ export default function CampaignsPage({
             <MetricCard
               label="Active lists"
               value={stats?.activeCampaigns ?? 0}
-              icon={<Megaphone className="h-4 w-4 text-emerald-500" />}
-              accent={(stats?.activeCampaigns ?? 0) > 0 ? "text-emerald-500" : undefined}
+              icon={<Megaphone />}
               loading={isLoading}
             />
             <MetricCard
               label="Listening Sources"
               value={stats?.listeningCampaigns ?? 0}
               sub="Real-time intake"
-              icon={<Wifi className="h-4 w-4 text-sky-500" />}
-              accent={(stats?.listeningCampaigns ?? 0) > 0 ? "text-sky-500" : undefined}
+              icon={<Wifi />}
               loading={isLoading}
             />
             <MetricCard
               label="Live Calls"
               value={stats?.liveCalls ?? 0}
               sub="In progress"
-              icon={<PhoneCall className="h-4 w-4 text-blue-500" />}
-              accent={(stats?.liveCalls ?? 0) > 0 ? "text-blue-500" : undefined}
+              icon={<PhoneCall />}
               loading={isLoading}
             />
             <MetricCard
               label="Queued Leads"
               value={stats?.queuedLeads ?? 0}
               sub="Pending call"
-              icon={<Timer className="h-4 w-4 text-amber-500" />}
-              accent={(stats?.queuedLeads ?? 0) > 0 ? "text-amber-500" : undefined}
+              icon={<Timer />}
               loading={isLoading}
             />
             <MetricCard
               label="Leads Today"
               value={stats?.todayLeads ?? 0}
               sub="Since midnight UTC"
-              icon={<Users className="h-4 w-4 text-violet-500" />}
-              accent={(stats?.todayLeads ?? 0) > 0 ? "text-violet-500" : undefined}
+              icon={<Users />}
               loading={isLoading}
             />
             <MetricCard
               label="Bookings Today"
               value={stats?.todayBookings ?? 0}
               sub="Meetings booked"
-              icon={<BookMarked className="h-4 w-4 text-rose-500" />}
-              accent={(stats?.todayBookings ?? 0) > 0 ? "text-rose-500" : undefined}
+              icon={<BookMarked />}
               loading={isLoading}
             />
           </MetricStrip>
         )}
+          </div>
+
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 lg:self-center">
+            {isFetching && !isLoading && (
+              <span className="mr-auto text-[11px] text-muted-foreground lg:mr-0">Refreshing…</span>
+            )}
+            <button
+              type="button"
+              onClick={() => setHelpOpen(true)}
+              className="h-9 w-9 rounded-lg border border-border bg-muted/40 hover:bg-muted/70 flex items-center justify-center text-muted-foreground hover:text-foreground transition-all"
+              title="People list guide"
+            >
+              <HelpCircle className="h-4 w-4" />
+            </button>
+            {!listsMode && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-9 text-xs gap-1.5 rounded-lg"
+                onClick={() => {
+                  const token = localStorage.getItem("voiceorch:session");
+                  const url = `${BASE}/api/campaigns/export.csv${token ? `?token=${encodeURIComponent(token)}` : ""}`;
+                  window.open(url, "_blank");
+                }}
+              >
+                <FileText className="h-3.5 w-3.5" /> Export
+              </Button>
+            )}
+            <Button size="sm" className="h-9 text-xs gap-1.5 rounded-lg" onClick={() => setCreateOpen(true)}>
+              <Plus className="h-3.5 w-3.5" /> New list
+            </Button>
+          </div>
+        </div>
       </div>
 
       {/* ── Content ── */}

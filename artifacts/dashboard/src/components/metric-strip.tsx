@@ -23,17 +23,17 @@ export function MetricCard({
   return (
     <div
       className={cn(
-        "bg-card border border-border/60 rounded-xl px-4 py-3.5 flex items-center gap-3 min-w-0",
+        "h-full bg-card border border-border/60 rounded-xl px-4 py-3.5 flex items-center gap-3 min-w-0",
         className,
       )}
     >
       {icon && (
-        <div className="h-8 w-8 rounded-lg bg-muted/50 border border-border/50 flex items-center justify-center shrink-0 [&_svg]:h-4 [&_svg]:w-4">
+        <div className="size-8 rounded-lg bg-muted border border-border flex items-center justify-center shrink-0 text-muted-foreground [&_svg]:size-4">
           {icon}
         </div>
       )}
-      <div className="min-w-0">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/45 leading-none mb-1.5 truncate">
+      <div className="min-w-0 flex-1 flex flex-col justify-center">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground leading-none mb-1.5 truncate">
           {label}
         </p>
         {loading ? (
@@ -43,9 +43,10 @@ export function MetricCard({
             {value}
           </p>
         )}
-        {sub && !loading && (
-          <p className="text-[10px] text-muted-foreground/40 mt-0.5 truncate">{sub}</p>
-        )}
+        {/* Reserve sub line so sibling cards stay the same height */}
+        <p className="text-[10px] text-muted-foreground mt-0.5 truncate min-h-[1rem]">
+          {!loading && sub ? sub : "\u00a0"}
+        </p>
       </div>
     </div>
   );
@@ -73,7 +74,7 @@ export function MetricStrip({
             : "grid-cols-2 sm:grid-cols-4";
 
   return (
-    <div className={cn("grid gap-2.5", colClass, className)}>
+    <div className={cn("grid gap-2.5 items-stretch", colClass, className)}>
       {children}
     </div>
   );
