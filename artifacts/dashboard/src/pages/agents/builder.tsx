@@ -6078,6 +6078,15 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
     return () => window.removeEventListener("beforeunload", warnBeforeLeave);
   }, [isDirty]);
 
+  const watchedName = form.watch("name") as string | undefined;
+  useEffect(() => {
+    const label = (watchedName ?? agent?.name)?.trim();
+    document.title = label ? `${label} · Agent · SnapServe` : "Agent · SnapServe";
+    return () => {
+      document.title = "SnapServe";
+    };
+  }, [watchedName, agent?.name]);
+
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
   const [renameValue, setRenameValue] = useState("");
   const handleRenameSave = () => {
@@ -6102,7 +6111,7 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
   return (
     <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
       {/* Single toolbar — agent identity + actions */}
-      <header className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border bg-background px-3 sm:h-14 sm:px-5">
+      <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border bg-background px-3 sm:h-16 sm:px-5">
         <div className="flex min-w-0 items-center gap-2.5">
           <Button
             type="button"
@@ -6134,11 +6143,18 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
           <button
             type="button"
             onClick={() => { setRenameValue(agent.name ?? ""); setRenameDialogOpen(true); }}
-            className="inline-flex max-w-[320px] items-center gap-1.5 truncate text-left"
+            className="group inline-flex min-w-0 max-w-[min(420px,52vw)] items-center gap-2 rounded-lg border border-border bg-card px-2.5 py-1 text-left shadow-sm hover:border-foreground/25 hover:bg-muted/40"
             title="Rename agent"
           >
-            <span className="truncate text-[14px] font-semibold tracking-[-0.02em]">{agent.name}</span>
-            <Pencil className="size-3 shrink-0 text-muted-foreground opacity-60" />
+            <span className="min-w-0">
+              <span className="block text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-foreground leading-none">
+                Editing
+              </span>
+              <span className="mt-0.5 block truncate text-[15px] sm:text-[16px] font-semibold tracking-[-0.03em] text-foreground leading-tight">
+                {agent.name}
+              </span>
+            </span>
+            <Pencil className="size-3.5 shrink-0 text-muted-foreground opacity-70 group-hover:opacity-100" />
           </button>
           <span className="inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-muted/30 px-1.5 py-0.5 text-[10px] capitalize text-muted-foreground">
             <StatusDot tone={agent.status === "active" ? "success" : "neutral"} />
