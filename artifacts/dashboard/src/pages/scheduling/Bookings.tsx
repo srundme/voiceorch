@@ -10,7 +10,6 @@ import type { Booking } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRoute, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,6 +21,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError } from "@/lib/format-api-error";
+import { MonoBadge, titleCaseStatus } from "@/components/mono-badge";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -29,33 +29,17 @@ function CalSyncBadge({ status, error }: { status: Booking["calendarSyncStatus"]
   let badge: React.ReactNode;
   switch (status) {
     case "synced":
-      badge = (
-        <Badge className="bg-green-100 text-green-800 border-green-200 hover:bg-green-100 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800 text-xs">
-          Synced
-        </Badge>
-      );
+      badge = <MonoBadge size="xs">Synced</MonoBadge>;
       break;
     case "scope_insufficient":
-      badge = (
-        <Badge className="bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-100 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800 text-xs">
-          Scope issue
-        </Badge>
-      );
+      badge = <MonoBadge size="xs" outline>Scope issue</MonoBadge>;
       break;
     case "sync_failed":
-      badge = (
-        <Badge className="bg-red-100 text-red-800 border-red-200 hover:bg-red-100 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800 text-xs">
-          Sync failed
-        </Badge>
-      );
+      badge = <MonoBadge size="xs" outline>Sync failed</MonoBadge>;
       break;
     case "skipped":
     default:
-      badge = (
-        <Badge variant="outline" className="text-muted-foreground text-xs">
-          No calendar
-        </Badge>
-      );
+      badge = <MonoBadge size="xs" outline>No calendar</MonoBadge>;
       break;
   }
 
@@ -74,13 +58,7 @@ function CalSyncBadge({ status, error }: { status: Booking["calendarSyncStatus"]
 }
 
 function statusBadge(status: string) {
-  switch (status) {
-    case "confirmed":   return <Badge className="bg-muted text-foreground border-border">{status}</Badge>;
-    case "pending":     return <Badge className="bg-muted text-foreground border-border">{status}</Badge>;
-    case "cancelled":   return <Badge className="bg-muted text-foreground border-border">{status}</Badge>;
-    case "rescheduled": return <Badge className="bg-muted text-foreground border-border">{status}</Badge>;
-    default:            return <Badge variant="outline">{status}</Badge>;
-  }
+  return <MonoBadge>{titleCaseStatus(status)}</MonoBadge>;
 }
 
 export default function BookingDetailPage() {
