@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { customFetch } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
+import { StripePage } from "@/components/stripe-page";
 import { Plus, Sheet, Loader2, Play, Pause, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -45,16 +46,20 @@ export default function AutomaticCallsPage() {
   const rows = q.data ?? [];
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
-      {/* Toolbar — parent People page owns the title */}
-      <div className="flex items-center justify-end gap-2">
-        <Button asChild className="h-9">
+    <StripePage
+      title="Google Sheets"
+      description="Watch a sheet and dial new rows automatically."
+      back={{ href: "/app/campaigns", label: "Campaigns" }}
+      actions={
+        <Button asChild size="sm" className="h-9 gap-1.5">
           <Link href="/app/automatic-calls/new">
-            <Plus className="h-4 w-4 mr-1.5" />
+            <Plus className="h-4 w-4" />
             Connect sheet
           </Link>
         </Button>
-      </div>
+      }
+    >
+    <div className="mx-auto max-w-5xl space-y-6">
 
       {q.isLoading && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground py-12 justify-center">
@@ -130,5 +135,6 @@ export default function AutomaticCallsPage() {
         ))}
       </div>
     </div>
+    </StripePage>
   );
 }

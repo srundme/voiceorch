@@ -326,7 +326,7 @@ function navItemIsActive(location: string, href: string): boolean {
   if (href === "/app/history" && (location.startsWith("/app/calls") || location.startsWith("/app/history"))) return true;
   if (
     href === "/app/campaigns"
-    && (location.startsWith("/app/campaigns") || location.startsWith("/app/people") || location.startsWith("/app/automatic-calls"))
+    && (location.startsWith("/app/campaigns") || location.startsWith("/app/automatic-calls"))
   ) return true;
   if (
     href === "/app/connections"

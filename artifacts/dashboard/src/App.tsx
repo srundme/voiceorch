@@ -48,7 +48,6 @@ import NotFound                from "@/pages/not-found";
 import PrivacyPage             from "@/pages/privacy";
 import TermsPage               from "@/pages/terms";
 import OnboardingPage          from "@/pages/onboarding";
-import CampaignsPage           from "@/pages/campaigns/index";
 import CampaignDetailPage      from "@/pages/campaigns/[id]";
 import BatchDetailPage         from "@/pages/campaigns/[id]/batches/[batchId]";
 import BatchWizardPage         from "@/pages/campaigns/batch-wizard";
@@ -86,7 +85,6 @@ import TestSimulatorPage    from "@/pages/test-simulator";
 import VibePage             from "@/pages/vibe";
 import HomePage             from "@/pages/home/index";
 import ChannelsRedirectPage from "@/pages/channels/index";
-import PeoplePage           from "@/pages/people/index";
 import CommandCenterRedirect from "@/pages/command-center/index";
 import MemoryPage           from "@/pages/memory/index";
 import DocsPage             from "@/pages/docs/index";
@@ -308,7 +306,10 @@ function AppRoutes() {
         <Route path="/app/call-plans">
           <TabRedirect to="/app/home" />
         </Route>
-        <Route path="/app/people" component={PeoplePage} />
+        {/* Legacy People / Leads → Campaigns */}
+        <Route path="/app/people">
+          <TabRedirect to="/app/campaigns" />
+        </Route>
         <Route path="/app/automation">
           <TabRedirect to="/app/home" />
         </Route>
@@ -409,9 +410,7 @@ function AppRoutes() {
         {/* ── Automatic Calls (detail/wizard live; list → Campaigns Sheets tab) ── */}
         <Route path="/app/automatic-calls/new" component={AutomaticCallsWizardPage} />
         <Route path="/app/automatic-calls/:id" component={AutomaticCallDetailPage} />
-        <Route path="/app/automatic-calls">
-          <TabRedirect to="/app/campaigns?tab=scheduled" />
-        </Route>
+        <Route path="/app/automatic-calls" component={AutomaticCallsPage} />
 
         {/* ── Meta Leads → Connections Meta card ── */}
         <Route path="/app/meta-leads">

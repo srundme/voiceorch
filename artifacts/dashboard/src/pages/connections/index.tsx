@@ -2321,7 +2321,7 @@ export default function ConnectionsPage() {
                 <div className="min-w-0 flex-1">
                   <p className="text-[13px] font-medium">Google Sheets</p>
                   <p className="truncate text-[11px] text-muted-foreground">
-                    Connect once — use under Automatic calls or Leads
+                    Connect once — use under Campaigns → Automatic Calls
                   </p>
                 </div>
                 <Button size="sm" className="h-8 px-2.5 text-[11px]" onClick={() => void connectSheets()}>
@@ -2368,8 +2368,8 @@ export default function ConnectionsPage() {
         </div>
         <p className="px-0.5 text-[11px] text-muted-foreground">
           Advanced intake URLs. For most setups use{" "}
-          <button type="button" className="underline underline-offset-2" onClick={() => navigate("/app/people?tab=lead-sources")}>
-            Leads → Website forms
+          <button type="button" className="underline underline-offset-2" onClick={() => navigate("/app/campaigns")}>
+            Campaigns
           </button>
           .
         </p>
@@ -2384,14 +2384,14 @@ export default function ConnectionsPage() {
           ) : webhookConnections.length === 0 ? (
             <div className="px-3.5 py-6 text-center">
               <p className="text-[12px] text-muted-foreground">
-                No webhook connections yet. Create a lead list under Leads, or add a website form intake.
+                No webhook connections yet. Create a campaign with a website form, or add intake under Connections.
               </p>
               <div className="mt-3 flex justify-center gap-2">
                 <Button size="sm" variant="outline" className="h-8 text-[11px]" onClick={() => navigate("/app/connections?setup=website")}>
                   Website form
                 </Button>
-                <Button size="sm" className="h-8 text-[11px]" onClick={() => navigate("/app/people")}>
-                  Leads
+                <Button size="sm" className="h-8 text-[11px]" onClick={() => navigate("/app/campaigns")}>
+                  Campaigns
                 </Button>
               </div>
             </div>

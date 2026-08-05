@@ -147,7 +147,7 @@ export function ReachPanel({
       id: "website",
       title: "Website form → Call",
       desc: "Webhook on form submit dials this agent",
-      href: `/app/campaigns?tab=lead-sources&agentId=${agentId}`,
+      href: `/app/campaigns?agentId=${agentId}`,
       icon: Globe,
     },
     {
@@ -323,7 +323,7 @@ export function ReachPanel({
               <Link href={`/app/campaigns?agentId=${agentId}`}>All campaigns</Link>
             </Button>
             <Button asChild size="sm" variant="ghost" className="h-7 px-2 text-[11px]">
-              <Link href="/app/campaigns?tab=scheduled">Automatic calls</Link>
+              <Link href="/app/automatic-calls">Automatic calls</Link>
             </Button>
           </div>
         )}

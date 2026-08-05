@@ -1,53 +1,42 @@
 # SnapServe — product knowledge base
 
-**Purpose:** Feature map for the restored **Campaigns** core system (outbound dialing at scale).
+**Purpose:** Feature map for the **Campaigns** core system (outbound dialing at scale).
 
 ## Primary navigation
 
 Home · **Campaigns** · Agents · Connections · History
 
-(Plus Knowledge, Memory, Squads, Analytics, Bookings under More.)
-
 ## Default path
 
 1. Create an **agent**
-2. Create a **campaign** (agent + phone + lead source)
-3. Upload leads / connect webhook / Meta / sheet
-4. Activate → batches dial → track outcomes in History
+2. Open **Campaigns** → **Start a campaign** from a source
+3. Attach agent + phone → activate → dial → track in History
 
 ## Campaigns (`/app/campaigns`)
 
-Tabbed manager:
+Single page (no tabs). Top section is the starter:
 
-| Tab | What |
-|-----|------|
-| **Campaigns** | Full campaign list — CSV, webhook, Meta, CRM. Create, activate, pause. |
-| **Automatic Calls** | Google Sheets → dial pipelines |
-| **From Website** | Website form webhooks + Meta Lead Ads |
+| Start with | Opens |
+|------------|--------|
+| **Meta** | New campaign wizard (Meta Lead Ads) |
+| **Website** | New campaign wizard (webhook / form) |
+| **Google Sheets** | `/app/automatic-calls/new` sheet pipeline |
+| **CSV file** | New campaign wizard (batch upload) |
+| **Zoho CRM** | New campaign wizard (CRM import) |
 
-Deep links (unchanged):
+Below: **Your campaigns** list, metrics, search/filter (when any exist).
+
+Deep links:
 
 - `/app/campaigns/:id` — detail, Activate / Pause / Resume / Stop, batches
 - `/app/campaigns/:id/batches/new` — batch wizard
-- `/app/campaigns/:id/batches/:batchId` — batch workspace
-- `/app/campaigns/:id/leads/:leadId` — lead profile
+- `/app/automatic-calls` — sheet pipeline list
 
 ## Legacy redirects
 
 | Old | Now |
 |-----|-----|
 | `/app/people` | `/app/campaigns` |
-| `/app/automatic-calls` | `/app/campaigns?tab=scheduled` |
-| `/app/call-plans` | `/app/home` (Call plans product removed) |
-| `/app/meta-leads` | Connections → Meta |
+| `/app/call-plans` | `/app/home` |
 
-## Key concepts
-
-| Concept | Definition |
-|---------|------------|
-| **Campaign** | Container: agent, settings, lead pool |
-| **Batch** | Scheduled subset of leads to dial |
-| **Lead** | Person to call (phone, name, metadata) |
-| **Outcome / Disposition** | Call result categories |
-
-See also: [SnapServe-Campaign-Book.md](./SnapServe-Campaign-Book.md) for deep technical detail.
+See also: [SnapServe-Campaign-Book.md](./SnapServe-Campaign-Book.md).
