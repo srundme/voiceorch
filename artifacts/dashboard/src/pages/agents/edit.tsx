@@ -224,7 +224,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     agentConfig["voiceStack"] = "classic";
   }
   // Meeting capacity + prompt. Attendance is owned by agent type:
-  // phone_and_meet → enabled (joins Meet when Booking is on); phone → never joins.
+  // phone_and_meet → enabled (paste-link Meet + optional booking join); phone → never joins.
   // Deep-merged on the server so whoJoins / memory toggles are preserved when present.
   if (
     meetingPrompt !== undefined ||

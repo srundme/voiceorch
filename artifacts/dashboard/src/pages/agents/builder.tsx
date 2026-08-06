@@ -1508,7 +1508,7 @@ function PromptTab({ form, agentId }: { form: any; agentId?: number }) {
               <ul className="mt-1.5 list-disc space-y-0.5 pl-4">
                 <li>People may ask you to wait 2–3 minutes for others — stay quiet after one acknowledgment.</li>
                 <li>Speaker tags like <span className="font-mono text-[10px]">[Speaker: Name]</span> are for you; never read them aloud.</li>
-                <li>Waiting patience &amp; max length are under <span className="text-foreground/80">Tools → Meeting join</span> (not Engine phone silence).</li>
+                <li>Waiting patience &amp; max length are under <span className="text-foreground/80">Tools → Meetings</span> (not Engine phone silence).</li>
               </ul>
             </div>
             <FormField control={form.control} name="meetingPrompt" render={({ field }) => (
@@ -1533,7 +1533,7 @@ function PromptTab({ form, agentId }: { form: any; agentId?: number }) {
               </FormItem>
             )} />
             <p className="text-[11px] text-muted-foreground">
-              Phone + meetings agents join Google Meet when Booking is on (Tools). Configure wait time and max meeting length in Tools → Meeting join.
+              Phone + meetings agents can join Meet/Zoom/Teams from the Meet page (paste link) or from a booking. Configure wait time, max length, and deck under Tools → Meetings.
             </p>
           </TabsContent>
         </Tabs>
@@ -2715,7 +2715,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                 <div className="mt-1.5 space-y-1">
                   <p className="text-[11px] leading-relaxed text-muted-foreground">
                     {canAttendMeetings
-                      ? "This is a phone + meetings agent — it joins Google Meet when a booking is made."
+                      ? "This is a phone + meetings agent — Booking can create Meet links; join settings are under Meetings below (works for paste-link too)."
                       : "Phone-only agent — can book the calendar, but will not join the Meet."}
                   </p>
                   {!canAttendMeetings && (
@@ -2840,18 +2840,6 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                 </Button>
               </div>
 
-              {canAttendMeetings && agentId && (
-                <div className="rounded-lg border border-border/40 bg-background/30 p-3">
-                  <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/70">
-                    Meeting settings
-                  </p>
-                  <p className="mb-3 text-[11px] text-muted-foreground leading-relaxed">
-                    Who joins, wait patience, max length, and optional presentation deck.
-                  </p>
-                  <MeetingsChannelCard agentId={agentId} showJoinLink={false} />
-                </div>
-              )}
-
               {bookingDetailsOpen && (
                 <div className="space-y-2 rounded-lg border border-border/40 bg-muted/15 p-3">
                   {BOOKING_TOOL_LABELS.map(({ type, fnName, label }) => {
@@ -2939,6 +2927,33 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
             </div>
           )}
         </div>
+
+        {/* Meeting join settings — independent of Booking (paste-link Meet bots need this too). */}
+        {canAttendMeetings && (
+          <>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-1 mt-4">
+              Meetings
+            </p>
+            <div className="rounded-xl border border-border/70 bg-card/40 p-4">
+              <div className="mb-3 flex items-start gap-3">
+                <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted/30">
+                  <Video className="h-4 w-4 text-foreground/70" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-foreground/80">Meeting settings</p>
+                  <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground/60">
+                    Applies whenever this agent joins Meet/Zoom/Teams — paste-link from the Meet page or auto-join from a booking. Booking tools are optional.
+                  </p>
+                </div>
+              </div>
+              {agentId ? (
+                <MeetingsChannelCard agentId={agentId} showJoinLink={false} />
+              ) : (
+                <p className="text-[11px] text-amber-400/80">Save the agent first to edit meeting settings.</p>
+              )}
+            </div>
+          </>
+        )}
 
         <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-1 mt-4">Messaging</p>
         {CALL_CONTROL_TOOLS.filter((t) => t.type === "send_email" || t.type === "send_whatsapp").map(({ type, icon, color, label, description }) => {
@@ -6903,7 +6918,7 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
     ttsModel: "bulbul:v3",
     ttsVoice: "priya",
     // Attendance capacity is fixed by agent type:
-    // phone+meet → joins Meet when Booking is on; phone-only → book only, never join.
+    // phone+meet → can join Meet (paste-link or booking); phone-only → book only, never join.
     agentConfig: {
       meetings: {
         enabled: surfaces === "phone_and_meet",
@@ -7041,7 +7056,7 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
           : "Name your agent";
   const stepDesc =
     step === "compose" ? "Start with one agent, or create two that hand off mid-call."
-      : step === "surfaces" ? "Phone only (book but never join Meet), or phone + meetings (joins Meet when Booking is on)."
+      : step === "surfaces" ? "Phone only (book but never join Meet), or phone + meetings (paste-link Meet bots + optional booking join)."
         : composition === "team"
           ? "We’ll create both agents and wire handoffs automatically."
           : "You can edit prompts, tools, and settings anytime.";
