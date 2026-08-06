@@ -16,6 +16,11 @@ export {
   findPhonesInTranscript,
 } from "./fill-phone-fields.js";
 export {
+  expandSpokenDigits,
+  mergeSpokenPhoneFragments,
+  preferIndianPhone,
+} from "./spoken-digits.js";
+export {
   slugDispositionKey,
   toStoredDomainField,
   fromStoredDomainField,
