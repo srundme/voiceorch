@@ -212,12 +212,13 @@ export async function handleWebcallWebSocket(
     // Meeting bot: attach the pipeline to the speaker roster so Recall
     // participant webhooks can feed names into the live conversation.
     if (opts?.meetMid) {
-      const pipeline = getSession(sid)?.pipeline;
+      const active = getSession(sid);
+      const pipeline = active?.pipeline;
       if (pipeline) {
         // Meeting etiquette (e.g. no farewell auto-hangup) must apply even if
         // the roster hasn't formed yet, so mark the mode unconditionally.
         pipeline.markMeetingMode?.();
-        attachMeetSession(opts.meetMid, pipeline);
+        attachMeetSession(opts.meetMid, pipeline, active?.callId ?? null);
       }
     }
     if (endedBeforeReady) {

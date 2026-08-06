@@ -11,8 +11,9 @@ import {
   createRecallBot,
 } from "./meet-bots.js";
 import {
+  bindMeetRosterBot,
   createMeetRoster,
-  RECALL_PARTICIPANT_EVENTS,
+  recallRealtimeEvents,
 } from "./meet-roster.js";
 import {
   parseMeetingsConfig,
@@ -85,8 +86,9 @@ export async function launchMeetingBotForAgent(opts: {
     ownerUserId: opts.userId,
     agentId: runtimeAgentId,
     eventsUrl: `${base}/api/meet-bots/recall-events?mb=${encodeURIComponent(token)}`,
-    eventsList: RECALL_PARTICIPANT_EVENTS,
+    eventsList: recallRealtimeEvents(),
   });
+  bindMeetRosterBot(mid, bot.id);
 
   return { botId: bot.id, runtimeAgentId };
 }

@@ -27,6 +27,17 @@ function recallKey(): string {
   return k;
 }
 
+/**
+ * Realtime + async diarized transcripts (Recall streaming STT + perfect
+ * diarization). Default ON when RECALL_API_KEY is set; set
+ * RECALL_DIARIZED_TRANSCRIPT=0 to disable (transcript minutes are billed).
+ */
+export function isRecallDiarizedTranscriptEnabled(): boolean {
+  if (!(process.env["RECALL_API_KEY"] ?? "").trim()) return false;
+  const v = (process.env["RECALL_DIARIZED_TRANSCRIPT"] ?? "1").trim().toLowerCase();
+  return v !== "0" && v !== "false" && v !== "off" && v !== "no";
+}
+
 // Recall API keys are region-scoped and a wrong RECALL_REGION yields a
 // confusing 401. Resolve the working region ONCE by probing (configured
 // region first), then cache for the process lifetime.
@@ -152,11 +163,37 @@ export async function createRecallBot(opts: {
   pageUrl: string;
   ownerUserId: string;
   agentId: number;
-  /** Webhook URL for real-time participant events (speaker identification). */
+  /** Webhook URL for real-time participant / transcript events. */
   eventsUrl?: string;
   eventsList?: string[];
 }): Promise<RecallBotSummary> {
   const loginGroupId = (process.env["RECALL_GOOGLE_LOGIN_GROUP_ID"] ?? "").trim();
+  const diarized = isRecallDiarizedTranscriptEnabled();
+  // Low-latency streaming requires language_code=en per Recall docs.
+  const transcriptLang = ((process.env["RECALL_TRANSCRIPT_LANGUAGE"] ?? "en").trim() || "en").toLowerCase();
+  const recordingConfig =
+    opts.eventsUrl && opts.eventsList?.length
+      ? {
+          ...(diarized
+            ? {
+                transcript: {
+                  provider: {
+                    recallai_streaming: {
+                      mode: "prioritize_low_latency",
+                      language_code: transcriptLang === "auto" ? "en" : transcriptLang,
+                    },
+                  },
+                  diarization: {
+                    use_separate_streams_when_available: true,
+                  },
+                },
+              }
+            : {}),
+          realtime_endpoints: [
+            { type: "webhook", url: opts.eventsUrl, events: opts.eventsList },
+          ],
+        }
+      : null;
   const res = await recallFetch("/bot/", {
     method: "POST",
     body: JSON.stringify({
@@ -186,17 +223,8 @@ export async function createRecallBot(opts: {
             },
           }
         : {}),
-      // Speaker identification: subscribe to real-time participant events
-      // (join/leave/speech_on/...) delivered as webhooks to our server.
-      ...(opts.eventsUrl && opts.eventsList?.length
-        ? {
-            recording_config: {
-              realtime_endpoints: [
-                { type: "webhook", url: opts.eventsUrl, events: opts.eventsList },
-              ],
-            },
-          }
-        : {}),
+      // Participant events (+ optional diarized transcript.data) via webhook.
+      ...(recordingConfig ? { recording_config: recordingConfig } : {}),
     }),
   });
   if (!res.ok) {
@@ -204,6 +232,66 @@ export async function createRecallBot(opts: {
     throw new Error(`Recall create bot failed (${res.status}): ${text.slice(0, 300)}`);
   }
   return summarizeBot(await res.json());
+}
+
+/**
+ * After the meeting ends, pull Recall's async diarized transcript artifact
+ * (recordings[].media_shortcuts.transcript.data.download_url) and format as
+ * plain "[Speaker]: utterance" lines. Returns null while the artifact is not
+ * ready yet (caller should retry).
+ */
+export async function fetchRecallBotDiarizedTranscript(botId: string): Promise<string | null> {
+  const res = await recallFetch(`/bot/${encodeURIComponent(botId)}/`);
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Recall get bot for transcript failed (${res.status}): ${text.slice(0, 200)}`);
+  }
+  const bot = (await res.json()) as {
+    recordings?: Array<{
+      media_shortcuts?: {
+        transcript?: { data?: { download_url?: string | null } | null } | null;
+      } | null;
+    }>;
+  };
+  const downloadUrl =
+    bot.recordings?.find((r) => r?.media_shortcuts?.transcript?.data?.download_url)
+      ?.media_shortcuts?.transcript?.data?.download_url ?? null;
+  if (!downloadUrl) return null;
+
+  const txRes = await fetch(downloadUrl, { headers: { accept: "application/json" } });
+  if (!txRes.ok) {
+    const text = await txRes.text().catch(() => "");
+    throw new Error(`Recall transcript download failed (${txRes.status}): ${text.slice(0, 200)}`);
+  }
+  const payload = (await txRes.json()) as unknown;
+  return formatRecallTranscriptDownload(payload);
+}
+
+/** Normalize Recall JSON transcript download into speaker-labeled lines. */
+export function formatRecallTranscriptDownload(payload: unknown): string | null {
+  if (!Array.isArray(payload)) return null;
+  const lines: string[] = [];
+  for (const entry of payload) {
+    if (!entry || typeof entry !== "object") continue;
+    const e = entry as {
+      participant?: { name?: unknown };
+      words?: Array<{ text?: unknown }>;
+    };
+    const name =
+      typeof e.participant?.name === "string" && e.participant.name.trim()
+        ? e.participant.name.trim().slice(0, 60)
+        : "Unknown";
+    const words = Array.isArray(e.words) ? e.words : [];
+    const text = words
+      .map((w) => (typeof w?.text === "string" ? w.text : ""))
+      .join("")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!text) continue;
+    lines.push(`[${name}]: ${text}`);
+    if (lines.length >= 500) break;
+  }
+  return lines.length ? lines.join("\n") : null;
 }
 
 /** Workspace Meet bot identity for UI + calendar invites. */
