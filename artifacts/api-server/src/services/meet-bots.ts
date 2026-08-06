@@ -261,6 +261,9 @@ export async function createRecallBot(opts: {
     video_mixed_layout: "gallery_view_v2",
     // Per-speaker MP3 parts for analytics / cleaner diarization archives.
     audio_separate_mp3: {},
+    // Required with output_media: without this, Recall omits bot TTS from the
+    // mixed recording and the dashboard flags "not configured to include bot audio".
+    include_bot_in_recording: { audio: true },
   };
   if (diarized) {
     recordingConfig["transcript"] = {
