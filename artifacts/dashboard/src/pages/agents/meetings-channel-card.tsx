@@ -1,6 +1,10 @@
 /**
  * Meeting join / delegate / memory toggles (Meetings page).
  * Meeting prompt is owned by Agent → Prompt → In meetings.
+ *
+ * Attend modes:
+ * - human — agent books calendar; a person attends (no Meet bot auto-join)
+ * - ai    — Meet bot joins as this agent or a delegate
  */
 
 import { useEffect, useState } from "react";
@@ -23,9 +27,11 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError } from "@/lib/format-api-error";
-import { ExternalLink, FileText, Loader2, Save } from "lucide-react";
+import { ExternalLink, FileText, Loader2, Save, User, Bot } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export type MeetingsForm = {
+  /** false = book only, human attends (no auto-join bot) */
   enabled: boolean;
   whoJoins: "self" | "delegate";
   meetingPrompt: string;
@@ -98,11 +104,12 @@ export function MeetingsChannelCard({
   }>;
   const others = agents.filter((a) => a.id !== agentId);
   const meetPromptPreview = form.meetingPrompt.trim();
+  const humanAttends = !form.enabled;
 
   const set = (patch: Partial<MeetingsForm>) => setForm((prev) => ({ ...prev, ...patch }));
 
   const save = async () => {
-    if (form.whoJoins === "delegate" && !form.delegateAgentId) {
+    if (!humanAttends && form.whoJoins === "delegate" && !form.delegateAgentId) {
       toast({
         title: "Pick a meeting agent",
         description: "Choose which agent joins the meeting, or switch to “This agent”.",
@@ -143,10 +150,10 @@ export function MeetingsChannelCard({
         <div className="min-w-0">
           <h3 className="text-sm font-semibold">Meetings</h3>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Meet, Zoom, Teams — who joins and what context is passed.
+            Book calendar from calls — choose who attends the meeting.
           </p>
         </div>
-        {showJoinLink ? (
+        {showJoinLink && !humanAttends ? (
           <Button asChild type="button" variant="outline" size="sm" className="h-8 shrink-0 text-xs">
             <Link href={`/app/meet?agentId=${agentId}`}>Join now</Link>
           </Button>
@@ -157,37 +164,74 @@ export function MeetingsChannelCard({
         <div className="h-28 animate-pulse rounded-md bg-muted/40" />
       ) : (
         <div className="space-y-4">
-          <div className="flex items-center justify-between gap-3 border-y border-border py-3">
-            <div>
-              <p className="text-[13px] font-medium">Can join meetings</p>
-              <p className="mt-0.5 text-[11px] text-muted-foreground">
-                Off skips auto-join from bookings; you can still launch manually.
-              </p>
+          <div className="space-y-2">
+            <Label className="text-[11px]">Who attends</Label>
+            <div className="grid sm:grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => set({ enabled: false })}
+                className={cn(
+                  "rounded-lg border px-3 py-2.5 text-left transition-colors",
+                  humanAttends
+                    ? "border-primary/40 bg-primary/5"
+                    : "border-border/50 hover:bg-muted/30",
+                )}
+              >
+                <div className="flex items-center gap-1.5">
+                  <User className="h-3.5 w-3.5 text-muted-foreground" />
+                  <p className="text-[12px] font-medium">Human attends</p>
+                </div>
+                <p className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed">
+                  Agent books the calendar. A person joins the Meet — no AI bot auto-joins.
+                </p>
+              </button>
+              <button
+                type="button"
+                onClick={() => set({ enabled: true })}
+                className={cn(
+                  "rounded-lg border px-3 py-2.5 text-left transition-colors",
+                  !humanAttends
+                    ? "border-primary/40 bg-primary/5"
+                    : "border-border/50 hover:bg-muted/30",
+                )}
+              >
+                <div className="flex items-center gap-1.5">
+                  <Bot className="h-3.5 w-3.5 text-muted-foreground" />
+                  <p className="text-[12px] font-medium">AI joins meeting</p>
+                </div>
+                <p className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed">
+                  Meet bot auto-joins from bookings (this agent or a delegate).
+                </p>
+              </button>
             </div>
-            <Switch checked={form.enabled} onCheckedChange={(v) => set({ enabled: v })} />
           </div>
 
-          {identityQ.data && (
+          {humanAttends ? (
             <div className="rounded-md border border-border/60 bg-muted/20 px-3 py-2.5 text-[11px] text-muted-foreground leading-relaxed">
-              {identityQ.data.botEmail ? (
-                <>
-                  Bot joins as{" "}
-                  <span className="font-mono text-foreground">{identityQ.data.botEmail}</span>
-                  {" — "}admit this address, or add it to the Meet invite.
-                </>
-              ) : (
-                <>
-                  Managed meeting agent joins as a guest. Google Meet may ask the host to admit it by
-                  the agent&apos;s name (no email shown).
-                </>
-              )}
+              Calendar booking still works on the call. Invite your team on the Meet link — SnapServe
+              will not send a meeting bot.
             </div>
-          )}
-
-          {form.enabled && (
+          ) : (
             <>
+              {identityQ.data && (
+                <div className="rounded-md border border-border/60 bg-muted/20 px-3 py-2.5 text-[11px] text-muted-foreground leading-relaxed">
+                  {identityQ.data.botEmail ? (
+                    <>
+                      Bot joins as{" "}
+                      <span className="font-mono text-foreground">{identityQ.data.botEmail}</span>
+                      {" — "}admit this address, or add it to the Meet invite.
+                    </>
+                  ) : (
+                    <>
+                      Managed meeting agent joins as a guest. Google Meet may ask the host to admit it by
+                      the agent&apos;s name (no email shown).
+                    </>
+                  )}
+                </div>
+              )}
+
               <div className="space-y-2">
-                <Label className="text-[11px]">Who joins</Label>
+                <Label className="text-[11px]">Which AI joins</Label>
                 <div className="grid sm:grid-cols-2 gap-2">
                   <button
                     type="button"

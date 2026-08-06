@@ -8,6 +8,8 @@ import {
   UpdateWebhookEndpointBody,
 } from "@workspace/api-zod";
 import { logger } from "../lib/logger.js";
+import { toAbsoluteAppUrl } from "../lib/app-domain.js";
+import { shareableRecordingUrl } from "../services/recording-share.js";
 
 const router: IRouter = Router();
 
@@ -156,4 +158,135 @@ export async function dispatchWebhooks(
       logger.warn({ err, webhookId: ep.id, event: canonical }, "Webhook delivery failed");
     });
   }
+}
+
+/** Flatten taxonomy disposition into the shape stored on calls.disposition_result. */
+export function flatDispositionFromTaxonomy(result: {
+  primary?: string | null;
+  sub?: string | null;
+  confidence?: number;
+  summary?: string;
+  evidence?: string;
+  flags?: string[];
+  needsReview?: boolean;
+  domainFields?: Record<string, unknown>;
+  error?: string;
+} | null | undefined): Record<string, unknown> | null {
+  if (!result || result.error || !result.primary || !result.sub) return null;
+  const flat: Record<string, unknown> = {
+    [result.primary]: result.sub,
+    primary: result.primary,
+    sub: result.sub,
+  };
+  if (typeof result.confidence === "number") flat["confidence"] = result.confidence;
+  if (result.summary) flat["summary"] = result.summary;
+  if (result.evidence) flat["evidence"] = result.evidence;
+  if (Array.isArray(result.flags) && result.flags.length) flat["flags"] = result.flags;
+  if (typeof result.needsReview === "boolean") flat["needsReview"] = result.needsReview;
+  if (result.domainFields && typeof result.domainFields === "object") {
+    flat["domainFields"] = result.domainFields;
+  }
+  return flat;
+}
+
+/** Full call-ended payload for agent + workspace webhooks. */
+export function buildCallEndedWebhookPayload(input: {
+  callId: number;
+  executionId?: string | null;
+  agentId: number;
+  agentName?: string | null;
+  status: string;
+  fromNumber?: string | null;
+  toNumber?: string | null;
+  durationSeconds?: number | null;
+  costCents?: number | null;
+  transcript?: string | null;
+  callSummary?: string | null;
+  dispositionResult?: Record<string, unknown> | null;
+  successEvaluation?: string | null;
+  recordingUrl?: string | null;
+  recordingError?: string | null;
+  amdResult?: string | null;
+  transferType?: string | null;
+  transferTarget?: string | null;
+  campaignLeadId?: number | null;
+  conversationCompleted?: boolean | null;
+  primaryLanguage?: string | null;
+  memoryRecognized?: boolean | null;
+  errorMessage?: string | null;
+  avgSttLatencyMs?: number | null;
+  avgLlmLatencyMs?: number | null;
+  avgTtsLatencyMs?: number | null;
+  tokensSaved?: number | null;
+  createdAt?: Date | string | null;
+  endedAt?: Date | string | null;
+  metadata?: string | Record<string, unknown> | null;
+}): Record<string, unknown> {
+  let meta: Record<string, unknown> | null = null;
+  if (input.metadata && typeof input.metadata === "object") {
+    meta = input.metadata;
+  } else if (typeof input.metadata === "string" && input.metadata.trim()) {
+    try {
+      meta = JSON.parse(input.metadata) as Record<string, unknown>;
+    } catch {
+      meta = null;
+    }
+  }
+
+  const direction =
+    (typeof meta?.["direction"] === "string" ? meta["direction"] : null)
+    ?? null;
+
+  const iso = (v: Date | string | null | undefined): string | null => {
+    if (!v) return null;
+    if (v instanceof Date) return v.toISOString();
+    const d = new Date(v);
+    return Number.isNaN(d.getTime()) ? String(v) : d.toISOString();
+  };
+
+  // External receivers need an absolute, playable URL. Stored values are often
+  // relative (`/api/storage/recordings/:id`) and require a login cookie — emit a
+  // signed share link instead (same as Sheets writeback).
+  let recordingUrl: string | null = null;
+  if (input.recordingUrl && String(input.recordingUrl).trim()) {
+    try {
+      recordingUrl = shareableRecordingUrl(input.callId);
+    } catch {
+      recordingUrl = toAbsoluteAppUrl(input.recordingUrl) || null;
+    }
+  }
+
+  return {
+    callId: input.callId,
+    executionId: input.executionId ?? null,
+    agentId: input.agentId,
+    agentName: input.agentName ?? null,
+    status: input.status,
+    direction,
+    fromNumber: input.fromNumber ?? null,
+    toNumber: input.toNumber ?? null,
+    durationSeconds: input.durationSeconds ?? null,
+    costCents: input.costCents ?? null,
+    transcript: input.transcript ?? null,
+    callSummary: input.callSummary ?? null,
+    dispositionResult: input.dispositionResult ?? null,
+    successEvaluation: input.successEvaluation ?? null,
+    recordingUrl,
+    recordingError: input.recordingError ?? null,
+    amdResult: input.amdResult ?? null,
+    transferType: input.transferType ?? null,
+    transferTarget: input.transferTarget ?? null,
+    campaignLeadId: input.campaignLeadId ?? null,
+    conversationCompleted: input.conversationCompleted ?? null,
+    primaryLanguage: input.primaryLanguage ?? null,
+    memoryRecognized: input.memoryRecognized ?? null,
+    errorMessage: input.errorMessage ?? null,
+    tokensSaved: input.tokensSaved ?? null,
+    avgSttLatencyMs: input.avgSttLatencyMs ?? null,
+    avgLlmLatencyMs: input.avgLlmLatencyMs ?? null,
+    avgTtsLatencyMs: input.avgTtsLatencyMs ?? null,
+    createdAt: iso(input.createdAt),
+    endedAt: iso(input.endedAt),
+    metadata: meta,
+  };
 }

@@ -19,6 +19,7 @@ export function StripePage({
   className,
   contentClassName,
   fullBleed = false,
+  lockScroll = false,
 }: {
   title: string;
   description?: string;
@@ -31,6 +32,8 @@ export function StripePage({
   contentClassName?: string;
   /** Skip max-width for dense tables (Activity, Dial flows, etc.). */
   fullBleed?: boolean;
+  /** Pin page chrome and let children manage their own vertical scroll. */
+  lockScroll?: boolean;
 }) {
   const [, navigate] = useLocation();
 
@@ -72,11 +75,17 @@ export function StripePage({
         </div>
         {tabs && <div className="mt-4 -mb-4">{tabs}</div>}
       </header>
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div
+        className={cn(
+          "min-h-0 flex-1",
+          lockScroll ? "flex flex-col overflow-hidden" : "overflow-y-auto",
+        )}
+      >
         <div
           className={cn(
             "mx-auto w-full px-5 py-5 sm:px-6 sm:py-6",
             fullBleed ? "max-w-none" : "max-w-[1200px]",
+            lockScroll && "flex min-h-0 flex-1 flex-col",
             contentClassName,
           )}
         >

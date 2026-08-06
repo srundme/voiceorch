@@ -47,6 +47,11 @@ import {
 } from "./sessionStore.js";
 import { destroyAudioSession } from "./audioPool.js";
 import { disposeCall } from "../services/disposition.js";
+import {
+  buildCallEndedWebhookPayload,
+  dispatchWebhooks,
+  flatDispositionFromTaxonomy,
+} from "../routes/webhook-endpoints.js";
 import { computeOperationalOutcome, setOperationalOutcome } from "../services/operational-outcome.js";
 import { appendTraiDisclosure, scanForOptOut } from "../services/trai/index.js";
 import { appendDpdpDisclosure, scanAndRedactPII } from "../services/dpdp/index.js";
@@ -3256,6 +3261,7 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
         void (async () => {
           let callSummary = "";
           let dispositionResult: Record<string, unknown> | null = null;
+          let successEvaluation: string | null = null;
 
           // 1. Generate call summary — always runs for every completed call.
           // Uses BYOP key when available; falls back to platform managed key (Groq).
@@ -3324,7 +3330,10 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
             }
           }
 
-          // 2. Extract disposition
+          // 2. Extract disposition BEFORE webhooks.
+          // Prefer legacy dispositionSchema when present; otherwise run taxonomy disposeCall
+          // (agent_dispositions). Must finish before webhook so disposition is never null
+          // when taxonomy/schema is configured.
           if (dispositionSchema.length > 0 && transcript && transcript.length > 50 && ag.userId) {
             try {
               const llmProvs = await db.select().from(providersTable).where(
@@ -3334,9 +3343,19 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
                   eq(providersTable.providerName, ag.llmProvider)
                 )
               );
-              const llmKey = llmProvs[0] ? decryptKey(llmProvs[0].apiKey) : undefined;
+              let llmKey: string | null = llmProvs[0] ? decryptKey(llmProvs[0].apiKey) : null;
+              let dispProvider = ag.llmProvider;
+              let dispModel = ag.llmModel;
+              if (!llmKey) {
+                const [row] = await db.select().from(platformSettingsTable).where(eq(platformSettingsTable.key, "managed_qwen_key"));
+                llmKey = row?.value?.trim() || process.env["GROQ_API_KEY"] || null;
+                if (llmKey) {
+                  dispProvider = "groq";
+                  dispModel = "llama-3.3-70b-versatile";
+                }
+              }
               if (llmKey) {
-                const llm = createLLMAdapter(ag.llmProvider, llmKey, ag.llmModel);
+                const llm = createLLMAdapter(dispProvider, llmKey, dispModel);
                 const fieldList = dispositionSchema
                   .map(f => `- "${f.key}" (${f.label}, type: ${f.type}${f.options?.length ? `, options: [${f.options.join(", ")}]` : ""})`)
                   .join("\n");
@@ -3363,6 +3382,29 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
             } catch (dispErr) {
               logger.warn({ sessionId, dispErr }, "Post-call disposition extraction failed");
             }
+          } else {
+            try {
+              const taxResult = await disposeCall({
+                agentId: call.agentId,
+                callId: session.callId,
+                transcript: transcript || null,
+                callEvents: [{ type: "duration", durationSec: durationSeconds }],
+                callStartedAt: call.createdAt ?? null,
+              });
+              dispositionResult = flatDispositionFromTaxonomy(taxResult);
+              if (dispositionResult) {
+                logger.info(
+                  {
+                    sessionId,
+                    primary: dispositionResult["primary"],
+                    sub: dispositionResult["sub"],
+                  },
+                  "Taxonomy disposition ready for webhook",
+                );
+              }
+            } catch (dispErr) {
+              logger.warn({ sessionId, dispErr }, "Post-call taxonomy disposition failed");
+            }
           }
 
           // 3. Evaluate call success against agent's success criteria (if configured)
@@ -3377,9 +3419,19 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
                   eq(providersTable.providerName, ag.llmProvider)
                 )
               );
-              const evalLlmKey = evalLlmProvs[0] ? decryptKey(evalLlmProvs[0].apiKey) : undefined;
+              let evalLlmKey: string | null = evalLlmProvs[0] ? decryptKey(evalLlmProvs[0].apiKey) : null;
+              let evalProvider = ag.llmProvider;
+              let evalModel = ag.llmModel;
+              if (!evalLlmKey) {
+                const [row] = await db.select().from(platformSettingsTable).where(eq(platformSettingsTable.key, "managed_qwen_key"));
+                evalLlmKey = row?.value?.trim() || process.env["GROQ_API_KEY"] || null;
+                if (evalLlmKey) {
+                  evalProvider = "groq";
+                  evalModel = "llama-3.3-70b-versatile";
+                }
+              }
               if (evalLlmKey) {
-                const evalLlm = createLLMAdapter(ag.llmProvider, evalLlmKey, ag.llmModel);
+                const evalLlm = createLLMAdapter(evalProvider, evalLlmKey, evalModel);
                 let evalRaw = "";
                 await evalLlm.chat(
                   [{ role: "user", content: `Success criteria: ${successCriteria}\n\nCall transcript:\n${transcript.slice(0, 6000)}\n\nDid this call meet the success criteria? Reply with PASS or FAIL on the first line, then one sentence of explanation.` }],
@@ -3388,8 +3440,9 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
                   (full) => { evalRaw = full; }
                 );
                 if (evalRaw.trim()) {
-                  await db.update(callsTable).set({ successEvaluation: evalRaw.trim() }).where(eq(callsTable.id, session.callId));
-                  logger.info({ sessionId, verdict: evalRaw.trim().slice(0, 60) }, "Post-call success evaluation complete");
+                  successEvaluation = evalRaw.trim();
+                  await db.update(callsTable).set({ successEvaluation }).where(eq(callsTable.id, session.callId));
+                  logger.info({ sessionId, verdict: successEvaluation.slice(0, 60) }, "Post-call success evaluation complete");
                 }
               }
             } catch (evalErr) {
@@ -3397,33 +3450,63 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
             }
           }
 
-          // 4. Fire webhook with complete enriched payload
+          // Re-read call for billing/metadata fields written earlier in endSession.
+          const [freshCall] = await db.select().from(callsTable).where(eq(callsTable.id, session.callId)).limit(1);
+          const webhookPayload = buildCallEndedWebhookPayload({
+            callId: session.callId,
+            executionId: freshCall?.executionId ?? call.executionId ?? null,
+            agentId: ag.id,
+            agentName: ag.name,
+            status: callStatus,
+            fromNumber: call.fromNumber,
+            toNumber: call.toNumber,
+            durationSeconds,
+            costCents: freshCall?.costCents ?? call.costCents ?? null,
+            transcript: transcript || null,
+            callSummary: callSummary || freshCall?.callSummary || null,
+            dispositionResult:
+              dispositionResult
+              ?? (freshCall?.dispositionResult as Record<string, unknown> | null)
+              ?? null,
+            successEvaluation: successEvaluation ?? freshCall?.successEvaluation ?? null,
+            recordingUrl: recordingUrl ?? freshCall?.recordingUrl ?? null,
+            recordingError: freshCall?.recordingError ?? call.recordingError ?? null,
+            amdResult: freshCall?.amdResult ?? call.amdResult ?? null,
+            transferType: freshCall?.transferType ?? call.transferType ?? null,
+            transferTarget: freshCall?.transferTarget ?? call.transferTarget ?? null,
+            campaignLeadId: session.campaignLeadId ?? null,
+            conversationCompleted: freshCall?.conversationCompleted ?? call.conversationCompleted ?? null,
+            primaryLanguage: freshCall?.primaryLanguage ?? call.primaryLanguage ?? null,
+            memoryRecognized: freshCall?.memoryRecognized ?? call.memoryRecognized ?? null,
+            errorMessage: freshCall?.errorMessage ?? call.errorMessage ?? null,
+            tokensSaved: freshCall?.tokensSaved ?? call.tokensSaved ?? null,
+            avgSttLatencyMs: avgSttMs,
+            avgLlmLatencyMs: avgLlmMs,
+            avgTtsLatencyMs: avgTtsMs,
+            createdAt: freshCall?.createdAt ?? call.createdAt ?? null,
+            endedAt,
+            metadata: freshCall?.metadata ?? call.metadata ?? null,
+          });
+
+          // 4. Agent webhook URL (Settings → Analytics) — full enriched payload
           if (ag.webhookUrl) {
-            const webhookPayload = {
-              callId:           session.callId,
-              agentId:          ag.id,
-              agentName:        ag.name,
-              status:           callStatus,
-              fromNumber:       call.fromNumber,
-              toNumber:         call.toNumber,
-              durationSeconds,
-              transcript:       transcript || null,
-              callSummary:      callSummary || null,
-              dispositionResult,
-              recordingUrl:     recordingUrl ?? null,
-              avgSttLatencyMs:  avgSttMs,
-              avgLlmLatencyMs:  avgLlmMs,
-              avgTtsLatencyMs:  avgTtsMs,
-              endedAt:          endedAt.toISOString(),
-            };
             const bodyStr = JSON.stringify(webhookPayload);
             const headers: Record<string, string> = { "Content-Type": "application/json" };
             if (webhookSecret) {
               headers["X-VoiceOrch-Signature"] =
                 "sha256=" + createHmac("sha256", webhookSecret).update(bodyStr, "utf8").digest("hex");
+              headers["X-SnapServe-Signature"] = headers["X-VoiceOrch-Signature"];
             }
             fetch(ag.webhookUrl, { method: "POST", headers, body: bodyStr }).catch((err) => {
               logger.error({ sessionId, webhookUrl: ag.webhookUrl, err }, "Webhook delivery failed");
+            });
+          }
+
+          // Workspace webhook endpoints (/app/webhooks) — same full payload
+          const webhookUserId = ag.userId ?? call.userId ?? null;
+          if (webhookUserId) {
+            dispatchWebhooks(webhookUserId, "call.completed", webhookPayload).catch((err) => {
+              logger.warn({ sessionId, err }, "Workspace webhook dispatch failed");
             });
           }
 
@@ -3483,7 +3566,7 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
                 summary: callSummary || null,
                 disposition: dispositionResult,
                 amdResult: call.amdResult ?? null,
-                successEvaluation: call.successEvaluation ?? null,
+                successEvaluation: successEvaluation ?? call.successEvaluation ?? null,
               });
             }
           } catch (taskEndErr) {
@@ -3507,21 +3590,6 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
             }
           }
         })();
-
-        // ── Post-call taxonomy disposition classification (fire-and-forget) ──────
-        // Uses the agent's configured Call Disposition taxonomy (agent_dispositions)
-        // and writes the result onto calls.disposition_result. No-ops when the agent
-        // has no taxonomy configured. Mutually exclusive with the legacy
-        // dispositionSchema extraction above (an agent uses one system or the other).
-        disposeCall({
-          agentId:    call.agentId,
-          callId:     session.callId,
-          transcript: transcript || null,
-          callEvents: [{ type: "duration", durationSec: durationSeconds }],
-          callStartedAt: call.createdAt ?? null,
-        }).catch((dispErr) => {
-          logger.warn({ sessionId, dispErr }, "Post-call taxonomy disposition failed");
-        });
 
         // ── Post-call caller memory update + callback detection (fire-and-forget) ──
         if (session.callerPhone && transcript && transcript.length > 50) {

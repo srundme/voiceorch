@@ -4,13 +4,13 @@ import { useLocation, useParams, useSearch, Link } from "wouter";
 import {
   Bot, Plus, Search, Phone, Mic, Brain, Webhook, PhoneForwarded,
   Save, MoreHorizontal, Trash2, Settings, FileText, Wrench,
-  VoicemailIcon, SlidersHorizontal, TestTube2, ChevronRight, ChevronLeft,
+  VoicemailIcon, TestTube2, ChevronRight, ChevronLeft,
   Volume2, Check, X, Pencil, ChevronDown, List, Globe, BarChart3,
   User2, Users, Sparkles, BookOpen, ToggleLeft, ToggleRight, Tag, Loader2, Square, AudioLines,
   Play, Pause,
   Timer, ShieldCheck, Layers, Gauge, MicOff, HelpCircle, PhoneOff, Mail, MessageCircle,
   History, GitBranch, Eye, RotateCcw, ChevronUp, AlertTriangle, ArrowLeftRight,
-  Upload, Archive, Info, AlertCircle, Calendar, Star, Video,
+  Upload, Archive, Info, AlertCircle, Calendar, Star, Video, Radio,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { motion } from "framer-motion";
@@ -93,6 +93,7 @@ import { RecentNumbersList } from "@/components/recent-numbers-list";
 import { useRecentNumbers } from "@/hooks/use-recent-numbers";
 import { GeneratePromptSheet } from "./generate-prompt-sheet";
 import { AgentInboundPanel } from "./agent-inbound-panel";
+import { ChannelsPanel, type ChannelId } from "./channels-panel";
 import {
   PropertyRow,
   StatusDot,
@@ -105,18 +106,19 @@ const DASH_API   = `${_DASH_BASE}/api`;
 
 /* ── Types ──────────────────────────────────────────────────────────────────── */
 
-type TabId = "overview" | "prompt" | "voice" | "tools" | "voicemail" | "advanced" | "versions";
+type TabId = "overview" | "prompt" | "voice" | "tools" | "channels" | "voicemail" | "settings" | "versions";
 
 interface TabDef { id: TabId; label: string; icon: React.ReactNode }
 
 const TABS: TabDef[] = [
-  { id: "overview",    label: "Overview",    icon: <Bot className="h-3.5 w-3.5" /> },
-  { id: "prompt",      label: "Prompt",      icon: <FileText className="h-3.5 w-3.5" /> },
-  { id: "voice",       label: "Voice",       icon: <Mic className="h-3.5 w-3.5" /> },
-  { id: "tools",       label: "Tools",       icon: <Wrench className="h-3.5 w-3.5" /> },
-  { id: "voicemail",   label: "Voicemail",   icon: <VoicemailIcon className="h-3.5 w-3.5" /> },
-  { id: "advanced",    label: "Advanced",    icon: <SlidersHorizontal className="h-3.5 w-3.5" /> },
-  { id: "versions",    label: "Versions",    icon: <History className="h-3.5 w-3.5" /> },
+  { id: "overview",  label: "Overview",  icon: <Bot className="h-3.5 w-3.5" /> },
+  { id: "prompt",    label: "Prompt",    icon: <FileText className="h-3.5 w-3.5" /> },
+  { id: "voice",     label: "Voice",     icon: <Mic className="h-3.5 w-3.5" /> },
+  { id: "tools",     label: "Tools",     icon: <Wrench className="h-3.5 w-3.5" /> },
+  { id: "channels",  label: "Channels",  icon: <Radio className="h-3.5 w-3.5" /> },
+  { id: "voicemail", label: "Voicemail", icon: <VoicemailIcon className="h-3.5 w-3.5" /> },
+  { id: "settings",  label: "Settings",  icon: <Settings className="h-3.5 w-3.5" /> },
+  { id: "versions",  label: "Versions",  icon: <History className="h-3.5 w-3.5" /> },
 ];
 
 const BUILDER_SEGMENTS: WorkspaceNavItem<TabId>[] = TABS.map((tab) => ({
@@ -124,8 +126,10 @@ const BUILDER_SEGMENTS: WorkspaceNavItem<TabId>[] = TABS.map((tab) => ({
   label: tab.label,
 }));
 
+/** Map legacy ?section= values onto current tabs. */
 function sectionFromSearch(search: string): TabId {
   const requested = new URLSearchParams(search).get("section");
+  if (requested === "advanced") return "settings";
   return TABS.some((tab) => tab.id === requested) ? requested as TabId : "overview";
 }
 
@@ -1288,7 +1292,7 @@ function OverviewTab({
 
 /* ── Tab: Prompt ────────────────────────────────────────────────────────────── */
 
-function PromptTab({ form }: { form: any }) {
+function PromptTab({ form, agentId }: { form: any; agentId?: number }) {
   const { fields: pvFields, append: pvAppend, remove: pvRemove } = useFieldArray({ control: form.control, name: "promptVariables" });
   const [generateOpen, setGenerateOpen] = useState(false);
   const [promptSurface, setPromptSurface] = useState<"calls" | "meetings">("calls");
@@ -1438,7 +1442,18 @@ function PromptTab({ form }: { form: any }) {
             </FormItem>
           )} />
           <p className="text-[11px] text-muted-foreground">
-            Join / delegate settings live under Meetings.
+            Join / delegate / human-attend settings:{" "}
+            {agentId ? (
+              <Link
+                href={`/app/agents/${agentId}?section=channels&channel=meetings`}
+                className="underline underline-offset-2"
+              >
+                Channels → Meetings
+              </Link>
+            ) : (
+              <span className="text-foreground/80">Channels → Meetings</span>
+            )}
+            .
           </p>
         </TabsContent>
       </Tabs>
@@ -2243,7 +2258,7 @@ function VoiceCallFeelPresets({ form }: { form: any }) {
       <div>
         <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Phone feel</h3>
         <p className="mt-0.5 text-[12px] text-muted-foreground">
-          How quickly the agent takes the turn — same Call Engine knobs as Advanced → Engine.
+          How quickly the agent takes the turn — same Call Engine knobs as Settings → Engine.
         </p>
         {asrProviderVal === "sarvam" && (
           <p className="text-[11px] text-muted-foreground mt-1">
@@ -2282,7 +2297,7 @@ function VoiceCallFeelPresets({ form }: { form: any }) {
         </div>
         <p className="text-[10px] text-muted-foreground leading-relaxed">
           Fine-tune endpointing, linear delay, and interrupt words on{" "}
-          <span className="text-foreground/80">Advanced → Engine</span>.
+          <span className="text-foreground/80">Settings → Engine</span>.
         </p>
       </div>
     </section>
@@ -2517,7 +2532,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
       icon: <Mail className="h-4 w-4" />,
       color: "sky",
       label: "Send Email",
-      description: "Lets the agent email the caller mid-call using Connections → Email (your Brevo). Asks for their address, then sends the email template.",
+      description: "Lets the agent email the caller mid-call using Channels → Email (your Brevo). Asks for their address, then sends the email template.",
       needsEventType: false,
     },
     {
@@ -3287,24 +3302,30 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
 
   return (
     <div className="flex flex-col">
-      {/* ── Sub-nav ── */}
-      <div className="flex flex-shrink-0 items-center gap-1 border-b border-border/40 px-4 pb-3 pt-4 sm:px-6 lg:px-8">
-        {nav.map(n => (
-          <button
-            key={n.id}
-            type="button"
-            onClick={() => setSection(n.id)}
-            className={cn(
-              "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11.5px] font-medium transition-all",
-              section === n.id
-                ? "bg-primary/15 text-primary border border-primary/30"
-                : "text-muted-foreground hover:text-foreground hover:bg-accent/50",
-            )}
-          >
-            {n.icon}
-            {n.label}
-          </button>
-        ))}
+      <div className="border-b border-border/40 px-4 pt-5 sm:px-6 lg:px-8">
+        <h2 className="text-[15px] font-semibold tracking-[-0.02em]">Settings</h2>
+        <p className="mt-0.5 text-[12px] text-muted-foreground">
+          Engine timing, call limits, analytics webhooks, dispositions, and compliance.
+        </p>
+        {/* ── Sub-nav ── */}
+        <div className="mt-3 flex flex-shrink-0 items-center gap-1 pb-3">
+          {nav.map(n => (
+            <button
+              key={n.id}
+              type="button"
+              onClick={() => setSection(n.id)}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11.5px] font-medium transition-all",
+                section === n.id
+                  ? "bg-primary/15 text-primary border border-primary/30"
+                  : "text-muted-foreground hover:text-foreground hover:bg-accent/50",
+              )}
+            >
+              {n.icon}
+              {n.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* ── Content ── */}
@@ -5972,10 +5993,10 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
     },
     (errors) => {
       const fieldTabMap: Record<string, TabId> = {
-        webhookUrl:               "advanced",
-        webhookSecret:            "advanced",
-        schedulingCalendarId:     "overview",
-        schedulingEventTypeId:    "overview",
+        webhookUrl:               "settings",
+        webhookSecret:            "settings",
+        schedulingCalendarId:     "channels",
+        schedulingEventTypeId:    "channels",
         noiseCancellationEnabled: "voice",
         ambientNoiseEnabled:      "voice",
         ambientNoiseTrack:        "voice",
@@ -5989,14 +6010,14 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
         sarvamSpeechEndFlushMs:      "voice",
         sarvamIncompleteHoldMs:      "voice",
         stopSpeakingNumWords:     "voice",
-        vadSilenceMs:             "advanced",
-        bargeInEnabled:           "advanced",
-        bargeInEnergyThreshold:   "advanced",
-        bargeInMinFrames:         "advanced",
-        micSensitivity:           "advanced",
-        timezone:                 "advanced",
-        autoRedialEnabled:        "advanced",
-        autoRedialMaxAttempts:    "advanced",
+        vadSilenceMs:             "settings",
+        bargeInEnabled:           "settings",
+        bargeInEnergyThreshold:   "settings",
+        bargeInMinFrames:         "settings",
+        micSensitivity:           "settings",
+        timezone:                 "prompt",
+        autoRedialEnabled:        "settings",
+        autoRedialMaxAttempts:    "settings",
         machineDetectionMode:     "voicemail",
         voicemailAction:          "voicemail",
         voicemailMessage:         "voicemail",
@@ -6318,11 +6339,22 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
                     onGoToPrompt={() => handleTabClick("prompt")}
                   />
                 )}
-                {activeTab === "prompt"    && <PromptTab form={form} />}
+                {activeTab === "prompt"    && <PromptTab form={form} agentId={agentId} />}
                 {activeTab === "voice"     && <VoiceTab form={form} />}
                 {activeTab === "tools"     && <ToolsTab form={form} agentId={agentId} />}
+                {activeTab === "channels" && (
+                  <ChannelsPanel
+                    agent={agent}
+                    embedded
+                    initialChannel={((): ChannelId => {
+                      const ch = new URLSearchParams(search).get("channel");
+                      const allowed: ChannelId[] = ["phone", "whatsapp", "email", "meetings", "booking"];
+                      return allowed.includes(ch as ChannelId) ? (ch as ChannelId) : "phone";
+                    })()}
+                  />
+                )}
                 {activeTab === "voicemail" && <VoicemailTab form={form} />}
-                {activeTab === "advanced"  && <AdvancedTab form={form} agent={agent} />}
+                {activeTab === "settings"  && <AdvancedTab form={form} agent={agent} />}
                 {activeTab === "versions"  && <VersionsTab agentId={agent.id} />}
               </form>
 
@@ -6676,7 +6708,7 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
       : step === "surfaces" ? "Phone only, or phone plus video meetings with a separate prompt."
         : composition === "team"
           ? "We’ll create this agent, then open team setup so you can add teammates."
-          : "You can edit prompts and connections anytime.";
+          : "You can edit prompts, channels, and settings anytime.";
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose(); }}>

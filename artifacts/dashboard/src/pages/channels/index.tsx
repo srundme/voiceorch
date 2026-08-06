@@ -1,11 +1,12 @@
 /**
- * Channels page removed from product IA.
- * Deep-links redirect to Connections / Meetings / Agents.
+ * Legacy /app/channels deep-links → Agent Builder Channels (or Connections).
  */
 
 import { useEffect } from "react";
 import { useLocation, useSearch } from "wouter";
 import { Loader2 } from "lucide-react";
+
+const CHANNELS = new Set(["phone", "whatsapp", "email", "meetings", "booking"]);
 
 export default function ChannelsRedirectPage() {
   const [, navigate] = useLocation();
@@ -15,10 +16,17 @@ export default function ChannelsRedirectPage() {
     const params = new URLSearchParams(search);
     const channel = params.get("channel");
     const agentId = params.get("agentId");
-    const q = agentId ? `?agentId=${encodeURIComponent(agentId)}` : "";
+
+    if (agentId && Number(agentId) > 0) {
+      const ch = channel && CHANNELS.has(channel) ? channel : "phone";
+      navigate(`/app/agents/${agentId}?section=channels&channel=${encodeURIComponent(ch)}`, {
+        replace: true,
+      });
+      return;
+    }
 
     if (channel === "meetings") {
-      navigate(`/app/meet${q}`, { replace: true });
+      navigate("/app/meet", { replace: true });
       return;
     }
     if (channel === "whatsapp") {
@@ -29,11 +37,11 @@ export default function ChannelsRedirectPage() {
       navigate("/app/connections?setup=email", { replace: true });
       return;
     }
-    if (channel === "booking" || channel === "phone") {
-      navigate(agentId ? `/app/agents/${agentId}` : "/app/agents", { replace: true });
+    if (channel === "booking") {
+      navigate("/app/connections?setup=calendar", { replace: true });
       return;
     }
-    navigate("/app/connections", { replace: true });
+    navigate("/app/agents", { replace: true });
   }, [navigate, search]);
 
   return (

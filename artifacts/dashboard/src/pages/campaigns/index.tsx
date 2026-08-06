@@ -9,6 +9,7 @@ import {
   useListPhoneNumbers,
   useListCrmConnections,
   useGetAccount,
+  customFetch,
 } from "@workspace/api-client-react";
 import type { Campaign, ConsentBasisBasisType } from "@workspace/api-client-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -31,7 +32,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import {
-  Plus, Copy, Check, Phone, Megaphone, ChevronRight, X,
+  Copy, Check, Phone, Megaphone, ChevronRight, X,
   PhoneCall, Clock, MoreHorizontal,
   Pencil, Trash2, Users, CalendarDays,
   CheckCircle2, PlayCircle, PauseCircle, XCircle,
@@ -509,6 +510,8 @@ function CampaignWizard({
   const [concurrentCallLimit, setConcurrentCallLimit] = useState<number | null>(null);
   // Resolved value: user-chosen (if within limit) or clamped to limit.
   const effectiveConcurrency = Math.min(concurrentCallLimit ?? maxConcurrency, maxConcurrency);
+  /** Optional squad — attached after create so dial can hand off between agents. */
+  const [squadId, setSquadId] = useState<number | null>(null);
 
   // ── DPDP consent basis (audit-only; required when agent has DPDP on) ──
   const [consentBasisType, setConsentBasisType] = useState<ConsentBasisType | "">("");
@@ -521,12 +524,40 @@ function CampaignWizard({
     activeCampaigns.filter(c => c.status === "active").map(c => c.agentId).filter(Boolean)
   );
 
+  const { data: squads } = useQuery({
+    queryKey: ["squads-list"],
+    queryFn: () => customFetch<Array<{ id: number; name: string; members?: Array<{ agentId: number; name?: string }> }>>("/api/squads"),
+    staleTime: 30_000,
+    enabled: open,
+  });
+
+  const { data: selectedDisp } = useQuery({
+    queryKey: ["disposition-config", agentId],
+    queryFn: async () => {
+      try {
+        return await customFetch<{ taxonomy: Record<string, string[]> }>(`/api/disposition/config/${agentId}`);
+      } catch {
+        return null;
+      }
+    },
+    enabled: open && !!agentId,
+    staleTime: 60_000,
+  });
+
+  const dispositionLabels = useMemo(() => {
+    const tax = selectedDisp?.taxonomy;
+    if (!tax) return [] as string[];
+    return Object.entries(tax).flatMap(([cat, vals]) =>
+      (vals?.length ? vals : [cat]).map((v) => (vals?.length ? `${cat}: ${v}` : cat)),
+    );
+  }, [selectedDisp]);
+
   function reset() {
     const src = lockedSource ?? "webhook";
     setStep("info"); setName(""); setDesc("");
     setLeadSource(src);
     setTriggerMode(SOURCE_OPTIONS.find(o => o.value === src)?.defaultTrigger ?? "instant");
-    setAgentId(null); setConcurrentCallLimit(null);
+    setAgentId(null); setSquadId(null); setConcurrentCallLimit(null);
     setConsentBasisType(""); setConsentSource(""); setConsentDateRange("");
     setConsentProofRef(""); setConsentNotes("");
   }
@@ -609,6 +640,20 @@ function CampaignWizard({
           callDelaySeconds: d.callDelaySeconds,
         } as Parameters<typeof create.mutateAsync>[0]["data"],
       });
+      if (squadId) {
+        try {
+          await customFetch(`/api/squads/${squadId}/connect`, {
+            method: "POST",
+            body: JSON.stringify({ campaignId: created.id }),
+          });
+        } catch {
+          toast({
+            title: "Campaign created — squad not attached",
+            description: "You can link a squad from the squad settings page.",
+            variant: "destructive",
+          });
+        }
+      }
       await qc.invalidateQueries({ queryKey: getListCampaignsQueryKey() });
       toast({
         title: "Campaign created",
@@ -805,7 +850,9 @@ function CampaignWizard({
             <div className="space-y-4">
               <div>
                 <h3 className="text-sm font-semibold mb-0.5">Select Voice Agent</h3>
-                <p className="text-xs text-muted-foreground/60">Choose the AI agent that will handle calls in this campaign</p>
+                <p className="text-xs text-muted-foreground/60">
+                  Entry agent for this campaign. Optionally attach a squad for handoffs.
+                </p>
               </div>
               {!agents?.length ? (
                 <div className="py-10 text-center text-muted-foreground/40 text-sm">No agents found. Create an agent first.</div>
@@ -814,7 +861,6 @@ function CampaignWizard({
                   {agents.map(agent => {
                     const lang = agent.asrLanguage ?? undefined;
                     const ttsProvider = agent.ttsProvider;
-                    const dispositions: string[] = [];
                     const isLive = liveAgentIds.has(agent.id);
                     const isSelected = agentId === agent.id;
                     const assignedNum = phoneNumbers?.find(pn => pn.agentId === agent.id)?.number;
@@ -846,12 +892,54 @@ function CampaignWizard({
                           ) : (
                             <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 border border-amber-500/20">No number</span>
                           )}
-                          {dispositions.length > 0 && <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border">{dispositions.length} dispositions</span>}
                         </div>
                         {isSelected && <div className="mt-2 flex items-center gap-1 text-[10px] text-emerald-600"><CheckCircle2 className="h-3 w-3" /> Selected</div>}
                       </button>
                     );
                   })}
+                </div>
+              )}
+              {agentId && dispositionLabels.length > 0 && (
+                <div className="rounded-xl border border-border bg-muted/20 p-3 space-y-2">
+                  <p className="text-[11px] font-semibold text-foreground">Dispositions on this agent</p>
+                  <p className="text-[10px] text-muted-foreground leading-relaxed">
+                    Outcomes captured on calls — filter them later in History.
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {dispositionLabels.slice(0, 12).map((d) => (
+                      <span key={d} className="text-[10px] px-2 py-0.5 rounded-full bg-card border border-border text-muted-foreground">
+                        {d}
+                      </span>
+                    ))}
+                    {dispositionLabels.length > 12 && (
+                      <span className="text-[10px] text-muted-foreground/60">+{dispositionLabels.length - 12} more</span>
+                    )}
+                  </div>
+                </div>
+              )}
+              {!!squads?.length && (
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Squad (optional)</Label>
+                  <Select
+                    value={squadId != null ? String(squadId) : "none"}
+                    onValueChange={(v) => setSquadId(v === "none" ? null : Number(v))}
+                  >
+                    <SelectTrigger className="h-9 text-xs">
+                      <SelectValue placeholder="No squad — single agent" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none" className="text-xs">No squad — single agent</SelectItem>
+                      {squads.map((s) => (
+                        <SelectItem key={s.id} value={String(s.id)} className="text-xs">
+                          {s.name}
+                          {s.members?.length ? ` · ${s.members.length} agents` : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[10px] text-muted-foreground leading-relaxed">
+                    Squad attaches for handoffs. Per-agent call logs: filter by agent in History.
+                  </p>
                 </div>
               )}
               {agentId && !agentFromNumber && (
@@ -910,8 +998,22 @@ function CampaignWizard({
                   { label: "Lead Source",   value: sourceLabel(leadSource), mono: false },
                   { label: "Trigger",       value: triggerMode === "instant" ? "Instant — auto-dial on arrival" : "Batch-wise — manual batch management", mono: false },
                   { label: "Agent",         value: selectedAgent?.name ?? "—", mono: false },
+                  {
+                    label: "Squad",
+                    value: squadId
+                      ? (squads?.find((s) => s.id === squadId)?.name ?? `Squad #${squadId}`)
+                      : "None",
+                    mono: false,
+                  },
                   { label: "Caller ID",     value: agentFromNumber ?? "Agent number (not assigned yet)", mono: !!agentFromNumber },
                   { label: "Concurrent Calls", value: String(effectiveConcurrency), mono: true },
+                  {
+                    label: "Dispositions",
+                    value: dispositionLabels.length
+                      ? `${dispositionLabels.length} on agent`
+                      : "None configured",
+                    mono: false,
+                  },
                 ].map(r => (
                   <div key={r.label} className="flex items-center justify-between px-4 py-2.5">
                     <span className="text-xs text-muted-foreground">{r.label}</span>
@@ -1337,11 +1439,6 @@ export default function CampaignsPage() {
     }
   }
 
-  function openCsvCreate() {
-    setCreateSource("csv");
-    setCreateOpen(true);
-  }
-
   async function handleDelete() {
     if (!deleting || deleteNameInput.trim() !== deleting.name) return;
     setDeletingCamp(true);
@@ -1360,103 +1457,95 @@ export default function CampaignsPage() {
   }
 
   return (
-    <div className="flex-1 flex flex-col h-full overflow-hidden">
-      <div ref={listScrollRef} className="flex-1 overflow-auto">
-        {/* Start a campaign */}
-        <section className="border-b border-border px-4 py-8 sm:px-6 lg:px-8">
-          <div className="mx-auto max-w-5xl">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                  Start a campaign
-                </p>
-                <h2 className="mt-1.5 text-xl font-semibold tracking-[-0.03em] sm:text-2xl">
-                  Where are your leads coming from?
-                </h2>
-                <p className="mt-1.5 max-w-xl text-[13px] leading-relaxed text-muted-foreground">
-                  Each source has its own setup — connect the channel first, then dial.
-                </p>
-              </div>
-              {hasCampaigns && (
-                <Button size="sm" variant="outline" className="h-9 shrink-0 gap-1.5 text-xs" onClick={openCsvCreate}>
-                  <Plus className="h-3.5 w-3.5" />
-                  CSV campaign
-                </Button>
-              )}
-            </div>
-
-            <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {START_SOURCES.map((src) => {
-                const zohoNeedsConnect = src.id === "crm" && !zohoConnected;
-                return (
-                  <button
-                    key={src.id}
-                    type="button"
-                    onClick={() => startFrom(src.id)}
-                    className="group flex min-h-[132px] flex-col items-start gap-4 rounded-2xl border border-border bg-card p-4 text-left transition-colors hover:bg-muted/35"
-                  >
-                    <div className="flex w-full items-start justify-between gap-3">
-                      {src.icon}
-                      <ArrowRight className="mt-1 size-3.5 shrink-0 text-muted-foreground/40 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[14px] font-semibold tracking-[-0.01em]">{src.title}</p>
-                      <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
-                        {src.description}
-                      </p>
-                      <p className="mt-3 text-[11px] font-medium text-foreground/80">
-                        {zohoNeedsConnect ? "Connect Zoho →" : `${src.cta} →`}
-                      </p>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
+    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+      {/* Start a campaign — Oceanic Shimmer hero */}
+      <section className="oceanic-shimmer shrink-0 border-b border-[#123A6B]/40 px-4 py-7 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-5xl">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/65">
+              Start a campaign
+            </p>
+            <h2 className="mt-1.5 text-xl font-semibold tracking-[-0.03em] text-white sm:text-2xl">
+              Where are your leads coming from?
+            </h2>
+            <p className="mt-1.5 max-w-xl text-[13px] leading-relaxed text-white/75">
+              Each source has its own setup — connect the channel first, then dial.
+            </p>
           </div>
-        </section>
 
-        {/* Your campaigns */}
-        <section className="px-4 py-6 sm:px-6 lg:px-8">
-          <div className="mx-auto max-w-5xl space-y-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h3 className="text-[15px] font-semibold tracking-[-0.02em]">Your campaigns</h3>
-                <p className="mt-0.5 text-[12px] text-muted-foreground">
-                  {isLoading
-                    ? "Loading…"
-                    : hasCampaigns
-                      ? `${campaigns.length} campaign${campaigns.length === 1 ? "" : "s"}`
-                      : "None yet — start from a source above"}
-                  {isFetching && !isLoading ? " · refreshing" : ""}
-                </p>
-              </div>
-              {hasCampaigns && (
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setHelpOpen(true)}
-                    className="flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-muted/40 text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground"
-                    title="Campaign guide"
-                  >
-                    <HelpCircle className="h-4 w-4" />
-                  </button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-9 gap-1.5 rounded-lg text-xs"
-                    onClick={() => {
-                      const token = localStorage.getItem("voiceorch:session");
-                      const url = `${BASE}/api/campaigns/export.csv${token ? `?token=${encodeURIComponent(token)}` : ""}`;
-                      window.open(url, "_blank");
-                    }}
-                  >
-                    <FileText className="h-3.5 w-3.5" /> Export
-                  </Button>
-                </div>
-              )}
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {START_SOURCES.map((src) => {
+              const zohoNeedsConnect = src.id === "crm" && !zohoConnected;
+              return (
+                <button
+                  key={src.id}
+                  type="button"
+                  onClick={() => startFrom(src.id)}
+                  className="group flex min-h-[120px] flex-col items-start gap-3 rounded-2xl border border-white/25 bg-white/90 p-4 text-left shadow-sm backdrop-blur-sm transition-colors hover:bg-white"
+                >
+                  <div className="flex w-full items-start justify-between gap-3">
+                    {src.icon}
+                    <ArrowRight className="mt-1 size-3.5 shrink-0 text-muted-foreground/40 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[14px] font-semibold tracking-[-0.01em] text-foreground">{src.title}</p>
+                    <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
+                      {src.description}
+                    </p>
+                    <p className="mt-2.5 text-[11px] font-medium text-[#123A6B]">
+                      {zohoNeedsConnect ? "Connect Zoho →" : `${src.cta} →`}
+                    </p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* Your campaigns — list scrolls independently */}
+      <section className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-5 sm:px-6 lg:px-8">
+        <div className="mx-auto flex h-full min-h-0 w-full max-w-5xl flex-col gap-3">
+          <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 className="text-[15px] font-semibold tracking-[-0.02em]">Your campaigns</h3>
+              <p className="mt-0.5 text-[12px] text-muted-foreground">
+                {isLoading
+                  ? "Loading…"
+                  : hasCampaigns
+                    ? `${campaigns.length} campaign${campaigns.length === 1 ? "" : "s"}`
+                    : "None yet — start from a source above"}
+                {isFetching && !isLoading ? " · refreshing" : ""}
+              </p>
             </div>
-
             {hasCampaigns && (
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setHelpOpen(true)}
+                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-muted/40 text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground"
+                  title="Campaign guide"
+                >
+                  <HelpCircle className="h-4 w-4" />
+                </button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-9 gap-1.5 rounded-lg text-xs"
+                  onClick={() => {
+                    const token = localStorage.getItem("voiceorch:session");
+                    const url = `${BASE}/api/campaigns/export.csv${token ? `?token=${encodeURIComponent(token)}` : ""}`;
+                    window.open(url, "_blank");
+                  }}
+                >
+                  <FileText className="h-3.5 w-3.5" /> Export
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {hasCampaigns && (
+            <div className="shrink-0">
               <MetricStrip cols={6}>
                 <MetricCard label="Active" value={stats?.activeCampaigns ?? 0} icon={<Megaphone />} loading={isLoading} />
                 <MetricCard label="Listening" value={stats?.listeningCampaigns ?? 0} sub="Real-time intake" icon={<Wifi />} loading={isLoading} />
@@ -1465,60 +1554,62 @@ export default function CampaignsPage() {
                 <MetricCard label="Leads today" value={stats?.todayLeads ?? 0} icon={<Users />} loading={isLoading} />
                 <MetricCard label="Bookings today" value={stats?.todayBookings ?? 0} icon={<BookMarked />} loading={isLoading} />
               </MetricStrip>
-            )}
+            </div>
+          )}
 
-            {hasCampaigns && (
-              <div className="overflow-hidden rounded-2xl border border-border bg-card">
-                <div className="flex flex-wrap items-center gap-2.5 border-b border-border/60 px-4 py-3">
-                  <div className="relative min-w-[160px] max-w-xs flex-1">
-                    <Activity className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/40" />
-                    <input
-                      className="h-8 w-full rounded-lg border border-border/60 bg-muted/40 pl-8 pr-3 text-xs text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:ring-1 focus:ring-ring"
-                      placeholder="Search campaigns…"
-                      value={search}
-                      onChange={e => setSearch(e.target.value)}
-                    />
-                  </div>
-                  <Select value={filterSource} onValueChange={setFilterSource}>
-                    <SelectTrigger className="h-8 w-[140px] border-border/60 bg-muted/40 text-xs">
-                      <SelectValue placeholder="Source" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__all__">All Sources</SelectItem>
-                      {Object.entries(SOURCE_LABEL).map(([v, l]) => (
-                        <SelectItem key={v} value={v}>{l}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Select value={filterStatus} onValueChange={setFilterStatus}>
-                    <SelectTrigger className="h-8 w-[140px] border-border/60 bg-muted/40 text-xs">
-                      <SelectValue placeholder="Status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__all__">All Statuses</SelectItem>
-                      {Object.entries(STATUS_CFG).map(([v, cfg]) => (
-                        <SelectItem key={v} value={v}>{cfg.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {showClear && (
-                    <button
-                      type="button"
-                      className="flex h-8 items-center gap-1.5 rounded-lg border border-border/60 px-2.5 text-xs text-muted-foreground/50 transition-colors hover:text-foreground"
-                      onClick={() => {
-                        setSearch("");
-                        setFilterSource("__all__");
-                        setFilterStatus("__all__");
-                      }}
-                    >
-                      <X className="h-3 w-3" /> Clear
-                    </button>
-                  )}
-                  <span className="ml-auto text-[10px] tabular-nums text-muted-foreground/30">
-                    {filtered.length} campaign{filtered.length !== 1 ? "s" : ""}
-                  </span>
+          {hasCampaigns && (
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border bg-card">
+              <div className="flex shrink-0 flex-wrap items-center gap-2.5 border-b border-border/60 px-4 py-3">
+                <div className="relative min-w-[160px] max-w-xs flex-1">
+                  <Activity className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/40" />
+                  <input
+                    className="h-8 w-full rounded-lg border border-border/60 bg-muted/40 pl-8 pr-3 text-xs text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:ring-1 focus:ring-ring"
+                    placeholder="Search campaigns…"
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                  />
                 </div>
+                <Select value={filterSource} onValueChange={setFilterSource}>
+                  <SelectTrigger className="h-8 w-[140px] border-border/60 bg-muted/40 text-xs">
+                    <SelectValue placeholder="Source" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__all__">All Sources</SelectItem>
+                    {Object.entries(SOURCE_LABEL).map(([v, l]) => (
+                      <SelectItem key={v} value={v}>{l}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={filterStatus} onValueChange={setFilterStatus}>
+                  <SelectTrigger className="h-8 w-[140px] border-border/60 bg-muted/40 text-xs">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__all__">All Statuses</SelectItem>
+                    {Object.entries(STATUS_CFG).map(([v, cfg]) => (
+                      <SelectItem key={v} value={v}>{cfg.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {showClear && (
+                  <button
+                    type="button"
+                    className="flex h-8 items-center gap-1.5 rounded-lg border border-border/60 px-2.5 text-xs text-muted-foreground/50 transition-colors hover:text-foreground"
+                    onClick={() => {
+                      setSearch("");
+                      setFilterSource("__all__");
+                      setFilterStatus("__all__");
+                    }}
+                  >
+                    <X className="h-3 w-3" /> Clear
+                  </button>
+                )}
+                <span className="ml-auto text-[10px] tabular-nums text-muted-foreground/30">
+                  {filtered.length} campaign{filtered.length !== 1 ? "s" : ""}
+                </span>
+              </div>
 
+              <div ref={listScrollRef} className="min-h-0 flex-1 overflow-y-auto">
                 {isLoading ? (
                   <div>
                     {[...Array(4)].map((_, i) => (
@@ -1566,18 +1657,18 @@ export default function CampaignsPage() {
                   </>
                 )}
               </div>
-            )}
+            </div>
+          )}
 
-            {!isLoading && !hasCampaigns && (
-              <div className="rounded-2xl border border-dashed border-border/70 px-6 py-10 text-center">
-                <p className="text-[13px] text-muted-foreground">
-                  Your campaigns will show up here after you start one.
-                </p>
-              </div>
-            )}
-          </div>
-        </section>
-      </div>
+          {!isLoading && !hasCampaigns && (
+            <div className="rounded-2xl border border-dashed border-border/70 px-6 py-10 text-center">
+              <p className="text-[13px] text-muted-foreground">
+                Your campaigns will show up here after you start one.
+              </p>
+            </div>
+          )}
+        </div>
+      </section>
 
       {/* Campaign guide */}
       <Sheet open={helpOpen} onOpenChange={setHelpOpen}>

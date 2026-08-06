@@ -22,7 +22,11 @@ import {
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { clientContext } from "../middlewares/clientContext.js";
 import { getAuth } from "../lib/auth-compat.js";
-import { dispatchWebhooks } from "./webhook-endpoints.js";
+import {
+  buildCallEndedWebhookPayload,
+  dispatchWebhooks,
+  flatDispositionFromTaxonomy,
+} from "./webhook-endpoints.js";
 import { disposeCall } from "../services/disposition.js";
 import { traiPreDialCheck, logPreDialDecision } from "../services/trai/index.js";
 import { evaluateIrdaiGate, IRDAI_BLOCKED_MESSAGE, IRDAI_BLOCKED_CODE } from "../services/irdai/gate.js";
@@ -1093,71 +1097,120 @@ router.patch("/calls/:id/end", requireAuth, clientContext, async (req, res): Pro
     }
   }
 
-  // Fire call.completed webhook (fire-and-forget). Legacy subscribers to call.ended still match.
-  if (callUserId) {
-    const status = String(call.status ?? "completed");
-    const event = status === "failed" ? "call.failed" as const : "call.completed" as const;
-    dispatchWebhooks(callUserId, event, {
+  // Disposition first, then webhooks with the full enriched payload.
+  // Fire-and-forget wrapper so the HTTP response is not blocked, but order inside
+  // is awaited so dispositionResult is present when webhooks fire.
+  void (async () => {
+    let dispositionResult: Record<string, unknown> | null =
+      (call.dispositionResult as Record<string, unknown> | null) ?? null;
+    try {
+      if (!dispositionResult) {
+        const taxResult = await disposeCall({
+          agentId: call.agentId,
+          callId: call.id,
+          transcript: call.transcript ?? null,
+          callEvents: [],
+          callStartedAt: call.createdAt ?? null,
+        });
+        dispositionResult = flatDispositionFromTaxonomy(taxResult) ?? dispositionResult;
+      }
+    } catch {
+      /* disposition optional */
+    }
+
+    const [fresh] = await db.select().from(callsTable).where(eq(callsTable.id, call.id)).limit(1);
+    const status = String(fresh?.status ?? call.status ?? "completed");
+    const payload = buildCallEndedWebhookPayload({
       callId: call.id,
+      executionId: fresh?.executionId ?? call.executionId ?? null,
       agentId: call.agentId,
+      agentName: agent?.name ?? null,
       status,
-      toNumber: call.toNumber ?? null,
-      fromNumber: call.fromNumber ?? null,
-      durationSeconds,
-      costCents: debitCents,
-      transcript: call.transcript ?? null,
-      callSummary: call.callSummary ?? null,
-      dispositionResult: call.dispositionResult ?? null,
-      recordingUrl: call.recordingUrl ?? null,
+      fromNumber: fresh?.fromNumber ?? call.fromNumber ?? null,
+      toNumber: fresh?.toNumber ?? call.toNumber ?? null,
+      durationSeconds: fresh?.durationSeconds ?? durationSeconds,
+      costCents: fresh?.costCents ?? debitCents ?? null,
+      transcript: fresh?.transcript ?? call.transcript ?? null,
+      callSummary: fresh?.callSummary ?? call.callSummary ?? null,
+      dispositionResult:
+        dispositionResult
+        ?? (fresh?.dispositionResult as Record<string, unknown> | null)
+        ?? null,
+      successEvaluation: fresh?.successEvaluation ?? call.successEvaluation ?? null,
+      recordingUrl: fresh?.recordingUrl ?? call.recordingUrl ?? null,
+      recordingError: fresh?.recordingError ?? call.recordingError ?? null,
+      amdResult: fresh?.amdResult ?? call.amdResult ?? null,
+      transferType: fresh?.transferType ?? call.transferType ?? null,
+      transferTarget: fresh?.transferTarget ?? call.transferTarget ?? null,
+      conversationCompleted: fresh?.conversationCompleted ?? call.conversationCompleted ?? null,
+      primaryLanguage: fresh?.primaryLanguage ?? call.primaryLanguage ?? null,
+      memoryRecognized: fresh?.memoryRecognized ?? call.memoryRecognized ?? null,
+      errorMessage: fresh?.errorMessage ?? call.errorMessage ?? null,
+      tokensSaved: fresh?.tokensSaved ?? call.tokensSaved ?? null,
+      avgSttLatencyMs: fresh?.sttLatencyMs ?? null,
+      avgLlmLatencyMs: fresh?.llmLatencyMs ?? null,
+      avgTtsLatencyMs: fresh?.ttsFirstChunkMs ?? null,
+      createdAt: fresh?.createdAt ?? call.createdAt ?? null,
+      endedAt: fresh?.endedAt ?? new Date(),
+      metadata: fresh?.metadata ?? call.metadata ?? null,
+    });
+
+    if (callUserId) {
+      const event = status === "failed" ? "call.failed" as const : "call.completed" as const;
+      dispatchWebhooks(callUserId, event, payload).catch(() => {});
+    }
+
+    // Agent webhook URL (if set on agent)
+    if (agent?.webhookUrl) {
+      const bodyStr = JSON.stringify(payload);
+      fetch(agent.webhookUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: bodyStr,
+        signal: AbortSignal.timeout(10_000),
+      }).catch(() => {});
+    }
+
+    import("../services/crm/writeback.js").then(({ writeCrmCallOutcome }) => {
+      writeCrmCallOutcome(call.id).catch(() => {});
     }).catch(() => {});
-  }
 
-  // Fire disposition extraction (fire-and-forget — never blocks webhook response)
-  disposeCall({
-    agentId:    call.agentId,
-    callId:     call.id,
-    transcript: call.transcript ?? null,
-    callEvents: [],
-    callStartedAt: call.createdAt ?? null,
-  }).catch(() => {});
-
-  // CRM writeback (fire-and-forget — push call outcome to HubSpot/Zoho if lead was CRM-sourced)
-  import("../services/crm/writeback.js").then(({ writeCrmCallOutcome }) => {
-    writeCrmCallOutcome(call.id).catch(() => {});
-  }).catch(() => {});
-
-  // Google Sheets Automatic Calls writeback only (agent Tools sheets removed)
-  import("../services/sheets-writeback.js").then(({ writeSheetAutoCallResults }) => {
-    writeSheetAutoCallResults(call.id).catch(() => {});
-  }).catch(() => {});
-
-  // WhatsApp post-call notify (custom outbound webhook)
-  import("../services/whatsapp/outbound.js").then(({ dispatchWhatsappCallEnded }) => {
-    dispatchWhatsappCallEnded(call.id).catch(() => {});
-  }).catch(() => {});
-
-  // Zelto call monitoring (fire-and-forget)
-  import("../services/zelto.js").then(({ pushCallToZelto }) => {
-    const endedAt  = new Date().toISOString();
-    const startedAt = durationSeconds
-      ? new Date(Date.now() - durationSeconds * 1000).toISOString()
-      : undefined;
-    pushCallToZelto({
-      callId:            call.id,
-      agentId:           call.agentId,
-      status:            call.status ?? undefined,
-      direction:         (call as any).direction ?? "inbound",
-      fromNumber:        call.fromNumber ?? null,
-      toNumber:          call.toNumber ?? null,
-      durationSeconds,
-      startedAt,
-      endedAt,
-      costCents:         debitCents ?? null,
-      transcript:        call.transcript ?? null,
-      callSummary:       (call as any).callSummary ?? null,
-      dispositionResult: (call as any).dispositionResult as Record<string, unknown> | null ?? null,
+    import("../services/sheets-writeback.js").then(({ writeSheetAutoCallResults }) => {
+      writeSheetAutoCallResults(call.id, {
+        callSummary: (payload["callSummary"] as string | null) ?? null,
+        dispositionResult: (payload["dispositionResult"] as Record<string, unknown> | null) ?? null,
+      }).catch(() => {});
     }).catch(() => {});
-  }).catch(() => {});
+
+    import("../services/whatsapp/outbound.js").then(({ dispatchWhatsappCallEnded }) => {
+      dispatchWhatsappCallEnded(call.id, {
+        callSummary: (payload["callSummary"] as string | null) ?? null,
+        dispositionResult: (payload["dispositionResult"] as Record<string, unknown> | null) ?? null,
+      }).catch(() => {});
+    }).catch(() => {});
+
+    import("../services/zelto.js").then(({ pushCallToZelto }) => {
+      const endedAt = new Date().toISOString();
+      const startedAt = durationSeconds
+        ? new Date(Date.now() - durationSeconds * 1000).toISOString()
+        : undefined;
+      pushCallToZelto({
+        callId: call.id,
+        agentId: call.agentId,
+        status: call.status ?? undefined,
+        direction: (call as any).direction ?? "inbound",
+        fromNumber: call.fromNumber ?? null,
+        toNumber: call.toNumber ?? null,
+        durationSeconds,
+        startedAt,
+        endedAt,
+        costCents: debitCents ?? null,
+        transcript: call.transcript ?? null,
+        callSummary: (payload["callSummary"] as string | null) ?? null,
+        dispositionResult: (payload["dispositionResult"] as Record<string, unknown> | null) ?? null,
+      }).catch(() => {});
+    }).catch(() => {});
+  })();
 
   const enriched = await enrichCall(call);
   res.json(EndCallResponse.parse(enriched));

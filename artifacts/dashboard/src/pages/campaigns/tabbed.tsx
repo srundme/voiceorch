@@ -11,6 +11,7 @@ export default function CampaignsTabPage() {
       title="Campaigns"
       description="Start a campaign from Meta, Website, Google Sheets, CSV, or Zoho CRM."
       fullBleed
+      lockScroll
       contentClassName="!px-0 !py-0 max-w-none"
     >
       <CampaignsPage />
