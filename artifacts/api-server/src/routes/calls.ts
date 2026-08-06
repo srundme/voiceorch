@@ -3,6 +3,7 @@ import { getSelfBaseUrl } from "../lib/app-domain.js";
 import { randomBytes } from "crypto";
 import { eq, desc, and, or, sql, gte, gt, lte, isNull, inArray } from "drizzle-orm";
 import { db, callsTable, callEventsTable, executionLogsTable, agentsTable, providersTable, usersTable, walletTransactionsTable, activityLogsTable, callTransfersTable, vobizAccountsTable, verifiedPhoneDestinationsTable, platformSettingsTable, phoneNumbersTable, callerProfilesTable, callerFactsTable, callerCallArchiveTable, callExecutionsTable, canonicalizeCallerKey, humanPhone, resolveCallerKey } from "@workspace/db";
+import { computeProRataDebitCents } from "../services/call-billing.js";
 import { getFlatRateCentsPerMin, resolveAgentBillingMode, resolveOwnTelephonyDiscount } from "../services/minute-rates.js";
 import { resolvePartnerBilling, creditPartnerSpreadOnCall } from "../services/partner-billing.js";
 import {
@@ -975,9 +976,10 @@ router.patch("/calls/:id/end", requireAuth, clientContext, async (req, res): Pro
     ?? Math.max(0, getFlatRateCentsPerMin(billingMode) - ownTelephonyDiscount);
   const modeLabel = partnerBilling ? "partner" : billingMode === "managed" ? "managed" : "BYOP";
   const rateLabel = `₹${(rateCentsPerMin / 100).toFixed(2)}/min (${modeLabel})`;
+  // Per-second pro-rata (never ceil to a full minute). 9s @ ₹5/min → ₹0.75.
   const debitCents = alreadyBilled || durationSeconds <= 0
     ? 0
-    : Math.max(1, Math.round((durationSeconds / 60) * rateCentsPerMin));
+    : computeProRataDebitCents(durationSeconds, rateCentsPerMin);
 
   // NOTE: costCents is deliberately NOT set here — it is written by the
   // atomic billing claim below so racing end paths can't both bill.

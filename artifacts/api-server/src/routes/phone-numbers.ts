@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import crypto from "crypto";
 import Razorpay from "razorpay";
 import { eq, and, ne, or, inArray, sql } from "drizzle-orm";
-import { db, usersTable, walletTransactionsTable, phoneNumbersTable, phoneNumberOrdersTable, agentsTable, partnersTable, vobizAccountsTable, platformSettingsTable, whatsappChannelsTable } from "@workspace/db";
+import { db, usersTable, walletTransactionsTable, phoneNumbersTable, phoneNumberOrdersTable, agentsTable, partnersTable, vobizAccountsTable, platformSettingsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { clientContext, denyManagedClient, getManagingPartner } from "../middlewares/clientContext.js";
 import { logActivity } from "../lib/activity.js";
@@ -28,6 +28,7 @@ import {
   AssignPhoneNumberResponse,
   ReleasePhoneNumberParams,
 } from "@workspace/api-zod";
+import { releasePhoneNumberRecord } from "../services/phone-number-release.js";
 
 const router: IRouter = Router();
 
@@ -503,34 +504,6 @@ async function configureVobizNumberWebhook(
   }
 }
 
-/** Release a number back to Vobiz inventory. */
-async function releaseVobizNumber(
-  authId: string,
-  authToken: string,
-  e164: string
-): Promise<void> {
-  // VoBiz paths carry the %2B-encoded E.164; older builds used bare digits.
-  // Try documented form first, fall back to digits-only on 404.
-  const plusForm = e164.startsWith("+") ? e164 : `+${e164.replace(/\D/g, "")}`;
-  let url = `${VOBIZ_ACCOUNT_BASE}/${authId}/numbers/${encodeURIComponent(plusForm)}`;
-  let resp = await fetch(url, {
-    method:  "DELETE",
-    headers: vobizHeaders(authId, authToken),
-  });
-  if (resp.status === 404) {
-    url = `${VOBIZ_ACCOUNT_BASE}/${authId}/numbers/${encodeURIComponent(plusForm.slice(1))}`;
-    resp = await fetch(url, {
-      method:  "DELETE",
-      headers: vobizHeaders(authId, authToken),
-    });
-  }
-  // 204 or 200 both indicate success; 404 means already released — treat as success
-  if (!resp.ok && resp.status !== 404) {
-    const err = await resp.text();
-    throw new Error(`Vobiz release error ${resp.status}: ${err}`);
-  }
-}
-
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 async function enrichNumber(row: typeof phoneNumbersTable.$inferSelect) {
@@ -542,6 +515,8 @@ async function enrichNumber(row: typeof phoneNumbersTable.$inferSelect) {
   return {
     ...row,
     agentName,
+    renewalMode: row.renewalMode ?? "wallet",
+    renewalGraceUntil: row.renewalGraceUntil?.toISOString() ?? null,
     purchasedAt:    row.purchasedAt.toISOString(),
     nextRenewalAt:  row.nextRenewalAt?.toISOString() ?? null,
     lastRenewalAt:  row.lastRenewalAt?.toISOString() ?? null,
@@ -684,10 +659,20 @@ router.post("/phone-numbers/purchase/initiate", requireAuth, clientContext, deny
   const parsed = InitiatePhoneNumberPurchaseBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Validation failed", issues: parsed.error.issues }); return; }
 
-  const { number, countryCode, region, numberType } = parsed.data;
+  const { number, countryCode, region, numberType, renewalMode } = parsed.data;
 
   const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, clerkId));
   if (!user) { res.status(404).json({ error: "User not found" }); return; }
+
+  if (renewalMode === "autopay") {
+    if (!user.razorpayCustomerId || !user.razorpayTokenId) {
+      res.status(400).json({
+        error: "Set up card auto-pay in Wallet before buying with Autopay renewal.",
+        code: "NEED_AUTOPAY_SETUP",
+      });
+      return;
+    }
+  }
 
   // KYC gate — Indian numbers require completed identity verification
   if (!countryCode || countryCode.toUpperCase() === "IN") {
@@ -754,11 +739,12 @@ router.post("/phone-numbers/purchase/initiate", requireAuth, clientContext, deny
     region:          region ?? null,
     numberType:      numberType ?? "local",
     amountCents:     payablePaise, // Razorpay charge incl. GST (for refunds)
+    renewalMode,
     status:          "pending",
     razorpayOrderId: order.id,
   }).returning();
 
-  req.log.info({ userId: clerkId, number, orderId: order.id, payablePaise }, "Phone number purchase order initiated");
+  req.log.info({ userId: clerkId, number, orderId: order.id, payablePaise, renewalMode }, "Phone number purchase order initiated");
 
   res.json({
     purchaseOrderId: orderRow!.id,
@@ -822,7 +808,8 @@ router.post("/phone-numbers/purchase/confirm", requireAuth, clientContext, denyM
     return;
   }
 
-  const { number, countryCode, region, numberType, amountCents } = claimed;
+  const { number, countryCode, region, numberType, amountCents, renewalMode } = claimed;
+  const resolvedRenewalMode = renewalMode === "autopay" ? "autopay" : "wallet";
 
   // Always buy from the platform VoBiz master wallet. Per-user sub-accounts
   // are not funded for DID cost and caused "balance debit failed" after the
@@ -883,10 +870,16 @@ router.post("/phone-numbers/purchase/confirm", requireAuth, clientContext, denyM
     status:           "active",
     monthlyRateCents: phonePurchaseBasePaise(number),
     renewalRateCents: withGstPaise(phonePurchaseBasePaise(number)), // renewal = same as purchase price
+    renewalMode:      resolvedRenewalMode,
     purchasedAt:      now,
     nextRenewalAt,
     lastRenewalAt:    now,
   }).returning();
+
+  // Autopay renewal: ensure account-level auto-pay stays on when a mandate exists.
+  if (resolvedRenewalMode === "autopay" && user.razorpayCustomerId && user.razorpayTokenId && !user.autoPayEnabled) {
+    await db.update(usersTable).set({ autoPayEnabled: true }).where(eq(usersTable.id, user.id));
+  }
 
   await db.update(phoneNumberOrdersTable)
     .set({ status: "completed", phoneNumberId: row!.id })
@@ -1227,51 +1220,7 @@ router.delete("/phone-numbers/:id", requireAuth, clientContext, denyManagedClien
 
   if (!existing) { res.status(404).json({ error: "Phone number not found" }); return; }
 
-  // Any released number may back a WhatsApp channel — BYON lets users
-  // WhatsApp-enable voice DIDs too — so deactivate any channel bound to this
-  // number so sends fail loudly, not silently.
-  {
-    const plusForm = existing.number.startsWith("+") ? existing.number : `+${existing.number}`;
-    await db.update(whatsappChannelsTable)
-      .set({ active: false, status: "disconnected", lastError: "The number linked to this WhatsApp channel was released", updatedAt: new Date() })
-      .where(and(
-        eq(whatsappChannelsTable.userId, clerkId),
-        inArray(whatsappChannelsTable.phoneE164, [existing.number, plusForm]),
-      ));
-  }
-
-  if (existing.service === "whatsapp") {
-    // WhatsApp numbers are not voice DIDs — the Account unrent API doesn't apply.
-    // Mark released locally (stops the 30-day wallet renewals).
-    req.log.warn({ number: existing.number }, "Releasing WhatsApp-service number — voice unrent API skipped");
-  } else if (existing.provider !== "vobiz") {
-    // BYO number (user's own carrier account) — nothing to unrent on VoBiz.
-    req.log.info({ number: existing.number, provider: existing.provider }, "Releasing BYO number — carrier unrent skipped");
-  } else {
-    const { authId, authToken, configured } = getPlatformVobizCreds();
-
-    // Release back to Vobiz inventory (live API call)
-    if (configured) {
-      try {
-        await releaseVobizNumber(authId!, authToken!, existing.number);
-      } catch (err) {
-        req.log.error({ err, number: existing.number }, "Vobiz release failed — marking released in DB anyway");
-      }
-    }
-  }
-
-  await db
-    .update(phoneNumbersTable)
-    .set({ status: "released", releasedAt: new Date(), agentId: null })
-    .where(eq(phoneNumbersTable.id, existing.id));
-
-  await logActivity({
-    userId:       clerkId,
-    eventType:    "phone_number.released",
-    resourceType: "phone_number",
-    resourceId:   String(existing.id),
-    description:  `Phone number ${existing.number} released back to inventory`,
-  });
+  await releasePhoneNumberRecord(existing, { reason: "user_requested", log: req.log });
 
   res.sendStatus(204);
 });

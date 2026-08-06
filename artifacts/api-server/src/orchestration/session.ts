@@ -2,6 +2,7 @@ import { createHmac, createHash, randomBytes } from "crypto";
 import { getSelfBaseUrl } from "../lib/app-domain.js";
 import { db, agentsTable, callsTable, providersTable, platformSettingsTable, campaignLeadsTable, knowledgeEntriesTable, callTransfersTable, usersTable, walletTransactionsTable, bookingsTable, eventTypesTable, scheduledCallbacksTable, campaignsTable, executionLogsTable, squadsTable, squadRunsTable, phoneNumbersTable } from "@workspace/db";
 import { createExecutionLogger, writeCallEndedLog, writeCallStartedLog, logRecordingEvent, EXEC_COMPONENTS } from "../services/execution-log.js";
+import { computeProRataDebitCents, isNonBillableCallStatus } from "../services/call-billing.js";
 import { getFlatRateCentsPerMin, resolveAgentBillingMode, resolveOwnTelephonyDiscount } from "../services/minute-rates.js";
 import { resolvePartnerBilling, creditPartnerSpreadOnCall } from "../services/partner-billing.js";
 import { getAttachedSourceIds, buildKnowledgeBaseBlockEx } from "./kb-retrieval.js";
@@ -3138,7 +3139,14 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
         // that route.  We bill here instead — skipped if costCents is already set
         // (prevents double-debit if the route is also called).
         const sessionCallUserId = call.userId ?? ag.userId ?? null;
-        if (sessionCallUserId && durationSeconds > 0 && !(call.costCents != null && call.costCents > 0)) {
+        // no_pickup / busy / failed: never charge a full minute (or anything) —
+        // common for short webcalls that never start a turn.
+        if (
+          sessionCallUserId &&
+          durationSeconds > 0 &&
+          !isNonBillableCallStatus(callStatus) &&
+          !(call.costCents != null && call.costCents > 0)
+        ) {
           try {
             const billingMode     = await resolveAgentBillingMode(sessionCallUserId, ag);
             // Partner-managed clients bill at their partner-set rate; spread is
@@ -3148,7 +3156,7 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
               ?? Math.max(0, getFlatRateCentsPerMin(billingMode) - await resolveOwnTelephonyDiscount(sessionCallUserId, ag));
             const modeLabel       = partnerBilling ? "partner" : billingMode === "managed" ? "managed" : "BYOP";
             const rateLabel       = `₹${(rateCentsPerMin / 100).toFixed(2)}/min (${modeLabel})`;
-            const debitCents      = Math.max(1, Math.round((durationSeconds / 60) * rateCentsPerMin));
+            const debitCents      = computeProRataDebitCents(durationSeconds, rateCentsPerMin);
             if (debitCents > 0) {
               // Atomic billing claim: flip costCents from unset→set in ONE
               // conditional UPDATE — only the winner debits + credits (the

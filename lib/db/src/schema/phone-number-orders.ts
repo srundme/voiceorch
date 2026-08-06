@@ -16,6 +16,8 @@ export const phoneNumberOrdersTable = pgTable("phone_number_orders", {
   region:         text("region"),
   numberType:     text("number_type").notNull().default("local"),
   amountCents:    integer("amount_cents").notNull(),
+  /** Chosen at checkout: 'autopay' | 'wallet' — copied onto phone_numbers on confirm. */
+  renewalMode:    text("renewal_mode").notNull().default("wallet"),
   // pending -> processing -> completed | failed | cancelled
   status:         text("status").notNull().default("pending"),
   razorpayOrderId:   text("razorpay_order_id").unique(),

@@ -384,7 +384,7 @@ export default function CallPricingPage() {
         <p className="font-semibold text-foreground">How billing works</p>
         <p>• Total per-min charge = LLM rate + ASR rate + TTS rate + Telephony rate for the agent's provider stack.</p>
         <p>• At call start, max duration = floor(user wallet / total rate) minutes — call auto-hangs up at that limit.</p>
-        <p>• At call end, we debit: ceil(seconds / 60) × total rate for calls ≥ 30 s; half the rate flat for calls &lt; 30 s.</p>
+        <p>• At call end, we debit per-second pro-rata: (seconds / 60) × rate. A 9s call @ ₹5/min is ₹0.75 — not a full minute. No-pickup / busy / failed calls are not charged.</p>
         <p>• Rates are in <strong className="text-foreground">paise (1/100 ₹)</strong>. 100 = ₹1.00/min.</p>
       </div>
     </div>
