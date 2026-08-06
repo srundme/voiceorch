@@ -1,12 +1,10 @@
 /**
- * Legacy /app/channels deep-links → Agent Builder Channels (or Connections).
+ * Legacy /app/channels deep-links → Agent Builder Tools (or Connections).
  */
 
 import { useEffect } from "react";
 import { useLocation, useSearch } from "wouter";
 import { Loader2 } from "lucide-react";
-
-const CHANNELS = new Set(["phone", "whatsapp", "email", "meetings", "booking"]);
 
 export default function ChannelsRedirectPage() {
   const [, navigate] = useLocation();
@@ -18,10 +16,7 @@ export default function ChannelsRedirectPage() {
     const agentId = params.get("agentId");
 
     if (agentId && Number(agentId) > 0) {
-      const ch = channel && CHANNELS.has(channel) ? channel : "phone";
-      navigate(`/app/agents/${agentId}?section=channels&channel=${encodeURIComponent(ch)}`, {
-        replace: true,
-      });
+      navigate(`/app/agents/${agentId}?section=tools`, { replace: true });
       return;
     }
 

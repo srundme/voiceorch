@@ -222,10 +222,14 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   } else if (voiceStack === "classic") {
     agentConfig["voiceStack"] = "classic";
   }
-  // Meeting-room prompt (Builder Talk → In meetings). Deep-merged on the server
-  // so Meetings whoJoins / delegate / memory toggles are preserved.
-  if (meetingPrompt !== undefined) {
-    agentConfig["meetings"] = { meetingPrompt: meetingPrompt ?? "" };
+  // Meeting capacity + prompt. Attendance is owned by agent type:
+  // phone_and_meet → enabled (joins Meet when Booking is on); phone → never joins.
+  // Deep-merged on the server so whoJoins / memory toggles are preserved when present.
+  if (meetingPrompt !== undefined || agentSurfaces !== undefined) {
+    agentConfig["meetings"] = {
+      meetingPrompt: meetingPrompt ?? "",
+      enabled: agentSurfaces === "phone_and_meet",
+    };
   }
 
   const NATIVE_BOOKING_TYPES = new Set(["native_booking", "native_check_availability", "native_list_bookings", "native_reschedule", "native_cancel"]);

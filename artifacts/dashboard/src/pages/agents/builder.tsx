@@ -10,7 +10,7 @@ import {
   Play, Pause,
   Timer, ShieldCheck, Layers, Gauge, MicOff, HelpCircle, PhoneOff, Mail, MessageCircle,
   History, GitBranch, Eye, RotateCcw, ChevronUp, AlertTriangle, ArrowLeftRight,
-  Upload, Archive, Info, AlertCircle, Calendar, Star, Video, Radio,
+  Upload, Archive, Info, AlertCircle, Calendar, Star, Video,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { motion } from "framer-motion";
@@ -93,7 +93,8 @@ import { RecentNumbersList } from "@/components/recent-numbers-list";
 import { useRecentNumbers } from "@/hooks/use-recent-numbers";
 import { GeneratePromptSheet } from "./generate-prompt-sheet";
 import { AgentInboundPanel } from "./agent-inbound-panel";
-import { ChannelsPanel, type ChannelId } from "./channels-panel";
+import { ToolsWhatsappSetup, ToolsEmailSetup } from "./tools-messaging";
+import { MeetingsChannelCard } from "./meetings-channel-card";
 import {
   PropertyRow,
   StatusDot,
@@ -106,7 +107,7 @@ const DASH_API   = `${_DASH_BASE}/api`;
 
 /* ── Types ──────────────────────────────────────────────────────────────────── */
 
-type TabId = "overview" | "prompt" | "voice" | "tools" | "channels" | "voicemail" | "settings" | "versions";
+type TabId = "overview" | "prompt" | "voice" | "tools" | "voicemail" | "settings" | "versions";
 
 interface TabDef { id: TabId; label: string; icon: React.ReactNode }
 
@@ -115,7 +116,6 @@ const TABS: TabDef[] = [
   { id: "prompt",    label: "Prompt",    icon: <FileText className="h-3.5 w-3.5" /> },
   { id: "voice",     label: "Voice",     icon: <Mic className="h-3.5 w-3.5" /> },
   { id: "tools",     label: "Tools",     icon: <Wrench className="h-3.5 w-3.5" /> },
-  { id: "channels",  label: "Channels",  icon: <Radio className="h-3.5 w-3.5" /> },
   { id: "voicemail", label: "Voicemail", icon: <VoicemailIcon className="h-3.5 w-3.5" /> },
   { id: "settings",  label: "Settings",  icon: <Settings className="h-3.5 w-3.5" /> },
   { id: "versions",  label: "Versions",  icon: <History className="h-3.5 w-3.5" /> },
@@ -130,6 +130,8 @@ const BUILDER_SEGMENTS: WorkspaceNavItem<TabId>[] = TABS.map((tab) => ({
 function sectionFromSearch(search: string): TabId {
   const requested = new URLSearchParams(search).get("section");
   if (requested === "advanced") return "settings";
+  // Channels removed — messaging/booking live under Tools.
+  if (requested === "channels") return "tools";
   return TABS.some((tab) => tab.id === requested) ? requested as TabId : "overview";
 }
 
@@ -1326,10 +1328,15 @@ function PromptTab({ form, agentId }: { form: any; agentId?: number }) {
   const [promptSurface, setPromptSurface] = useState<"calls" | "meetings">("calls");
   const agentName  = form.watch("name")     as string | undefined;
   const agentLang  = form.watch("language") as string | undefined;
+  const canAttendMeetings = form.watch("agentSurfaces") === "phone_and_meet";
   const callPromptLen = String(form.watch("systemPrompt") ?? "").length;
   const meetPromptLen = String(form.watch("meetingPrompt") ?? "").length;
   const promptLen = promptSurface === "calls" ? callPromptLen : meetPromptLen;
   const langLabel = LANGUAGES.find(l => l.value === agentLang)?.label ?? agentLang ?? "Language";
+
+  useEffect(() => {
+    if (!canAttendMeetings && promptSurface === "meetings") setPromptSurface("calls");
+  }, [canAttendMeetings, promptSurface]);
 
   return (
     <div className="relative flex min-h-full flex-col gap-6 px-4 py-5 sm:px-6 lg:px-8">
@@ -1392,7 +1399,9 @@ function PromptTab({ form, agentId }: { form: any; agentId?: number }) {
             </Badge>
           </div>
           <p className="mt-0.5 text-[12px] text-muted-foreground">
-            Separate instructions for phone calls and video meetings.
+            {canAttendMeetings
+              ? "Instructions for phone calls and for when this agent joins Meet."
+              : "Instructions for phone calls."}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -1414,77 +1423,89 @@ function PromptTab({ form, agentId }: { form: any; agentId?: number }) {
         </div>
       </div>
 
-      <Tabs value={promptSurface} onValueChange={(v) => setPromptSurface(v as "calls" | "meetings")} className="w-full">
-        <TabsList className="h-9 w-full sm:w-auto grid grid-cols-2 sm:inline-flex">
-          <TabsTrigger value="calls" className="gap-1.5 text-xs">
-            <Phone className="h-3.5 w-3.5" />
-            On calls
-          </TabsTrigger>
-          <TabsTrigger value="meetings" className="gap-1.5 text-xs">
-            <Video className="h-3.5 w-3.5" />
-            In meetings
-          </TabsTrigger>
-        </TabsList>
-        <TabsContent value="calls" className="mt-3">
-          <FormField control={form.control} name="systemPrompt" render={({ field }) => (
-            <FormItem className="space-y-0">
-              <FormControl>
-                <div className="overflow-hidden rounded-lg border border-border bg-card">
-                  <div className="flex h-9 items-center justify-between border-b border-border/70 bg-muted/20 px-3">
-                    <span className="text-[10px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
-                      Call prompt
-                    </span>
-                    <span className="font-mono text-[10px] text-muted-foreground/70">markdown · plain text</span>
+      {canAttendMeetings ? (
+        <Tabs value={promptSurface} onValueChange={(v) => setPromptSurface(v as "calls" | "meetings")} className="w-full">
+          <TabsList className="h-9 w-full sm:w-auto grid grid-cols-2 sm:inline-flex">
+            <TabsTrigger value="calls" className="gap-1.5 text-xs">
+              <Phone className="h-3.5 w-3.5" />
+              On calls
+            </TabsTrigger>
+            <TabsTrigger value="meetings" className="gap-1.5 text-xs">
+              <Video className="h-3.5 w-3.5" />
+              In meetings
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="calls" className="mt-3">
+            <FormField control={form.control} name="systemPrompt" render={({ field }) => (
+              <FormItem className="space-y-0">
+                <FormControl>
+                  <div className="overflow-hidden rounded-lg border border-border bg-card">
+                    <div className="flex h-9 items-center justify-between border-b border-border/70 bg-muted/20 px-3">
+                      <span className="text-[10px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
+                        Call prompt
+                      </span>
+                      <span className="font-mono text-[10px] text-muted-foreground/70">markdown · plain text</span>
+                    </div>
+                    <Textarea
+                      className="min-h-[min(48vh,480px)] resize-y rounded-none border-0 bg-transparent px-3.5 py-3.5 font-mono text-[12.5px] leading-6 shadow-none focus-visible:ring-0"
+                      placeholder="You are a helpful voice assistant on phone calls…"
+                      {...field}
+                    />
                   </div>
-                  <Textarea
-                    className="min-h-[min(48vh,480px)] resize-y rounded-none border-0 bg-transparent px-3.5 py-3.5 font-mono text-[12.5px] leading-6 shadow-none focus-visible:ring-0"
-                    placeholder="You are a helpful voice assistant on phone calls…"
-                    {...field}
-                  />
-                </div>
-              </FormControl>
-              <FormMessage className="mt-2" />
-            </FormItem>
-          )} />
-        </TabsContent>
-        <TabsContent value="meetings" className="mt-3 space-y-2">
-          <FormField control={form.control} name="meetingPrompt" render={({ field }) => (
-            <FormItem className="space-y-0">
-              <FormControl>
-                <div className="overflow-hidden rounded-lg border border-border bg-card">
-                  <div className="flex h-9 items-center justify-between border-b border-border/70 bg-muted/20 px-3">
-                    <span className="text-[10px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
-                      Meeting prompt
-                    </span>
-                    <span className="font-mono text-[10px] text-muted-foreground/70">blank = use call prompt</span>
+                </FormControl>
+                <FormMessage className="mt-2" />
+              </FormItem>
+            )} />
+          </TabsContent>
+          <TabsContent value="meetings" className="mt-3 space-y-2">
+            <FormField control={form.control} name="meetingPrompt" render={({ field }) => (
+              <FormItem className="space-y-0">
+                <FormControl>
+                  <div className="overflow-hidden rounded-lg border border-border bg-card">
+                    <div className="flex h-9 items-center justify-between border-b border-border/70 bg-muted/20 px-3">
+                      <span className="text-[10px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
+                        Meeting prompt
+                      </span>
+                      <span className="font-mono text-[10px] text-muted-foreground/70">blank = use call prompt</span>
+                    </div>
+                    <Textarea
+                      className="min-h-[min(48vh,480px)] resize-y rounded-none border-0 bg-transparent px-3.5 py-3.5 font-mono text-[12.5px] leading-6 shadow-none focus-visible:ring-0"
+                      placeholder="Optional. Leave blank to reuse the call prompt…"
+                      {...field}
+                      value={field.value ?? ""}
+                    />
                   </div>
-                  <Textarea
-                    className="min-h-[min(48vh,480px)] resize-y rounded-none border-0 bg-transparent px-3.5 py-3.5 font-mono text-[12.5px] leading-6 shadow-none focus-visible:ring-0"
-                    placeholder="Optional. Leave blank to reuse the call prompt…"
-                    {...field}
-                    value={field.value ?? ""}
-                  />
+                </FormControl>
+                <FormMessage className="mt-2" />
+              </FormItem>
+            )} />
+            <p className="text-[11px] text-muted-foreground">
+              Phone + meetings agents join Google Meet when Booking is on (Tools). Phone-only agents can book but never join.
+            </p>
+          </TabsContent>
+        </Tabs>
+      ) : (
+        <FormField control={form.control} name="systemPrompt" render={({ field }) => (
+          <FormItem className="space-y-0">
+            <FormControl>
+              <div className="overflow-hidden rounded-lg border border-border bg-card">
+                <div className="flex h-9 items-center justify-between border-b border-border/70 bg-muted/20 px-3">
+                  <span className="text-[10px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
+                    Call prompt
+                  </span>
+                  <span className="font-mono text-[10px] text-muted-foreground/70">markdown · plain text</span>
                 </div>
-              </FormControl>
-              <FormMessage className="mt-2" />
-            </FormItem>
-          )} />
-          <p className="text-[11px] text-muted-foreground">
-            Join / delegate / human-attend settings:{" "}
-            {agentId ? (
-              <Link
-                href={`/app/agents/${agentId}?section=channels&channel=meetings`}
-                className="underline underline-offset-2"
-              >
-                Channels → Meetings
-              </Link>
-            ) : (
-              <span className="text-foreground/80">Channels → Meetings</span>
-            )}
-            .
-          </p>
-        </TabsContent>
-      </Tabs>
+                <Textarea
+                  className="min-h-[min(48vh,480px)] resize-y rounded-none border-0 bg-transparent px-3.5 py-3.5 font-mono text-[12.5px] leading-6 shadow-none focus-visible:ring-0"
+                  placeholder="You are a helpful voice assistant on phone calls…"
+                  {...field}
+                />
+              </div>
+            </FormControl>
+            <FormMessage className="mt-2" />
+          </FormItem>
+        )} />
+      )}
 
       <section className="overflow-hidden rounded-lg border border-border bg-card">
         <div className="border-b border-border/70 px-3.5 py-2.5">
@@ -2560,7 +2581,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
       icon: <Mail className="h-4 w-4" />,
       color: "sky",
       label: "Send Email",
-      description: "Lets the agent email the caller mid-call using Channels → Email (your Brevo). Asks for their address, then sends the email template.",
+      description: "Lets the agent email the caller mid-call using your Brevo sender (configure below). Asks for their address, then sends the email template.",
       needsEventType: false,
     },
     {
@@ -2568,10 +2589,12 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
       icon: <MessageCircle className="h-4 w-4" />,
       color: "emerald",
       label: "Send WhatsApp",
-      description: "Lets the agent send a WhatsApp template mid-call via Meta Business API or your BSP webhook. Uses the caller’s phone unless they give another number.",
+      description: "Lets the agent send a WhatsApp template mid-call. Pick connection + templates below when enabled.",
       needsEventType: false,
     },
   ] as const;
+
+  const canAttendMeetings = form.watch("agentSurfaces") === "phone_and_meet";
 
   const transferIdx = nativeToolIndex("call_transfer");
   const transferOn = transferIdx >= 0;
@@ -2635,6 +2658,24 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
               <p className="text-[11px] leading-relaxed text-muted-foreground/60">
                 One switch enables the full booking flow: check availability, book, list, reschedule, and cancel.
               </p>
+              {(bookingEnabled || bookingPartial) && (
+                <div className="mt-1.5 space-y-1">
+                  <p className="text-[11px] leading-relaxed text-muted-foreground">
+                    {canAttendMeetings
+                      ? "This is a phone + meetings agent — it joins Google Meet when a booking is made."
+                      : "Phone-only agent — can book the calendar, but will not join the Meet."}
+                  </p>
+                  {!canAttendMeetings && (
+                    <button
+                      type="button"
+                      className="text-[11px] font-medium text-foreground underline underline-offset-2"
+                      onClick={() => form.setValue("agentSurfaces", "phone_and_meet", { shouldDirty: true })}
+                    >
+                      Upgrade to phone + meetings (joins Meet) — then Save
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
             <div className="mt-1 shrink-0">
               <Switch
@@ -2746,6 +2787,15 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                 </Button>
               </div>
 
+              {canAttendMeetings && agentId && (
+                <div className="rounded-lg border border-border/40 bg-background/30 p-3">
+                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/70">
+                    Meeting join
+                  </p>
+                  <MeetingsChannelCard agentId={agentId} showJoinLink={false} />
+                </div>
+              )}
+
               {bookingDetailsOpen && (
                 <div className="space-y-2 rounded-lg border border-border/40 bg-muted/15 p-3">
                   {BOOKING_TOOL_LABELS.map(({ type, fnName, label }) => {
@@ -2834,10 +2884,34 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
           )}
         </div>
 
-        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-1 mt-4">Call Control</p>
-        {CALL_CONTROL_TOOLS.map(({ type, icon, color, label, description }) => {
+        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-1 mt-4">Messaging</p>
+        {CALL_CONTROL_TOOLS.filter((t) => t.type === "send_email" || t.type === "send_whatsapp").map(({ type, icon, color, label, description }) => {
           const isOn = hasNativeTool(type);
-          const c = colorMap[color];
+          return (
+            <div key={type} className={cn("rounded-xl border transition-all duration-150", isOn ? "border-border/70 bg-card/40" : "border-border/40 bg-card/20")}>
+              <div className="w-full text-left p-4 flex items-start gap-3">
+                <div className="mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center shrink-0 bg-muted/30">
+                  <span className={cn(isOn ? "text-foreground/70" : "text-muted-foreground/35")}>{icon}</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className="text-xs font-semibold text-foreground/80">{label}</span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground/60 leading-relaxed">{description}</p>
+                </div>
+                <div className="shrink-0 mt-1">
+                  <Switch checked={isOn} onCheckedChange={() => toggleNativeTool(type)} />
+                </div>
+              </div>
+              {type === "send_whatsapp" && isOn && agentId ? <ToolsWhatsappSetup agentId={agentId} /> : null}
+              {type === "send_email" && isOn ? <ToolsEmailSetup /> : null}
+            </div>
+          );
+        })}
+
+        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-1 mt-4">Call Control</p>
+        {CALL_CONTROL_TOOLS.filter((t) => t.type === "end_call").map(({ type, icon, label, description }) => {
+          const isOn = hasNativeTool(type);
           return (
             <div key={type} className={cn("rounded-xl border transition-all duration-150", isOn ? "border-border/70 bg-card/40" : "border-border/40 bg-card/20")}>
               <div className="w-full text-left p-4 flex items-start gap-3">
@@ -6023,8 +6097,8 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
       const fieldTabMap: Record<string, TabId> = {
         webhookUrl:               "settings",
         webhookSecret:            "settings",
-        schedulingCalendarId:     "channels",
-        schedulingEventTypeId:    "channels",
+        schedulingCalendarId:     "tools",
+        schedulingEventTypeId:    "tools",
         noiseCancellationEnabled: "voice",
         ambientNoiseEnabled:      "voice",
         ambientNoiseTrack:        "voice",
@@ -6372,17 +6446,6 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
                 {activeTab === "prompt"    && <PromptTab form={form} agentId={agentId} />}
                 {activeTab === "voice"     && <VoiceTab form={form} />}
                 {activeTab === "tools"     && <ToolsTab form={form} agentId={agentId} />}
-                {activeTab === "channels" && (
-                  <ChannelsPanel
-                    agent={agent}
-                    embedded
-                    initialChannel={((): ChannelId => {
-                      const ch = new URLSearchParams(search).get("channel");
-                      const allowed: ChannelId[] = ["phone", "whatsapp", "email", "meetings", "booking"];
-                      return allowed.includes(ch as ChannelId) ? (ch as ChannelId) : "phone";
-                    })()}
-                  />
-                )}
                 {activeTab === "voicemail" && <VoicemailTab form={form} />}
                 {activeTab === "settings"  && <AdvancedTab form={form} agent={agent} />}
                 {activeTab === "versions"  && <VersionsTab agentId={agent.id} />}
@@ -6514,10 +6577,13 @@ function PromptReadinessAside({
   });
   const voiceOk = isGeminiLive || Boolean(ttsVoice && ttsVoice !== "__custom__");
 
+  const canAttendMeetings = form.watch("agentSurfaces") === "phone_and_meet";
   const rows = [
     { label: "Welcome", ready: greeting.length >= 4, detail: firstSpeaker },
     { label: "Call prompt", ready: systemPrompt.length >= 40, detail: `${systemPrompt.length.toLocaleString()} chars` },
-    { label: "Meeting prompt", ready: meetingPrompt.length > 0, detail: meetingPrompt ? `${meetingPrompt.length.toLocaleString()} chars` : "Uses call prompt", optional: true },
+    ...(canAttendMeetings
+      ? [{ label: "Meeting prompt", ready: meetingPrompt.length > 0, detail: meetingPrompt ? `${meetingPrompt.length.toLocaleString()} chars` : "Uses call prompt", optional: true as const }]
+      : []),
     { label: "Voice", ready: voiceOk, detail: voiceOk ? "Set" : "Missing" },
   ];
 
@@ -6693,17 +6759,17 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
         ttsModel: "bulbul:v3",
         ttsVoice: "priya",
       };
-      if (surfaces === "phone_and_meet") {
-        body.agentConfig = {
-          meetings: {
-            enabled: true,
-            whoJoins: "self",
-            meetingPrompt: "",
-            passMemory: true,
-            passCallContext: true,
-          },
-        };
-      }
+      // Attendance capacity is fixed by agent type:
+      // phone+meet → joins Meet when Booking is on; phone-only → book only, never join.
+      body.agentConfig = {
+        meetings: {
+          enabled: surfaces === "phone_and_meet",
+          whoJoins: "self",
+          meetingPrompt: "",
+          passMemory: true,
+          passCallContext: true,
+        },
+      };
 
       const result = await customFetch<{ id: number }>(`${DASH_API}/agents`, {
         method: "POST",
@@ -6735,10 +6801,10 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
         : "Name your agent";
   const stepDesc =
     step === "compose" ? "Start with one agent, or plan a handoff team."
-      : step === "surfaces" ? "Phone only, or phone plus video meetings with a separate prompt."
+      : step === "surfaces" ? "Phone only (book but never join Meet), or phone + meetings (joins Meet when Booking is on)."
         : composition === "team"
           ? "We’ll create this agent, then open team setup so you can add teammates."
-          : "You can edit prompts, channels, and settings anytime.";
+          : "You can edit prompts, tools, and settings anytime.";
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose(); }}>
@@ -6812,7 +6878,9 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
               >
                 <Phone className="h-4 w-4 text-primary" />
                 <p className="text-sm font-semibold">Phone</p>
-                <p className="text-[11px] text-muted-foreground leading-snug">Inbound / outbound voice calls</p>
+                <p className="text-[11px] text-muted-foreground leading-snug">
+                  Voice calls. Can book calendar — does not join Meet.
+                </p>
               </button>
               <button
                 type="button"
@@ -6829,7 +6897,9 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
                   <Video className="h-4 w-4 text-primary" />
                 </div>
                 <p className="text-sm font-semibold">Phone + meetings</p>
-                <p className="text-[11px] text-muted-foreground leading-snug">Dual prompts — calls and Meet/Zoom</p>
+                <p className="text-[11px] text-muted-foreground leading-snug">
+                  Voice + joins Meet when Booking is enabled.
+                </p>
               </button>
             </div>
             <DialogFooter>

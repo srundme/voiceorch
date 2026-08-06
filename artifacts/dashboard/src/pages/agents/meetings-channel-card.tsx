@@ -1,18 +1,17 @@
 /**
- * Meeting join / delegate / memory toggles (Channels → Meetings).
- * Meeting prompt is owned by Agent → Prompt → In meetings.
+ * Meeting memory / delegate toggles for phone+meetings agents.
+ * Attendance capacity is fixed by agent type (meetings.enabled):
+ * phone+meet → joins Meet when Booking is on; phone-only → never joins.
  */
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "wouter";
-import { useQuery } from "@tanstack/react-query";
 import {
   useGetAgent,
   useListAgents,
   useUpdateAgent,
   getGetAgentQueryKey,
   getListAgentsQueryKey,
-  customFetch,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -22,11 +21,9 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError } from "@/lib/format-api-error";
-import { ExternalLink, Loader2, Save, User, Bot, ChevronRight } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Loader2, Save } from "lucide-react";
 
 export type MeetingsForm = {
-  /** false = book only, human attends (no auto-join bot) */
   enabled: boolean;
   whoJoins: "self" | "delegate";
   meetingPrompt: string;
@@ -59,51 +56,9 @@ function readMeetings(agent: any): MeetingsForm {
   };
 }
 
-function Choice({
-  selected,
-  onSelect,
-  icon,
-  title,
-  hint,
-}: {
-  selected: boolean;
-  onSelect: () => void;
-  icon: ReactNode;
-  title: string;
-  hint: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      className={cn(
-        "flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-left transition-colors",
-        selected
-          ? "bg-foreground text-background"
-          : "bg-muted/35 text-foreground hover:bg-muted/55",
-      )}
-    >
-      <span className={cn("mt-0.5 shrink-0", selected ? "opacity-90" : "text-muted-foreground")}>
-        {icon}
-      </span>
-      <span className="min-w-0">
-        <span className="block text-[13px] font-medium leading-tight">{title}</span>
-        <span
-          className={cn(
-            "mt-0.5 block text-[11px] leading-snug",
-            selected ? "text-background/70" : "text-muted-foreground",
-          )}
-        >
-          {hint}
-        </span>
-      </span>
-    </button>
-  );
-}
-
 export function MeetingsChannelCard({
   agentId,
-  showJoinLink = true,
+  showJoinLink: _showJoinLink = true,
 }: {
   agentId: number;
   showJoinLink?: boolean;
@@ -117,13 +72,6 @@ export function MeetingsChannelCard({
     query: { queryKey: getListAgentsQueryKey(), staleTime: 30_000 },
   });
   const update = useUpdateAgent();
-
-  const identityQ = useQuery({
-    queryKey: ["meet-bot-identity"],
-    queryFn: () =>
-      customFetch<{ botEmail: string | null; signedInGoogleMeet: boolean }>("/api/meet-bots/identity"),
-    staleTime: 60_000,
-  });
 
   const [form, setForm] = useState<MeetingsForm>(EMPTY);
   const [loaded, setLoaded] = useState(false);
@@ -139,16 +87,15 @@ export function MeetingsChannelCard({
     name: string;
   }>;
   const others = agents.filter((a) => a.id !== agentId);
-  const meetPromptPreview = form.meetingPrompt.trim();
-  const humanAttends = !form.enabled;
+  const canAttend = form.enabled;
 
   const set = (patch: Partial<MeetingsForm>) => setForm((prev) => ({ ...prev, ...patch }));
 
   const save = async () => {
-    if (!humanAttends && form.whoJoins === "delegate" && !form.delegateAgentId) {
+    if (canAttend && form.whoJoins === "delegate" && !form.delegateAgentId) {
       toast({
         title: "Pick a meeting agent",
-        description: "Choose which agent joins the meeting, or switch to “This agent”.",
+        description: "Choose which agent joins, or switch to “This agent”.",
         variant: "destructive",
       });
       return;
@@ -173,181 +120,124 @@ export function MeetingsChannelCard({
         },
       });
       qc.invalidateQueries({ queryKey: getGetAgentQueryKey(agentId) });
-      toast({ title: "Meeting channel saved" });
+      toast({ title: "Meeting settings saved" });
     } catch (err) {
       toast({ title: "Could not save", description: formatApiError(err), variant: "destructive" });
     }
   };
 
+  if (!loaded || agentQ.isLoading) {
+    return <div className="h-20 animate-pulse rounded-lg bg-muted/40" />;
+  }
+
+  if (!canAttend) {
+    return (
+      <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-3 text-[12px] text-muted-foreground leading-relaxed">
+        Phone-only agent — can book calendar from calls, but will not join Google Meet.
+        Create a <span className="text-foreground">Phone + meetings</span> agent if you need the bot in the room.
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-5">
-      {showJoinLink && !humanAttends ? (
-        <div className="flex justify-end">
-          <Button asChild type="button" variant="ghost" size="sm" className="h-8 shrink-0 gap-1 px-2 text-xs">
-            <Link href={`/app/meet?agentId=${agentId}`}>
-              Join now <ChevronRight className="size-3.5" />
-            </Link>
-          </Button>
-        </div>
-      ) : null}
+    <div className="space-y-4">
+      <p className="text-[12px] text-muted-foreground leading-relaxed">
+        This agent joins Meet when Booking is enabled under Tools. Optional: send a delegate or pass call context.
+      </p>
 
-      {!loaded || agentQ.isLoading ? (
-        <div className="h-28 animate-pulse rounded-lg bg-muted/40" />
-      ) : (
-        <div className="space-y-5">
-          <section className="space-y-2">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/70">
-              1 · Who attends
+      <div className="space-y-2">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/70">
+          Who joins
+        </p>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => set({ whoJoins: "self" })}
+            className={
+              form.whoJoins === "self"
+                ? "rounded-lg border border-foreground/20 bg-foreground px-3 py-2.5 text-left text-background"
+                : "rounded-lg border border-border/50 bg-muted/35 px-3 py-2.5 text-left hover:bg-muted/55"
+            }
+          >
+            <p className="text-[12px] font-medium">This agent</p>
+            <p className={`text-[10px] mt-0.5 ${form.whoJoins === "self" ? "text-background/70" : "text-muted-foreground"}`}>
+              Uses the meeting prompt from Builder
             </p>
-            <div className="grid gap-2 sm:grid-cols-2">
-              <Choice
-                selected={humanAttends}
-                onSelect={() => set({ enabled: false })}
-                icon={<User className="size-4" />}
-                title="Human"
-                hint="Books the calendar. A person joins — no AI bot."
-              />
-              <Choice
-                selected={!humanAttends}
-                onSelect={() => set({ enabled: true })}
-                icon={<Bot className="size-4" />}
-                title="AI joins"
-                hint="Meet bot auto-joins from the booking."
-              />
-            </div>
-            {humanAttends ? (
-              <p className="text-[11px] text-muted-foreground leading-relaxed pt-0.5">
-                Calendar booking still works on the call. SnapServe will not send a meeting bot.
-              </p>
-            ) : identityQ.data ? (
-              <p className="text-[11px] text-muted-foreground leading-relaxed pt-0.5">
-                {identityQ.data.botEmail ? (
-                  <>
-                    Bot joins as{" "}
-                    <span className="font-mono text-foreground">{identityQ.data.botEmail}</span>
-                    — admit this address or add it to the invite.
-                  </>
-                ) : (
-                  <>
-                    Managed bot joins as a guest. Meet may ask the host to admit it by agent name.
-                  </>
-                )}
-              </p>
-            ) : null}
-          </section>
-
-          {!humanAttends && (
-            <>
-              <section className="space-y-2">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/70">
-                  2 · Which AI
-                </p>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <Choice
-                    selected={form.whoJoins === "self"}
-                    onSelect={() => set({ whoJoins: "self" })}
-                    icon={<Bot className="size-4" />}
-                    title="This agent"
-                    hint="Uses this agent’s meeting prompt"
-                  />
-                  <Choice
-                    selected={form.whoJoins === "delegate"}
-                    onSelect={() => set({ whoJoins: "delegate" })}
-                    icon={<User className="size-4" />}
-                    title="Another agent"
-                    hint="Delegate joins the room"
-                  />
-                </div>
-
-                {form.whoJoins === "self" ? (
-                  <div className="flex items-center justify-between gap-3 rounded-lg bg-muted/30 px-3 py-2.5">
-                    <div className="min-w-0">
-                      <p className="text-[12px] font-medium">Meeting prompt</p>
-                      <p className="truncate text-[11px] text-muted-foreground">
-                        {meetPromptPreview
-                          ? meetPromptPreview
-                          : "Not set — falls back to the call prompt"}
-                      </p>
-                    </div>
-                    <Button asChild type="button" variant="outline" size="sm" className="h-8 shrink-0 gap-1 text-xs">
-                      <Link href={`/app/agents/${agentId}?section=prompt`}>
-                        Edit <ExternalLink className="size-3" />
-                      </Link>
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="space-y-1.5">
-                    <Select
-                      value={form.delegateAgentId || undefined}
-                      onValueChange={(v) => set({ delegateAgentId: v })}
-                    >
-                      <SelectTrigger className="h-9 text-xs">
-                        <SelectValue placeholder={others.length ? "Choose agent…" : "Create another agent first"} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {others.map((a) => (
-                          <SelectItem key={a.id} value={String(a.id)} className="text-xs">
-                            {a.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {form.delegateAgentId ? (
-                      <Link
-                        href={`/app/agents/${form.delegateAgentId}?section=prompt`}
-                        className="inline-flex text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-                      >
-                        Edit their meeting prompt
-                      </Link>
-                    ) : null}
-                  </div>
-                )}
-              </section>
-
-              <section className="space-y-2">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/70">
-                  3 · Context for the meeting
-                </p>
-                <div className="divide-y divide-border/60 rounded-lg border border-border/60">
-                  <label className="flex cursor-pointer items-center justify-between gap-3 px-3 py-2.5">
-                    <span>
-                      <span className="block text-[13px] font-medium">Contact memory</span>
-                      <span className="block text-[11px] text-muted-foreground">Facts about the person when available</span>
-                    </span>
-                    <Switch checked={form.passMemory} onCheckedChange={(v) => set({ passMemory: v })} />
-                  </label>
-                  <label className="flex cursor-pointer items-center justify-between gap-3 px-3 py-2.5">
-                    <span>
-                      <span className="block text-[13px] font-medium">Recent call context</span>
-                      <span className="block text-[11px] text-muted-foreground">Summary from the call that booked this</span>
-                    </span>
-                    <Switch
-                      checked={form.passCallContext}
-                      onCheckedChange={(v) => set({ passCallContext: v })}
-                    />
-                  </label>
-                </div>
-              </section>
-            </>
-          )}
-
-          <div className="flex items-center justify-between gap-3 border-t border-border/60 pt-3">
-            <p className="text-[11px] text-muted-foreground">
-              Channel settings save here — agent prompt still uses the main Save.
+          </button>
+          <button
+            type="button"
+            onClick={() => set({ whoJoins: "delegate" })}
+            className={
+              form.whoJoins === "delegate"
+                ? "rounded-lg border border-foreground/20 bg-foreground px-3 py-2.5 text-left text-background"
+                : "rounded-lg border border-border/50 bg-muted/35 px-3 py-2.5 text-left hover:bg-muted/55"
+            }
+          >
+            <p className="text-[12px] font-medium">Another agent</p>
+            <p className={`text-[10px] mt-0.5 ${form.whoJoins === "delegate" ? "text-background/70" : "text-muted-foreground"}`}>
+              Delegate joins the room
             </p>
-            <Button
-              type="button"
-              size="sm"
-              className="h-8 shrink-0 gap-1.5 text-xs"
-              disabled={update.isPending}
-              onClick={() => void save()}
-            >
-              {update.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
-              Save meetings
-            </Button>
-          </div>
+          </button>
         </div>
-      )}
+        {form.whoJoins === "delegate" && (
+          <Select
+            value={form.delegateAgentId || undefined}
+            onValueChange={(v) => set({ delegateAgentId: v })}
+          >
+            <SelectTrigger className="h-9 text-xs">
+              <SelectValue placeholder={others.length ? "Choose agent…" : "Create another agent first"} />
+            </SelectTrigger>
+            <SelectContent>
+              {others.map((a) => (
+                <SelectItem key={a.id} value={String(a.id)} className="text-xs">
+                  {a.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        {form.whoJoins === "self" && (
+          <Link
+            href={`/app/agents/${agentId}?section=prompt`}
+            className="inline-flex text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+          >
+            Edit meeting prompt
+          </Link>
+        )}
+      </div>
+
+      <div className="divide-y divide-border/60 rounded-lg border border-border/60">
+        <label className="flex cursor-pointer items-center justify-between gap-3 px-3 py-2.5">
+          <span>
+            <span className="block text-[13px] font-medium">Contact memory</span>
+            <span className="block text-[11px] text-muted-foreground">Facts about the person when available</span>
+          </span>
+          <Switch checked={form.passMemory} onCheckedChange={(v) => set({ passMemory: v })} />
+        </label>
+        <label className="flex cursor-pointer items-center justify-between gap-3 px-3 py-2.5">
+          <span>
+            <span className="block text-[13px] font-medium">Recent call context</span>
+            <span className="block text-[11px] text-muted-foreground">Summary from the call that booked this</span>
+          </span>
+          <Switch
+            checked={form.passCallContext}
+            onCheckedChange={(v) => set({ passCallContext: v })}
+          />
+        </label>
+      </div>
+
+      <div className="flex justify-end">
+        <Button
+          type="button"
+          size="sm"
+          className="h-8 gap-1.5 text-xs"
+          disabled={update.isPending}
+          onClick={() => void save()}
+        >
+          {update.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
+          Save
+        </Button>
+      </div>
     </div>
   );
 }
