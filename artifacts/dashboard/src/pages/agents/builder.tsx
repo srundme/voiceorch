@@ -93,6 +93,12 @@ import { RecentNumbersList } from "@/components/recent-numbers-list";
 import { useRecentNumbers } from "@/hooks/use-recent-numbers";
 import { GeneratePromptSheet } from "./generate-prompt-sheet";
 import { AgentInboundPanel } from "./agent-inbound-panel";
+import {
+  useAgentTeamMap,
+  sortAgentsByTeam,
+  agentPathWithSection,
+  type AgentTeamMembership,
+} from "./agent-team";
 import { ToolsWhatsappSetup, ToolsEmailSetup } from "./tools-messaging";
 import { MeetingsChannelCard } from "./meetings-channel-card";
 import {
@@ -1325,6 +1331,9 @@ function OverviewTab({
 /* ── Tab: Prompt ────────────────────────────────────────────────────────────── */
 
 function PromptTab({ form, agentId }: { form: any; agentId?: number }) {
+  const [, navigate] = useLocation();
+  const { teamByAgentId } = useAgentTeamMap();
+  const team = agentId != null ? teamByAgentId.get(agentId) : undefined;
   const { fields: pvFields, append: pvAppend, remove: pvRemove } = useFieldArray({ control: form.control, name: "promptVariables" });
   const [generateOpen, setGenerateOpen] = useState(false);
   const [promptSurface, setPromptSurface] = useState<"calls" | "meetings">("calls");
@@ -1354,6 +1363,40 @@ function PromptTab({ form, agentId }: { form: any; agentId?: number }) {
           setPromptSurface("calls");
         }}
       />
+
+      {team && team.members.length >= 2 && (
+        <section className="space-y-2 rounded-xl border border-border/60 bg-muted/15 px-3.5 py-3">
+          <div className="space-y-0.5">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Team prompts</p>
+            <p className="text-[12px] text-muted-foreground leading-snug">
+              Each teammate has their own prompt. Handoffs use the specialist&apos;s prompt.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {team.members.map((m) => {
+              const active = m.agentId === agentId;
+              return (
+                <button
+                  key={m.agentId}
+                  type="button"
+                  disabled={active}
+                  onClick={() => navigate(agentPathWithSection(m.agentId, "prompt"))}
+                  className={cn(
+                    "inline-flex max-w-full items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] transition-colors",
+                    active
+                      ? "border-foreground/25 bg-background font-medium text-foreground"
+                      : "border-border/70 bg-background/60 text-muted-foreground hover:border-foreground/20 hover:text-foreground",
+                  )}
+                  title={active ? `Editing ${m.agentName}'s prompt` : `Edit ${m.agentName}'s prompt`}
+                >
+                  <span className="truncate">{active ? `Editing ${m.agentName}` : m.agentName}</span>
+                  <span className="truncate text-muted-foreground">· {m.roleName}</span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       <section className="space-y-3">
         <div className="space-y-0.5">
@@ -3965,6 +4008,7 @@ function AgentListPanel({ selectedId, onSelect, className }: {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const { data: agents, isLoading } = useListAgents({ query: { queryKey: getListAgentsQueryKey() } });
+  const { teamByAgentId } = useAgentTeamMap();
   const deleteAgent = useDeleteAgent();
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
@@ -3990,12 +4034,13 @@ function AgentListPanel({ selectedId, onSelect, className }: {
     }
   };
 
-  const filtered = (agents ?? [])
-    .filter(a => {
+  const filtered = sortAgentsByTeam(
+    (agents ?? []).filter(a => {
       if (search && !a.name.toLowerCase().includes(search.toLowerCase())) return false;
       return true;
-    })
-    .sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime());
+    }),
+    teamByAgentId,
+  );
   const liveCount = (agents ?? []).filter(a => a.status === "active").length;
   const totalCount = agents?.length ?? 0;
 
@@ -4037,6 +4082,7 @@ function AgentListPanel({ selectedId, onSelect, className }: {
         {filtered.map((agent) => {
           const isSelected = agent.id === selectedId;
           const isLive = agent.status === "active";
+          const team = teamByAgentId.get(agent.id);
           return (
             <button
               key={agent.id}
@@ -4052,9 +4098,19 @@ function AgentListPanel({ selectedId, onSelect, className }: {
                   <span className="truncate text-[12px] font-medium">{agent.name}</span>
                   <StatusDot tone={isLive ? "success" : "neutral"} />
                 </div>
-                <p className="truncate text-[10px] text-muted-foreground">
-                  {agent.asrProvider} · {agent.ttsProvider}
-                </p>
+                {team ? (
+                  <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
+                    <span className="inline-flex max-w-full items-center gap-1 rounded border border-border/60 bg-muted/40 px-1 py-px">
+                      <Users className="size-2.5 shrink-0" />
+                      <span className="truncate">Team · {team.squadName}</span>
+                    </span>
+                    {team.roleName ? <span className="ml-1 truncate">· {team.roleName}</span> : null}
+                  </p>
+                ) : (
+                  <p className="truncate text-[10px] text-muted-foreground">
+                    {agent.asrProvider} · {agent.ttsProvider}
+                  </p>
+                )}
               </div>
               <button
                 type="button"
@@ -6385,7 +6441,9 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
         </div>
       </header>
 
-      {/* Rename Agent dialog — team strip lives on Overview */}
+      <AgentTeamChromeBar agentId={agentId} section={activeTab} />
+
+      {/* Rename Agent dialog — Overview still has Add-to-team for solos */}
       <Dialog open={renameDialogOpen} onOpenChange={setRenameDialogOpen}>
         <DialogContent className="sm:max-w-[440px]">
           <DialogHeader>
@@ -6654,23 +6712,84 @@ function PromptReadinessAside({
   );
 }
 
+function TeammateChips({
+  agentId,
+  membership,
+  section,
+}: {
+  agentId: number;
+  membership: AgentTeamMembership;
+  section?: string | null;
+}) {
+  const [, navigate] = useLocation();
+  return (
+    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+      {membership.members.map((m) => {
+        const active = m.agentId === agentId;
+        return (
+          <button
+            key={m.agentId}
+            type="button"
+            disabled={active}
+            onClick={() => navigate(agentPathWithSection(m.agentId, section))}
+            className={cn(
+              "inline-flex max-w-full items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] transition-colors",
+              active
+                ? "border-foreground/25 bg-background font-medium text-foreground"
+                : "border-border/70 bg-background/70 text-muted-foreground hover:border-foreground/20 hover:text-foreground",
+            )}
+            title={active ? `${m.agentName} (editing)` : `Switch to ${m.agentName}`}
+          >
+            <span className="truncate">{m.agentName}</span>
+            <span className="truncate text-muted-foreground">· {m.roleName}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Always-on chrome bar when this agent is on a team (above section tabs). */
+function AgentTeamChromeBar({ agentId, section }: { agentId: number; section: string }) {
+  const [, navigate] = useLocation();
+  const { teamByAgentId, isLoading } = useAgentTeamMap();
+  const membership = teamByAgentId.get(agentId);
+
+  if (isLoading || !membership) return null;
+
+  return (
+    <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border/70 bg-muted/15 px-3 py-1.5 sm:px-5">
+      <Users className="size-3.5 shrink-0 text-muted-foreground" />
+      <button
+        type="button"
+        onClick={() => navigate(`/app/squads/${membership.squadId}`)}
+        className="inline-flex max-w-[160px] items-center gap-1 truncate text-[11px] font-medium hover:underline"
+        title={membership.squadName}
+      >
+        <GitBranch className="size-3 shrink-0 text-muted-foreground" />
+        <span className="truncate">{membership.squadName}</span>
+      </button>
+      <TeammateChips agentId={agentId} membership={membership} section={section} />
+      <Button
+        type="button"
+        size="sm"
+        variant="ghost"
+        className="h-7 shrink-0 gap-1 px-2 text-[11px] text-muted-foreground"
+        onClick={() => navigate(`/app/squads/${membership.squadId}`)}
+      >
+        Manage
+      </Button>
+    </div>
+  );
+}
+
+/** Overview card: team detail or quiet “Add to team” for solos. */
 function AgentTeamStrip({ agentId, compact }: { agentId: number; compact?: boolean }) {
   const [, navigate] = useLocation();
-  const squadsQ = useQuery({
-    queryKey: ["agent-team-strip", agentId],
-    queryFn: () => customFetch<Array<{
-      id: number;
-      name: string;
-      status: string;
-      members: Array<{ agentId: number; roleName: string; agentName?: string | null }>;
-    }>>("/api/squads"),
-    staleTime: 30_000,
-  });
-  const teams = (squadsQ.data ?? []).filter((s) =>
-    s.members?.some((m) => m.agentId === agentId),
-  );
+  const { teamByAgentId, isLoading } = useAgentTeamMap();
+  const membership = teamByAgentId.get(agentId);
 
-  if (squadsQ.isLoading) return null;
+  if (isLoading) return null;
 
   const shell = cn(
     compact
@@ -6678,7 +6797,7 @@ function AgentTeamStrip({ agentId, compact }: { agentId: number; compact?: boole
       : "flex shrink-0 flex-wrap items-center gap-2 border-b border-border/70 bg-muted/15 px-3 py-1.5 sm:px-5",
   );
 
-  if (teams.length === 0) {
+  if (!membership) {
     return (
       <div className={shell}>
         <Users className="size-3.5 shrink-0 text-muted-foreground" />
@@ -6702,33 +6821,23 @@ function AgentTeamStrip({ agentId, compact }: { agentId: number; compact?: boole
   return (
     <div className={shell}>
       <Users className="size-3.5 shrink-0 text-muted-foreground" />
-      {!compact && <span className="text-[11px] text-muted-foreground">Team</span>}
-      {teams.map((team) => {
-        const role = team.members.find((m) => m.agentId === agentId)?.roleName;
-        const mates = team.members
-          .filter((m) => m.agentId !== agentId)
-          .map((m) => m.agentName || m.roleName)
-          .slice(0, 3);
-        return (
-          <button
-            key={team.id}
-            type="button"
-            onClick={() => navigate(`/app/squads/${team.id}`)}
-            className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-border/70 bg-background px-2 py-0.5 text-[11px] hover:bg-muted/40"
-            title={mates.length ? `With ${mates.join(", ")}` : team.name}
-          >
-            <GitBranch className="size-3 shrink-0 text-muted-foreground" />
-            <span className="truncate font-medium">{team.name}</span>
-            {role ? <span className="truncate text-muted-foreground">· {role}</span> : null}
-          </button>
-        );
-      })}
+      <button
+        type="button"
+        onClick={() => navigate(`/app/squads/${membership.squadId}`)}
+        className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-border/70 bg-background px-2 py-0.5 text-[11px] hover:bg-muted/40"
+        title={membership.mates.length ? `With ${membership.mates.map((m) => m.agentName).join(", ")}` : membership.squadName}
+      >
+        <GitBranch className="size-3 shrink-0 text-muted-foreground" />
+        <span className="truncate font-medium">{membership.squadName}</span>
+        {membership.roleName ? <span className="truncate text-muted-foreground">· {membership.roleName}</span> : null}
+      </button>
+      <TeammateChips agentId={agentId} membership={membership} section="overview" />
       <Button
         type="button"
         size="sm"
         variant="ghost"
         className="h-7 shrink-0 gap-1 px-2 text-[11px] text-muted-foreground"
-        onClick={() => navigate("/app/squads")}
+        onClick={() => navigate(`/app/squads/${membership.squadId}`)}
       >
         Manage
       </Button>
@@ -6873,9 +6982,9 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
         handleClose();
         toast({
           title: "Team ready",
-          description: `${name1} and ${name2} can hand off mid-call.`,
+          description: "Edit each agent’s prompt from the Team bar — handoffs use each specialist’s own prompt.",
         });
-        navigate(`/app/agents/${agent1.id}`);
+        navigate(agentPathWithSection(agent1.id, "prompt"));
         return;
       }
 
