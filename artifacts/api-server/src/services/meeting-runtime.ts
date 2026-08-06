@@ -124,6 +124,9 @@ export const MEETING_BEHAVIOR_PROMPT =
   `[MEETING BEHAVIOR] You are a participant in a live video meeting, not a phone call. ` +
   `If someone asks you to wait for others to join, acknowledge briefly once, then stay quiet — do not keep checking in. ` +
   `Caller lines may be tagged [Speaker: Name]; address people by name when natural and never read those tags aloud. ` +
+  `If the speaker name matches anyone listed as known in your instructions (KNOWN PEOPLE, founders, teammates, etc.), ` +
+  `greet them by name immediately and SKIP asking which company or role — treat discovery as already done for that person. ` +
+  `Only ask company/role for speakers who are NOT on your known list. ` +
   `Do not use phone openers like "am I speaking with…". Leave only when the host wraps up or clearly asks you to go.\n` +
   `[MEETING SCHEDULING] If participants want another time: use list_bookings / reschedule / book tools when available. ` +
   `After a successful reschedule or booking with a Meet link, confirm the new time and that a SnapServe meeting agent will join automatically near that time. ` +

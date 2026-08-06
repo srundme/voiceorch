@@ -806,6 +806,12 @@ export class OrchestrationPipeline implements VoiceSession {
    * already in progress.
    */
   private transferInitiated = false;
+  /**
+   * Set when end_call begins (before onCallEnd → close()). Stops stall silence
+   * reprompts and STT drain from restarting Listening while teardown is in flight
+   * (meet bots: call 6026 had two Silence Reprompts after bye/end_call).
+   */
+  private endCallInitiated = false;
 
   // Barge-in state
   private isPlaying = false;
@@ -2853,6 +2859,14 @@ export class OrchestrationPipeline implements VoiceSession {
       this.logDiscardedTranscript(transcript, "transfer_in_progress");
       return;
     }
+    if (this.endCallInitiated) {
+      logger.info(
+        { callId: this.config.callId, transcript },
+        "Streaming STT: discarding transcript — end_call already in progress",
+      );
+      this.logDiscardedTranscript(transcript, "end_call_in_progress");
+      return;
+    }
 
     // Language auto-detection — runs AFTER all discard guards so echoed transcripts
     // can never drive language switching or increment the consecutive-detection counter.
@@ -3170,11 +3184,11 @@ export class OrchestrationPipeline implements VoiceSession {
       }
       // If the call ended (transfer or end_call) while this turn was processing,
       // do NOT drain the pending queue — those transcripts must be discarded.
-      if (this.closed) return;
+      if (this.closed || this.endCallInitiated) return;
       const next = this.drainPendingTranscripts();
       if (next) {
         void this.handleStreamingTranscript(next.text, next.emittedAt, next.closeReason);
-      } else if (!this.closed) {
+      } else if (!this.closed && !this.endCallInitiated) {
         // Turn fully done — re-enter Listening and re-arm the stall backstop.
         this.safetyNet.beginListening();
       }
@@ -3274,9 +3288,12 @@ export class OrchestrationPipeline implements VoiceSession {
   }
 
   private async stallReprompt(): Promise<void> {
-    if (this.closed || this.isProcessing || this.isPlaying) {
+    if (this.closed || this.endCallInitiated) {
+      return;
+    }
+    if (this.isProcessing || this.isPlaying) {
       // Activity resumed between expiry and handling — just re-arm.
-      if (!this.closed) this.safetyNet.beginListening();
+      if (!this.closed && !this.endCallInitiated) this.safetyNet.beginListening();
       return;
     }
     // Caller energy pulsed recently (VAD before STT) — don't say "can't hear".
@@ -5991,6 +6008,8 @@ export class OrchestrationPipeline implements VoiceSession {
         logger.info({ callId: this.config.callId }, "Built-in end_call invoked by LLM");
         // Speak the configured goodbye message, or a sensible default, before
         // hanging up — never drop the connection silently.
+        this.endCallInitiated = true;
+        this.safetyNet?.clear();
         const endCallTool = this.agent.tools.find(t => t.type === "end_call");
         const goodbye = resolveGoodbyeMessage(
           endCallTool?.type === "end_call" ? endCallTool.goodbyeMessage : undefined,
@@ -6275,6 +6294,8 @@ export class OrchestrationPipeline implements VoiceSession {
 
   private async executeEndCall(tool: AgentTool & { type: "end_call" }): Promise<void> {
     logger.info({ callId: this.config.callId }, "End Call tool invoked by LLM");
+    this.endCallInitiated = true;
+    this.safetyNet?.clear();
     {
       const goodbye = resolveGoodbyeMessage(tool.goodbyeMessage, this.agent.endCallPhrases);
       this.conversationHistory.appendAssistant(goodbye);
@@ -7427,12 +7448,19 @@ export class OrchestrationPipeline implements VoiceSession {
     // Meeting speaker identification: tag the caller's utterance with the name
     // of the participant Recall last reported speaking, so the LLM knows WHO in
     // the meeting said it. LLM-history-only — UI transcripts stay untagged.
+    // Also append a short reminder so "ask company" prompt steps don't override
+    // KNOWN PEOPLE when the speaker tag already matches (call 6026).
     if (this.meetingSpeakerName && historyForLlm.length > 0) {
       const lastTurn = historyForLlm[historyForLlm.length - 1]!;
       if (lastTurn.role === "user") {
+        const speakerHint =
+          `[Speaker: ${this.meetingSpeakerName}] ${lastTurn.content}\n\n` +
+          `[Meeting speaker is "${this.meetingSpeakerName}". ` +
+          `If this name matches KNOWN PEOPLE / founders / teammates in your instructions, ` +
+          `greet by name and do NOT ask which company or role.]`;
         historyForLlm = [
           ...historyForLlm.slice(0, -1),
-          { ...lastTurn, content: `[Speaker: ${this.meetingSpeakerName}] ${lastTurn.content}` },
+          { ...lastTurn, content: speakerHint },
         ];
       }
     }
@@ -8488,6 +8516,8 @@ export class OrchestrationPipeline implements VoiceSession {
     // drain have completed (the final words are already out uncut).
     if (this.agentSaidEndCallPhrase(spokenResponse)) {
       logger.info({ callId: this.config.callId, response: spokenResponse.slice(0, 80) }, "Agent used end-call phrase — hanging up after playback");
+      this.endCallInitiated = true;
+      this.safetyNet?.clear();
       this.config.onCallEnd();
       return;
     }
