@@ -1,5 +1,7 @@
 import { Router } from "express";
 import { getAuth } from "../lib/auth-compat.js";
+import { requireAuth } from "../middlewares/requireAuth.js";
+import { clientContext } from "../middlewares/clientContext.js";
 import {
   db,
   campaignLeadsTable,
@@ -14,6 +16,8 @@ import {
 import { eq, and, gte, lt, sql, desc, count, inArray } from "drizzle-orm";
 
 const router = Router();
+
+router.use(requireAuth, clientContext);
 
 /* ── helpers ──────────────────────────────────────────────────────────────── */
 

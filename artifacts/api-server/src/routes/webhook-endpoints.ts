@@ -3,6 +3,7 @@ import { randomBytes, createHmac } from "crypto";
 import { eq, and } from "drizzle-orm";
 import { db, webhookEndpointsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
+import { clientContext } from "../middlewares/clientContext.js";
 import {
   CreateWebhookEndpointBody,
   UpdateWebhookEndpointBody,
@@ -35,13 +36,13 @@ function formatEndpoint(
   };
 }
 
-router.get("/webhook-endpoints", requireAuth, async (req, res): Promise<void> => {
+router.get("/webhook-endpoints", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const rows = await db.select().from(webhookEndpointsTable).where(eq(webhookEndpointsTable.userId, clerkId));
   res.json(rows.map((ep) => formatEndpoint(ep)));
 });
 
-router.post("/webhook-endpoints", requireAuth, async (req, res): Promise<void> => {
+router.post("/webhook-endpoints", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const parsed = CreateWebhookEndpointBody.safeParse(req.body);
   if (!parsed.success) {
@@ -61,7 +62,7 @@ router.post("/webhook-endpoints", requireAuth, async (req, res): Promise<void> =
   res.status(201).json(formatEndpoint(row, { includeSecret: true }));
 });
 
-router.patch("/webhook-endpoints/:id", requireAuth, async (req, res): Promise<void> => {
+router.patch("/webhook-endpoints/:id", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
@@ -85,7 +86,7 @@ router.patch("/webhook-endpoints/:id", requireAuth, async (req, res): Promise<vo
   res.json(formatEndpoint(row));
 });
 
-router.delete("/webhook-endpoints/:id", requireAuth, async (req, res): Promise<void> => {
+router.delete("/webhook-endpoints/:id", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }

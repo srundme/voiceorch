@@ -14,6 +14,7 @@ import {
   providersTable,
 } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
+import { clientContext } from "../middlewares/clientContext.js";
 import { encryptKey, decryptKey } from "../lib/crypto.js";
 import { dialTwilio, dialPlivo, dialVobiz } from "../orchestration/telephony/dial.js";
 import { logger } from "../lib/logger.js";
@@ -117,7 +118,7 @@ async function fireMetaLeadCall(opts: {
 
 /* ── GET /meta/integrations ─────────────────────────────────────────────── */
 
-router.get("/meta/integrations", requireAuth, async (req, res): Promise<void> => {
+router.get("/meta/integrations", requireAuth, clientContext, async (req, res): Promise<void> => {
   const userId = (req as any).clerkUserId as string;
 
   const rows = await db
@@ -143,7 +144,7 @@ router.get("/meta/integrations", requireAuth, async (req, res): Promise<void> =>
 
 /* ── POST /meta/integrations ────────────────────────────────────────────── */
 
-router.post("/meta/integrations", requireAuth, async (req, res): Promise<void> => {
+router.post("/meta/integrations", requireAuth, clientContext, async (req, res): Promise<void> => {
   const userId = (req as any).clerkUserId as string;
   const {
     pageName, formId, formName, agentId, phoneNumberId, accessToken,
@@ -182,7 +183,7 @@ router.post("/meta/integrations", requireAuth, async (req, res): Promise<void> =
 
 /* ── PATCH /meta/integrations/:id ───────────────────────────────────────── */
 
-router.patch("/meta/integrations/:id", requireAuth, async (req, res): Promise<void> => {
+router.patch("/meta/integrations/:id", requireAuth, clientContext, async (req, res): Promise<void> => {
   const userId = (req as any).clerkUserId as string;
   const id     = Number(req.params["id"]);
   const { agentId, phoneNumberId, active } = req.body as {
@@ -202,7 +203,7 @@ router.patch("/meta/integrations/:id", requireAuth, async (req, res): Promise<vo
 
 /* ── DELETE /meta/integrations/:id ──────────────────────────────────────── */
 
-router.delete("/meta/integrations/:id", requireAuth, async (req, res): Promise<void> => {
+router.delete("/meta/integrations/:id", requireAuth, clientContext, async (req, res): Promise<void> => {
   const userId = (req as any).clerkUserId as string;
   const id     = Number(req.params["id"]);
 
@@ -214,7 +215,7 @@ router.delete("/meta/integrations/:id", requireAuth, async (req, res): Promise<v
 
 /* ── GET /meta/leads ────────────────────────────────────────────────────── */
 
-router.get("/meta/leads", requireAuth, async (req, res): Promise<void> => {
+router.get("/meta/leads", requireAuth, clientContext, async (req, res): Promise<void> => {
   const userId        = (req as any).clerkUserId as string;
   const integrationId = req.query["integrationId"] ? Number(req.query["integrationId"]) : undefined;
 

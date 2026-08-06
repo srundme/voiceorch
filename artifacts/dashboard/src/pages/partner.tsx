@@ -306,9 +306,10 @@ function ClientConfigDialog({ client, onClose }: { client: PartnerClient; onClos
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Configure {client.name || client.email || "client"}</DialogTitle>
+          <DialogTitle>Control panel — {client.name || client.email || "client"}</DialogTitle>
           <DialogDescription>
-            Build agents in their workspace and connect your phone numbers to their agents.
+            Open their full workspace to edit agents, campaigns, connections, and more.
+            Or manage agents and phone numbers here.
           </DialogDescription>
         </DialogHeader>
 
@@ -320,6 +321,34 @@ function ClientConfigDialog({ client, onClose }: { client: PartnerClient; onClos
           </p>
         ) : (
           <div className="space-y-5">
+            {/* Full workspace entry */}
+            <section className="rounded-lg border border-border bg-muted/30 p-3 space-y-2">
+              <p className="text-[12px] font-medium text-foreground">Client workspace</p>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                Full control — create/edit agents, run campaigns, assign numbers, manage connections.
+                An amber bar shows you are editing this client until you exit.
+              </p>
+              <div className="flex flex-wrap gap-2 pt-1">
+                <Button size="sm" className="h-8 text-xs" onClick={() => {
+                  startActingAs({ clientId: client.clerkId, clientName: client.name || client.email || "Client" });
+                  queryClient.clear();
+                  navigate("/app/home");
+                }}>
+                  <LogIn className="w-3 h-3 mr-1" /> Open full workspace
+                </Button>
+                <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => openBuilder()}>
+                  <Bot className="w-3 h-3 mr-1" /> Agents
+                </Button>
+                <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => {
+                  startActingAs({ clientId: client.clerkId, clientName: client.name || client.email || "Client" });
+                  queryClient.clear();
+                  navigate("/app/campaigns");
+                }}>
+                  Campaigns
+                </Button>
+              </div>
+            </section>
+
             {/* Agents */}
             <section>
               <div className="flex items-center justify-between mb-2">
@@ -555,13 +584,13 @@ function ClientsTab({ me }: { me: PartnerMe }) {
                   <td className="px-3 py-2.5">
                     <div className="flex items-center gap-1.5 justify-end">
                       <Button size="sm" variant="outline" className="h-7 px-2 text-xs"
-                        title="Open the dashboard as this client"
+                        title="Open this client's full workspace (control panel)"
                         onClick={() => {
                           startActingAs({ clientId: c.clerkId, clientName: c.name || c.email || "Client" });
                           queryClient.clear();
                           navigate("/app/home");
                         }}>
-                        <LogIn className="w-3 h-3 mr-1" /> Log in
+                        <LogIn className="w-3 h-3 mr-1" /> Open workspace
                       </Button>
                       <Button size="sm" variant="outline" className="h-7 px-2 text-xs"
                         onClick={() => setConfigClient(c)}>

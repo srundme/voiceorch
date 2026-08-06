@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { eq, and, count, sql } from "drizzle-orm";
 import { db, schedulingCalendarsTable, googleCalendarConnectionsTable, bookingsTable, agentsTable } from "@workspace/db";
 import { requireAuth } from "../../middlewares/requireAuth.js";
+import { clientContext } from "../../middlewares/clientContext.js";
 import {
   CreateCalendarBody,
   UpdateCalendarBody,
@@ -35,7 +36,7 @@ async function enrichCalendarRow(row: typeof schedulingCalendarsTable.$inferSele
   return { ...row, connectedGoogleEmail, connectedGoogleAccountsCount: googleAccountsCount };
 }
 
-router.get("/scheduling/calendars", requireAuth, async (req, res): Promise<void> => {
+router.get("/scheduling/calendars", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
 
   const rows = await db.select().from(schedulingCalendarsTable)
@@ -88,7 +89,7 @@ router.get("/scheduling/calendars", requireAuth, async (req, res): Promise<void>
   res.json(ListCalendarsResponse.parse(enriched));
 });
 
-router.post("/scheduling/calendars", requireAuth, async (req, res): Promise<void> => {
+router.post("/scheduling/calendars", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const parsed = CreateCalendarBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Validation failed", issues: parsed.error.issues }); return; }
@@ -98,7 +99,7 @@ router.post("/scheduling/calendars", requireAuth, async (req, res): Promise<void
   res.status(201).json(GetCalendarResponse.parse({ ...row, connectedGoogleEmail: null, connectedGoogleAccountsCount: 0 }));
 });
 
-router.get("/scheduling/calendars/:id", requireAuth, async (req, res): Promise<void> => {
+router.get("/scheduling/calendars/:id", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const params = GetCalendarParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: "Validation failed", issues: params.error.issues }); return; }
@@ -110,7 +111,7 @@ router.get("/scheduling/calendars/:id", requireAuth, async (req, res): Promise<v
   res.json(GetCalendarResponse.parse(enriched));
 });
 
-router.patch("/scheduling/calendars/:id", requireAuth, async (req, res): Promise<void> => {
+router.patch("/scheduling/calendars/:id", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const params = UpdateCalendarParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: "Validation failed", issues: params.error.issues }); return; }
@@ -126,7 +127,7 @@ router.patch("/scheduling/calendars/:id", requireAuth, async (req, res): Promise
 
 // ── Link / unlink a Google Calendar connection to a scheduling calendar ──────
 
-router.patch("/scheduling/calendars/:id/google-connection", requireAuth, async (req, res): Promise<void> => {
+router.patch("/scheduling/calendars/:id/google-connection", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const { id } = req.params as { id: string };
   const { connectionId } = req.body as { connectionId: string | null };
@@ -155,7 +156,7 @@ router.patch("/scheduling/calendars/:id/google-connection", requireAuth, async (
   res.sendStatus(204);
 });
 
-router.delete("/scheduling/calendars/:id", requireAuth, async (req, res): Promise<void> => {
+router.delete("/scheduling/calendars/:id", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const params = DeleteCalendarParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: "Validation failed", issues: params.error.issues }); return; }

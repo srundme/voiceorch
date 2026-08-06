@@ -7,6 +7,8 @@
 
 import { Router, type IRouter } from "express";
 import { getAuth } from "../lib/auth-compat.js";
+import { requireAuth } from "../middlewares/requireAuth.js";
+import { clientContext } from "../middlewares/clientContext.js";
 import {
   db, campaignsTable, campaignLeadsTable, campaignBatchesTable,
   callCallbacksTable, callRetriesTable, workspaceDncTable,
@@ -16,6 +18,8 @@ import { eq, and, count, sql, desc, isNotNull, inArray, ne } from "drizzle-orm";
 import { normalizePhone } from "../lib/phone-normalize.js";
 
 const router: IRouter = Router();
+
+router.use(requireAuth, clientContext);
 
 async function requireCampaign(campaignId: number, userId: string) {
   const [row] = await db.select().from(campaignsTable)

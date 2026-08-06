@@ -462,10 +462,12 @@ function OverviewTab({
   form,
   agent,
   onGoToPrompt,
+  rateMap,
 }: {
   form: any;
   agent: any;
   onGoToPrompt?: () => void;
+  rateMap: Map<string, number>;
 }) {
   const [openSection, setOpenSection] = useState<CardSection | null>(null);
   const [confirmDiscardSection, setConfirmDiscardSection] = useState<CardSection | null>(null);
@@ -762,18 +764,21 @@ function OverviewTab({
                     : "Finish these items before going live."}
                 </p>
               </div>
-              {onGoToPrompt && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-8 gap-1.5 text-xs"
-                  onClick={onGoToPrompt}
-                >
-                  <FileText className="size-3.5" />
-                  Edit prompt
-                </Button>
-              )}
+              <div className="flex flex-wrap items-center gap-2">
+                <AgentCostSummary form={form} rateMap={rateMap} compact />
+                {onGoToPrompt && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 gap-1.5 text-xs"
+                    onClick={onGoToPrompt}
+                  >
+                    <FileText className="size-3.5" />
+                    Edit prompt
+                  </Button>
+                )}
+              </div>
             </div>
             <ul className="divide-y divide-border/70 overflow-hidden rounded-xl border border-border/60 bg-card/40">
               {readinessItems.map((item) => (
@@ -6336,6 +6341,7 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
                   <OverviewTab
                     form={form}
                     agent={agent}
+                    rateMap={rateMap}
                     onGoToPrompt={() => handleTabClick("prompt")}
                   />
                 )}

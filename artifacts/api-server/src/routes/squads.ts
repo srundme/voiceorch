@@ -22,6 +22,7 @@ import {
   type SquadStatus,
 } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
+import { clientContext } from "../middlewares/clientContext.js";
 import { logger } from "../lib/logger.js";
 import {
   startTaskRun,
@@ -139,13 +140,13 @@ type MemberInput = {
 
 // ── Templates ────────────────────────────────────────────────────────────────
 
-router.get("/squads/templates", requireAuth, (_req, res): void => {
+router.get("/squads/templates", requireAuth, clientContext, (_req, res): void => {
   res.json(TEMPLATES);
 });
 
 // ── CRUD ─────────────────────────────────────────────────────────────────────
 
-router.get("/squads", requireAuth, async (req, res): Promise<void> => {
+router.get("/squads", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const rows = await db.select().from(squadsTable)
     .where(eq(squadsTable.userId, clerkId))
@@ -155,7 +156,7 @@ router.get("/squads", requireAuth, async (req, res): Promise<void> => {
   res.json(out);
 });
 
-router.get("/squads/:id", requireAuth, async (req, res): Promise<void> => {
+router.get("/squads/:id", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const id = parseInt(String(req.params["id"]), 10);
   const [s] = await db.select().from(squadsTable)
@@ -164,7 +165,7 @@ router.get("/squads/:id", requireAuth, async (req, res): Promise<void> => {
   res.json(await serializeSquad(s));
 });
 
-router.post("/squads", requireAuth, async (req, res): Promise<void> => {
+router.post("/squads", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const body = req.body as {
     name?: string;
@@ -228,7 +229,7 @@ router.post("/squads", requireAuth, async (req, res): Promise<void> => {
   res.status(201).json(await serializeSquad(fresh!));
 });
 
-router.patch("/squads/:id", requireAuth, async (req, res): Promise<void> => {
+router.patch("/squads/:id", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const id = parseInt(String(req.params["id"]), 10);
   const [existing] = await db.select().from(squadsTable)
@@ -290,7 +291,7 @@ router.patch("/squads/:id", requireAuth, async (req, res): Promise<void> => {
   res.json(await serializeSquad(fresh!));
 });
 
-router.delete("/squads/:id", requireAuth, async (req, res): Promise<void> => {
+router.delete("/squads/:id", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const id = parseInt(String(req.params["id"]), 10);
   // Detach connections first
@@ -306,7 +307,7 @@ router.delete("/squads/:id", requireAuth, async (req, res): Promise<void> => {
 
 // ── Connect phone / campaign ─────────────────────────────────────────────────
 
-router.post("/squads/:id/connect", requireAuth, async (req, res): Promise<void> => {
+router.post("/squads/:id/connect", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const id = parseInt(String(req.params["id"]), 10);
   const [s] = await db.select().from(squadsTable)
@@ -376,7 +377,7 @@ router.post("/squads/:id/connect", requireAuth, async (req, res): Promise<void> 
 
 // ── Tasks (handoffs + follow-ups between squad members) ──────────────────────
 
-router.get("/squads/:id/tasks", requireAuth, async (req, res): Promise<void> => {
+router.get("/squads/:id/tasks", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const id = parseInt(String(req.params["id"]), 10);
   const [s] = await db.select().from(squadsTable)
@@ -413,7 +414,7 @@ router.get("/squads/:id/tasks", requireAuth, async (req, res): Promise<void> => 
   })));
 });
 
-router.post("/squad-tasks/:taskId/cancel", requireAuth, async (req, res): Promise<void> => {
+router.post("/squad-tasks/:taskId/cancel", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const taskId = parseInt(String(req.params["taskId"]), 10);
   const [task] = await db.select().from(squadTasksTable)
@@ -437,7 +438,7 @@ router.post("/squad-tasks/:taskId/cancel", requireAuth, async (req, res): Promis
 
 // ── Runs ─────────────────────────────────────────────────────────────────────
 
-router.post("/squads/:id/runs", requireAuth, async (req, res): Promise<void> => {
+router.post("/squads/:id/runs", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const id = parseInt(String(req.params["id"]), 10);
   const body = req.body as {
@@ -477,7 +478,7 @@ router.post("/squads/:id/runs", requireAuth, async (req, res): Promise<void> => 
   }
 });
 
-router.get("/squads/:id/runs", requireAuth, async (req, res): Promise<void> => {
+router.get("/squads/:id/runs", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const id = parseInt(String(req.params["id"]), 10);
   const [s] = await db.select().from(squadsTable)
@@ -503,7 +504,7 @@ router.get("/squads/:id/runs", requireAuth, async (req, res): Promise<void> => {
   })));
 });
 
-router.get("/squad-runs/:runId", requireAuth, async (req, res): Promise<void> => {
+router.get("/squad-runs/:runId", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const runId = parseInt(String(req.params["runId"]), 10);
   const [run] = await db.select().from(squadRunsTable)
@@ -527,7 +528,7 @@ router.get("/squad-runs/:runId", requireAuth, async (req, res): Promise<void> =>
   });
 });
 
-router.post("/squad-runs/:runId/cancel", requireAuth, async (req, res): Promise<void> => {
+router.post("/squad-runs/:runId/cancel", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const runId = parseInt(String(req.params["runId"]), 10);
   try {
@@ -538,7 +539,7 @@ router.post("/squad-runs/:runId/cancel", requireAuth, async (req, res): Promise<
   }
 });
 
-router.post("/squad-runs/:runId/approve", requireAuth, async (req, res): Promise<void> => {
+router.post("/squad-runs/:runId/approve", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const runId = parseInt(String(req.params["runId"]), 10);
   const body = req.body as { stepId?: number; approved?: boolean; note?: string };
@@ -560,7 +561,7 @@ router.post("/squad-runs/:runId/approve", requireAuth, async (req, res): Promise
   }
 });
 
-router.post("/squad-runs/:runId/retry", requireAuth, async (req, res): Promise<void> => {
+router.post("/squad-runs/:runId/retry", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const runId = parseInt(String(req.params["runId"]), 10);
   const [run] = await db.select().from(squadRunsTable)

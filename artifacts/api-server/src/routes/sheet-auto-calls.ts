@@ -5,6 +5,7 @@
 import { Router, type IRouter } from "express";
 import { z } from "zod/v4";
 import { requireAuth } from "../middlewares/requireAuth.js";
+import { clientContext } from "../middlewares/clientContext.js";
 import { logger } from "../lib/logger.js";
 import {
   listPipelines,
@@ -50,7 +51,7 @@ function paramId(req: { params: Record<string, string | string[] | undefined> },
   return Array.isArray(v) ? v[0]! : String(v ?? "");
 }
 
-router.get("/automatic-calls", requireAuth, async (req, res): Promise<void> => {
+router.get("/automatic-calls", requireAuth, clientContext, async (req, res): Promise<void> => {
   try {
     const userId = (req as any).clerkUserId as string;
     const rows = await listPipelines(userId);
@@ -61,7 +62,7 @@ router.get("/automatic-calls", requireAuth, async (req, res): Promise<void> => {
   }
 });
 
-router.post("/automatic-calls", requireAuth, async (req, res): Promise<void> => {
+router.post("/automatic-calls", requireAuth, clientContext, async (req, res): Promise<void> => {
   try {
     const userId = (req as any).clerkUserId as string;
     const parsed = CreateBody.safeParse(req.body);
@@ -87,7 +88,7 @@ router.post("/automatic-calls", requireAuth, async (req, res): Promise<void> => 
   }
 });
 
-router.get("/automatic-calls/:id", requireAuth, async (req, res): Promise<void> => {
+router.get("/automatic-calls/:id", requireAuth, clientContext, async (req, res): Promise<void> => {
   try {
     const userId = (req as any).clerkUserId as string;
     const id = paramId(req);
@@ -100,7 +101,7 @@ router.get("/automatic-calls/:id", requireAuth, async (req, res): Promise<void> 
   }
 });
 
-router.get("/automatic-calls/:id/activity", requireAuth, async (req, res): Promise<void> => {
+router.get("/automatic-calls/:id/activity", requireAuth, clientContext, async (req, res): Promise<void> => {
   try {
     const userId = (req as any).clerkUserId as string;
     const id = paramId(req);
@@ -113,7 +114,7 @@ router.get("/automatic-calls/:id/activity", requireAuth, async (req, res): Promi
   }
 });
 
-router.post("/automatic-calls/:id/start", requireAuth, async (req, res): Promise<void> => {
+router.post("/automatic-calls/:id/start", requireAuth, clientContext, async (req, res): Promise<void> => {
   try {
     const userId = (req as any).clerkUserId as string;
     const id = paramId(req);
@@ -125,7 +126,7 @@ router.post("/automatic-calls/:id/start", requireAuth, async (req, res): Promise
   }
 });
 
-router.post("/automatic-calls/:id/pause", requireAuth, async (req, res): Promise<void> => {
+router.post("/automatic-calls/:id/pause", requireAuth, clientContext, async (req, res): Promise<void> => {
   try {
     const userId = (req as any).clerkUserId as string;
     const row = await pausePipeline(userId, paramId(req));
@@ -135,7 +136,7 @@ router.post("/automatic-calls/:id/pause", requireAuth, async (req, res): Promise
   }
 });
 
-router.post("/automatic-calls/:id/resume", requireAuth, async (req, res): Promise<void> => {
+router.post("/automatic-calls/:id/resume", requireAuth, clientContext, async (req, res): Promise<void> => {
   try {
     const userId = (req as any).clerkUserId as string;
     const row = await resumePipeline(userId, paramId(req));
@@ -145,7 +146,7 @@ router.post("/automatic-calls/:id/resume", requireAuth, async (req, res): Promis
   }
 });
 
-router.post("/automatic-calls/:id/stop", requireAuth, async (req, res): Promise<void> => {
+router.post("/automatic-calls/:id/stop", requireAuth, clientContext, async (req, res): Promise<void> => {
   try {
     const userId = (req as any).clerkUserId as string;
     const row = await stopPipeline(userId, paramId(req));
@@ -163,7 +164,7 @@ const PreviewBody = z.object({
   limit: z.number().int().min(1).max(10).optional(),
 });
 
-router.post("/automatic-calls/preview", requireAuth, async (req, res): Promise<void> => {
+router.post("/automatic-calls/preview", requireAuth, clientContext, async (req, res): Promise<void> => {
   try {
     const userId = (req as any).clerkUserId as string;
     const parsed = PreviewBody.safeParse(req.body);
@@ -182,7 +183,7 @@ router.post("/automatic-calls/preview", requireAuth, async (req, res): Promise<v
   }
 });
 
-router.post("/automatic-calls/:id/retry-row", requireAuth, async (req, res): Promise<void> => {
+router.post("/automatic-calls/:id/retry-row", requireAuth, clientContext, async (req, res): Promise<void> => {
   try {
     const userId = (req as any).clerkUserId as string;
     const sheetRowIndex = Number((req.body as { sheetRowIndex?: number })?.sheetRowIndex);

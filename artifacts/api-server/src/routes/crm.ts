@@ -37,6 +37,7 @@ import {
   leadTimelineTable,
 } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
+import { clientContext } from "../middlewares/clientContext.js";
 import { encryptKey, decryptKey } from "../lib/crypto.js";
 import { getSelfBaseUrl, getAppOrigins } from "../lib/app-domain.js";
 import { logger } from "../lib/logger.js";
@@ -165,7 +166,7 @@ function serializeConnection(conn: typeof crmConnectionsTable.$inferSelect) {
 
 /* ── GET /crm/connections ────────────────────────────────────────────────── */
 
-router.get("/crm/connections", requireAuth, async (req, res): Promise<void> => {
+router.get("/crm/connections", requireAuth, clientContext, async (req, res): Promise<void> => {
   const userId = (req as any).clerkUserId as string;
   const rows = await db.select().from(crmConnectionsTable)
     .where(eq(crmConnectionsTable.userId, userId))
@@ -175,7 +176,7 @@ router.get("/crm/connections", requireAuth, async (req, res): Promise<void> => {
 
 /* ── PATCH /crm/connections/:id ──────────────────────────────────────────── */
 
-router.patch("/crm/connections/:id", requireAuth, async (req, res): Promise<void> => {
+router.patch("/crm/connections/:id", requireAuth, clientContext, async (req, res): Promise<void> => {
   const userId = (req as any).clerkUserId as string;
   const id = Number(req.params["id"]);
   const body = req.body as {
@@ -247,7 +248,7 @@ router.patch("/crm/connections/:id", requireAuth, async (req, res): Promise<void
 
 /* ── DELETE /crm/connections/:id ─────────────────────────────────────────── */
 
-router.delete("/crm/connections/:id", requireAuth, async (req, res): Promise<void> => {
+router.delete("/crm/connections/:id", requireAuth, clientContext, async (req, res): Promise<void> => {
   const userId = (req as any).clerkUserId as string;
   const id = Number(req.params["id"]);
   const [conn] = await db.select().from(crmConnectionsTable)
@@ -260,7 +261,7 @@ router.delete("/crm/connections/:id", requireAuth, async (req, res): Promise<voi
 
 /* ── GET /crm/connect/:provider ──────────────────────────────────────────── */
 
-router.get("/crm/connect/:provider", requireAuth, (req, res): void => {
+router.get("/crm/connect/:provider", requireAuth, clientContext, (req, res): void => {
   const userId       = (req as any).clerkUserId as string;
   const provider     = req.params["provider"] as string;
   const returnOrigin = (req.query["returnOrigin"] as string | undefined) ?? null;
@@ -440,7 +441,7 @@ router.get("/crm/callback/:provider", async (req, res): Promise<void> => {
 
 /* ── GET /crm/connections/:id/lists ──────────────────────────────────────── */
 
-router.get("/crm/connections/:id/lists", requireAuth, async (req, res): Promise<void> => {
+router.get("/crm/connections/:id/lists", requireAuth, clientContext, async (req, res): Promise<void> => {
   const userId = (req as any).clerkUserId as string;
   const id     = Number(req.params["id"]);
   const module = (req.query["module"] as string | undefined) === "leads" ? "leads" : "contacts";
@@ -473,7 +474,7 @@ router.get("/crm/connections/:id/lists", requireAuth, async (req, res): Promise<
 
 /* ── GET /crm/connections/:id/contacts ───────────────────────────────────── */
 
-router.get("/crm/connections/:id/contacts", requireAuth, async (req, res): Promise<void> => {
+router.get("/crm/connections/:id/contacts", requireAuth, clientContext, async (req, res): Promise<void> => {
   const userId = (req as any).clerkUserId as string;
   const id     = Number(req.params["id"]);
   const query  = req.query["query"]  as string | undefined;
@@ -524,7 +525,7 @@ router.get("/crm/connections/:id/contacts", requireAuth, async (req, res): Promi
 
 /* ── POST /crm/connections/:id/import ────────────────────────────────────── */
 
-router.post("/crm/connections/:id/import", requireAuth, async (req, res): Promise<void> => {
+router.post("/crm/connections/:id/import", requireAuth, clientContext, async (req, res): Promise<void> => {
   const userId = (req as any).clerkUserId as string;
   const id     = Number(req.params["id"]);
 

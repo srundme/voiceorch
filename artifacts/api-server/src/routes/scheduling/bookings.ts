@@ -3,6 +3,7 @@ import { eq, and, or, gte, lte, sql, getTableColumns } from "drizzle-orm";
 import { formatInTimeZone } from "date-fns-tz";
 import { db, bookingsTable, eventTypesTable, schedulingCalendarsTable } from "@workspace/db";
 import { requireAuth } from "../../middlewares/requireAuth.js";
+import { clientContext } from "../../middlewares/clientContext.js";
 import {
   CreateBookingBody,
   UpdateBookingBody,
@@ -48,7 +49,7 @@ function formatBooking(b: typeof bookingsTable.$inferSelect) {
   };
 }
 
-router.get("/scheduling/bookings", requireAuth, async (req, res): Promise<void> => {
+router.get("/scheduling/bookings", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const qp = ListBookingsQueryParams.safeParse(req.query);
   if (!qp.success) { res.status(400).json({ error: "Validation failed", issues: qp.error.issues }); return; }
@@ -68,7 +69,7 @@ router.get("/scheduling/bookings", requireAuth, async (req, res): Promise<void> 
   res.json(ListBookingsResponse.parse(rows.map(formatBooking)));
 });
 
-router.post("/scheduling/bookings", requireAuth, async (req, res): Promise<void> => {
+router.post("/scheduling/bookings", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const parsed = CreateBookingBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Validation failed", issues: parsed.error.issues }); return; }
@@ -297,7 +298,7 @@ router.post("/scheduling/bookings", requireAuth, async (req, res): Promise<void>
   res.status(201).json(GetBookingResponse.parse({ ...formatBooking(booking), meetLink, googleEventId }));
 });
 
-router.get("/scheduling/bookings/:id", requireAuth, async (req, res): Promise<void> => {
+router.get("/scheduling/bookings/:id", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const params = GetBookingParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: "Validation failed", issues: params.error.issues }); return; }
@@ -308,7 +309,7 @@ router.get("/scheduling/bookings/:id", requireAuth, async (req, res): Promise<vo
   res.json(GetBookingResponse.parse(formatBooking(row)));
 });
 
-router.patch("/scheduling/bookings/:id", requireAuth, async (req, res): Promise<void> => {
+router.patch("/scheduling/bookings/:id", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const params = UpdateBookingParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: "Validation failed", issues: params.error.issues }); return; }

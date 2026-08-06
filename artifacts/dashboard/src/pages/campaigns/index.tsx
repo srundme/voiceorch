@@ -1458,22 +1458,22 @@ export default function CampaignsPage() {
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
-      {/* Start a campaign — Oceanic Shimmer hero (dark top for copy contrast) */}
-      <section className="oceanic-shimmer shrink-0 border-b border-[#0d2a4f]/50 px-4 py-7 sm:px-6 lg:px-8">
+      {/* Start a campaign */}
+      <section className="shrink-0 border-b border-border px-4 py-6 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-5xl">
-          <div className="relative z-[1]">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/80">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
               Start a campaign
             </p>
-            <h2 className="mt-1.5 text-xl font-semibold tracking-[-0.03em] text-white sm:text-2xl drop-shadow-sm">
+            <h2 className="mt-1.5 text-xl font-semibold tracking-[-0.03em] sm:text-2xl">
               Where are your leads coming from?
             </h2>
-            <p className="mt-1.5 max-w-xl text-[13px] leading-relaxed text-white/85">
+            <p className="mt-1.5 max-w-xl text-[13px] leading-relaxed text-muted-foreground">
               Each source has its own setup — connect the channel first, then dial.
             </p>
           </div>
 
-          <div className="relative z-[1] mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {START_SOURCES.map((src) => {
               const zohoNeedsConnect = src.id === "crm" && !zohoConnected;
               return (
@@ -1481,18 +1481,18 @@ export default function CampaignsPage() {
                   key={src.id}
                   type="button"
                   onClick={() => startFrom(src.id)}
-                  className="group flex min-h-[120px] flex-col items-start gap-3 rounded-2xl border border-white/30 bg-white p-4 text-left shadow-md shadow-[#123A6B]/25 transition-colors hover:bg-[#F7FBFD]"
+                  className="group flex min-h-[120px] flex-col items-start gap-3 rounded-2xl border border-border bg-card p-4 text-left transition-colors hover:bg-muted/35"
                 >
                   <div className="flex w-full items-start justify-between gap-3">
                     {src.icon}
                     <ArrowRight className="mt-1 size-3.5 shrink-0 text-muted-foreground/40 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-[14px] font-semibold tracking-[-0.01em] text-foreground">{src.title}</p>
+                    <p className="text-[14px] font-semibold tracking-[-0.01em]">{src.title}</p>
                     <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
                       {src.description}
                     </p>
-                    <p className="mt-2.5 text-[11px] font-medium text-[#123A6B]">
+                    <p className="mt-2.5 text-[11px] font-medium text-foreground/80">
                       {zohoNeedsConnect ? "Connect Zoho →" : `${src.cta} →`}
                     </p>
                   </div>

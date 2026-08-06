@@ -10,6 +10,7 @@ import {
   UpdateProviderResponse,
 } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/requireAuth.js";
+import { clientContext } from "../middlewares/clientContext.js";
 import { logActivity } from "../lib/activity.js";
 import { encryptKey, decryptKey } from "../lib/crypto.js";
 import { syncByoPlivoNumbers } from "../services/byo-numbers.js";
@@ -34,7 +35,7 @@ function toProviderConfig(p: typeof providersTable.$inferSelect) {
   };
 }
 
-router.get("/providers", requireAuth, async (req, res): Promise<void> => {
+router.get("/providers", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const providers = await db
     .select()
@@ -44,7 +45,7 @@ router.get("/providers", requireAuth, async (req, res): Promise<void> => {
   res.json(ListProvidersResponse.parse(providers.map(toProviderConfig)));
 });
 
-router.post("/providers", requireAuth, async (req, res): Promise<void> => {
+router.post("/providers", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const parsed = CreateProviderBody.safeParse(req.body);
   if (!parsed.success) {
@@ -61,7 +62,7 @@ router.post("/providers", requireAuth, async (req, res): Promise<void> => {
   res.status(201).json(toProviderConfig(provider));
 });
 
-router.patch("/providers/:id", requireAuth, async (req, res): Promise<void> => {
+router.patch("/providers/:id", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const params = UpdateProviderParams.safeParse(req.params);
   if (!params.success) {
@@ -88,7 +89,7 @@ router.patch("/providers/:id", requireAuth, async (req, res): Promise<void> => {
   res.json(UpdateProviderResponse.parse(toProviderConfig(provider)));
 });
 
-router.delete("/providers/:id", requireAuth, async (req, res): Promise<void> => {
+router.delete("/providers/:id", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const params = DeleteProviderParams.safeParse(req.params);
   if (!params.success) {

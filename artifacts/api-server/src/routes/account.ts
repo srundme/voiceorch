@@ -4,6 +4,7 @@ import { promisify } from "util";
 import { eq } from "drizzle-orm";
 import { db, usersTable, walletTransactionsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
+import { clientContext } from "../middlewares/clientContext.js";
 import { logActivity } from "../lib/activity.js";
 import { issueInvoice } from "../services/invoice.js";
 import { GetPreferencesResponse, UpdatePreferencesBody } from "@workspace/api-zod";
@@ -41,14 +42,14 @@ function toAccountInfo(user: typeof usersTable.$inferSelect) {
   };
 }
 
-router.get("/account", requireAuth, async (req, res): Promise<void> => {
+router.get("/account", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, clerkId));
   if (!user) { res.status(404).json({ error: "User not found" }); return; }
   res.json(toAccountInfo(user));
 });
 
-router.post("/account/regenerate-api-key", requireAuth, async (req, res): Promise<void> => {
+router.post("/account/regenerate-api-key", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const newKey = generateApiKey();
   const [user] = await db
@@ -61,7 +62,7 @@ router.post("/account/regenerate-api-key", requireAuth, async (req, res): Promis
   res.json(toAccountInfo(user));
 });
 
-router.post("/account/add-concurrent", requireAuth, async (req, res): Promise<void> => {
+router.post("/account/add-concurrent", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, clerkId));
   if (!user) { res.status(404).json({ error: "User not found" }); return; }
@@ -109,7 +110,7 @@ router.post("/account/add-concurrent", requireAuth, async (req, res): Promise<vo
   res.json(toAccountInfo(updated));
 });
 
-router.post("/account/change-password", requireAuth, async (req, res): Promise<void> => {
+router.post("/account/change-password", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const { currentPassword, newPassword } = req.body as {
     currentPassword?: string;
@@ -151,7 +152,7 @@ router.post("/account/change-password", requireAuth, async (req, res): Promise<v
   res.json({ ok: true });
 });
 
-router.get("/account/preferences", requireAuth, async (req, res): Promise<void> => {
+router.get("/account/preferences", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, clerkId));
   if (!user) { res.status(404).json({ error: "User not found" }); return; }
@@ -159,7 +160,7 @@ router.get("/account/preferences", requireAuth, async (req, res): Promise<void> 
   res.json(GetPreferencesResponse.parse({ theme: prefs.theme ?? null }));
 });
 
-router.patch("/account/preferences", requireAuth, async (req, res): Promise<void> => {
+router.patch("/account/preferences", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const parsed = UpdatePreferencesBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Invalid preferences" }); return; }

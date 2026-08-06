@@ -674,7 +674,7 @@ router.get("/phone-numbers/available", requireAuth, async (req, res): Promise<vo
 // until the payment is confirmed via /purchase/confirm below. This guarantees
 // a completed payment always precedes granting the number.
 
-router.post("/phone-numbers/purchase/initiate", requireAuth, denyManagedClient, async (req, res): Promise<void> => {
+router.post("/phone-numbers/purchase/initiate", requireAuth, clientContext, denyManagedClient, async (req, res): Promise<void> => {
   if (!process.env["RAZORPAY_KEY_ID"] || !process.env["RAZORPAY_KEY_SECRET"]) {
     res.status(503).json({ error: "Payment gateway not configured" });
     return;
@@ -780,7 +780,7 @@ router.post("/phone-numbers/purchase/initiate", requireAuth, denyManagedClient, 
 // from Vobiz. If provisioning fails after a successful payment, the payment
 // is refunded so the user is never charged for a number they didn't receive.
 
-router.post("/phone-numbers/purchase/confirm", requireAuth, denyManagedClient, async (req, res): Promise<void> => {
+router.post("/phone-numbers/purchase/confirm", requireAuth, clientContext, denyManagedClient, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const parsed = ConfirmPhoneNumberPurchaseBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Validation failed", issues: parsed.error.issues }); return; }
@@ -960,7 +960,7 @@ async function refundOrder(
 
 // ── PATCH /phone-numbers/:id/assign ──────────────────────────────────────────
 
-router.patch("/phone-numbers/:id/assign", requireAuth, denyManagedClient, async (req, res): Promise<void> => {
+router.patch("/phone-numbers/:id/assign", requireAuth, clientContext, denyManagedClient, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const params  = AssignPhoneNumberParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: "Validation failed", issues: params.error.issues }); return; }
@@ -1167,7 +1167,7 @@ router.post("/phone-numbers/:id/configure-webhook", requireAuth, clientContext, 
 // Re-link inbound webhooks for the user's numbers on the platform master
 // VoBiz account. (Legacy name: previously synced to per-user sub-accounts.)
 
-router.post("/phone-numbers/sync-vobiz-partner", requireAuth, denyManagedClient, async (req, res): Promise<void> => {
+router.post("/phone-numbers/sync-vobiz-partner", requireAuth, clientContext, denyManagedClient, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
 
   const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, clerkId));
@@ -1215,7 +1215,7 @@ router.post("/phone-numbers/sync-vobiz-partner", requireAuth, denyManagedClient,
 
 // ── DELETE /phone-numbers/:id ─────────────────────────────────────────────────
 
-router.delete("/phone-numbers/:id", requireAuth, denyManagedClient, async (req, res): Promise<void> => {
+router.delete("/phone-numbers/:id", requireAuth, clientContext, denyManagedClient, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const params  = ReleasePhoneNumberParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: "Validation failed", issues: params.error.issues }); return; }

@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { eq, and, count } from "drizzle-orm";
 import { db, eventTypesTable, schedulingCalendarsTable, bookingsTable } from "@workspace/db";
 import { requireAuth } from "../../middlewares/requireAuth.js";
+import { clientContext } from "../../middlewares/clientContext.js";
 import {
   CreateEventTypeBody,
   UpdateEventTypeBody,
@@ -16,7 +17,7 @@ import {
 
 const router: IRouter = Router();
 
-router.get("/scheduling/event-types", requireAuth, async (req, res): Promise<void> => {
+router.get("/scheduling/event-types", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const qp = ListEventTypesQueryParams.safeParse(req.query);
   const rows = await db.select().from(eventTypesTable)
@@ -30,7 +31,7 @@ router.get("/scheduling/event-types", requireAuth, async (req, res): Promise<voi
   res.json(ListEventTypesResponse.parse(rows));
 });
 
-router.post("/scheduling/event-types", requireAuth, async (req, res): Promise<void> => {
+router.post("/scheduling/event-types", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const parsed = CreateEventTypeBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Validation failed", issues: parsed.error.issues }); return; }
@@ -50,7 +51,7 @@ router.post("/scheduling/event-types", requireAuth, async (req, res): Promise<vo
   res.status(201).json(GetEventTypeResponse.parse(row));
 });
 
-router.get("/scheduling/event-types/:id", requireAuth, async (req, res): Promise<void> => {
+router.get("/scheduling/event-types/:id", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const params = GetEventTypeParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: "Validation failed", issues: params.error.issues }); return; }
@@ -60,7 +61,7 @@ router.get("/scheduling/event-types/:id", requireAuth, async (req, res): Promise
   res.json(GetEventTypeResponse.parse(row));
 });
 
-router.patch("/scheduling/event-types/:id", requireAuth, async (req, res): Promise<void> => {
+router.patch("/scheduling/event-types/:id", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const params = UpdateEventTypeParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: "Validation failed", issues: params.error.issues }); return; }
@@ -74,7 +75,7 @@ router.patch("/scheduling/event-types/:id", requireAuth, async (req, res): Promi
   res.json(UpdateEventTypeResponse.parse(row));
 });
 
-router.delete("/scheduling/event-types/:id", requireAuth, async (req, res): Promise<void> => {
+router.delete("/scheduling/event-types/:id", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const params = DeleteEventTypeParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: "Validation failed", issues: params.error.issues }); return; }

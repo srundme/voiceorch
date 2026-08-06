@@ -420,16 +420,21 @@ function SidebarContent({
   };
 
   // Partner hub nav (gated) + white-label branding for partner-managed clients.
+  // While acting as a client, show the full client workspace nav (not Partner Hub)
+  // so partners can control the client's account end-to-end.
   const { data: partnerCtx } = usePartnerContext();
-  const isManagedClient = partnerCtx?.isManagedClient === true;
-  const navGroups: NavGroup[] = isManagedClient
-    ? MANAGED_CLIENT_NAV
-    : partnerCtx?.isPartner
-      ? [
-          ...NAV_GROUPS,
-          { group: "PARTNER", items: [{ name: "Partner Hub", href: "/app/partner", icon: Handshake }] },
-        ]
-      : NAV_GROUPS;
+  const actingAsClient = loadActingAs();
+  const isManagedClient = partnerCtx?.isManagedClient === true && !actingAsClient;
+  const navGroups: NavGroup[] = actingAsClient
+    ? NAV_GROUPS
+    : isManagedClient
+      ? MANAGED_CLIENT_NAV
+      : partnerCtx?.isPartner
+        ? [
+            ...NAV_GROUPS,
+            { group: "PARTNER", items: [{ name: "Partner Hub", href: "/app/partner", icon: Handshake }] },
+          ]
+        : NAV_GROUPS;
   const settingsItems: NavItem[] = isManagedClient
     ? NAV_SETTINGS.filter((s) => MANAGED_CLIENT_SETTINGS_HREFS.includes(s.href))
     : NAV_SETTINGS;
@@ -975,14 +980,16 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <div className="flex items-center gap-2 px-4 py-2 bg-amber-500/10 border-b border-amber-500/30">
             <Handshake className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
             <p className="text-[12.5px] text-foreground truncate">
-              Managing <span className="font-semibold">{actingAs.clientName}</span>'s workspace — agents, numbers and calls here belong to their account.
+              Client control panel — editing{" "}
+              <span className="font-semibold">{actingAs.clientName}</span>
+              {" "}(agents, campaigns, numbers, billing). Changes apply to their account.
             </p>
             <button
               type="button"
               onClick={exitActingAs}
               className="ml-auto shrink-0 text-[12px] font-medium px-2.5 py-1 rounded-md border border-border bg-card hover:bg-accent transition-colors cursor-pointer"
             >
-              Exit
+              Exit to Partner Hub
             </button>
           </div>
         )}

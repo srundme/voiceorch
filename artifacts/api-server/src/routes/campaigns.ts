@@ -1,5 +1,7 @@
 import { Router, type IRouter } from "express";
 import { getAuth } from "../lib/auth-compat.js";
+import { requireAuth } from "../middlewares/requireAuth.js";
+import { clientContext } from "../middlewares/clientContext.js";
 import { randomUUID } from "crypto";
 import {
   CreateCampaignBody,
@@ -12,6 +14,8 @@ import { scheduleCampaignCall } from "../orchestration/campaignCaller.js";
 import { evaluateIrdaiGate, IRDAI_BLOCKED_MESSAGE, IRDAI_BLOCKED_CODE, type IrdaiGateResult } from "../services/irdai/gate.js";
 
 const router: IRouter = Router();
+
+router.use(requireAuth, clientContext);
 
 /**
  * Hard platform ceiling on how many concurrent calls a single campaign may run.
