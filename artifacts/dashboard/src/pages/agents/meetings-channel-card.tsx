@@ -1,13 +1,9 @@
 /**
- * Meeting join / delegate / memory toggles (Meetings page).
+ * Meeting join / delegate / memory toggles (Channels → Meetings).
  * Meeting prompt is owned by Agent → Prompt → In meetings.
- *
- * Attend modes:
- * - human — agent books calendar; a person attends (no Meet bot auto-join)
- * - ai    — Meet bot joins as this agent or a delegate
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -20,14 +16,13 @@ import {
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError } from "@/lib/format-api-error";
-import { ExternalLink, FileText, Loader2, Save, User, Bot } from "lucide-react";
+import { ExternalLink, Loader2, Save, User, Bot, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export type MeetingsForm = {
@@ -35,7 +30,7 @@ export type MeetingsForm = {
   enabled: boolean;
   whoJoins: "self" | "delegate";
   meetingPrompt: string;
-  delegateAgentId: string; // "" | number string
+  delegateAgentId: string;
   passMemory: boolean;
   passCallContext: boolean;
 };
@@ -64,12 +59,53 @@ function readMeetings(agent: any): MeetingsForm {
   };
 }
 
+function Choice({
+  selected,
+  onSelect,
+  icon,
+  title,
+  hint,
+}: {
+  selected: boolean;
+  onSelect: () => void;
+  icon: ReactNode;
+  title: string;
+  hint: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={cn(
+        "flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-left transition-colors",
+        selected
+          ? "bg-foreground text-background"
+          : "bg-muted/35 text-foreground hover:bg-muted/55",
+      )}
+    >
+      <span className={cn("mt-0.5 shrink-0", selected ? "opacity-90" : "text-muted-foreground")}>
+        {icon}
+      </span>
+      <span className="min-w-0">
+        <span className="block text-[13px] font-medium leading-tight">{title}</span>
+        <span
+          className={cn(
+            "mt-0.5 block text-[11px] leading-snug",
+            selected ? "text-background/70" : "text-muted-foreground",
+          )}
+        >
+          {hint}
+        </span>
+      </span>
+    </button>
+  );
+}
+
 export function MeetingsChannelCard({
   agentId,
   showJoinLink = true,
 }: {
   agentId: number;
-  /** Hide when already on the Meetings join page. */
   showJoinLink?: boolean;
 }) {
   const { toast } = useToast();
@@ -125,7 +161,6 @@ export function MeetingsChannelCard({
             meetings: {
               enabled: form.enabled,
               whoJoins: form.whoJoins,
-              // Prompt is owned by Builder — keep existing value on channel save.
               meetingPrompt: form.meetingPrompt,
               delegateAgentId:
                 form.whoJoins === "delegate" && form.delegateAgentId
@@ -145,201 +180,169 @@ export function MeetingsChannelCard({
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h3 className="text-sm font-semibold">Meetings</h3>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            Book calendar from calls — choose who attends the meeting.
-          </p>
-        </div>
-        {showJoinLink && !humanAttends ? (
-          <Button asChild type="button" variant="outline" size="sm" className="h-8 shrink-0 text-xs">
-            <Link href={`/app/meet?agentId=${agentId}`}>Join now</Link>
+    <div className="space-y-5">
+      {showJoinLink && !humanAttends ? (
+        <div className="flex justify-end">
+          <Button asChild type="button" variant="ghost" size="sm" className="h-8 shrink-0 gap-1 px-2 text-xs">
+            <Link href={`/app/meet?agentId=${agentId}`}>
+              Join now <ChevronRight className="size-3.5" />
+            </Link>
           </Button>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
 
       {!loaded || agentQ.isLoading ? (
-        <div className="h-28 animate-pulse rounded-md bg-muted/40" />
+        <div className="h-28 animate-pulse rounded-lg bg-muted/40" />
       ) : (
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label className="text-[11px]">Who attends</Label>
-            <div className="grid sm:grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => set({ enabled: false })}
-                className={cn(
-                  "rounded-lg border px-3 py-2.5 text-left transition-colors",
-                  humanAttends
-                    ? "border-primary/40 bg-primary/5"
-                    : "border-border/50 hover:bg-muted/30",
-                )}
-              >
-                <div className="flex items-center gap-1.5">
-                  <User className="h-3.5 w-3.5 text-muted-foreground" />
-                  <p className="text-[12px] font-medium">Human attends</p>
-                </div>
-                <p className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed">
-                  Agent books the calendar. A person joins the Meet — no AI bot auto-joins.
-                </p>
-              </button>
-              <button
-                type="button"
-                onClick={() => set({ enabled: true })}
-                className={cn(
-                  "rounded-lg border px-3 py-2.5 text-left transition-colors",
-                  !humanAttends
-                    ? "border-primary/40 bg-primary/5"
-                    : "border-border/50 hover:bg-muted/30",
-                )}
-              >
-                <div className="flex items-center gap-1.5">
-                  <Bot className="h-3.5 w-3.5 text-muted-foreground" />
-                  <p className="text-[12px] font-medium">AI joins meeting</p>
-                </div>
-                <p className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed">
-                  Meet bot auto-joins from bookings (this agent or a delegate).
-                </p>
-              </button>
+        <div className="space-y-5">
+          <section className="space-y-2">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/70">
+              1 · Who attends
+            </p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Choice
+                selected={humanAttends}
+                onSelect={() => set({ enabled: false })}
+                icon={<User className="size-4" />}
+                title="Human"
+                hint="Books the calendar. A person joins — no AI bot."
+              />
+              <Choice
+                selected={!humanAttends}
+                onSelect={() => set({ enabled: true })}
+                icon={<Bot className="size-4" />}
+                title="AI joins"
+                hint="Meet bot auto-joins from the booking."
+              />
             </div>
-          </div>
+            {humanAttends ? (
+              <p className="text-[11px] text-muted-foreground leading-relaxed pt-0.5">
+                Calendar booking still works on the call. SnapServe will not send a meeting bot.
+              </p>
+            ) : identityQ.data ? (
+              <p className="text-[11px] text-muted-foreground leading-relaxed pt-0.5">
+                {identityQ.data.botEmail ? (
+                  <>
+                    Bot joins as{" "}
+                    <span className="font-mono text-foreground">{identityQ.data.botEmail}</span>
+                    — admit this address or add it to the invite.
+                  </>
+                ) : (
+                  <>
+                    Managed bot joins as a guest. Meet may ask the host to admit it by agent name.
+                  </>
+                )}
+              </p>
+            ) : null}
+          </section>
 
-          {humanAttends ? (
-            <div className="rounded-md border border-border/60 bg-muted/20 px-3 py-2.5 text-[11px] text-muted-foreground leading-relaxed">
-              Calendar booking still works on the call. Invite your team on the Meet link — SnapServe
-              will not send a meeting bot.
-            </div>
-          ) : (
+          {!humanAttends && (
             <>
-              {identityQ.data && (
-                <div className="rounded-md border border-border/60 bg-muted/20 px-3 py-2.5 text-[11px] text-muted-foreground leading-relaxed">
-                  {identityQ.data.botEmail ? (
-                    <>
-                      Bot joins as{" "}
-                      <span className="font-mono text-foreground">{identityQ.data.botEmail}</span>
-                      {" — "}admit this address, or add it to the Meet invite.
-                    </>
-                  ) : (
-                    <>
-                      Managed meeting agent joins as a guest. Google Meet may ask the host to admit it by
-                      the agent&apos;s name (no email shown).
-                    </>
-                  )}
-                </div>
-              )}
-
-              <div className="space-y-2">
-                <Label className="text-[11px]">Which AI joins</Label>
-                <div className="grid sm:grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => set({ whoJoins: "self" })}
-                    className={
-                      form.whoJoins === "self"
-                        ? "rounded-lg border border-primary/40 bg-primary/5 px-3 py-2.5 text-left"
-                        : "rounded-lg border border-border/50 px-3 py-2.5 text-left hover:bg-muted/30"
-                    }
-                  >
-                    <p className="text-[12px] font-medium">This agent</p>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">Uses the meeting prompt from Builder</p>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => set({ whoJoins: "delegate" })}
-                    className={
-                      form.whoJoins === "delegate"
-                        ? "rounded-lg border border-primary/40 bg-primary/5 px-3 py-2.5 text-left"
-                        : "rounded-lg border border-border/50 px-3 py-2.5 text-left hover:bg-muted/30"
-                    }
-                  >
-                    <p className="text-[12px] font-medium">Another agent</p>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">Delegate joins the room</p>
-                  </button>
-                </div>
-              </div>
-
-              {form.whoJoins === "self" ? (
-                <div className="rounded-lg border border-border/50 bg-muted/20 px-3 py-3 space-y-2">
-                  <div className="flex items-start gap-2">
-                    <FileText className="h-3.5 w-3.5 mt-0.5 text-muted-foreground shrink-0" />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[12px] font-medium">Meeting prompt</p>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">
-                        {meetPromptPreview
-                          ? `${meetPromptPreview.slice(0, 120)}${meetPromptPreview.length > 120 ? "…" : ""}`
-                          : "Not set — meetings will use the call prompt."}
-                      </p>
-                    </div>
-                  </div>
-                  <Button asChild type="button" variant="outline" size="sm" className="h-8 text-xs gap-1.5">
-                    <Link href={`/app/agents/${agentId}?section=prompt`}>
-                      Edit in Builder
-                      <ExternalLink className="h-3 w-3" />
-                    </Link>
-                  </Button>
-                </div>
-              ) : (
-                <div className="space-y-1.5">
-                  <Label className="text-[11px]">Meeting agent</Label>
-                  <Select
-                    value={form.delegateAgentId || undefined}
-                    onValueChange={(v) => set({ delegateAgentId: v })}
-                  >
-                    <SelectTrigger className="h-8 text-xs">
-                      <SelectValue placeholder={others.length ? "Choose agent…" : "Create another agent first"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {others.map((a) => (
-                        <SelectItem key={a.id} value={String(a.id)} className="text-xs">
-                          {a.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-[10px] text-muted-foreground">
-                    That agent’s meeting prompt (or call prompt) is used in the room.{" "}
-                    {form.delegateAgentId ? (
-                      <Link href={`/app/agents/${form.delegateAgentId}?section=prompt`} className="underline underline-offset-2">
-                        Edit their prompt
-                      </Link>
-                    ) : null}
-                  </p>
-                </div>
-              )}
-
-              <div className="grid sm:grid-cols-2 gap-3">
-                <div className="flex items-center justify-between gap-3 rounded-lg border border-border/40 px-3 py-2">
-                  <div>
-                    <p className="text-[12px] font-medium">Pass contact memory</p>
-                    <p className="text-[10px] text-muted-foreground">Facts about the person when available</p>
-                  </div>
-                  <Switch checked={form.passMemory} onCheckedChange={(v) => set({ passMemory: v })} />
-                </div>
-                <div className="flex items-center justify-between gap-3 rounded-lg border border-border/40 px-3 py-2">
-                  <div>
-                    <p className="text-[12px] font-medium">Pass recent call context</p>
-                    <p className="text-[10px] text-muted-foreground">Summary from the prior call when booked</p>
-                  </div>
-                  <Switch
-                    checked={form.passCallContext}
-                    onCheckedChange={(v) => set({ passCallContext: v })}
+              <section className="space-y-2">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/70">
+                  2 · Which AI
+                </p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <Choice
+                    selected={form.whoJoins === "self"}
+                    onSelect={() => set({ whoJoins: "self" })}
+                    icon={<Bot className="size-4" />}
+                    title="This agent"
+                    hint="Uses this agent’s meeting prompt"
+                  />
+                  <Choice
+                    selected={form.whoJoins === "delegate"}
+                    onSelect={() => set({ whoJoins: "delegate" })}
+                    icon={<User className="size-4" />}
+                    title="Another agent"
+                    hint="Delegate joins the room"
                   />
                 </div>
-              </div>
+
+                {form.whoJoins === "self" ? (
+                  <div className="flex items-center justify-between gap-3 rounded-lg bg-muted/30 px-3 py-2.5">
+                    <div className="min-w-0">
+                      <p className="text-[12px] font-medium">Meeting prompt</p>
+                      <p className="truncate text-[11px] text-muted-foreground">
+                        {meetPromptPreview
+                          ? meetPromptPreview
+                          : "Not set — falls back to the call prompt"}
+                      </p>
+                    </div>
+                    <Button asChild type="button" variant="outline" size="sm" className="h-8 shrink-0 gap-1 text-xs">
+                      <Link href={`/app/agents/${agentId}?section=prompt`}>
+                        Edit <ExternalLink className="size-3" />
+                      </Link>
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    <Select
+                      value={form.delegateAgentId || undefined}
+                      onValueChange={(v) => set({ delegateAgentId: v })}
+                    >
+                      <SelectTrigger className="h-9 text-xs">
+                        <SelectValue placeholder={others.length ? "Choose agent…" : "Create another agent first"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {others.map((a) => (
+                          <SelectItem key={a.id} value={String(a.id)} className="text-xs">
+                            {a.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {form.delegateAgentId ? (
+                      <Link
+                        href={`/app/agents/${form.delegateAgentId}?section=prompt`}
+                        className="inline-flex text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                      >
+                        Edit their meeting prompt
+                      </Link>
+                    ) : null}
+                  </div>
+                )}
+              </section>
+
+              <section className="space-y-2">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/70">
+                  3 · Context for the meeting
+                </p>
+                <div className="divide-y divide-border/60 rounded-lg border border-border/60">
+                  <label className="flex cursor-pointer items-center justify-between gap-3 px-3 py-2.5">
+                    <span>
+                      <span className="block text-[13px] font-medium">Contact memory</span>
+                      <span className="block text-[11px] text-muted-foreground">Facts about the person when available</span>
+                    </span>
+                    <Switch checked={form.passMemory} onCheckedChange={(v) => set({ passMemory: v })} />
+                  </label>
+                  <label className="flex cursor-pointer items-center justify-between gap-3 px-3 py-2.5">
+                    <span>
+                      <span className="block text-[13px] font-medium">Recent call context</span>
+                      <span className="block text-[11px] text-muted-foreground">Summary from the call that booked this</span>
+                    </span>
+                    <Switch
+                      checked={form.passCallContext}
+                      onCheckedChange={(v) => set({ passCallContext: v })}
+                    />
+                  </label>
+                </div>
+              </section>
             </>
           )}
 
-          <div className="flex justify-end">
+          <div className="flex items-center justify-between gap-3 border-t border-border/60 pt-3">
+            <p className="text-[11px] text-muted-foreground">
+              Channel settings save here — agent prompt still uses the main Save.
+            </p>
             <Button
               type="button"
               size="sm"
-              className="h-8 text-xs gap-1.5"
+              className="h-8 shrink-0 gap-1.5 text-xs"
               disabled={update.isPending}
               onClick={() => void save()}
             >
-              {update.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+              {update.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
               Save meetings
             </Button>
           </div>

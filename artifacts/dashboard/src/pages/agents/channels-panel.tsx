@@ -3,7 +3,7 @@
  * Embedded in Agent Builder → Channels (also usable standalone).
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -13,7 +13,6 @@ import {
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { StatusDot } from "@/components/workspace/workspace";
 import { cn } from "@/lib/utils";
 import { EmailChannelCard, useEmailChannelReady } from "./email-channel-card";
 import { MeetingsChannelCard } from "./meetings-channel-card";
@@ -23,6 +22,9 @@ import {
   type AgentWaTemplates,
   type WaCatalogEntry,
 } from "@/components/whatsapp/agent-template-picks";
+import {
+  Phone, MessageCircle, Mail, Video, CalendarDays, ChevronRight,
+} from "lucide-react";
 
 const _DASH_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const DASH_API = `${_DASH_BASE}/api`;
@@ -53,18 +55,42 @@ type BuilderWhatsappConnection = {
 
 export type ChannelId = "phone" | "whatsapp" | "email" | "meetings" | "booking";
 
-function StatusBadge({
-  ready,
-  readyLabel = "Ready",
-  emptyLabel = "Not set",
+function ChannelShell({
+  title,
+  subtitle,
+  action,
+  children,
 }: {
-  ready: boolean;
-  readyLabel?: string;
-  emptyLabel?: string;
+  title: string;
+  subtitle: string;
+  action?: ReactNode;
+  children: ReactNode;
 }) {
   return (
-    <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
-      <StatusDot tone={ready ? "success" : "neutral"} />
+    <div className="space-y-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="text-[15px] font-semibold tracking-[-0.02em]">{title}</h3>
+          <p className="mt-0.5 text-[12px] text-muted-foreground leading-relaxed">{subtitle}</p>
+        </div>
+        {action}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function StatusLine({ ready, readyLabel, emptyLabel }: { ready: boolean; readyLabel: string; emptyLabel: string }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium",
+        ready
+          ? "bg-emerald-500/12 text-emerald-600 dark:text-emerald-400"
+          : "bg-muted text-muted-foreground",
+      )}
+    >
+      <span className={cn("size-1.5 rounded-full", ready ? "bg-emerald-500" : "bg-muted-foreground/50")} />
       {ready ? readyLabel : emptyLabel}
     </span>
   );
@@ -136,243 +162,297 @@ export function ChannelsPanel({
   });
   const phoneReady = Array.isArray(phonesRaw) && phonesRaw.some((p: any) => p.agentId === agent?.id);
   const emailReady = useEmailChannelReady();
+  const bookingReady = !!cfg.schedulingCalendarId && !!cfg.schedulingEventTypeId;
+  const meetingsCfg = ((agent?.agentConfig as any)?.meetings ?? {}) as Record<string, unknown>;
+  const meetingsReady =
+    meetingsCfg.enabled === false
+    || meetingsCfg.whoJoins !== "delegate"
+    || (meetingsCfg.delegateAgentId != null && Number(meetingsCfg.delegateAgentId) > 0);
 
-  const channelItems = [
-    { id: "phone" as const, label: "Phone", ready: phoneReady },
+  const channelItems: Array<{
+    id: ChannelId;
+    label: string;
+    icon: ReactNode;
+    ready: boolean;
+    status: string;
+  }> = [
     {
-      id: "whatsapp" as const,
-      label: "WhatsApp",
-      ready: !!agentConnection || !!waData?.channel?.active,
+      id: "phone",
+      label: "Phone",
+      icon: <Phone className="size-3.5" />,
+      ready: phoneReady,
+      status: phoneReady ? "Live" : "Setup",
     },
-    { id: "email" as const, label: "Email", ready: emailReady },
-    { id: "meetings" as const, label: "Meetings", ready: !!agent?.id },
     {
-      id: "booking" as const,
+      id: "whatsapp",
+      label: "WhatsApp",
+      icon: <MessageCircle className="size-3.5" />,
+      ready: !!agentConnection || !!waData?.channel?.active,
+      status: !!agentConnection || !!waData?.channel?.active ? "Live" : "Setup",
+    },
+    {
+      id: "email",
+      label: "Email",
+      icon: <Mail className="size-3.5" />,
+      ready: emailReady,
+      status: emailReady ? "Live" : "Setup",
+    },
+    {
+      id: "meetings",
+      label: "Meetings",
+      icon: <Video className="size-3.5" />,
+      ready: meetingsReady,
+      status: meetingsCfg.enabled === false ? "Human" : "AI",
+    },
+    {
+      id: "booking",
       label: "Booking",
-      ready: !!cfg.schedulingCalendarId && !!cfg.schedulingEventTypeId,
+      icon: <CalendarDays className="size-3.5" />,
+      ready: bookingReady,
+      status: bookingReady ? "Linked" : "Setup",
     },
   ];
 
   return (
-    <div className={cn("space-y-5", !embedded && "px-4 py-5 sm:px-6")}>
+    <div className={cn("space-y-5", !embedded && "px-4 py-5 sm:px-6", embedded && "p-5 sm:p-6")}>
       {!embedded && (
         <section>
           <h2 className="text-[15px] font-semibold tracking-[-0.02em]">Channels</h2>
           <p className="mt-0.5 text-[12px] text-muted-foreground">
-            Wire how {agent?.name ? <span className="text-foreground">{agent.name}</span> : "this agent"} communicates.
+            How {agent?.name ? <span className="text-foreground">{agent.name}</span> : "this agent"} reaches people.
           </p>
         </section>
       )}
 
-      {/* Horizontal tabs — no nested card chrome */}
-      <div className="flex gap-1 overflow-x-auto border-b border-border pb-px">
-        {channelItems.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => selectChannel(item.id)}
-            className={cn(
-              "relative shrink-0 px-3 pb-2.5 pt-1 text-[13px] font-medium transition-colors",
-              activeChannel === item.id
-                ? "text-foreground"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            <span className="inline-flex items-center gap-1.5">
-              <StatusDot tone={item.ready ? "success" : "neutral"} />
-              {item.label}
-            </span>
-            {activeChannel === item.id && (
-              <span className="absolute inset-x-1 -bottom-px h-0.5 rounded-full bg-foreground" />
-            )}
-          </button>
-        ))}
+      {embedded && (
+        <section className="space-y-0.5">
+          <h2 className="text-[15px] font-semibold tracking-[-0.02em]">Channels</h2>
+          <p className="text-[12px] text-muted-foreground">
+            Pick a channel, finish setup, then save. Phone is required to go live.
+          </p>
+        </section>
+      )}
+
+      {/* Channel switcher — icon + label + status, not green-dot soup */}
+      <div className="flex gap-1.5 overflow-x-auto pb-0.5">
+        {channelItems.map((item) => {
+          const active = activeChannel === item.id;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => selectChannel(item.id)}
+              className={cn(
+                "flex min-w-[6.5rem] shrink-0 flex-col gap-1 rounded-xl border px-3 py-2.5 text-left transition-colors",
+                active
+                  ? "border-foreground/20 bg-card shadow-sm"
+                  : "border-transparent bg-muted/30 hover:bg-muted/50",
+              )}
+            >
+              <span className="flex items-center gap-1.5 text-[12px] font-medium">
+                <span className={cn(active ? "text-foreground" : "text-muted-foreground")}>{item.icon}</span>
+                {item.label}
+              </span>
+              <StatusLine
+                ready={item.ready}
+                readyLabel={item.status}
+                emptyLabel={item.status}
+              />
+            </button>
+          );
+        })}
       </div>
 
-      <div className="min-w-0 max-w-2xl">
-          {activeChannel === "phone" && (
-            <div className="space-y-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h3 className="text-sm font-semibold">Phone</h3>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    Inbound routing, outbound caller ID, and test calls.
-                  </p>
+      <div className="min-w-0 max-w-2xl rounded-xl border border-border/70 bg-card/30 p-4 sm:p-5">
+        {activeChannel === "phone" && (
+          <ChannelShell
+            title="Phone"
+            subtitle="Inbound routing, outbound caller ID, and test calls."
+            action={(
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs"
+                onClick={() => navigate("/app/phone-numbers")}
+              >
+                Manage numbers
+              </Button>
+            )}
+          >
+            {agent?.id ? (
+              <AgentInboundPanel
+                agentId={agent.id}
+                preferredManagedNumber={cfg.preferredManagedNumber}
+                telephonyProvider={cfg.telephonyProvider}
+              />
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Save the agent first to attach inbound phone numbers.
+              </p>
+            )}
+          </ChannelShell>
+        )}
+
+        {activeChannel === "whatsapp" && (
+          <ChannelShell
+            title="WhatsApp"
+            subtitle="Templates, summaries, and chat replies."
+            action={(
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs"
+                onClick={() => navigate(
+                  `/app/connections?setup=whatsapp${agent?.id ? `&agentId=${agent.id}` : ""}`,
+                )}
+              >
+                Configure
+              </Button>
+            )}
+          >
+            {waLoading ? (
+              <Skeleton className="h-16 w-full rounded-md" />
+            ) : agentConnection ? (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-3 rounded-lg bg-muted/30 px-3 py-2.5">
+                  <div className="min-w-0">
+                    <p className="truncate text-[13px] font-medium">
+                      {agentConnection.name || "WhatsApp connection"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {agentConnection.metaPhoneNumberId || agentConnection.metaConnected
+                        ? "WhatsApp Business · Meta API"
+                        : "BSP webhook connection"}
+                    </p>
+                  </div>
+                  <StatusLine ready readyLabel="Active" emptyLabel="Inactive" />
                 </div>
+                {(agentConnection.metaPhoneNumberId || agentConnection.metaConnected) && agent?.id ? (
+                  <AgentWhatsappTemplatePicks
+                    agentId={agent.id}
+                    connectionId={agentConnection.id}
+                    initialTemplates={agentConnection.metaTemplates}
+                    initialCatalog={agentConnection.templateCatalog}
+                  />
+                ) : null}
+              </div>
+            ) : waData?.channel ? (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-3 rounded-lg bg-muted/30 px-3 py-2.5">
+                  <div className="min-w-0">
+                    <p className="truncate text-[13px] font-medium">
+                      {waData.channel.businessName || "WhatsApp channel"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {waData.channel.mode === "own" ? "Own number" : "Legacy Instant channel"}
+                      {waData.channel.phoneE164 ? ` · ${waData.channel.phoneE164}` : ""}
+                    </p>
+                  </div>
+                  <StatusLine
+                    ready={waData.channel.active}
+                    readyLabel={waData.channel.status || "Active"}
+                    emptyLabel="Inactive"
+                  />
+                </div>
+                {agent?.id ? (
+                  <AgentWhatsappTemplatePicks
+                    agentId={agent.id}
+                    nativeMode
+                    initialCatalog={waData.channel.templateCatalog}
+                  />
+                ) : null}
+              </div>
+            ) : (
+              <div className="rounded-lg bg-muted/25 px-4 py-5">
+                <p className="text-[13px] font-medium">No WhatsApp yet</p>
+                <p className="mt-1 text-xs text-muted-foreground max-w-sm">
+                  Connect one for summaries, reminders, and chat replies.
+                </p>
                 <Button
                   type="button"
-                  variant="outline"
                   size="sm"
-                  className="h-8 text-xs"
-                  onClick={() => navigate("/app/phone-numbers")}
+                  className="mt-3 h-8"
+                  onClick={() => navigate(
+                    `/app/connections?setup=whatsapp${agent?.id ? `&agentId=${agent.id}` : ""}`,
+                  )}
                 >
-                  Manage numbers
+                  Set up WhatsApp
                 </Button>
               </div>
-              {agent?.id ? (
-                <AgentInboundPanel
-                  agentId={agent.id}
-                  preferredManagedNumber={cfg.preferredManagedNumber}
-                  telephonyProvider={cfg.telephonyProvider}
-                />
-              ) : (
-                <p className="text-xs text-muted-foreground">
-                  Save the agent first to attach inbound phone numbers.
-                </p>
-              )}
-            </div>
-          )}
+            )}
+          </ChannelShell>
+        )}
 
-          {activeChannel === "whatsapp" && (
-            <div className="space-y-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h3 className="text-sm font-semibold">WhatsApp</h3>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    Meta Business API or BYO BSP messages and follow-ups.
-                  </p>
-                </div>
+        {activeChannel === "email" && <EmailChannelCard forceExpanded />}
+
+        {activeChannel === "meetings" && (
+          <ChannelShell
+            title="Meetings"
+            subtitle="When a call books a calendar slot — who shows up on the Meet?"
+          >
+            {agent?.id ? (
+              <MeetingsChannelCard agentId={agent.id} />
+            ) : (
+              <p className="text-xs text-muted-foreground">Save the agent first to configure meetings.</p>
+            )}
+          </ChannelShell>
+        )}
+
+        {activeChannel === "booking" && (
+          <ChannelShell
+            title="Booking"
+            subtitle="Calendar, event type, meeting links, and notifications."
+            action={(
+              <div className="flex shrink-0 gap-2">
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
                   className="h-8 text-xs"
                   onClick={() => navigate(
-                    `/app/connections?setup=whatsapp${agent?.id ? `&agentId=${agent.id}` : ""}`,
+                    `/app/connections?setup=calendar${agent?.id ? `&agentId=${agent.id}` : ""}`,
                   )}
                 >
-                  Configure
+                  Connections
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-xs"
+                  onClick={() => navigate("/app/scheduling")}
+                >
+                  Scheduling
                 </Button>
               </div>
-              {waLoading ? (
-                <Skeleton className="h-16 w-full rounded-md" />
-              ) : agentConnection ? (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between border-y border-border py-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-[13px] font-medium">
-                        {agentConnection.name || "WhatsApp connection"}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {agentConnection.metaPhoneNumberId || agentConnection.metaConnected
-                          ? "WhatsApp Business · Meta API"
-                          : "BSP webhook connection"}
-                      </p>
-                    </div>
-                    <StatusBadge ready readyLabel="Active" emptyLabel="Inactive" />
-                  </div>
-                  {(agentConnection.metaPhoneNumberId || agentConnection.metaConnected) && agent?.id ? (
-                    <AgentWhatsappTemplatePicks
-                      agentId={agent.id}
-                      connectionId={agentConnection.id}
-                      initialTemplates={agentConnection.metaTemplates}
-                      initialCatalog={agentConnection.templateCatalog}
-                    />
-                  ) : null}
-                </div>
-              ) : waData?.channel ? (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between border-y border-border py-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-[13px] font-medium">
-                        {waData.channel.businessName || "WhatsApp channel"}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {waData.channel.mode === "own" ? "Own number" : "Legacy Instant channel"}
-                        {waData.channel.phoneE164 ? ` · ${waData.channel.phoneE164}` : ""}
-                      </p>
-                    </div>
-                    <StatusBadge
-                      ready={waData.channel.active}
-                      readyLabel={waData.channel.status || "Active"}
-                      emptyLabel="Inactive"
-                    />
-                  </div>
-                  {agent?.id ? (
-                    <AgentWhatsappTemplatePicks
-                      agentId={agent.id}
-                      nativeMode
-                      initialCatalog={waData.channel.templateCatalog}
-                    />
-                  ) : null}
-                </div>
-              ) : (
-                <div className="border-y border-border py-5">
-                  <p className="text-[13px] font-medium">No WhatsApp channel</p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Connect one for summaries, reminders, and chat replies.
-                  </p>
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="mt-3 h-8"
-                    onClick={() => navigate(
-                      `/app/connections?setup=whatsapp${agent?.id ? `&agentId=${agent.id}` : ""}`,
-                    )}
-                  >
-                    Set up WhatsApp
-                  </Button>
-                </div>
-              )}
-            </div>
-          )}
-
-          {activeChannel === "email" && <EmailChannelCard forceExpanded />}
-          {activeChannel === "meetings" && agent?.id && <MeetingsChannelCard agentId={agent.id} />}
-          {activeChannel === "booking" && (
-            <div className="space-y-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h3 className="text-sm font-semibold">Booking</h3>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    Calendar, event type, meeting links, and notifications.
-                  </p>
-                </div>
-                <div className="flex shrink-0 gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-8 text-xs"
-                    onClick={() => navigate(
-                      `/app/connections?setup=calendar${agent?.id ? `&agentId=${agent.id}` : ""}`,
-                    )}
-                  >
-                    Connections
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-8 text-xs"
-                    onClick={() => navigate("/app/scheduling")}
-                  >
-                    Scheduling
-                  </Button>
-                </div>
+            )}
+          >
+            <div className="flex items-center justify-between gap-3 rounded-lg bg-muted/30 px-3 py-3">
+              <div>
+                <p className="text-[13px] font-medium">Calendar + event type</p>
+                <p className="text-xs text-muted-foreground">
+                  {bookingReady
+                    ? "Booking tools and notifications are linked."
+                    : "Connect calendar, then link event type under Tools → Booking."}
+                </p>
               </div>
-              <div className="flex items-center justify-between border-y border-border py-3">
-                <div>
-                  <p className="text-[13px] font-medium">Calendar + event type</p>
-                  <p className="text-xs text-muted-foreground">
-                    {cfg.schedulingCalendarId && cfg.schedulingEventTypeId
-                      ? "Booking tools and notifications are linked."
-                      : "Connect calendar, then link event type under Tools → Booking."}
-                  </p>
-                </div>
-                <StatusBadge
-                  ready={!!cfg.schedulingCalendarId && !!cfg.schedulingEventTypeId}
-                  readyLabel="Linked"
-                  emptyLabel="Unlinked"
-                />
-              </div>
-              {agent?.id && (
-                <Button asChild variant="ghost" size="sm" className="h-8 px-0 text-xs">
-                  <Link href={`/app/agents/${agent.id}?section=tools`}>Open Tools → Booking</Link>
-                </Button>
-              )}
+              <StatusLine
+                ready={bookingReady}
+                readyLabel="Linked"
+                emptyLabel="Unlinked"
+              />
             </div>
-          )}
+            {agent?.id && (
+              <Button asChild variant="ghost" size="sm" className="h-8 gap-1 px-0 text-xs">
+                <Link href={`/app/agents/${agent.id}?section=tools`}>
+                  Open Tools → Booking <ChevronRight className="size-3.5" />
+                </Link>
+              </Button>
+            )}
+          </ChannelShell>
+        )}
       </div>
     </div>
   );

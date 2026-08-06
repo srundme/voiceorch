@@ -360,7 +360,19 @@ function WebhookParamsEditor({ control, toolIndex }: { control: any; toolIndex: 
 
 type CardSection = "transcriber" | "model" | "voice";
 
-function AgentCostSummary({ form, rateMap, compact = false }: { form: any; rateMap: Map<string, number>; agent?: any; compact?: boolean }) {
+function AgentCostSummary({
+  form,
+  rateMap,
+  compact = false,
+  variant = "default",
+}: {
+  form: any;
+  rateMap: Map<string, number>;
+  agent?: any;
+  compact?: boolean;
+  /** line = readiness one-liner; chip/compact = header pill */
+  variant?: "default" | "line" | "chip";
+}) {
   const userProviderNames = useUserProviderNames();
 
   const asrProvider = form.watch("asrProvider");
@@ -377,18 +389,31 @@ function AgentCostSummary({ form, rateMap, compact = false }: { form: any; rateM
   ];
   const breakdown = segments.filter(s => s.cost > 0);
   const barTotal = Math.max(breakdown.reduce((s, x) => s + x.cost, 0), 0.0001);
+  const mode = variant === "default" && compact ? "chip" : variant;
 
-  if (compact) {
+  if (mode === "line") {
+    return (
+      <p className="text-[12px] text-muted-foreground">
+        Billed at{" "}
+        <span className="font-medium tabular-nums text-foreground">₹{totalPerMin.toFixed(2)}</span>
+        /min
+        {isByop ? " · BYOP" : ""}
+      </p>
+    );
+  }
+
+  if (mode === "chip" || compact) {
     return (
       <Tooltip>
         <TooltipTrigger asChild>
-          <div className="inline-flex items-center gap-2 rounded-full border border-border/50 bg-muted/20 px-3 py-1.5 text-[12px] text-muted-foreground cursor-default">
-            <span className="text-muted-foreground/70">Est. cost</span>
+          <div className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border/70 bg-muted/25 px-2.5 text-[11px] text-muted-foreground cursor-default">
+            <span className="hidden text-muted-foreground/70 sm:inline">Est.</span>
             <span className="font-semibold tabular-nums text-foreground">₹{totalPerMin.toFixed(2)}</span>
-            <span className="text-muted-foreground/50">/min</span>
+            <span className="text-muted-foreground/55">/min</span>
           </div>
         </TooltipTrigger>
         <TooltipContent side="bottom" className="text-xs space-y-1">
+          <p className="font-medium text-foreground">Estimated call cost</p>
           {breakdown.map(seg => (
             <div key={seg.key} className="flex items-center justify-between gap-3">
               <span className="font-medium">{seg.label}</span>
@@ -763,22 +788,20 @@ function OverviewTab({
                     ? "Core setup looks ready — edit prompts anytime on the Prompt tab."
                     : "Finish these items before going live."}
                 </p>
+                <AgentCostSummary form={form} rateMap={rateMap} variant="line" />
               </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <AgentCostSummary form={form} rateMap={rateMap} compact />
-                {onGoToPrompt && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-8 gap-1.5 text-xs"
-                    onClick={onGoToPrompt}
-                  >
-                    <FileText className="size-3.5" />
-                    Edit prompt
-                  </Button>
-                )}
-              </div>
+              {onGoToPrompt && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 gap-1.5 text-xs"
+                  onClick={onGoToPrompt}
+                >
+                  <FileText className="size-3.5" />
+                  Edit prompt
+                </Button>
+              )}
             </div>
             <ul className="divide-y divide-border/70 overflow-hidden rounded-xl border border-border/60 bg-card/40">
               {readinessItems.map((item) => (
@@ -6206,6 +6229,7 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
         </div>
 
         <div className="flex shrink-0 items-center gap-1.5">
+          <AgentCostSummary form={form} rateMap={rateMap} variant="chip" />
           <Button
             type="button"
             size="sm"
