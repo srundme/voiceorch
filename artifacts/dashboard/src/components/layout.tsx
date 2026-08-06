@@ -878,7 +878,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   // Managed clients: restricted surface — bounce hidden sections to Home.
   // (UX only; the API rejects managed-client writes server-side.)
-  const isManagedClient = partnerCtx?.isManagedClient === true;
+  // Partners acting-as a client are not "managed clients" for nav purposes.
+  const isManagedClient = partnerCtx?.isManagedClient === true && !actingAs;
   useEffect(() => {
     if (!isManagedClient) return;
     const allowed = [

@@ -13,14 +13,9 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import {
   Handshake, Users, UserPlus, Wallet, TrendingUp, Clock, Mail,
-  Trash2, IndianRupee, ArrowRightLeft, Upload, X, Bot, Settings2, ChevronRight, Send, LogIn,
+  Trash2, IndianRupee, ArrowRightLeft, Upload, X, Settings2,
 } from "lucide-react";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
-import { getListPhoneNumbersQueryKey, getListAgentsQueryKey } from "@workspace/api-client-react";
 import { useLocation } from "wouter";
-import { startActingAs } from "@/lib/acting-as";
 
 /* ─── Types (mirror routes/partner.ts responses) ─────────────────────────── */
 
@@ -225,279 +220,11 @@ function OverviewTab({ me }: { me: PartnerMe }) {
 
 /* ─── Clients ────────────────────────────────────────────────────────────── */
 
-/* ─── Client configuration dialog ────────────────────────────────────────── */
-
-interface ClientConfigAgent {
-  id: number;
-  name: string;
-  status: string;
-  inboundNumber: string | null;
-  inboundNumberOwnedByPartner: boolean;
-}
-
-interface ClientConfigNumber {
-  id: number;
-  number: string;
-  assignedAgentId: number | null;
-  assignedAgentName: string | null;
-  assignment: "unassigned" | "this_client" | "own" | "other_client";
-}
-
-interface PartnerOwnAgent {
-  id: number;
-  name: string;
-  status: string;
-}
-
-function ClientConfigDialog({ client, onClose }: { client: PartnerClient; onClose: () => void }) {
-  const { getToken } = useAuth();
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-  const [, navigate] = useLocation();
-
-  const { data, isLoading, isError } = useQuery<{ agents: ClientConfigAgent[]; partnerNumbers: ClientConfigNumber[]; partnerAgents: PartnerOwnAgent[] }>({
-    queryKey: ["partner-client-config", client.clerkId],
-    queryFn: () => partnerFetch(getToken, `/api/partner/clients/${encodeURIComponent(client.clerkId)}/config`),
-  });
-
-  const assign = useMutation({
-    mutationFn: ({ numberId, agentId }: { numberId: number; agentId: number | null }) =>
-      partnerFetch(getToken, `/api/phone-numbers/${numberId}/assign`, {
-        method: "PATCH",
-        body: JSON.stringify({ agentId }),
-      }),
-    onSuccess: () => {
-      // All clients' configs (holder labels change) + number/agent lists cached elsewhere.
-      void queryClient.invalidateQueries({ queryKey: ["partner-client-config"] });
-      void queryClient.invalidateQueries({ queryKey: getListPhoneNumbersQueryKey() });
-      void queryClient.invalidateQueries({ queryKey: getListAgentsQueryKey() });
-      toast({ title: "Number assignment updated" });
-    },
-    onError: (err: Error) =>
-      toast({ title: "Could not update assignment", description: err.message, variant: "destructive" }),
-  });
-
-  const agents = data?.agents ?? [];
-  const numbers = data?.partnerNumbers ?? [];
-  const partnerAgents = data?.partnerAgents ?? [];
-
-  const sendAgent = useMutation({
-    mutationFn: (sourceAgentId: number): Promise<{ id: number; name: string }> =>
-      partnerFetch(getToken, `/api/partner/clients/${encodeURIComponent(client.clerkId)}/agents`, {
-        method: "POST",
-        body: JSON.stringify({ sourceAgentId }),
-      }),
-    onSuccess: (created) => {
-      void queryClient.invalidateQueries({ queryKey: ["partner-client-config"] });
-      void queryClient.invalidateQueries({ queryKey: getListAgentsQueryKey() });
-      toast({ title: "Agent sent", description: `"${created.name}" is now in their account.` });
-    },
-    onError: (err: Error) =>
-      toast({ title: "Could not send agent", description: err.message, variant: "destructive" }),
-  });
-
-  const openBuilder = (agentId?: number) => {
-    startActingAs({ clientId: client.clerkId, clientName: client.name || client.email || "Client" });
-    queryClient.clear();
-    navigate(agentId != null ? `/app/agents/${agentId}` : "/app/agents");
-  };
-
-  return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Control panel — {client.name || client.email || "client"}</DialogTitle>
-          <DialogDescription>
-            Open their full workspace to edit agents, campaigns, connections, and more.
-            Or manage agents and phone numbers here.
-          </DialogDescription>
-        </DialogHeader>
-
-        {isLoading ? (
-          <div className="space-y-2 animate-pulse">{[0, 1, 2].map(i => <div key={i} className="h-9 rounded bg-muted" />)}</div>
-        ) : isError ? (
-          <p className="text-sm text-destructive border border-destructive/30 rounded-lg px-3 py-4 text-center">
-            Couldn't load this client's setup — close the dialog and try again.
-          </p>
-        ) : (
-          <div className="space-y-5">
-            {/* Full workspace entry */}
-            <section className="rounded-lg border border-border bg-muted/30 p-3 space-y-2">
-              <p className="text-[12px] font-medium text-foreground">Client workspace</p>
-              <p className="text-[11px] text-muted-foreground leading-relaxed">
-                Full control — create/edit agents, run campaigns, assign numbers, manage connections.
-                An amber bar shows you are editing this client until you exit.
-              </p>
-              <div className="flex flex-wrap gap-2 pt-1">
-                <Button size="sm" className="h-8 text-xs" onClick={() => {
-                  startActingAs({ clientId: client.clerkId, clientName: client.name || client.email || "Client" });
-                  queryClient.clear();
-                  navigate("/app/home");
-                }}>
-                  <LogIn className="w-3 h-3 mr-1" /> Open full workspace
-                </Button>
-                <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => openBuilder()}>
-                  <Bot className="w-3 h-3 mr-1" /> Agents
-                </Button>
-                <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => {
-                  startActingAs({ clientId: client.clerkId, clientName: client.name || client.email || "Client" });
-                  queryClient.clear();
-                  navigate("/app/campaigns");
-                }}>
-                  Campaigns
-                </Button>
-              </div>
-            </section>
-
-            {/* Agents */}
-            <section>
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  Client's agents ({agents.length})
-                </h3>
-                <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => openBuilder()}>
-                  <Bot className="w-3 h-3 mr-1" /> Open agent builder
-                </Button>
-              </div>
-              {agents.length === 0 ? (
-                <p className="text-sm text-muted-foreground border border-dashed border-border rounded-lg px-3 py-4 text-center">
-                  No agents yet — use "Open agent builder" to create their first agent.
-                </p>
-              ) : (
-                <ul className="divide-y divide-border rounded-lg border border-border">
-                  {agents.map(a => (
-                    <li key={a.id}>
-                      <button
-                        type="button"
-                        onClick={() => openBuilder(a.id)}
-                        className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left hover:bg-muted/50 transition-colors first:rounded-t-lg last:rounded-b-lg"
-                        title="Open this agent in their builder"
-                      >
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium truncate">{a.name}</p>
-                          <p className="text-[11px] text-muted-foreground truncate">
-                            {a.inboundNumber ? (
-                              <>Inbound: <span className="font-mono">{a.inboundNumber}</span>{a.inboundNumberOwnedByPartner ? " · your number" : ""}</>
-                            ) : "No inbound number"}
-                          </p>
-                        </div>
-                        <span className="flex items-center gap-1.5 shrink-0">
-                          <Badge variant={a.status === "active" ? "default" : "secondary"} className="text-[10px]">
-                            {a.status}
-                          </Badge>
-                          <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
-
-            {/* Send one of the partner's own agents */}
-            <section>
-              <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">
-                Your agents — send a copy
-              </h3>
-              {partnerAgents.length === 0 ? (
-                <p className="text-sm text-muted-foreground border border-dashed border-border rounded-lg px-3 py-4 text-center">
-                  You haven't built any agents in your own account yet.
-                </p>
-              ) : (
-                <ul className="divide-y divide-border rounded-lg border border-border">
-                  {partnerAgents.map(a => (
-                    <li key={a.id} className="flex items-center justify-between gap-2 px-3 py-2">
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">{a.name}</p>
-                        <p className="text-[11px] text-muted-foreground capitalize">{a.status}</p>
-                      </div>
-                      <Button
-                        size="sm" variant="outline" className="h-7 px-2 text-xs shrink-0"
-                        disabled={sendAgent.isPending}
-                        onClick={() => sendAgent.mutate(a.id)}
-                      >
-                        <Send className="w-3 h-3 mr-1" /> Send to client
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <p className="text-[11px] text-muted-foreground mt-2">
-                Sends a copy into their account. Knowledge bases, phone numbers, calendars and call history
-                don't transfer — connect a number below and re-link the rest in their workspace.
-              </p>
-            </section>
-
-            {/* Partner numbers */}
-            <section>
-              <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">
-                Your phone numbers
-              </h3>
-              {numbers.length === 0 ? (
-                <p className="text-sm text-muted-foreground border border-dashed border-border rounded-lg px-3 py-4 text-center">
-                  You don't own any voice numbers yet — buy one on the Phone Numbers page, then connect it here.
-                </p>
-              ) : (
-                <ul className="divide-y divide-border rounded-lg border border-border">
-                  {numbers.map(n => {
-                    const heldElsewhere = n.assignment === "own" || n.assignment === "other_client";
-                    const value =
-                      n.assignment === "this_client" && n.assignedAgentId != null
-                        ? String(n.assignedAgentId)
-                        : heldElsewhere ? "__keep__" : "__none__";
-                    return (
-                      <li key={n.id} className="flex items-center justify-between gap-3 px-3 py-2">
-                        <div className="min-w-0">
-                          <p className="text-sm font-mono truncate">{n.number}</p>
-                          {heldElsewhere && (
-                            <p className="text-[11px] text-muted-foreground truncate">
-                              In use — {n.assignedAgentName}{n.assignment === "own" ? " (your agent)" : " (another client)"}
-                            </p>
-                          )}
-                        </div>
-                        <Select
-                          value={value}
-                          disabled={assign.isPending || agents.length === 0}
-                          onValueChange={(v) => {
-                            if (v === "__keep__" || v === value) return;
-                            assign.mutate({ numberId: n.id, agentId: v === "__none__" ? null : Number(v) });
-                          }}
-                        >
-                          <SelectTrigger className="w-[180px] h-8 text-xs shrink-0">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {heldElsewhere
-                              ? <SelectItem value="__keep__" className="text-xs">Keep current</SelectItem>
-                              : <SelectItem value="__none__" className="text-xs">Not assigned</SelectItem>}
-                            {agents.map(a => (
-                              <SelectItem key={a.id} value={String(a.id)} className="text-xs">{a.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-              <p className="text-[11px] text-muted-foreground mt-2">
-                Connecting a number makes it the agent's inbound line and caller ID. You pay the number's renewal;
-                their calls bill their wallet at their rate.
-              </p>
-            </section>
-          </div>
-        )}
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 function ClientsTab({ me }: { me: PartnerMe }) {
   const { getToken } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [, navigate] = useLocation();
-  const [configClient, setConfigClient] = useState<PartnerClient | null>(null);
   const [rateClient, setRateClient] = useState<PartnerClient | null>(null);
   const [transferClient, setTransferClient] = useState<PartnerClient | null>(null);
   const [rateText, setRateText] = useState("");
@@ -545,9 +272,14 @@ function ClientsTab({ me }: { me: PartnerMe }) {
 
   return (
     <div className="rounded-xl border border-border bg-card">
-      <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-        <h2 className="text-sm font-medium">Your clients</h2>
-        <span className="text-[11px] text-muted-foreground">Base rate {inr(baseRate)}/min</span>
+      <div className="px-4 py-3 border-b border-border flex items-center justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-medium">Your clients</h2>
+          <p className="text-[11px] text-muted-foreground mt-0.5">
+            Open Control panel to manage each client&apos;s agents, numbers, rate, and wallet.
+          </p>
+        </div>
+        <span className="text-[11px] text-muted-foreground shrink-0">Base {inr(baseRate)}/min</span>
       </div>
       {isLoading ? (
         <div className="p-4 space-y-2 animate-pulse">{[0, 1, 2].map(i => <div key={i} className="h-10 rounded bg-muted" />)}</div>
@@ -583,18 +315,13 @@ function ClientsTab({ me }: { me: PartnerMe }) {
                   </td>
                   <td className="px-3 py-2.5">
                     <div className="flex items-center gap-1.5 justify-end">
-                      <Button size="sm" variant="outline" className="h-7 px-2 text-xs"
-                        title="Open this client's full workspace (control panel)"
-                        onClick={() => {
-                          startActingAs({ clientId: c.clerkId, clientName: c.name || c.email || "Client" });
-                          queryClient.clear();
-                          navigate("/app/home");
-                        }}>
-                        <LogIn className="w-3 h-3 mr-1" /> Open workspace
-                      </Button>
-                      <Button size="sm" variant="outline" className="h-7 px-2 text-xs"
-                        onClick={() => setConfigClient(c)}>
-                        <Settings2 className="w-3 h-3 mr-1" /> Configure
+                      <Button
+                        size="sm"
+                        className="h-7 px-2.5 text-xs"
+                        title="Open client control panel in Partner Hub"
+                        onClick={() => navigate(`/app/partner/clients/${encodeURIComponent(c.clerkId)}`)}
+                      >
+                        <Settings2 className="w-3 h-3 mr-1" /> Control panel
                       </Button>
                       <Button size="sm" variant="outline" className="h-7 px-2 text-xs"
                         onClick={() => { setRateClient(c); setRateText((c.rateCentsPerMin / 100).toFixed(2)); }}>
@@ -614,8 +341,6 @@ function ClientsTab({ me }: { me: PartnerMe }) {
       )}
 
       {/* Client configuration dialog */}
-      {configClient && <ClientConfigDialog client={configClient} onClose={() => setConfigClient(null)} />}
-
       {/* Set rate dialog */}
       <Dialog open={!!rateClient} onOpenChange={(o) => !o && setRateClient(null)}>
         <DialogContent className="max-w-sm">

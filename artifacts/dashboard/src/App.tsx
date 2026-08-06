@@ -62,6 +62,7 @@ import SchedulingConferencingPage  from "@/pages/scheduling/Conferencing";
 import PublicBookingPage    from "@/pages/book/[slug]";
 import WebcallJoinPage      from "@/pages/join/[token]";
 import PartnerPage          from "@/pages/partner";
+import PartnerClientPage    from "@/pages/partner-client";
 import PartnerJoinPage      from "@/pages/partner-join";
 import WorkshopFormPage     from "@/pages/workshop/[slug]";
 import EventsPage           from "@/pages/events/index";
@@ -320,6 +321,7 @@ function AppRoutes() {
 
         {/* ── Partner (reseller) hub ── */}
         <Route path="/app/partner-join" component={PartnerJoinPage} />
+        <Route path="/app/partner/clients/:clerkId" component={PartnerClientPage} />
         <Route path="/app/partner" component={PartnerPage} />
 
         {/* ── Agents ── */}
