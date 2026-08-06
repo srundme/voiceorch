@@ -233,17 +233,12 @@ export function AgentInboundPanel({
             if (assigned || ownedCount > 0) openDialog();
             else navigate("/app/phone-numbers");
           }}
-          className={cn(
-            "inline-flex h-8 max-w-full items-center gap-1.5 rounded-md border px-2.5 text-[11px] font-medium transition-colors",
-            live
-              ? "border-border/70 bg-muted/25 text-foreground hover:bg-muted/40"
-              : "border-amber-500/35 bg-amber-500/10 text-foreground hover:bg-amber-500/15",
-          )}
+          className="inline-flex h-8 max-w-full items-center gap-1.5 rounded-md border border-border/70 bg-muted/25 px-2.5 text-[11px] font-medium text-foreground transition-colors hover:bg-muted/40"
           title={live ? "Phone number" : "Add a phone number to go live"}
         >
-          <PhoneForwarded className={cn("size-3.5 shrink-0", live ? "text-muted-foreground" : "text-amber-500")} />
+          <PhoneForwarded className="size-3.5 shrink-0 text-muted-foreground" />
           <span className="truncate tabular-nums">{label}</span>
-          {!live && ownedCount === 0 ? <Plus className="size-3 shrink-0 text-amber-600" /> : null}
+          {!live && ownedCount === 0 ? <Plus className="size-3 shrink-0 text-muted-foreground" /> : null}
         </button>
         {assignDialog}
       </div>
@@ -252,17 +247,11 @@ export function AgentInboundPanel({
 
   return (
     <div className={cn("space-y-2", className)}>
-      <div className={cn(
-        "rounded-xl border p-3 space-y-2.5",
-        live ? "border-emerald-500/25 bg-emerald-500/5" : "border-amber-500/30 bg-amber-500/5",
-      )}>
+      <div className="space-y-2.5 rounded-xl border border-border/60 bg-card/40 p-3">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 min-w-0">
-            <PhoneForwarded className={cn("h-3.5 w-3.5 shrink-0", live ? "text-emerald-500" : "text-amber-500")} />
-            <span className={cn(
-              "text-[10px] font-semibold uppercase tracking-wider",
-              live ? "text-emerald-600/90 dark:text-emerald-400/90" : "text-amber-600/90 dark:text-amber-400/90",
-            )}>
+            <PhoneForwarded className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/70">
               Your phone number
             </span>
           </div>
@@ -319,7 +308,7 @@ export function AgentInboundPanel({
           <button
             type="button"
             onClick={openDialog}
-            className="w-full flex items-center justify-between gap-2 rounded-lg border border-amber-500/30 bg-background/50 px-2.5 py-2 text-left hover:border-amber-500/50 transition-colors"
+            className="flex w-full items-center justify-between gap-2 rounded-lg border border-border/50 bg-background/50 px-2.5 py-2 text-left transition-colors hover:border-border hover:bg-background/70"
           >
             <div className="min-w-0">
               <p className="text-[12px] font-medium truncate text-foreground">Number purchased — assign it</p>
@@ -333,7 +322,7 @@ export function AgentInboundPanel({
       </div>
 
       {!assigned && !byoNumber && (
-        <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5 flex items-start gap-2">
+        <div className="flex items-start gap-2 rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5">
           <Phone className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
           <div className="min-w-0 flex-1">
             <p className="text-[12px] font-medium tabular-nums text-muted-foreground">
