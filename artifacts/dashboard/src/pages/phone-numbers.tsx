@@ -958,7 +958,7 @@ export default function PhoneNumbersPage() {
     const kyc = params.get("kyc");
     if (!kyc) return;
 
-    setLocation("/phone-numbers", { replace: true });
+    setLocation("/app/phone-numbers", { replace: true });
 
     if (kyc === "kyc_completed" || kyc === "completed") {
       queryClient.invalidateQueries({ queryKey: getGetKycStatusQueryKey() });

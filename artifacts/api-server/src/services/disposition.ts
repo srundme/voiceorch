@@ -154,8 +154,12 @@ async function persistResult(
   // fallbacks (no LLM / empty transcript / extraction error) so we never clobber
   // the column with placeholder values like NOT_CONNECTED.
   if (!result.error && result.primary && result.sub) {
+    // Keep primary/sub alongside [primary]:sub so call-log UI can always
+    // resolve an outcome even if a client filters meta keys incorrectly.
     const flat: Record<string, string | number | boolean> = {
       [result.primary]: result.sub,
+      primary: result.primary,
+      sub: result.sub,
     };
     if (typeof result.confidence === "number") flat["confidence"] = result.confidence;
     if (result.summary) flat["summary"] = result.summary;

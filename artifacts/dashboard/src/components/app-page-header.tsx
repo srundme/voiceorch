@@ -1,7 +1,6 @@
 import React from "react";
 import { useLocation } from "wouter";
 import { ChevronLeft } from "lucide-react";
-import { canGoBackInApp } from "@/lib/nav-history";
 import { cn } from "@/lib/utils";
 
 /**
@@ -18,7 +17,7 @@ export function AppPageHeader({
   className,
   compact = false,
 }: {
-  /** Prefer in-app history.back(); otherwise navigate to href. */
+  /** Explicit parent — label must match destination (no history.back()). */
   back?: { href: string; label: string };
   eyebrow?: string;
   title: string;
@@ -32,8 +31,7 @@ export function AppPageHeader({
 
   const onBack = () => {
     if (!back) return;
-    if (canGoBackInApp()) window.history.back();
-    else navigate(back.href);
+    navigate(back.href);
   };
 
   return (

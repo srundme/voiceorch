@@ -141,8 +141,10 @@ export default function ConnectionsPage() {
 
   const openSetup = (id: SetupId) => {
     setSetup(id);
-    if (id) navigate(`/app/connections?setup=${id}`, { replace: true });
-    else navigate("/app/connections", { replace: true });
+    // Push (not replace) so the Connections hub stays on the history stack and
+    // browser Back from a setup page returns here — not the prior sidebar page.
+    if (id) navigate(`/app/connections?setup=${id}`);
+    else navigate("/app/connections");
   };
 
   const sheetsQ = useQuery({

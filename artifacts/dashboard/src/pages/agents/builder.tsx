@@ -2804,9 +2804,9 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                   {(!calendarIdForEt || (agentEventTypes ?? []).length === 0) && (
                     <p className="text-[10px] text-amber-400/80">
                       {!calendarIdForEt ? "No calendar yet. " : "No meeting yet. "}
-                      <a href="/app/connections?setup=calendar" className="underline underline-offset-2">
+                      <Link href="/app/connections?setup=calendar" className="underline underline-offset-2">
                         Finish Calendar & booking setup
-                      </a>
+                      </Link>
                       .
                     </p>
                   )}
@@ -2820,17 +2820,17 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                   ) : !agentCalendar ? (
                     <p className="text-[10px] text-amber-400/80">
                       No calendar found for this agent.{" "}
-                      <a href="/app/connections?setup=calendar" className="underline underline-offset-2">
+                      <Link href="/app/connections?setup=calendar" className="underline underline-offset-2">
                         Finish calendar setup
-                      </a>
+                      </Link>
                       .
                     </p>
                   ) : !(agentCalendar as any).connectedGoogleEmail ? (
                     <span className="text-[10px] text-amber-400/80">
                       No Google account connected.{" "}
-                      <a href="/app/connections?setup=calendar" className="underline underline-offset-2">
+                      <Link href="/app/connections?setup=calendar" className="underline underline-offset-2">
                         Finish calendar setup
-                      </a>
+                      </Link>
                       .
                     </span>
                   ) : (

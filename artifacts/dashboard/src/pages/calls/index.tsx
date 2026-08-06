@@ -37,6 +37,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { CallDetailDrawer } from "@/components/call-detail-drawer";
 import { EmptyState } from "@/components/empty-state";
 import { MetricCard, MetricStrip } from "@/components/metric-strip";
+import { getDispositionValues } from "@/lib/disposition-display";
 
 /* ── Types ───────────────────────────────────────────────────────────────── */
 
@@ -49,29 +50,6 @@ const formatDuration = (seconds?: number | null) => {
   const secs = Math.floor(seconds % 60);
   return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
 };
-
-// Reserved meta keys in calls.dispositionResult that are NOT classification values.
-const DISPOSITION_META_KEYS = new Set([
-  "confidence",
-  "summary",
-  "evidence",
-  "primary",
-  "sub",
-  "flags",
-  "needsReview",
-  "domainFields",
-  "error",
-]);
-
-/** Extract the human-readable disposition value(s) from a call's dispositionResult. */
-function getDispositionValues(
-  result: Record<string, string | number | boolean | null> | null | undefined,
-): string[] {
-  if (!result || typeof result !== "object") return [];
-  return Object.entries(result)
-    .filter(([k, v]) => !DISPOSITION_META_KEYS.has(k) && v != null && v !== "" && typeof v !== "object")
-    .map(([, v]) => String(v));
-}
 
 function StatusBadge({ status }: { status: string }) {
   const configs: Record<string, { label: string; icon: React.ReactNode; variant: string; bg: string; text: string; border: string; dot: string }> = {
@@ -259,6 +237,22 @@ function CallMobileCard({
           <p className="text-[10px] text-muted-foreground/50 font-mono mt-1">
             {format(parseISO(call.createdAt), "MMM d · HH:mm")} · {getExecutionId(call)}
           </p>
+          {(() => {
+            const disp = getDispositionValues(call.dispositionResult).slice(0, 2);
+            if (!disp.length) return null;
+            return (
+              <div className="mt-1.5 flex flex-wrap gap-1">
+                {disp.map((v) => (
+                  <span
+                    key={v}
+                    className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-primary/10 text-primary border border-primary/20 capitalize"
+                  >
+                    {v}
+                  </span>
+                ))}
+              </div>
+            );
+          })()}
         </div>
         <Eye className="h-4 w-4 text-muted-foreground/40 shrink-0 mt-0.5" />
       </div>
@@ -313,10 +307,21 @@ export default function CallsList() {
   const [pageInput, setPageInput] = useState("");
   const [pageSize, setPageSize] = useState(50);
 
-  // Mirror filter/search/pagination state into the URL query string (replace, so
-  // we don't spam history) so it can be restored on return.
+  // Mirror filter/search/pagination into the URL (replace). Keep the current
+  // pathname (/app/history or legacy /app/calls) and preserve unrelated params
+  // like tab= so History share links don't rewrite to /app/calls.
   useEffect(() => {
-    const params = new URLSearchParams();
+    const path = window.location.pathname.startsWith("/app/history")
+      ? "/app/history"
+      : window.location.pathname.startsWith("/app/calls")
+        ? "/app/calls"
+        : "/app/history";
+    const params = new URLSearchParams(window.location.search);
+    const keepTab = params.get("tab");
+    for (const k of ["status", "agent", "disp", "q", "from", "to", "sort", "page"]) {
+      params.delete(k);
+    }
+    if (keepTab) params.set("tab", keepTab);
     if (statusFilter !== "all") params.set("status", statusFilter);
     if (agentFilter !== "all") params.set("agent", agentFilter);
     if (dispositionFilter !== "all") params.set("disp", dispositionFilter);
@@ -326,8 +331,8 @@ export default function CallsList() {
     if (sortBy !== "newest") params.set("sort", sortBy);
     if (currentPage > 1) params.set("page", String(currentPage));
     const qs = params.toString();
-    const next = qs ? `/app/calls?${qs}` : "/app/calls";
-    const current = `/app/calls${window.location.search}`;
+    const next = qs ? `${path}?${qs}` : path;
+    const current = `${window.location.pathname}${window.location.search}`;
     if (next !== current) navigate(next, { replace: true });
   }, [statusFilter, agentFilter, dispositionFilter, searchQuery, dateFrom, dateTo, sortBy, currentPage, navigate]);
 
@@ -751,6 +756,7 @@ export default function CallsList() {
                   <TableHead className="hidden md:table-cell py-3 px-4 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground/70">To</TableHead>
                   <TableHead className="w-[118px] py-3 px-4 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground/70 text-center">Call Type</TableHead>
                   <TableHead className="w-[112px] py-3 px-4 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground/70 text-center">Status</TableHead>
+                  <TableHead className="hidden lg:table-cell min-w-[120px] py-3 px-4 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground/70">Disposition</TableHead>
                   <TableHead className="w-[72px] py-3 px-4 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground/70 text-center">Duration</TableHead>
                   <TableHead className="w-[80px] py-3 px-4 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground/70 text-right">Cost</TableHead>
                   <TableHead className="w-[64px] py-3 px-4 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground/70 text-center">Actions</TableHead>
@@ -767,6 +773,7 @@ export default function CallsList() {
                       <TableCell className="px-4 py-0"><Skeleton className="h-3 w-32" /></TableCell>
                       <TableCell className="px-4 py-0"><Skeleton className="h-5 w-20 rounded-full mx-auto" /></TableCell>
                       <TableCell className="px-4 py-0"><Skeleton className="h-5 w-16 rounded-full mx-auto" /></TableCell>
+                      <TableCell className="hidden lg:table-cell px-4 py-0"><Skeleton className="h-3 w-16" /></TableCell>
                       <TableCell className="px-4 py-0"><Skeleton className="h-3 w-10 mx-auto" /></TableCell>
                       <TableCell className="px-4 py-0"><Skeleton className="h-3 w-10 ml-auto" /></TableCell>
                       <TableCell className="px-4 py-0"><Skeleton className="h-6 w-6 mx-auto rounded" /></TableCell>
@@ -827,6 +834,27 @@ export default function CallsList() {
                         </TableCell>
                         <TableCell className="px-4 py-0 align-middle text-center">
                           <StatusBadge status={call.status} />
+                        </TableCell>
+                        <TableCell className="hidden lg:table-cell px-4 py-0 align-middle max-w-[180px]">
+                          {(() => {
+                            const disp = getDispositionValues((call as { dispositionResult?: Record<string, string | number | boolean | null> }).dispositionResult);
+                            if (!disp.length) {
+                              return <span className="text-[10px] text-muted-foreground/35">—</span>;
+                            }
+                            return (
+                              <div className="flex flex-wrap gap-1">
+                                {disp.slice(0, 2).map((v) => (
+                                  <span
+                                    key={v}
+                                    className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-primary/10 text-primary border border-primary/20 capitalize truncate max-w-[140px]"
+                                    title={disp.join(", ")}
+                                  >
+                                    {v}
+                                  </span>
+                                ))}
+                              </div>
+                            );
+                          })()}
                         </TableCell>
                         <TableCell className="font-mono text-xs text-muted-foreground/60 px-4 py-0 align-middle text-center">
                           {formatDuration(call.durationSeconds)}

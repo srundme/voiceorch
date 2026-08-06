@@ -32,6 +32,11 @@ import { useToast } from "@/hooks/use-toast";
 import { formatApiError } from "@/lib/format-api-error";
 import { uiTypeFromStored, type StoredDomainField } from "@/lib/disposition-fields";
 import {
+  getDispositionConfidence,
+  getDispositionSummary,
+  getDispositionValues,
+} from "@/lib/disposition-display";
+import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -1295,7 +1300,7 @@ export function CallDetailContent({
         <p className="text-sm font-medium text-foreground/40">Call not found</p>
         <p className="text-xs text-muted-foreground/30 mt-1">The call may have been deleted or you may not have access</p>
         <div className="mt-4">
-          <DetailNav backTo="/app/calls" backLabel="Back to Calls" />
+          <DetailNav backTo="/app/history" backLabel="Back to History" />
         </div>
       </div>
     );
@@ -1367,7 +1372,7 @@ export function CallDetailContent({
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
           <div className="flex flex-col sm:flex-row sm:items-center gap-3 min-w-0">
             {!drawerMode ? (
-              <DetailNav backTo="/app/calls" backLabel="Back to Calls" />
+              <DetailNav backTo="/app/history" backLabel="Back to History" />
             ) : (
               <div className="flex items-center gap-1">
                 <DetailNav backLabel="Close" onBack={onClose} preferOnBack className="mr-1" />
@@ -1846,20 +1851,11 @@ export function CallDetailContent({
             {(() => {
               const r = dispositionResult;
               if (!r || typeof r !== "object") return null;
-              // Hide taxonomy meta / evidence prose — only show outcome category values.
-              // Domain fields (WhatsApp, etc.) render in the Collected data card below.
-              const domainKeys = new Set(collectFields.map((f) => f.key));
-              const meta = new Set([
-                "confidence", "summary", "evidence", "primary", "sub",
-                "flags", "needsReview", "domainFields", "error",
-                ...domainKeys,
-              ]);
-              const values = Object.entries(r)
-                .filter(([k, v]) => !meta.has(k) && v != null && v !== "" && typeof v !== "object")
-                .map(([, v]) => String(v));
+              // Outcome chips only — domain fields render in Collected data below.
+              const values = getDispositionValues(r, collectFields.map((f) => f.key));
               if (values.length === 0) return null;
-              const confidence = typeof r["confidence"] === "number" ? (r["confidence"] as number) : null;
-              const summary = typeof r["summary"] === "string" ? (r["summary"] as string) : null;
+              const confidence = getDispositionConfidence(r);
+              const summary = getDispositionSummary(r);
               return (
                 <Card className="border-primary/30">
                   <CardHeader className="py-3 border-b">

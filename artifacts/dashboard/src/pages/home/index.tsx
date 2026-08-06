@@ -421,7 +421,7 @@ export default function HomePage() {
                 {calls.slice(0, 4).map((call: any) => (
                   <Link
                     key={call.id}
-                    href={`/app/calls/${call.id}`}
+                    href={`/app/history/${call.id}`}
                     className="flex min-h-10 items-center gap-2 px-3.5 hover:bg-muted/35"
                   >
                     <Phone className="size-3 text-muted-foreground shrink-0" />
