@@ -1,51 +1,94 @@
 /**
- * SnapServe Autonomous Meeting Bot Dispatcher & Invites.
+ * SnapServe Autonomous Meeting Bot Dispatcher.
  *
- * Automates the end-to-end phone -> meeting workflow:
- *  1. When a booking with a Google Meet / Zoom link is created, sends immediate
- *     WhatsApp & Email invites containing the meeting URL.
- *  2. Background worker polls upcoming bookings (starting in <= 3 minutes) and
- *     automatically dispatches a Recall.ai Meeting Bot to join the meeting early.
- *  3. The bot joins the room, auto-admits the caller when they enter, and conducts
- *     the live voice AI conversation.
+ * 1. WhatsApp/Email invites are sent when bookings are created (elsewhere).
+ * 2. This worker schedules Recall bots with join_at = slotStart − 2m when the
+ *    meeting is far enough out (≥10m lead — Recall on-time guarantee), or
+ *    creates an ad-hoc bot in the last ~3 minutes before the slot.
+ * 3. Bot id is persisted on bookings.meet_bot_id so restarts don't double-dispatch.
+ *
+ * Admit / waiting room: Google Meet has no Recall “auto-admit guests” API.
+ * We rely on signed-in Workspace identity + calendar invite of RECALL_BOT_EMAIL,
+ * clear chat admit hints, and host admit when prompted.
  */
 
 import { randomUUID } from "node:crypto";
-import { eq, and, sql, gte, lte, ne } from "drizzle-orm";
+import { eq, and, sql, gte, lte, ne, isNull } from "drizzle-orm";
 import {
   db,
   bookingsTable,
-  callsTable,
   agentsTable,
-  eventTypesTable,
 } from "@workspace/db";
 import { logger } from "../lib/logger.js";
 import { getSelfBaseUrl } from "../lib/app-domain.js";
 import {
   signMeetBotToken,
   createRecallBot,
+  deleteRecallBot,
 } from "./meet-bots.js";
 import {
+  bindMeetRosterBot,
   createMeetRoster,
-  RECALL_PARTICIPANT_EVENTS,
+  recallRealtimeEvents,
+  setMeetAttendeeHints,
 } from "./meet-roster.js";
 import {
   parseMeetingsConfig,
   resolveMeetRuntimeAgentId,
 } from "./meeting-runtime.js";
+import { prepareMeetPresentationAtLaunch } from "./meet-presentation.js";
+import { resolveDispatchContextFromCall } from "./meet-booking.js";
+import {
+  MEET_BOT_LOOKBACK_MS,
+  MEET_BOT_SCHEDULE_HORIZON_MS,
+  planMeetBotDispatch,
+} from "./meet-dispatch-plan.js";
 
-/** In-memory cache of booking IDs for which a meeting bot has already been dispatched */
-const dispatchedBotBookings = new Set<number>();
+export {
+  MEET_BOT_ADHOC_WINDOW_MS,
+  MEET_BOT_JOIN_EARLY_MS,
+  MEET_BOT_LOOKBACK_MS,
+  MEET_BOT_SCHEDULE_HORIZON_MS,
+  MEET_BOT_SCHEDULE_MIN_LEAD_MS,
+  planMeetBotDispatch,
+  type MeetBotDispatchPlan,
+} from "./meet-dispatch-plan.js";
+
+/** In-flight lock so concurrent polls don't double-create before DB write. */
+const dispatchInFlight = new Set<number>();
+
+/** Best-effort: delete a scheduled Recall bot when a booking is cancelled. */
+export async function cancelMeetBotForBooking(bookingId: number): Promise<void> {
+  try {
+    const [row] = await db
+      .select({ meetBotId: bookingsTable.meetBotId })
+      .from(bookingsTable)
+      .where(eq(bookingsTable.id, bookingId))
+      .limit(1);
+    const botId = typeof row?.meetBotId === "string" ? row.meetBotId.trim() : "";
+    if (!botId) return;
+    try {
+      await deleteRecallBot(botId);
+    } catch (err) {
+      logger.warn({ err, bookingId, botId }, "Failed to delete Recall bot on booking cancel");
+    }
+    await db
+      .update(bookingsTable)
+      .set({ meetBotId: null, meetBotJoinAt: null, updatedAt: new Date() })
+      .where(eq(bookingsTable.id, bookingId));
+  } catch (err) {
+    logger.warn({ err, bookingId }, "cancelMeetBotForBooking failed");
+  }
+}
 
 /**
- * Auto-dispatches Recall.ai Meeting Bots for upcoming bookings starting in <= 3 minutes.
+ * Schedule or immediately dispatch Recall bots for upcoming bookings.
  */
 export async function dispatchUpcomingMeetingBots(): Promise<void> {
   try {
     const now = new Date();
-    // Look ahead up to 3 minutes, and look back up to 2 minutes (in case of scheduler cold start)
-    const windowStart = new Date(now.getTime() - 2 * 60 * 1000);
-    const windowEnd = new Date(now.getTime() + 3 * 60 * 1000);
+    const windowStart = new Date(now.getTime() - MEET_BOT_LOOKBACK_MS);
+    const windowEnd = new Date(now.getTime() + MEET_BOT_SCHEDULE_HORIZON_MS);
 
     const dueBookings = await db
       .select({
@@ -57,12 +100,14 @@ export async function dispatchUpcomingMeetingBots(): Promise<void> {
         slotStart: bookingsTable.slotStart,
         meetLink: bookingsTable.meetLink,
         status: bookingsTable.status,
+        meetBotId: bookingsTable.meetBotId,
       })
       .from(bookingsTable)
       .where(
         and(
           ne(bookingsTable.status, "cancelled"),
           sql`${bookingsTable.meetLink} IS NOT NULL AND ${bookingsTable.meetLink} != ''`,
+          isNull(bookingsTable.meetBotId),
           gte(bookingsTable.slotStart, windowStart),
           lte(bookingsTable.slotStart, windowEnd),
         ),
@@ -71,9 +116,11 @@ export async function dispatchUpcomingMeetingBots(): Promise<void> {
     if (dueBookings.length === 0) return;
 
     for (const b of dueBookings) {
-      if (!b.meetLink) continue;
-      if (dispatchedBotBookings.has(b.id)) continue;
-      dispatchedBotBookings.add(b.id);
+      if (!b.meetLink || !b.slotStart) continue;
+      const plan = planMeetBotDispatch(b.slotStart, now);
+      if (plan.action === "skip") continue;
+      if (dispatchInFlight.has(b.id)) continue;
+      dispatchInFlight.add(b.id);
 
       try {
         let configuredAgentId: number | null = null;
@@ -81,23 +128,11 @@ export async function dispatchUpcomingMeetingBots(): Promise<void> {
         let sourceCallId: number | undefined;
 
         if (b.callId) {
-          const [callRow] = await db
-            .select({
-              agentId: callsTable.agentId,
-              toNumber: callsTable.toNumber,
-              fromNumber: callsTable.fromNumber,
-            })
-            .from(callsTable)
-            .where(eq(callsTable.id, b.callId))
-            .limit(1);
-          if (callRow?.agentId) {
-            configuredAgentId = callRow.agentId;
-            sourceCallId = b.callId;
-            // Prefer the human party number for memory (outbound → toNumber).
-            const candidate = callRow.toNumber || callRow.fromNumber;
-            if (candidate && !candidate.startsWith("webcall-") && !candidate.startsWith("meetbot-")) {
-              memoryPhone = candidate;
-            }
+          const ctx = await resolveDispatchContextFromCall(b.callId);
+          if (ctx.agentId) {
+            configuredAgentId = ctx.agentId;
+            sourceCallId = ctx.sourceCallId;
+            memoryPhone = ctx.memoryPhone;
           }
         }
 
@@ -160,22 +195,40 @@ export async function dispatchUpcomingMeetingBots(): Promise<void> {
         }
 
         const mid = randomUUID();
+        const attendeeEmail =
+          typeof b.attendeeEmail === "string" ? b.attendeeEmail.trim().toLowerCase() : "";
+        const attendeeName =
+          typeof b.attendeeName === "string" ? b.attendeeName.trim() : "";
+        // Token must outlive a bot scheduled up to 24h ahead.
+        const tokenExp = Math.max(Date.now(), b.slotStart.getTime()) + 2 * 60 * 60 * 1000;
         const token = signMeetBotToken({
           agentId: runtimeAgentId,
           userId: b.userId,
-          exp: Date.now() + 2 * 60 * 60 * 1000, // 2 hour TTL for live meeting
+          exp: tokenExp,
           mid,
+          meetUrl: b.meetLink,
           ...(sourceCallId && meetings.passCallContext ? { sourceCallId } : {}),
           ...(memoryPhone && meetings.passMemory ? { memoryPhone } : {}),
+          ...(attendeeEmail && meetings.passMemory ? { memoryEmail: attendeeEmail } : {}),
           passMemory: meetings.passMemory,
           passCallContext: meetings.passCallContext,
         });
         const base = getSelfBaseUrl();
         const pageUrl = `${base}/api/meet-bots/page?mb=${encodeURIComponent(token)}`;
 
-        // Register meeting roster early so participant webhooks map correctly
         createMeetRoster(mid, agentName);
+        if (attendeeEmail) {
+          setMeetAttendeeHints(mid, [{ name: attendeeName || attendeeEmail, email: attendeeEmail }]);
+        }
+        const { screensharePageUrl } = prepareMeetPresentationAtLaunch({
+          mid,
+          token,
+          baseUrl: base,
+          presentationUrl: meetings.presentationUrl,
+          presentationAutoStart: meetings.presentationAutoStart,
+        });
 
+        const joinAt = plan.action === "schedule" ? plan.joinAt : undefined;
         const bot = await createRecallBot({
           meetingUrl: b.meetLink,
           botName: agentName,
@@ -183,8 +236,20 @@ export async function dispatchUpcomingMeetingBots(): Promise<void> {
           ownerUserId: b.userId,
           agentId: runtimeAgentId,
           eventsUrl: `${base}/api/meet-bots/recall-events?mb=${encodeURIComponent(token)}`,
-          eventsList: RECALL_PARTICIPANT_EVENTS,
+          eventsList: recallRealtimeEvents(),
+          ...(screensharePageUrl ? { screensharePageUrl } : {}),
+          ...(joinAt ? { joinAt } : {}),
         });
+        bindMeetRosterBot(mid, bot.id);
+
+        await db
+          .update(bookingsTable)
+          .set({
+            meetBotId: bot.id,
+            meetBotJoinAt: joinAt ?? new Date(),
+            updatedAt: new Date(),
+          })
+          .where(eq(bookingsTable.id, b.id));
 
         logger.info(
           {
@@ -194,11 +259,17 @@ export async function dispatchUpcomingMeetingBots(): Promise<void> {
             botId: bot.id,
             meetLink: b.meetLink,
             slotStart: b.slotStart,
+            mode: plan.action,
+            joinAt: joinAt?.toISOString() ?? null,
           },
-          "🤖 Autonomous Meeting Bot dispatched successfully!",
+          plan.action === "schedule"
+            ? "Meeting bot scheduled (join_at)"
+            : "Meeting bot dispatched (ad-hoc)",
         );
       } catch (err) {
         logger.error({ err, bookingId: b.id }, "Auto-dispatch meeting bot failed for booking");
+      } finally {
+        dispatchInFlight.delete(b.id);
       }
     }
   } catch (err) {
@@ -214,10 +285,10 @@ export function startMeetingBotAutoDispatcher(): void {
   if (workerStarted) return;
   workerStarted = true;
 
-  // Poll every 30 seconds to catch meetings starting soon
+  // Poll every 30s: schedule far-out meetings + catch last-minute ad-hoc joins.
   setInterval(() => {
     void dispatchUpcomingMeetingBots();
   }, 30_000);
 
-  logger.info("🤖 SnapServe Autonomous Meeting Bot Dispatcher started (polling every 30s)");
+  logger.info("Meeting bot auto-dispatcher started (schedule 24h / ad-hoc 3m, poll 30s)");
 }

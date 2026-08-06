@@ -8,7 +8,7 @@ import {
   Menu, ChevronDown, ChevronLeft, ChevronRight,
   LogOut, Bell, Search, SlidersHorizontal, BookOpen, PlugZap, Sun, Moon, Sparkles,
   Plus, X, Wand2, Wrench, Megaphone, Calendar, Video, MessageCircle,
-  Brain, Users, BarChart3, ListOrdered, GitBranch,
+  Brain, BarChart3, GitBranch,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -98,17 +98,14 @@ interface NavGroup {
 }
 
 /**
- * Call-plans IA (Phase 4).
- * Primary: Home · Call plans · Agents · People · Connections · History
- * Journeys / Automation / Dial flows / Channels peers are redirected, not deleted.
+ * Primary: Home · Campaigns · Agents · Connections · History
  */
 const NAV_GROUPS: NavGroup[] = [
   {
     items: [
       { name: "Home",        href: "/app/home",        icon: Home },
-      { name: "Call plans",  href: "/app/call-plans",  icon: ListOrdered },
+      { name: "Campaigns",  href: "/app/campaigns",  icon: Megaphone },
       { name: "Agents",      href: "/app/agents",      icon: Bot },
-      { name: "People",      href: "/app/people",      icon: Users },
       { name: "Connections", href: "/app/connections", icon: PlugZap },
       { name: "History",     href: "/app/history",     icon: Phone, callbackBadge: true },
     ],
@@ -135,7 +132,7 @@ const MANAGED_CLIENT_NAV: NavGroup[] = [
   {
     items: [
       { name: "Home",        href: "/app/home",        icon: Home },
-      { name: "Call plans",  href: "/app/call-plans",  icon: ListOrdered },
+      { name: "Campaigns",  href: "/app/campaigns",  icon: Megaphone },
       { name: "Agents",      href: "/app/agents",      icon: Bot },
       { name: "History",     href: "/app/history",     icon: Phone, callbackBadge: true },
       { name: "Connections", href: "/app/connections", icon: PlugZap },
@@ -194,28 +191,28 @@ function WalletChip({ compact = false }: { compact?: boolean }) {
 
   const { ring, text, bar } =
     cents === null
-      ? { ring: "border-border",         text: "text-muted-foreground", bar: "bg-border" }
+      ? { ring: "border-border", text: "text-muted-foreground", bar: "bg-border" }
       : cents >= 50_000
-      ? { ring: "border-emerald-500/30", text: "text-emerald-400",      bar: "bg-emerald-500" }
+      ? { ring: "border-emerald-500/35", text: "text-emerald-700 dark:text-emerald-400", bar: "bg-emerald-500" }
       : cents >= 10_000
-      ? { ring: "border-amber-500/30",   text: "text-amber-400",        bar: "bg-amber-500" }
-      : { ring: "border-red-500/30",     text: "text-red-400",          bar: "bg-red-500" };
+      ? { ring: "border-amber-500/35", text: "text-amber-700 dark:text-amber-400", bar: "bg-amber-500" }
+      : { ring: "border-red-500/35", text: "text-red-700 dark:text-red-400", bar: "bg-red-500" };
 
   const pct = cents === null ? 0 : Math.min(100, (cents / 100_000) * 100);
 
   return (
     <Link href="/app/wallet">
       <div className={`flex items-center gap-1.5 px-2.5 py-[7px] rounded-lg border ${ring} bg-elevated/40 cursor-pointer hover:bg-elevated transition-colors w-full`}>
-        <Wallet className={`w-3 h-3 shrink-0 ${text}`} />
+        <Wallet className={`size-3.5 shrink-0 ${text}`} />
         {!compact && (
           <div className="flex flex-col gap-[3px] flex-1 min-w-0">
             {cents !== null ? (
               <div className="flex items-baseline gap-1.5">
-                <span className={`text-[11px] font-semibold tabular-nums leading-none ${text}`}>
+                <span className={`text-[13px] font-semibold tabular-nums leading-none ${text}`}>
                   ₹{(cents / 100).toFixed(2)}
                 </span>
                 {availMins !== null && (
-                  <span className={`text-[9px] leading-none tabular-nums ${text} opacity-60`}>
+                  <span className={`text-[11px] leading-none tabular-nums ${text} opacity-70`}>
                     ~{availMins}m
                   </span>
                 )}
@@ -236,8 +233,8 @@ function WalletChip({ compact = false }: { compact?: boolean }) {
 /* ─── Notification bell ──────────────────────────────────────────────────── */
 function BellButton() {
   return (
-    <button className="p-2 rounded-lg text-muted-foreground/50 hover:text-foreground hover:bg-accent transition-colors relative">
-      <Bell className="w-[15px] h-[15px]" />
+    <button className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors relative">
+      <Bell className="size-4" />
     </button>
   );
 }
@@ -257,13 +254,13 @@ function SidebarUser({ collapsed }: { collapsed: boolean }) {
         onClick={() => setOpen(o => !o)}
         className="flex items-center gap-2 w-full px-2.5 py-2 rounded-lg hover:bg-accent transition-colors"
       >
-        <div className="w-6 h-6 rounded-md bg-elevated border border-border flex items-center justify-center shrink-0">
-          <span className="text-[10px] font-semibold text-foreground/70">{initials}</span>
+        <div className="size-7 rounded-md bg-elevated border border-border flex items-center justify-center shrink-0">
+          <span className="text-[11px] font-semibold text-foreground">{initials}</span>
         </div>
         {!collapsed && (
           <>
-            <span className="flex-1 text-left text-[12.5px] font-medium text-foreground max-w-[110px] truncate">{name}</span>
-            <ChevronDown className={`w-3 h-3 text-muted-foreground/40 transition-transform duration-150 shrink-0 ${open ? "rotate-180" : ""}`} />
+            <span className="flex-1 text-left text-[13px] font-medium text-foreground max-w-[110px] truncate">{name}</span>
+            <ChevronDown className={`size-3.5 text-muted-foreground transition-transform duration-150 shrink-0 ${open ? "rotate-180" : ""}`} />
           </>
         )}
       </button>
@@ -327,7 +324,10 @@ function navItemIsActive(location: string, href: string): boolean {
   if (location.startsWith(href)) return true;
   // Phase 4 aliases — old URLs still work; highlight the new home.
   if (href === "/app/history" && (location.startsWith("/app/calls") || location.startsWith("/app/history"))) return true;
-  if (href === "/app/people" && (location.startsWith("/app/people") || location.startsWith("/app/campaigns"))) return true;
+  if (
+    href === "/app/campaigns"
+    && (location.startsWith("/app/campaigns") || location.startsWith("/app/automatic-calls"))
+  ) return true;
   if (
     href === "/app/connections"
     && (
@@ -337,7 +337,6 @@ function navItemIsActive(location: string, href: string): boolean {
       || location.startsWith("/app/automatic-calls")
     )
   ) return true;
-  if (href === "/app/call-plans" && (location.startsWith("/app/call-plans") || location.startsWith("/app/automation"))) return true;
   return false;
 }
 
@@ -357,15 +356,15 @@ function NavItemEl({
     <Link href={item.href} onClick={onClick}>
       <div
         className={[
-          "relative flex h-8 items-center gap-2 rounded-md px-2 text-[12px] transition-colors duration-100 cursor-pointer select-none",
+          "relative flex h-9 items-center gap-2.5 rounded-md px-2.5 text-[13px] transition-colors duration-100 cursor-pointer select-none",
           indent ? "pl-2" : "",
           isActive
-            ? "bg-foreground/[0.065] text-foreground font-medium"
-            : "text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground",
+            ? "bg-foreground/[0.08] text-foreground font-medium"
+            : "text-muted-foreground hover:bg-foreground/[0.05] hover:text-foreground",
         ].join(" ")}
       >
         <item.icon
-          className={`size-3.5 shrink-0 ${isActive ? "text-foreground" : "text-muted-foreground/75"}`}
+          className={`size-4 shrink-0 ${isActive ? "text-foreground" : "text-muted-foreground"}`}
         />
         {!collapsed && (
           <>
@@ -421,16 +420,21 @@ function SidebarContent({
   };
 
   // Partner hub nav (gated) + white-label branding for partner-managed clients.
+  // While acting as a client, show the full client workspace nav (not Partner Hub)
+  // so partners can control the client's account end-to-end.
   const { data: partnerCtx } = usePartnerContext();
-  const isManagedClient = partnerCtx?.isManagedClient === true;
-  const navGroups: NavGroup[] = isManagedClient
-    ? MANAGED_CLIENT_NAV
-    : partnerCtx?.isPartner
-      ? [
-          ...NAV_GROUPS,
-          { group: "PARTNER", items: [{ name: "Partner Hub", href: "/app/partner", icon: Handshake }] },
-        ]
-      : NAV_GROUPS;
+  const actingAsClient = loadActingAs();
+  const isManagedClient = partnerCtx?.isManagedClient === true && !actingAsClient;
+  const navGroups: NavGroup[] = actingAsClient
+    ? NAV_GROUPS
+    : isManagedClient
+      ? MANAGED_CLIENT_NAV
+      : partnerCtx?.isPartner
+        ? [
+            ...NAV_GROUPS,
+            { group: "PARTNER", items: [{ name: "Partner Hub", href: "/app/partner", icon: Handshake }] },
+          ]
+        : NAV_GROUPS;
   const settingsItems: NavItem[] = isManagedClient
     ? NAV_SETTINGS.filter((s) => MANAGED_CLIENT_SETTINGS_HREFS.includes(s.href))
     : NAV_SETTINGS;
@@ -468,16 +472,16 @@ function SidebarContent({
             </>
           ) : (
             <>
-              <SnapServeIcon size={20} className="shrink-0 self-center text-foreground" />
+              <SnapServeIcon size={24} className="shrink-0 self-center text-foreground" />
               {!collapsed && (
                 <span className="flex min-w-0 flex-col gap-0.5 py-0.5">
                   <span
-                    className="whitespace-nowrap text-[13px] leading-none text-foreground"
+                    className="whitespace-nowrap text-[15px] leading-none text-foreground"
                     style={{ fontFamily: "system-ui, sans-serif", letterSpacing: "-0.02em" }}
                     aria-label="SnapServe"
                   >
                     <span style={{ fontWeight: 700 }}>Snap</span>
-                    <span style={{ fontWeight: 400, opacity: 0.55 }}>Serve</span>
+                    <span style={{ fontWeight: 400, opacity: 0.72 }}>Serve</span>
                   </span>
                   <PoweredBySarvam variant="inline" className="justify-start" />
                 </span>
@@ -505,30 +509,30 @@ function SidebarContent({
       <div className="shrink-0 px-2 pt-2 pb-1">
         <button
           onClick={onSearchOpen}
-          className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-[12px] text-muted-foreground transition-colors hover:bg-foreground/[0.04] hover:text-foreground"
+          className="flex h-9 w-full items-center gap-2.5 rounded-md px-2.5 text-[13px] text-muted-foreground transition-colors hover:bg-foreground/[0.05] hover:text-foreground"
         >
-          <Search className="w-[14px] h-[14px] shrink-0 text-muted-foreground/70" />
+          <Search className="size-4 shrink-0 text-muted-foreground" />
           {!collapsed && (
             <>
               <span className="flex-1 text-left">Search…</span>
-              <kbd className="rounded border border-border bg-background px-1 py-0.5 text-[8px] font-medium text-muted-foreground/55">⌘K</kbd>
+              <kbd className="rounded border border-border bg-background px-1 py-0.5 text-[10px] font-medium text-muted-foreground">⌘K</kbd>
             </>
           )}
         </button>
       </div>
 
-      {/* + New agent CTA (hidden for managed clients — the partner builds their agents) */}
-      {!isManagedClient && (
+      {/* + New agent CTA — hidden for locked managed clients; partner can unlock via Control panel */}
+      {(!isManagedClient || partnerCtx?.canEditAgents === true) && (
       <div className="shrink-0 px-2 pb-2">
         <button
           type="button"
           onClick={() => { onNavClick?.(); onNewAgent?.(); }}
           className={cn(
-            "flex h-8 w-full cursor-pointer select-none items-center gap-2 rounded-md bg-primary px-2 text-[12px] font-medium text-primary-foreground transition-colors hover:bg-primary/90",
+            "flex h-9 w-full cursor-pointer select-none items-center gap-2.5 rounded-md bg-primary px-2.5 text-[13px] font-medium text-primary-foreground transition-colors hover:bg-primary/90",
             collapsed ? "justify-center" : ""
           )}
         >
-          <Plus className="size-3.5 shrink-0" />
+          <Plus className="size-4 shrink-0" />
           {!collapsed && <span>New agent</span>}
         </button>
       </div>
@@ -542,7 +546,7 @@ function SidebarContent({
 
             {/* Group label */}
             {group.group && !collapsed && (
-              <p className="mb-1 px-2 text-[9px] font-semibold uppercase tracking-[0.13em] text-muted-foreground/55 select-none">
+              <p className="mb-1.5 px-2.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground select-none">
                 {group.group}
               </p>
             )}
@@ -568,17 +572,17 @@ function SidebarContent({
         <button
           onClick={toggleSettings}
           className={[
-            "flex h-8 w-full cursor-pointer select-none items-center gap-2 rounded-md px-2 text-[12px] transition-colors duration-100",
+            "flex h-9 w-full cursor-pointer select-none items-center gap-2.5 rounded-md px-2.5 text-[13px] transition-colors duration-100",
             isInSettings
-              ? "text-foreground font-medium"
-              : "text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground",
+              ? "bg-foreground/[0.08] text-foreground font-medium"
+              : "text-muted-foreground hover:bg-foreground/[0.05] hover:text-foreground",
           ].join(" ")}
         >
-          <SlidersHorizontal className={`size-3.5 shrink-0 ${isInSettings ? "text-foreground" : "text-muted-foreground/75"}`} />
+          <SlidersHorizontal className={`size-4 shrink-0 ${isInSettings ? "text-foreground" : "text-muted-foreground"}`} />
           {!collapsed && (
             <>
               <span className="flex-1 text-left">Settings</span>
-              <ChevronDown className={`w-3 h-3 text-muted-foreground/55 transition-transform duration-150 ${settingsOpen ? "rotate-180" : ""}`} />
+              <ChevronDown className={`size-3.5 text-muted-foreground transition-transform duration-150 ${settingsOpen ? "rotate-180" : ""}`} />
             </>
           )}
         </button>
@@ -620,9 +624,9 @@ function SidebarContent({
           <Link
             href="/docs"
             onClick={onNavClick}
-            className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-[12px] text-muted-foreground transition-colors hover:bg-foreground/[0.04] hover:text-foreground"
+            className="flex h-9 w-full items-center gap-2.5 rounded-md px-2.5 text-[13px] text-muted-foreground transition-colors hover:bg-foreground/[0.05] hover:text-foreground"
           >
-            <BookOpen className="w-[14px] h-[14px] shrink-0 text-muted-foreground/70" />
+            <BookOpen className="size-4 shrink-0 text-muted-foreground" />
             {!collapsed && <span>Documentation</span>}
           </Link>
         </div>
@@ -643,11 +647,11 @@ function SidebarContent({
 
 /* ─── Mobile bottom nav ──────────────────────────────────────────────────── */
 const MOBILE_BOTTOM_NAV_ITEMS = [
-  { name: "Home",   href: "/app/home",       icon: Home },
-  { name: "Plans",  href: "/app/call-plans", icon: ListOrdered },
-  { name: "Create", href: null,              icon: Sparkles }, // opens modal
-  { name: "Agents", href: "/app/agents",     icon: Bot },
-  { name: "History", href: "/app/history",   icon: Phone },
+  { name: "Home",      href: "/app/home",       icon: Home },
+  { name: "Campaigns", href: "/app/campaigns",  icon: Megaphone },
+  { name: "Create",    href: null,              icon: Sparkles }, // opens modal
+  { name: "Agents",    href: "/app/agents",     icon: Bot },
+  { name: "History",   href: "/app/history",    icon: Phone },
 ] as const;
 
 function MobileBottomNav({ onNewAgent }: { onNewAgent?: () => void }) {
@@ -874,12 +878,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   // Managed clients: restricted surface — bounce hidden sections to Home.
   // (UX only; the API rejects managed-client writes server-side.)
-  const isManagedClient = partnerCtx?.isManagedClient === true;
+  // Partners acting-as a client are not "managed clients" for nav purposes.
+  const isManagedClient = partnerCtx?.isManagedClient === true && !actingAs;
   useEffect(() => {
     if (!isManagedClient) return;
     const allowed = [
       "/app/home",
-      "/app/call-plans",
+      "/app/campaigns",
       "/app/agents",
       "/app/history",
       "/app/calls",
@@ -942,7 +947,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               </span>
             ) : (
               <>
-                <SnapServeIcon size={20} className="text-foreground shrink-0" />
+                <SnapServeIcon size={22} className="text-foreground shrink-0" />
                 <span className="flex flex-col min-w-0 leading-none gap-0.5">
                   <span className="text-[13px] text-foreground truncate" style={{ fontFamily: "system-ui, sans-serif", letterSpacing: "-0.02em" }}>
                     <span style={{ fontWeight: 700 }}>Snap</span>
@@ -976,14 +981,16 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <div className="flex items-center gap-2 px-4 py-2 bg-amber-500/10 border-b border-amber-500/30">
             <Handshake className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
             <p className="text-[12.5px] text-foreground truncate">
-              Managing <span className="font-semibold">{actingAs.clientName}</span>'s workspace — agents, numbers and calls here belong to their account.
+              Client control panel — editing{" "}
+              <span className="font-semibold">{actingAs.clientName}</span>
+              {" "}(agents, campaigns, numbers, billing). Changes apply to their account.
             </p>
             <button
               type="button"
               onClick={exitActingAs}
               className="ml-auto shrink-0 text-[12px] font-medium px-2.5 py-1 rounded-md border border-border bg-card hover:bg-accent transition-colors cursor-pointer"
             >
-              Exit
+              Exit to Partner Hub
             </button>
           </div>
         )}

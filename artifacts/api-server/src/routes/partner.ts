@@ -12,7 +12,7 @@
  *  - GET/PATCH /partner/me                    → partner profile + settings
  *  - POST/DELETE /partner/logo                → white-label logo (bytea, capability token)
  *  - GET  /partner/clients                    → clients with balance/rate/month usage
- *  - PATCH /partner/clients/:clerkId          → set per-client rate
+ *  - PATCH /partner/clients/:clerkId          → set per-client rate and/or allowAgentEdit
  *  - POST /partner/clients/:clerkId/transfer  → move balance partner → client
  *  - GET  /partner/clients/:clerkId/calls     → recent calls for one client
  *  - GET  /partner/clients/:clerkId/config    → client agents + partner number provisioning
@@ -158,13 +158,24 @@ router.get("/partner/context", requireAuth, async (req, res): Promise<void> => {
     }
 
     const isPartner = !!ownPartner && ownPartner.status === "active";
+    const isManagedClient = branding !== null && !isPartner;
+    let canEditAgents = false;
+    if (isManagedClient) {
+      const [clientFlags] = await db
+        .select({ allow: usersTable.partnerAllowAgentEdit })
+        .from(usersTable)
+        .where(eq(usersTable.clerkId, clerkId));
+      canEditAgents = clientFlags?.allow === true;
+    }
     res.json({
       isPartner,
       branding,
-      // Managed client = linked to an ACTIVE partner. The partner builds and
-      // manages their agents; the dashboard renders the restricted client view.
+      // Managed client = linked to an ACTIVE partner. By default the partner
+      // builds/manages agents; canEditAgents is true when the partner opted
+      // this client into editing their own agents.
       // A partner linked to their own org (self-partner) is never "managed".
-      isManagedClient: branding !== null && !isPartner,
+      isManagedClient,
+      canEditAgents,
     });
   } catch (err) {
     req.log.error({ err }, "partner/context failed");
@@ -392,6 +403,7 @@ router.get("/partner/clients", requireAuth, async (req, res): Promise<void> => {
         status: usersTable.status,
         walletBalanceCents: usersTable.walletBalanceCents,
         rateCentsPerMin: usersTable.partnerRateCentsPerMin,
+        allowAgentEdit: usersTable.partnerAllowAgentEdit,
         createdAt: usersTable.createdAt,
       })
       .from(usersTable)
@@ -433,6 +445,7 @@ router.get("/partner/clients", requireAuth, async (req, res): Promise<void> => {
         status: c.status,
         walletBalanceCents: c.walletBalanceCents,
         rateCentsPerMin: c.rateCentsPerMin ?? partner.defaultClientRateCentsPerMin,
+        allowAgentEdit: c.allowAgentEdit === true,
         joinedAt: c.createdAt,
         monthSeconds: usageByUser.get(c.clerkId)?.seconds ?? 0,
         monthSpendCents: usageByUser.get(c.clerkId)?.spendCents ?? 0,
@@ -465,19 +478,44 @@ router.patch("/partner/clients/:clerkId", requireAuth, async (req, res): Promise
       return;
     }
 
-    const rate = Number((req.body ?? {}).rateCentsPerMin);
-    if (!Number.isInteger(rate) || rate < partner.baseRateCentsPerMin || rate > MAX_RATE_CENTS_PER_MIN) {
-      res.status(400).json({
-        error: `Rate must be an integer between your base rate (${fmtInr(partner.baseRateCentsPerMin)}/min) and ${fmtInr(MAX_RATE_CENTS_PER_MIN)}/min`,
-      });
+    const body = (req.body ?? {}) as { rateCentsPerMin?: unknown; allowAgentEdit?: unknown };
+    const updates: {
+      partnerRateCentsPerMin?: number;
+      partnerAllowAgentEdit?: boolean;
+    } = {};
+
+    if (body.rateCentsPerMin !== undefined && body.rateCentsPerMin !== null) {
+      const rate = Number(body.rateCentsPerMin);
+      if (!Number.isInteger(rate) || rate < partner.baseRateCentsPerMin || rate > MAX_RATE_CENTS_PER_MIN) {
+        res.status(400).json({
+          error: `Rate must be an integer between your base rate (${fmtInr(partner.baseRateCentsPerMin)}/min) and ${fmtInr(MAX_RATE_CENTS_PER_MIN)}/min`,
+        });
+        return;
+      }
+      updates.partnerRateCentsPerMin = rate;
+    }
+
+    if (typeof body.allowAgentEdit === "boolean") {
+      updates.partnerAllowAgentEdit = body.allowAgentEdit;
+    }
+
+    if (Object.keys(updates).length === 0) {
+      res.status(400).json({ error: "Provide rateCentsPerMin and/or allowAgentEdit" });
       return;
     }
 
     await db
       .update(usersTable)
-      .set({ partnerRateCentsPerMin: rate })
+      .set(updates)
       .where(eq(usersTable.id, client.id));
-    res.json({ clerkId: client.clerkId, rateCentsPerMin: rate });
+
+    res.json({
+      clerkId: client.clerkId,
+      rateCentsPerMin: updates.partnerRateCentsPerMin
+        ?? client.partnerRateCentsPerMin
+        ?? partner.defaultClientRateCentsPerMin,
+      allowAgentEdit: updates.partnerAllowAgentEdit ?? client.partnerAllowAgentEdit === true,
+    });
   } catch (err) {
     req.log.error({ err }, "partner/clients PATCH failed");
     res.status(500).json({ error: "Internal server error" });

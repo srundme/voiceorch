@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { Video, Loader2, LogOut } from "lucide-react";
+import { MeetingsChannelCard } from "@/pages/agents/meetings-channel-card";
 
 const API = "/api";
 
@@ -18,6 +19,7 @@ export default function MeetPage() {
   const { toast } = useToast();
   const { agents, selectedId, setAgentId } = useAgentFromSearch();
   const agentId = selectedId != null ? String(selectedId) : "";
+  const agentIdNum = selectedId != null && selectedId > 0 ? selectedId : 0;
 
   const [meetingUrl, setMeetingUrl] = useState("");
   const [bots, setBots] = useState<ActiveBot[]>([]);
@@ -66,28 +68,38 @@ export default function MeetPage() {
 
   return (
     <StripePage
-      title="Meeting Bots"
-      description="Send a voice agent into a Google Meet, Zoom, or Teams meeting. Meeting prompt lives on the agent; join settings are under Agent channels → Meetings."
+      title="Meetings"
+      description="Paste a Google Meet, Zoom, or Teams link and send an agent into the call."
       back={{ href: "/app/connections", label: "Connections" }}
       actions={
         <AgentContextBar agents={agents} selectedId={selectedId} onChange={setAgentId} />
       }
     >
-      <div className="max-w-xl space-y-4 rounded-lg border p-4">
+      <div className="max-w-xl space-y-3 rounded-lg border border-border bg-muted/20 px-4 py-3 text-[12px] text-muted-foreground leading-relaxed">
+        <p className="font-medium text-foreground text-[13px]">How to use</p>
+        <ol className="list-decimal pl-4 space-y-1">
+          <li>
+            Pick an agent above (use a dedicated meetings agent if you want it separate from phone calls — no phone number required).
+          </li>
+          <li>
+            Set the <span className="text-foreground">In meetings</span> prompt on the agent, and enable join below.
+          </li>
+          <li>Paste the meeting link and click Join meeting. Admit the bot if the host asks.</li>
+        </ol>
+      </div>
+
+      <div className="mt-4 max-w-xl space-y-4 rounded-lg border p-4">
         {agentId ? (
           <p className="text-[11px] text-muted-foreground">
             Meeting prompt:{" "}
             <a className="underline underline-offset-2" href={`/app/agents/${agentId}?section=prompt`}>
-              Agent → Prompt
-            </a>
-            {" · "}
-            Join / delegate:{" "}
-            <a className="underline underline-offset-2" href={`/app/channels?agentId=${agentId}&channel=meetings`}>
-              Agent channels → Meetings
+              Agent → Prompt → In meetings
             </a>
             .
           </p>
-        ) : null}
+        ) : (
+          <p className="text-[11px] text-muted-foreground">Select an agent first.</p>
+        )}
         {identityQ.data?.botEmail ? (
           <p className="text-[11px] text-muted-foreground leading-relaxed">
             Bot joins as <span className="font-mono text-foreground">{identityQ.data.botEmail}</span>
@@ -114,6 +126,12 @@ export default function MeetPage() {
           Join meeting
         </Button>
       </div>
+
+      {agentIdNum > 0 && (
+        <div className="mt-6 max-w-xl">
+          <MeetingsChannelCard agentId={agentIdNum} showJoinLink={false} />
+        </div>
+      )}
 
       {bots.length > 0 && (
         <div className="mt-6 max-w-xl space-y-2">

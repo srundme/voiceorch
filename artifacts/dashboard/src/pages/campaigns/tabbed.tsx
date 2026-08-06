@@ -1,13 +1,20 @@
 /**
- * /app/campaigns — legacy URL → People lists.
+ * /app/campaigns — single Campaigns page.
+ * Deep-link routes (/:id, batches, leads) are handled separately in App.tsx.
  */
-import { useEffect } from "react";
-import { useLocation } from "wouter";
+import { StripePage } from "@/components/stripe-page";
+import CampaignsPage from "./index";
 
 export default function CampaignsTabPage() {
-  const [, navigate] = useLocation();
-  useEffect(() => {
-    navigate("/app/people", { replace: true });
-  }, [navigate]);
-  return null;
+  return (
+    <StripePage
+      title="Campaigns"
+      description="Start a campaign from Meta, Website, Google Sheets, CSV, or Zoho CRM."
+      fullBleed
+      lockScroll
+      contentClassName="!px-0 !py-0 max-w-none"
+    >
+      <CampaignsPage />
+    </StripePage>
+  );
 }

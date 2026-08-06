@@ -42,6 +42,8 @@ import {
   speakerHandoffChallenge,
   inactivityReprompt,
   inactivityFarewell,
+  meetingWaitingReprompt,
+  meetingInactivityFarewell,
   neutralGreeting,
   buildInstantReturningGreeting,
   AFFIRMATIONS,
@@ -95,6 +97,12 @@ import {
   parsePreferredDate,
   writeTransferLeadDb,
 } from "../services/tool-executor.js";
+import {
+  executeScheduleMeetRejoin,
+  resolveAgentOwnerUserId,
+} from "../services/meet-booking.js";
+import { executeMeetPresentationTool } from "../services/meet-presentation.js";
+import { executeMeetChatTool } from "../services/meet-chat.js";
 
 /** Built-in tool always injected into the LLM tool list (telephony calls only). */
 const SCHEDULE_CALLBACK_TOOL_DEF: ToolDefinition = {
@@ -114,6 +122,104 @@ const SCHEDULE_CALLBACK_TOOL_DEF: ToolDefinition = {
     },
   },
 };
+
+/** Built-in for meet-bot sessions: rejoin the same Meet link later (auto-dispatch). */
+const SCHEDULE_MEET_REJOIN_TOOL_DEF: ToolDefinition = {
+  name: "schedule_meet_rejoin",
+  description:
+    "Schedule a SnapServe meeting agent to rejoin THIS same Meet/Zoom/Teams link at a later time. " +
+    "Use when participants ask you to come back later to the same meeting URL (not a new calendar slot). " +
+    "For a new calendar appointment, use book/reschedule tools instead.",
+  parameters: {
+    type: "object",
+    properties: {
+      scheduled_at: {
+        type: "string",
+        description:
+          "When to rejoin, as absolute ISO 8601 without timezone suffix in the business timezone " +
+          "(e.g. '2026-06-23T16:00:00'). Resolve relative phrasing against [CURRENT DATE & TIME].",
+      },
+      meet_url: {
+        type: "string",
+        description: "Optional. Defaults to the current meeting link. Only set if rejoin is for a different known link.",
+      },
+      notes: {
+        type: "string",
+        description: "Short note about why the rejoin was requested.",
+      },
+    },
+    required: ["scheduled_at"],
+  },
+};
+
+const START_PRESENTATION_TOOL_DEF: ToolDefinition = {
+  name: "start_presentation",
+  description:
+    "Start screensharing a presentation deck/PDF/webpage in this meeting. " +
+    "Uses the agent's configured presentation URL unless url is provided. " +
+    "Call when participants ask you to present or share slides.",
+  parameters: {
+    type: "object",
+    properties: {
+      url: {
+        type: "string",
+        description: "Optional https:// URL of Google Slides, PDF, or webpage to present.",
+      },
+    },
+  },
+};
+
+const STOP_PRESENTATION_TOOL_DEF: ToolDefinition = {
+  name: "stop_presentation",
+  description: "Stop screensharing the presentation. Voice continues; only the deck share ends.",
+  parameters: { type: "object", properties: {} },
+};
+
+const NEXT_SLIDE_TOOL_DEF: ToolDefinition = {
+  name: "next_slide",
+  description: "Advance to the next slide while presenting.",
+  parameters: { type: "object", properties: {} },
+};
+
+const PREVIOUS_SLIDE_TOOL_DEF: ToolDefinition = {
+  name: "previous_slide",
+  description: "Go back to the previous slide while presenting.",
+  parameters: { type: "object", properties: {} },
+};
+
+const SEND_MEETING_CHAT_TOOL_DEF: ToolDefinition = {
+  name: "send_meeting_chat",
+  description:
+    "Post a short message to the meeting chat (links, agenda, summary, follow-up). " +
+    "Use when participants ask you to share something in chat, or after confirming a booking/link. " +
+    "Keep under ~500 characters. Do not spam.",
+  parameters: {
+    type: "object",
+    properties: {
+      message: {
+        type: "string",
+        description: "Chat message to post to everyone in the meeting.",
+      },
+      pin: {
+        type: "boolean",
+        description: "Optional. Pin the message (Google Meet) so late joiners see it.",
+      },
+    },
+    required: ["message"],
+  },
+};
+
+const MEETING_PRESENTATION_TOOL_DEFS: ToolDefinition[] = [
+  START_PRESENTATION_TOOL_DEF,
+  STOP_PRESENTATION_TOOL_DEF,
+  NEXT_SLIDE_TOOL_DEF,
+  PREVIOUS_SLIDE_TOOL_DEF,
+];
+
+const MEETING_SESSION_TOOL_DEFS: ToolDefinition[] = [
+  ...MEETING_PRESENTATION_TOOL_DEFS,
+  SEND_MEETING_CHAT_TOOL_DEF,
+];
 
 const VAD_SILENCE_MS          = 150;    // default silence window before STT flush (per-agent tunable via vadSilenceMs)
 const MIN_SPEECH_BYTES        = 3200;   // ~200ms @ 8kHz PCM — skip noise bursts shorter than this
@@ -4377,6 +4483,9 @@ export class OrchestrationPipeline implements VoiceSession {
       try {
         const warmTools = buildToolDefs(this.agent.tools);
         warmTools.push(SCHEDULE_CALLBACK_TOOL_DEF);
+        if (this.agent.isMeetingSession) {
+          warmTools.push(SCHEDULE_MEET_REJOIN_TOOL_DEF, ...MEETING_SESSION_TOOL_DEFS);
+        }
         void this.llm.warmContextCache(this.buildCacheBase(null), warmTools);
       } catch (err) {
         logger.debug({ callId: this.config.callId, err }, "Gemini cache warm (greeting) skipped");
@@ -4970,7 +5079,10 @@ export class OrchestrationPipeline implements VoiceSession {
         },
         onGiveUp: () => {
           if (this.closed) return;
-          logger.info({ callId: this.config.callId }, "Silence timeout — ending call");
+          logger.info(
+            { callId: this.config.callId, meeting: !!this.agent.isMeetingSession },
+            "Silence timeout — ending call",
+          );
           void this.playInactivityMessageAndEnd();
         },
         // Diagnostic-only: the watchdog was about to expire but re-armed instead
@@ -5002,7 +5114,10 @@ export class OrchestrationPipeline implements VoiceSession {
       turnNumber: this._activeTurnIndex,
       detail: { reason: "silence-hangup window expired — checking if caller is still there" },
     });
-    const text = inactivityReprompt(this.currentLang || this.agent.language);
+    const lang = this.currentLang || this.agent.language;
+    const text = this.agent.isMeetingSession
+      ? meetingWaitingReprompt(lang)
+      : inactivityReprompt(lang);
     this.bargeInHoldUntil = Date.now() + this.bargeInEchoGraceMs;
     this.isPlaying = true;
     try {
@@ -5053,8 +5168,11 @@ export class OrchestrationPipeline implements VoiceSession {
   private async playInactivityMessageAndEnd(): Promise<void> {
     this.endReasonHint ??= "silence_timeout";
     this.prepareSystemPlayback();
+    const lang = this.currentLang || this.agent.language;
     const farewell = this.agent.inactivityMessage?.trim()
-      || inactivityFarewell(this.currentLang || this.agent.language);
+      || (this.agent.isMeetingSession
+        ? meetingInactivityFarewell(lang)
+        : inactivityFarewell(lang));
     if (!this.closed) {
       try {
         await this.playSentence(farewell);
@@ -5912,6 +6030,59 @@ export class OrchestrationPipeline implements VoiceSession {
         }
         return "Callback noted — I'll arrange for someone to call you back.";
       }
+      if (toolName === "schedule_meet_rejoin") {
+        if (!this.agent.isMeetingSession) {
+          return "error: schedule_meet_rejoin is only available during meeting sessions";
+        }
+        const meetUrl =
+          (typeof args["meet_url"] === "string" && args["meet_url"].trim()) ||
+          this.config.currentMeetUrl?.trim() ||
+          "";
+        if (!meetUrl) {
+          return "error: meet_url is required (current meeting link unknown)";
+        }
+        const ownerUserId = await resolveAgentOwnerUserId(this.agent.id);
+        if (!ownerUserId) {
+          return "error: could not resolve agent owner for meeting rejoin";
+        }
+        return executeScheduleMeetRejoin({
+          sessionCallId: this.config.callId,
+          agentId: this.agent.id,
+          userId: ownerUserId,
+          meetUrl,
+          scheduledAtRaw: typeof args["scheduled_at"] === "string" ? args["scheduled_at"] : null,
+          notes: typeof args["notes"] === "string" ? args["notes"] : null,
+          lineageCallId: this.config.bookingLineageCallId,
+          timezone: this.agent.timezone?.trim() || "Asia/Kolkata",
+        });
+      }
+      if (
+        toolName === "start_presentation" ||
+        toolName === "stop_presentation" ||
+        toolName === "next_slide" ||
+        toolName === "previous_slide"
+      ) {
+        if (!this.agent.isMeetingSession) {
+          return `error: ${toolName} is only available during meeting sessions`;
+        }
+        return executeMeetPresentationTool({
+          toolName,
+          args,
+          meetMid: this.config.meetMid,
+          meetBotToken: this.config.meetBotToken,
+          presentationDefaultUrl: this.config.presentationDefaultUrl,
+        });
+      }
+      if (toolName === "send_meeting_chat") {
+        if (!this.agent.isMeetingSession) {
+          return "error: send_meeting_chat is only available during meeting sessions";
+        }
+        return executeMeetChatTool({
+          meetMid: this.config.meetMid,
+          message: typeof args["message"] === "string" ? args["message"] : "",
+          pin: args["pin"] === true,
+        });
+      }
       logger.warn({ callId: this.config.callId, toolName }, "LLM called unknown tool — ignoring");
       return undefined;
     }
@@ -6689,6 +6860,9 @@ export class OrchestrationPipeline implements VoiceSession {
     // ── Build tool definitions from agent config ──
     const toolDefs = buildToolDefs(this.agent.tools);
     toolDefs.push(SCHEDULE_CALLBACK_TOOL_DEF);
+    if (this.agent.isMeetingSession) {
+      toolDefs.push(SCHEDULE_MEET_REJOIN_TOOL_DEF, ...MEETING_SESSION_TOOL_DEFS);
+    }
 
     const llmStart = Date.now();
     let llmFirstTokenAt: number | null = null;
@@ -8665,7 +8839,9 @@ export class OrchestrationPipeline implements VoiceSession {
       });
       return "error: cannot book yet — you must first ask the caller for their name, email, and preferred slot. Do not call this tool until the caller has provided those details in the conversation.";
     }
-    return sharedExecuteNativeBooking(this.config.callId, this.agent.id, tool, args);
+    return sharedExecuteNativeBooking(this.config.callId, this.agent.id, tool, args, {
+      lineageCallId: this.config.bookingLineageCallId,
+    });
   }
 
   private async executeNativeReschedule(tool: AgentTool & { type: "native_reschedule" }, args: Record<string, unknown>): Promise<string> {
@@ -8676,7 +8852,9 @@ export class OrchestrationPipeline implements VoiceSession {
       selected_booking_time: this.activeRescheduleBooking?.timeLabel ?? null,
       resolved_requested_datetime: args["preferred_date"] ?? args["new_time"] ?? null,
     }, "Pipeline: executeNativeReschedule invoked");
-    return sharedExecuteNativeReschedule(this.config.callId, this.agent.id, tool, args);
+    return sharedExecuteNativeReschedule(this.config.callId, this.agent.id, tool, args, {
+      lineageCallId: this.config.bookingLineageCallId,
+    });
   }
 
   private async executeNativeCancel(tool: AgentTool & { type: "native_cancel" }, args: Record<string, unknown>): Promise<string> {
@@ -8753,6 +8931,9 @@ export class OrchestrationPipeline implements VoiceSession {
     const MAX_TOOL_DEPTH = 5;
     const toolDefs = buildToolDefs(this.agent.tools);
     toolDefs.push(SCHEDULE_CALLBACK_TOOL_DEF);
+    if (this.agent.isMeetingSession) {
+      toolDefs.push(SCHEDULE_MEET_REJOIN_TOOL_DEF, ...MEETING_SESSION_TOOL_DEFS);
+    }
     const attachTools = depth < MAX_TOOL_DEPTH && toolDefs.length > 0;
     let triggeredToolName: string | null = null;
     let triggeredToolArgs: Record<string, unknown> = {};
@@ -9241,6 +9422,17 @@ export class OrchestrationPipeline implements VoiceSession {
     const n = note.trim().slice(0, 200);
     if (!n || this.pendingMeetingNotes.length >= 10) return;
     this.pendingMeetingNotes.push(n);
+  }
+
+  /** Roster cost-cut: end the SnapServe session when the meeting is over. */
+  endMeetingSession(reason?: string): void {
+    if (this.closed) return;
+    this.endReasonHint = reason?.trim() || "meeting_ended";
+    logger.info(
+      { callId: this.config.callId, reason: this.endReasonHint },
+      "Meeting session ended by roster cost-cut",
+    );
+    this.config.onCallEnd();
   }
 
   /**

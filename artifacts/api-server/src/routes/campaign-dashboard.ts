@@ -9,6 +9,8 @@
  */
 import { Router } from "express";
 import { getAuth } from "../lib/auth-compat.js";
+import { requireAuth } from "../middlewares/requireAuth.js";
+import { clientContext } from "../middlewares/clientContext.js";
 import {
   db,
   campaignsTable,
@@ -21,6 +23,8 @@ import { eq, and, gte, lt, inArray, count, desc } from "drizzle-orm";
 import { decryptKey } from "../lib/crypto.js";
 
 const router = Router();
+
+router.use(requireAuth, clientContext);
 
 function todayUtcBounds() {
   const now = new Date();

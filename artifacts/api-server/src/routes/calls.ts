@@ -3,6 +3,7 @@ import { getSelfBaseUrl } from "../lib/app-domain.js";
 import { randomBytes } from "crypto";
 import { eq, desc, and, or, sql, gte, gt, lte, isNull, inArray } from "drizzle-orm";
 import { db, callsTable, callEventsTable, executionLogsTable, agentsTable, providersTable, usersTable, walletTransactionsTable, activityLogsTable, callTransfersTable, vobizAccountsTable, verifiedPhoneDestinationsTable, platformSettingsTable, phoneNumbersTable, callerProfilesTable, callerFactsTable, callerCallArchiveTable, callExecutionsTable, canonicalizeCallerKey, humanPhone, resolveCallerKey } from "@workspace/db";
+import { computeProRataDebitCents } from "../services/call-billing.js";
 import { getFlatRateCentsPerMin, resolveAgentBillingMode, resolveOwnTelephonyDiscount } from "../services/minute-rates.js";
 import { resolvePartnerBilling, creditPartnerSpreadOnCall } from "../services/partner-billing.js";
 import {
@@ -22,7 +23,11 @@ import {
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { clientContext } from "../middlewares/clientContext.js";
 import { getAuth } from "../lib/auth-compat.js";
-import { dispatchWebhooks } from "./webhook-endpoints.js";
+import {
+  buildCallEndedWebhookPayload,
+  dispatchWebhooks,
+  flatDispositionFromTaxonomy,
+} from "./webhook-endpoints.js";
 import { disposeCall } from "../services/disposition.js";
 import { traiPreDialCheck, logPreDialDecision } from "../services/trai/index.js";
 import { evaluateIrdaiGate, IRDAI_BLOCKED_MESSAGE, IRDAI_BLOCKED_CODE } from "../services/irdai/gate.js";
@@ -636,6 +641,164 @@ router.get("/calls/:id", requireAuth, clientContext, async (req, res): Promise<v
   res.json(GetCallResponse.parse(enriched));
 });
 
+/**
+ * Fresh Recall mixed-meeting MP4 URL for call-log playback.
+ * Pre-signed URLs expire — always re-fetch via recallBotId in call metadata.
+ */
+router.get("/calls/:id/meeting-recording", requireAuth, clientContext, async (req, res): Promise<void> => {
+  const params = GetCallParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: "Validation failed", issues: params.error.issues });
+    return;
+  }
+  const clerkId = (req as any).clerkUserId as string;
+  const [call] = await db.select().from(callsTable).where(eq(callsTable.id, params.data.id));
+  if (!call) {
+    res.status(404).json({ error: "Call not found" });
+    return;
+  }
+  if (call.userId && call.userId !== clerkId) {
+    res.status(404).json({ error: "Call not found" });
+    return;
+  }
+  if (!call.userId) {
+    const [agent] = await db.select({ userId: agentsTable.userId })
+      .from(agentsTable).where(eq(agentsTable.id, call.agentId));
+    if (agent?.userId && agent.userId !== clerkId) {
+      res.status(404).json({ error: "Call not found" });
+      return;
+    }
+  }
+
+  let meta: Record<string, unknown> = {};
+  try {
+    meta = call.metadata ? (JSON.parse(call.metadata) as Record<string, unknown>) : {};
+  } catch {
+    meta = {};
+  }
+  const botId = typeof meta["recallBotId"] === "string" ? meta["recallBotId"].trim() : "";
+  if (!botId) {
+    res.status(404).json({ error: "No meeting recording for this call" });
+    return;
+  }
+  if (!process.env["RECALL_API_KEY"]) {
+    res.status(503).json({ error: "Meeting recording is not configured" });
+    return;
+  }
+
+  try {
+    const { fetchRecallBotMixedVideoUrl } = await import("../services/meet-bots.js");
+    const url = await fetchRecallBotMixedVideoUrl(botId);
+    if (!url) {
+      res.status(404).json({
+        error: "Meeting recording is not ready yet — try again shortly",
+        pending: true,
+      });
+      return;
+    }
+    // Mark ready if we hadn't yet (late playback after processing finished).
+    if (meta["recallVideoReady"] !== true) {
+      await db
+        .update(callsTable)
+        .set({
+          metadata: JSON.stringify({ ...meta, recallVideoReady: true, recallBotId: botId }),
+        })
+        .where(eq(callsTable.id, call.id));
+    }
+    res.json({ url, botId });
+  } catch (err) {
+    res.status(502).json({
+      error: err instanceof Error ? err.message : "Failed to fetch meeting recording",
+    });
+  }
+});
+
+/**
+ * Fresh per-participant meeting audio tracks (Recall audio_separate MP3 parts).
+ * Pre-signed URLs expire — re-fetch on each request.
+ */
+router.get("/calls/:id/meeting-separate-audio", requireAuth, clientContext, async (req, res): Promise<void> => {
+  const params = GetCallParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: "Validation failed", issues: params.error.issues });
+    return;
+  }
+  const clerkId = (req as any).clerkUserId as string;
+  const [call] = await db.select().from(callsTable).where(eq(callsTable.id, params.data.id));
+  if (!call) {
+    res.status(404).json({ error: "Call not found" });
+    return;
+  }
+  if (call.userId && call.userId !== clerkId) {
+    res.status(404).json({ error: "Call not found" });
+    return;
+  }
+  if (!call.userId) {
+    const [agent] = await db.select({ userId: agentsTable.userId })
+      .from(agentsTable).where(eq(agentsTable.id, call.agentId));
+    if (agent?.userId && agent.userId !== clerkId) {
+      res.status(404).json({ error: "Call not found" });
+      return;
+    }
+  }
+
+  let meta: Record<string, unknown> = {};
+  try {
+    meta = call.metadata ? (JSON.parse(call.metadata) as Record<string, unknown>) : {};
+  } catch {
+    meta = {};
+  }
+  const botId = typeof meta["recallBotId"] === "string" ? meta["recallBotId"].trim() : "";
+  if (!botId) {
+    res.status(404).json({ error: "No meeting audio for this call" });
+    return;
+  }
+  if (!process.env["RECALL_API_KEY"]) {
+    res.status(503).json({ error: "Meeting recording is not configured" });
+    return;
+  }
+
+  try {
+    const { fetchRecallBotSeparateAudioTracks } = await import("../services/meet-bots.js");
+    const result = await fetchRecallBotSeparateAudioTracks(botId);
+    if (!result?.tracks.length) {
+      res.status(404).json({
+        error: "Per-speaker audio is not ready yet — try again shortly",
+        pending: true,
+      });
+      return;
+    }
+    if (meta["recallSeparateAudioReady"] !== true) {
+      await db
+        .update(callsTable)
+        .set({
+          metadata: JSON.stringify({
+            ...meta,
+            recallSeparateAudioReady: true,
+            recallSeparateAudioCount: result.tracks.length,
+            recallRecordingId: result.recordingId,
+            recallBotId: botId,
+          }),
+        })
+        .where(eq(callsTable.id, call.id));
+    }
+    res.json({
+      botId,
+      recordingId: result.recordingId,
+      tracks: result.tracks.map((t) => ({
+        name: t.name,
+        participantId: t.participantId,
+        isHost: t.isHost,
+        url: t.downloadUrl,
+      })),
+    });
+  } catch (err) {
+    res.status(502).json({
+      error: err instanceof Error ? err.message : "Failed to fetch per-speaker audio",
+    });
+  }
+});
+
 // Caller-scoped memory context for the caller on a given call. Mirrors the
 // runtime caller-key derivation (orchestration/session.ts) so the Call Log
 // detail page shows the SAME memory the live pipeline reads/writes.
@@ -971,9 +1134,10 @@ router.patch("/calls/:id/end", requireAuth, clientContext, async (req, res): Pro
     ?? Math.max(0, getFlatRateCentsPerMin(billingMode) - ownTelephonyDiscount);
   const modeLabel = partnerBilling ? "partner" : billingMode === "managed" ? "managed" : "BYOP";
   const rateLabel = `₹${(rateCentsPerMin / 100).toFixed(2)}/min (${modeLabel})`;
+  // Per-second pro-rata (never ceil to a full minute). 9s @ ₹5/min → ₹0.75.
   const debitCents = alreadyBilled || durationSeconds <= 0
     ? 0
-    : Math.max(1, Math.round((durationSeconds / 60) * rateCentsPerMin));
+    : computeProRataDebitCents(durationSeconds, rateCentsPerMin);
 
   // NOTE: costCents is deliberately NOT set here — it is written by the
   // atomic billing claim below so racing end paths can't both bill.
@@ -1093,71 +1257,120 @@ router.patch("/calls/:id/end", requireAuth, clientContext, async (req, res): Pro
     }
   }
 
-  // Fire call.completed webhook (fire-and-forget). Legacy subscribers to call.ended still match.
-  if (callUserId) {
-    const status = String(call.status ?? "completed");
-    const event = status === "failed" ? "call.failed" as const : "call.completed" as const;
-    dispatchWebhooks(callUserId, event, {
+  // Disposition first, then webhooks with the full enriched payload.
+  // Fire-and-forget wrapper so the HTTP response is not blocked, but order inside
+  // is awaited so dispositionResult is present when webhooks fire.
+  void (async () => {
+    let dispositionResult: Record<string, unknown> | null =
+      (call.dispositionResult as Record<string, unknown> | null) ?? null;
+    try {
+      if (!dispositionResult) {
+        const taxResult = await disposeCall({
+          agentId: call.agentId,
+          callId: call.id,
+          transcript: call.transcript ?? null,
+          callEvents: [],
+          callStartedAt: call.createdAt ?? null,
+        });
+        dispositionResult = flatDispositionFromTaxonomy(taxResult) ?? dispositionResult;
+      }
+    } catch {
+      /* disposition optional */
+    }
+
+    const [fresh] = await db.select().from(callsTable).where(eq(callsTable.id, call.id)).limit(1);
+    const status = String(fresh?.status ?? call.status ?? "completed");
+    const payload = buildCallEndedWebhookPayload({
       callId: call.id,
+      executionId: fresh?.executionId ?? call.executionId ?? null,
       agentId: call.agentId,
+      agentName: agent?.name ?? null,
       status,
-      toNumber: call.toNumber ?? null,
-      fromNumber: call.fromNumber ?? null,
-      durationSeconds,
-      costCents: debitCents,
-      transcript: call.transcript ?? null,
-      callSummary: call.callSummary ?? null,
-      dispositionResult: call.dispositionResult ?? null,
-      recordingUrl: call.recordingUrl ?? null,
+      fromNumber: fresh?.fromNumber ?? call.fromNumber ?? null,
+      toNumber: fresh?.toNumber ?? call.toNumber ?? null,
+      durationSeconds: fresh?.durationSeconds ?? durationSeconds,
+      costCents: fresh?.costCents ?? debitCents ?? null,
+      transcript: fresh?.transcript ?? call.transcript ?? null,
+      callSummary: fresh?.callSummary ?? call.callSummary ?? null,
+      dispositionResult:
+        dispositionResult
+        ?? (fresh?.dispositionResult as Record<string, unknown> | null)
+        ?? null,
+      successEvaluation: fresh?.successEvaluation ?? call.successEvaluation ?? null,
+      recordingUrl: fresh?.recordingUrl ?? call.recordingUrl ?? null,
+      recordingError: fresh?.recordingError ?? call.recordingError ?? null,
+      amdResult: fresh?.amdResult ?? call.amdResult ?? null,
+      transferType: fresh?.transferType ?? call.transferType ?? null,
+      transferTarget: fresh?.transferTarget ?? call.transferTarget ?? null,
+      conversationCompleted: fresh?.conversationCompleted ?? call.conversationCompleted ?? null,
+      primaryLanguage: fresh?.primaryLanguage ?? call.primaryLanguage ?? null,
+      memoryRecognized: fresh?.memoryRecognized ?? call.memoryRecognized ?? null,
+      errorMessage: fresh?.errorMessage ?? call.errorMessage ?? null,
+      tokensSaved: fresh?.tokensSaved ?? call.tokensSaved ?? null,
+      avgSttLatencyMs: fresh?.sttLatencyMs ?? null,
+      avgLlmLatencyMs: fresh?.llmLatencyMs ?? null,
+      avgTtsLatencyMs: fresh?.ttsFirstChunkMs ?? null,
+      createdAt: fresh?.createdAt ?? call.createdAt ?? null,
+      endedAt: fresh?.endedAt ?? new Date(),
+      metadata: fresh?.metadata ?? call.metadata ?? null,
+    });
+
+    if (callUserId) {
+      const event = status === "failed" ? "call.failed" as const : "call.completed" as const;
+      dispatchWebhooks(callUserId, event, payload).catch(() => {});
+    }
+
+    // Agent webhook URL (if set on agent)
+    if (agent?.webhookUrl) {
+      const bodyStr = JSON.stringify(payload);
+      fetch(agent.webhookUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: bodyStr,
+        signal: AbortSignal.timeout(10_000),
+      }).catch(() => {});
+    }
+
+    import("../services/crm/writeback.js").then(({ writeCrmCallOutcome }) => {
+      writeCrmCallOutcome(call.id).catch(() => {});
     }).catch(() => {});
-  }
 
-  // Fire disposition extraction (fire-and-forget — never blocks webhook response)
-  disposeCall({
-    agentId:    call.agentId,
-    callId:     call.id,
-    transcript: call.transcript ?? null,
-    callEvents: [],
-    callStartedAt: call.createdAt ?? null,
-  }).catch(() => {});
-
-  // CRM writeback (fire-and-forget — push call outcome to HubSpot/Zoho if lead was CRM-sourced)
-  import("../services/crm/writeback.js").then(({ writeCrmCallOutcome }) => {
-    writeCrmCallOutcome(call.id).catch(() => {});
-  }).catch(() => {});
-
-  // Google Sheets Automatic Calls writeback only (agent Tools sheets removed)
-  import("../services/sheets-writeback.js").then(({ writeSheetAutoCallResults }) => {
-    writeSheetAutoCallResults(call.id).catch(() => {});
-  }).catch(() => {});
-
-  // WhatsApp post-call notify (custom outbound webhook)
-  import("../services/whatsapp/outbound.js").then(({ dispatchWhatsappCallEnded }) => {
-    dispatchWhatsappCallEnded(call.id).catch(() => {});
-  }).catch(() => {});
-
-  // Zelto call monitoring (fire-and-forget)
-  import("../services/zelto.js").then(({ pushCallToZelto }) => {
-    const endedAt  = new Date().toISOString();
-    const startedAt = durationSeconds
-      ? new Date(Date.now() - durationSeconds * 1000).toISOString()
-      : undefined;
-    pushCallToZelto({
-      callId:            call.id,
-      agentId:           call.agentId,
-      status:            call.status ?? undefined,
-      direction:         (call as any).direction ?? "inbound",
-      fromNumber:        call.fromNumber ?? null,
-      toNumber:          call.toNumber ?? null,
-      durationSeconds,
-      startedAt,
-      endedAt,
-      costCents:         debitCents ?? null,
-      transcript:        call.transcript ?? null,
-      callSummary:       (call as any).callSummary ?? null,
-      dispositionResult: (call as any).dispositionResult as Record<string, unknown> | null ?? null,
+    import("../services/sheets-writeback.js").then(({ writeSheetAutoCallResults }) => {
+      writeSheetAutoCallResults(call.id, {
+        callSummary: (payload["callSummary"] as string | null) ?? null,
+        dispositionResult: (payload["dispositionResult"] as Record<string, unknown> | null) ?? null,
+      }).catch(() => {});
     }).catch(() => {});
-  }).catch(() => {});
+
+    import("../services/whatsapp/outbound.js").then(({ dispatchWhatsappCallEnded }) => {
+      dispatchWhatsappCallEnded(call.id, {
+        callSummary: (payload["callSummary"] as string | null) ?? null,
+        dispositionResult: (payload["dispositionResult"] as Record<string, unknown> | null) ?? null,
+      }).catch(() => {});
+    }).catch(() => {});
+
+    import("../services/zelto.js").then(({ pushCallToZelto }) => {
+      const endedAt = new Date().toISOString();
+      const startedAt = durationSeconds
+        ? new Date(Date.now() - durationSeconds * 1000).toISOString()
+        : undefined;
+      pushCallToZelto({
+        callId: call.id,
+        agentId: call.agentId,
+        status: call.status ?? undefined,
+        direction: (call as any).direction ?? "inbound",
+        fromNumber: call.fromNumber ?? null,
+        toNumber: call.toNumber ?? null,
+        durationSeconds,
+        startedAt,
+        endedAt,
+        costCents: debitCents ?? null,
+        transcript: call.transcript ?? null,
+        callSummary: (payload["callSummary"] as string | null) ?? null,
+        dispositionResult: (payload["dispositionResult"] as Record<string, unknown> | null) ?? null,
+      }).catch(() => {});
+    }).catch(() => {});
+  })();
 
   const enriched = await enrichCall(call);
   res.json(EndCallResponse.parse(enriched));

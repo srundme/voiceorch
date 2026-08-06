@@ -13,6 +13,12 @@ import {
 } from "../../../services/tool-executor.js";
 import { scheduleCallbackRequested } from "../../../services/autoRedial.js";
 import { resolveCallbackTime } from "../../../lib/tz-datetime.js";
+import {
+  executeScheduleMeetRejoin,
+  resolveAgentOwnerUserId,
+} from "../../../services/meet-booking.js";
+import { executeMeetPresentationTool } from "../../../services/meet-presentation.js";
+import { executeMeetChatTool } from "../../../services/meet-chat.js";
 import { logger } from "../../../lib/logger.js";
 
 export interface LiveToolRunnerDeps {
@@ -74,6 +80,61 @@ export async function runLiveToolCall(
       };
     }
     return { output: "Callback noted." };
+  }
+
+  if (toolName === "schedule_meet_rejoin") {
+    if (!agent.isMeetingSession) {
+      return { error: "schedule_meet_rejoin is only available during meeting sessions" };
+    }
+    const meetUrl =
+      (typeof args["meet_url"] === "string" && args["meet_url"].trim()) ||
+      config.currentMeetUrl?.trim() ||
+      "";
+    if (!meetUrl) return { error: "meet_url is required" };
+    const ownerUserId = await resolveAgentOwnerUserId(agent.id);
+    if (!ownerUserId) return { error: "could not resolve agent owner" };
+    const output = await executeScheduleMeetRejoin({
+      sessionCallId: config.callId,
+      agentId: agent.id,
+      userId: ownerUserId,
+      meetUrl,
+      scheduledAtRaw: typeof args["scheduled_at"] === "string" ? args["scheduled_at"] : null,
+      notes: typeof args["notes"] === "string" ? args["notes"] : null,
+      lineageCallId: config.bookingLineageCallId,
+      timezone: agent.timezone?.trim() || "Asia/Kolkata",
+    });
+    return { output };
+  }
+
+  if (
+    toolName === "start_presentation" ||
+    toolName === "stop_presentation" ||
+    toolName === "next_slide" ||
+    toolName === "previous_slide"
+  ) {
+    if (!agent.isMeetingSession) {
+      return { error: `${toolName} is only available during meeting sessions` };
+    }
+    const output = await executeMeetPresentationTool({
+      toolName,
+      args,
+      meetMid: config.meetMid,
+      meetBotToken: config.meetBotToken,
+      presentationDefaultUrl: config.presentationDefaultUrl,
+    });
+    return { output };
+  }
+
+  if (toolName === "send_meeting_chat") {
+    if (!agent.isMeetingSession) {
+      return { error: "send_meeting_chat is only available during meeting sessions" };
+    }
+    const output = await executeMeetChatTool({
+      meetMid: config.meetMid,
+      message: typeof args["message"] === "string" ? args["message"] : "",
+      pin: args["pin"] === true,
+    });
+    return { output };
   }
 
   const tool = matchToolByName(agent.tools, toolName);
@@ -166,13 +227,17 @@ async function executeLiveAgentTool(
       return undefined;
     }
     case "native_booking":
-      return executeNativeBooking(callId, agentId, tool, args);
+      return executeNativeBooking(callId, agentId, tool, args, {
+        lineageCallId: config.bookingLineageCallId,
+      });
     case "native_check_availability":
       return executeNativeCheckAvailability(callId, agentId, tool, args);
     case "native_list_bookings":
       return executeNativeListBookings(callId, agentId, tool, args);
     case "native_reschedule":
-      return executeNativeReschedule(callId, agentId, tool, args);
+      return executeNativeReschedule(callId, agentId, tool, args, {
+        lineageCallId: config.bookingLineageCallId,
+      });
     case "native_cancel":
       return executeNativeCancel(callId, agentId, tool, args);
     case "send_sms":

@@ -7,7 +7,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-/** Quick dark ↔ light toggle (default app theme is dark). */
+/** Quick dark ↔ light toggle (default app theme is light for outdoor readability). */
 export function ThemeToggle() {
   const { theme, setTheme } = useTheme();
   const isDark = theme === "dark" || (theme === "system" && typeof window !== "undefined"

@@ -5,6 +5,7 @@ import { db } from "@workspace/db";
 import { usersTable, walletTransactionsTable, invoicesTable, partnersTable } from "@workspace/db/schema";
 import { eq, desc, sql, and } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
+import { clientContext } from "../middlewares/clientContext.js";
 import { logger } from "../lib/logger.js";
 import { resolvePartnerBilling } from "../services/partner-billing.js";
 import { getFlatRateCentsPerMin } from "../services/minute-rates.js";
@@ -65,7 +66,7 @@ function walletInfoPayload(
 }
 
 // GET /api/wallet
-router.get("/wallet", requireAuth, async (req, res) => {
+router.get("/wallet", requireAuth, clientContext, async (req, res) => {
   const clerkId = (req as any).clerkUserId as string;
   const user = await getDbUser(clerkId);
   if (!user) {
@@ -86,7 +87,7 @@ router.get("/wallet", requireAuth, async (req, res) => {
 });
 
 // POST /api/wallet/topup — create Razorpay INR order (base credit + 18% GST payable)
-router.post("/wallet/topup", requireAuth, async (req, res) => {
+router.post("/wallet/topup", requireAuth, clientContext, async (req, res) => {
   if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
     res.status(503).json({ error: "Payment gateway not configured" });
     return;
@@ -183,7 +184,7 @@ router.post("/wallet/topup", requireAuth, async (req, res) => {
 });
 
 // POST /api/wallet/verify-payment — verify signature, save mandate token, credit wallet
-router.post("/wallet/verify-payment", requireAuth, async (req, res) => {
+router.post("/wallet/verify-payment", requireAuth, clientContext, async (req, res) => {
   const clerkId = (req as any).clerkUserId as string;
   const { razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body as {
     razorpayOrderId: string;
@@ -400,7 +401,7 @@ router.post("/wallet/payment-callback", async (req, res) => {
 });
 
 // GET /api/wallet/transactions
-router.get("/wallet/transactions", requireAuth, async (req, res) => {
+router.get("/wallet/transactions", requireAuth, clientContext, async (req, res) => {
   const clerkId = (req as any).clerkUserId as string;
   const limit  = Math.min(Number(req.query.limit  ?? 20), 100);
   const offset = Number(req.query.offset ?? 0);
@@ -437,7 +438,7 @@ router.get("/wallet/transactions", requireAuth, async (req, res) => {
 });
 
 // PATCH /api/wallet/autopay
-router.patch("/wallet/autopay", requireAuth, async (req, res) => {
+router.patch("/wallet/autopay", requireAuth, clientContext, async (req, res) => {
   const clerkId = (req as any).clerkUserId as string;
   const { autoPayEnabled, autoPayThresholdCents, autoPayAmountCents } = req.body as {
     autoPayEnabled?: boolean;
@@ -591,7 +592,7 @@ router.post("/wallet/webhook", async (req, res) => {
 });
 
 // GET /api/wallet/invoices — list the authenticated user's tax invoices
-router.get("/wallet/invoices", requireAuth, async (req, res) => {
+router.get("/wallet/invoices", requireAuth, clientContext, async (req, res) => {
   const clerkId = (req as any).clerkUserId as string;
   const limit  = Math.min(Number(req.query.limit  ?? 50), 200);
   const offset = Number(req.query.offset ?? 0);
@@ -624,7 +625,7 @@ router.get("/wallet/invoices", requireAuth, async (req, res) => {
 });
 
 // GET /api/wallet/invoices/:id — rendered HTML invoice (printable / save as PDF)
-router.get("/wallet/invoices/:id", requireAuth, async (req, res) => {
+router.get("/wallet/invoices/:id", requireAuth, clientContext, async (req, res) => {
   const clerkId = (req as any).clerkUserId as string;
   const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(rawId!, 10);
@@ -642,7 +643,7 @@ router.get("/wallet/invoices/:id", requireAuth, async (req, res) => {
 });
 
 // GET /api/wallet/invoices/:id/pdf — downloadable PDF invoice
-router.get("/wallet/invoices/:id/pdf", requireAuth, async (req, res) => {
+router.get("/wallet/invoices/:id/pdf", requireAuth, clientContext, async (req, res) => {
   const clerkId = (req as any).clerkUserId as string;
   const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(rawId!, 10);

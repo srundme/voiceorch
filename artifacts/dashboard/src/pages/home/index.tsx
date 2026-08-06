@@ -6,7 +6,6 @@ import {
   Check,
   CircleAlert,
   FileSpreadsheet,
-  ListOrdered,
   Phone,
   Plus,
   Sparkles,
@@ -24,7 +23,6 @@ import {
   useListAgents,
   useListCalls,
   useListCampaigns,
-  useListPhoneNumbers,
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { StripePage } from "@/components/stripe-page";
@@ -85,7 +83,6 @@ export default function HomePage() {
   const campaignsQ = useListCampaigns({
     query: { queryKey: getListCampaignsQueryKey(), staleTime: 30_000 },
   });
-  const phonesQ = useListPhoneNumbers();
   const walletQ = useGetWallet();
   const pipelinesQ = useQuery({
     queryKey: ["automatic-calls"],
@@ -96,7 +93,6 @@ export default function HomePage() {
   const agents = Array.isArray(agentsQ.data) ? agentsQ.data : (agentsQ.data as any)?.agents ?? [];
   const calls = Array.isArray(callsQ.data) ? callsQ.data : (callsQ.data as any)?.calls ?? [];
   const campaigns = Array.isArray(campaignsQ.data) ? campaignsQ.data : [];
-  const phones = Array.isArray(phonesQ.data) ? phonesQ.data : [];
   const pipelines: AutoPipeline[] = pipelinesQ.data ?? [];
   const activeCampaigns = campaigns.filter((campaign: any) => campaign.status === "active" || campaign.isActive);
   const activePipelines = pipelines.filter((pipeline) => pipeline.status === "running");
@@ -114,28 +110,12 @@ export default function HomePage() {
   const availableMinutes = balanceCents == null ? null : Math.floor(balanceCents / rate);
   const lowBalance = balanceCents != null && balanceCents < 10_000;
 
-  const plansQ = useQuery({
-    queryKey: ["call-plans", "home"],
-    queryFn: () => customFetch<Array<{
-      id: number;
-      name: string;
-      status: string;
-      totalRuns: number;
-      lastRunAt: string | null;
-      agentId: number;
-    }>>("/api/journeys"),
-    refetchInterval: 30_000,
-  });
-  const plans = plansQ.data ?? [];
-  const runningPlans = plans.filter((p) => p.status === "active").slice(0, 6);
-
   const hasAgent = agents.length > 0;
-  const hasPhone = phones.length > 0;
-  const hasPlan = plans.length > 0;
+  const hasLeads = campaigns.length > 0;
   const setup = [
     { label: "Create an agent", done: hasAgent, href: "/app/agents?create=1" },
-    { label: "Connect a phone number", done: hasPhone, href: "/app/phone-numbers" },
-    { label: "Make a call plan", done: hasPlan, href: "/app/call-plans" },
+    { label: "Create a campaign", done: hasLeads, href: "/app/campaigns" },
+    { label: "Connect phone / channels", done: true, href: "/app/connections" },
   ];
   const setupDone = setup.every((item) => item.done);
 
@@ -168,16 +148,6 @@ export default function HomePage() {
   }
 
   const recentReach = [
-    ...runningPlans.map((plan) => ({
-      id: `plan-${plan.id}`,
-      name: plan.name,
-      detail: plan.totalRuns > 0
-        ? `${plan.totalRuns} run${plan.totalRuns === 1 ? "" : "s"} · live`
-        : "Live — waiting for people",
-      href: `/app/call-plans/${plan.id}`,
-      status: plan.status,
-      icon: ListOrdered,
-    })),
     ...activePipelines.map((pipeline) => ({
       id: `sheet-${pipeline.id}`,
       name: pipeline.name,
@@ -189,7 +159,7 @@ export default function HomePage() {
     ...activeCampaigns.map((campaign: any) => ({
       id: `flow-${campaign.id}`,
       name: campaign.name,
-      detail: "People list",
+      detail: "Lead list",
       href: `/app/campaigns/${campaign.id}`,
       status: campaign.status ?? "active",
       icon: Zap,
@@ -222,7 +192,7 @@ export default function HomePage() {
             </div>
             <h1 className="text-2xl font-semibold tracking-[-0.03em]">Create your first agent</h1>
             <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
-              Who talks on the phone. Then make a call plan for what happens next.
+              Build the voice agent first, then create a campaign to dial leads.
             </p>
           </div>
           <div className="grid gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-2">
@@ -267,9 +237,9 @@ export default function HomePage() {
       actions={
         !isManagedClient ? (
           <div className="flex flex-wrap items-center gap-2">
-            <Button size="sm" variant="outline" className="h-8 gap-1.5 px-3 text-xs" onClick={() => navigate("/app/call-plans")}>
-              <ListOrdered className="size-3.5" />
-              New call plan
+            <Button size="sm" variant="outline" className="h-8 gap-1.5 px-3 text-xs" onClick={() => navigate("/app/campaigns")}>
+              <Plus className="size-3.5" />
+              New campaign
             </Button>
             <Button size="sm" className="h-8 gap-1.5 px-3 text-xs" onClick={() => navigate("/app/agents?create=1")}>
               <Plus className="size-3.5" />
@@ -284,22 +254,28 @@ export default function HomePage() {
         <div className="min-w-0 overflow-hidden rounded-lg border border-border">
           <div className="flex h-10 items-center justify-between border-b border-border px-3.5">
             <h2 className="text-[13px] font-semibold">What’s running</h2>
-            <Link href="/app/call-plans" className="text-[11px] text-muted-foreground hover:text-foreground">
-              Call plans
+            <Link href="/app/history" className="text-[11px] text-muted-foreground hover:text-foreground">
+              History
             </Link>
           </div>
           {recentReach.length === 0 ? (
             <div className="px-3.5 py-10 text-center">
-              <p className="text-[12px] text-muted-foreground">Nothing running yet.</p>
-              <div className="mt-3 flex justify-center gap-2">
-                <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => navigate("/app/call-plans")}>
-                  <ListOrdered className="size-3.5" />
-                  Make a call plan
-                </Button>
-                <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={() => navigate("/app/agents?create=1")}>
-                  <Plus className="size-3.5" />
-                  New agent
-                </Button>
+              <p className="text-[12px] font-medium text-foreground">Nothing in the queue yet</p>
+              <p className="mt-1.5 text-[11px] text-muted-foreground leading-relaxed max-w-sm mx-auto">
+                Create an agent, then start a campaign to upload leads and dial.
+              </p>
+              <div className="mt-4 flex justify-center gap-2">
+                {!hasAgent ? (
+                  <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => navigate("/app/agents?create=1")}>
+                    <Plus className="size-3.5" />
+                    Create agent
+                  </Button>
+                ) : (
+                  <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => navigate("/app/campaigns")}>
+                    <Plus className="size-3.5" />
+                    New campaign
+                  </Button>
+                )}
               </div>
             </div>
           ) : (
@@ -362,7 +338,7 @@ export default function HomePage() {
             <section className="rounded-lg border border-border bg-card">
               <div className="border-b border-border px-3.5 py-3">
                 <h2 className="text-[11px] font-semibold">Finish setup</h2>
-                <p className="mt-0.5 text-[10px] text-muted-foreground">Agent → phone → call plan.</p>
+                <p className="mt-0.5 text-[10px] text-muted-foreground">Agent → Campaign → dial.</p>
               </div>
               <div className="p-2">
                 {setup.map((item, index) => (
@@ -384,88 +360,87 @@ export default function HomePage() {
                     <span className={cn("min-w-0 flex-1 truncate", item.done && "text-muted-foreground")}>
                       {item.label}
                     </span>
-                    {!item.done && <ArrowRight className="size-3 text-muted-foreground" />}
+                    <ArrowRight className="size-3 text-muted-foreground/40" />
                   </Link>
                 ))}
               </div>
             </section>
           )}
-
-          <section className="rounded-lg border border-border bg-card">
-            <div className="flex h-10 items-center justify-between border-b border-border px-3.5">
-              <h2 className="text-[11px] font-semibold">Workspace health</h2>
-              {issues.length === 0 && <StatusDot tone="success" />}
-            </div>
-            {issues.length === 0 ? (
-              <p className="px-3.5 py-4 text-[10px] text-muted-foreground">No action needed.</p>
-            ) : (
+          {issues.length > 0 && (
+            <section className="rounded-lg border border-border bg-card">
+              <div className="border-b border-border px-3.5 py-3">
+                <h2 className="text-[11px] font-semibold">Needs attention</h2>
+              </div>
               <div className="divide-y divide-border/70">
-                {issues.slice(0, 4).map((issue) => (
+                {issues.map((issue) => (
                   <Link
-                    key={`${issue.title}-${issue.href}`}
+                    key={issue.title}
                     href={issue.href}
-                    className="flex gap-2.5 px-3.5 py-3 hover:bg-muted/35"
+                    className="flex min-h-11 items-start gap-2 px-3.5 py-2.5 hover:bg-muted/35"
                   >
                     <CircleAlert
                       className={cn(
                         "mt-0.5 size-3.5 shrink-0",
-                        issue.tone === "danger" ? "text-rose-500" : "text-amber-500",
+                        issue.tone === "danger" ? "text-destructive" : "text-amber-500",
                       )}
                     />
                     <div className="min-w-0">
-                      <p className="truncate text-[11px] font-medium">{issue.title}</p>
-                      <p className="mt-0.5 truncate text-[10px] text-muted-foreground">{issue.detail}</p>
+                      <p className="text-[11px] font-medium">{issue.title}</p>
+                      <p className="text-[10px] text-muted-foreground">{issue.detail}</p>
                     </div>
                   </Link>
                 ))}
               </div>
-            )}
-          </section>
+            </section>
+          )}
+          {balanceCents != null && (
+            <Link
+              href="/app/wallet"
+              className="flex items-center gap-2.5 rounded-lg border border-border px-3.5 py-3 hover:bg-muted/35"
+            >
+              <Wallet className="size-3.5 text-muted-foreground" />
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] font-medium">Wallet</p>
+                <p className="text-[10px] text-muted-foreground">
+                  ₹{(balanceCents / 100).toFixed(0)}
+                  {availableMinutes != null ? ` · ~${availableMinutes} min` : ""}
+                </p>
+              </div>
+              <ArrowRight className="size-3 text-muted-foreground/40" />
+            </Link>
+          )}
+          {calls.slice(0, 4).length > 0 && (
+            <section className="rounded-lg border border-border bg-card">
+              <div className="flex h-10 items-center justify-between border-b border-border px-3.5">
+                <h2 className="text-[11px] font-semibold">Recent calls</h2>
+                <Link href="/app/history" className="text-[10px] text-muted-foreground hover:text-foreground">
+                  All
+                </Link>
+              </div>
+              <div className="divide-y divide-border/70">
+                {calls.slice(0, 4).map((call: any) => (
+                  <Link
+                    key={call.id}
+                    href={`/app/calls/${call.id}`}
+                    className="flex min-h-10 items-center gap-2 px-3.5 hover:bg-muted/35"
+                  >
+                    <Phone className="size-3 text-muted-foreground shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[11px] font-medium">
+                        {call.toNumber || call.fromNumber || `Call ${call.id}`}
+                      </p>
+                      <p className="truncate text-[10px] text-muted-foreground">
+                        {relativeTime(call.startedAt ?? call.createdAt)} · {durationLabel(call.durationSeconds)}
+                      </p>
+                    </div>
+                    <StatusDot tone={statusTone(String(call.status ?? ""))} />
+                  </Link>
+                ))}
+              </div>
+            </section>
+          )}
         </aside>
       </div>
-
-      <div className="mt-5">
-        <section className="overflow-hidden rounded-lg border border-border bg-card">
-          <div className="flex h-10 items-center justify-between border-b border-border px-3.5">
-            <h2 className="text-[11px] font-semibold">Recent history</h2>
-            <Link href="/app/history" className="text-[10px] text-muted-foreground hover:text-foreground">
-              Open History
-            </Link>
-          </div>
-          {callsQ.isLoading ? (
-            <p className="px-3.5 py-8 text-center text-[10px] text-muted-foreground">Loading…</p>
-          ) : calls.length === 0 ? (
-            <p className="px-3.5 py-8 text-center text-[10px] text-muted-foreground">No calls yet.</p>
-          ) : (
-            <div className="divide-y divide-border/70">
-              {calls.slice(0, 6).map((call: any) => (
-                <Link
-                  key={call.id}
-                  href={`/app/history/${call.id}`}
-                  className="grid min-h-11 grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 px-3.5 text-[10px] hover:bg-muted/35"
-                >
-                  <div className="flex min-w-0 items-center gap-2">
-                    <StatusDot tone={statusTone(String(call.status ?? ""))} />
-                    <span className="truncate font-mono text-[10px]">
-                      {call.direction === "outbound" ? call.toNumber : call.fromNumber}
-                    </span>
-                  </div>
-                  <span className="text-muted-foreground">{durationLabel(call.durationSeconds)}</span>
-                  <span className="w-12 text-right text-muted-foreground">{relativeTime(call.createdAt)}</span>
-                </Link>
-              ))}
-            </div>
-          )}
-        </section>
-      </div>
-
-      <footer className="mt-5 flex items-center justify-between border-t border-border/70 pt-4 text-[11px] text-muted-foreground">
-        <span>{agents.length} agent{agents.length === 1 ? "" : "s"} in this workspace</span>
-        <Link href="/app/wallet" className="inline-flex items-center gap-1.5 hover:text-foreground">
-          <Wallet className="size-3" />
-          {availableMinutes == null ? "Billing" : `~${availableMinutes} minutes available`}
-        </Link>
-      </footer>
     </StripePage>
   );
 }

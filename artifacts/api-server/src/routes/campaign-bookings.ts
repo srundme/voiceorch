@@ -8,6 +8,8 @@
 
 import { Router, type IRouter } from "express";
 import { getAuth } from "../lib/auth-compat.js";
+import { requireAuth } from "../middlewares/requireAuth.js";
+import { clientContext } from "../middlewares/clientContext.js";
 import {
   db, campaignsTable, campaignLeadsTable, campaignBatchesTable,
   callBookingsTable, bookingsTable, eventTypesTable,
@@ -15,6 +17,8 @@ import {
 import { eq, and, sql, desc, or, ilike } from "drizzle-orm";
 
 const router: IRouter = Router();
+
+router.use(requireAuth, clientContext);
 
 async function requireCampaign(campaignId: number, userId: string) {
   const [row] = await db.select({ id: campaignsTable.id })
@@ -189,6 +193,9 @@ router.patch("/campaigns/:id/bookings/:bookingId/cancel", async (req, res): Prom
     await db.update(bookingsTable)
       .set({ status: "cancelled", cancelledAt: new Date(), updatedAt: new Date() })
       .where(eq(bookingsTable.id, cb.schedulingBookingId));
+    void import("../services/meet-auto-dispatch.js").then(({ cancelMeetBotForBooking }) =>
+      cancelMeetBotForBooking(cb.schedulingBookingId!),
+    );
   }
 
   res.json({ id: bookingId, status: "cancelled" });

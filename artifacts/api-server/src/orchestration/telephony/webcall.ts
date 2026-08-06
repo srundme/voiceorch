@@ -41,8 +41,11 @@ export async function handleWebcallWebSocket(
     linkId?: number | null;
     hdAudio?: boolean;
     meetMid?: string;
+    meetBotToken?: string;
     meetingMemoryPhone?: string;
+    meetingMemoryEmail?: string;
     meetingSourceCallId?: number;
+    meetingUrl?: string;
     passMemory?: boolean;
     passCallContext?: boolean;
   },
@@ -192,10 +195,14 @@ export async function handleWebcallWebSocket(
       rawPcmOutputRate: opts?.hdAudio ? 16000 : 8000,
       ...(opts?.meetMid
         ? {
+            meetMid: opts.meetMid,
+            ...(opts.meetBotToken ? { meetBotToken: opts.meetBotToken } : {}),
             ...(opts.meetingMemoryPhone ? { meetingMemoryPhone: opts.meetingMemoryPhone } : {}),
+            ...(opts.meetingMemoryEmail ? { meetingMemoryEmail: opts.meetingMemoryEmail } : {}),
             ...(typeof opts.meetingSourceCallId === "number"
               ? { meetingSourceCallId: opts.meetingSourceCallId }
               : {}),
+            ...(opts.meetingUrl ? { meetingUrl: opts.meetingUrl } : {}),
             ...(opts.passMemory === false ? { passMemory: false } : {}),
             ...(opts.passCallContext === false ? { passCallContext: false } : {}),
           }
@@ -212,12 +219,13 @@ export async function handleWebcallWebSocket(
     // Meeting bot: attach the pipeline to the speaker roster so Recall
     // participant webhooks can feed names into the live conversation.
     if (opts?.meetMid) {
-      const pipeline = getSession(sid)?.pipeline;
+      const active = getSession(sid);
+      const pipeline = active?.pipeline;
       if (pipeline) {
         // Meeting etiquette (e.g. no farewell auto-hangup) must apply even if
         // the roster hasn't formed yet, so mark the mode unconditionally.
         pipeline.markMeetingMode?.();
-        attachMeetSession(opts.meetMid, pipeline);
+        attachMeetSession(opts.meetMid, pipeline, active?.callId ?? null);
       }
     }
     if (endedBeforeReady) {

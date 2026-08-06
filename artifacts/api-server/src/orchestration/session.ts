@@ -2,6 +2,7 @@ import { createHmac, createHash, randomBytes } from "crypto";
 import { getSelfBaseUrl } from "../lib/app-domain.js";
 import { db, agentsTable, callsTable, providersTable, platformSettingsTable, campaignLeadsTable, knowledgeEntriesTable, callTransfersTable, usersTable, walletTransactionsTable, bookingsTable, eventTypesTable, scheduledCallbacksTable, campaignsTable, executionLogsTable, squadsTable, squadRunsTable, phoneNumbersTable } from "@workspace/db";
 import { createExecutionLogger, writeCallEndedLog, writeCallStartedLog, logRecordingEvent, EXEC_COMPONENTS } from "../services/execution-log.js";
+import { computeProRataDebitCents, isNonBillableCallStatus } from "../services/call-billing.js";
 import { getFlatRateCentsPerMin, resolveAgentBillingMode, resolveOwnTelephonyDiscount } from "../services/minute-rates.js";
 import { resolvePartnerBilling, creditPartnerSpreadOnCall } from "../services/partner-billing.js";
 import { getAttachedSourceIds, buildKnowledgeBaseBlockEx } from "./kb-retrieval.js";
@@ -38,7 +39,7 @@ import { resolveMicSensitivity, resolveBargeInEnergyThreshold } from "./mic-sens
 import { loadPcmLoop, TRACK_PARAMS } from "./ambient.js";
 import type { AgentConfig, AgentTool, TelephonyProvider, SessionTransport, PipelineMetrics } from "./types.js";
 import { logger } from "../lib/logger.js";
-import { parseMeetingsConfig } from "../services/meeting-runtime.js";
+import { MEETING_BEHAVIOR_PROMPT, parseMeetingsConfig } from "../services/meeting-runtime.js";
 import {
   saveSessionMeta,
   patchSessionMeta,
@@ -47,6 +48,11 @@ import {
 } from "./sessionStore.js";
 import { destroyAudioSession } from "./audioPool.js";
 import { disposeCall } from "../services/disposition.js";
+import {
+  buildCallEndedWebhookPayload,
+  dispatchWebhooks,
+  flatDispositionFromTaxonomy,
+} from "../routes/webhook-endpoints.js";
 import { computeOperationalOutcome, setOperationalOutcome } from "../services/operational-outcome.js";
 import { appendTraiDisclosure, scanForOptOut } from "../services/trai/index.js";
 import { appendDpdpDisclosure, scanAndRedactPII } from "../services/dpdp/index.js";
@@ -64,6 +70,7 @@ import {
   canonicalizeCallerKey,
   loadCallerProfile,
   loadCallerContext,
+  findCallerPhoneByEmail,
   injectCallerMemory,
   injectEnhancedMemory,
   isResumeDroppedCall,
@@ -220,12 +227,20 @@ export async function createSession(params: {
   /** 16000 for browser webcall clients that negotiated HD audio; default 8000. */
   rawPcmOutputRate?: 8000 | 16000;
   /**
-   * Meeting bot (Channels → Meetings): contact phone for caller memory when
-   * passMemory is on. Does not change the call-log fromNumber (still meetbot-*).
+   * Meeting bot: contact phone for caller memory when passMemory is on.
+   * Does not change the call-log fromNumber (still meetbot-*).
    */
   meetingMemoryPhone?: string;
   /** Prior call id whose summary is injected when passCallContext is on. */
   meetingSourceCallId?: number;
+  /** Meet/Zoom/Teams URL for this bot session (rejoin tool + prompt). */
+  meetingUrl?: string;
+  /** Meeting roster id (from meet-bot token mid). */
+  meetMid?: string;
+  /** Full meet-bot token for presentation page URL construction. */
+  meetBotToken?: string;
+  /** Booking attendee email for memory lookup when phone is unknown. */
+  meetingMemoryEmail?: string;
   /** Snapshot from meet-bot token; default true when omitted. */
   passMemory?: boolean;
   passCallContext?: boolean;
@@ -395,15 +410,34 @@ export async function createSession(params: {
     hour: "2-digit", minute: "2-digit", timeZone: agentTimezone,
   });
   let effectiveSystemPrompt = agent.generatedPrompt ?? agent.systemPrompt;
-  // Meeting bots: Channels → Meetings "meeting prompt" replaces the call prompt
-  // when set. Date/time + memory/context blocks still append below.
+  // Meeting bots: meeting prompt replaces the call prompt when set.
+  // Date/time + memory/context blocks still append below.
   const isMeetBotSession =
     typeof params.fromNumber === "string" && params.fromNumber.startsWith("meetbot-");
+  const meetingsCfg = parseMeetingsConfig(agentCfg);
   if (isMeetBotSession) {
-    const meetingPrompt = parseMeetingsConfig(agentCfg).meetingPrompt.trim();
+    const meetingPrompt = meetingsCfg.meetingPrompt.trim();
     if (meetingPrompt) {
       effectiveSystemPrompt = meetingPrompt;
-      logger.info({ agentId: params.agentId }, "Using Channels meeting prompt for meet-bot session");
+      logger.info({ agentId: params.agentId }, "Using meeting prompt for meet-bot session");
+    }
+    effectiveSystemPrompt += `\n\n${MEETING_BEHAVIOR_PROMPT}`;
+    if (typeof params.meetingUrl === "string" && params.meetingUrl.trim()) {
+      effectiveSystemPrompt +=
+        `\n\n[CURRENT MEETING LINK] ${params.meetingUrl.trim()}\n` +
+        `Use this URL with schedule_meet_rejoin when participants ask you to rejoin later.`;
+    }
+    if (meetingsCfg.presentationUrl) {
+      effectiveSystemPrompt +=
+        `\n\n[PRESENTATION DECK] ${meetingsCfg.presentationUrl}\n` +
+        (meetingsCfg.presentationAutoStart
+          ? `Screenshare may already be active — use next_slide / previous_slide / stop_presentation as needed.`
+          : `Call start_presentation when asked to share slides (url optional).`);
+    }
+    if (typeof params.meetingMemoryEmail === "string" && params.meetingMemoryEmail.trim()) {
+      effectiveSystemPrompt +=
+        `\n\n[BOOKING ATTENDEE EMAIL] ${params.meetingMemoryEmail.trim()}\n` +
+        `Prefer matching this person in the room by name/email when relevant.`;
     }
   }
   effectiveSystemPrompt += `\n\n[DATE/TIME CONTEXT] Today is ${dateCtxParts}. Current time is ${timeCtxParts} (${agentTimezone}).`;
@@ -562,7 +596,11 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
           ? { reasoningEffort: null }
           : {}),
     },
-    maxDuration: agent.maxDuration ?? 600,
+    // Meet bots use meeting-specific length/silence (Builder → Meetings), not
+    // phone maxDuration / silenceTimeoutSeconds — waiting for late joiners is normal.
+    maxDuration: isMeetBotSession
+      ? meetingsCfg.maxDurationSeconds
+      : (agent.maxDuration ?? 600),
     asrProvider: agent.asrProvider,
     asrModel: agent.asrModel,
     llmProvider: agent.llmProvider,
@@ -578,8 +616,11 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     endCallPhrases,
     // Fall back to a default so idle/dead-air calls self-terminate instead of
     // lingering until the stuck-call sweep. `?? ` keeps an explicit 0 (disabled)
-    // and any explicit value the agent configured.
-    silenceTimeoutSeconds: agent.silenceTimeoutSeconds ?? DEFAULT_SILENCE_TIMEOUT_SECONDS,
+    // and any explicit value the agent configured. Meet bots: longer patience or off.
+    silenceTimeoutSeconds: isMeetBotSession
+      ? (meetingsCfg.silenceHangupEnabled ? meetingsCfg.silenceTimeoutSeconds : 0)
+      : (agent.silenceTimeoutSeconds ?? DEFAULT_SILENCE_TIMEOUT_SECONDS),
+    ...(isMeetBotSession ? { isMeetingSession: true } : {}),
     // AgentConfig.language is the agent's SPOKEN language — it drives the
     // pipeline's [LANGUAGE — ABSOLUTE RULE] block and the TTS voice language.
     // Use the unified resolver so the language rule, TTS, and STT all agree.
@@ -762,7 +803,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
   //   one key. Placeholder/sentinel + missing numbers resolve to null (cold start).
   const callDirection: CallDirection = params.callDirection ?? "inbound";
   // Meeting bots normally key off meetbot-<mid> (no personal memory). When
-  // Channels → Meetings passMemory + memoryPhone are set (e.g. booking auto-join),
+  // Meeting passMemory + memoryPhone are set (e.g. booking auto-join),
   // load contact memory under that phone while the call log stays on meetbot-*.
   let callerPhone = isWebcall
     ? canonicalizeCallerKey(params.fromNumber)
@@ -835,6 +876,30 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
   try {
     memoryOwnerAgentId = await resolveSquadMemoryOwnerAgentId(params.agentId, agent.userId, params.squadId ?? null);
   } catch { /* non-fatal — fall back to own agentId */ }
+  // Booking attendee email → existing caller memory (email fact → phone key).
+  if (
+    isMeetBotSession &&
+    params.passMemory !== false &&
+    !callerPhone &&
+    typeof params.meetingMemoryEmail === "string" &&
+    params.meetingMemoryEmail.trim()
+  ) {
+    try {
+      const byEmail = await findCallerPhoneByEmail(
+        memoryOwnerAgentId,
+        params.meetingMemoryEmail.trim(),
+      );
+      if (byEmail) {
+        callerPhone = byEmail;
+        logger.info(
+          { agentId: params.agentId, email: params.meetingMemoryEmail.trim() },
+          "Meet-bot memory resolved via attendee email",
+        );
+      }
+    } catch (err) {
+      logger.warn({ err }, "Meet-bot email memory lookup failed");
+    }
+  }
   // Persona-swap invalidation compares the answering agent's prompt hash; with
   // a shared owner record + different member prompts it would false-fire and
   // wipe squad memory on every member alternation — disable it when shared.
@@ -887,12 +952,20 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
         })
       : Promise.resolve([] as Array<typeof providersTable.$inferSelect>),
 
-    // 5. Upcoming bookings (pre-fetched in parallel)
-    (!isWebcall && callerPhone)
+    // 5. Upcoming bookings (pre-fetched in parallel). Meet bots use the contact
+    // phone / source call — not meetbot-* synthetic numbers.
+    ((!isWebcall || isMeetBotSession) && callerPhone)
       ? (async () => {
-          const callerRawNumber = callDirection === "outbound" ? params.toNumber : params.fromNumber;
-          if (!callerRawNumber || !agent.id) return [];
+          const callerRawNumber = isMeetBotSession
+            ? (params.meetingMemoryPhone?.trim() || null)
+            : (callDirection === "outbound" ? params.toNumber : params.fromNumber);
+          if (!agent.id) return [];
           const now = new Date();
+          const sourceCallId =
+            isMeetBotSession && typeof params.meetingSourceCallId === "number" && params.meetingSourceCallId > 0
+              ? params.meetingSourceCallId
+              : null;
+          if (!callerRawNumber && !sourceCallId) return [];
           return db
             .select({
               slotStart: bookingsTable.slotStart,
@@ -900,6 +973,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
               status: bookingsTable.status,
               meetLink: bookingsTable.meetLink,
               eventName: eventTypesTable.name,
+              bookingId: bookingsTable.id,
             })
             .from(bookingsTable)
             .innerJoin(callsTable, eq(bookingsTable.callId, callsTable.id))
@@ -908,8 +982,13 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
               and(
                 eq(callsTable.agentId, agent.id),
                 or(
-                  eq(callsTable.fromNumber, callerRawNumber),
-                  eq(callsTable.toNumber, callerRawNumber),
+                  ...(callerRawNumber
+                    ? [
+                        eq(callsTable.fromNumber, callerRawNumber),
+                        eq(callsTable.toNumber, callerRawNumber),
+                      ]
+                    : []),
+                  ...(sourceCallId ? [eq(bookingsTable.callId, sourceCallId)] : []),
                 ),
                 gt(bookingsTable.slotStart, now),
                 ne(bookingsTable.status, "cancelled"),
@@ -1019,7 +1098,9 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
   }
 
   // ── Inject DB-backed upcoming bookings (pre-fetched in parallel) ─────────────
-  if (!isWebcall && callerPhone && upcomingBookingsResult && upcomingBookingsResult.length > 0) {
+  // Meet bots: also inject upcoming bookings when we have a contact phone so
+  // the agent can reschedule without guessing booking ids.
+  if ((!isWebcall || isMeetBotSession) && callerPhone && upcomingBookingsResult && upcomingBookingsResult.length > 0) {
     try {
       const tz = (agentCfg["timezone"] as string | undefined) || "Asia/Kolkata";
       const now = new Date();
@@ -1043,7 +1124,11 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
         });
         const delta = dayDelta(todayYmd, ymdInTz(b.slotStart));
         const title = b.eventName ? `"${b.eventName}"` : "the meeting";
-        return `- ${title} on ${abs} (that is ${relWord(delta)}).`;
+        const idPart = "bookingId" in b && typeof (b as { bookingId?: number }).bookingId === "number"
+          ? ` booking_id=${(b as { bookingId: number }).bookingId}`
+          : "";
+        const linkPart = b.meetLink ? ` meet_link=${b.meetLink}` : "";
+        return `- ${title} on ${abs} (that is ${relWord(delta)}).${idPart}${linkPart}`;
       });
 
       agentConfig.systemPrompt +=
@@ -1053,7 +1138,10 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
         `that may appear in the caller memory above, which could be stale.\n` +
         lines.join("\n") +
         `\nWhen you refer to a meeting, say the relative day-word that is correct for TODAY ` +
-        `(e.g. only say "tomorrow" if it is genuinely the next day; say "today" if it is today).`;
+        `(e.g. only say "tomorrow" if it is genuinely the next day; say "today" if it is today).` +
+        (isMeetBotSession
+          ? `\nTo move a meeting, call reschedule with the booking_id above. A SnapServe agent will auto-join the new slot when a Meet link exists.`
+          : "");
 
       logger.info(
         { agentId: params.agentId, callerPhone, bookingCount: upcomingBookingsResult.length },
@@ -1104,7 +1192,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     logger.info({ agentId: params.agentId }, "Resume context injected into system prompt for network-drop callback");
   }
 
-  // Meeting bot: inject prior phone-call summary when Channels → Meetings
+  // Meeting bot: inject prior phone-call summary when
   // passCallContext is on and the launch token carried a sourceCallId.
   if (
     isMeetBotSession &&
@@ -1529,8 +1617,18 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
           ...(params.externalCallId ? { externalCallId: params.externalCallId } : {}),
           ...(params.platformTelephony ? { platformTelephony: true } : {}),
           ...(isWebcall ? { transport: "webcall", isTestCall: true } : {}),
+          ...(isMeetBotSession ? { transport: "meetbot", isTestCall: true } : {}),
           direction: callDirection,
           ...(callerPhone ? { callerKey: callerPhone } : {}),
+          ...(isMeetBotSession && typeof params.meetingSourceCallId === "number"
+            ? { meetingSourceCallId: params.meetingSourceCallId }
+            : {}),
+          ...(isMeetBotSession && params.meetingMemoryPhone
+            ? { meetingMemoryPhone: params.meetingMemoryPhone.trim() }
+            : {}),
+          ...(isMeetBotSession && params.meetingUrl
+            ? { meetUrl: params.meetingUrl.trim() }
+            : {}),
           ...(inboundSheetMeta
             ? {
                 __sheet_pipeline_id: inboundSheetMeta.pipelineId,
@@ -2140,6 +2238,15 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
         providerKeys,
         telephonyProvider: params.telephonyProvider,
         callerPhone,
+        bookingLineageCallId:
+          isMeetBotSession && typeof params.meetingSourceCallId === "number" && params.meetingSourceCallId > 0
+            ? params.meetingSourceCallId
+            : null,
+        currentMeetUrl: isMeetBotSession && params.meetingUrl ? params.meetingUrl.trim() : null,
+        meetMid: isMeetBotSession && params.meetMid ? params.meetMid : null,
+        meetBotToken: isMeetBotSession && params.meetBotToken ? params.meetBotToken : null,
+        presentationDefaultUrl:
+          isMeetBotSession && meetingsCfg.presentationUrl ? meetingsCfg.presentationUrl : null,
         memoryOwnerAgentId,
         campaignLeadId: params.campaignLeadId ?? null,
         onAudioOut: params.onAudioOut,
@@ -2171,6 +2278,15 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     providerKeys,
     telephonyProvider: params.telephonyProvider,
     callerPhone,
+    bookingLineageCallId:
+      isMeetBotSession && typeof params.meetingSourceCallId === "number" && params.meetingSourceCallId > 0
+        ? params.meetingSourceCallId
+        : null,
+    currentMeetUrl: isMeetBotSession && params.meetingUrl ? params.meetingUrl.trim() : null,
+    meetMid: isMeetBotSession && params.meetMid ? params.meetMid : null,
+    meetBotToken: isMeetBotSession && params.meetBotToken ? params.meetBotToken : null,
+    presentationDefaultUrl:
+      isMeetBotSession && meetingsCfg.presentationUrl ? meetingsCfg.presentationUrl : null,
     memoryOwnerAgentId,
     campaignLeadId: params.campaignLeadId ?? null,
     onAudioOut: params.onAudioOut,
@@ -3133,7 +3249,14 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
         // that route.  We bill here instead — skipped if costCents is already set
         // (prevents double-debit if the route is also called).
         const sessionCallUserId = call.userId ?? ag.userId ?? null;
-        if (sessionCallUserId && durationSeconds > 0 && !(call.costCents != null && call.costCents > 0)) {
+        // no_pickup / busy / failed: never charge a full minute (or anything) —
+        // common for short webcalls that never start a turn.
+        if (
+          sessionCallUserId &&
+          durationSeconds > 0 &&
+          !isNonBillableCallStatus(callStatus) &&
+          !(call.costCents != null && call.costCents > 0)
+        ) {
           try {
             const billingMode     = await resolveAgentBillingMode(sessionCallUserId, ag);
             // Partner-managed clients bill at their partner-set rate; spread is
@@ -3143,7 +3266,7 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
               ?? Math.max(0, getFlatRateCentsPerMin(billingMode) - await resolveOwnTelephonyDiscount(sessionCallUserId, ag));
             const modeLabel       = partnerBilling ? "partner" : billingMode === "managed" ? "managed" : "BYOP";
             const rateLabel       = `₹${(rateCentsPerMin / 100).toFixed(2)}/min (${modeLabel})`;
-            const debitCents      = Math.max(1, Math.round((durationSeconds / 60) * rateCentsPerMin));
+            const debitCents      = computeProRataDebitCents(durationSeconds, rateCentsPerMin);
             if (debitCents > 0) {
               // Atomic billing claim: flip costCents from unset→set in ONE
               // conditional UPDATE — only the winner debits + credits (the
@@ -3256,6 +3379,7 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
         void (async () => {
           let callSummary = "";
           let dispositionResult: Record<string, unknown> | null = null;
+          let successEvaluation: string | null = null;
 
           // 1. Generate call summary — always runs for every completed call.
           // Uses BYOP key when available; falls back to platform managed key (Groq).
@@ -3324,7 +3448,10 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
             }
           }
 
-          // 2. Extract disposition
+          // 2. Extract disposition BEFORE webhooks.
+          // Prefer legacy dispositionSchema when present; otherwise run taxonomy disposeCall
+          // (agent_dispositions). Must finish before webhook so disposition is never null
+          // when taxonomy/schema is configured.
           if (dispositionSchema.length > 0 && transcript && transcript.length > 50 && ag.userId) {
             try {
               const llmProvs = await db.select().from(providersTable).where(
@@ -3334,9 +3461,19 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
                   eq(providersTable.providerName, ag.llmProvider)
                 )
               );
-              const llmKey = llmProvs[0] ? decryptKey(llmProvs[0].apiKey) : undefined;
+              let llmKey: string | null = llmProvs[0] ? decryptKey(llmProvs[0].apiKey) : null;
+              let dispProvider = ag.llmProvider;
+              let dispModel = ag.llmModel;
+              if (!llmKey) {
+                const [row] = await db.select().from(platformSettingsTable).where(eq(platformSettingsTable.key, "managed_qwen_key"));
+                llmKey = row?.value?.trim() || process.env["GROQ_API_KEY"] || null;
+                if (llmKey) {
+                  dispProvider = "groq";
+                  dispModel = "llama-3.3-70b-versatile";
+                }
+              }
               if (llmKey) {
-                const llm = createLLMAdapter(ag.llmProvider, llmKey, ag.llmModel);
+                const llm = createLLMAdapter(dispProvider, llmKey, dispModel);
                 const fieldList = dispositionSchema
                   .map(f => `- "${f.key}" (${f.label}, type: ${f.type}${f.options?.length ? `, options: [${f.options.join(", ")}]` : ""})`)
                   .join("\n");
@@ -3363,6 +3500,29 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
             } catch (dispErr) {
               logger.warn({ sessionId, dispErr }, "Post-call disposition extraction failed");
             }
+          } else {
+            try {
+              const taxResult = await disposeCall({
+                agentId: call.agentId,
+                callId: session.callId,
+                transcript: transcript || null,
+                callEvents: [{ type: "duration", durationSec: durationSeconds }],
+                callStartedAt: call.createdAt ?? null,
+              });
+              dispositionResult = flatDispositionFromTaxonomy(taxResult);
+              if (dispositionResult) {
+                logger.info(
+                  {
+                    sessionId,
+                    primary: dispositionResult["primary"],
+                    sub: dispositionResult["sub"],
+                  },
+                  "Taxonomy disposition ready for webhook",
+                );
+              }
+            } catch (dispErr) {
+              logger.warn({ sessionId, dispErr }, "Post-call taxonomy disposition failed");
+            }
           }
 
           // 3. Evaluate call success against agent's success criteria (if configured)
@@ -3377,9 +3537,19 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
                   eq(providersTable.providerName, ag.llmProvider)
                 )
               );
-              const evalLlmKey = evalLlmProvs[0] ? decryptKey(evalLlmProvs[0].apiKey) : undefined;
+              let evalLlmKey: string | null = evalLlmProvs[0] ? decryptKey(evalLlmProvs[0].apiKey) : null;
+              let evalProvider = ag.llmProvider;
+              let evalModel = ag.llmModel;
+              if (!evalLlmKey) {
+                const [row] = await db.select().from(platformSettingsTable).where(eq(platformSettingsTable.key, "managed_qwen_key"));
+                evalLlmKey = row?.value?.trim() || process.env["GROQ_API_KEY"] || null;
+                if (evalLlmKey) {
+                  evalProvider = "groq";
+                  evalModel = "llama-3.3-70b-versatile";
+                }
+              }
               if (evalLlmKey) {
-                const evalLlm = createLLMAdapter(ag.llmProvider, evalLlmKey, ag.llmModel);
+                const evalLlm = createLLMAdapter(evalProvider, evalLlmKey, evalModel);
                 let evalRaw = "";
                 await evalLlm.chat(
                   [{ role: "user", content: `Success criteria: ${successCriteria}\n\nCall transcript:\n${transcript.slice(0, 6000)}\n\nDid this call meet the success criteria? Reply with PASS or FAIL on the first line, then one sentence of explanation.` }],
@@ -3388,8 +3558,9 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
                   (full) => { evalRaw = full; }
                 );
                 if (evalRaw.trim()) {
-                  await db.update(callsTable).set({ successEvaluation: evalRaw.trim() }).where(eq(callsTable.id, session.callId));
-                  logger.info({ sessionId, verdict: evalRaw.trim().slice(0, 60) }, "Post-call success evaluation complete");
+                  successEvaluation = evalRaw.trim();
+                  await db.update(callsTable).set({ successEvaluation }).where(eq(callsTable.id, session.callId));
+                  logger.info({ sessionId, verdict: successEvaluation.slice(0, 60) }, "Post-call success evaluation complete");
                 }
               }
             } catch (evalErr) {
@@ -3397,33 +3568,63 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
             }
           }
 
-          // 4. Fire webhook with complete enriched payload
+          // Re-read call for billing/metadata fields written earlier in endSession.
+          const [freshCall] = await db.select().from(callsTable).where(eq(callsTable.id, session.callId)).limit(1);
+          const webhookPayload = buildCallEndedWebhookPayload({
+            callId: session.callId,
+            executionId: freshCall?.executionId ?? call.executionId ?? null,
+            agentId: ag.id,
+            agentName: ag.name,
+            status: callStatus,
+            fromNumber: call.fromNumber,
+            toNumber: call.toNumber,
+            durationSeconds,
+            costCents: freshCall?.costCents ?? call.costCents ?? null,
+            transcript: transcript || null,
+            callSummary: callSummary || freshCall?.callSummary || null,
+            dispositionResult:
+              dispositionResult
+              ?? (freshCall?.dispositionResult as Record<string, unknown> | null)
+              ?? null,
+            successEvaluation: successEvaluation ?? freshCall?.successEvaluation ?? null,
+            recordingUrl: recordingUrl ?? freshCall?.recordingUrl ?? null,
+            recordingError: freshCall?.recordingError ?? call.recordingError ?? null,
+            amdResult: freshCall?.amdResult ?? call.amdResult ?? null,
+            transferType: freshCall?.transferType ?? call.transferType ?? null,
+            transferTarget: freshCall?.transferTarget ?? call.transferTarget ?? null,
+            campaignLeadId: session.campaignLeadId ?? null,
+            conversationCompleted: freshCall?.conversationCompleted ?? call.conversationCompleted ?? null,
+            primaryLanguage: freshCall?.primaryLanguage ?? call.primaryLanguage ?? null,
+            memoryRecognized: freshCall?.memoryRecognized ?? call.memoryRecognized ?? null,
+            errorMessage: freshCall?.errorMessage ?? call.errorMessage ?? null,
+            tokensSaved: freshCall?.tokensSaved ?? call.tokensSaved ?? null,
+            avgSttLatencyMs: avgSttMs,
+            avgLlmLatencyMs: avgLlmMs,
+            avgTtsLatencyMs: avgTtsMs,
+            createdAt: freshCall?.createdAt ?? call.createdAt ?? null,
+            endedAt,
+            metadata: freshCall?.metadata ?? call.metadata ?? null,
+          });
+
+          // 4. Agent webhook URL (Settings → Analytics) — full enriched payload
           if (ag.webhookUrl) {
-            const webhookPayload = {
-              callId:           session.callId,
-              agentId:          ag.id,
-              agentName:        ag.name,
-              status:           callStatus,
-              fromNumber:       call.fromNumber,
-              toNumber:         call.toNumber,
-              durationSeconds,
-              transcript:       transcript || null,
-              callSummary:      callSummary || null,
-              dispositionResult,
-              recordingUrl:     recordingUrl ?? null,
-              avgSttLatencyMs:  avgSttMs,
-              avgLlmLatencyMs:  avgLlmMs,
-              avgTtsLatencyMs:  avgTtsMs,
-              endedAt:          endedAt.toISOString(),
-            };
             const bodyStr = JSON.stringify(webhookPayload);
             const headers: Record<string, string> = { "Content-Type": "application/json" };
             if (webhookSecret) {
               headers["X-VoiceOrch-Signature"] =
                 "sha256=" + createHmac("sha256", webhookSecret).update(bodyStr, "utf8").digest("hex");
+              headers["X-SnapServe-Signature"] = headers["X-VoiceOrch-Signature"];
             }
             fetch(ag.webhookUrl, { method: "POST", headers, body: bodyStr }).catch((err) => {
               logger.error({ sessionId, webhookUrl: ag.webhookUrl, err }, "Webhook delivery failed");
+            });
+          }
+
+          // Workspace webhook endpoints (/app/webhooks) — same full payload
+          const webhookUserId = ag.userId ?? call.userId ?? null;
+          if (webhookUserId) {
+            dispatchWebhooks(webhookUserId, "call.completed", webhookPayload).catch((err) => {
+              logger.warn({ sessionId, err }, "Workspace webhook dispatch failed");
             });
           }
 
@@ -3483,7 +3684,7 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
                 summary: callSummary || null,
                 disposition: dispositionResult,
                 amdResult: call.amdResult ?? null,
-                successEvaluation: call.successEvaluation ?? null,
+                successEvaluation: successEvaluation ?? call.successEvaluation ?? null,
               });
             }
           } catch (taskEndErr) {
@@ -3507,21 +3708,6 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
             }
           }
         })();
-
-        // ── Post-call taxonomy disposition classification (fire-and-forget) ──────
-        // Uses the agent's configured Call Disposition taxonomy (agent_dispositions)
-        // and writes the result onto calls.disposition_result. No-ops when the agent
-        // has no taxonomy configured. Mutually exclusive with the legacy
-        // dispositionSchema extraction above (an agent uses one system or the other).
-        disposeCall({
-          agentId:    call.agentId,
-          callId:     session.callId,
-          transcript: transcript || null,
-          callEvents: [{ type: "duration", durationSec: durationSeconds }],
-          callStartedAt: call.createdAt ?? null,
-        }).catch((dispErr) => {
-          logger.warn({ sessionId, dispErr }, "Post-call taxonomy disposition failed");
-        });
 
         // ── Post-call caller memory update + callback detection (fire-and-forget) ──
         if (session.callerPhone && transcript && transcript.length > 50) {

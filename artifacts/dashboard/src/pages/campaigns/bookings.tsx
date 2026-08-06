@@ -86,14 +86,15 @@ function fmtRelative(iso: string | null): string {
   return diff > 0 ? "imminent" : "just passed";
 }
 
+const MONO_STATUS = "bg-muted text-foreground border-border";
 const STATUS_CFG: Record<string, { label: string; cls: string }> = {
-  pending:   { label: "Upcoming",  cls: "bg-sky-500/10 text-sky-600 border-sky-500/30"           },
-  scheduled: { label: "Upcoming",  cls: "bg-sky-500/10 text-sky-600 border-sky-500/30"           },
-  confirmed: { label: "Confirmed", cls: "bg-violet-500/10 text-violet-600 border-violet-500/30"  },
-  completed: { label: "Completed", cls: "bg-emerald-500/10 text-emerald-600 border-emerald-500/30" },
-  cancelled: { label: "Cancelled", cls: "bg-red-500/10 text-red-500 border-red-500/30"           },
-  canceled:  { label: "Cancelled", cls: "bg-red-500/10 text-red-500 border-red-500/30"           },
-  rescheduled: { label: "Rescheduled", cls: "bg-amber-500/10 text-amber-600 border-amber-500/30" },
+  pending:     { label: "Upcoming",    cls: MONO_STATUS },
+  scheduled:   { label: "Upcoming",    cls: MONO_STATUS },
+  confirmed:   { label: "Confirmed",   cls: MONO_STATUS },
+  completed:   { label: "Completed",   cls: MONO_STATUS },
+  cancelled:   { label: "Cancelled",   cls: MONO_STATUS },
+  canceled:    { label: "Cancelled",   cls: MONO_STATUS },
+  rescheduled: { label: "Rescheduled", cls: MONO_STATUS },
 };
 
 const SUB_TABS = [
@@ -193,8 +194,8 @@ export default function BookingsTab({ campaignId }: { campaignId: number }) {
           className="flex-1 min-w-[100px] rounded-lg border px-4 py-3 text-left border-border/40 bg-card hover:bg-muted/30 transition-all"
         >
           <div className="flex items-center gap-1.5 mb-1">
-            <Clock className="h-3 w-3 text-sky-500" />
-            <span className="text-[9px] uppercase tracking-widest font-semibold text-muted-foreground/50">Today</span>
+            <Clock className="h-3 w-3 text-muted-foreground" />
+            <span className="text-[9px] uppercase tracking-widest font-semibold text-muted-foreground">Today</span>
           </div>
           <p className="text-xl font-bold tabular-nums">{m?.today ?? "—"}</p>
         </button>
@@ -205,15 +206,15 @@ export default function BookingsTab({ campaignId }: { campaignId: number }) {
           className={cn(
             "flex-1 min-w-[100px] rounded-lg border px-4 py-3 text-left transition-all",
             tab === "upcoming"
-              ? "border-violet-500/50 bg-violet-500/10 shadow-sm"
+              ? "border-foreground/30 bg-muted shadow-sm"
               : "border-border/40 bg-card hover:bg-muted/30",
           )}
         >
           <div className="flex items-center gap-1.5 mb-1">
-            <CalendarDays className="h-3 w-3 text-violet-500" />
-            <span className="text-[9px] uppercase tracking-widest font-semibold text-violet-500">Upcoming</span>
+            <CalendarDays className="h-3 w-3 text-muted-foreground" />
+            <span className="text-[9px] uppercase tracking-widest font-semibold text-muted-foreground">Upcoming</span>
           </div>
-          <p className={cn("text-xl font-bold tabular-nums", tab === "upcoming" ? "text-violet-500" : "")}>
+          <p className="text-xl font-bold tabular-nums">
             {m?.upcoming ?? "—"}
           </p>
         </button>
@@ -224,15 +225,15 @@ export default function BookingsTab({ campaignId }: { campaignId: number }) {
           className={cn(
             "flex-1 min-w-[100px] rounded-lg border px-4 py-3 text-left transition-all",
             tab === "completed"
-              ? "border-emerald-500/50 bg-emerald-500/10 shadow-sm"
+              ? "border-foreground/30 bg-muted shadow-sm"
               : "border-border/40 bg-card hover:bg-muted/30",
           )}
         >
           <div className="flex items-center gap-1.5 mb-1">
-            <CheckCircle2 className="h-3 w-3 text-emerald-500" />
-            <span className="text-[9px] uppercase tracking-widest font-semibold text-emerald-500">Completed</span>
+            <CheckCircle2 className="h-3 w-3 text-muted-foreground" />
+            <span className="text-[9px] uppercase tracking-widest font-semibold text-muted-foreground">Completed</span>
           </div>
-          <p className={cn("text-xl font-bold tabular-nums", tab === "completed" ? "text-emerald-500" : "")}>
+          <p className="text-xl font-bold tabular-nums">
             {m?.completed ?? "—"}
           </p>
         </button>
@@ -243,15 +244,15 @@ export default function BookingsTab({ campaignId }: { campaignId: number }) {
           className={cn(
             "flex-1 min-w-[100px] rounded-lg border px-4 py-3 text-left transition-all",
             tab === "cancelled"
-              ? "border-red-500/50 bg-red-500/10 shadow-sm"
+              ? "border-foreground/30 bg-muted shadow-sm"
               : "border-border/40 bg-card hover:bg-muted/30",
           )}
         >
           <div className="flex items-center gap-1.5 mb-1">
-            <XCircle className="h-3 w-3 text-red-500" />
-            <span className="text-[9px] uppercase tracking-widest font-semibold text-red-500">Cancelled</span>
+            <XCircle className="h-3 w-3 text-muted-foreground" />
+            <span className="text-[9px] uppercase tracking-widest font-semibold text-muted-foreground">Cancelled</span>
           </div>
-          <p className={cn("text-xl font-bold tabular-nums", tab === "cancelled" ? "text-red-500" : "")}>
+          <p className="text-xl font-bold tabular-nums">
             {m?.cancelled ?? "—"}
           </p>
         </button>

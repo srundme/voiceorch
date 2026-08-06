@@ -33,6 +33,14 @@ export const phoneNumbersTable = pgTable("phone_numbers", {
   // Recurring monthly renewal charge (billed on the purchase-date anniversary,
   // i.e. exactly 30 days after purchasedAt / lastRenewalAt — NOT calendar month).
   renewalRateCents: integer("renewal_rate_cents").notNull().default(800), // $8.00 USD
+  /**
+   * How monthly renewals are funded:
+   * - 'autopay' — Razorpay mandate tops up wallet, then renewal debits wallet
+   * - 'wallet'  — wallet balance only (no mandate top-up); unpaid → grace → release
+   */
+  renewalMode: text("renewal_mode").notNull().default("wallet"),
+  /** After a failed renewal, release the number when this timestamp is reached. */
+  renewalGraceUntil: timestamp("renewal_grace_until", { withTimezone: true }),
   nextRenewalAt: timestamp("next_renewal_at", { withTimezone: true }),
   lastRenewalAt: timestamp("last_renewal_at", { withTimezone: true }),
   purchasedAt:   timestamp("purchased_at", { withTimezone: true }).notNull().defaultNow(),

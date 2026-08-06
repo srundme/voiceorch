@@ -1,5 +1,7 @@
 import { Router, type IRouter } from "express";
 import { getAuth } from "../lib/auth-compat.js";
+import { requireAuth } from "../middlewares/requireAuth.js";
+import { clientContext } from "../middlewares/clientContext.js";
 import {
   db, campaignsTable, campaignBatchesTable, campaignLeadsTable, callsTable,
   leadTimelineTable, batchImportRunsTable, agentsTable,
@@ -38,6 +40,8 @@ import {
 import { evaluateIrdaiGate, IRDAI_BLOCKED_MESSAGE, IRDAI_BLOCKED_CODE, type IrdaiGateResult } from "../services/irdai/gate.js";
 
 const router: IRouter = Router();
+
+router.use(requireAuth, clientContext);
 
 /**
  * Evaluate the IRDAI enforcement gate for a campaign's assigned agent. Reads the

@@ -1995,6 +1995,8 @@ export const ListPhoneNumbersResponseItem = zod.object({
   "purchasedAt": zod.coerce.date(),
   "monthlyRateCents": zod.number().optional().describe('Monthly cost in paise (INR; from Vobiz, 0 = no recurring fee)'),
   "renewalRateCents": zod.number().optional().describe('Recurring monthly renewal fee in paise (INR), charged from wallet balance on the purchase-date anniversary (30 days)'),
+  "renewalMode": zod.enum(['autopay', 'wallet']).optional().describe('How renewals are funded — autopay uses a Razorpay card mandate to top up the wallet; wallet uses balance only (unpaid past grace → release).'),
+  "renewalGraceUntil": zod.coerce.date().nullish().describe('If set, the number will be auto-released after this time if renewal remains unpaid.'),
   "nextRenewalAt": zod.coerce.date().nullish().describe('When the next renewal charge is due (30 days after purchasedAt\/lastRenewalAt). Null once released.'),
   "lastRenewalAt": zod.coerce.date().nullish(),
   "releasedAt": zod.coerce.date().nullish(),
@@ -2029,11 +2031,14 @@ export const ListAvailablePhoneNumbersResponse = zod.array(ListAvailablePhoneNum
  */
 export const initiatePhoneNumberPurchaseBodyNumberTypeDefault = `local`;
 
+export const initiatePhoneNumberPurchaseBodyRenewalModeDefault = `wallet`;
+
 export const InitiatePhoneNumberPurchaseBody = zod.object({
   "number": zod.string().describe('E.164 number to purchase (from the available list)'),
   "countryCode": zod.string(),
   "region": zod.string().optional(),
-  "numberType": zod.enum(['local', 'toll_free', 'mobile']).default(initiatePhoneNumberPurchaseBodyNumberTypeDefault)
+  "numberType": zod.enum(['local', 'toll_free', 'mobile']).default(initiatePhoneNumberPurchaseBodyNumberTypeDefault),
+  "renewalMode": zod.enum(['autopay', 'wallet']).default(initiatePhoneNumberPurchaseBodyRenewalModeDefault).describe('Autopay keeps the number via card mandate top-ups; wallet renews from balance only (unpaid → release after grace).')
 })
 
 export const InitiatePhoneNumberPurchaseResponse = zod.object({
@@ -2084,6 +2089,8 @@ export const AssignPhoneNumberResponse = zod.object({
   "purchasedAt": zod.coerce.date(),
   "monthlyRateCents": zod.number().optional().describe('Monthly cost in paise (INR; from Vobiz, 0 = no recurring fee)'),
   "renewalRateCents": zod.number().optional().describe('Recurring monthly renewal fee in paise (INR), charged from wallet balance on the purchase-date anniversary (30 days)'),
+  "renewalMode": zod.enum(['autopay', 'wallet']).optional().describe('How renewals are funded — autopay uses a Razorpay card mandate to top up the wallet; wallet uses balance only (unpaid past grace → release).'),
+  "renewalGraceUntil": zod.coerce.date().nullish().describe('If set, the number will be auto-released after this time if renewal remains unpaid.'),
   "nextRenewalAt": zod.coerce.date().nullish().describe('When the next renewal charge is due (30 days after purchasedAt\/lastRenewalAt). Null once released.'),
   "lastRenewalAt": zod.coerce.date().nullish(),
   "releasedAt": zod.coerce.date().nullish(),

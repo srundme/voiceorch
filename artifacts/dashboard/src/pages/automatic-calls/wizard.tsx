@@ -308,14 +308,21 @@ export default function AutomaticCallsWizardPage() {
   };
   const goBack = () => {
     const i = steps.indexOf(step);
-    if (i > 0) setStep(steps[i - 1]!);
+    if (i > 0) {
+      setStep(steps[i - 1]!);
+      return;
+    }
+    setLocation("/app/campaigns");
   };
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-8 space-y-6">
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="sm" asChild className="h-8 px-2">
-          <Link href="/app/automatic-calls"><ArrowLeft className="h-4 w-4" /></Link>
+        <Button variant="ghost" size="sm" asChild className="h-8 px-2 gap-1.5 text-muted-foreground hover:text-foreground">
+          <Link href="/app/campaigns">
+            <ArrowLeft className="h-4 w-4" />
+            <span className="text-xs font-medium">Campaigns</span>
+          </Link>
         </Button>
         <div>
           <h1 className="text-xl font-semibold">Create Automatic Calls</h1>
@@ -616,8 +623,8 @@ export default function AutomaticCallsWizardPage() {
       </div>
 
       <div className="flex justify-between">
-        <Button type="button" variant="outline" size="sm" onClick={goBack} disabled={stepIdx <= 0}>
-          Back
+        <Button type="button" variant="outline" size="sm" onClick={goBack}>
+          {stepIdx <= 0 ? "Back to Campaigns" : "Back"}
         </Button>
         {step !== "modes" ? (
           <Button type="button" size="sm" onClick={goNext} disabled={!canNext()}>

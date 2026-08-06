@@ -110,7 +110,7 @@ export default function AutomaticCallDetailPage() {
     return (
       <div className="max-w-3xl mx-auto px-4 py-12 text-center space-y-3">
         <p className="text-sm">Pipeline not found</p>
-        <Button asChild size="sm" variant="outline"><Link href="/app/automatic-calls">Back</Link></Button>
+        <Button asChild size="sm" variant="outline"><Link href="/app/campaigns">Back to Campaigns</Link></Button>
       </div>
     );
   }
@@ -118,8 +118,11 @@ export default function AutomaticCallDetailPage() {
   return (
     <div className="max-w-3xl mx-auto px-4 py-8 space-y-6">
       <div className="flex items-start gap-3">
-        <Button variant="ghost" size="sm" asChild className="h-8 px-2 mt-0.5">
-          <Link href="/app/automatic-calls"><ArrowLeft className="h-4 w-4" /></Link>
+        <Button variant="ghost" size="sm" asChild className="h-8 px-2 mt-0.5 gap-1.5 text-muted-foreground hover:text-foreground">
+          <Link href="/app/campaigns">
+            <ArrowLeft className="h-4 w-4" />
+            <span className="text-xs font-medium">Campaigns</span>
+          </Link>
         </Button>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">

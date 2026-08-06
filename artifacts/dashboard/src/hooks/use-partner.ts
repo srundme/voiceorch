@@ -8,9 +8,11 @@ export interface PartnerContext {
   /**
    * True when this account is a client managed by an ACTIVE partner: the
    * partner builds/manages agents and numbers; the dashboard renders the
-   * restricted read-only client view.
+   * restricted read-only client view unless canEditAgents is true.
    */
   isManagedClient?: boolean;
+  /** Partner opted this managed client into creating/editing/saving agents. */
+  canEditAgents?: boolean;
 }
 
 /**

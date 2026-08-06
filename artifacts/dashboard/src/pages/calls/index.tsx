@@ -290,6 +290,7 @@ export default function CallsList() {
   const initialParams = useMemo(() => new URLSearchParams(window.location.search), []);
   const [statusFilter, setStatusFilter] = useState<string>(() => initialParams.get("status") ?? "all");
   const [agentFilter, setAgentFilter] = useState<string>(() => initialParams.get("agent") ?? "all");
+  const [dispositionFilter, setDispositionFilter] = useState<string>(() => initialParams.get("disp") ?? "all");
   const [searchQuery, setSearchQuery] = useState(() => initialParams.get("q") ?? "");
   const [dateFrom, setDateFrom] = useState(() => initialParams.get("from") ?? "");
   const [dateTo, setDateTo] = useState(() => initialParams.get("to") ?? "");
@@ -300,7 +301,7 @@ export default function CallsList() {
     return Number.isNaN(p) || p < 1 ? 1 : p;
   });
   const [pageInput, setPageInput] = useState("");
-  const [pageSize, setPageSize] = useState(100);
+  const [pageSize, setPageSize] = useState(50);
 
   // Mirror filter/search/pagination state into the URL query string (replace, so
   // we don't spam history) so it can be restored on return.
@@ -308,6 +309,7 @@ export default function CallsList() {
     const params = new URLSearchParams();
     if (statusFilter !== "all") params.set("status", statusFilter);
     if (agentFilter !== "all") params.set("agent", agentFilter);
+    if (dispositionFilter !== "all") params.set("disp", dispositionFilter);
     if (searchQuery.trim()) params.set("q", searchQuery);
     if (dateFrom) params.set("from", dateFrom);
     if (dateTo) params.set("to", dateTo);
@@ -317,7 +319,7 @@ export default function CallsList() {
     const next = qs ? `/app/calls?${qs}` : "/app/calls";
     const current = `/app/calls${window.location.search}`;
     if (next !== current) navigate(next, { replace: true });
-  }, [statusFilter, agentFilter, searchQuery, dateFrom, dateTo, sortBy, currentPage, navigate]);
+  }, [statusFilter, agentFilter, dispositionFilter, searchQuery, dateFrom, dateTo, sortBy, currentPage, navigate]);
 
   const { data: calls, isLoading: callsLoading } = useListCalls(
     {
@@ -348,6 +350,15 @@ export default function CallsList() {
   // Restore the table scroll position when returning to this list.
   const callsScrollRef = useScrollRestoration<HTMLDivElement>("calls-list", !callsLoading);
 
+  const dispositionOptions = useMemo(() => {
+    if (!calls?.length) return [] as string[];
+    const set = new Set<string>();
+    for (const c of calls) {
+      for (const v of getDispositionValues((c as any).dispositionResult)) set.add(v);
+    }
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [calls]);
+
   // Client-side search filter
   const filteredCalls = useMemo(() => {
     if (!calls) return [];
@@ -370,6 +381,12 @@ export default function CallsList() {
           c.fromNumber?.toLowerCase().includes(q) ||
           c.agentName?.toLowerCase().includes(q) ||
           String(c.id).includes(q)
+      );
+    }
+
+    if (dispositionFilter !== "all") {
+      result = result.filter((c) =>
+        getDispositionValues((c as any).dispositionResult).includes(dispositionFilter),
       );
     }
 
@@ -409,7 +426,7 @@ export default function CallsList() {
     }
 
     return result;
-  }, [calls, searchQuery, dateFrom, dateTo, sortBy]);
+  }, [calls, searchQuery, dispositionFilter, dateFrom, dateTo, sortBy]);
 
   // Reset to page 1 whenever any filter/search/sort changes — but NOT on the
   // initial mount, so a page restored from the URL survives.
@@ -420,7 +437,7 @@ export default function CallsList() {
       return;
     }
     setCurrentPage(1);
-  }, [statusFilter, agentFilter, searchQuery, dateFrom, dateTo, sortBy]);
+  }, [statusFilter, agentFilter, dispositionFilter, searchQuery, dateFrom, dateTo, sortBy]);
 
   // Pagination math (page size configurable)
   const totalPages = Math.max(1, Math.ceil(filteredCalls.length / pageSize));
@@ -465,6 +482,7 @@ export default function CallsList() {
   const clearFilters = () => {
     setStatusFilter("all");
     setAgentFilter("all");
+    setDispositionFilter("all");
     setSearchQuery("");
     setDateFrom("");
     setDateTo("");
@@ -497,6 +515,7 @@ export default function CallsList() {
   const hasActiveFilters =
     statusFilter !== "all" ||
     agentFilter !== "all" ||
+    dispositionFilter !== "all" ||
     searchQuery.trim() ||
     dateFrom ||
     dateTo;
@@ -623,6 +642,22 @@ export default function CallsList() {
                   {agents?.map((agent) => (
                     <SelectItem key={agent.id} value={agent.id.toString()}>
                       {agent.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="shrink-0 w-full sm:w-auto">
+              <Select value={dispositionFilter} onValueChange={setDispositionFilter}>
+                <SelectTrigger className="w-full sm:w-[180px] h-9 text-xs">
+                  <SelectValue placeholder="All dispositions" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All dispositions</SelectItem>
+                  {dispositionOptions.map((d) => (
+                    <SelectItem key={d} value={d}>
+                      {d}
                     </SelectItem>
                   ))}
                 </SelectContent>

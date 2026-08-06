@@ -54,10 +54,17 @@ export interface WorkflowStep {
    */
   squadId?: number;
 
-  // ── condition (continue only if it evaluates true, else the run stops) ────────
+  // ── condition ───────────────────────────────────────────────────────────────
+  // Legacy (thenStepCount/elseStepCount unset or 0): continue if true, else stop.
+  // With counts: linear if/else — then block is the next `thenStepCount` steps,
+  // else block is the following `elseStepCount` steps; both rejoin after.
   field?: string;                          // context path, e.g. "call.disposition.interested"
   op?: "eq" | "neq" | "contains" | "exists" | "gt" | "lt";
   value?: string;
+  /** Steps immediately after this condition that run when true. */
+  thenStepCount?: number;
+  /** Steps after the then-block that run when false (skipped when true). */
+  elseStepCount?: number;
 
   // ── delay ────────────────────────────────────────────────────────────────────
   delaySeconds?: number;

@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db, agentDispositionsTable, callDispositionsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
+import { clientContext } from "../middlewares/clientContext.js";
 import { evictDispositionCache } from "../services/disposition.js";
 
 const router = Router();
@@ -26,7 +27,7 @@ const UpsertConfigBody = z.object({
 });
 
 /* ── GET /api/disposition/config/:agentId ────────────────────────────────── */
-router.get("/disposition/config/:agentId", requireAuth, async (req, res): Promise<void> => {
+router.get("/disposition/config/:agentId", requireAuth, clientContext, async (req, res): Promise<void> => {
   const agentId = parseInt(String(req.params["agentId"] ?? ""), 10);
   if (!agentId || isNaN(agentId)) {
     res.status(400).json({ error: "Invalid agentId" });
@@ -47,7 +48,7 @@ router.get("/disposition/config/:agentId", requireAuth, async (req, res): Promis
 });
 
 /* ── PUT /api/disposition/config/:agentId ────────────────────────────────── */
-router.put("/disposition/config/:agentId", requireAuth, async (req, res): Promise<void> => {
+router.put("/disposition/config/:agentId", requireAuth, clientContext, async (req, res): Promise<void> => {
   const agentId = parseInt(String(req.params["agentId"] ?? ""), 10);
   if (!agentId || isNaN(agentId)) {
     res.status(400).json({ error: "Invalid agentId" });
@@ -85,7 +86,7 @@ router.put("/disposition/config/:agentId", requireAuth, async (req, res): Promis
 });
 
 /* ── GET /api/disposition/result/:callId ─────────────────────────────────── */
-router.get("/disposition/result/:callId", requireAuth, async (req, res): Promise<void> => {
+router.get("/disposition/result/:callId", requireAuth, clientContext, async (req, res): Promise<void> => {
   const callId = parseInt(String(req.params["callId"] ?? ""), 10);
   if (!callId || isNaN(callId)) {
     res.status(400).json({ error: "Invalid callId" });

@@ -7,7 +7,7 @@ import {
   ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Phone, Calendar, Clock, TrendingUp,
   BarChart3, Mic, Cpu, Volume2, Hash, ArrowRight, ArrowUpRight, UserCheck,
   Voicemail, BookOpen, Tag, Activity, ExternalLink, Copy, CheckCircle2,
-  XCircle, PlayCircle, PauseCircle, MicOff, ScrollText,
+  XCircle, PlayCircle, PauseCircle, MicOff, ScrollText, Video,
   Play, Pause, MoreVertical, VolumeX, Gauge
 } from "lucide-react";
 import {
@@ -716,7 +716,199 @@ function formatPlayerTime(secs: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
+function parseCallMeta(raw: unknown): Record<string, unknown> {
+  if (!raw || typeof raw !== "string") return {};
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function hasMeetingVideo(call: { metadata?: string | null }): boolean {
+  const m = parseCallMeta(call.metadata);
+  return typeof m["recallBotId"] === "string" && !!m["recallBotId"].trim();
+}
+
 const PLAYBACK_SPEEDS = [0.5, 1, 1.5, 2] as const;
+
+type SeparateAudioTrack = {
+  name: string;
+  participantId: string | null;
+  isHost: boolean;
+  url: string;
+};
+
+/** Meeting bot mixed MP4 + per-speaker audio via Recall pre-signed URLs. */
+function MeetingRecordingPlayer({ callId }: { callId: number | string }) {
+  const { getToken } = useAuth();
+  const [url, setUrl] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+  const [tracks, setTracks] = useState<SeparateAudioTrack[] | null>(null);
+  const [tracksPending, setTracksPending] = useState(false);
+  const [tracksError, setTracksError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoadError(null);
+        setPending(false);
+        const token = await getToken();
+        const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
+        const r = await fetch(`/api/calls/${callId}/meeting-recording`, { headers });
+        const body = await r.json().catch(() => ({}));
+        if (!r.ok) {
+          if (body?.pending) {
+            if (!cancelled) setPending(true);
+            return;
+          }
+          throw new Error(body?.error || `Failed to load meeting recording (${r.status})`);
+        }
+        if (cancelled) return;
+        if (typeof body?.url === "string") setUrl(body.url);
+        else throw new Error("No recording URL returned");
+      } catch (e) {
+        if (!cancelled) setLoadError(e instanceof Error ? e.message : "Failed to load meeting recording");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [callId, getToken]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setTracksError(null);
+        setTracksPending(false);
+        const token = await getToken();
+        const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
+        const r = await fetch(`/api/calls/${callId}/meeting-separate-audio`, { headers });
+        const body = await r.json().catch(() => ({}));
+        if (!r.ok) {
+          if (body?.pending) {
+            if (!cancelled) setTracksPending(true);
+            return;
+          }
+          // Soft-fail: video may exist without separate audio yet.
+          if (!cancelled) setTracks([]);
+          return;
+        }
+        if (cancelled) return;
+        const list = Array.isArray(body?.tracks) ? body.tracks : [];
+        setTracks(
+          list
+            .filter((t: any) => typeof t?.url === "string" && typeof t?.name === "string")
+            .map((t: any) => ({
+              name: String(t.name),
+              participantId: typeof t.participantId === "string" ? t.participantId : null,
+              isHost: t.isHost === true,
+              url: String(t.url),
+            })),
+        );
+      } catch (e) {
+        if (!cancelled) setTracksError(e instanceof Error ? e.message : "Failed to load speaker audio");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [callId, getToken]);
+
+  if (loadError && !url) {
+    return (
+      <div className="text-center max-w-md py-10">
+        <AlertTriangle className="h-5 w-5 text-destructive mx-auto mb-2" />
+        <p className="text-sm text-foreground/80">Could not load meeting video</p>
+        <p className="text-xs text-muted-foreground mt-1">{loadError}</p>
+      </div>
+    );
+  }
+  if (pending && !url) {
+    return (
+      <div className="text-center text-muted-foreground py-10">
+        <Video className="h-5 w-5 mx-auto mb-2 opacity-40" />
+        <p className="text-sm">Meeting recording is still processing — refresh in a minute.</p>
+      </div>
+    );
+  }
+  if (!url && !tracks?.length && !tracksPending) {
+    return (
+      <div className="text-center text-muted-foreground py-10">
+        <p className="text-sm">Loading meeting recording…</p>
+      </div>
+    );
+  }
+  return (
+    <div className="w-full max-w-3xl space-y-5">
+      {url ? (
+        <div className="space-y-3">
+          <p className="text-[11px] text-muted-foreground text-center">Meeting video (Recall)</p>
+          <video
+            key={url}
+            controls
+            playsInline
+            className="w-full rounded-lg border border-border bg-black aspect-video"
+            src={url}
+          />
+          <div className="flex justify-center">
+            <a
+              href={url}
+              download
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 text-[11px] text-foreground/70 border border-border rounded-md px-2.5 py-1.5 hover:bg-accent"
+            >
+              <Download className="h-3 w-3" /> Open / download MP4
+            </a>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="space-y-2 border-t border-border/60 pt-4">
+        <p className="text-[11px] text-muted-foreground text-center">Per-speaker audio</p>
+        {tracksPending ? (
+          <p className="text-center text-xs text-muted-foreground py-2">
+            Speaker tracks still processing — refresh shortly.
+          </p>
+        ) : tracksError ? (
+          <p className="text-center text-xs text-muted-foreground py-2">{tracksError}</p>
+        ) : tracks && tracks.length > 0 ? (
+          <ul className="space-y-1.5 max-w-md mx-auto">
+            {tracks.map((t, i) => (
+              <li
+                key={`${t.participantId ?? t.name}-${i}`}
+                className="flex items-center justify-between gap-3 rounded-md border border-border/60 px-3 py-2 text-[12px]"
+              >
+                <span className="truncate">
+                  {t.name}
+                  {t.isHost ? (
+                    <span className="ml-1.5 text-[10px] text-muted-foreground">host</span>
+                  ) : null}
+                </span>
+                <a
+                  href={t.url}
+                  download
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex shrink-0 items-center gap-1 text-[11px] text-foreground/70 hover:text-foreground"
+                >
+                  <Download className="h-3 w-3" /> MP3
+                </a>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-center text-xs text-muted-foreground py-2">No separate speaker audio for this meeting.</p>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function CallRecordingPlayer({ src, callId }: { src: string; callId: number | string }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -1166,6 +1358,16 @@ export function CallDetailContent({
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap shrink-0">
+            {hasMeetingVideo(call) ? (
+              <button
+                type="button"
+                onClick={() => setActiveTab("recording")}
+                title="View meeting recording"
+                className="inline-flex items-center gap-1.5 text-[11px] text-foreground/70 border border-border rounded-md px-2.5 py-1.5 hover:bg-accent hover:text-accent-foreground"
+              >
+                <Video className="h-3 w-3" /> Meeting recording
+              </button>
+            ) : null}
             {call.recordingUrl ? (
               <button
                 type="button"
@@ -1527,10 +1729,13 @@ export function CallDetailContent({
 
               <TabsContent value="recording" className="flex-1 overflow-auto mt-2 min-h-0">
                 <Card className="h-full flex flex-col">
-                  <CardContent className="flex-1 flex items-center justify-center p-6">
+                  <CardContent className="flex-1 flex flex-col items-center justify-center gap-8 p-6">
+                    {hasMeetingVideo(call) ? (
+                      <MeetingRecordingPlayer callId={call.id} />
+                    ) : null}
                     {call.recordingUrl ? (
                       <CallRecordingPlayer src={call.recordingUrl} callId={call.id} />
-                    ) : (call.recordingEnabled && call.recordingError) ? (
+                    ) : hasMeetingVideo(call) ? null : (call.recordingEnabled && call.recordingError) ? (
                       <div className="text-center max-w-md py-10">
                         <div className="h-10 w-10 rounded-xl bg-destructive/10 border border-destructive/30 flex items-center justify-center mx-auto mb-3">
                           <AlertTriangle className="h-5 w-5 text-destructive" />

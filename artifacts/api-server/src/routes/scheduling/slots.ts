@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import { requireAuth } from "../../middlewares/requireAuth.js";
+import { clientContext } from "../../middlewares/clientContext.js";
 import { getAvailableSlots } from "../../services/scheduling/slot-engine.js";
 import { GetAvailableSlotsResponse } from "@workspace/api-zod";
 import { eq, and } from "drizzle-orm";
@@ -9,7 +10,7 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 const router: IRouter = Router();
 
-router.get("/scheduling/slots", requireAuth, async (req, res): Promise<void> => {
+router.get("/scheduling/slots", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const { eventTypeId: rawId, startDate, endDate } = req.query as Record<string, string>;
   const eventTypeId = parseInt(rawId);

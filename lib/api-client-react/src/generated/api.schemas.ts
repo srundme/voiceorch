@@ -1896,6 +1896,13 @@ export const PhoneNumberStatus = {
   released: 'released',
 } as const;
 
+export type PhoneNumberRenewalMode = typeof PhoneNumberRenewalMode[keyof typeof PhoneNumberRenewalMode];
+
+export const PhoneNumberRenewalMode = {
+  autopay: 'autopay',
+  wallet: 'wallet',
+} as const;
+
 export interface PhoneNumber {
   id: number;
   userId: string;
@@ -1922,6 +1929,13 @@ export interface PhoneNumber {
   monthlyRateCents?: number;
   /** Recurring monthly renewal fee in paise (INR), charged from wallet balance on the purchase-date anniversary (30 days) */
   renewalRateCents?: number;
+  /** How renewals are funded — autopay uses a Razorpay card mandate to top up the wallet; wallet uses balance only (unpaid past grace → release). */
+  renewalMode?: PhoneNumberRenewalMode;
+  /**
+     * If set, the number will be auto-released after this time if renewal remains unpaid.
+     * @nullable
+     */
+  renewalGraceUntil?: string | null;
   /**
      * When the next renewal charge is due (30 days after purchasedAt/lastRenewalAt). Null once released.
      * @nullable
@@ -1963,12 +1977,21 @@ export const PurchasePhoneNumberInputNumberType = {
   mobile: 'mobile',
 } as const;
 
+export type PurchasePhoneNumberInputRenewalMode = typeof PurchasePhoneNumberInputRenewalMode[keyof typeof PurchasePhoneNumberInputRenewalMode];
+
+export const PurchasePhoneNumberInputRenewalMode = {
+  autopay: 'autopay',
+  wallet: 'wallet',
+} as const;
+
 export interface PurchasePhoneNumberInput {
   /** E.164 number to purchase (from the available list) */
   number: string;
   countryCode: string;
   region?: string;
   numberType?: PurchasePhoneNumberInputNumberType;
+  /** Autopay keeps the number via card mandate top-ups; wallet renews from balance only (unpaid → release after grace). */
+  renewalMode?: PurchasePhoneNumberInputRenewalMode;
 }
 
 export interface InitiatePhoneNumberPurchaseResponse {

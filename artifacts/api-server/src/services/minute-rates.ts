@@ -25,6 +25,8 @@ export function getFlatRateCentsPerMin(mode: "managed" | "byop" | string | null 
   return mode === "byop" ? BYOP_RATE_CENTS_PER_MIN : MANAGED_RATE_CENTS_PER_MIN;
 }
 
+export { computeProRataDebitCents, isNonBillableCallStatus } from "./call-billing.js";
+
 /**
  * Dynamically resolves whether an agent should be billed at the managed or BYOP rate.
  *

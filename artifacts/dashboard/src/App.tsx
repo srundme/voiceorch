@@ -18,7 +18,7 @@ import { VoiceAssistant } from "@/components/VoiceAssistant";
 
 // ── Page imports ─────────────────────────────────────────────────────────────
 // Tabbed wrappers (new routes)
-import AgentsTabPage      from "@/pages/agents/index";
+import AgentsTabPage, { AgentBuilderPage } from "@/pages/agents/index";
 import CampaignsTabPage   from "@/pages/campaigns/tabbed";
 import CallsTabPage       from "@/pages/calls/tabbed";
 import PhoneNumbersTabPage from "@/pages/phone-numbers-tabbed";
@@ -28,7 +28,6 @@ import ApiKeysTabPage     from "@/pages/api-keys-tabbed";
 import WalletTabPage      from "@/pages/wallet-tabbed";
 
 // Individual / deep-link pages (unchanged)
-import AgentBuilder            from "@/pages/agents/builder";
 import SquadsPage              from "@/pages/squads/index";
 import MeetPage                from "@/pages/meet/index";
 import CallsList               from "@/pages/calls/index";
@@ -48,7 +47,6 @@ import NotFound                from "@/pages/not-found";
 import PrivacyPage             from "@/pages/privacy";
 import TermsPage               from "@/pages/terms";
 import OnboardingPage          from "@/pages/onboarding";
-import CampaignsPage           from "@/pages/campaigns/index";
 import CampaignDetailPage      from "@/pages/campaigns/[id]";
 import BatchDetailPage         from "@/pages/campaigns/[id]/batches/[batchId]";
 import BatchWizardPage         from "@/pages/campaigns/batch-wizard";
@@ -63,6 +61,7 @@ import SchedulingConferencingPage  from "@/pages/scheduling/Conferencing";
 import PublicBookingPage    from "@/pages/book/[slug]";
 import WebcallJoinPage      from "@/pages/join/[token]";
 import PartnerPage          from "@/pages/partner";
+import PartnerClientPage    from "@/pages/partner-client";
 import PartnerJoinPage      from "@/pages/partner-join";
 import WorkshopFormPage     from "@/pages/workshop/[slug]";
 import EventsPage           from "@/pages/events/index";
@@ -85,10 +84,7 @@ import VoicesPage           from "@/pages/voices";
 import TestSimulatorPage    from "@/pages/test-simulator";
 import VibePage             from "@/pages/vibe";
 import HomePage             from "@/pages/home/index";
-import ChannelsPage         from "@/pages/channels/index";
-import CallPlansPage        from "@/pages/call-plans/index";
-import CallPlanDetailPage   from "@/pages/call-plans/[id]";
-import PeoplePage           from "@/pages/people/index";
+import ChannelsRedirectPage from "@/pages/channels/index";
 import CommandCenterRedirect from "@/pages/command-center/index";
 import MemoryPage           from "@/pages/memory/index";
 import DocsPage             from "@/pages/docs/index";
@@ -300,26 +296,37 @@ function AppRoutes() {
       <Switch>
         <Route path="/app" component={AppRoot} />
         <Route path="/app/home" component={HomePage} />
-        <Route path="/app/call-plans/:id" component={CallPlanDetailPage} />
-        <Route path="/app/call-plans" component={CallPlansPage} />
-        <Route path="/app/people" component={PeoplePage} />
-        {/* Phase 4 — Journey / Automation peers → Call plans */}
-        <Route path="/app/automation">
-          <TabRedirect to="/app/call-plans" />
+        {/* Call plans product surface removed — await Campaigns rebuild */}
+        <Route path="/app/call-plans/:id/activity">
+          <TabRedirect to="/app/home" />
         </Route>
-        {/* Channels kept for Connections / Meet deep-links; removed from primary nav */}
-        <Route path="/app/channels" component={ChannelsPage} />
+        <Route path="/app/call-plans/:id">
+          <TabRedirect to="/app/home" />
+        </Route>
+        <Route path="/app/call-plans">
+          <TabRedirect to="/app/home" />
+        </Route>
+        {/* Legacy People / Leads → Campaigns */}
+        <Route path="/app/people">
+          <TabRedirect to="/app/campaigns" />
+        </Route>
+        <Route path="/app/automation">
+          <TabRedirect to="/app/home" />
+        </Route>
+        {/* Channels product surface removed — redirect legacy links */}
+        <Route path="/app/channels" component={ChannelsRedirectPage} />
         <Route path="/app/command-center" component={CommandCenterRedirect} />
         <Route path="/app/analytics" component={AnalyticsPage} />
 
         {/* ── Partner (reseller) hub ── */}
         <Route path="/app/partner-join" component={PartnerJoinPage} />
+        <Route path="/app/partner/clients/:clerkId" component={PartnerClientPage} />
         <Route path="/app/partner" component={PartnerPage} />
 
         {/* ── Agents ── */}
         {/* /app/agents (list, tabbed) — must come BEFORE /app/agents/:id */}
         <Route path="/app/agents" component={AgentsTabPage} />
-        <Route path="/app/agents/:id" component={AgentBuilder} />
+        <Route path="/app/agents/:id" component={AgentBuilderPage} />
 
         {/* ── Squads (list + detail; create opens with ?seedAgent=) ── */}
         <Route path="/app/squads/:id" component={SquadsPage} />
@@ -401,12 +408,10 @@ function AppRoutes() {
         <Route path="/app/campaigns/:id" component={CampaignDetailPage} />
         <Route path="/app/campaigns" component={CampaignsTabPage} />
 
-        {/* ── Automatic Calls → People sheet tab ── */}
+        {/* ── Automatic Calls (detail/wizard live; list → Campaigns Sheets tab) ── */}
         <Route path="/app/automatic-calls/new" component={AutomaticCallsWizardPage} />
         <Route path="/app/automatic-calls/:id" component={AutomaticCallDetailPage} />
-        <Route path="/app/automatic-calls">
-          <TabRedirect to="/app/connections?setup=sheets" />
-        </Route>
+        <Route path="/app/automatic-calls" component={AutomaticCallsPage} />
 
         {/* ── Meta Leads → Connections Meta card ── */}
         <Route path="/app/meta-leads">
@@ -521,7 +526,7 @@ function Router() {
 
 function App() {
   return (
-    <ThemeProvider defaultTheme="dark" storageKey="snapserve-ui-theme">
+    <ThemeProvider defaultTheme="light" storageKey="snapserve-ui-theme-v2">
       <TooltipProvider>
         <WouterRouter base={basePath}>
           <Router />

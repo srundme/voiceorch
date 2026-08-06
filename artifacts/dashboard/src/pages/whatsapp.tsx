@@ -1074,7 +1074,7 @@ export default function WhatsAppPage() {
     Number.isFinite(urlAgentId) && urlAgentId > 0 ? urlAgentId : "",
   );
 
-  // Prefill agent when opened from Builder Channels (?agentId=).
+  // Prefill agent when opened with ?agentId=.
   useEffect(() => {
     if (Number.isFinite(urlAgentId) && urlAgentId > 0) setAgentId(urlAgentId);
   }, [urlAgentId]);

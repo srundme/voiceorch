@@ -80,6 +80,21 @@ async function logPlatformEmail(row: {
 }
 
 /**
+ * Platform From identity for transactional mail.
+ *
+ * IMPORTANT: Brevo will silently rewrite From to something like
+ * `noreply@<id>.brevosend.com` when `snapserve.ai` is not authenticated
+ * (DKIM / Brevo code / DMARC) in that Brevo account — even though we always
+ * request noreply@snapserve.ai. Authenticate the domain under
+ * Brevo → Senders, Domains & Dedicated IPs → Domains.
+ */
+function brevoSender(): { name: string; email: string } {
+  const email = (process.env["BREVO_SENDER_EMAIL"] ?? "noreply@snapserve.ai").trim();
+  const name = (process.env["BREVO_SENDER_NAME"] ?? "SnapServe").trim() || "SnapServe";
+  return { name, email: email || "noreply@snapserve.ai" };
+}
+
+/**
  * Sends a transactional email via Brevo, optionally with file attachments.
  * Requires BREVO_API_KEY environment variable.
  *
@@ -99,6 +114,7 @@ export async function sendBrevoEmail(
   const emailType = meta?.emailType ?? "transactional";
   const sentBy = meta?.sentBy ?? "system";
   const shouldLog = !meta?.skipLog;
+  const sender = brevoSender();
   // Never persist OTP / password-reset HTML (contains one-time codes).
   const logBody =
     emailType === "password_reset"
@@ -116,7 +132,7 @@ export async function sendBrevoEmail(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        sender:  { name: "SnapServe", email: "noreply@snapserve.ai" },
+        sender,
         to:      [{ email: to }],
         subject,
         htmlContent: htmlBody,

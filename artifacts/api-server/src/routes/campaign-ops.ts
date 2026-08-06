@@ -7,6 +7,8 @@
 
 import { Router, type IRouter } from "express";
 import { getAuth } from "../lib/auth-compat.js";
+import { requireAuth } from "../middlewares/requireAuth.js";
+import { clientContext } from "../middlewares/clientContext.js";
 import { eq, and, desc } from "drizzle-orm";
 import {
   db,
@@ -22,6 +24,8 @@ import { appendTimeline } from "../services/operational-outcome.js";
 import { logger } from "../lib/logger.js";
 
 const router: IRouter = Router();
+
+router.use(requireAuth, clientContext);
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 

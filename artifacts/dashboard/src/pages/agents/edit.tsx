@@ -110,6 +110,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     sarvamHighVadSensitivity, sarvamSpeechEndFlushMs, sarvamIncompleteHoldMs,
     voiceStack, geminiLiveVoiceName, geminiLiveThinkingLevel,
     agentComposition, agentSurfaces, meetingPrompt,
+    meetingMaxDurationSeconds, meetingSilenceTimeoutSeconds, meetingSilenceHangupEnabled,
     // Inbound/outbound phone number assignment is read-only in the agent form —
     // it's managed exclusively from the Phone Numbers page now. Never forward
     // these to the server: they're populated from the agent's own (potentially
@@ -222,10 +223,29 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   } else if (voiceStack === "classic") {
     agentConfig["voiceStack"] = "classic";
   }
-  // Meeting-room prompt (Builder Talk → In meetings). Deep-merged on the server
-  // so Channels whoJoins / delegate / memory toggles are preserved.
-  if (meetingPrompt !== undefined) {
-    agentConfig["meetings"] = { meetingPrompt: meetingPrompt ?? "" };
+  // Meeting capacity + prompt. Attendance is owned by agent type:
+  // phone_and_meet → enabled (joins Meet when Booking is on); phone → never joins.
+  // Deep-merged on the server so whoJoins / memory toggles are preserved when present.
+  if (
+    meetingPrompt !== undefined ||
+    agentSurfaces !== undefined ||
+    meetingMaxDurationSeconds !== undefined ||
+    meetingSilenceTimeoutSeconds !== undefined ||
+    meetingSilenceHangupEnabled !== undefined
+  ) {
+    agentConfig["meetings"] = {
+      meetingPrompt: meetingPrompt ?? "",
+      enabled: agentSurfaces === "phone_and_meet",
+      ...(typeof meetingMaxDurationSeconds === "number"
+        ? { maxDurationSeconds: meetingMaxDurationSeconds }
+        : {}),
+      ...(typeof meetingSilenceTimeoutSeconds === "number"
+        ? { silenceTimeoutSeconds: meetingSilenceTimeoutSeconds }
+        : {}),
+      ...(typeof meetingSilenceHangupEnabled === "boolean"
+        ? { silenceHangupEnabled: meetingSilenceHangupEnabled }
+        : {}),
+    };
   }
 
   const NATIVE_BOOKING_TYPES = new Set(["native_booking", "native_check_availability", "native_list_bookings", "native_reschedule", "native_cancel"]);
@@ -473,6 +493,9 @@ export default function AgentEdit() {
       agentComposition: "single",
       agentSurfaces: "phone",
       meetingPrompt: "",
+      meetingMaxDurationSeconds: 45 * 60,
+      meetingSilenceTimeoutSeconds: 3 * 60,
+      meetingSilenceHangupEnabled: true,
     },
   });
 
@@ -514,7 +537,7 @@ export default function AgentEdit() {
     }
   }, [calendarIdForEt]);
 
-  const NATIVE_TOOL_TYPES = ["native_booking", "native_check_availability", "native_list_bookings", "native_reschedule", "native_cancel", "send_email", "send_whatsapp"];
+  const NATIVE_TOOL_TYPES = ["native_booking", "native_check_availability", "native_list_bookings", "native_reschedule", "native_cancel", "send_email", "send_whatsapp", "call_transfer", "end_call"];
   const watchedTools = (form.watch("tools") ?? []) as any[];
   const hasNativeTool = (type: string) => watchedTools.some((t: any) => t.type === type);
   const nativeToolIndex = (type: string) => watchedTools.findIndex((t: any) => t.type === type);
@@ -561,7 +584,7 @@ export default function AgentEdit() {
       icon: <Mail className="h-4 w-4" />,
       color: "sky",
       label: "Send Email",
-      description: "Lets the agent email the caller mid-call using Channels → Email (your Brevo). Collects their address, then sends the channel template.",
+      description: "Lets the agent email the caller mid-call using Connections → Email (your Brevo). Collects their address, then sends the email template.",
     },
     {
       type: "send_whatsapp",
@@ -757,6 +780,16 @@ export default function AgentEdit() {
       meetingPrompt: typeof (agent as any).agentConfig?.meetings?.meetingPrompt === "string"
         ? (agent as any).agentConfig.meetings.meetingPrompt
         : "",
+      meetingMaxDurationSeconds:
+        typeof (agent as any).agentConfig?.meetings?.maxDurationSeconds === "number"
+          ? (agent as any).agentConfig.meetings.maxDurationSeconds
+          : 45 * 60,
+      meetingSilenceTimeoutSeconds:
+        typeof (agent as any).agentConfig?.meetings?.silenceTimeoutSeconds === "number"
+          ? (agent as any).agentConfig.meetings.silenceTimeoutSeconds
+          : 3 * 60,
+      meetingSilenceHangupEnabled:
+        (agent as any).agentConfig?.meetings?.silenceHangupEnabled !== false,
     });
     const cfg = (agent as any).agentConfig;
     if (cfg?.voiceStack === "gemini_live") {
@@ -1936,24 +1969,14 @@ export default function AgentEdit() {
                   <CardTitle className="flex items-center gap-2"><PhoneForwarded className="h-4 w-4" /> Tools</CardTitle>
                   <CardDescription>Actions the LLM can trigger mid-call. The agent decides when to use them based on the conversation.</CardDescription>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => appendTool({ type: "call_transfer", name: "transfer_to_human", description: "Transfer the call to a human agent when the caller requests it or the issue cannot be resolved automatically.", transferTo: "", warmHandoffMessage: "" })}
-                  >
-                    <PhoneForwarded className="h-4 w-4 mr-1" /> Call Transfer
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => appendTool({ type: "webhook", name: "custom_action", description: "Invoke this when the caller requests a specific action.", url: "", method: "POST", secret: "", preToolMessage: "One moment, let me take care of that for you.", parameters: [] })}
-                  >
-                    <Webhook className="h-4 w-4 mr-1" /> Custom Function
-                  </Button>
-                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => appendTool({ type: "webhook", name: "custom_action", description: "Invoke this when the caller requests a specific action.", url: "", method: "POST", secret: "", preToolMessage: "One moment, let me take care of that for you.", parameters: [] })}
+                >
+                  <Webhook className="h-4 w-4 mr-1" /> Custom Function
+                </Button>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -2089,6 +2112,79 @@ export default function AgentEdit() {
                     );
                   })}
                 </div>
+              </div>
+
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-2">Call Control</p>
+                {(() => {
+                  const transferIdx = (form.watch("tools") ?? []).findIndex((t: any) => t?.type === "call_transfer");
+                  const transferOn = transferIdx >= 0;
+                  return (
+                    <div className={cn("rounded-xl border transition-all duration-150", transferOn ? "border-border/70 bg-card/40" : "border-border/60 bg-card/20")}>
+                      <button
+                        type="button"
+                        className="w-full text-left p-4 flex items-start gap-3"
+                        onClick={() => {
+                          if (transferOn) {
+                            removeTool(transferIdx);
+                          } else {
+                            appendTool({
+                              type: "call_transfer",
+                              name: "transfer_to_human",
+                              description: "Transfer the call to a human agent when the caller requests it or the issue cannot be resolved automatically.",
+                              transferTo: "",
+                              warmHandoffMessage: "",
+                              transferMode: "cold",
+                            });
+                          }
+                        }}
+                      >
+                        <div className={cn("mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center shrink-0", transferOn ? "bg-muted/40" : "bg-muted/30")}>
+                          <PhoneForwarded className={cn("h-4 w-4", transferOn ? "text-foreground/70" : "text-muted-foreground/35")} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <span className="text-xs font-semibold text-foreground/80">Call Transfer</span>
+                          <p className="text-[11px] text-muted-foreground/60 leading-relaxed mt-0.5">
+                            Warm or cold transfer to a human number.
+                          </p>
+                        </div>
+                        <div className="shrink-0 mt-1 text-muted-foreground/50">
+                          {transferOn ? <ToggleRight className="h-5 w-5" /> : <ToggleLeft className="h-5 w-5" />}
+                        </div>
+                      </button>
+                      {transferOn && transferIdx >= 0 && (
+                        <div className="space-y-3 border-t border-border/30 px-4 pb-4 pt-3">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <FormField control={form.control} name={`tools.${transferIdx}.transferTo`} render={({ field: f }) => (
+                              <FormItem>
+                                <FormLabel className="text-xs">Transfer To</FormLabel>
+                                <FormControl><Input placeholder="+12125551234" {...f} /></FormControl>
+                              </FormItem>
+                            )} />
+                            <FormField control={form.control} name={`tools.${transferIdx}.warmHandoffMessage`} render={({ field: f }) => (
+                              <FormItem>
+                                <FormLabel className="text-xs">Warm Handoff Message</FormLabel>
+                                <FormControl><Input placeholder="Connecting you with a specialist now…" {...f} /></FormControl>
+                              </FormItem>
+                            )} />
+                          </div>
+                          <FormField control={form.control} name={`tools.${transferIdx}.transferMode`} render={({ field: f }) => (
+                            <FormItem>
+                              <FormLabel className="text-xs">Transfer Mode</FormLabel>
+                              <Select value={f.value ?? "cold"} onValueChange={f.onChange}>
+                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="cold">Cold — connect immediately</SelectItem>
+                                  <SelectItem value="warm_summary">Warm — brief the agent first</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </FormItem>
+                          )} />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* View Schema dialog */}

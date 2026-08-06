@@ -19,6 +19,7 @@ import {
   type CampaignFieldMappings,
 } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
+import { clientContext } from "../middlewares/clientContext.js";
 import { getSelfBaseUrl } from "../lib/app-domain.js";
 import { logger } from "../lib/logger.js";
 
@@ -101,7 +102,7 @@ function deriveStatus(
 
 /* ── GET /connections ────────────────────────────────────────────────────── */
 
-router.get("/connections", requireAuth, async (req, res): Promise<void> => {
+router.get("/connections", requireAuth, clientContext, async (req, res): Promise<void> => {
   const userId = (req as any).clerkUserId as string;
   const baseUrl = getSelfBaseUrl();
 
@@ -188,7 +189,7 @@ router.get("/connections", requireAuth, async (req, res): Promise<void> => {
 
 /* ── PATCH /connections/:campaignId/webhook-config ───────────────────────── */
 
-router.patch("/connections/:campaignId/webhook-config", requireAuth, async (req, res): Promise<void> => {
+router.patch("/connections/:campaignId/webhook-config", requireAuth, clientContext, async (req, res): Promise<void> => {
   const userId     = (req as any).clerkUserId as string;
   const campaignId = Number(req.params["campaignId"]);
   const body = req.body as {
@@ -244,7 +245,7 @@ router.patch("/connections/:campaignId/webhook-config", requireAuth, async (req,
 
 /* ── POST /connections/:campaignId/listen/start ──────────────────────────── */
 
-router.post("/connections/:campaignId/listen/start", requireAuth, async (req, res): Promise<void> => {
+router.post("/connections/:campaignId/listen/start", requireAuth, clientContext, async (req, res): Promise<void> => {
   const userId     = (req as any).clerkUserId as string;
   const campaignId = Number(req.params["campaignId"]);
 
@@ -281,7 +282,7 @@ router.post("/connections/:campaignId/listen/start", requireAuth, async (req, re
 
 /* ── GET /connections/:campaignId/listen/poll ────────────────────────────── */
 
-router.get("/connections/:campaignId/listen/poll", requireAuth, async (req, res): Promise<void> => {
+router.get("/connections/:campaignId/listen/poll", requireAuth, clientContext, async (req, res): Promise<void> => {
   const userId     = (req as any).clerkUserId as string;
   const campaignId = Number(req.params["campaignId"]);
 
@@ -313,7 +314,7 @@ router.get("/connections/:campaignId/listen/poll", requireAuth, async (req, res)
 
 /* ── DELETE /connections/:campaignId/listen/stop ─────────────────────────── */
 
-router.delete("/connections/:campaignId/listen/stop", requireAuth, async (req, res): Promise<void> => {
+router.delete("/connections/:campaignId/listen/stop", requireAuth, clientContext, async (req, res): Promise<void> => {
   const userId     = (req as any).clerkUserId as string;
   const campaignId = Number(req.params["campaignId"]);
 

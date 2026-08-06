@@ -7,6 +7,8 @@
 
 import { Router, type IRouter } from "express";
 import { getAuth } from "../lib/auth-compat.js";
+import { requireAuth } from "../middlewares/requireAuth.js";
+import { clientContext } from "../middlewares/clientContext.js";
 import {
   db,
   campaignsTable, campaignBatchesTable, campaignLeadsTable,
@@ -18,6 +20,8 @@ import {
 import { eq, and, sql, desc, isNotNull, inArray, asc, or, ilike } from "drizzle-orm";
 
 const router: IRouter = Router();
+
+router.use(requireAuth, clientContext);
 
 async function requireBatch(campaignId: number, batchId: number, userId: string) {
   const [campaign] = await db.select({ id: campaignsTable.id })

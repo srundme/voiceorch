@@ -11,7 +11,6 @@ import {
 } from "@workspace/api-client-react";
 import type { Booking } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -23,36 +22,26 @@ import {
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { MonoBadge, titleCaseStatus } from "@/components/mono-badge";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 function statusBadge(status: string) {
-  switch (status) {
-    case "confirmed":
-      return <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/10 text-[10px]">{status}</Badge>;
-    case "pending":
-      return <Badge className="bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/10 text-[10px]">{status}</Badge>;
-    case "cancelled":
-      return <Badge className="bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/10 text-[10px]">{status}</Badge>;
-    case "rescheduled":
-      return <Badge className="bg-sky-500/10 text-sky-400 border-sky-500/20 hover:bg-sky-500/10 text-[10px]">{status}</Badge>;
-    default:
-      return <Badge variant="outline" className="text-[10px]">{status}</Badge>;
-  }
+  return <MonoBadge size="xs">{titleCaseStatus(status)}</MonoBadge>;
 }
 
 function sourceBadge(bookedVia: string) {
   if (bookedVia === "agent") {
     return (
-      <Badge className="bg-muted text-foreground border-border hover:bg-muted gap-1">
+      <MonoBadge className="gap-1 normal-case">
         <Bot className="h-3 w-3" />Agent Call
-      </Badge>
+      </MonoBadge>
     );
   }
   return (
-    <Badge variant="outline" className="gap-1 text-muted-foreground">
+    <MonoBadge outline className="gap-1 normal-case">
       <Globe className="h-3 w-3" />Web
-    </Badge>
+    </MonoBadge>
   );
 }
 
@@ -60,33 +49,17 @@ function CalSyncBadge({ status, error }: { status: Booking["calendarSyncStatus"]
   let badge: React.ReactNode;
   switch (status) {
     case "synced":
-      badge = (
-        <Badge className="bg-green-100 text-green-800 border-green-200 hover:bg-green-100 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800 text-xs">
-          Synced
-        </Badge>
-      );
+      badge = <MonoBadge size="xs">Synced</MonoBadge>;
       break;
     case "scope_insufficient":
-      badge = (
-        <Badge className="bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-100 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800 text-xs">
-          Scope issue
-        </Badge>
-      );
+      badge = <MonoBadge size="xs" outline>Scope issue</MonoBadge>;
       break;
     case "sync_failed":
-      badge = (
-        <Badge className="bg-red-100 text-red-800 border-red-200 hover:bg-red-100 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800 text-xs">
-          Sync failed
-        </Badge>
-      );
+      badge = <MonoBadge size="xs" outline>Sync failed</MonoBadge>;
       break;
     case "skipped":
     default:
-      badge = (
-        <Badge variant="outline" className="text-muted-foreground text-xs">
-          No calendar
-        </Badge>
-      );
+      badge = <MonoBadge size="xs" outline>No calendar</MonoBadge>;
       break;
   }
 

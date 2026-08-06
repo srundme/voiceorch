@@ -6,6 +6,8 @@
 
 import { Router, type IRouter } from "express";
 import { getAuth } from "../lib/auth-compat.js";
+import { requireAuth } from "../middlewares/requireAuth.js";
+import { clientContext } from "../middlewares/clientContext.js";
 import {
   db, campaignsTable, campaignLeadsTable, callsTable,
   callExecutionsTable, leadTimelineTable, callCallbacksTable, callRetriesTable,
@@ -15,6 +17,8 @@ import { scheduleCampaignCall } from "../orchestration/campaignCaller.js";
 import { logger } from "../lib/logger.js";
 
 const router: IRouter = Router();
+
+router.use(requireAuth, clientContext);
 
 async function requireCampaign(campaignId: number, userId: string) {
   const [row] = await db.select().from(campaignsTable)

@@ -1,5 +1,5 @@
 /**
- * Automation sources for an agent — forms, sheets, lists, call rules, journeys.
+ * Automation sources for an agent — forms, sheets, lists, call rules.
  * Used by the standalone Automation page (agent builder stays agent-only).
  */
 
@@ -12,7 +12,6 @@ import {
   Globe,
   List,
   Loader2,
-  MessageCircle,
   Plus,
   Video,
   Zap,
@@ -26,7 +25,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { StatusDot } from "@/components/workspace/workspace";
 import { cn } from "@/lib/utils";
-import { JourneyPanel } from "./journey-panel";
 import { CallRulesPanel } from "./call-rules-panel";
 
 type AutoPipeline = {
@@ -109,8 +107,6 @@ function RowLink({
 export function ReachPanel({
   agentId,
   agentName,
-  webhookUrl,
-  onConfigureEmail,
   onOpenChannels,
   heading = "Automation",
   embedded = false,
@@ -151,7 +147,7 @@ export function ReachPanel({
       id: "website",
       title: "Website form → Call",
       desc: "Webhook on form submit dials this agent",
-      href: `/app/campaigns?tab=lead-sources&agentId=${agentId}`,
+      href: `/app/campaigns?agentId=${agentId}`,
       icon: Globe,
     },
     {
@@ -182,20 +178,6 @@ export function ReachPanel({
       href: "#reach-call-rules",
       icon: Clock,
     },
-    {
-      id: "journey",
-      title: "After-call sequence",
-      desc: "Call → WhatsApp / email / callback",
-      href: "#reach-journey",
-      icon: MessageCircle,
-    },
-    {
-      id: "custom",
-      title: "Custom sequence",
-      desc: "Build your own steps on this agent",
-      href: "#reach-custom-steps",
-      icon: Zap,
-    },
   ];
 
   const loading = campaignsQ.isLoading || pipelinesQ.isLoading;
@@ -217,14 +199,14 @@ export function ReachPanel({
                   onClick={onOpenChannels}
                   className="underline underline-offset-2 hover:text-foreground"
                 >
-                  Channels
+                  Connections
                 </button>
               ) : (
                 <Link
-                  href={`/app/channels?agentId=${agentId}`}
+                  href="/app/connections"
                   className="underline underline-offset-2 hover:text-foreground"
                 >
-                  Channels
+                  Connections
                 </Link>
               )}
               .
@@ -240,11 +222,11 @@ export function ReachPanel({
             Credentials live in{" "}
             {onOpenChannels ? (
               <button type="button" onClick={onOpenChannels} className="underline underline-offset-2 hover:text-foreground">
-                Channels
+                Connections
               </button>
             ) : (
-              <Link href={`/app/channels?agentId=${agentId}`} className="underline underline-offset-2 hover:text-foreground">
-                Channels
+              <Link href="/app/connections" className="underline underline-offset-2 hover:text-foreground">
+                Connections
               </Link>
             )}
             .
@@ -254,6 +236,98 @@ export function ReachPanel({
           </span>
         </div>
       )}
+
+      <section className="overflow-hidden rounded-lg border border-border bg-card">
+        <div className="flex h-10 items-center justify-between border-b border-border/70 px-3.5">
+          <h3 className="text-[11px] font-semibold">Add source</h3>
+          <Plus className="size-3.5 text-muted-foreground" />
+        </div>
+        <div className="px-2">
+          {presets.map((preset) => (
+            <RowLink
+              key={preset.id}
+              href={preset.href}
+              title={preset.title}
+              detail={preset.desc}
+              icon={preset.icon}
+            />
+          ))}
+        </div>
+      </section>
+
+      <section className="overflow-hidden rounded-lg border border-border bg-card">
+        <div className="flex h-10 items-center justify-between border-b border-border/70 px-3.5">
+          <h3 className="text-[11px] font-semibold">Armed</h3>
+          {loading && <Loader2 className="size-3.5 animate-spin text-muted-foreground" />}
+        </div>
+
+        {!loading && armedCount === 0 ? (
+          <p className="px-3.5 py-6 text-[12px] text-muted-foreground">
+            Nothing dialing this agent yet. Add a form, sheet, or list source above.
+          </p>
+        ) : (
+          <div className="px-2">
+            {pipelines.map((p) => (
+              <RowLink
+                key={p.id}
+                href={`/app/automatic-calls/${p.id}`}
+                title={p.name}
+                detail={`Sheet dial · ${p.spreadsheetTitle ?? "Google Sheet"} · ${p.dialedCount} dialed`}
+                icon={FileSpreadsheet}
+                trailing={
+                  <span className="inline-flex items-center gap-1 text-[9px] capitalize text-muted-foreground">
+                    <StatusDot tone={statusTone(p.status)} />
+                    {p.status}
+                  </span>
+                }
+              />
+            ))}
+            {websiteCampaigns.map((c) => (
+              <RowLink
+                key={`web-${c.id}`}
+                href={`/app/campaigns/${c.id}`}
+                title={c.name}
+                detail={`Website / instant · ${c.totalLeads ?? 0} leads · ${c.calledLeads ?? 0} called`}
+                icon={Globe}
+                trailing={
+                  <span className="inline-flex items-center gap-1 text-[9px] capitalize text-muted-foreground">
+                    <StatusDot tone={statusTone(c.isActive === false ? "paused" : (c.status ?? "active"))} />
+                    {c.isActive === false ? "paused" : (c.status ?? "active")}
+                  </span>
+                }
+              />
+            ))}
+            {listCampaigns
+              .filter((c) => !websiteCampaigns.some((w) => w.id === c.id))
+              .map((c) => (
+                <RowLink
+                  key={`list-${c.id}`}
+                  href={`/app/campaigns/${c.id}`}
+                  title={c.name}
+                  detail={`List / batch · ${c.totalLeads ?? 0} leads · ${c.calledLeads ?? 0} called`}
+                  icon={Zap}
+                  trailing={
+                    <span className="inline-flex items-center gap-1 text-[9px] capitalize text-muted-foreground">
+                      <StatusDot tone={statusTone(c.isActive === false ? "paused" : (c.status ?? "active"))} />
+                      {c.isActive === false ? "paused" : (c.status ?? "active")}
+                    </span>
+                  }
+                />
+              ))}
+          </div>
+        )}
+
+        {armedCount > 0 && (
+          <div className="flex flex-wrap gap-1 border-t border-border/70 px-2 py-2">
+            <Button asChild size="sm" variant="ghost" className="h-7 px-2 text-[11px]">
+              <Link href={`/app/campaigns?agentId=${agentId}`}>All campaigns</Link>
+            </Button>
+            <Button asChild size="sm" variant="ghost" className="h-7 px-2 text-[11px]">
+              <Link href="/app/automatic-calls">Automatic calls</Link>
+            </Button>
+          </div>
+        )}
+      </section>
 
       <div id="reach-call-rules" className="scroll-mt-4">
         <CallRulesPanel agentId={agentId} campaigns={campaigns} />

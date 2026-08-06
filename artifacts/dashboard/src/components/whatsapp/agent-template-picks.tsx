@@ -1,6 +1,6 @@
 /**
  * Per-agent WhatsApp template pickers (default + three outcomes).
- * Used in Builder Channels and can share option JSON with /app/whatsapp.
+ * Used in agent WhatsApp template picks and can share option JSON with /app/whatsapp.
  */
 
 import { useEffect, useMemo, useState } from "react";

@@ -36,6 +36,7 @@ import { writeExecutionLog } from "./execution-log.js";
 import type { TimeSlot } from "./scheduling/slot-engine.js";
 import { sendChannelEmail } from "./email-channel.js";
 import { sendMidCallWhatsapp } from "./whatsapp/outbound.js";
+import { resolveBookingLineageCallId } from "./meet-booking.js";
 
 // ── Booking diagnostic log helper ────────────────────────────────────────────
 
@@ -497,8 +498,10 @@ export async function executeNativeBooking(
   agentId: number,
   tool: AgentTool & { type: "native_booking" },
   args: Record<string, unknown>,
+  opts?: { lineageCallId?: number | null },
 ): Promise<string> {
   logger.info({ callId, eventTypeId: tool.eventTypeId }, "Native booking tool invoked");
+  const bookingCallId = await resolveBookingLineageCallId(callId, opts?.lineageCallId);
   const attendeeName = String(args["attendee_name"] ?? args["name"] ?? "Guest");
   const attendeeEmail = String(args["attendee_email"] ?? args["email"] ?? "");
   const preferredRaw = args["preferred_date"] != null ? String(args["preferred_date"]) : null;
@@ -712,7 +715,8 @@ export async function executeNativeBooking(
         .values({
           eventTypeId: eventType.id,
           calendarId: calendar.id,
-          callId,
+          // Prefer original phone call id when booking from a meet-bot session.
+          callId: bookingCallId,
           userId: calendar.userId,
           attendeeName,
           attendeeEmail,
@@ -1004,7 +1008,10 @@ export async function executeNativeBooking(
       googleEventId: googleEventId ?? null,
     }, "success");
 
-    return `booking_confirmed: event="${eventType.name}", slot="${dateStr}", booking_id=${confirmedBooking.id}, attendee="${attendeeName}", email="${attendeeEmail}", status="${confirmedBooking.status}"${meetLink ? `, meet_link="${meetLink}"` : ""}`;
+    const autoJoin = meetLink
+      ? `, meet_link="${meetLink}", auto_join=yes (SnapServe meeting agent will join near this time)`
+      : "";
+    return `booking_confirmed: event="${eventType.name}", slot="${dateStr}", booking_id=${confirmedBooking.id}, attendee="${attendeeName}", email="${attendeeEmail}", status="${confirmedBooking.status}"${autoJoin}`;
   } catch (err) {
     logger.error({ callId, err }, "Native booking tool execution failed");
     return "error: booking failed due to a technical issue";
@@ -1243,6 +1250,7 @@ export async function executeNativeReschedule(
   agentId: number,
   tool: AgentTool & { type: "native_reschedule" },
   args: Record<string, unknown>,
+  opts?: { lineageCallId?: number | null },
 ): Promise<string> {
   logger.info({ callId }, "Native reschedule tool invoked");
   const bookingId = Number(args["booking_id"] ?? args["bookingId"] ?? 0);
@@ -1250,6 +1258,10 @@ export async function executeNativeReschedule(
   if (!bookingId) {
     return "error: booking_id is required to reschedule";
   }
+  const bookingCallId = await resolveBookingLineageCallId(
+    callId,
+    opts?.lineageCallId ?? undefined,
+  );
 
   try {
     const { authorizedUserId } = await resolveCalendarContext(agentId);
@@ -1402,7 +1414,10 @@ export async function executeNativeReschedule(
         .values({
           eventTypeId: eventType.id,
           calendarId: calendar.id,
-          callId,
+          // Keep phone-call lineage (not the live meetbot call id).
+          callId: existing.callId && existing.callId !== callId
+            ? existing.callId
+            : bookingCallId,
           userId: calendar.userId,
           attendeeName: existing.attendeeName,
           attendeeEmail: existing.attendeeEmail,
@@ -1412,6 +1427,9 @@ export async function executeNativeReschedule(
           status: eventType.confirmationMode === "instant" ? "confirmed" : "pending",
           bookedVia: "agent",
           rescheduledFromId: bookingId,
+          // Preserve Meet link until GCal sync confirms (never drop auto-dispatch).
+          meetLink: existing.meetLink ?? null,
+          googleEventId: existing.googleEventId ?? null,
         })
         .returning();
       newBooking = inserted;
@@ -1502,9 +1520,10 @@ export async function executeNativeReschedule(
               additionalHosts: calendar.additionalHosts,
             });
         if (gcalResult) {
-          meetLink = gcalResult.meetLink;
+          // Never wipe an existing Meet link if GCal omits conference data.
+          meetLink = gcalResult.meetLink ?? meetLink ?? existing.meetLink ?? null;
           await db.execute(
-            sql`UPDATE bookings SET meet_link = ${gcalResult.meetLink}, google_event_id = ${gcalResult.eventId} WHERE id = ${confirmedNewBooking.id}`,
+            sql`UPDATE bookings SET meet_link = ${meetLink}, google_event_id = ${gcalResult.eventId} WHERE id = ${confirmedNewBooking.id}`,
           );
         }
       }
@@ -1540,7 +1559,10 @@ export async function executeNativeReschedule(
       },
     }).catch((err) => logger.warn({ callId, bookingId: confirmedNewBooking.id, err }, "Native reschedule: webhook dispatch failed"));
 
-    return `reschedule_confirmed: old_booking_id=${bookingId}, new_booking_id=${confirmedNewBooking.id}, new_slot="${dateStr}", status="${confirmedNewBooking.status}"`;
+    const meetNote = meetLink
+      ? `, meet_url=${meetLink}, auto_join=yes (SnapServe meeting agent will join near the new time)`
+      : ", auto_join=no (no Meet link on this booking — enable Google Meet on the event type)";
+    return `reschedule_confirmed: old_booking_id=${bookingId}, new_booking_id=${confirmedNewBooking.id}, new_slot="${dateStr}", status="${confirmedNewBooking.status}"${meetNote}`;
   } catch (err) {
     logger.error({ callId, err }, "Native reschedule tool execution failed");
     return "error: reschedule failed due to a technical issue";

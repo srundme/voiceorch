@@ -3,6 +3,7 @@ import { format } from "date-fns";
 import { eq, and } from "drizzle-orm";
 import { db, availabilitySchedulesTable, availabilityOverridesTable, schedulingCalendarsTable } from "@workspace/db";
 import { requireAuth } from "../../middlewares/requireAuth.js";
+import { clientContext } from "../../middlewares/clientContext.js";
 import {
   CreateAvailabilityBody,
   UpdateAvailabilityBody,
@@ -25,7 +26,7 @@ async function assertCalendarOwner(calendarId: number, userId: string): Promise<
   return !!cal;
 }
 
-router.get("/scheduling/availability", requireAuth, async (req, res): Promise<void> => {
+router.get("/scheduling/availability", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const qp = ListAvailabilityQueryParams.safeParse(req.query);
   if (!qp.success) { res.status(400).json({ error: "Validation failed", issues: qp.error.issues }); return; }
@@ -37,7 +38,7 @@ router.get("/scheduling/availability", requireAuth, async (req, res): Promise<vo
   res.json(ListAvailabilityResponse.parse(rows));
 });
 
-router.post("/scheduling/availability", requireAuth, async (req, res): Promise<void> => {
+router.post("/scheduling/availability", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const parsed = CreateAvailabilityBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Validation failed", issues: parsed.error.issues }); return; }
@@ -48,7 +49,7 @@ router.post("/scheduling/availability", requireAuth, async (req, res): Promise<v
   res.status(201).json(row);
 });
 
-router.patch("/scheduling/availability/:id", requireAuth, async (req, res): Promise<void> => {
+router.patch("/scheduling/availability/:id", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const params = UpdateAvailabilityParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: "Validation failed", issues: params.error.issues }); return; }
@@ -68,7 +69,7 @@ router.patch("/scheduling/availability/:id", requireAuth, async (req, res): Prom
   res.json(UpdateAvailabilityResponse.parse(row));
 });
 
-router.delete("/scheduling/availability/:id", requireAuth, async (req, res): Promise<void> => {
+router.delete("/scheduling/availability/:id", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const params = DeleteAvailabilityParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: "Validation failed", issues: params.error.issues }); return; }
@@ -82,7 +83,7 @@ router.delete("/scheduling/availability/:id", requireAuth, async (req, res): Pro
   res.sendStatus(204);
 });
 
-router.get("/scheduling/overrides", requireAuth, async (req, res): Promise<void> => {
+router.get("/scheduling/overrides", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const qp = ListAvailabilityOverridesQueryParams.safeParse(req.query);
   if (!qp.success) { res.status(400).json({ error: "Validation failed", issues: qp.error.issues }); return; }
@@ -94,7 +95,7 @@ router.get("/scheduling/overrides", requireAuth, async (req, res): Promise<void>
   res.json(ListAvailabilityOverridesResponse.parse(rows));
 });
 
-router.post("/scheduling/overrides", requireAuth, async (req, res): Promise<void> => {
+router.post("/scheduling/overrides", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const parsed = CreateAvailabilityOverrideBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Validation failed", issues: parsed.error.issues }); return; }
@@ -108,7 +109,7 @@ router.post("/scheduling/overrides", requireAuth, async (req, res): Promise<void
   res.status(201).json(row);
 });
 
-router.delete("/scheduling/overrides/:id", requireAuth, async (req, res): Promise<void> => {
+router.delete("/scheduling/overrides/:id", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const params = DeleteAvailabilityOverrideParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: "Validation failed", issues: params.error.issues }); return; }

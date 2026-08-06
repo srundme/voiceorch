@@ -10,10 +10,11 @@ import {
   GetAgentStatsResponse,
 } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/requireAuth.js";
+import { clientContext } from "../middlewares/clientContext.js";
 
 const router: IRouter = Router();
 
-router.get("/analytics/dashboard", requireAuth, async (req, res): Promise<void> => {
+router.get("/analytics/dashboard", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
 
   const [agentStats] = await db
@@ -70,7 +71,7 @@ router.get("/analytics/dashboard", requireAuth, async (req, res): Promise<void> 
   );
 });
 
-router.get("/analytics/calls/recent", requireAuth, async (req, res): Promise<void> => {
+router.get("/analytics/calls/recent", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
 
   const calls = await db
@@ -105,7 +106,7 @@ router.get("/analytics/calls/recent", requireAuth, async (req, res): Promise<voi
   res.json(GetRecentCallsResponse.parse(mapped));
 });
 
-router.get("/analytics/calls/by-status", requireAuth, async (req, res): Promise<void> => {
+router.get("/analytics/calls/by-status", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
 
   const rows = await db
@@ -120,7 +121,7 @@ router.get("/analytics/calls/by-status", requireAuth, async (req, res): Promise<
   res.json(GetCallsByStatusResponse.parse(rows));
 });
 
-router.get("/analytics/calls/daily", requireAuth, async (req, res): Promise<void> => {
+router.get("/analytics/calls/daily", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
 
   const sevenDaysAgo = new Date();
@@ -144,7 +145,7 @@ router.get("/analytics/calls/daily", requireAuth, async (req, res): Promise<void
 
 /* ── GET /analytics/agents/:id ─────────────────────────────────────────── */
 
-router.get("/analytics/agents/:id", requireAuth, async (req, res): Promise<void> => {
+router.get("/analytics/agents/:id", requireAuth, clientContext, async (req, res): Promise<void> => {
   const params = GetAgentStatsParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: "Validation failed", issues: params.error.issues }); return; }
 

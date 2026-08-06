@@ -23,29 +23,30 @@ export function MetricCard({
   return (
     <div
       className={cn(
-        "bg-card border border-border/80 rounded-xl px-4 py-3.5 flex items-center gap-3.5 min-w-0 shadow-sm hover:shadow-md transition-shadow",
+        "h-full bg-card border border-border/60 rounded-xl px-4 py-3.5 flex items-center gap-3 min-w-0",
         className,
       )}
     >
       {icon && (
-        <div className="h-9 w-9 rounded-xl bg-muted/60 border border-border/50 flex items-center justify-center shrink-0 [&_svg]:h-4 [&_svg]:w-4">
+        <div className="size-8 rounded-lg bg-muted border border-border flex items-center justify-center shrink-0 text-muted-foreground [&_svg]:size-4">
           {icon}
         </div>
       )}
-      <div className="min-w-0 flex-1">
-        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/50 leading-none mb-1.5 truncate">
+      <div className="min-w-0 flex-1 flex flex-col justify-center">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground leading-none mb-1.5 truncate">
           {label}
         </p>
         {loading ? (
-          <Skeleton className="h-6 w-12 rounded-md" />
+          <Skeleton className="h-5 w-10 rounded" />
         ) : (
-          <p className={cn("text-2xl font-bold tabular-nums leading-none tracking-tight", accent ?? "text-foreground")}>
+          <p className={cn("text-xl font-semibold tabular-nums leading-none", accent ?? "text-foreground")}>
             {value}
           </p>
         )}
-        {sub && !loading && (
-          <p className="text-[10px] font-medium text-muted-foreground/60 mt-1 truncate">{sub}</p>
-        )}
+        {/* Reserve sub line so sibling cards stay the same height */}
+        <p className="text-[10px] text-muted-foreground mt-0.5 truncate min-h-[1rem]">
+          {!loading && sub ? sub : "\u00a0"}
+        </p>
       </div>
     </div>
   );
@@ -73,7 +74,7 @@ export function MetricStrip({
             : "grid-cols-2 sm:grid-cols-4";
 
   return (
-    <div className={cn("grid gap-2.5", colClass, className)}>
+    <div className={cn("grid gap-2.5 items-stretch", colClass, className)}>
       {children}
     </div>
   );

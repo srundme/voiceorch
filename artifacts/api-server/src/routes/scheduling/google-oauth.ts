@@ -1,5 +1,6 @@
 import { Router, type IRouter, type Request } from "express";
 import { requireAuth } from "../../middlewares/requireAuth.js";
+import { clientContext } from "../../middlewares/clientContext.js";
 import {
   getAuthUrl,
   exchangeCode,
@@ -92,7 +93,7 @@ function deriveRedirectUri(req: Request): string {
 
 // ── List connected Google accounts ───────────────────────────────────────────
 
-router.get("/scheduling/google/connections", requireAuth, async (req, res): Promise<void> => {
+router.get("/scheduling/google/connections", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const connections = await listConnectionsForUser(clerkId);
   res.json(connections.map(c => {
@@ -112,7 +113,7 @@ router.get("/scheduling/google/connections", requireAuth, async (req, res): Prom
 
 // ── OAuth connect — redirect to Google consent screen ───────────────────────
 
-router.get("/scheduling/google/connect", requireAuth, (req, res): void => {
+router.get("/scheduling/google/connect", requireAuth, clientContext, (req, res): void => {
   const clerkId      = (req as any).clerkUserId as string;
   const returnTo     = (req.query["returnTo"] as string | undefined) ?? "conferencing";
   const returnOrigin = req.query["returnOrigin"] as string | undefined;
@@ -134,7 +135,7 @@ router.get("/scheduling/google/connect", requireAuth, (req, res): void => {
 
 // ── OAuth connect URL — returns the Google auth URL as JSON (for Bearer-token callers) ─
 
-router.get("/scheduling/google/connect-url", requireAuth, async (req, res): Promise<void> => {
+router.get("/scheduling/google/connect-url", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId      = (req as any).clerkUserId as string;
   const returnTo     = (req.query["returnTo"] as string | undefined) ?? "conferencing";
   const returnOrigin = req.query["returnOrigin"] as string | undefined;
@@ -245,7 +246,7 @@ router.get("/scheduling/google/callback", async (req, res): Promise<void> => {
 // Calls calendarList.list to verify the token is valid and the API is reachable.
 // Returns { ok: true, email } on success, { ok: false, error, status? } on failure.
 
-router.post("/scheduling/google/connections/:id/test", requireAuth, async (req, res): Promise<void> => {
+router.post("/scheduling/google/connections/:id/test", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId      = (req as any).clerkUserId as string;
   const connectionId = req.params["id"] as string;
 
@@ -274,7 +275,7 @@ router.post("/scheduling/google/connections/:id/test", requireAuth, async (req, 
 
 // ── Disconnect a specific Google account ─────────────────────────────────────
 
-router.delete("/scheduling/google/connections/:id", requireAuth, async (req, res): Promise<void> => {
+router.delete("/scheduling/google/connections/:id", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId      = (req as any).clerkUserId as string;
   const connectionId = req.params["id"] as string;
 
@@ -293,7 +294,7 @@ router.delete("/scheduling/google/connections/:id", requireAuth, async (req, res
 
 // ── Calendar→connection mapping (which account is linked to which calendar) ──
 
-router.get("/scheduling/google/calendar-links", requireAuth, async (req, res): Promise<void> => {
+router.get("/scheduling/google/calendar-links", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const { db } = await import("@workspace/db");
   const { sql } = await import("drizzle-orm");
@@ -313,7 +314,7 @@ router.get("/scheduling/google/calendar-links", requireAuth, async (req, res): P
 // calendar id (if any). The dashboard uses this to drive the Book Appointment
 // tool's Calendar dropdown.
 
-router.get("/scheduling/google/calendars", requireAuth, async (req, res): Promise<void> => {
+router.get("/scheduling/google/calendars", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const connections = await listConnectionsForUser(clerkId);
 
@@ -359,7 +360,7 @@ router.get("/scheduling/google/calendars", requireAuth, async (req, res): Promis
 
 // ── Status (legacy single-account compat) ────────────────────────────────────
 
-router.get("/scheduling/google/status", requireAuth, async (req, res): Promise<void> => {
+router.get("/scheduling/google/status", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const connections = await listConnectionsForUser(clerkId);
   res.json({

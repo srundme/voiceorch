@@ -144,6 +144,15 @@ const NON_TERMINAL_BATCH_STATUSES = ["draft", "running", "paused"];
  */
 export async function evaluateBatchCompletion(batchId: number): Promise<boolean> {
   try {
+    const [batch] = await db.select({
+      name: campaignBatchesTable.name,
+      leadSource: campaignBatchesTable.leadSource,
+    }).from(campaignBatchesTable).where(eq(campaignBatchesTable.id, batchId)).limit(1);
+    // Call-plan dial queue stays open like a continuous campaign source.
+    if (batch?.name === "__call_plan_queue" || batch?.leadSource === "workflow") {
+      return false;
+    }
+
     // PostgreSQL returns count(*) as a string — coerce with Number().
     const [pendingRow] = await db.select({ count: sql<string>`count(*)` })
       .from(campaignLeadsTable)
@@ -213,8 +222,8 @@ export async function evaluateCampaignCompletion(campaignId: number): Promise<vo
     const [campaign] = await db.select().from(campaignsTable)
       .where(eq(campaignsTable.id, campaignId));
     if (!campaign) return;
-    // Continuous lead sources (webhook, meta_ads, crm) never auto-complete
-    const continuousSources = new Set(["webhook", "meta_ads", "crm"]);
+    // Continuous lead sources (webhook, meta_ads, crm, workflow/call-plans) never auto-complete
+    const continuousSources = new Set(["webhook", "meta_ads", "crm", "workflow"]);
     if (continuousSources.has(campaign.leadSource ?? "")) return;
     if (campaign.status !== "active" && campaign.status !== "draft") return;
 
@@ -362,8 +371,20 @@ async function doRefillCampaignConcurrency(campaignId: number): Promise<void> {
       return;
     }
 
-    const limit = campaign.concurrentCallLimit ?? 20;
-    const currentlyActive = await countCallingLeads(campaign.id);
+    const isWorkflow = campaign.leadSource === "workflow";
+    let limit = campaign.concurrentCallLimit ?? 20;
+    let currentlyActive = await countCallingLeads(campaign.id);
+
+    // Call plans share the account concurrentLimit across all workflow campaigns.
+    if (isWorkflow) {
+      const {
+        getUserConcurrentLimit,
+        countActiveWorkflowCallsForUser,
+      } = await import("./workflow-dial-queue.js");
+      limit = await getUserConcurrentLimit(campaign.userId);
+      currentlyActive = await countActiveWorkflowCallsForUser(campaign.userId);
+    }
+
     let slots = Math.max(0, limit - currentlyActive);
     if (slots <= 0) return;
 
@@ -378,36 +399,53 @@ async function doRefillCampaignConcurrency(campaignId: number): Promise<void> {
     for (const batch of runningBatches) {
       if (slots <= 0) break;
 
-      // Atomic pre-claim — identical guard to fireStartBatch. The trailing
-      // `AND call_status = 'pending'` means a concurrent claim on the same rows
-      // sees the committed 'calling' status and skips them, so no lead is ever
-      // double-dialed even if the poll and an event-driven refill race.
-      // NB: only call_status is written here. last_attempt_at is set by
-      // fireCampaignCall at the moment a real dial is placed, so "Last Activity"
-      // reflects an actual outbound attempt and never a mere pre-claim.
-      // Claim both "pending" (new/batch leads) and "queued" (arrived outside hours).
-      // "queued" is prioritized (alphabetically comes before "pending") so leads
-      // that have been waiting are dialled first when the calling window opens.
-      const claimed = await db.execute<{ id: number }>(sql`
-        UPDATE campaign_leads
-        SET call_status = 'calling'
-        WHERE id IN (
-          SELECT id FROM campaign_leads
-          WHERE campaign_id = ${campaign.id}
-            AND batch_id = ${batch.id}
-            AND call_status IN ('pending', 'queued')
-            AND NOT EXISTS (
-              SELECT 1 FROM call_retries cr
-              WHERE cr.lead_id = campaign_leads.id
-                AND cr.status = 'pending'
-                AND cr.scheduled_at > now()
+      // Atomic pre-claim — identical guard to fireStartBatch.
+      // Workflow (call-plan) leads also require a waiting_call run on an active
+      // journey (or no journey = test/hook), so Pause stops further dials.
+      const claimed = isWorkflow
+        ? await db.execute<{ id: number }>(sql`
+            UPDATE campaign_leads
+            SET call_status = 'calling'
+            WHERE id IN (
+              SELECT cl.id FROM campaign_leads cl
+              JOIN workflow_runs wr ON wr.lead_id = cl.id AND wr.status = 'waiting_call'
+              LEFT JOIN journeys j ON j.workflow_id = wr.workflow_id
+              WHERE cl.campaign_id = ${campaign.id}
+                AND cl.batch_id = ${batch.id}
+                AND cl.call_status IN ('pending', 'queued')
+                AND (j.id IS NULL OR j.status = 'active')
+                AND NOT EXISTS (
+                  SELECT 1 FROM call_retries cr
+                  WHERE cr.lead_id = cl.id
+                    AND cr.status = 'pending'
+                    AND cr.scheduled_at > now()
+                )
+              ORDER BY cl.call_status, cl.id
+              LIMIT ${slots}
             )
-          ORDER BY call_status, id
-          LIMIT ${slots}
-        )
-        AND call_status IN ('pending', 'queued')
-        RETURNING id
-      `);
+            AND call_status IN ('pending', 'queued')
+            RETURNING id
+          `)
+        : await db.execute<{ id: number }>(sql`
+            UPDATE campaign_leads
+            SET call_status = 'calling'
+            WHERE id IN (
+              SELECT id FROM campaign_leads
+              WHERE campaign_id = ${campaign.id}
+                AND batch_id = ${batch.id}
+                AND call_status IN ('pending', 'queued')
+                AND NOT EXISTS (
+                  SELECT 1 FROM call_retries cr
+                  WHERE cr.lead_id = campaign_leads.id
+                    AND cr.status = 'pending'
+                    AND cr.scheduled_at > now()
+                )
+              ORDER BY call_status, id
+              LIMIT ${slots}
+            )
+            AND call_status IN ('pending', 'queued')
+            RETURNING id
+          `);
 
       const claimedIds = claimed.rows.map(r => r.id);
       if (claimedIds.length === 0) continue;
@@ -421,7 +459,7 @@ async function doRefillCampaignConcurrency(campaignId: number): Promise<void> {
 
       slots -= claimedIds.length;
       logger.info(
-        { campaignId: campaign.id, batchId: batch.id, dialed: claimedIds.length, limit, currentlyActive },
+        { campaignId: campaign.id, batchId: batch.id, dialed: claimedIds.length, limit, currentlyActive, isWorkflow },
         "Rolling refill: dialed next pending leads",
       );
     }
@@ -436,6 +474,9 @@ async function doRefillCampaignConcurrency(campaignId: number): Promise<void> {
  */
 export async function refillCampaignForLead(leadId: number): Promise<void> {
   try {
+    const { refillWorkflowDialSlotsForLead } = await import("./workflow-dial-queue.js");
+    if (await refillWorkflowDialSlotsForLead(leadId)) return;
+
     const [lead] = await db.select({ campaignId: campaignLeadsTable.campaignId })
       .from(campaignLeadsTable)
       .where(eq(campaignLeadsTable.id, leadId));

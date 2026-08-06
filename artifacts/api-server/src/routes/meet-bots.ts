@@ -20,14 +20,21 @@ import {
   getMeetBotIdentity,
 } from "../services/meet-bots.js";
 import {
+  bindMeetRosterBot,
   createMeetRoster,
   handleRecallParticipantEvent,
-  RECALL_PARTICIPANT_EVENTS,
+  recallRealtimeEvents,
+  scheduleDiarizedTranscriptArchive,
 } from "../services/meet-roster.js";
 import {
   parseMeetingsConfig,
   resolveMeetRuntimeAgentId,
 } from "../services/meeting-runtime.js";
+import {
+  buildMeetPresentationPageHtml,
+  prepareMeetPresentationAtLaunch,
+  presentationPublicState,
+} from "../services/meet-presentation.js";
 
 const router: IRouter = Router();
 
@@ -60,7 +67,31 @@ router.get("/meet-bots/page", async (req, res) => {
     .send(buildMeetBotPageHtml({ agentId: payload.agentId, token, agentName }));
 });
 
-// ── Public: Recall real-time participant events (speaker identification) ─────
+// ── Public: presentation viewer (Recall screenshare) + state poll ────────────
+router.get("/meet-bots/present", (req, res) => {
+  const token = typeof req.query["mb"] === "string" ? req.query["mb"] : "";
+  const payload = token ? verifyMeetBotToken(token) : null;
+  if (!payload?.mid) {
+    res.status(401).send("Invalid or expired meeting-bot token");
+    return;
+  }
+  res
+    .set("Content-Type", "text/html; charset=utf-8")
+    .set("Cache-Control", "no-store")
+    .send(buildMeetPresentationPageHtml());
+});
+
+router.get("/meet-bots/present-state", (req, res) => {
+  const token = typeof req.query["mb"] === "string" ? req.query["mb"] : "";
+  const payload = token ? verifyMeetBotToken(token) : null;
+  if (!payload?.mid) {
+    res.status(401).json({ ok: false });
+    return;
+  }
+  res.set("Cache-Control", "no-store").json(presentationPublicState(payload.mid));
+});
+
+// ── Public: Recall realtime events (participants + diarized transcript) ──────
 // Auth = the same signed launch token, carried in the webhook URL we gave
 // Recall at bot creation. Always 200s (Recall retries on non-2xx; a forged or
 // expired token should be dropped silently, not hammered).
@@ -72,7 +103,7 @@ router.post("/meet-bots/recall-events", (req, res) => {
     if (!payload?.mid) return;
     handleRecallParticipantEvent(payload.mid, req.body);
   } catch (err) {
-    logger.warn({ err }, "Recall participant event handling failed");
+    logger.warn({ err }, "Recall realtime event handling failed");
   }
 });
 
@@ -115,7 +146,7 @@ router.post("/meet-bots", requireAuth, async (req, res) => {
       return;
     }
 
-    // Channels → Meetings: whoJoins=delegate swaps the runtime agent that enters the room.
+    // Meeting settings: whoJoins=delegate swaps the runtime agent that enters the room.
     const meetings = parseMeetingsConfig(agent.agentConfig);
     let runtimeAgentId = resolveMeetRuntimeAgentId(agentId, agent.agentConfig);
     let botName = agent.name || "Voice Agent";
@@ -141,6 +172,7 @@ router.post("/meet-bots", requireAuth, async (req, res) => {
       userId,
       exp: Date.now() + PAGE_TOKEN_TTL_MS,
       mid,
+      meetUrl: meetingUrl,
       passMemory: meetings.passMemory,
       passCallContext: meetings.passCallContext,
     });
@@ -149,6 +181,13 @@ router.post("/meet-bots", requireAuth, async (req, res) => {
     // Speaker identification: register the roster BEFORE the bot exists so the
     // earliest participant webhooks land on a live entry.
     createMeetRoster(mid, botName);
+    const { screensharePageUrl } = prepareMeetPresentationAtLaunch({
+      mid,
+      token,
+      baseUrl: base,
+      presentationUrl: meetings.presentationUrl,
+      presentationAutoStart: meetings.presentationAutoStart,
+    });
     const bot = await createRecallBot({
       meetingUrl,
       botName,
@@ -156,8 +195,10 @@ router.post("/meet-bots", requireAuth, async (req, res) => {
       ownerUserId: userId,
       agentId: runtimeAgentId,
       eventsUrl: `${base}/api/meet-bots/recall-events?mb=${encodeURIComponent(token)}`,
-      eventsList: RECALL_PARTICIPANT_EVENTS,
+      eventsList: recallRealtimeEvents(),
+      ...(screensharePageUrl ? { screensharePageUrl } : {}),
     });
+    bindMeetRosterBot(mid, bot.id);
     logger.info(
       { userId, agentId, runtimeAgentId, botId: bot.id, whoJoins: meetings.whoJoins },
       "Meeting bot created",
@@ -204,6 +245,7 @@ router.delete("/meet-bots/:botId", requireAuth, async (req, res) => {
       return;
     }
     await leaveRecallBot(bot.id);
+    scheduleDiarizedTranscriptArchive(bot.id);
     res.json({ ok: true });
   } catch (err) {
     res.status(502).json({ error: err instanceof Error ? err.message : "Failed to remove bot" });

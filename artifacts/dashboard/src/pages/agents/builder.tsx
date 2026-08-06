@@ -4,7 +4,7 @@ import { useLocation, useParams, useSearch, Link } from "wouter";
 import {
   Bot, Plus, Search, Phone, Mic, Brain, Webhook, PhoneForwarded,
   Save, MoreHorizontal, Trash2, Settings, FileText, Wrench,
-  VoicemailIcon, SlidersHorizontal, TestTube2, ChevronRight, ChevronLeft,
+  VoicemailIcon, TestTube2, ChevronRight, ChevronLeft,
   Volume2, Check, X, Pencil, ChevronDown, List, Globe, BarChart3,
   User2, Users, Sparkles, BookOpen, ToggleLeft, ToggleRight, Tag, Loader2, Square, AudioLines,
   Play, Pause,
@@ -92,8 +92,15 @@ import { DestinationOtpDialog } from "@/components/destination-otp-dialog";
 import { RecentNumbersList } from "@/components/recent-numbers-list";
 import { useRecentNumbers } from "@/hooks/use-recent-numbers";
 import { GeneratePromptSheet } from "./generate-prompt-sheet";
-import { JourneyPanel } from "./journey-panel";
 import { AgentInboundPanel } from "./agent-inbound-panel";
+import {
+  useAgentTeamMap,
+  sortAgentsByTeam,
+  agentPathWithSection,
+  type AgentTeamMembership,
+} from "./agent-team";
+import { ToolsWhatsappSetup, ToolsEmailSetup } from "./tools-messaging";
+import { MeetingsChannelCard } from "./meetings-channel-card";
 import {
   PropertyRow,
   StatusDot,
@@ -106,18 +113,18 @@ const DASH_API   = `${_DASH_BASE}/api`;
 
 /* ── Types ──────────────────────────────────────────────────────────────────── */
 
-type TabId = "overview" | "prompt" | "voice" | "tools" | "voicemail" | "advanced" | "versions";
+type TabId = "overview" | "prompt" | "voice" | "tools" | "voicemail" | "settings" | "versions";
 
 interface TabDef { id: TabId; label: string; icon: React.ReactNode }
 
 const TABS: TabDef[] = [
-  { id: "overview",    label: "Overview",    icon: <Bot className="h-3.5 w-3.5" /> },
-  { id: "prompt",      label: "Prompt",      icon: <FileText className="h-3.5 w-3.5" /> },
-  { id: "voice",       label: "Voice",       icon: <Mic className="h-3.5 w-3.5" /> },
-  { id: "tools",       label: "Tools",       icon: <Wrench className="h-3.5 w-3.5" /> },
-  { id: "voicemail",   label: "Voicemail",   icon: <VoicemailIcon className="h-3.5 w-3.5" /> },
-  { id: "advanced",    label: "Advanced",    icon: <SlidersHorizontal className="h-3.5 w-3.5" /> },
-  { id: "versions",    label: "Versions",    icon: <History className="h-3.5 w-3.5" /> },
+  { id: "overview",  label: "Overview",  icon: <Bot className="h-3.5 w-3.5" /> },
+  { id: "prompt",    label: "Prompt",    icon: <FileText className="h-3.5 w-3.5" /> },
+  { id: "voice",     label: "Voice",     icon: <Mic className="h-3.5 w-3.5" /> },
+  { id: "tools",     label: "Tools",     icon: <Wrench className="h-3.5 w-3.5" /> },
+  { id: "voicemail", label: "Voicemail", icon: <VoicemailIcon className="h-3.5 w-3.5" /> },
+  { id: "settings",  label: "Settings",  icon: <Settings className="h-3.5 w-3.5" /> },
+  { id: "versions",  label: "Versions",  icon: <History className="h-3.5 w-3.5" /> },
 ];
 
 const BUILDER_SEGMENTS: WorkspaceNavItem<TabId>[] = TABS.map((tab) => ({
@@ -125,8 +132,12 @@ const BUILDER_SEGMENTS: WorkspaceNavItem<TabId>[] = TABS.map((tab) => ({
   label: tab.label,
 }));
 
+/** Map legacy ?section= values onto current tabs. */
 function sectionFromSearch(search: string): TabId {
   const requested = new URLSearchParams(search).get("section");
+  if (requested === "advanced") return "settings";
+  // Channels removed — messaging/booking live under Tools.
+  if (requested === "channels") return "tools";
   return TABS.some((tab) => tab.id === requested) ? requested as TabId : "overview";
 }
 
@@ -357,7 +368,19 @@ function WebhookParamsEditor({ control, toolIndex }: { control: any; toolIndex: 
 
 type CardSection = "transcriber" | "model" | "voice";
 
-function AgentCostSummary({ form, rateMap, compact = false }: { form: any; rateMap: Map<string, number>; agent?: any; compact?: boolean }) {
+function AgentCostSummary({
+  form,
+  rateMap,
+  compact = false,
+  variant = "default",
+}: {
+  form: any;
+  rateMap: Map<string, number>;
+  agent?: any;
+  compact?: boolean;
+  /** line = readiness one-liner; chip/compact = header pill */
+  variant?: "default" | "line" | "chip";
+}) {
   const userProviderNames = useUserProviderNames();
 
   const asrProvider = form.watch("asrProvider");
@@ -374,18 +397,31 @@ function AgentCostSummary({ form, rateMap, compact = false }: { form: any; rateM
   ];
   const breakdown = segments.filter(s => s.cost > 0);
   const barTotal = Math.max(breakdown.reduce((s, x) => s + x.cost, 0), 0.0001);
+  const mode = variant === "default" && compact ? "chip" : variant;
 
-  if (compact) {
+  if (mode === "line") {
+    return (
+      <p className="text-[12px] text-muted-foreground">
+        Billed at{" "}
+        <span className="font-medium tabular-nums text-foreground">₹{totalPerMin.toFixed(2)}</span>
+        /min
+        {isByop ? " · BYOP" : ""}
+      </p>
+    );
+  }
+
+  if (mode === "chip" || compact) {
     return (
       <Tooltip>
         <TooltipTrigger asChild>
-          <div className="inline-flex items-center gap-2 rounded-full border border-border/50 bg-muted/20 px-3 py-1.5 text-[12px] text-muted-foreground cursor-default">
-            <span className="text-muted-foreground/70">Est. cost</span>
+          <div className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border/70 bg-muted/25 px-2.5 text-[11px] text-muted-foreground cursor-default">
+            <span className="hidden text-muted-foreground/70 sm:inline">Est.</span>
             <span className="font-semibold tabular-nums text-foreground">₹{totalPerMin.toFixed(2)}</span>
-            <span className="text-muted-foreground/50">/min</span>
+            <span className="text-muted-foreground/55">/min</span>
           </div>
         </TooltipTrigger>
         <TooltipContent side="bottom" className="text-xs space-y-1">
+          <p className="font-medium text-foreground">Estimated call cost</p>
           {breakdown.map(seg => (
             <div key={seg.key} className="flex items-center justify-between gap-3">
               <span className="font-medium">{seg.label}</span>
@@ -459,10 +495,12 @@ function OverviewTab({
   form,
   agent,
   onGoToPrompt,
+  rateMap,
 }: {
   form: any;
   agent: any;
   onGoToPrompt?: () => void;
+  rateMap: Map<string, number>;
 }) {
   const [openSection, setOpenSection] = useState<CardSection | null>(null);
   const [confirmDiscardSection, setConfirmDiscardSection] = useState<CardSection | null>(null);
@@ -758,6 +796,7 @@ function OverviewTab({
                     ? "Core setup looks ready — edit prompts anytime on the Prompt tab."
                     : "Finish these items before going live."}
                 </p>
+                <AgentCostSummary form={form} rateMap={rateMap} variant="line" />
               </div>
               {onGoToPrompt && (
                 <Button
@@ -845,13 +884,15 @@ function OverviewTab({
             </section>
           )}
 
-          {/* Phone number — assign on the agent (not Connections) */}
           {agent?.id != null && (
-            <AgentInboundPanel
-              agentId={agent.id}
-              preferredManagedNumber={form.watch("preferredManagedNumber")}
-              telephonyProvider={form.watch("telephonyProvider")}
-            />
+            <section className="space-y-2.5">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/55">Phone</p>
+              <AgentInboundPanel
+                agentId={agent.id}
+                preferredManagedNumber={form.watch("preferredManagedNumber")}
+                telephonyProvider={form.watch("telephonyProvider")}
+              />
+            </section>
           )}
 
           {/* ── Transcriber / Language dialog ── */}
@@ -1289,16 +1330,24 @@ function OverviewTab({
 
 /* ── Tab: Prompt ────────────────────────────────────────────────────────────── */
 
-function PromptTab({ form }: { form: any }) {
+function PromptTab({ form, agentId }: { form: any; agentId?: number }) {
+  const [, navigate] = useLocation();
+  const { teamByAgentId } = useAgentTeamMap();
+  const team = agentId != null ? teamByAgentId.get(agentId) : undefined;
   const { fields: pvFields, append: pvAppend, remove: pvRemove } = useFieldArray({ control: form.control, name: "promptVariables" });
   const [generateOpen, setGenerateOpen] = useState(false);
   const [promptSurface, setPromptSurface] = useState<"calls" | "meetings">("calls");
   const agentName  = form.watch("name")     as string | undefined;
   const agentLang  = form.watch("language") as string | undefined;
+  const canAttendMeetings = form.watch("agentSurfaces") === "phone_and_meet";
   const callPromptLen = String(form.watch("systemPrompt") ?? "").length;
   const meetPromptLen = String(form.watch("meetingPrompt") ?? "").length;
   const promptLen = promptSurface === "calls" ? callPromptLen : meetPromptLen;
   const langLabel = LANGUAGES.find(l => l.value === agentLang)?.label ?? agentLang ?? "Language";
+
+  useEffect(() => {
+    if (!canAttendMeetings && promptSurface === "meetings") setPromptSurface("calls");
+  }, [canAttendMeetings, promptSurface]);
 
   return (
     <div className="relative flex min-h-full flex-col gap-6 px-4 py-5 sm:px-6 lg:px-8">
@@ -1314,6 +1363,40 @@ function PromptTab({ form }: { form: any }) {
           setPromptSurface("calls");
         }}
       />
+
+      {team && team.members.length >= 2 && (
+        <section className="space-y-2 rounded-xl border border-border/60 bg-muted/15 px-3.5 py-3">
+          <div className="space-y-0.5">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Team prompts</p>
+            <p className="text-[12px] text-muted-foreground leading-snug">
+              Each teammate has their own prompt. Handoffs use the specialist&apos;s prompt.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {team.members.map((m) => {
+              const active = m.agentId === agentId;
+              return (
+                <button
+                  key={m.agentId}
+                  type="button"
+                  disabled={active}
+                  onClick={() => navigate(agentPathWithSection(m.agentId, "prompt"))}
+                  className={cn(
+                    "inline-flex max-w-full items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] transition-colors",
+                    active
+                      ? "border-foreground/25 bg-background font-medium text-foreground"
+                      : "border-border/70 bg-background/60 text-muted-foreground hover:border-foreground/20 hover:text-foreground",
+                  )}
+                  title={active ? `Editing ${m.agentName}'s prompt` : `Edit ${m.agentName}'s prompt`}
+                >
+                  <span className="truncate">{active ? `Editing ${m.agentName}` : m.agentName}</span>
+                  <span className="truncate text-muted-foreground">· {m.roleName}</span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       <section className="space-y-3">
         <div className="space-y-0.5">
@@ -1361,7 +1444,9 @@ function PromptTab({ form }: { form: any }) {
             </Badge>
           </div>
           <p className="mt-0.5 text-[12px] text-muted-foreground">
-            Separate instructions for phone calls and video meetings.
+            {canAttendMeetings
+              ? "Instructions for phone calls and for when this agent joins Meet."
+              : "Instructions for phone calls."}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -1383,66 +1468,97 @@ function PromptTab({ form }: { form: any }) {
         </div>
       </div>
 
-      <Tabs value={promptSurface} onValueChange={(v) => setPromptSurface(v as "calls" | "meetings")} className="w-full">
-        <TabsList className="h-9 w-full sm:w-auto grid grid-cols-2 sm:inline-flex">
-          <TabsTrigger value="calls" className="gap-1.5 text-xs">
-            <Phone className="h-3.5 w-3.5" />
-            On calls
-          </TabsTrigger>
-          <TabsTrigger value="meetings" className="gap-1.5 text-xs">
-            <Video className="h-3.5 w-3.5" />
-            In meetings
-          </TabsTrigger>
-        </TabsList>
-        <TabsContent value="calls" className="mt-3">
-          <FormField control={form.control} name="systemPrompt" render={({ field }) => (
-            <FormItem className="space-y-0">
-              <FormControl>
-                <div className="overflow-hidden rounded-lg border border-border bg-card">
-                  <div className="flex h-9 items-center justify-between border-b border-border/70 bg-muted/20 px-3">
-                    <span className="text-[10px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
-                      Call prompt
-                    </span>
-                    <span className="font-mono text-[10px] text-muted-foreground/70">markdown · plain text</span>
+      {canAttendMeetings ? (
+        <Tabs value={promptSurface} onValueChange={(v) => setPromptSurface(v as "calls" | "meetings")} className="w-full">
+          <TabsList className="h-9 w-full sm:w-auto grid grid-cols-2 sm:inline-flex">
+            <TabsTrigger value="calls" className="gap-1.5 text-xs">
+              <Phone className="h-3.5 w-3.5" />
+              On calls
+            </TabsTrigger>
+            <TabsTrigger value="meetings" className="gap-1.5 text-xs">
+              <Video className="h-3.5 w-3.5" />
+              In meetings
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="calls" className="mt-3">
+            <FormField control={form.control} name="systemPrompt" render={({ field }) => (
+              <FormItem className="space-y-0">
+                <FormControl>
+                  <div className="overflow-hidden rounded-lg border border-border bg-card">
+                    <div className="flex h-9 items-center justify-between border-b border-border/70 bg-muted/20 px-3">
+                      <span className="text-[10px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
+                        Call prompt
+                      </span>
+                      <span className="font-mono text-[10px] text-muted-foreground/70">markdown · plain text</span>
+                    </div>
+                    <Textarea
+                      className="min-h-[min(48vh,480px)] resize-y rounded-none border-0 bg-transparent px-3.5 py-3.5 font-mono text-[12.5px] leading-6 shadow-none focus-visible:ring-0"
+                      placeholder="You are a helpful voice assistant on phone calls…"
+                      {...field}
+                    />
                   </div>
-                  <Textarea
-                    className="min-h-[min(48vh,480px)] resize-y rounded-none border-0 bg-transparent px-3.5 py-3.5 font-mono text-[12.5px] leading-6 shadow-none focus-visible:ring-0"
-                    placeholder="You are a helpful voice assistant on phone calls…"
-                    {...field}
-                  />
-                </div>
-              </FormControl>
-              <FormMessage className="mt-2" />
-            </FormItem>
-          )} />
-        </TabsContent>
-        <TabsContent value="meetings" className="mt-3 space-y-2">
-          <FormField control={form.control} name="meetingPrompt" render={({ field }) => (
-            <FormItem className="space-y-0">
-              <FormControl>
-                <div className="overflow-hidden rounded-lg border border-border bg-card">
-                  <div className="flex h-9 items-center justify-between border-b border-border/70 bg-muted/20 px-3">
-                    <span className="text-[10px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
-                      Meeting prompt
-                    </span>
-                    <span className="font-mono text-[10px] text-muted-foreground/70">blank = use call prompt</span>
+                </FormControl>
+                <FormMessage className="mt-2" />
+              </FormItem>
+            )} />
+          </TabsContent>
+          <TabsContent value="meetings" className="mt-3 space-y-3">
+            <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2.5 text-[11px] text-muted-foreground leading-relaxed">
+              <p className="font-medium text-foreground/90">Meeting ≠ phone call</p>
+              <ul className="mt-1.5 list-disc space-y-0.5 pl-4">
+                <li>People may ask you to wait 2–3 minutes for others — stay quiet after one acknowledgment.</li>
+                <li>Speaker tags like <span className="font-mono text-[10px]">[Speaker: Name]</span> are for you; never read them aloud.</li>
+                <li>Waiting patience &amp; max length are under <span className="text-foreground/80">Tools → Meeting join</span> (not Engine phone silence).</li>
+              </ul>
+            </div>
+            <FormField control={form.control} name="meetingPrompt" render={({ field }) => (
+              <FormItem className="space-y-0">
+                <FormControl>
+                  <div className="overflow-hidden rounded-lg border border-border bg-card">
+                    <div className="flex h-9 items-center justify-between border-b border-border/70 bg-muted/20 px-3">
+                      <span className="text-[10px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
+                        Meeting prompt
+                      </span>
+                      <span className="font-mono text-[10px] text-muted-foreground/70">blank = use call prompt</span>
+                    </div>
+                    <Textarea
+                      className="min-h-[min(48vh,480px)] resize-y rounded-none border-0 bg-transparent px-3.5 py-3.5 font-mono text-[12.5px] leading-6 shadow-none focus-visible:ring-0"
+                      placeholder={"You are a participant in a live video meeting…\nIf asked to wait for others, acknowledge once and stay quiet.\nAddress people by name when speaker tags appear."}
+                      {...field}
+                      value={field.value ?? ""}
+                    />
                   </div>
-                  <Textarea
-                    className="min-h-[min(48vh,480px)] resize-y rounded-none border-0 bg-transparent px-3.5 py-3.5 font-mono text-[12.5px] leading-6 shadow-none focus-visible:ring-0"
-                    placeholder="Optional. Leave blank to reuse the call prompt…"
-                    {...field}
-                    value={field.value ?? ""}
-                  />
+                </FormControl>
+                <FormMessage className="mt-2" />
+              </FormItem>
+            )} />
+            <p className="text-[11px] text-muted-foreground">
+              Phone + meetings agents join Google Meet when Booking is on (Tools). Configure wait time and max meeting length in Tools → Meeting join.
+            </p>
+          </TabsContent>
+        </Tabs>
+      ) : (
+        <FormField control={form.control} name="systemPrompt" render={({ field }) => (
+          <FormItem className="space-y-0">
+            <FormControl>
+              <div className="overflow-hidden rounded-lg border border-border bg-card">
+                <div className="flex h-9 items-center justify-between border-b border-border/70 bg-muted/20 px-3">
+                  <span className="text-[10px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
+                    Call prompt
+                  </span>
+                  <span className="font-mono text-[10px] text-muted-foreground/70">markdown · plain text</span>
                 </div>
-              </FormControl>
-              <FormMessage className="mt-2" />
-            </FormItem>
-          )} />
-          <p className="text-[11px] text-muted-foreground">
-            Join / delegate settings stay under Channels → Meetings.
-          </p>
-        </TabsContent>
-      </Tabs>
+                <Textarea
+                  className="min-h-[min(48vh,480px)] resize-y rounded-none border-0 bg-transparent px-3.5 py-3.5 font-mono text-[12.5px] leading-6 shadow-none focus-visible:ring-0"
+                  placeholder="You are a helpful voice assistant on phone calls…"
+                  {...field}
+                />
+              </div>
+            </FormControl>
+            <FormMessage className="mt-2" />
+          </FormItem>
+        )} />
+      )}
 
       <section className="overflow-hidden rounded-lg border border-border bg-card">
         <div className="border-b border-border/70 px-3.5 py-2.5">
@@ -2244,7 +2360,7 @@ function VoiceCallFeelPresets({ form }: { form: any }) {
       <div>
         <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Phone feel</h3>
         <p className="mt-0.5 text-[12px] text-muted-foreground">
-          How quickly the agent takes the turn — same Call Engine knobs as Advanced → Engine.
+          How quickly the agent takes the turn — same Call Engine knobs as Settings → Engine.
         </p>
         {asrProviderVal === "sarvam" && (
           <p className="text-[11px] text-muted-foreground mt-1">
@@ -2283,7 +2399,7 @@ function VoiceCallFeelPresets({ form }: { form: any }) {
         </div>
         <p className="text-[10px] text-muted-foreground leading-relaxed">
           Fine-tune endpointing, linear delay, and interrupt words on{" "}
-          <span className="text-foreground/80">Advanced → Engine</span>.
+          <span className="text-foreground/80">Settings → Engine</span>.
         </p>
       </div>
     </section>
@@ -2518,7 +2634,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
       icon: <Mail className="h-4 w-4" />,
       color: "sky",
       label: "Send Email",
-      description: "Lets the agent email the caller mid-call using Channels → Email (your Brevo). Asks for their address, then sends the channel template.",
+      description: "Lets the agent email the caller mid-call using your Brevo sender (configure below). Asks for their address, then sends the email template.",
       needsEventType: false,
     },
     {
@@ -2526,10 +2642,33 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
       icon: <MessageCircle className="h-4 w-4" />,
       color: "emerald",
       label: "Send WhatsApp",
-      description: "Lets the agent send a WhatsApp template mid-call via Meta Business API or your BSP webhook. Uses the caller’s phone unless they give another number.",
+      description: "Lets the agent send a WhatsApp template mid-call. Pick connection + templates below when enabled.",
       needsEventType: false,
     },
   ] as const;
+
+  const canAttendMeetings = form.watch("agentSurfaces") === "phone_and_meet";
+
+  const transferIdx = nativeToolIndex("call_transfer");
+  const transferOn = transferIdx >= 0;
+
+  const toggleCallTransfer = (on: boolean) => {
+    const idx = nativeToolIndex("call_transfer");
+    if (on) {
+      if (idx < 0) {
+        append({
+          type: "call_transfer" as any,
+          name: "transfer_to_human",
+          description: "Transfer the call to a human agent when the caller requests it or the issue cannot be resolved automatically.",
+          transferTo: "",
+          warmHandoffMessage: "",
+          transferMode: "cold",
+        });
+      }
+    } else if (idx >= 0) {
+      remove(idx);
+    }
+  };
 
   const colorMap: Record<string, { border: string; bg: string; iconBg: string; iconText: string; label: string; badge: string; badgeText: string; active: string }> = {
     emerald: { border: "border-emerald-500/40", bg: "bg-emerald-500/10", iconBg: "bg-emerald-500/15", iconText: "text-emerald-600 dark:text-emerald-400", label: "text-emerald-700 dark:text-emerald-300", badge: "bg-emerald-500/20", badgeText: "text-emerald-700 dark:text-emerald-300", active: "" },
@@ -2572,6 +2711,24 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
               <p className="text-[11px] leading-relaxed text-muted-foreground/60">
                 One switch enables the full booking flow: check availability, book, list, reschedule, and cancel.
               </p>
+              {(bookingEnabled || bookingPartial) && (
+                <div className="mt-1.5 space-y-1">
+                  <p className="text-[11px] leading-relaxed text-muted-foreground">
+                    {canAttendMeetings
+                      ? "This is a phone + meetings agent — it joins Google Meet when a booking is made."
+                      : "Phone-only agent — can book the calendar, but will not join the Meet."}
+                  </p>
+                  {!canAttendMeetings && (
+                    <button
+                      type="button"
+                      className="text-[11px] font-medium text-foreground underline underline-offset-2"
+                      onClick={() => form.setValue("agentSurfaces", "phone_and_meet", { shouldDirty: true })}
+                    >
+                      Upgrade to phone + meetings (joins Meet) — then Save
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
             <div className="mt-1 shrink-0">
               <Switch
@@ -2683,6 +2840,18 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                 </Button>
               </div>
 
+              {canAttendMeetings && agentId && (
+                <div className="rounded-lg border border-border/40 bg-background/30 p-3">
+                  <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/70">
+                    Meeting settings
+                  </p>
+                  <p className="mb-3 text-[11px] text-muted-foreground leading-relaxed">
+                    Who joins, wait patience, max length, and optional presentation deck.
+                  </p>
+                  <MeetingsChannelCard agentId={agentId} showJoinLink={false} />
+                </div>
+              )}
+
               {bookingDetailsOpen && (
                 <div className="space-y-2 rounded-lg border border-border/40 bg-muted/15 p-3">
                   {BOOKING_TOOL_LABELS.map(({ type, fnName, label }) => {
@@ -2771,10 +2940,34 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
           )}
         </div>
 
-        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-1 mt-4">Call Control</p>
-        {CALL_CONTROL_TOOLS.map(({ type, icon, color, label, description }) => {
+        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-1 mt-4">Messaging</p>
+        {CALL_CONTROL_TOOLS.filter((t) => t.type === "send_email" || t.type === "send_whatsapp").map(({ type, icon, color, label, description }) => {
           const isOn = hasNativeTool(type);
-          const c = colorMap[color];
+          return (
+            <div key={type} className={cn("rounded-xl border transition-all duration-150", isOn ? "border-border/70 bg-card/40" : "border-border/40 bg-card/20")}>
+              <div className="w-full text-left p-4 flex items-start gap-3">
+                <div className="mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center shrink-0 bg-muted/30">
+                  <span className={cn(isOn ? "text-foreground/70" : "text-muted-foreground/35")}>{icon}</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className="text-xs font-semibold text-foreground/80">{label}</span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground/60 leading-relaxed">{description}</p>
+                </div>
+                <div className="shrink-0 mt-1">
+                  <Switch checked={isOn} onCheckedChange={() => toggleNativeTool(type)} />
+                </div>
+              </div>
+              {type === "send_whatsapp" && isOn && agentId ? <ToolsWhatsappSetup agentId={agentId} /> : null}
+              {type === "send_email" && isOn ? <ToolsEmailSetup /> : null}
+            </div>
+          );
+        })}
+
+        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-1 mt-4">Call Control</p>
+        {CALL_CONTROL_TOOLS.filter((t) => t.type === "end_call").map(({ type, icon, label, description }) => {
+          const isOn = hasNativeTool(type);
           return (
             <div key={type} className={cn("rounded-xl border transition-all duration-150", isOn ? "border-border/70 bg-card/40" : "border-border/40 bg-card/20")}>
               <div className="w-full text-left p-4 flex items-start gap-3">
@@ -2794,6 +2987,78 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
             </div>
           );
         })}
+
+        {/* Call Transfer — platform tool (not under Custom Tools) */}
+        <div className={cn("rounded-xl border transition-all duration-150", transferOn ? "border-border/70 bg-card/40" : "border-border/40 bg-card/20")}>
+          <div className="w-full text-left p-4 flex items-start gap-3">
+            <div className="mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center shrink-0 bg-muted/30">
+              <PhoneForwarded className={cn("h-4 w-4", transferOn ? "text-foreground/70" : "text-muted-foreground/35")} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-0.5">
+                <span className="text-xs font-semibold text-foreground/80">Call Transfer</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground/60 leading-relaxed">
+                Warm or cold transfer to a human number when the caller asks or the agent can’t resolve the issue.
+              </p>
+            </div>
+            <div className="shrink-0 mt-1">
+              <Switch checked={transferOn} onCheckedChange={(v) => toggleCallTransfer(v)} />
+            </div>
+          </div>
+          {transferOn && transferIdx >= 0 && (
+            <div className="space-y-3 border-t border-border/30 px-4 pb-4 pt-3">
+              <div className="grid grid-cols-2 gap-3">
+                <FormField control={form.control} name={`tools.${transferIdx}.name`} render={({ field: f }) => (
+                  <FormItem className="space-y-1">
+                    <FormLabel className="text-[10px] text-muted-foreground">Function Name</FormLabel>
+                    <FormControl><Input placeholder="transfer_to_human" className="h-8 text-xs" {...f} /></FormControl>
+                    <FormMessage className="text-[10px]" />
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name={`tools.${transferIdx}.transferTo`} render={({ field: f }) => (
+                  <FormItem className="space-y-1">
+                    <FormLabel className="text-[10px] text-muted-foreground">Transfer To</FormLabel>
+                    <FormControl><Input placeholder="+12125551234" className="h-8 text-xs" {...f} /></FormControl>
+                  </FormItem>
+                )} />
+              </div>
+              <FormField control={form.control} name={`tools.${transferIdx}.description`} render={({ field: f }) => (
+                <FormItem className="space-y-1">
+                  <FormLabel className="text-[10px] text-muted-foreground">Description (shown to LLM)</FormLabel>
+                  <FormControl><Textarea className="min-h-[60px] text-xs resize-none" placeholder="When should the LLM transfer?" {...f} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name={`tools.${transferIdx}.warmHandoffMessage`} render={({ field: f }) => (
+                <FormItem className="space-y-1">
+                  <FormLabel className="text-[10px] text-muted-foreground">Warm Handoff Message</FormLabel>
+                  <FormControl><Input placeholder="Connecting you with a specialist now…" className="h-8 text-xs" {...f} /></FormControl>
+                </FormItem>
+              )} />
+              <FormField control={form.control} name={`tools.${transferIdx}.transferMode`} render={({ field: f }) => (
+                <FormItem className="space-y-1">
+                  <FormLabel className="text-[10px] text-muted-foreground">Transfer Mode</FormLabel>
+                  <Select value={f.value ?? "cold"} onValueChange={f.onChange}>
+                    <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="cold" className="text-xs">Cold — connect immediately</SelectItem>
+                      <SelectItem value="warm_summary" className="text-xs">Warm — brief the agent first (context-aware)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </FormItem>
+              )} />
+              {form.watch(`tools.${transferIdx}.transferMode`) === "warm_summary" && (
+                <FormField control={form.control} name={`tools.${transferIdx}.summaryPrompt`} render={({ field: f }) => (
+                  <FormItem className="space-y-1">
+                    <FormLabel className="text-[10px] text-muted-foreground">Briefing Prompt (optional)</FormLabel>
+                    <FormControl><Textarea className="min-h-[60px] text-xs resize-none" placeholder="Default: customer name, core issue, urgency, and key context the agent needs." {...f} /></FormControl>
+                  </FormItem>
+                )} />
+              )}
+            </div>
+          )}
+        </div>
 
         <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-1 mt-4">Recording</p>
         {/* Call Recording card */}
@@ -2902,45 +3167,36 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
       </div>
       </div>
 
-      {/* ── Custom Tools ─── */}
+      {/* ── Custom Tools (webhooks only — Call Transfer lives under Platform Tools) ─── */}
       <div>
         <div className="flex items-center justify-between mb-3">
           <div>
             <h3 className="text-sm font-semibold mb-0.5">Custom Tools</h3>
-            <p className="text-xs text-muted-foreground">Functions the LLM can invoke mid-conversation</p>
+            <p className="text-xs text-muted-foreground">Your own HTTP functions the LLM can invoke mid-conversation</p>
           </div>
-          <div className="flex gap-2">
-            <Button type="button" variant="outline" size="sm" className="h-7 text-xs"
-              onClick={() => append({ type: "call_transfer", name: "transfer_to_human", description: "Transfer to a human agent.", transferTo: "", warmHandoffMessage: "" })}>
-              <PhoneForwarded className="h-3.5 w-3.5 mr-1" /> Call Transfer
-            </Button>
-            <Button type="button" variant="outline" size="sm" className="h-7 text-xs"
-              onClick={() => append({ type: "webhook", name: "custom_action", description: "Invoke when caller requests a specific action.", url: "", method: "POST", secret: "", preToolMessage: "One moment…", parameters: [] })}>
-              <Webhook className="h-3.5 w-3.5 mr-1" /> Custom Function
-            </Button>
-          </div>
+          <Button type="button" variant="outline" size="sm" className="h-7 text-xs"
+            onClick={() => append({ type: "webhook", name: "custom_action", description: "Invoke when caller requests a specific action.", url: "", method: "POST", secret: "", preToolMessage: "One moment…", parameters: [] })}>
+            <Webhook className="h-3.5 w-3.5 mr-1" /> Custom Function
+          </Button>
         </div>
 
-        {(form.watch("tools") ?? []).filter((t: { type: string }) => t.type === "call_transfer" || t.type === "webhook").length === 0 ? (
+        {(form.watch("tools") ?? []).filter((t: { type: string }) => t.type === "webhook").length === 0 ? (
           <div className="rounded-xl border border-dashed border-border/50 p-8 text-center">
             <Wrench className="h-7 w-7 text-muted-foreground/20 mx-auto mb-2" />
             <p className="text-sm font-medium text-muted-foreground/50">No custom tools</p>
-            <p className="text-xs text-muted-foreground/30 mt-0.5">Add a Call Transfer or Custom Function above</p>
+            <p className="text-xs text-muted-foreground/30 mt-0.5">Add a Custom Function above</p>
           </div>
         ) : (
           <div className="space-y-3">
             {fields.flatMap((field, index) => {
               const toolType = form.watch(`tools.${index}.type`);
-              if (toolType !== "call_transfer" && toolType !== "webhook") return [];
+              if (toolType !== "webhook") return [];
               return (
                 <div key={field.id} className="rounded-xl border border-border/60 bg-card/30 p-4 space-y-3">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      {toolType === "webhook"
-                        ? <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground"><Webhook className="h-3 w-3" />Custom Function</span>
-                        : <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground"><PhoneForwarded className="h-3 w-3" />Call Transfer</span>
-                      }
-                    </div>
+                    <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                      <Webhook className="h-3 w-3" />Custom Function
+                    </span>
                     <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => remove(index)}>
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
@@ -2953,21 +3209,12 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                         <FormMessage className="text-[10px]" />
                       </FormItem>
                     )} />
-                    {toolType === "webhook" ? (
-                      <FormField control={form.control} name={`tools.${index}.preToolMessage`} render={({ field: f }) => (
-                        <FormItem className="space-y-1">
-                          <FormLabel className="text-[10px] text-muted-foreground">Pre-call Message</FormLabel>
-                          <FormControl><Input placeholder="One moment…" className="h-8 text-xs" {...f} /></FormControl>
-                        </FormItem>
-                      )} />
-                    ) : (
-                      <FormField control={form.control} name={`tools.${index}.transferTo`} render={({ field: f }) => (
-                        <FormItem className="space-y-1">
-                          <FormLabel className="text-[10px] text-muted-foreground">Transfer To</FormLabel>
-                          <FormControl><Input placeholder="+12125551234" className="h-8 text-xs" {...f} /></FormControl>
-                        </FormItem>
-                      )} />
-                    )}
+                    <FormField control={form.control} name={`tools.${index}.preToolMessage`} render={({ field: f }) => (
+                      <FormItem className="space-y-1">
+                        <FormLabel className="text-[10px] text-muted-foreground">Pre-call Message</FormLabel>
+                        <FormControl><Input placeholder="One moment…" className="h-8 text-xs" {...f} /></FormControl>
+                      </FormItem>
+                    )} />
                   </div>
                   <FormField control={form.control} name={`tools.${index}.description`} render={({ field: f }) => (
                     <FormItem className="space-y-1">
@@ -2976,69 +3223,37 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                       <FormMessage />
                     </FormItem>
                   )} />
-                  {toolType === "webhook" && (
-                    <div className="space-y-3">
-                      <div className="grid grid-cols-[1fr_100px] gap-2">
-                        <FormField control={form.control} name={`tools.${index}.url`} render={({ field: f }) => (
-                          <FormItem className="space-y-1">
-                            <FormLabel className="text-[10px] text-muted-foreground">Endpoint URL</FormLabel>
-                            <FormControl><Input placeholder="https://your-api.com/webhook" className="h-8 text-xs" {...f} /></FormControl>
-                          </FormItem>
-                        )} />
-                        <FormField control={form.control} name={`tools.${index}.method`} render={({ field: f }) => (
-                          <FormItem className="space-y-1">
-                            <FormLabel className="text-[10px] text-muted-foreground">Method</FormLabel>
-                            <Select value={f.value ?? "POST"} onValueChange={f.onChange}>
-                              <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="POST" className="text-xs">POST</SelectItem>
-                                <SelectItem value="GET" className="text-xs">GET</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </FormItem>
-                        )} />
-                      </div>
-                      <FormField control={form.control} name={`tools.${index}.secret`} render={({ field: f }) => (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-[1fr_100px] gap-2">
+                      <FormField control={form.control} name={`tools.${index}.url`} render={({ field: f }) => (
                         <FormItem className="space-y-1">
-                          <FormLabel className="text-[10px] text-muted-foreground">X-Webhook-Secret (optional)</FormLabel>
-                          <FormControl><Input type="password" placeholder="shared-secret" className="h-8 text-xs" {...f} /></FormControl>
+                          <FormLabel className="text-[10px] text-muted-foreground">Endpoint URL</FormLabel>
+                          <FormControl><Input placeholder="https://your-api.com/webhook" className="h-8 text-xs" {...f} /></FormControl>
                         </FormItem>
                       )} />
-                      <div className="border-t border-border/40 pt-3">
-                        <WebhookParamsEditor control={form.control} toolIndex={index} />
-                      </div>
-                    </div>
-                  )}
-                  {toolType === "call_transfer" && (
-                    <div className="space-y-3">
-                      <FormField control={form.control} name={`tools.${index}.warmHandoffMessage`} render={({ field: f }) => (
+                      <FormField control={form.control} name={`tools.${index}.method`} render={({ field: f }) => (
                         <FormItem className="space-y-1">
-                          <FormLabel className="text-[10px] text-muted-foreground">Warm Handoff Message</FormLabel>
-                          <FormControl><Input placeholder="Connecting you with a specialist now…" className="h-8 text-xs" {...f} /></FormControl>
-                        </FormItem>
-                      )} />
-                      <FormField control={form.control} name={`tools.${index}.transferMode`} render={({ field: f }) => (
-                        <FormItem className="space-y-1">
-                          <FormLabel className="text-[10px] text-muted-foreground">Transfer Mode</FormLabel>
-                          <Select value={f.value ?? "cold"} onValueChange={f.onChange}>
+                          <FormLabel className="text-[10px] text-muted-foreground">Method</FormLabel>
+                          <Select value={f.value ?? "POST"} onValueChange={f.onChange}>
                             <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="cold" className="text-xs">Cold — connect immediately</SelectItem>
-                              <SelectItem value="warm_summary" className="text-xs">Warm — brief the agent first (context-aware)</SelectItem>
+                              <SelectItem value="POST" className="text-xs">POST</SelectItem>
+                              <SelectItem value="GET" className="text-xs">GET</SelectItem>
                             </SelectContent>
                           </Select>
                         </FormItem>
                       )} />
-                      {form.watch(`tools.${index}.transferMode`) === "warm_summary" && (
-                        <FormField control={form.control} name={`tools.${index}.summaryPrompt`} render={({ field: f }) => (
-                          <FormItem className="space-y-1">
-                            <FormLabel className="text-[10px] text-muted-foreground">Briefing Prompt (optional)</FormLabel>
-                            <FormControl><Textarea className="min-h-[60px] text-xs resize-none" placeholder="Default: customer name, core issue, urgency, and key context the agent needs." {...f} /></FormControl>
-                          </FormItem>
-                        )} />
-                      )}
                     </div>
-                  )}
+                    <FormField control={form.control} name={`tools.${index}.secret`} render={({ field: f }) => (
+                      <FormItem className="space-y-1">
+                        <FormLabel className="text-[10px] text-muted-foreground">X-Webhook-Secret (optional)</FormLabel>
+                        <FormControl><Input type="password" placeholder="shared-secret" className="h-8 text-xs" {...f} /></FormControl>
+                      </FormItem>
+                    )} />
+                    <div className="border-t border-border/40 pt-3">
+                      <WebhookParamsEditor control={form.control} toolIndex={index} />
+                    </div>
+                  </div>
                 </div>
               );
             })}
@@ -3245,24 +3460,30 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
 
   return (
     <div className="flex flex-col">
-      {/* ── Sub-nav ── */}
-      <div className="flex flex-shrink-0 items-center gap-1 border-b border-border/40 px-4 pb-3 pt-4 sm:px-6 lg:px-8">
-        {nav.map(n => (
-          <button
-            key={n.id}
-            type="button"
-            onClick={() => setSection(n.id)}
-            className={cn(
-              "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11.5px] font-medium transition-all",
-              section === n.id
-                ? "bg-primary/15 text-primary border border-primary/30"
-                : "text-muted-foreground hover:text-foreground hover:bg-accent/50",
-            )}
-          >
-            {n.icon}
-            {n.label}
-          </button>
-        ))}
+      <div className="border-b border-border/40 px-4 pt-5 sm:px-6 lg:px-8">
+        <h2 className="text-[15px] font-semibold tracking-[-0.02em]">Settings</h2>
+        <p className="mt-0.5 text-[12px] text-muted-foreground">
+          Engine timing, call limits, analytics webhooks, dispositions, and compliance.
+        </p>
+        {/* ── Sub-nav ── */}
+        <div className="mt-3 flex flex-shrink-0 items-center gap-1 pb-3">
+          {nav.map(n => (
+            <button
+              key={n.id}
+              type="button"
+              onClick={() => setSection(n.id)}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11.5px] font-medium transition-all",
+                section === n.id
+                  ? "bg-primary/15 text-primary border border-primary/30"
+                  : "text-muted-foreground hover:text-foreground hover:bg-accent/50",
+              )}
+            >
+              {n.icon}
+              {n.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* ── Content ── */}
@@ -3720,7 +3941,7 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
             <div>
               <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">CRM / post-call webhook</h3>
               <p className="text-[11px] text-muted-foreground mt-0.5">
-                Notify your CRM or Zap after a call ends. Separate from Journey lead intake — leave blank if you only need intake.
+                Notify your CRM or Zap after a call ends. Leave blank if unused.
               </p>
             </div>
             <div className="space-y-3 rounded-xl border border-border/50 bg-card/40 p-4">
@@ -3798,6 +4019,7 @@ function AgentListPanel({ selectedId, onSelect, className }: {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const { data: agents, isLoading } = useListAgents({ query: { queryKey: getListAgentsQueryKey() } });
+  const { teamByAgentId } = useAgentTeamMap();
   const deleteAgent = useDeleteAgent();
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
@@ -3823,12 +4045,13 @@ function AgentListPanel({ selectedId, onSelect, className }: {
     }
   };
 
-  const filtered = (agents ?? [])
-    .filter(a => {
+  const filtered = sortAgentsByTeam(
+    (agents ?? []).filter(a => {
       if (search && !a.name.toLowerCase().includes(search.toLowerCase())) return false;
       return true;
-    })
-    .sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime());
+    }),
+    teamByAgentId,
+  );
   const liveCount = (agents ?? []).filter(a => a.status === "active").length;
   const totalCount = agents?.length ?? 0;
 
@@ -3870,6 +4093,7 @@ function AgentListPanel({ selectedId, onSelect, className }: {
         {filtered.map((agent) => {
           const isSelected = agent.id === selectedId;
           const isLive = agent.status === "active";
+          const team = teamByAgentId.get(agent.id);
           return (
             <button
               key={agent.id}
@@ -3885,9 +4109,19 @@ function AgentListPanel({ selectedId, onSelect, className }: {
                   <span className="truncate text-[12px] font-medium">{agent.name}</span>
                   <StatusDot tone={isLive ? "success" : "neutral"} />
                 </div>
-                <p className="truncate text-[10px] text-muted-foreground">
-                  {agent.asrProvider} · {agent.ttsProvider}
-                </p>
+                {team ? (
+                  <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
+                    <span className="inline-flex max-w-full items-center gap-1 rounded border border-border/60 bg-muted/40 px-1 py-px">
+                      <Users className="size-2.5 shrink-0" />
+                      <span className="truncate">Team · {team.squadName}</span>
+                    </span>
+                    {team.roleName ? <span className="ml-1 truncate">· {team.roleName}</span> : null}
+                  </p>
+                ) : (
+                  <p className="truncate text-[10px] text-muted-foreground">
+                    {agent.asrProvider} · {agent.ttsProvider}
+                  </p>
+                )}
               </div>
               <button
                 type="button"
@@ -4100,36 +4334,6 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
           </Button>
         </div>
       )}
-    </div>
-  );
-}
-
-function AnalysisTab({
-  form,
-  agentId,
-  onConfigureEmail,
-  onOpenChannels,
-}: {
-  form: any;
-  agentId: number;
-  onConfigureEmail?: () => void;
-  onOpenChannels?: () => void;
-}) {
-  return (
-    <div className="relative p-6 space-y-8">
-      <section className="space-y-2">
-        <h2 className="text-base font-semibold tracking-tight">Journey</h2>
-        <p className="text-[12px] text-muted-foreground max-w-3xl">
-          Attach one auto-pilot sequence to this agent: lead in → call → WhatsApp/email/callback. Channels hold WhatsApp &amp; Email; CRM webhook and disposition live under Advanced → Integrations.
-        </p>
-      </section>
-
-      <JourneyPanel
-        agentId={agentId}
-        webhookUrl={form.watch("webhookUrl")}
-        onConfigureEmail={onConfigureEmail}
-        onOpenChannels={onOpenChannels}
-      />
     </div>
   );
 }
@@ -5767,6 +5971,9 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
       agentComposition: "single",
       agentSurfaces: "phone",
       meetingPrompt: "",
+      meetingMaxDurationSeconds: 45 * 60,
+      meetingSilenceTimeoutSeconds: 3 * 60,
+      meetingSilenceHangupEnabled: true,
     },
   });
 
@@ -5916,6 +6123,16 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
       meetingPrompt: typeof (agent as any).agentConfig?.meetings?.meetingPrompt === "string"
         ? (agent as any).agentConfig.meetings.meetingPrompt
         : "",
+      meetingMaxDurationSeconds:
+        typeof (agent as any).agentConfig?.meetings?.maxDurationSeconds === "number"
+          ? (agent as any).agentConfig.meetings.maxDurationSeconds
+          : 45 * 60,
+      meetingSilenceTimeoutSeconds:
+        typeof (agent as any).agentConfig?.meetings?.silenceTimeoutSeconds === "number"
+          ? (agent as any).agentConfig.meetings.silenceTimeoutSeconds
+          : 3 * 60,
+      meetingSilenceHangupEnabled:
+        (agent as any).agentConfig?.meetings?.silenceHangupEnabled !== false,
     });
     if ((agent as any).agentConfig?.voiceStack === "gemini_live") {
       form.setValue("llmProvider", "google");
@@ -5960,10 +6177,10 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
     },
     (errors) => {
       const fieldTabMap: Record<string, TabId> = {
-        webhookUrl:               "advanced",
-        webhookSecret:            "advanced",
-        schedulingCalendarId:     "overview",
-        schedulingEventTypeId:    "overview",
+        webhookUrl:               "settings",
+        webhookSecret:            "settings",
+        schedulingCalendarId:     "tools",
+        schedulingEventTypeId:    "tools",
         noiseCancellationEnabled: "voice",
         ambientNoiseEnabled:      "voice",
         ambientNoiseTrack:        "voice",
@@ -5977,14 +6194,14 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
         sarvamSpeechEndFlushMs:      "voice",
         sarvamIncompleteHoldMs:      "voice",
         stopSpeakingNumWords:     "voice",
-        vadSilenceMs:             "advanced",
-        bargeInEnabled:           "advanced",
-        bargeInEnergyThreshold:   "advanced",
-        bargeInMinFrames:         "advanced",
-        micSensitivity:           "advanced",
-        timezone:                 "advanced",
-        autoRedialEnabled:        "advanced",
-        autoRedialMaxAttempts:    "advanced",
+        vadSilenceMs:             "settings",
+        bargeInEnabled:           "settings",
+        bargeInEnergyThreshold:   "settings",
+        bargeInMinFrames:         "settings",
+        micSensitivity:           "settings",
+        timezone:                 "prompt",
+        autoRedialEnabled:        "settings",
+        autoRedialMaxAttempts:    "settings",
         machineDetectionMode:     "voicemail",
         voicemailAction:          "voicemail",
         voicemailMessage:         "voicemail",
@@ -6078,6 +6295,15 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
     return () => window.removeEventListener("beforeunload", warnBeforeLeave);
   }, [isDirty]);
 
+  const watchedName = form.watch("name") as string | undefined;
+  useEffect(() => {
+    const label = (watchedName ?? agent?.name)?.trim();
+    document.title = label ? `${label} · Agent · SnapServe` : "Agent · SnapServe";
+    return () => {
+      document.title = "SnapServe";
+    };
+  }, [watchedName, agent?.name]);
+
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
   const [renameValue, setRenameValue] = useState("");
   const handleRenameSave = () => {
@@ -6102,7 +6328,7 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
   return (
     <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
       {/* Single toolbar — agent identity + actions */}
-      <header className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border bg-background px-3 sm:h-14 sm:px-5">
+      <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border bg-background px-3 sm:h-16 sm:px-5">
         <div className="flex min-w-0 items-center gap-2.5">
           <Button
             type="button"
@@ -6134,11 +6360,18 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
           <button
             type="button"
             onClick={() => { setRenameValue(agent.name ?? ""); setRenameDialogOpen(true); }}
-            className="inline-flex max-w-[320px] items-center gap-1.5 truncate text-left"
+            className="group inline-flex min-w-0 max-w-[min(420px,52vw)] items-center gap-2 rounded-lg border border-border bg-card px-2.5 py-1 text-left shadow-sm hover:border-foreground/25 hover:bg-muted/40"
             title="Rename agent"
           >
-            <span className="truncate text-[14px] font-semibold tracking-[-0.02em]">{agent.name}</span>
-            <Pencil className="size-3 shrink-0 text-muted-foreground opacity-60" />
+            <span className="min-w-0">
+              <span className="block text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-foreground leading-none">
+                Editing
+              </span>
+              <span className="mt-0.5 block truncate text-[15px] sm:text-[16px] font-semibold tracking-[-0.03em] text-foreground leading-tight">
+                {agent.name}
+              </span>
+            </span>
+            <Pencil className="size-3.5 shrink-0 text-muted-foreground opacity-70 group-hover:opacity-100" />
           </button>
           <span className="inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-muted/30 px-1.5 py-0.5 text-[10px] capitalize text-muted-foreground">
             <StatusDot tone={agent.status === "active" ? "success" : "neutral"} />
@@ -6151,7 +6384,27 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
           )}
         </div>
 
+        {/* Phone chip fills the middle toolbar gap — full card stays on Overview */}
+        <div className="hidden min-w-0 flex-1 items-center justify-center px-3 md:flex">
+          <AgentInboundPanel
+            agentId={agent.id}
+            preferredManagedNumber={form.watch("preferredManagedNumber")}
+            telephonyProvider={form.watch("telephonyProvider")}
+            compact
+            className="max-w-[260px]"
+          />
+        </div>
+
         <div className="flex shrink-0 items-center gap-1.5">
+          <div className="md:hidden">
+            <AgentInboundPanel
+              agentId={agent.id}
+              preferredManagedNumber={form.watch("preferredManagedNumber")}
+              telephonyProvider={form.watch("telephonyProvider")}
+              compact
+            />
+          </div>
+          <AgentCostSummary form={form} rateMap={rateMap} variant="chip" />
           <Button
             type="button"
             size="sm"
@@ -6160,7 +6413,7 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
             onClick={() => setCallDialog(true)}
           >
             <Phone className="size-3.5" />
-            Phone
+            Call
           </Button>
           <Button
             type="button"
@@ -6212,7 +6465,9 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
         </div>
       </header>
 
-      {/* Rename Agent dialog — team strip lives on Overview */}
+      <AgentTeamChromeBar agentId={agentId} section={activeTab} />
+
+      {/* Rename Agent dialog — Overview still has Add-to-team for solos */}
       <Dialog open={renameDialogOpen} onOpenChange={setRenameDialogOpen}>
         <DialogContent className="sm:max-w-[440px]">
           <DialogHeader>
@@ -6287,14 +6542,15 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
                   <OverviewTab
                     form={form}
                     agent={agent}
+                    rateMap={rateMap}
                     onGoToPrompt={() => handleTabClick("prompt")}
                   />
                 )}
-                {activeTab === "prompt"    && <PromptTab form={form} />}
+                {activeTab === "prompt"    && <PromptTab form={form} agentId={agentId} />}
                 {activeTab === "voice"     && <VoiceTab form={form} />}
                 {activeTab === "tools"     && <ToolsTab form={form} agentId={agentId} />}
                 {activeTab === "voicemail" && <VoicemailTab form={form} />}
-                {activeTab === "advanced"  && <AdvancedTab form={form} agent={agent} />}
+                {activeTab === "settings"  && <AdvancedTab form={form} agent={agent} />}
                 {activeTab === "versions"  && <VersionsTab agentId={agent.id} />}
               </form>
 
@@ -6424,10 +6680,13 @@ function PromptReadinessAside({
   });
   const voiceOk = isGeminiLive || Boolean(ttsVoice && ttsVoice !== "__custom__");
 
+  const canAttendMeetings = form.watch("agentSurfaces") === "phone_and_meet";
   const rows = [
     { label: "Welcome", ready: greeting.length >= 4, detail: firstSpeaker },
     { label: "Call prompt", ready: systemPrompt.length >= 40, detail: `${systemPrompt.length.toLocaleString()} chars` },
-    { label: "Meeting prompt", ready: meetingPrompt.length > 0, detail: meetingPrompt ? `${meetingPrompt.length.toLocaleString()} chars` : "Uses call prompt", optional: true },
+    ...(canAttendMeetings
+      ? [{ label: "Meeting prompt", ready: meetingPrompt.length > 0, detail: meetingPrompt ? `${meetingPrompt.length.toLocaleString()} chars` : "Uses call prompt", optional: true as const }]
+      : []),
     { label: "Voice", ready: voiceOk, detail: voiceOk ? "Set" : "Missing" },
   ];
 
@@ -6477,23 +6736,84 @@ function PromptReadinessAside({
   );
 }
 
+function TeammateChips({
+  agentId,
+  membership,
+  section,
+}: {
+  agentId: number;
+  membership: AgentTeamMembership;
+  section?: string | null;
+}) {
+  const [, navigate] = useLocation();
+  return (
+    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+      {membership.members.map((m) => {
+        const active = m.agentId === agentId;
+        return (
+          <button
+            key={m.agentId}
+            type="button"
+            disabled={active}
+            onClick={() => navigate(agentPathWithSection(m.agentId, section))}
+            className={cn(
+              "inline-flex max-w-full items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] transition-colors",
+              active
+                ? "border-foreground/25 bg-background font-medium text-foreground"
+                : "border-border/70 bg-background/70 text-muted-foreground hover:border-foreground/20 hover:text-foreground",
+            )}
+            title={active ? `${m.agentName} (editing)` : `Switch to ${m.agentName}`}
+          >
+            <span className="truncate">{m.agentName}</span>
+            <span className="truncate text-muted-foreground">· {m.roleName}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Always-on chrome bar when this agent is on a team (above section tabs). */
+function AgentTeamChromeBar({ agentId, section }: { agentId: number; section: string }) {
+  const [, navigate] = useLocation();
+  const { teamByAgentId, isLoading } = useAgentTeamMap();
+  const membership = teamByAgentId.get(agentId);
+
+  if (isLoading || !membership) return null;
+
+  return (
+    <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border/70 bg-muted/15 px-3 py-1.5 sm:px-5">
+      <Users className="size-3.5 shrink-0 text-muted-foreground" />
+      <button
+        type="button"
+        onClick={() => navigate(`/app/squads/${membership.squadId}`)}
+        className="inline-flex max-w-[160px] items-center gap-1 truncate text-[11px] font-medium hover:underline"
+        title={membership.squadName}
+      >
+        <GitBranch className="size-3 shrink-0 text-muted-foreground" />
+        <span className="truncate">{membership.squadName}</span>
+      </button>
+      <TeammateChips agentId={agentId} membership={membership} section={section} />
+      <Button
+        type="button"
+        size="sm"
+        variant="ghost"
+        className="h-7 shrink-0 gap-1 px-2 text-[11px] text-muted-foreground"
+        onClick={() => navigate(`/app/squads/${membership.squadId}`)}
+      >
+        Manage
+      </Button>
+    </div>
+  );
+}
+
+/** Overview card: team detail or quiet “Add to team” for solos. */
 function AgentTeamStrip({ agentId, compact }: { agentId: number; compact?: boolean }) {
   const [, navigate] = useLocation();
-  const squadsQ = useQuery({
-    queryKey: ["agent-team-strip", agentId],
-    queryFn: () => customFetch<Array<{
-      id: number;
-      name: string;
-      status: string;
-      members: Array<{ agentId: number; roleName: string; agentName?: string | null }>;
-    }>>("/api/squads"),
-    staleTime: 30_000,
-  });
-  const teams = (squadsQ.data ?? []).filter((s) =>
-    s.members?.some((m) => m.agentId === agentId),
-  );
+  const { teamByAgentId, isLoading } = useAgentTeamMap();
+  const membership = teamByAgentId.get(agentId);
 
-  if (squadsQ.isLoading) return null;
+  if (isLoading) return null;
 
   const shell = cn(
     compact
@@ -6501,7 +6821,7 @@ function AgentTeamStrip({ agentId, compact }: { agentId: number; compact?: boole
       : "flex shrink-0 flex-wrap items-center gap-2 border-b border-border/70 bg-muted/15 px-3 py-1.5 sm:px-5",
   );
 
-  if (teams.length === 0) {
+  if (!membership) {
     return (
       <div className={shell}>
         <Users className="size-3.5 shrink-0 text-muted-foreground" />
@@ -6525,33 +6845,23 @@ function AgentTeamStrip({ agentId, compact }: { agentId: number; compact?: boole
   return (
     <div className={shell}>
       <Users className="size-3.5 shrink-0 text-muted-foreground" />
-      {!compact && <span className="text-[11px] text-muted-foreground">Team</span>}
-      {teams.map((team) => {
-        const role = team.members.find((m) => m.agentId === agentId)?.roleName;
-        const mates = team.members
-          .filter((m) => m.agentId !== agentId)
-          .map((m) => m.agentName || m.roleName)
-          .slice(0, 3);
-        return (
-          <button
-            key={team.id}
-            type="button"
-            onClick={() => navigate(`/app/squads/${team.id}`)}
-            className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-border/70 bg-background px-2 py-0.5 text-[11px] hover:bg-muted/40"
-            title={mates.length ? `With ${mates.join(", ")}` : team.name}
-          >
-            <GitBranch className="size-3 shrink-0 text-muted-foreground" />
-            <span className="truncate font-medium">{team.name}</span>
-            {role ? <span className="truncate text-muted-foreground">· {role}</span> : null}
-          </button>
-        );
-      })}
+      <button
+        type="button"
+        onClick={() => navigate(`/app/squads/${membership.squadId}`)}
+        className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-border/70 bg-background px-2 py-0.5 text-[11px] hover:bg-muted/40"
+        title={membership.mates.length ? `With ${membership.mates.map((m) => m.agentName).join(", ")}` : membership.squadName}
+      >
+        <GitBranch className="size-3 shrink-0 text-muted-foreground" />
+        <span className="truncate font-medium">{membership.squadName}</span>
+        {membership.roleName ? <span className="truncate text-muted-foreground">· {membership.roleName}</span> : null}
+      </button>
+      <TeammateChips agentId={agentId} membership={membership} section="overview" />
       <Button
         type="button"
         size="sm"
         variant="ghost"
         className="h-7 shrink-0 gap-1 px-2 text-[11px] text-muted-foreground"
-        onClick={() => navigate("/app/squads")}
+        onClick={() => navigate(`/app/squads/${membership.squadId}`)}
       >
         Manage
       </Button>
@@ -6567,8 +6877,48 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
   const [composition, setComposition] = useState<"single" | "team">("single");
   const [surfaces, setSurfaces] = useState<"phone" | "phone_and_meet">("phone");
   const [agentName, setAgentName] = useState("");
+  const [teamName, setTeamName] = useState("");
+  const [agent1Name, setAgent1Name] = useState("");
+  const [agent1Role, setAgent1Role] = useState("Lead Qualifier");
+  const [agent2Name, setAgent2Name] = useState("");
+  const [agent2Role, setAgent2Role] = useState("Meeting Scheduler");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+
+  const buildAgentBody = (name: string): Record<string, unknown> => ({
+    name,
+    asrProvider: "sarvam",
+    asrModel: "saaras:v3",
+    asrLanguage: "",
+    language: "en-IN",
+    telephonyProvider: "vobiz",
+    systemPrompt: "You are a helpful AI voice assistant.",
+    greetingMessage: "Hello! How can I help you today?",
+    tools: [
+      { type: "end_call", name: "end_call", description: "End the call when the conversation is complete." },
+    ],
+    llmProvider: "google",
+    llmModel: "gemini-3.6-flash",
+    ttsProvider: "sarvam",
+    ttsModel: "bulbul:v3",
+    ttsVoice: "priya",
+    // Attendance capacity is fixed by agent type:
+    // phone+meet → joins Meet when Booking is on; phone-only → book only, never join.
+    agentConfig: {
+      meetings: {
+        enabled: surfaces === "phone_and_meet",
+        whoJoins: "self",
+        meetingPrompt: "",
+        passMemory: true,
+        passCallContext: true,
+        maxDurationSeconds: 45 * 60,
+        silenceTimeoutSeconds: 3 * 60,
+        silenceHangupEnabled: true,
+        presentationUrl: "",
+        presentationAutoStart: false,
+      },
+    },
+  });
 
   const handleClose = () => {
     if (creating) return;
@@ -6576,6 +6926,11 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
     setComposition("single");
     setSurfaces("phone");
     setAgentName("");
+    setTeamName("");
+    setAgent1Name("");
+    setAgent1Role("Lead Qualifier");
+    setAgent2Name("");
+    setAgent2Role("Meeting Scheduler");
     setCreateError(null);
     onClose();
   };
@@ -6584,53 +6939,93 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
     setCreating(true);
     setCreateError(null);
     try {
-      const name = agentName.trim() || "New Voice Agent";
-      const body: Record<string, unknown> = {
-        name,
-        asrProvider: "sarvam",
-        asrModel: "saaras:v3",
-        asrLanguage: "",
-        language: "en-IN",
-        telephonyProvider: "vobiz",
-        systemPrompt: "You are a helpful AI voice assistant.",
-        greetingMessage: "Hello! How can I help you today?",
-        tools: [
-          { type: "end_call", name: "end_call", description: "End the call when the conversation is complete." },
-        ],
-        llmProvider: "google",
-        llmModel: "gemini-3.6-flash",
-        ttsProvider: "sarvam",
-        ttsModel: "bulbul:v3",
-        ttsVoice: "priya",
-      };
-      if (surfaces === "phone_and_meet") {
-        body.agentConfig = {
-          meetings: {
-            enabled: true,
-            whoJoins: "self",
-            meetingPrompt: "",
-            passMemory: true,
-            passCallContext: true,
-          },
-        };
+      if (composition === "team") {
+        const resolvedTeam = teamName.trim() || "New team";
+        const name1 = agent1Name.trim() || "Lead Qualifier";
+        const name2 = agent2Name.trim() || "Meeting Scheduler";
+        const role1 = agent1Role.trim() || "Lead Qualifier";
+        const role2 = agent2Role.trim() || "Meeting Scheduler";
+
+        const agent1 = await customFetch<{ id: number }>(`${DASH_API}/agents`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(buildAgentBody(name1)),
+        });
+
+        let agent2: { id: number };
+        try {
+          agent2 = await customFetch<{ id: number }>(`${DASH_API}/agents`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(buildAgentBody(name2)),
+          });
+        } catch (err: any) {
+          await queryClient.invalidateQueries({ queryKey: getListAgentsQueryKey() });
+          const issueMsg = Array.isArray(err?.issues) ? err.issues.map((i: any) => `${i.path.join(".")}: ${i.message}`).join(", ") : "";
+          setCreateError(
+            issueMsg
+              ? `Created “${name1}”, but agent 2 failed: ${issueMsg}`
+              : `Created “${name1}”, but agent 2 failed: ${err?.message ?? "Please try again from the agents list."}`,
+          );
+          return;
+        }
+
+        try {
+          await customFetch(`${DASH_API}/squads`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: resolvedTeam,
+              description: null,
+              status: "active",
+              members: [
+                {
+                  agentId: agent1.id,
+                  roleName: role1,
+                  roleType: "specialist",
+                  instructions: "Entry point — hand off when a specialist should take over",
+                  handoffEnabled: true,
+                  sortOrder: 0,
+                },
+                {
+                  agentId: agent2.id,
+                  roleName: role2,
+                  roleType: "specialist",
+                  instructions: null,
+                  handoffEnabled: true,
+                  sortOrder: 1,
+                },
+              ],
+            }),
+          });
+        } catch (err: any) {
+          await queryClient.invalidateQueries({ queryKey: getListAgentsQueryKey() });
+          setCreateError(
+            `Both agents were created, but the team failed: ${err?.message ?? "Open Squads to assemble them manually."}`,
+          );
+          return;
+        }
+
+        await queryClient.invalidateQueries({ queryKey: getListAgentsQueryKey() });
+        await queryClient.invalidateQueries({ queryKey: ["squads"] });
+        handleClose();
+        toast({
+          title: "Team ready",
+          description: "Edit each agent’s prompt from the Team bar — handoffs use each specialist’s own prompt.",
+        });
+        navigate(agentPathWithSection(agent1.id, "prompt"));
+        return;
       }
 
+      const name = agentName.trim() || "New Voice Agent";
       const result = await customFetch<{ id: number }>(`${DASH_API}/agents`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify(buildAgentBody(name)),
       });
       await queryClient.invalidateQueries({ queryKey: getListAgentsQueryKey() });
       handleClose();
-      if (composition === "team") {
-        toast({
-          title: "First agent ready",
-          description: "Add teammates and name the team — then they can hand off mid-call.",
-        });
-        navigate(`/app/squads?seedAgent=${result.id}`);
-      } else {
-        navigate(`/app/agents/${result.id}`);
-      }
+      navigate(`/app/agents/${result.id}`);
     } catch (err: any) {
       const issueMsg = Array.isArray(err?.issues) ? err.issues.map((i: any) => `${i.path.join(".")}: ${i.message}`).join(", ") : "";
       setCreateError(issueMsg ? `Validation failed: ${issueMsg}` : (err?.message ?? "Failed to create agent. Please try again."));
@@ -6642,17 +7037,18 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
   const stepTitle =
     step === "compose" ? "Who is this for?"
       : step === "surfaces" ? "Where will they talk?"
-        : "Name your agent";
+        : composition === "team" ? "Name your team"
+          : "Name your agent";
   const stepDesc =
-    step === "compose" ? "Start with one agent, or plan a handoff team."
-      : step === "surfaces" ? "Phone only, or phone plus video meetings with a separate prompt."
+    step === "compose" ? "Start with one agent, or create two that hand off mid-call."
+      : step === "surfaces" ? "Phone only (book but never join Meet), or phone + meetings (joins Meet when Booking is on)."
         : composition === "team"
-          ? "We’ll create this agent, then open team setup so you can add teammates."
-          : "You can edit prompts and channels anytime.";
+          ? "We’ll create both agents and wire handoffs automatically."
+          : "You can edit prompts, tools, and settings anytime.";
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose(); }}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className={cn("sm:max-w-md", composition === "team" && step === "name" && "sm:max-w-lg")}>
         <DialogHeader>
           <DialogTitle>{stepTitle}</DialogTitle>
           <DialogDescription>{stepDesc}</DialogDescription>
@@ -6693,7 +7089,7 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
               </div>
               <div>
                 <p className="text-sm font-semibold">Team</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Handoffs across agents</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Create two agents that hand off mid-call</p>
               </div>
             </button>
             <button
@@ -6722,7 +7118,9 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
               >
                 <Phone className="h-4 w-4 text-primary" />
                 <p className="text-sm font-semibold">Phone</p>
-                <p className="text-[11px] text-muted-foreground leading-snug">Inbound / outbound voice calls</p>
+                <p className="text-[11px] text-muted-foreground leading-snug">
+                  Voice calls. Can book calendar — does not join Meet.
+                </p>
               </button>
               <button
                 type="button"
@@ -6739,7 +7137,9 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
                   <Video className="h-4 w-4 text-primary" />
                 </div>
                 <p className="text-sm font-semibold">Phone + meetings</p>
-                <p className="text-[11px] text-muted-foreground leading-snug">Dual prompts — calls and Meet/Zoom</p>
+                <p className="text-[11px] text-muted-foreground leading-snug">
+                  Voice + joins Meet when Booking is enabled.
+                </p>
               </button>
             </div>
             <DialogFooter>
@@ -6749,7 +7149,7 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
           </div>
         )}
 
-        {step === "name" && (
+        {step === "name" && composition === "single" && (
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
               <Label htmlFor="scratch-name">Agent name</Label>
@@ -6763,7 +7163,7 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
               />
             </div>
             <p className="text-[11px] text-muted-foreground">
-              {composition === "single" ? "One agent" : "Team (first agent)"}
+              One agent
               {" · "}
               {surfaces === "phone" ? "Phone" : "Phone + meetings"}
             </p>
@@ -6771,7 +7171,78 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
             <DialogFooter>
               <Button variant="ghost" onClick={() => setStep("surfaces")} disabled={creating}>Back</Button>
               <Button onClick={() => void handleCreate()} disabled={creating}>
-                {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : composition === "team" ? "Create & assemble team" : "Create agent"}
+                {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create agent"}
+              </Button>
+            </DialogFooter>
+          </div>
+        )}
+
+        {step === "name" && composition === "team" && (
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="team-name">Team name</Label>
+              <Input
+                id="team-name"
+                placeholder="e.g. Sales team"
+                value={teamName}
+                onChange={e => setTeamName(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <div className="rounded-lg border border-border/60 p-3 space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">Agent 1</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label htmlFor="agent1-name" className="text-[11px]">Name</Label>
+                  <Input
+                    id="agent1-name"
+                    placeholder="e.g. Lead Qualifier"
+                    value={agent1Name}
+                    onChange={e => setAgent1Name(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="agent1-role" className="text-[11px]">Role</Label>
+                  <Input
+                    id="agent1-role"
+                    placeholder="Lead Qualifier"
+                    value={agent1Role}
+                    onChange={e => setAgent1Role(e.target.value)}
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="rounded-lg border border-border/60 p-3 space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">Agent 2</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label htmlFor="agent2-name" className="text-[11px]">Name</Label>
+                  <Input
+                    id="agent2-name"
+                    placeholder="e.g. Meeting Scheduler"
+                    value={agent2Name}
+                    onChange={e => setAgent2Name(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="agent2-role" className="text-[11px]">Role</Label>
+                  <Input
+                    id="agent2-role"
+                    placeholder="Meeting Scheduler"
+                    value={agent2Role}
+                    onChange={e => setAgent2Role(e.target.value)}
+                  />
+                </div>
+              </div>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              Two agents · {surfaces === "phone" ? "Phone" : "Phone + meetings"} · handoffs wired automatically
+            </p>
+            {createError && <p className="text-xs text-destructive">{createError}</p>}
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setStep("surfaces")} disabled={creating}>Back</Button>
+              <Button onClick={() => void handleCreate()} disabled={creating}>
+                {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create team"}
               </Button>
             </DialogFooter>
           </div>

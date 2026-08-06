@@ -12,6 +12,7 @@ import {
   type EmailContentTemplate,
 } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
+import { clientContext } from "../middlewares/clientContext.js";
 import {
   ensureEmailChannel,
   getEmailChannel,
@@ -23,7 +24,7 @@ import { listTemplateVariables } from "../services/template-vars.js";
 
 const router: IRouter = Router();
 
-router.get("/email/channel", requireAuth, async (req, res): Promise<void> => {
+router.get("/email/channel", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const ch = await ensureEmailChannel(clerkId);
   res.json({
@@ -32,7 +33,7 @@ router.get("/email/channel", requireAuth, async (req, res): Promise<void> => {
   });
 });
 
-router.put("/email/channel", requireAuth, async (req, res): Promise<void> => {
+router.put("/email/channel", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const body = req.body as {
     mode?: EmailChannelMode;
@@ -69,7 +70,7 @@ router.put("/email/channel", requireAuth, async (req, res): Promise<void> => {
   }
 });
 
-router.post("/email/channel/test", requireAuth, async (req, res): Promise<void> => {
+router.post("/email/channel/test", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const body = req.body as { toEmail?: string; name?: string };
   const to = (body.toEmail ?? "").trim();
@@ -103,7 +104,7 @@ router.post("/email/channel/test", requireAuth, async (req, res): Promise<void> 
   res.json(result);
 });
 
-router.get("/email/messages", requireAuth, async (req, res): Promise<void> => {
+router.get("/email/messages", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const rows = await db.select().from(emailMessagesTable)
     .where(eq(emailMessagesTable.userId, clerkId))

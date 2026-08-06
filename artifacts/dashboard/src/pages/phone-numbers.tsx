@@ -13,6 +13,7 @@ import {
   getListProvidersQueryKey,
   useGetKycStatus,
   useStartKyc,
+  useGetWallet,
   getListPhoneNumbersQueryKey,
   getListAvailablePhoneNumbersQueryKey,
   getListAgentsQueryKey,
@@ -402,16 +403,20 @@ function FixInboundButton({ number }: { number: PhoneNumber }) {
 function BuyNumberDialog({ onClose }: { onClose: () => void }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const [country, setCountry] = useState("IN");
   const [pattern, setPattern] = useState("");
   const [searched, setSearched] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
+  const [renewalMode, setRenewalMode] = useState<"autopay" | "wallet">("wallet");
 
   const { data: available, isFetching, error: searchError, refetch } = useListAvailablePhoneNumbers(
     { countryCode: country, pattern: pattern || undefined },
     { query: { enabled: false, queryKey: getListAvailablePhoneNumbersQueryKey({ countryCode: country }), retry: false } }
   );
+  const { data: wallet } = useGetWallet();
+  const mandateActive = wallet?.mandateActive ?? false;
 
   const platformNotConfigured =
     searchError != null &&
@@ -440,6 +445,14 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
 
   async function handlePurchase() {
     if (!selected) return;
+    if (renewalMode === "autopay" && !mandateActive) {
+      toast({
+        title: "Card auto-pay required",
+        description: "Set up a card mandate in Wallet first, then buy with Autopay renewal.",
+        variant: "destructive",
+      });
+      return;
+    }
     setPayingViaCheckout(true);
     try {
       const order = await initiate.mutateAsync({
@@ -448,6 +461,7 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
           countryCode: country,
           region: selectedNum?.region ?? undefined,
           numberType: selectedNum?.numberType ?? "local",
+          renewalMode,
         },
       });
 
@@ -528,6 +542,12 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
           variant: "destructive",
         });
         onClose();
+      } else if (code === "NEED_AUTOPAY_SETUP") {
+        toast({
+          title: "Card auto-pay required",
+          description: "Open Wallet to set up a card mandate, then choose Autopay renewal.",
+          variant: "destructive",
+        });
       } else {
         toast({ title: "Purchase failed", description: formatApiError(err), variant: "destructive" });
         setConfirming(false);
@@ -579,14 +599,68 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
               <span className="font-semibold text-foreground">₹{PHONE_TOTAL_INR}.00</span>
             </div>
             <div className="flex justify-between px-4 py-2.5">
-              <span className="text-muted-foreground">Renews every 30 days (wallet)</span>
+              <span className="text-muted-foreground">Renews every 30 days</span>
               <span className="text-foreground">₹{PHONE_BASE_INR} + GST (₹{RENEWAL_TOTAL_INR})</span>
             </div>
           </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs">How should renewals be paid?</Label>
+            <div className="grid gap-2">
+              <button
+                type="button"
+                onClick={() => setRenewalMode("autopay")}
+                className={`rounded-lg border px-3 py-2.5 text-left text-sm transition-colors ${
+                  renewalMode === "autopay"
+                    ? "border-foreground/40 bg-muted"
+                    : "border-border hover:border-foreground/20"
+                }`}
+              >
+                <div className="font-medium text-foreground">Autopay — keep number safe</div>
+                <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                  On renewal day we top up your wallet via your card mandate, then charge ₹{RENEWAL_TOTAL_INR}. Requires a card mandate in Wallet.
+                </p>
+              </button>
+              <button
+                type="button"
+                onClick={() => setRenewalMode("wallet")}
+                className={`rounded-lg border px-3 py-2.5 text-left text-sm transition-colors ${
+                  renewalMode === "wallet"
+                    ? "border-foreground/40 bg-muted"
+                    : "border-border hover:border-foreground/20"
+                }`}
+              >
+                <div className="font-medium text-foreground">Wallet only</div>
+                <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                  Renew from wallet balance. If unpaid for 7 days after the due date, the number is released.
+                </p>
+              </button>
+            </div>
+            {renewalMode === "autopay" && !mandateActive && (
+              <div className="flex items-start gap-2 rounded-lg border border-border px-3 py-2 text-xs text-muted-foreground">
+                <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                <span>
+                  No card mandate yet.{" "}
+                  <button
+                    type="button"
+                    className="underline text-foreground"
+                    onClick={() => { onClose(); setLocation("/app/wallet"); }}
+                  >
+                    Set up auto-pay in Wallet
+                  </button>
+                  {" "}first.
+                </span>
+              </div>
+            )}
+          </div>
+
           <div className="flex items-start gap-3 p-3 rounded-lg border border-zinc-500/20 bg-zinc-500/5 text-foreground text-xs">
             <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
             <span>
-              You&apos;ll pay ₹{PHONE_TOTAL_INR} now by card (₹{PHONE_BASE_INR} + 18% GST). The number then renews at the same price — ₹{PHONE_BASE_INR} + 18% GST (₹{RENEWAL_TOTAL_INR} total) — from your wallet every 30 days.
+              You&apos;ll pay ₹{PHONE_TOTAL_INR} now by card (₹{PHONE_BASE_INR} + 18% GST). Every 30 days the same amount (₹{RENEWAL_TOTAL_INR}) is charged
+              {renewalMode === "autopay"
+                ? " via Autopay (mandate → wallet → debit)."
+                : " from your wallet; unpaid past 7 days releases the number."}
             </span>
           </div>
           <DialogFooter>
@@ -594,7 +668,7 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
             <Button
               className="bg-primary text-primary-foreground hover:bg-primary/90"
               onClick={handlePurchase}
-              disabled={payingViaCheckout}
+              disabled={payingViaCheckout || (renewalMode === "autopay" && !mandateActive)}
             >
               {payingViaCheckout ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
               Pay ₹{PHONE_TOTAL_INR} & Get Number
@@ -1047,9 +1121,19 @@ export default function PhoneNumbersPage() {
                 {(n as { provider?: string }).provider === "plivo" ? (
                   <Badge variant="secondary" className="text-[10px] shrink-0">Your Plivo number · Free</Badge>
                 ) : (
-                  <Badge variant="outline" className="text-[10px] capitalize shrink-0">
-                    {n.numberType.replace("_", " ")}
-                  </Badge>
+                  <>
+                    <Badge variant="outline" className="text-[10px] capitalize shrink-0">
+                      {n.numberType.replace("_", " ")}
+                    </Badge>
+                    {n.renewalMode === "autopay" ? (
+                      <Badge variant="secondary" className="text-[10px] shrink-0">Autopay</Badge>
+                    ) : n.renewalMode === "wallet" ? (
+                      <Badge variant="outline" className="text-[10px] shrink-0">Wallet renew</Badge>
+                    ) : null}
+                    {n.renewalGraceUntil && (
+                      <Badge variant="destructive" className="text-[10px] shrink-0">Renewal unpaid</Badge>
+                    )}
+                  </>
                 )}
 
                 <div className="flex-1 min-w-0">
