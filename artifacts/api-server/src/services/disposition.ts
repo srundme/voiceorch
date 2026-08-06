@@ -159,6 +159,14 @@ async function persistResult(
     };
     if (typeof result.confidence === "number") flat["confidence"] = result.confidence;
     if (result.summary) flat["summary"] = result.summary;
+    if (result.domainFields) {
+      for (const [k, v] of Object.entries(result.domainFields)) {
+        if (v == null || v === "") continue;
+        if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") {
+          flat[k] = v;
+        }
+      }
+    }
     try {
       await db
         .update(callsTable)

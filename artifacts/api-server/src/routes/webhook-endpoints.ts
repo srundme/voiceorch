@@ -185,7 +185,13 @@ export function flatDispositionFromTaxonomy(result: {
   if (Array.isArray(result.flags) && result.flags.length) flat["flags"] = result.flags;
   if (typeof result.needsReview === "boolean") flat["needsReview"] = result.needsReview;
   if (result.domainFields && typeof result.domainFields === "object") {
-    flat["domainFields"] = result.domainFields;
+    // Flatten domain scalars onto the top level so call UI / sheets see
+    // whatsapp_number=987… instead of a nested blob or prose summary.
+    for (const [k, v] of Object.entries(result.domainFields)) {
+      if (v == null || v === "") continue;
+      if (k in flat) continue;
+      flat[k] = v;
+    }
   }
   return flat;
 }

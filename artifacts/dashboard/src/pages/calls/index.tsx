@@ -51,7 +51,17 @@ const formatDuration = (seconds?: number | null) => {
 };
 
 // Reserved meta keys in calls.dispositionResult that are NOT classification values.
-const DISPOSITION_META_KEYS = new Set(["confidence", "summary"]);
+const DISPOSITION_META_KEYS = new Set([
+  "confidence",
+  "summary",
+  "evidence",
+  "primary",
+  "sub",
+  "flags",
+  "needsReview",
+  "domainFields",
+  "error",
+]);
 
 /** Extract the human-readable disposition value(s) from a call's dispositionResult. */
 function getDispositionValues(
@@ -59,7 +69,7 @@ function getDispositionValues(
 ): string[] {
   if (!result || typeof result !== "object") return [];
   return Object.entries(result)
-    .filter(([k, v]) => !DISPOSITION_META_KEYS.has(k) && v != null && v !== "")
+    .filter(([k, v]) => !DISPOSITION_META_KEYS.has(k) && v != null && v !== "" && typeof v !== "object")
     .map(([, v]) => String(v));
 }
 

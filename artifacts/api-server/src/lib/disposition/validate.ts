@@ -1,4 +1,5 @@
 import type { CallEvent, DispositionConfig, DispositionResult } from "./types.js";
+import { clampDispositionText, extractBarePhone, isPhoneLikeDispositionField } from "./normalize-fields.js";
 
 interface CallStats {
   durationSec?: number;
@@ -72,7 +73,15 @@ export function validate(
 
   const domainFields: Record<string, unknown> = {};
   for (const field of cfg.domainFields) {
-    if (out[field.key] !== undefined) domainFields[field.key] = out[field.key];
+    if (out[field.key] === undefined) continue;
+    const raw = out[field.key];
+    if (isPhoneLikeDispositionField(field.key, field.label, field.type)) {
+      domainFields[field.key] = extractBarePhone(raw);
+    } else if (field.type === "string") {
+      domainFields[field.key] = clampDispositionText(raw);
+    } else {
+      domainFields[field.key] = raw;
+    }
   }
 
   return {

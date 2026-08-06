@@ -7,6 +7,8 @@ export type TaxonomyMap = Record<string, string[]>;
 export interface DomainFieldCfg {
   key: string;
   type: "string" | "number" | "boolean";
+  /** Human label for Builder / call detail (optional for older rows). */
+  label?: string;
   enum?: string[];
 }
 

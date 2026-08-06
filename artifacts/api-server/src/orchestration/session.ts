@@ -49,6 +49,11 @@ import {
 import { destroyAudioSession } from "./audioPool.js";
 import { disposeCall } from "../services/disposition.js";
 import {
+  DISPOSITION_EXTRACT_SYSTEM,
+  formatDispositionFieldList,
+  normalizeDispositionSchemaResult,
+} from "../lib/disposition/normalize-fields.js";
+import {
   buildCallEndedWebhookPayload,
   dispatchWebhooks,
   flatDispositionFromTaxonomy,
@@ -3474,22 +3479,30 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
               }
               if (llmKey) {
                 const llm = createLLMAdapter(dispProvider, llmKey, dispModel);
-                const fieldList = dispositionSchema
-                  .map(f => `- "${f.key}" (${f.label}, type: ${f.type}${f.options?.length ? `, options: [${f.options.join(", ")}]` : ""})`)
-                  .join("\n");
+                const fieldList = formatDispositionFieldList(dispositionSchema);
                 let raw = "";
                 await llm.chat(
-                  [{ role: "user", content: `Based on this call transcript, extract the following disposition fields and return valid JSON only (no markdown, no commentary):\n\nFields:\n${fieldList}\n\nTranscript:\n${transcript.slice(0, 8000)}` }],
-                  "You extract structured data from call transcripts. Return only a flat JSON object with the specified keys. For boolean fields use true/false. For number fields use numbers. For choice fields use only the specified option values. If a field cannot be determined, use null.",
+                  [{
+                    role: "user",
+                    content:
+                      `Extract disposition fields from this call transcript. Return valid JSON only.\n\n` +
+                      `Fields:\n${fieldList}\n\n` +
+                      `Transcript:\n${transcript.slice(0, 8000)}`,
+                  }],
+                  DISPOSITION_EXTRACT_SYSTEM,
                   () => {},
-                  (full) => { raw = full; }
+                  (full) => { raw = full; },
                 );
                 if (raw) {
                   try {
                     const jsonStr = raw.replace(/```(?:json)?\s*/gi, "").replace(/```\s*/g, "").trim();
-                    const result = JSON.parse(jsonStr);
-                    if (result && typeof result === "object" && !Array.isArray(result)) {
-                      dispositionResult = result as Record<string, unknown>;
+                    const parsed = JSON.parse(jsonStr);
+                    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+                      const result = normalizeDispositionSchemaResult(
+                        dispositionSchema,
+                        parsed as Record<string, unknown>,
+                      );
+                      dispositionResult = result;
                       await db.update(callsTable).set({ dispositionResult: result }).where(eq(callsTable.id, session.callId));
                     }
                   } catch {

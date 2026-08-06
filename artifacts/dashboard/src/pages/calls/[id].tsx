@@ -30,6 +30,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError } from "@/lib/format-api-error";
+import { uiTypeFromStored, type StoredDomainField } from "@/lib/disposition-fields";
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from "@/components/ui/tooltip";
@@ -1160,13 +1161,39 @@ export function CallDetailContent({
 
   const updateDisposition = useUpdateCallDisposition();
   const [editing, setEditing] = useState(false);
+  const [editingDomain, setEditingDomain] = useState(false);
   const [edits, setEdits] = useState<Record<string, string>>({});
+  const [domainEdits, setDomainEdits] = useState<Record<string, string>>({});
   const initialTab = new URLSearchParams(window.location.search).get("tab") || "logs";
   const [activeTab, setActiveTab] = useState(initialTab);
 
   const dispositionSchema = Array.isArray((agent as any)?.dispositionSchema)
     ? (agent as any).dispositionSchema as Array<{ key: string; label: string; type: string; options?: string[] }>
     : [];
+
+  const { data: dispConfig } = useQuery<{ domainFields?: StoredDomainField[] } | null>({
+    queryKey: ["disposition-config", agentId],
+    enabled: !!agentId,
+    staleTime: 60_000,
+    queryFn: async () => {
+      const token = await getToken();
+      const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
+      const r = await fetch(`/api/disposition/config/${agentId}`, { headers });
+      if (!r.ok) return null;
+      return r.json();
+    },
+  });
+
+  const domainFields = (dispConfig?.domainFields ?? []) as StoredDomainField[];
+  const collectFields = domainFields.map((f) => {
+    const uiType = uiTypeFromStored(f);
+    return {
+      key: f.key,
+      label: f.label?.trim() || f.key,
+      type: uiType === "yes_no" ? "boolean" : uiType === "choice" ? "choice" : uiType === "number" ? "number" : "text",
+      options: f.enum,
+    };
+  });
 
   const dispositionResult = (call as any)?.dispositionResult as Record<string, string | number | boolean | null> | null | undefined;
 
@@ -1178,6 +1205,16 @@ export function CallDetailContent({
     });
     setEdits(initial);
     setEditing(true);
+  };
+
+  const startEditingDomain = () => {
+    const initial: Record<string, string> = {};
+    collectFields.forEach((f) => {
+      const v = dispositionResult?.[f.key];
+      initial[f.key] = v != null ? String(v) : "";
+    });
+    setDomainEdits(initial);
+    setEditingDomain(true);
   };
 
   const saveDisposition = () => {
@@ -1200,6 +1237,33 @@ export function CallDetailContent({
         },
         onError: (err: unknown) => toast({ title: "Failed to save", description: formatApiError(err), variant: "destructive" }),
       }
+    );
+  };
+
+  const saveDomainFields = () => {
+    const merged: Record<string, string | number | boolean | null> = {
+      ...(dispositionResult ?? {}),
+    };
+    collectFields.forEach((f) => {
+      const v = domainEdits[f.key];
+      if (v === "" || v == null) {
+        merged[f.key] = null;
+        return;
+      }
+      if (f.type === "number") merged[f.key] = parseFloat(v) || 0;
+      else if (f.type === "boolean") merged[f.key] = v === "true";
+      else merged[f.key] = v;
+    });
+    updateDisposition.mutate(
+      { id, data: { dispositionResult: merged } },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: getGetCallQueryKey(id) });
+          setEditingDomain(false);
+          toast({ title: "Collected data saved" });
+        },
+        onError: (err: unknown) => toast({ title: "Failed to save", description: formatApiError(err), variant: "destructive" }),
+      },
     );
   };
 
@@ -1782,9 +1846,16 @@ export function CallDetailContent({
             {(() => {
               const r = dispositionResult;
               if (!r || typeof r !== "object") return null;
-              const meta = new Set(["confidence", "summary"]);
+              // Hide taxonomy meta / evidence prose — only show outcome category values.
+              // Domain fields (WhatsApp, etc.) render in the Collected data card below.
+              const domainKeys = new Set(collectFields.map((f) => f.key));
+              const meta = new Set([
+                "confidence", "summary", "evidence", "primary", "sub",
+                "flags", "needsReview", "domainFields", "error",
+                ...domainKeys,
+              ]);
               const values = Object.entries(r)
-                .filter(([k, v]) => !meta.has(k) && v != null && v !== "")
+                .filter(([k, v]) => !meta.has(k) && v != null && v !== "" && typeof v !== "object")
                 .map(([, v]) => String(v));
               if (values.length === 0) return null;
               const confidence = typeof r["confidence"] === "number" ? (r["confidence"] as number) : null;
@@ -1962,14 +2033,102 @@ export function CallDetailContent({
               </Card>
             )}
 
-            {/* Disposition */}
+            {/* Collected data — domainFields from Builder disposition config */}
+            {collectFields.length > 0 && (
+              <Card>
+                <CardHeader className="py-3 border-b">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <ClipboardList className="h-4 w-4 text-primary/70" />
+                      Collected data
+                    </CardTitle>
+                    {!editingDomain ? (
+                      <Button variant="ghost" size="sm" className="h-6 gap-1 text-xs px-2" onClick={startEditingDomain}>
+                        <Pencil className="h-3 w-3" /> Edit
+                      </Button>
+                    ) : (
+                      <div className="flex gap-1">
+                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setEditingDomain(false)}>
+                          <X className="h-3 w-3" />
+                        </Button>
+                        <Button size="sm" className="h-6 text-xs gap-1 px-2" onClick={saveDomainFields} disabled={updateDisposition.isPending}>
+                          <Check className="h-3 w-3" /> Save
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                  <CardDescription className="text-[10px] mt-1">
+                    Fields configured on the agent — filled automatically after the call
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <div className="divide-y divide-border">
+                    {collectFields.map((field, i) => {
+                      const value = dispositionResult?.[field.key];
+                      return (
+                        <div key={field.key} className={`py-2 px-4 ${i % 2 === 1 ? "bg-elevated/20" : ""}`}>
+                          <p className="text-[10px] text-muted-foreground/50 mb-1">{field.label}</p>
+                          {editingDomain ? (
+                            field.type === "boolean" ? (
+                              <select
+                                className="w-full text-xs border rounded px-2 py-1 bg-background"
+                                value={domainEdits[field.key] ?? ""}
+                                onChange={(e) => setDomainEdits((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                              >
+                                <option value="">—</option>
+                                <option value="true">Yes</option>
+                                <option value="false">No</option>
+                              </select>
+                            ) : field.type === "choice" && field.options?.length ? (
+                              <select
+                                className="w-full text-xs border rounded px-2 py-1 bg-background"
+                                value={domainEdits[field.key] ?? ""}
+                                onChange={(e) => setDomainEdits((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                              >
+                                <option value="">—</option>
+                                {field.options.map((opt) => (
+                                  <option key={opt} value={opt}>{opt}</option>
+                                ))}
+                              </select>
+                            ) : (
+                              <Input
+                                className="h-6 text-xs"
+                                type={field.type === "number" ? "number" : "text"}
+                                value={domainEdits[field.key] ?? ""}
+                                onChange={(e) => setDomainEdits((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                              />
+                            )
+                          ) : (
+                            <div className="text-xs font-medium">
+                              {value != null && value !== "" ? (
+                                field.type === "boolean" ? (
+                                  <Badge variant={value ? "default" : "secondary"} className="text-[10px] h-5">
+                                    {value ? "Yes" : "No"}
+                                  </Badge>
+                                ) : (
+                                  String(value)
+                                )
+                              ) : (
+                                <span className="text-muted-foreground/40 text-[10px] italic">Not captured</span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Legacy dispositionSchema (admin) */}
             {dispositionSchema.length > 0 && (
               <Card>
                 <CardHeader className="py-3 border-b">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-sm flex items-center gap-2">
                       <ClipboardList className="h-4 w-4 text-primary/70" />
-                      Disposition
+                      Disposition fields
                     </CardTitle>
                     {!editing ? (
                       <Button variant="ghost" size="sm" className="h-6 gap-1 text-xs px-2" onClick={startEditing}>

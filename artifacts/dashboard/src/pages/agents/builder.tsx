@@ -79,6 +79,19 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError, mapApiErrors, isDestinationUnverifiedError } from "@/lib/format-api-error";
 import {
+  OUTCOME_PRESETS,
+  DOMAIN_FIELD_QUICK_ADDS,
+  taxonomyToCategories,
+  categoriesToTaxonomy,
+  fromStoredDomainField,
+  toStoredDomainField,
+  slugDispositionKey,
+  type DispositionCategory,
+  type UiDomainField,
+  type UiDomainFieldType,
+  type StoredDomainField,
+} from "@/lib/disposition-fields";
+import {
   ASR_PROVIDERS, LLM_PROVIDERS, TTS_PROVIDERS,
   LANGUAGES, SARVAM_PERSONALISATION_LANGUAGES, ASR_MODELS, LLM_MODELS, TTS_MODELS, TTS_VOICES, AGENT_TIMEZONES,
   filterVoicesForLanguage, isVoiceCompatibleWithLanguage,
@@ -4168,18 +4181,24 @@ function AgentListPanel({ selectedId, onSelect, className }: {
 
 /* ── Tab: Analysis (Journey) ────────────────────────────────────────────────── */
 
-type DispositionCategory = { id: string; name: string; values: string };
+type DispConfigRow = {
+  taxonomy: Record<string, string[]>;
+  domainFields?: StoredDomainField[];
+  rules?: unknown[];
+};
 
 function DispositionSettingsPanel({ agentId }: { agentId: number }) {
   const { toast } = useToast();
   const [categories, setCategories] = useState<DispositionCategory[]>([]);
+  const [fields, setFields] = useState<UiDomainField[]>([]);
+  const [rules, setRules] = useState<unknown[]>([]);
   const [dirty, setDirty] = useState(false);
 
-  const { data: dispConfig, isLoading: dispLoading } = useQuery<{ taxonomy: Record<string, string[]> } | null>({
+  const { data: dispConfig, isLoading: dispLoading } = useQuery<DispConfigRow | null>({
     queryKey: ["disposition-config", agentId],
     queryFn: async () => {
       try {
-        return await customFetch<{ taxonomy: Record<string, string[]> }>(`${DASH_API}/disposition/config/${agentId}`);
+        return await customFetch<DispConfigRow>(`${DASH_API}/disposition/config/${agentId}`);
       } catch {
         return null;
       }
@@ -4189,32 +4208,27 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
   });
 
   useEffect(() => {
-    if (dispConfig?.taxonomy) {
-      setCategories(
-        Object.entries(dispConfig.taxonomy).map(([name, vals]) => ({
-          id: crypto.randomUUID(),
-          name,
-          values: vals.join(", "),
-        })),
-      );
-    }
+    if (!dispConfig) return;
+    setCategories(taxonomyToCategories(dispConfig.taxonomy ?? {}));
+    setFields((dispConfig.domainFields ?? []).map(fromStoredDomainField));
+    setRules(Array.isArray(dispConfig.rules) ? dispConfig.rules : []);
     setDirty(false);
   }, [dispConfig]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const taxonomy: Record<string, string[]> = {};
-      for (const cat of categories) {
-        const name = cat.name.trim();
-        if (!name) continue;
-        taxonomy[name] = cat.values
-          .split(",")
-          .map((v) => v.trim())
-          .filter(Boolean);
+      let taxonomy = categoriesToTaxonomy(categories);
+      // LLM disposeCall requires at least one outcome category; if user only
+      // added data fields, seed a minimal Sales outcome set.
+      if (Object.keys(taxonomy).length === 0 && fields.length > 0) {
+        taxonomy = { ...OUTCOME_PRESETS.find((p) => p.id === "sales")!.taxonomy };
       }
+      const domainFields = fields
+        .map(toStoredDomainField)
+        .filter((f): f is StoredDomainField => !!f);
       await customFetch(`${DASH_API}/disposition/config/${agentId}`, {
         method: "PUT",
-        body: JSON.stringify({ taxonomy }),
+        body: JSON.stringify({ taxonomy, domainFields, rules }),
       });
     },
     onSuccess: () => {
@@ -4225,6 +4239,13 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
       toast({ title: "Failed to save", variant: "destructive" });
     },
   });
+
+  function applyPreset(presetId: string) {
+    const preset = OUTCOME_PRESETS.find((p) => p.id === presetId);
+    if (!preset) return;
+    setCategories(taxonomyToCategories(preset.taxonomy));
+    setDirty(true);
+  }
 
   function addCategory() {
     setCategories((prev) => [...prev, { id: crypto.randomUUID(), name: "", values: "" }]);
@@ -4241,6 +4262,44 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
     setDirty(true);
   }
 
+  function addField(partial?: Partial<UiDomainField>) {
+    const label = partial?.label ?? "";
+    const key = partial?.key ?? (label ? slugDispositionKey(label) : "");
+    setFields((prev) => {
+      if (key && prev.some((f) => f.key === key)) return prev;
+      return [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          label,
+          key,
+          uiType: partial?.uiType ?? "text",
+          optionsText: partial?.optionsText ?? "",
+        },
+      ];
+    });
+    setDirty(true);
+  }
+
+  function removeField(id: string) {
+    setFields((prev) => prev.filter((f) => f.id !== id));
+    setDirty(true);
+  }
+
+  function updateField(id: string, patch: Partial<UiDomainField>) {
+    setFields((prev) =>
+      prev.map((f) => {
+        if (f.id !== id) return f;
+        const next = { ...f, ...patch };
+        if (patch.label != null && (!f.key || f.key === slugDispositionKey(f.label))) {
+          next.key = slugDispositionKey(patch.label);
+        }
+        return next;
+      }),
+    );
+    setDirty(true);
+  }
+
   if (agentId <= 0) {
     return (
       <div>
@@ -4249,94 +4308,221 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
           <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Call Disposition</h3>
         </div>
         <p className="text-[11px] text-muted-foreground mt-0.5">
-          Save the agent first to define disposition categories.
+          Save the agent first to define outcomes and data fields.
         </p>
       </div>
     );
   }
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-1">
-        <div className="flex items-center gap-2">
+    <div className="space-y-8">
+      <div>
+        <div className="flex items-center gap-2 mb-1">
           <Tag className="h-4 w-4 text-amber-400" />
           <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Call Disposition</h3>
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-7 text-xs gap-1"
-          onClick={addCategory}
-        >
-          <Plus className="h-3.5 w-3.5" /> Add Category
-        </Button>
+        <p className="text-[11px] text-muted-foreground">
+          After each call, AI picks an outcome and fills the data fields you define (WhatsApp, email, city…). Values show on the call detail page.
+        </p>
       </div>
-      <p className="text-[11px] text-muted-foreground mb-4">
-        Define categories and their possible values. After each call the AI automatically picks the best match from the transcript and saves it. Results appear in the call detail page.
-      </p>
 
       {dispLoading ? (
         <div className="space-y-2">
-          {[1, 2].map((i) => <div key={i} className="h-16 rounded-xl bg-muted/20 animate-pulse" />)}
-        </div>
-      ) : categories.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-border/50 p-8 text-center">
-          <Tag className="h-7 w-7 text-muted-foreground/20 mx-auto mb-2" />
-          <p className="text-sm font-medium text-muted-foreground/50">No categories yet</p>
-          <p className="text-xs text-muted-foreground/30 mt-0.5">Add a category to start capturing structured call outcomes</p>
+          {[1, 2, 3].map((i) => <div key={i} className="h-16 rounded-xl bg-muted/20 animate-pulse" />)}
         </div>
       ) : (
-        <div className="space-y-3">
-          {categories.map((cat) => (
-            <div key={cat.id} className="rounded-xl border border-border/60 bg-card/20 p-4">
-              <div className="flex items-start gap-3">
-                <div className="flex-1 grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Category name</label>
-                    <Input
-                      className="h-8 text-xs"
-                      placeholder="e.g. intent"
-                      value={cat.name}
-                      onChange={(e) => updateCategory(cat.id, "name", e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Possible values <span className="normal-case">(comma-separated)</span></label>
-                    <Input
-                      className="h-8 text-xs"
-                      placeholder="e.g. interested, not_interested, callback"
-                      value={cat.values}
-                      onChange={(e) => updateCategory(cat.id, "values", e.target.value)}
-                    />
-                  </div>
-                </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 mt-5 text-muted-foreground hover:text-destructive shrink-0"
-                  onClick={() => removeCategory(cat.id)}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
+        <>
+          {/* ── Outcomes ─────────────────────────────────────────────── */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <div>
+                <h4 className="text-xs font-semibold text-foreground">Outcomes</h4>
+                <p className="text-[10px] text-muted-foreground mt-0.5">Category → allowed values the AI can pick</p>
               </div>
-              {cat.values && (
-                <div className="flex flex-wrap gap-1 mt-3">
-                  {cat.values.split(",").map((v) => v.trim()).filter(Boolean).map((v) => (
-                    <span key={v} className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                      {v}
-                    </span>
-                  ))}
-                </div>
-              )}
+              <Button type="button" variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={addCategory}>
+                <Plus className="h-3.5 w-3.5" /> Add category
+              </Button>
             </div>
-          ))}
-        </div>
+            <div className="flex flex-wrap gap-1.5 mb-3">
+              {OUTCOME_PRESETS.map((p) => (
+                <Button
+                  key={p.id}
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="h-7 text-[11px]"
+                  onClick={() => applyPreset(p.id)}
+                >
+                  Use {p.name} preset
+                </Button>
+              ))}
+            </div>
+            {categories.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-border/50 p-6 text-center">
+                <p className="text-sm font-medium text-muted-foreground/60">No outcomes yet</p>
+                <p className="text-xs text-muted-foreground/40 mt-0.5">Pick a preset or add a category</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {categories.map((cat) => (
+                  <div key={cat.id} className="rounded-xl border border-border/60 bg-card/20 p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="flex-1 grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Category</label>
+                          <Input
+                            className="h-8 text-xs"
+                            placeholder="e.g. outcome"
+                            value={cat.name}
+                            onChange={(e) => updateCategory(cat.id, "name", e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                            Values <span className="normal-case">(comma-separated)</span>
+                          </label>
+                          <Input
+                            className="h-8 text-xs"
+                            placeholder="interested, callback, no_answer"
+                            value={cat.values}
+                            onChange={(e) => updateCategory(cat.id, "values", e.target.value)}
+                          />
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 mt-5 text-muted-foreground hover:text-destructive shrink-0"
+                        onClick={() => removeCategory(cat.id)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                    {cat.values && (
+                      <div className="flex flex-wrap gap-1 mt-3">
+                        {cat.values.split(",").map((v) => v.trim()).filter(Boolean).map((v) => (
+                          <span key={v} className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                            {v}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* ── Data to collect ──────────────────────────────────────── */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <div>
+                <h4 className="text-xs font-semibold text-foreground">Data to collect</h4>
+                <p className="text-[10px] text-muted-foreground mt-0.5">
+                  Extracted as bare values (WhatsApp → digits only, not a paragraph)
+                </p>
+              </div>
+              <Button type="button" variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => addField()}>
+                <Plus className="h-3.5 w-3.5" /> Add field
+              </Button>
+            </div>
+            <div className="flex flex-wrap gap-1.5 mb-3">
+              {DOMAIN_FIELD_QUICK_ADDS.map((q) => (
+                <Button
+                  key={q.key}
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="h-7 text-[11px]"
+                  disabled={fields.some((f) => f.key === q.key)}
+                  onClick={() => addField(q)}
+                >
+                  + {q.label}
+                </Button>
+              ))}
+            </div>
+            {fields.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-border/50 p-6 text-center">
+                <p className="text-sm font-medium text-muted-foreground/60">No data fields</p>
+                <p className="text-xs text-muted-foreground/40 mt-0.5">Quick-add WhatsApp, email, city…</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {fields.map((field) => (
+                  <div key={field.id} className="rounded-xl border border-border/60 bg-card/20 p-4 space-y-3">
+                    <div className="flex items-start gap-3">
+                      <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Label</label>
+                          <Input
+                            className="h-8 text-xs"
+                            placeholder="WhatsApp number"
+                            value={field.label}
+                            onChange={(e) => updateField(field.id, { label: e.target.value })}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Key</label>
+                          <Input
+                            className="h-8 text-xs font-mono"
+                            placeholder="whatsapp_number"
+                            value={field.key}
+                            onChange={(e) => updateField(field.id, { key: e.target.value })}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Type</label>
+                          <Select
+                            value={field.uiType}
+                            onValueChange={(v) => updateField(field.id, { uiType: v as UiDomainFieldType })}
+                          >
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="phone">Phone / WhatsApp</SelectItem>
+                              <SelectItem value="text">Short text</SelectItem>
+                              <SelectItem value="number">Number</SelectItem>
+                              <SelectItem value="yes_no">Yes / No</SelectItem>
+                              <SelectItem value="choice">Choice</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 mt-5 text-muted-foreground hover:text-destructive shrink-0"
+                        onClick={() => removeField(field.id)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                    {field.uiType === "choice" && (
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                          Options <span className="normal-case">(comma-separated)</span>
+                        </label>
+                        <Input
+                          className="h-8 text-xs"
+                          placeholder="yes, no, maybe"
+                          value={field.optionsText ?? ""}
+                          onChange={(e) => updateField(field.id, { optionsText: e.target.value })}
+                        />
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
       )}
 
-      {(categories.length > 0 || dirty) && (
-        <div className="flex justify-end mt-4">
+      {(categories.length > 0 || fields.length > 0 || dirty) && (
+        <div className="flex justify-end">
           <Button
             type="button"
             size="sm"
