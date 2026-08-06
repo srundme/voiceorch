@@ -878,6 +878,17 @@ function OverviewTab({
             </section>
           )}
 
+          {agent?.id != null && (
+            <section className="space-y-2.5">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/55">Phone</p>
+              <AgentInboundPanel
+                agentId={agent.id}
+                preferredManagedNumber={form.watch("preferredManagedNumber")}
+                telephonyProvider={form.watch("telephonyProvider")}
+              />
+            </section>
+          )}
+
           {/* ── Transcriber / Language dialog ── */}
           <EditConfigDialog
             open={openSection === "transcriber"}
@@ -6293,7 +6304,26 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
           )}
         </div>
 
+        {/* Phone chip fills the middle toolbar gap — full card stays on Overview */}
+        <div className="hidden min-w-0 flex-1 items-center justify-center px-3 md:flex">
+          <AgentInboundPanel
+            agentId={agent.id}
+            preferredManagedNumber={form.watch("preferredManagedNumber")}
+            telephonyProvider={form.watch("telephonyProvider")}
+            compact
+            className="max-w-[260px]"
+          />
+        </div>
+
         <div className="flex shrink-0 items-center gap-1.5">
+          <div className="md:hidden">
+            <AgentInboundPanel
+              agentId={agent.id}
+              preferredManagedNumber={form.watch("preferredManagedNumber")}
+              telephonyProvider={form.watch("telephonyProvider")}
+              compact
+            />
+          </div>
           <AgentCostSummary form={form} rateMap={rateMap} variant="chip" />
           <Button
             type="button"
@@ -6354,17 +6384,6 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
           </DropdownMenu>
         </div>
       </header>
-
-      {/* Full phone card under toolbar — same card people liked in the old builder */}
-      <div className="shrink-0 border-b border-border bg-background px-3 py-2.5 sm:px-5">
-        <div className="w-full max-w-lg">
-          <AgentInboundPanel
-            agentId={agent.id}
-            preferredManagedNumber={form.watch("preferredManagedNumber")}
-            telephonyProvider={form.watch("telephonyProvider")}
-          />
-        </div>
-      </div>
 
       {/* Rename Agent dialog — team strip lives on Overview */}
       <Dialog open={renameDialogOpen} onOpenChange={setRenameDialogOpen}>

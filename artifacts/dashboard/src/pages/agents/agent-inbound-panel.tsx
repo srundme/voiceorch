@@ -223,15 +223,6 @@ export function AgentInboundPanel({
           : ownedCount > 0
             ? "Assign number"
             : "Add number";
-    const sub = isLoading
-      ? ""
-      : byoNumber
-        ? "BYO · unlimited"
-        : assigned
-          ? "Live"
-          : ownedCount > 0
-            ? "Purchased — attach"
-            : "Required to go live";
 
     return (
       <div className={cn("flex min-w-0 items-center", className)}>
@@ -243,22 +234,16 @@ export function AgentInboundPanel({
             else navigate("/app/phone-numbers");
           }}
           className={cn(
-            "inline-flex h-9 max-w-full items-center gap-2 rounded-lg border px-2.5 text-left transition-colors",
+            "inline-flex h-8 max-w-full items-center gap-1.5 rounded-md border px-2.5 text-[11px] font-medium transition-colors",
             live
-              ? "border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/15"
-              : "border-amber-500/35 bg-amber-500/10 hover:bg-amber-500/15",
+              ? "border-border/70 bg-muted/25 text-foreground hover:bg-muted/40"
+              : "border-amber-500/35 bg-amber-500/10 text-foreground hover:bg-amber-500/15",
           )}
+          title={live ? "Phone number" : "Add a phone number to go live"}
         >
-          <PhoneForwarded className={cn("size-3.5 shrink-0", live ? "text-emerald-500" : "text-amber-500")} />
-          <span className="min-w-0">
-            <span className="block truncate text-[12px] font-medium tabular-nums leading-tight">{label}</span>
-            {sub ? (
-              <span className={cn("block truncate text-[10px] leading-tight", live ? "text-emerald-700/80 dark:text-emerald-400/80" : "text-amber-700/80 dark:text-amber-400/80")}>
-                {sub}
-              </span>
-            ) : null}
-          </span>
-          {!live && ownedCount === 0 ? <Plus className="size-3.5 shrink-0 text-amber-600" /> : <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />}
+          <PhoneForwarded className={cn("size-3.5 shrink-0", live ? "text-muted-foreground" : "text-amber-500")} />
+          <span className="truncate tabular-nums">{label}</span>
+          {!live && ownedCount === 0 ? <Plus className="size-3 shrink-0 text-amber-600" /> : null}
         </button>
         {assignDialog}
       </div>
