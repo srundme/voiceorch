@@ -70,6 +70,7 @@ import {
   canonicalizeCallerKey,
   loadCallerProfile,
   loadCallerContext,
+  findCallerPhoneByEmail,
   injectCallerMemory,
   injectEnhancedMemory,
   isResumeDroppedCall,
@@ -238,6 +239,8 @@ export async function createSession(params: {
   meetMid?: string;
   /** Full meet-bot token for presentation page URL construction. */
   meetBotToken?: string;
+  /** Booking attendee email for memory lookup when phone is unknown. */
+  meetingMemoryEmail?: string;
   /** Snapshot from meet-bot token; default true when omitted. */
   passMemory?: boolean;
   passCallContext?: boolean;
@@ -430,6 +433,11 @@ export async function createSession(params: {
         (meetingsCfg.presentationAutoStart
           ? `Screenshare may already be active — use next_slide / previous_slide / stop_presentation as needed.`
           : `Call start_presentation when asked to share slides (url optional).`);
+    }
+    if (typeof params.meetingMemoryEmail === "string" && params.meetingMemoryEmail.trim()) {
+      effectiveSystemPrompt +=
+        `\n\n[BOOKING ATTENDEE EMAIL] ${params.meetingMemoryEmail.trim()}\n` +
+        `Prefer matching this person in the room by name/email when relevant.`;
     }
   }
   effectiveSystemPrompt += `\n\n[DATE/TIME CONTEXT] Today is ${dateCtxParts}. Current time is ${timeCtxParts} (${agentTimezone}).`;
@@ -868,6 +876,30 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
   try {
     memoryOwnerAgentId = await resolveSquadMemoryOwnerAgentId(params.agentId, agent.userId, params.squadId ?? null);
   } catch { /* non-fatal — fall back to own agentId */ }
+  // Booking attendee email → existing caller memory (email fact → phone key).
+  if (
+    isMeetBotSession &&
+    params.passMemory !== false &&
+    !callerPhone &&
+    typeof params.meetingMemoryEmail === "string" &&
+    params.meetingMemoryEmail.trim()
+  ) {
+    try {
+      const byEmail = await findCallerPhoneByEmail(
+        memoryOwnerAgentId,
+        params.meetingMemoryEmail.trim(),
+      );
+      if (byEmail) {
+        callerPhone = byEmail;
+        logger.info(
+          { agentId: params.agentId, email: params.meetingMemoryEmail.trim() },
+          "Meet-bot memory resolved via attendee email",
+        );
+      }
+    } catch (err) {
+      logger.warn({ err }, "Meet-bot email memory lookup failed");
+    }
+  }
   // Persona-swap invalidation compares the answering agent's prompt hash; with
   // a shared owner record + different member prompts it would false-fire and
   // wipe squad memory on every member alternation — disable it when shared.
@@ -1160,7 +1192,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     logger.info({ agentId: params.agentId }, "Resume context injected into system prompt for network-drop callback");
   }
 
-  // Meeting bot: inject prior phone-call summary when Channels → Meetings
+  // Meeting bot: inject prior phone-call summary when
   // passCallContext is on and the launch token carried a sourceCallId.
   if (
     isMeetBotSession &&

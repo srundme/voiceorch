@@ -193,6 +193,9 @@ router.patch("/campaigns/:id/bookings/:bookingId/cancel", async (req, res): Prom
     await db.update(bookingsTable)
       .set({ status: "cancelled", cancelledAt: new Date(), updatedAt: new Date() })
       .where(eq(bookingsTable.id, cb.schedulingBookingId));
+    void import("../services/meet-auto-dispatch.js").then(({ cancelMeetBotForBooking }) =>
+      cancelMeetBotForBooking(cb.schedulingBookingId!),
+    );
   }
 
   res.json({ id: bookingId, status: "cancelled" });

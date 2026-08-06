@@ -567,6 +567,11 @@ router.patch("/scheduling/bookings/:id", requireAuth, clientContext, async (req,
       })();
     }
 
+    // Cancel any pre-scheduled Recall meeting bot for this booking.
+    void import("../../services/meet-auto-dispatch.js").then(({ cancelMeetBotForBooking }) =>
+      cancelMeetBotForBooking(params.data.id),
+    );
+
     void sendBookingCancelledEmail({
       attendeeName: row.attendeeName,
       attendeeEmail: row.attendeeEmail,

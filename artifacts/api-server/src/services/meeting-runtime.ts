@@ -131,4 +131,6 @@ export const MEETING_BEHAVIOR_PROMPT =
   `Never claim a booking or rejoin is set unless the tool returned success.\n` +
   `[MEETING PRESENTATION] When participants ask you to present or share slides, call start_presentation (optional url if they give a different HTTPS link). ` +
   `Use next_slide / previous_slide to advance; stop_presentation when done. ` +
-  `Do not claim you are sharing unless the tool returned success. Voice stays on; screenshare is the deck.`;
+  `Do not claim you are sharing unless the tool returned success. Voice stays on; screenshare is the deck.\n` +
+  `[MEETING CHAT] Use send_meeting_chat to post links, agendas, or short summaries in the meeting chat when helpful. ` +
+  `Keep messages brief; pin only for important notices late joiners should see. Never invent that chat was sent unless the tool succeeded.`;

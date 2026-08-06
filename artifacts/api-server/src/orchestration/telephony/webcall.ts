@@ -43,6 +43,7 @@ export async function handleWebcallWebSocket(
     meetMid?: string;
     meetBotToken?: string;
     meetingMemoryPhone?: string;
+    meetingMemoryEmail?: string;
     meetingSourceCallId?: number;
     meetingUrl?: string;
     passMemory?: boolean;
@@ -197,6 +198,7 @@ export async function handleWebcallWebSocket(
             meetMid: opts.meetMid,
             ...(opts.meetBotToken ? { meetBotToken: opts.meetBotToken } : {}),
             ...(opts.meetingMemoryPhone ? { meetingMemoryPhone: opts.meetingMemoryPhone } : {}),
+            ...(opts.meetingMemoryEmail ? { meetingMemoryEmail: opts.meetingMemoryEmail } : {}),
             ...(typeof opts.meetingSourceCallId === "number"
               ? { meetingSourceCallId: opts.meetingSourceCallId }
               : {}),

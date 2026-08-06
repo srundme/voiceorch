@@ -207,6 +207,16 @@ export function MeetingsChannelCard({
         Set patience and length here (separate from Engine phone silence / Limits).
       </p>
 
+      <div className="rounded-lg border border-border/60 bg-muted/15 px-3 py-2.5 text-[11px] text-muted-foreground leading-relaxed">
+        <p className="font-medium text-foreground text-[12px]">Waiting room &amp; admit</p>
+        <p className="mt-1">
+          Meet/Zoom/Teams may ask the host to admit the bot. SnapServe cannot auto-admit guests from the
+          waiting room. Booked Meet invites include the platform bot email when configured; otherwise admit
+          the agent by name. Zoom/Teams may also show a recording consent prompt — participants should accept
+          it so the meeting can be recorded.
+        </p>
+      </div>
+
       <div className="space-y-2">
         <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/70">
           Who joins

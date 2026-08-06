@@ -102,6 +102,7 @@ import {
   resolveAgentOwnerUserId,
 } from "../services/meet-booking.js";
 import { executeMeetPresentationTool } from "../services/meet-presentation.js";
+import { executeMeetChatTool } from "../services/meet-chat.js";
 
 /** Built-in tool always injected into the LLM tool list (telephony calls only). */
 const SCHEDULE_CALLBACK_TOOL_DEF: ToolDefinition = {
@@ -186,11 +187,38 @@ const PREVIOUS_SLIDE_TOOL_DEF: ToolDefinition = {
   parameters: { type: "object", properties: {} },
 };
 
+const SEND_MEETING_CHAT_TOOL_DEF: ToolDefinition = {
+  name: "send_meeting_chat",
+  description:
+    "Post a short message to the meeting chat (links, agenda, summary, follow-up). " +
+    "Use when participants ask you to share something in chat, or after confirming a booking/link. " +
+    "Keep under ~500 characters. Do not spam.",
+  parameters: {
+    type: "object",
+    properties: {
+      message: {
+        type: "string",
+        description: "Chat message to post to everyone in the meeting.",
+      },
+      pin: {
+        type: "boolean",
+        description: "Optional. Pin the message (Google Meet) so late joiners see it.",
+      },
+    },
+    required: ["message"],
+  },
+};
+
 const MEETING_PRESENTATION_TOOL_DEFS: ToolDefinition[] = [
   START_PRESENTATION_TOOL_DEF,
   STOP_PRESENTATION_TOOL_DEF,
   NEXT_SLIDE_TOOL_DEF,
   PREVIOUS_SLIDE_TOOL_DEF,
+];
+
+const MEETING_SESSION_TOOL_DEFS: ToolDefinition[] = [
+  ...MEETING_PRESENTATION_TOOL_DEFS,
+  SEND_MEETING_CHAT_TOOL_DEF,
 ];
 
 const VAD_SILENCE_MS          = 150;    // default silence window before STT flush (per-agent tunable via vadSilenceMs)
@@ -4456,7 +4484,7 @@ export class OrchestrationPipeline implements VoiceSession {
         const warmTools = buildToolDefs(this.agent.tools);
         warmTools.push(SCHEDULE_CALLBACK_TOOL_DEF);
         if (this.agent.isMeetingSession) {
-          warmTools.push(SCHEDULE_MEET_REJOIN_TOOL_DEF, ...MEETING_PRESENTATION_TOOL_DEFS);
+          warmTools.push(SCHEDULE_MEET_REJOIN_TOOL_DEF, ...MEETING_SESSION_TOOL_DEFS);
         }
         void this.llm.warmContextCache(this.buildCacheBase(null), warmTools);
       } catch (err) {
@@ -6045,6 +6073,16 @@ export class OrchestrationPipeline implements VoiceSession {
           presentationDefaultUrl: this.config.presentationDefaultUrl,
         });
       }
+      if (toolName === "send_meeting_chat") {
+        if (!this.agent.isMeetingSession) {
+          return "error: send_meeting_chat is only available during meeting sessions";
+        }
+        return executeMeetChatTool({
+          meetMid: this.config.meetMid,
+          message: typeof args["message"] === "string" ? args["message"] : "",
+          pin: args["pin"] === true,
+        });
+      }
       logger.warn({ callId: this.config.callId, toolName }, "LLM called unknown tool — ignoring");
       return undefined;
     }
@@ -6823,7 +6861,7 @@ export class OrchestrationPipeline implements VoiceSession {
     const toolDefs = buildToolDefs(this.agent.tools);
     toolDefs.push(SCHEDULE_CALLBACK_TOOL_DEF);
     if (this.agent.isMeetingSession) {
-      toolDefs.push(SCHEDULE_MEET_REJOIN_TOOL_DEF, ...MEETING_PRESENTATION_TOOL_DEFS);
+      toolDefs.push(SCHEDULE_MEET_REJOIN_TOOL_DEF, ...MEETING_SESSION_TOOL_DEFS);
     }
 
     const llmStart = Date.now();
@@ -8894,7 +8932,7 @@ export class OrchestrationPipeline implements VoiceSession {
     const toolDefs = buildToolDefs(this.agent.tools);
     toolDefs.push(SCHEDULE_CALLBACK_TOOL_DEF);
     if (this.agent.isMeetingSession) {
-      toolDefs.push(SCHEDULE_MEET_REJOIN_TOOL_DEF, ...MEETING_PRESENTATION_TOOL_DEFS);
+      toolDefs.push(SCHEDULE_MEET_REJOIN_TOOL_DEF, ...MEETING_SESSION_TOOL_DEFS);
     }
     const attachTools = depth < MAX_TOOL_DEPTH && toolDefs.length > 0;
     let triggeredToolName: string | null = null;
@@ -9384,6 +9422,17 @@ export class OrchestrationPipeline implements VoiceSession {
     const n = note.trim().slice(0, 200);
     if (!n || this.pendingMeetingNotes.length >= 10) return;
     this.pendingMeetingNotes.push(n);
+  }
+
+  /** Roster cost-cut: end the SnapServe session when the meeting is over. */
+  endMeetingSession(reason?: string): void {
+    if (this.closed) return;
+    this.endReasonHint = reason?.trim() || "meeting_ended";
+    logger.info(
+      { callId: this.config.callId, reason: this.endReasonHint },
+      "Meeting session ended by roster cost-cut",
+    );
+    this.config.onCallEnd();
   }
 
   /**

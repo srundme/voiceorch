@@ -641,6 +641,164 @@ router.get("/calls/:id", requireAuth, clientContext, async (req, res): Promise<v
   res.json(GetCallResponse.parse(enriched));
 });
 
+/**
+ * Fresh Recall mixed-meeting MP4 URL for call-log playback.
+ * Pre-signed URLs expire — always re-fetch via recallBotId in call metadata.
+ */
+router.get("/calls/:id/meeting-recording", requireAuth, clientContext, async (req, res): Promise<void> => {
+  const params = GetCallParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: "Validation failed", issues: params.error.issues });
+    return;
+  }
+  const clerkId = (req as any).clerkUserId as string;
+  const [call] = await db.select().from(callsTable).where(eq(callsTable.id, params.data.id));
+  if (!call) {
+    res.status(404).json({ error: "Call not found" });
+    return;
+  }
+  if (call.userId && call.userId !== clerkId) {
+    res.status(404).json({ error: "Call not found" });
+    return;
+  }
+  if (!call.userId) {
+    const [agent] = await db.select({ userId: agentsTable.userId })
+      .from(agentsTable).where(eq(agentsTable.id, call.agentId));
+    if (agent?.userId && agent.userId !== clerkId) {
+      res.status(404).json({ error: "Call not found" });
+      return;
+    }
+  }
+
+  let meta: Record<string, unknown> = {};
+  try {
+    meta = call.metadata ? (JSON.parse(call.metadata) as Record<string, unknown>) : {};
+  } catch {
+    meta = {};
+  }
+  const botId = typeof meta["recallBotId"] === "string" ? meta["recallBotId"].trim() : "";
+  if (!botId) {
+    res.status(404).json({ error: "No meeting recording for this call" });
+    return;
+  }
+  if (!process.env["RECALL_API_KEY"]) {
+    res.status(503).json({ error: "Meeting recording is not configured" });
+    return;
+  }
+
+  try {
+    const { fetchRecallBotMixedVideoUrl } = await import("../services/meet-bots.js");
+    const url = await fetchRecallBotMixedVideoUrl(botId);
+    if (!url) {
+      res.status(404).json({
+        error: "Meeting recording is not ready yet — try again shortly",
+        pending: true,
+      });
+      return;
+    }
+    // Mark ready if we hadn't yet (late playback after processing finished).
+    if (meta["recallVideoReady"] !== true) {
+      await db
+        .update(callsTable)
+        .set({
+          metadata: JSON.stringify({ ...meta, recallVideoReady: true, recallBotId: botId }),
+        })
+        .where(eq(callsTable.id, call.id));
+    }
+    res.json({ url, botId });
+  } catch (err) {
+    res.status(502).json({
+      error: err instanceof Error ? err.message : "Failed to fetch meeting recording",
+    });
+  }
+});
+
+/**
+ * Fresh per-participant meeting audio tracks (Recall audio_separate MP3 parts).
+ * Pre-signed URLs expire — re-fetch on each request.
+ */
+router.get("/calls/:id/meeting-separate-audio", requireAuth, clientContext, async (req, res): Promise<void> => {
+  const params = GetCallParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: "Validation failed", issues: params.error.issues });
+    return;
+  }
+  const clerkId = (req as any).clerkUserId as string;
+  const [call] = await db.select().from(callsTable).where(eq(callsTable.id, params.data.id));
+  if (!call) {
+    res.status(404).json({ error: "Call not found" });
+    return;
+  }
+  if (call.userId && call.userId !== clerkId) {
+    res.status(404).json({ error: "Call not found" });
+    return;
+  }
+  if (!call.userId) {
+    const [agent] = await db.select({ userId: agentsTable.userId })
+      .from(agentsTable).where(eq(agentsTable.id, call.agentId));
+    if (agent?.userId && agent.userId !== clerkId) {
+      res.status(404).json({ error: "Call not found" });
+      return;
+    }
+  }
+
+  let meta: Record<string, unknown> = {};
+  try {
+    meta = call.metadata ? (JSON.parse(call.metadata) as Record<string, unknown>) : {};
+  } catch {
+    meta = {};
+  }
+  const botId = typeof meta["recallBotId"] === "string" ? meta["recallBotId"].trim() : "";
+  if (!botId) {
+    res.status(404).json({ error: "No meeting audio for this call" });
+    return;
+  }
+  if (!process.env["RECALL_API_KEY"]) {
+    res.status(503).json({ error: "Meeting recording is not configured" });
+    return;
+  }
+
+  try {
+    const { fetchRecallBotSeparateAudioTracks } = await import("../services/meet-bots.js");
+    const result = await fetchRecallBotSeparateAudioTracks(botId);
+    if (!result?.tracks.length) {
+      res.status(404).json({
+        error: "Per-speaker audio is not ready yet — try again shortly",
+        pending: true,
+      });
+      return;
+    }
+    if (meta["recallSeparateAudioReady"] !== true) {
+      await db
+        .update(callsTable)
+        .set({
+          metadata: JSON.stringify({
+            ...meta,
+            recallSeparateAudioReady: true,
+            recallSeparateAudioCount: result.tracks.length,
+            recallRecordingId: result.recordingId,
+            recallBotId: botId,
+          }),
+        })
+        .where(eq(callsTable.id, call.id));
+    }
+    res.json({
+      botId,
+      recordingId: result.recordingId,
+      tracks: result.tracks.map((t) => ({
+        name: t.name,
+        participantId: t.participantId,
+        isHost: t.isHost,
+        url: t.downloadUrl,
+      })),
+    });
+  } catch (err) {
+    res.status(502).json({
+      error: err instanceof Error ? err.message : "Failed to fetch per-speaker audio",
+    });
+  }
+});
+
 // Caller-scoped memory context for the caller on a given call. Mirrors the
 // runtime caller-key derivation (orchestration/session.ts) so the Call Log
 // detail page shows the SAME memory the live pipeline reads/writes.

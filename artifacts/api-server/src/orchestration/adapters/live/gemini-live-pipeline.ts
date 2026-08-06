@@ -116,6 +116,19 @@ const MEETING_PRESENTATION_TOOLS: Array<{
     description: "Go back to the previous slide while presenting.",
     parameters: { type: "object", properties: {}, required: [] },
   },
+  {
+    name: "send_meeting_chat",
+    description:
+      "Post a short message to the meeting chat (links, agenda, summary). Keep under ~500 characters.",
+    parameters: {
+      type: "object",
+      properties: {
+        message: { type: "string", description: "Chat message for everyone." },
+        pin: { type: "boolean", description: "Pin on Google Meet (optional)." },
+      },
+      required: ["message"],
+    },
+  },
 ];
 
 export class GeminiLivePipeline implements VoiceSession {
@@ -348,6 +361,17 @@ export class GeminiLivePipeline implements VoiceSession {
 
   getLastMediaAtMs(): number | null {
     return this.recording.getLastWriteAtMs();
+  }
+
+  /** Meeting roster cost-cut: end SnapServe session when the room empties. */
+  endMeetingSession(reason?: string): void {
+    if (this.closed) return;
+    this.endReasonHint = reason?.trim() || "meeting_ended";
+    logger.info(
+      { callId: this.config.callId, reason: this.endReasonHint },
+      "Gemini Live meeting session ended by roster cost-cut",
+    );
+    this.config.onCallEnd();
   }
 
   close(): void {

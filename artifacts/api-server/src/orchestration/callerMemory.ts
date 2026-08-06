@@ -294,6 +294,35 @@ function isResumableTail(
   return true;
 }
 
+/**
+ * Resolve a caller-memory phone key from a known email fact (meeting attendees).
+ * Returns the profile phoneNumber when an active email fact matches.
+ */
+export async function findCallerPhoneByEmail(
+  agentId: number,
+  email: string,
+): Promise<string | null> {
+  const normalized = email.trim().toLowerCase();
+  if (!normalized || !normalized.includes("@")) return null;
+  try {
+    const [row] = await db
+      .select({ phoneNumber: callerFactsTable.phoneNumber })
+      .from(callerFactsTable)
+      .where(and(
+        eq(callerFactsTable.agentId, agentId),
+        eq(callerFactsTable.key, "email"),
+        sql`lower(${callerFactsTable.value}) = ${normalized}`,
+        isNull(callerFactsTable.supersededById),
+      ))
+      .limit(1);
+    const phone = row?.phoneNumber?.trim();
+    return phone ? (canonicalizeCallerKey(phone) ?? phone) : null;
+  } catch (err) {
+    logger.warn({ err, agentId, email: normalized }, "findCallerPhoneByEmail failed");
+    return null;
+  }
+}
+
 // ── Layer 1 compat: load just the profile row ─────────────────────────────────
 
 export async function loadCallerProfile(

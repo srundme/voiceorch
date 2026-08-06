@@ -89,6 +89,8 @@ export interface MeetBotTokenPayload {
   passMemory?: boolean;
   /** Snapshot of meetings.passCallContext at launch (default true). */
   passCallContext?: boolean;
+  /** Booking attendee email for memory matching when passMemory is on. */
+  memoryEmail?: string;
 }
 
 function tokenSecret(): string {
@@ -159,6 +161,72 @@ function summarizeBot(bot: any): RecallBotSummary {
   };
 }
 
+/** Cost cut: leave soon after the room empties (tolerate brief drop/rejoin). */
+export const RECALL_EVERYONE_LEFT_TIMEOUT_SEC = 30;
+/** Cost cut: leave if bot joined but nobody else ever arrives. */
+export const RECALL_NOONE_JOINED_TIMEOUT_SEC = 10 * 60;
+/** Cost cut: leave if never admitted from waiting room. */
+export const RECALL_WAITING_ROOM_TIMEOUT_SEC = 10 * 60;
+/** Keep mixed MP4 within Recall's free storage window for call-log playback. */
+export const RECALL_RECORDING_RETENTION_HOURS = 168;
+
+/** Pure payload fragment — unit-tested; used by createRecallBot. */
+export function buildRecallAutomaticLeave(): {
+  everyone_left_timeout: { timeout: number; activate_after: number };
+  noone_joined_timeout: number;
+  waiting_room_timeout: number;
+  recording_permission_denied_timeout: number;
+  in_call_not_recording_timeout: number;
+} {
+  return {
+    everyone_left_timeout: {
+      timeout: RECALL_EVERYONE_LEFT_TIMEOUT_SEC,
+      activate_after: 0,
+    },
+    noone_joined_timeout: RECALL_NOONE_JOINED_TIMEOUT_SEC,
+    waiting_room_timeout: RECALL_WAITING_ROOM_TIMEOUT_SEC,
+    // Zoom/Teams: leave soon if host denies recording consent.
+    recording_permission_denied_timeout: 60,
+    // Don't sit forever waiting for consent UI.
+    in_call_not_recording_timeout: 15 * 60,
+  };
+}
+
+export function detectMeetingPlatform(
+  meetingUrl: string,
+): "google_meet" | "zoom" | "microsoft_teams" | "unknown" {
+  const u = meetingUrl.toLowerCase();
+  if (u.includes("meet.google.com")) return "google_meet";
+  if (u.includes("zoom.us") || u.includes("zoom.com")) return "zoom";
+  if (u.includes("teams.microsoft.com") || u.includes("teams.live.com")) return "microsoft_teams";
+  return "unknown";
+}
+
+function buildRecordingConsentChat(platform: ReturnType<typeof detectMeetingPlatform>): {
+  on_bot_join: { send_to: string; message: string; pin: boolean };
+  on_participant_join?: { exclude_host: boolean; message: string };
+} {
+  const botEmail = (process.env["RECALL_BOT_EMAIL"] ?? "").trim();
+  const admitHint = botEmail
+    ? ` If prompted, please admit ${botEmail}.`
+    : " If prompted, please admit the SnapServe meeting agent.";
+  const base =
+    platform === "zoom" || platform === "microsoft_teams"
+      ? `SnapServe AI joined. This meeting may be recorded. Please accept the recording consent prompt if shown.${admitHint}`
+      : `SnapServe AI joined. This meeting may be recorded for quality and follow-up.${admitHint}`;
+  return {
+    on_bot_join: { send_to: "everyone", message: base.slice(0, 500), pin: true },
+    on_participant_join: {
+      exclude_host: false,
+      message: "SnapServe AI is in this meeting (may be recorded).".slice(0, 500),
+    },
+  };
+}
+
+export function buildRecallRecordingRetention(): { type: "timed"; hours: number } {
+  return { type: "timed", hours: RECALL_RECORDING_RETENTION_HOURS };
+}
+
 export async function createRecallBot(opts: {
   meetingUrl: string;
   botName: string;
@@ -173,40 +241,58 @@ export async function createRecallBot(opts: {
    * the voice agent page). Mid-call start uses startRecallScreenshare instead.
    */
   screensharePageUrl?: string;
+  /**
+   * Schedule join (ISO / Date). When ≥10 minutes ahead, Recall guarantees
+   * on-time join. Omit for immediate (ad-hoc) join.
+   */
+  joinAt?: Date | string;
 }): Promise<RecallBotSummary> {
   const loginGroupId = (process.env["RECALL_GOOGLE_LOGIN_GROUP_ID"] ?? "").trim();
   const diarized = isRecallDiarizedTranscriptEnabled();
   // Low-latency streaming requires language_code=en per Recall docs.
   const transcriptLang = ((process.env["RECALL_TRANSCRIPT_LANGUAGE"] ?? "en").trim() || "en").toLowerCase();
-  const recordingConfig =
-    opts.eventsUrl && opts.eventsList?.length
-      ? {
-          ...(diarized
-            ? {
-                transcript: {
-                  provider: {
-                    recallai_streaming: {
-                      mode: "prioritize_low_latency",
-                      language_code: transcriptLang === "auto" ? "en" : transcriptLang,
-                    },
-                  },
-                  diarization: {
-                    use_separate_streams_when_available: true,
-                  },
-                },
-              }
-            : {}),
-          realtime_endpoints: [
-            { type: "webhook", url: opts.eventsUrl, events: opts.eventsList },
-          ],
-        }
-      : null;
+  const platform = detectMeetingPlatform(opts.meetingUrl);
+  const recordingConfig: Record<string, unknown> = {
+    retention: buildRecallRecordingRetention(),
+    // Mixed meeting video for SnapServe call-log playback.
+    video_mixed_mp4: {},
+    // Multi-person gallery for Zoom/Teams/Meet recordings.
+    video_mixed_layout: "gallery_view_v2",
+    // Per-speaker MP3 parts for analytics / cleaner diarization archives.
+    audio_separate_mp3: {},
+  };
+  if (diarized) {
+    recordingConfig["transcript"] = {
+      provider: {
+        recallai_streaming: {
+          mode: "prioritize_low_latency",
+          language_code: transcriptLang === "auto" ? "en" : transcriptLang,
+        },
+      },
+      diarization: {
+        use_separate_streams_when_available: true,
+      },
+    };
+  }
+  if (opts.eventsUrl && opts.eventsList?.length) {
+    recordingConfig["realtime_endpoints"] = [
+      { type: "webhook", url: opts.eventsUrl, events: opts.eventsList },
+    ];
+  }
   const screenshareUrl = typeof opts.screensharePageUrl === "string" ? opts.screensharePageUrl.trim() : "";
+  let joinAtIso: string | undefined;
+  if (opts.joinAt) {
+    const d = opts.joinAt instanceof Date ? opts.joinAt : new Date(opts.joinAt);
+    if (Number.isFinite(d.getTime()) && d.getTime() > Date.now() + 15_000) {
+      joinAtIso = d.toISOString();
+    }
+  }
   const res = await recallFetch("/bot/", {
     method: "POST",
     body: JSON.stringify({
       meeting_url: opts.meetingUrl,
       bot_name: opts.botName,
+      ...(joinAtIso ? { join_at: joinAtIso } : {}),
       // Ownership is enforced on every status/leave call by reading this back
       // from Recall (no local DB row to drift or lose on restart).
       metadata: { ownerUserId: opts.ownerUserId, agentId: String(opts.agentId) },
@@ -218,14 +304,21 @@ export async function createRecallBot(opts: {
       },
       // The default `web` variant gives the bot's browser only 250 millicores,
       // which starves real-time audio (choppy/"sticky" voice). Recall's own FAQ
-      // prescribes web_4_core for output-media agents.
+      // prescribes web_4_core for output-media agents (+ separate audio).
       variant: {
         google_meet: "web_4_core",
         zoom: "web_4_core",
         microsoft_teams: "web_4_core",
       },
+      // Leave empty / idle rooms quickly — stops Recall + SnapServe minute burn.
+      automatic_leave: buildRecallAutomaticLeave(),
+      chat: buildRecordingConsentChat(platform),
+      // Zoom: follow breakout invites so the agent stays with participants.
+      ...(platform === "zoom"
+        ? { breakout_room: { mode: "auto_accept_all_invites" } }
+        : {}),
       // Signed-in Google Meet bot so the admit screen shows a real email address
-      // instead of an anonymous guest with no address.
+      // (also invited as calendar attendee when RECALL_BOT_EMAIL is set).
       ...(loginGroupId
         ? {
             google_meet: {
@@ -234,8 +327,7 @@ export async function createRecallBot(opts: {
             },
           }
         : {}),
-      // Participant events (+ optional diarized transcript.data) via webhook.
-      ...(recordingConfig ? { recording_config: recordingConfig } : {}),
+      recording_config: recordingConfig,
     }),
   });
   if (!res.ok) {
@@ -245,25 +337,53 @@ export async function createRecallBot(opts: {
   return summarizeBot(await res.json());
 }
 
+/** Delete a scheduled/active bot (e.g. booking cancelled before join). */
+export async function deleteRecallBot(botId: string): Promise<void> {
+  const res = await recallFetch(`/bot/${encodeURIComponent(botId)}/`, { method: "DELETE" });
+  if (!res.ok && res.status !== 404) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Recall delete bot failed (${res.status}): ${text.slice(0, 200)}`);
+  }
+}
+
 /**
  * After the meeting ends, pull Recall's async diarized transcript artifact
  * (recordings[].media_shortcuts.transcript.data.download_url) and format as
  * plain "[Speaker]: utterance" lines. Returns null while the artifact is not
  * ready yet (caller should retry).
  */
-export async function fetchRecallBotDiarizedTranscript(botId: string): Promise<string | null> {
+type RecallBotRecordings = {
+  recordings?: Array<{
+    id?: string;
+    media_shortcuts?: {
+      transcript?: { data?: { download_url?: string | null } | null } | null;
+      video_mixed?: {
+        status?: { code?: string | null } | null;
+        data?: { download_url?: string | null } | null;
+        format?: string | null;
+      } | null;
+    } | null;
+  }>;
+};
+
+export type RecallSeparateAudioTrack = {
+  participantId: string | null;
+  name: string;
+  downloadUrl: string;
+  isHost: boolean;
+};
+
+async function fetchRecallBotJson(botId: string): Promise<RecallBotRecordings> {
   const res = await recallFetch(`/bot/${encodeURIComponent(botId)}/`);
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(`Recall get bot for transcript failed (${res.status}): ${text.slice(0, 200)}`);
+    throw new Error(`Recall get bot failed (${res.status}): ${text.slice(0, 200)}`);
   }
-  const bot = (await res.json()) as {
-    recordings?: Array<{
-      media_shortcuts?: {
-        transcript?: { data?: { download_url?: string | null } | null } | null;
-      } | null;
-    }>;
-  };
+  return (await res.json()) as RecallBotRecordings;
+}
+
+export async function fetchRecallBotDiarizedTranscript(botId: string): Promise<string | null> {
+  const bot = await fetchRecallBotJson(botId);
   const downloadUrl =
     bot.recordings?.find((r) => r?.media_shortcuts?.transcript?.data?.download_url)
       ?.media_shortcuts?.transcript?.data?.download_url ?? null;
@@ -276,6 +396,113 @@ export async function fetchRecallBotDiarizedTranscript(botId: string): Promise<s
   }
   const payload = (await txRes.json()) as unknown;
   return formatRecallTranscriptDownload(payload);
+}
+
+/**
+ * Fresh pre-signed MP4 URL for mixed meeting video (short-lived — do not cache).
+ * Returns null while Recall is still processing.
+ */
+export async function fetchRecallBotMixedVideoUrl(botId: string): Promise<string | null> {
+  const bot = await fetchRecallBotJson(botId);
+  for (const rec of bot.recordings ?? []) {
+    const vm = rec?.media_shortcuts?.video_mixed;
+    const url = vm?.data?.download_url;
+    if (typeof url === "string" && url.startsWith("http")) {
+      // Prefer done; still accept URL if present (some regions omit status briefly).
+      const code = vm?.status?.code;
+      if (!code || code === "done") return url;
+    }
+  }
+  return null;
+}
+
+/**
+ * Per-participant MP3 parts (async). Pre-signed URLs — do not cache long-term.
+ * Returns null while Recall is still processing separate audio.
+ */
+export async function fetchRecallBotSeparateAudioTracks(
+  botId: string,
+): Promise<{ recordingId: string; tracks: RecallSeparateAudioTrack[] } | null> {
+  const bot = await fetchRecallBotJson(botId);
+  const recordingId =
+    bot.recordings?.find((r) => typeof r?.id === "string" && r.id.trim())?.id?.trim() ?? "";
+  if (!recordingId) return null;
+
+  const listRes = await recallFetch(
+    `/audio_separate?recording_id=${encodeURIComponent(recordingId)}`,
+  );
+  if (!listRes.ok) {
+    const text = await listRes.text().catch(() => "");
+    throw new Error(`Recall audio_separate list failed (${listRes.status}): ${text.slice(0, 200)}`);
+  }
+  const listJson = (await listRes.json()) as {
+    results?: Array<{
+      status?: { code?: string | null } | null;
+      data?: { download_url?: string | null } | null;
+    }>;
+  };
+  const manifests = (listJson.results ?? []).filter(
+    (r) => (!r.status?.code || r.status.code === "done") && typeof r.data?.download_url === "string",
+  );
+  if (!manifests.length) return null;
+
+  const tracks: RecallSeparateAudioTrack[] = [];
+  for (const m of manifests) {
+    const manifestUrl = m.data!.download_url!;
+    const partRes = await fetch(manifestUrl, { headers: { accept: "application/json" } });
+    if (!partRes.ok) continue;
+    const parts = (await partRes.json()) as unknown;
+    if (!Array.isArray(parts)) continue;
+    for (const part of parts) {
+      if (!part || typeof part !== "object") continue;
+      const p = part as {
+        download_url?: unknown;
+        participant?: { id?: unknown; name?: unknown; is_host?: unknown };
+      };
+      const downloadUrl = typeof p.download_url === "string" ? p.download_url : "";
+      if (!downloadUrl.startsWith("http")) continue;
+      const name =
+        typeof p.participant?.name === "string" && p.participant.name.trim()
+          ? p.participant.name.trim().slice(0, 80)
+          : "Participant";
+      const participantId =
+        p.participant?.id != null && String(p.participant.id).trim()
+          ? String(p.participant.id).trim()
+          : null;
+      tracks.push({
+        participantId,
+        name,
+        downloadUrl,
+        isHost: p.participant?.is_host === true,
+      });
+      if (tracks.length >= 64) break;
+    }
+    if (tracks.length >= 64) break;
+  }
+  if (!tracks.length) return null;
+  return { recordingId, tracks };
+}
+
+/** Post a message to the meeting chat (Meet: everyone; Zoom may DM by id). */
+export async function sendRecallChatMessage(
+  botId: string,
+  message: string,
+  opts?: { to?: string; pin?: boolean },
+): Promise<void> {
+  const text = message.trim().slice(0, 500); // Meet hard limit
+  if (!text) throw new Error("chat message is empty");
+  const res = await recallFetch(`/bot/${encodeURIComponent(botId)}/send_chat_message/`, {
+    method: "POST",
+    body: JSON.stringify({
+      message: text,
+      to: opts?.to?.trim() || "everyone",
+      pin: opts?.pin === true,
+    }),
+  });
+  if (!res.ok) {
+    const errText = await res.text().catch(() => "");
+    throw new Error(`Recall send chat failed (${res.status}): ${errText.slice(0, 300)}`);
+  }
 }
 
 /** Normalize Recall JSON transcript download into speaker-labeled lines. */

@@ -87,6 +87,10 @@ export const bookingsTable = pgTable("bookings", {
   rescheduledFromId: integer("rescheduled_from_id"),
   googleEventId: text("google_event_id"),
   meetLink: text("meet_link"),
+  /** Recall bot id when a meeting bot was scheduled/dispatched for this booking. */
+  meetBotId: text("meet_bot_id"),
+  /** When the Recall bot is scheduled to join (join_at), if pre-scheduled. */
+  meetBotJoinAt: timestamp("meet_bot_join_at", { withTimezone: true }),
   calendarSyncStatus: text("calendar_sync_status"),
   calendarSyncError: text("calendar_sync_error"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

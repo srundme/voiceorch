@@ -53,4 +53,6 @@ export interface VoiceSession {
   setMeetingRoster?(line: string | null): void;
   setMeetingSpeaker?(name: string | null): void;
   injectMeetingNote?(note: string): void;
+  /** Cost cut: end voice session when the meeting room empties / bot leaves. */
+  endMeetingSession?(reason?: string): void;
 }

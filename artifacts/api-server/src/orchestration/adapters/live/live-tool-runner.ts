@@ -18,6 +18,7 @@ import {
   resolveAgentOwnerUserId,
 } from "../../../services/meet-booking.js";
 import { executeMeetPresentationTool } from "../../../services/meet-presentation.js";
+import { executeMeetChatTool } from "../../../services/meet-chat.js";
 import { logger } from "../../../lib/logger.js";
 
 export interface LiveToolRunnerDeps {
@@ -120,6 +121,18 @@ export async function runLiveToolCall(
       meetMid: config.meetMid,
       meetBotToken: config.meetBotToken,
       presentationDefaultUrl: config.presentationDefaultUrl,
+    });
+    return { output };
+  }
+
+  if (toolName === "send_meeting_chat") {
+    if (!agent.isMeetingSession) {
+      return { error: "send_meeting_chat is only available during meeting sessions" };
+    }
+    const output = await executeMeetChatTool({
+      meetMid: config.meetMid,
+      message: typeof args["message"] === "string" ? args["message"] : "",
+      pin: args["pin"] === true,
     });
     return { output };
   }

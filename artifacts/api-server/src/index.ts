@@ -164,6 +164,7 @@ server.on("upgrade", (request, socket, head) => { void (async () => {
   let webcallMeetMid: string | null = null;
   let webcallMeetBotToken: string | null = null;
   let webcallMeetMemoryPhone: string | null = null;
+  let webcallMeetMemoryEmail: string | null = null;
   let webcallMeetSourceCallId: number | null = null;
   let webcallMeetUrl: string | null = null;
   let webcallMeetPassMemory: boolean | undefined;
@@ -210,6 +211,7 @@ server.on("upgrade", (request, socket, head) => { void (async () => {
         webcallMeetMid = payload.mid ?? null;
         webcallMeetBotToken = meetBotToken;
         webcallMeetMemoryPhone = typeof payload.memoryPhone === "string" ? payload.memoryPhone : null;
+        webcallMeetMemoryEmail = typeof payload.memoryEmail === "string" ? payload.memoryEmail : null;
         webcallMeetSourceCallId =
           typeof payload.sourceCallId === "number" && payload.sourceCallId > 0
             ? payload.sourceCallId
@@ -337,6 +339,7 @@ server.on("upgrade", (request, socket, head) => { void (async () => {
           ...(webcallMeetMid ? { meetMid: webcallMeetMid } : {}),
           ...(webcallMeetBotToken ? { meetBotToken: webcallMeetBotToken } : {}),
           ...(webcallMeetMemoryPhone ? { meetingMemoryPhone: webcallMeetMemoryPhone } : {}),
+          ...(webcallMeetMemoryEmail ? { meetingMemoryEmail: webcallMeetMemoryEmail } : {}),
           ...(webcallMeetSourceCallId ? { meetingSourceCallId: webcallMeetSourceCallId } : {}),
           ...(webcallMeetUrl ? { meetingUrl: webcallMeetUrl } : {}),
           ...(webcallMeetPassMemory === false ? { passMemory: false } : {}),
