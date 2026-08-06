@@ -1458,22 +1458,22 @@ export default function CampaignsPage() {
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
-      {/* Start a campaign — Oceanic Shimmer hero */}
-      <section className="oceanic-shimmer shrink-0 border-b border-[#123A6B]/40 px-4 py-7 sm:px-6 lg:px-8">
+      {/* Start a campaign — Oceanic Shimmer hero (dark top for copy contrast) */}
+      <section className="oceanic-shimmer shrink-0 border-b border-[#0d2a4f]/50 px-4 py-7 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-5xl">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/65">
+          <div className="relative z-[1]">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/80">
               Start a campaign
             </p>
-            <h2 className="mt-1.5 text-xl font-semibold tracking-[-0.03em] text-white sm:text-2xl">
+            <h2 className="mt-1.5 text-xl font-semibold tracking-[-0.03em] text-white sm:text-2xl drop-shadow-sm">
               Where are your leads coming from?
             </h2>
-            <p className="mt-1.5 max-w-xl text-[13px] leading-relaxed text-white/75">
+            <p className="mt-1.5 max-w-xl text-[13px] leading-relaxed text-white/85">
               Each source has its own setup — connect the channel first, then dial.
             </p>
           </div>
 
-          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="relative z-[1] mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {START_SOURCES.map((src) => {
               const zohoNeedsConnect = src.id === "crm" && !zohoConnected;
               return (
@@ -1481,7 +1481,7 @@ export default function CampaignsPage() {
                   key={src.id}
                   type="button"
                   onClick={() => startFrom(src.id)}
-                  className="group flex min-h-[120px] flex-col items-start gap-3 rounded-2xl border border-white/25 bg-white/90 p-4 text-left shadow-sm backdrop-blur-sm transition-colors hover:bg-white"
+                  className="group flex min-h-[120px] flex-col items-start gap-3 rounded-2xl border border-white/30 bg-white p-4 text-left shadow-md shadow-[#123A6B]/25 transition-colors hover:bg-[#F7FBFD]"
                 >
                   <div className="flex w-full items-start justify-between gap-3">
                     {src.icon}
