@@ -1,8 +1,9 @@
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
 import { createHash, randomBytes } from "node:crypto";
 import { eq, and, isNull } from "drizzle-orm";
-import { db, usersTable, userApiKeysTable } from "@workspace/db";
+import { db, userApiKeysTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
+import { clientContext } from "../middlewares/clientContext.js";
 import { logger } from "../lib/logger.js";
 
 const router: IRouter = Router();
@@ -23,7 +24,9 @@ function hashKey(key: string): string {
 
 /* ── GET /user-api-keys ──────────────────────────────────────────────────── */
 
-router.get("/user-api-keys", requireAuth, async (req, res): Promise<void> => {
+// clientContext: partners acting-as a managed client create/list/revoke that
+// client's keys (x-client-context), not their own partner-account keys.
+router.get("/user-api-keys", requireAuth, clientContext, async (req, res): Promise<void> => {
   const userId = (req as any).clerkUserId as string;
   const keys = await db
     .select({
@@ -43,7 +46,7 @@ router.get("/user-api-keys", requireAuth, async (req, res): Promise<void> => {
 
 /* ── POST /user-api-keys ─────────────────────────────────────────────────── */
 
-router.post("/user-api-keys", requireAuth, async (req, res): Promise<void> => {
+router.post("/user-api-keys", requireAuth, clientContext, async (req, res): Promise<void> => {
   const userId = (req as any).clerkUserId as string;
   const name   = (req.body as { name?: string }).name?.trim() || "Default";
 
@@ -69,7 +72,7 @@ router.post("/user-api-keys", requireAuth, async (req, res): Promise<void> => {
 
 /* ── DELETE /user-api-keys/:id ───────────────────────────────────────────── */
 
-router.delete("/user-api-keys/:id", requireAuth, async (req, res): Promise<void> => {
+router.delete("/user-api-keys/:id", requireAuth, clientContext, async (req, res): Promise<void> => {
   const userId = (req as any).clerkUserId as string;
   const id     = Number(req.params["id"]);
 

@@ -21,6 +21,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft, ArrowRightLeft, Bot, IndianRupee, LogIn, Wallet, Send, ChevronRight,
+  Key, Plus, Copy, Trash2, CheckCircle2,
 } from "lucide-react";
 import { getListAgentsQueryKey, getListPhoneNumbersQueryKey } from "@workspace/api-client-react";
 
@@ -68,6 +69,15 @@ interface ClientCall {
   createdAt: string;
 }
 
+interface ClientApiKey {
+  id: number;
+  name: string;
+  keyPrefix: string;
+  lastUsedAt: string | null;
+  createdAt: string;
+  revokedAt: string | null;
+}
+
 const inr = (cents: number) => `₹${(cents / 100).toFixed(2)}`;
 const toMins = (seconds: number) => Math.round(seconds / 60);
 const fmtDate = (d: string) =>
@@ -100,6 +110,8 @@ export default function PartnerClientPage() {
   const [rateText, setRateText] = useState("");
   const [amountText, setAmountText] = useState("");
   const [sendAgentId, setSendAgentId] = useState<string>("");
+  const [apiKeyName, setApiKeyName] = useState("Client SDK");
+  const [revealApiKey, setRevealApiKey] = useState<string | null>(null);
 
   const clientsQ = useQuery<{ clients: PartnerClient[]; baseRateCentsPerMin: number }>({
     queryKey: ["partner-clients"],
@@ -126,6 +138,12 @@ export default function PartnerClientPage() {
   const callsQ = useQuery<{ calls: ClientCall[] }>({
     queryKey: ["partner-client-calls", clerkId],
     queryFn: () => partnerFetch(getToken, `/api/partner/clients/${encodeURIComponent(clerkId)}/calls`),
+    enabled: !!clerkId && !!client,
+  });
+
+  const apiKeysQ = useQuery<{ keys: ClientApiKey[] }>({
+    queryKey: ["partner-client-api-keys", clerkId],
+    queryFn: () => partnerFetch(getToken, `/api/partner/clients/${encodeURIComponent(clerkId)}/api-keys`),
     enabled: !!clerkId && !!client,
   });
 
@@ -186,6 +204,36 @@ export default function PartnerClientPage() {
     },
     onError: (err: Error) =>
       toast({ title: "Transfer failed", description: err.message, variant: "destructive" }),
+  });
+
+  const createApiKeyMutation = useMutation({
+    mutationFn: (name: string) =>
+      partnerFetch<{ key: string; prefix: string; name: string }>(
+        getToken,
+        `/api/partner/clients/${encodeURIComponent(clerkId)}/api-keys`,
+        { method: "POST", body: JSON.stringify({ name }) },
+      ),
+    onSuccess: (data) => {
+      setRevealApiKey(data.key);
+      setApiKeyName("Client SDK");
+      void qc.invalidateQueries({ queryKey: ["partner-client-api-keys", clerkId] });
+      toast({ title: "API key created — copy it now" });
+    },
+    onError: (err: Error) =>
+      toast({ title: "Could not create API key", description: err.message, variant: "destructive" }),
+  });
+
+  const revokeApiKeyMutation = useMutation({
+    mutationFn: (id: number) =>
+      partnerFetch(getToken, `/api/partner/clients/${encodeURIComponent(clerkId)}/api-keys/${id}`, {
+        method: "DELETE",
+      }),
+    onSuccess: () => {
+      toast({ title: "API key revoked" });
+      void qc.invalidateQueries({ queryKey: ["partner-client-api-keys", clerkId] });
+    },
+    onError: (err: Error) =>
+      toast({ title: "Could not revoke key", description: err.message, variant: "destructive" }),
   });
 
   const assign = useMutation({
@@ -258,6 +306,9 @@ export default function PartnerClientPage() {
   const numbers = configQ.data?.partnerNumbers ?? [];
   const partnerAgents = configQ.data?.partnerAgents ?? [];
   const calls = callsQ.data?.calls ?? [];
+  const apiKeys = apiKeysQ.data?.keys ?? [];
+  const activeApiKeys = apiKeys.filter((k) => !k.revokedAt);
+  const revokedApiKeys = apiKeys.filter((k) => !!k.revokedAt);
 
   return (
     <div className="mx-auto max-w-5xl space-y-5 p-4 sm:p-6">
@@ -327,11 +378,12 @@ export default function PartnerClientPage() {
       </div>
 
       <Tabs defaultValue="agents" className="space-y-4">
-        <TabsList className="h-9">
+        <TabsList className="h-9 flex-wrap">
           <TabsTrigger value="agents" className="text-xs">Agents</TabsTrigger>
           <TabsTrigger value="numbers" className="text-xs">Numbers</TabsTrigger>
           <TabsTrigger value="calls" className="text-xs">Calls</TabsTrigger>
           <TabsTrigger value="billing" className="text-xs">Billing</TabsTrigger>
+          <TabsTrigger value="api-keys" className="text-xs">API keys</TabsTrigger>
         </TabsList>
 
         <TabsContent value="agents" className="space-y-4">
@@ -583,6 +635,135 @@ export default function PartnerClientPage() {
               </Button>
             </div>
           </section>
+        </TabsContent>
+
+        <TabsContent value="api-keys" className="space-y-4">
+          <section className="rounded-xl border border-border bg-card p-4 space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 space-y-1">
+                <div className="flex items-center gap-2">
+                  <Key className="size-4 text-muted-foreground" />
+                  <h2 className="text-sm font-semibold">Client API keys</h2>
+                </div>
+                <p className="text-[12px] text-muted-foreground leading-relaxed">
+                  Issue <code className="font-mono text-[11px]">sk_live_…</code> keys that authenticate as this client
+                  for the SnapServe API / SDK. The full key is shown only once.
+                </p>
+              </div>
+            </div>
+
+            {revealApiKey && (
+              <div className="rounded-xl border border-border bg-elevated/40 p-4 space-y-2">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="size-4 text-foreground/50" />
+                  <p className="text-sm font-semibold">Save this key now</p>
+                </div>
+                <p className="text-[11px] text-muted-foreground">It will not be shown again.</p>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 text-[11px] bg-background border border-border rounded-lg px-3 py-2 font-mono break-all">
+                    {revealApiKey}
+                  </code>
+                  <Button
+                    size="icon"
+                    variant="outline"
+                    className="h-9 w-9 shrink-0"
+                    onClick={() => {
+                      void navigator.clipboard.writeText(revealApiKey);
+                      toast({ title: "Copied" });
+                    }}
+                  >
+                    <Copy className="size-3.5" />
+                  </Button>
+                </div>
+                <button
+                  type="button"
+                  className="text-[11px] text-muted-foreground underline underline-offset-2"
+                  onClick={() => setRevealApiKey(null)}
+                >
+                  I've saved the key
+                </button>
+              </div>
+            )}
+
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+              <div className="flex-1 space-y-1.5">
+                <Label className="text-xs">Key name</Label>
+                <Input
+                  className="h-9 text-xs"
+                  value={apiKeyName}
+                  onChange={(e) => setApiKeyName(e.target.value)}
+                  placeholder="Client SDK"
+                />
+              </div>
+              <Button
+                size="sm"
+                className="h-9 text-xs gap-1.5"
+                disabled={createApiKeyMutation.isPending || activeApiKeys.length >= 5}
+                onClick={() => createApiKeyMutation.mutate(apiKeyName.trim() || "Client SDK")}
+              >
+                <Plus className="size-3.5" /> Create key
+              </Button>
+            </div>
+            {activeApiKeys.length >= 5 && (
+              <p className="text-[11px] text-muted-foreground">Maximum 5 active keys — revoke one to create another.</p>
+            )}
+          </section>
+
+          <section className="rounded-xl border border-border bg-card overflow-hidden">
+            <div className="px-4 py-3 border-b border-border/60">
+              <p className="text-sm font-semibold">Active ({activeApiKeys.length})</p>
+            </div>
+            {apiKeysQ.isLoading ? (
+              <div className="h-16 m-4 animate-pulse rounded bg-muted" />
+            ) : activeApiKeys.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-8 text-center">No API keys yet for this client.</p>
+            ) : (
+              <ul className="divide-y divide-border">
+                {activeApiKeys.map((k) => (
+                  <li key={k.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{k.name}</p>
+                      <p className="text-[11px] font-mono text-muted-foreground">
+                        {k.keyPrefix}…
+                        {k.lastUsedAt
+                          ? ` · last used ${new Date(k.lastUsedAt).toLocaleDateString("en-IN")}`
+                          : " · never used"}
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 text-xs text-destructive hover:text-destructive gap-1"
+                      disabled={revokeApiKeyMutation.isPending}
+                      onClick={() => {
+                        if (window.confirm(`Revoke key “${k.name}”? Integrations using it will stop working.`)) {
+                          revokeApiKeyMutation.mutate(k.id);
+                        }
+                      }}
+                    >
+                      <Trash2 className="size-3.5" /> Revoke
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          {revokedApiKeys.length > 0 && (
+            <section className="rounded-xl border border-border bg-card overflow-hidden opacity-70">
+              <div className="px-4 py-3 border-b border-border/60">
+                <p className="text-sm font-semibold">Revoked ({revokedApiKeys.length})</p>
+              </div>
+              <ul className="divide-y divide-border">
+                {revokedApiKeys.map((k) => (
+                  <li key={k.id} className="px-4 py-2.5">
+                    <p className="text-sm truncate">{k.name}</p>
+                    <p className="text-[11px] font-mono text-muted-foreground">{k.keyPrefix}…</p>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
         </TabsContent>
       </Tabs>
     </div>
