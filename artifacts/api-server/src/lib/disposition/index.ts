@@ -12,6 +12,10 @@ export {
   clampDispositionText,
 } from "./normalize-fields.js";
 export {
+  fillMissingPhoneFields,
+  findPhonesInTranscript,
+} from "./fill-phone-fields.js";
+export {
   slugDispositionKey,
   toStoredDomainField,
   fromStoredDomainField,

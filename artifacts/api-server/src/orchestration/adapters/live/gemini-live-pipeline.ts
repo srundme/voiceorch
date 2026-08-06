@@ -31,6 +31,7 @@ import {
 } from "./gemini-live-voices.js";
 import { toGeminiLiveTools } from "./gemini-tools.js";
 import { runLiveToolCall } from "./live-tool-runner.js";
+import { mergeTranscriptFragment } from "./live-transcript-merge.js";
 
 const SCHEDULE_CALLBACK_TOOL = {
   name: "schedule_callback",
@@ -141,6 +142,10 @@ export class GeminiLivePipeline implements VoiceSession {
   private readonly history: ConversationTurn[] = [];
   private lastUserText: string | null = null;
   private lastAgentText: string | null = null;
+
+  /** Streaming Live transcription buffers — flushed on turn boundaries. */
+  private inputBuf = "";
+  private outputBuf = "";
 
   private session: Session | null = null;
   private connectPromise: Promise<void> | null = null;
@@ -332,6 +337,10 @@ export class GeminiLivePipeline implements VoiceSession {
   }
 
   getTranscript(): string {
+    // Commit streaming buffers so callers that read before close() still get
+    // the latest Live transcription fragments.
+    this.flushInputBuf();
+    this.flushOutputBuf();
     return this.history
       .filter((t) => t.content.trim() !== "")
       .map((t) => `${t.role === "user" ? "Caller" : "Agent"}: ${t.content}`)
@@ -339,6 +348,8 @@ export class GeminiLivePipeline implements VoiceSession {
   }
 
   getHistory(): ConversationTurn[] {
+    this.flushInputBuf();
+    this.flushOutputBuf();
     return [...this.history];
   }
 
@@ -377,6 +388,10 @@ export class GeminiLivePipeline implements VoiceSession {
   close(): void {
     if (this.closed) return;
     this.closed = true;
+    // Commit any in-flight Live transcription so post-call disposition/memory
+    // see the full conversation (Gemini often omits a final turnComplete).
+    this.flushInputBuf();
+    this.flushOutputBuf();
     this.stopPump();
     if (this.keepaliveTimer) {
       clearInterval(this.keepaliveTimer);
@@ -476,20 +491,17 @@ export class GeminiLivePipeline implements VoiceSession {
     if (this.closed) return;
 
     const content = msg.serverContent;
+
+    // Live streams transcription as deltas or cumulative fragments with no
+    // reliable `finished` flag. Buffer until a turn boundary, then commit.
     if (content?.inputTranscription?.text) {
-      const text = content.inputTranscription.text.trim();
-      if (text) {
-        this.appendUser(text);
-        this.config.onTranscript("user", text);
-      }
+      this.inputBuf = mergeTranscriptFragment(this.inputBuf, content.inputTranscription.text);
     }
 
     if (content?.outputTranscription?.text) {
-      const text = content.outputTranscription.text.trim();
-      if (text) {
-        this.appendAgent(text);
-        this.config.onTranscript("agent", text);
-      }
+      // Model started speaking → caller turn is done.
+      if (this.inputBuf.trim()) this.flushInputBuf();
+      this.outputBuf = mergeTranscriptFragment(this.outputBuf, content.outputTranscription.text);
     }
 
     const inlineAudio = msg.data;
@@ -500,11 +512,19 @@ export class GeminiLivePipeline implements VoiceSession {
     }
 
     if (msg.toolCall?.functionCalls?.length) {
+      // Tool calls usually follow user speech with no output transcription yet.
+      if (this.inputBuf.trim()) this.flushInputBuf();
       await this.handleToolCalls(msg.toolCall.functionCalls);
     }
 
     if (content?.turnComplete) {
+      this.flushInputBuf();
+      this.flushOutputBuf();
       this.isPlayingOut = false;
+      // Classic STT→LLM→TTS metrics don't apply; count a conversational turn
+      // so History / wasDropped / no_turns logic treat Live calls as real.
+      this.config.onMetrics?.({ sttLatencyMs: 0, llmLatencyMs: 0, ttsFirstChunkMs: 0 });
+      this.config.onConversationUpdate?.(this.getHistory());
     }
   }
 
@@ -515,8 +535,26 @@ export class GeminiLivePipeline implements VoiceSession {
     this.pendingOut24k = Buffer.alloc(0);
     this.outFrames8k.length = 0; // drop locally queued (unplayed) audio immediately
     this.isPlayingOut = false;
+    // Commit what was already transcribed; drop only unplayed audio frames.
+    this.flushOutputBuf();
     this.config.onBargeIn?.();
     logger.info({ callId: this.config.callId, droppedMs }, "Gemini Live: interrupted — cleared queued audio");
+  }
+
+  private flushInputBuf(): void {
+    const text = this.inputBuf.trim();
+    this.inputBuf = "";
+    if (!text) return;
+    this.appendUser(text);
+    this.config.onTranscript("user", text);
+  }
+
+  private flushOutputBuf(): void {
+    const text = this.outputBuf.trim();
+    this.outputBuf = "";
+    if (!text) return;
+    this.appendAgent(text);
+    this.config.onTranscript("agent", text);
   }
 
   private flushOutboundAudio(): void {

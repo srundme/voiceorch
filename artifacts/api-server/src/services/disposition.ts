@@ -10,6 +10,7 @@ import {
   type CallEvent,
   type DispositionResult,
 } from "../lib/disposition/index.js";
+import { fillMissingPhoneFields } from "../lib/disposition/fill-phone-fields.js";
 import { getDispositionLLM } from "./disposition-llm.js";
 
 // ── Config cache (60-second TTL) ─────────────────────────────────────────────
@@ -58,6 +59,8 @@ export interface DisposeCallInput {
   callEvents?: CallEvent[];
   /** When the call happened — anchors relative dates ("tomorrow") in the LLM prompt. */
   callStartedAt?: Date | null;
+  /** Dialed / connected party number — used for "same number" WhatsApp fill. */
+  calledNumber?: string | null;
 }
 
 export async function disposeCall(input: DisposeCallInput): Promise<DispositionResult | null> {
@@ -99,7 +102,7 @@ export async function disposeCall(input: DisposeCallInput): Promise<DispositionR
       return fallbackResult;
     }
 
-    const systemPrompt = buildPrompt(cfg, input.callStartedAt ?? null);
+    const systemPrompt = buildPrompt(cfg, input.callStartedAt ?? null, input.calledNumber ?? null);
     const schema       = buildSchema(cfg);
 
     let rawOut: Record<string, unknown>;
@@ -123,6 +126,10 @@ export async function disposeCall(input: DisposeCallInput): Promise<DispositionR
 
     result = validate(cfg, rawOut, callEvents);
   }
+
+  // 3. Regex / same-number fill when LLM left phone fields empty (common on Live
+  //    transcripts that still contain spoken digits).
+  result = fillMissingPhoneFields(cfg, result, transcript, input.calledNumber);
 
   await persistResult(agentId, callId, transcript, callEvents, result);
   return result;

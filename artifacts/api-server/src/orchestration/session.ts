@@ -3521,6 +3521,7 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
                 transcript: transcript || null,
                 callEvents: [{ type: "duration", durationSec: durationSeconds }],
                 callStartedAt: call.createdAt ?? null,
+                calledNumber: call.toNumber ?? null,
               });
               dispositionResult = flatDispositionFromTaxonomy(taxResult);
               if (dispositionResult) {

@@ -1271,6 +1271,7 @@ router.patch("/calls/:id/end", requireAuth, clientContext, async (req, res): Pro
           transcript: call.transcript ?? null,
           callEvents: [],
           callStartedAt: call.createdAt ?? null,
+          calledNumber: call.toNumber ?? null,
         });
         dispositionResult = flatDispositionFromTaxonomy(taxResult) ?? dispositionResult;
       }

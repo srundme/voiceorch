@@ -25,7 +25,11 @@ function isoDateIST(d: Date): string {
  * `callTime` anchors relative date expressions ("tomorrow", "next Monday") so
  * extracted dates come out absolute; defaults to now.
  */
-export function buildPrompt(cfg: DispositionConfig, callTime?: Date | null): string {
+export function buildPrompt(
+  cfg: DispositionConfig,
+  callTime?: Date | null,
+  calledNumber?: string | null,
+): string {
   const taxonomyJson = JSON.stringify(cfg.taxonomy, null, 2);
 
   const categoryKeys = Object.keys(cfg.taxonomy);
@@ -53,6 +57,11 @@ export function buildPrompt(cfg: DispositionConfig, callTime?: Date | null): str
           .join("\n")}`
       : "";
 
+  const calledDigits = calledNumber?.replace(/\D/g, "") ?? "";
+  const calledHint = calledDigits
+    ? `\n- Called party number on this call: ${calledDigits}. If the customer agrees to use THIS same number for WhatsApp/callback, put ${calledDigits} in the phone/WhatsApp domain field. If they give a different number, put THAT number (digits only).`
+    : "";
+
   const now = callTime ?? new Date();
 
   return `You are a call disposition classifier for a voice AI sales/support system.
@@ -72,9 +81,9 @@ RULES:
 - disposition = what the CUSTOMER said/intended, NOT what the agent did
 - evidence = single verbatim customer line that best supports the classification
 - If no quotable customer line exists → set confidence below 0.5
-- Judge intent equally across Hindi, Hinglish, Kannada, and English
+- Judge intent equally across Hindi, Hinglish, Kannada, Tamil, Telugu, and English
 - confidence: 0.0 (no signal) to 1.0 (completely certain)
-- sub MUST belong to the chosen primary per the taxonomy above
+- sub MUST belong to the chosen primary per the taxonomy above${calledHint}
 ${domainInstructions}
 
 OUTPUT FORMAT — respond with a single JSON object using EXACTLY these keys:
