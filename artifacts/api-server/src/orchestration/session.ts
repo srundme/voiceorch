@@ -3454,10 +3454,41 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
           }
 
           // 2. Extract disposition BEFORE webhooks.
-          // Prefer legacy dispositionSchema when present; otherwise run taxonomy disposeCall
-          // (agent_dispositions). Must finish before webhook so disposition is never null
-          // when taxonomy/schema is configured.
-          if (dispositionSchema.length > 0 && transcript && transcript.length > 50 && ag.userId) {
+          // Prefer Builder taxonomy (agent_dispositions) — that path owns Outcomes +
+          // Data to collect (WhatsApp etc.). Legacy agents.dispositionSchema only runs
+          // when no taxonomy config exists; otherwise it would skip WhatsApp fill.
+          try {
+            const taxResult = await disposeCall({
+              agentId: call.agentId,
+              callId: session.callId,
+              transcript: transcript || null,
+              callEvents: [{ type: "duration", durationSec: durationSeconds }],
+              callStartedAt: call.createdAt ?? null,
+              calledNumber: call.toNumber ?? null,
+            });
+            dispositionResult = flatDispositionFromTaxonomy(taxResult);
+            if (dispositionResult) {
+              logger.info(
+                {
+                  sessionId,
+                  primary: dispositionResult["primary"],
+                  sub: dispositionResult["sub"],
+                  whatsapp: dispositionResult["whatsapp_number"] ?? null,
+                },
+                "Taxonomy disposition ready for webhook",
+              );
+            }
+          } catch (dispErr) {
+            logger.warn({ sessionId, dispErr }, "Post-call taxonomy disposition failed");
+          }
+
+          if (
+            !dispositionResult &&
+            dispositionSchema.length > 0 &&
+            transcript &&
+            transcript.length > 50 &&
+            ag.userId
+          ) {
             try {
               const llmProvs = await db.select().from(providersTable).where(
                 and(
@@ -3512,30 +3543,6 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
               }
             } catch (dispErr) {
               logger.warn({ sessionId, dispErr }, "Post-call disposition extraction failed");
-            }
-          } else {
-            try {
-              const taxResult = await disposeCall({
-                agentId: call.agentId,
-                callId: session.callId,
-                transcript: transcript || null,
-                callEvents: [{ type: "duration", durationSec: durationSeconds }],
-                callStartedAt: call.createdAt ?? null,
-                calledNumber: call.toNumber ?? null,
-              });
-              dispositionResult = flatDispositionFromTaxonomy(taxResult);
-              if (dispositionResult) {
-                logger.info(
-                  {
-                    sessionId,
-                    primary: dispositionResult["primary"],
-                    sub: dispositionResult["sub"],
-                  },
-                  "Taxonomy disposition ready for webhook",
-                );
-              }
-            } catch (dispErr) {
-              logger.warn({ sessionId, dispErr }, "Post-call taxonomy disposition failed");
             }
           }
 

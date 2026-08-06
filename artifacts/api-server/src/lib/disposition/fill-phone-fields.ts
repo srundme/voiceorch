@@ -25,12 +25,18 @@ function digitsEqual(a: string, b: string): boolean {
 
 /** All phone-like digit runs in transcript order. */
 export function findPhonesInTranscript(transcript: string): string[] {
-  const matches = [...transcript.matchAll(/(?:\+?\d[\d\s\-().]{6,18}\d)/g)].map((m) =>
+  // Strip TTS spell tags so <spell>683653279</spell> still matches.
+  const cleaned = transcript.replace(/<\/?spell>/gi, " ");
+  const matches = [...cleaned.matchAll(/(?:\+?\d[\d\s\-().]{6,22}\d)/g)].map((m) =>
     m[0]!.replace(/[\s\-().]/g, "").replace(/^\+/, ""),
+  );
+  // Also glue runs of spaced single digits: "6 8 3 6 5 3 2 7 9"
+  const spaced = [...cleaned.matchAll(/(?:\b\d(?:\s+\d){7,14}\b)/g)].map((m) =>
+    m[0]!.replace(/\s+/g, ""),
   );
   const out: string[] = [];
   const seen = new Set<string>();
-  for (const d of matches) {
+  for (const d of [...matches, ...spaced]) {
     if (d.length < 8 || d.length > 15) continue;
     const key = d.length > 10 ? d.slice(-10) : d;
     if (seen.has(key)) continue;
@@ -90,18 +96,17 @@ export function fillMissingPhoneFields(
     if (called && isSameNumberOutcome(result.sub)) {
       filled = called;
     } else if (phones.length) {
-      const fromTx = preferWhatsappContextPhone(transcript ?? "", phones);
-      if (fromTx) {
-        // Prefer a number that isn't the dialed line when outcome is alternate.
-        if (called && isAlternateNumberOutcome(result.sub)) {
-          const alt = phones.find((p) => !digitsEqual(p, called)) ?? fromTx;
-          filled = digitsEqual(alt, called) ? null : alt;
-        } else if (called && digitsEqual(fromTx, called) && !isSameNumberOutcome(result.sub)) {
-          // Number in transcript is just the dialed line — only keep if same-number.
-          filled = null;
-        } else {
-          filled = fromTx;
-        }
+      // Prefer a number that isn't the dialed line (alternate WhatsApp).
+      const notCalled = called ? phones.filter((p) => !digitsEqual(p, called)) : phones;
+      if (notCalled.length) {
+        filled = preferWhatsappContextPhone(transcript ?? "", notCalled) ?? notCalled[notCalled.length - 1]!;
+      } else if (isSameNumberOutcome(result.sub) || /same|இதே|this\s*number|calling\s*number/i.test(transcript ?? "")) {
+        filled = called ?? phones[phones.length - 1]!;
+      } else if (isAlternateNumberOutcome(result.sub)) {
+        filled = null; // only dialed number present — don't invent an alternate
+      } else {
+        // Unknown outcome but a number was spoken — keep last candidate.
+        filled = preferWhatsappContextPhone(transcript ?? "", phones);
       }
     } else if (called && isSameNumberOutcome(result.sub)) {
       filled = called;

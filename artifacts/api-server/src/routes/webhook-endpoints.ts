@@ -173,25 +173,31 @@ export function flatDispositionFromTaxonomy(result: {
   domainFields?: Record<string, unknown>;
   error?: string;
 } | null | undefined): Record<string, unknown> | null {
-  if (!result || result.error || !result.primary || !result.sub) return null;
-  const flat: Record<string, unknown> = {
-    [result.primary]: result.sub,
-    primary: result.primary,
-    sub: result.sub,
-  };
-  if (typeof result.confidence === "number") flat["confidence"] = result.confidence;
-  if (result.summary) flat["summary"] = result.summary;
-  if (result.evidence) flat["evidence"] = result.evidence;
-  if (Array.isArray(result.flags) && result.flags.length) flat["flags"] = result.flags;
-  if (typeof result.needsReview === "boolean") flat["needsReview"] = result.needsReview;
+  if (!result) return null;
+
+  const domainFlat: Record<string, unknown> = {};
   if (result.domainFields && typeof result.domainFields === "object") {
-    // Flatten domain scalars onto the top level so call UI / sheets see
-    // whatsapp_number=987… instead of a nested blob or prose summary.
     for (const [k, v] of Object.entries(result.domainFields)) {
       if (v == null || v === "") continue;
-      if (k in flat) continue;
-      flat[k] = v;
+      domainFlat[k] = v;
     }
+  }
+
+  const hasOutcome = !result.error && !!result.primary && !!result.sub;
+  const hasDomain = Object.keys(domainFlat).length > 0;
+  // Allow domain-only flats (e.g. WhatsApp recovered from transcript after LLM error).
+  if (!hasOutcome && !hasDomain) return null;
+
+  const flat: Record<string, unknown> = { ...domainFlat };
+  if (hasOutcome) {
+    flat[result.primary!] = result.sub;
+    flat["primary"] = result.primary;
+    flat["sub"] = result.sub;
+    if (typeof result.confidence === "number") flat["confidence"] = result.confidence;
+    if (result.summary) flat["summary"] = result.summary;
+    if (result.evidence) flat["evidence"] = result.evidence;
+    if (Array.isArray(result.flags) && result.flags.length) flat["flags"] = result.flags;
+    if (typeof result.needsReview === "boolean") flat["needsReview"] = result.needsReview;
   }
   return flat;
 }
