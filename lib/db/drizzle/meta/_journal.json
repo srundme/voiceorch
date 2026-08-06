@@ -631,6 +631,13 @@
       "when": 1790500000000,
       "tag": "0089_whatsapp_template_catalog",
       "breakpoints": true
+    },
+    {
+      "idx": 90,
+      "version": "7",
+      "when": 1790600000000,
+      "tag": "0090_partner_allow_agent_edit",
+      "breakpoints": true
     }
   ]
 }

@@ -521,8 +521,8 @@ function SidebarContent({
         </button>
       </div>
 
-      {/* + New agent CTA (hidden for managed clients — the partner builds their agents) */}
-      {!isManagedClient && (
+      {/* + New agent CTA — hidden for locked managed clients; partner can unlock via Control panel */}
+      {(!isManagedClient || partnerCtx?.canEditAgents === true) && (
       <div className="shrink-0 px-2 pb-2">
         <button
           type="button"

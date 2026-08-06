@@ -5,26 +5,34 @@
  * Note: /app/agents/:id continues to route directly to AgentBuilder.
  *
  * Special cases:
- *  - Partner acting-as a client (Partner Hub → client → Configure): full
- *    builder operating on the client's account.
- *  - Managed client (account run by a partner): read-only ClientAgentsView.
+ *  - Partner acting-as a client: full builder on the client's account.
+ *  - Managed client without canEditAgents: read-only ClientAgentsView.
+ *  - Managed client with canEditAgents (partner toggle): full builder.
  */
 import AgentBuilder from "./builder";
 import ClientAgentsView from "./client-view";
 import { usePartnerContext } from "@/hooks/use-partner";
 import { loadActingAs } from "@/lib/acting-as";
 
-export default function AgentsTabPage() {
+function useManagedAgentGate(): "loading" | "readonly" | "builder" {
   const { data: partnerCtx, isLoading } = usePartnerContext();
+  if (loadActingAs()) return "builder";
+  if (isLoading) return "loading";
+  if (partnerCtx?.isManagedClient && !partnerCtx.canEditAgents) return "readonly";
+  return "builder";
+}
 
-  // Partner managing a client's account — straight to the builder.
-  if (loadActingAs()) return <AgentBuilder />;
+export default function AgentsTabPage() {
+  const gate = useManagedAgentGate();
+  if (gate === "loading") return null;
+  if (gate === "readonly") return <ClientAgentsView />;
+  return <AgentBuilder />;
+}
 
-  // Brief window on hard refresh before the context loads: render nothing
-  // rather than flashing the full builder at a managed client.
-  if (isLoading) return null;
-
-  if (partnerCtx?.isManagedClient) return <ClientAgentsView />;
-
+/** Same gate for /app/agents/:id deep links. */
+export function AgentBuilderPage() {
+  const gate = useManagedAgentGate();
+  if (gate === "loading") return null;
+  if (gate === "readonly") return <ClientAgentsView />;
   return <AgentBuilder />;
 }

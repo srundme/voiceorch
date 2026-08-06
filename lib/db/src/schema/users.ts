@@ -36,6 +36,11 @@ export const usersTable = pgTable("users", {
   partnerId: integer("partner_id").references(() => partnersTable.id, { onDelete: "set null" }),
   /** Per-minute rate (paise) this client is billed at, set by their partner; null → partner default. */
   partnerRateCentsPerMin: integer("partner_rate_cents_per_min"),
+  /**
+   * When true, this managed client may create/edit/save agents in their own
+   * dashboard. Default false: partner-only agent management.
+   */
+  partnerAllowAgentEdit: boolean("partner_allow_agent_edit").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 }, (t) => [

@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -30,6 +31,7 @@ interface PartnerClient {
   status: string;
   walletBalanceCents: number;
   rateCentsPerMin: number;
+  allowAgentEdit: boolean;
   joinedAt: string;
   monthSeconds: number;
   monthSpendCents: number;
@@ -149,6 +151,25 @@ export default function PartnerClientPage() {
     },
     onError: (err: Error) =>
       toast({ title: "Could not update rate", description: err.message, variant: "destructive" }),
+  });
+
+  const allowEditMutation = useMutation({
+    mutationFn: (allowAgentEdit: boolean) =>
+      partnerFetch(getToken, `/api/partner/clients/${encodeURIComponent(clerkId)}`, {
+        method: "PATCH",
+        body: JSON.stringify({ allowAgentEdit }),
+      }),
+    onSuccess: (_data, allowAgentEdit) => {
+      toast({
+        title: allowAgentEdit ? "Client can edit agents" : "Client agent editing off",
+        description: allowAgentEdit
+          ? "They can open the builder and save changes in their own login."
+          : "Only you can edit their agents from this control panel.",
+      });
+      void qc.invalidateQueries({ queryKey: ["partner-clients"] });
+    },
+    onError: (err: Error) =>
+      toast({ title: "Could not update permission", description: err.message, variant: "destructive" }),
   });
 
   const transferMutation = useMutation({
@@ -271,9 +292,32 @@ export default function PartnerClientPage() {
 
       <div className="rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2.5 text-[12px] text-muted-foreground leading-relaxed">
         You are managing this client from <span className="font-medium text-foreground">your partner account</span>.
-        Rate, wallet top-ups, agent copies, and number assignment stay here.
-        Use <span className="font-medium text-foreground">Edit agents / Full workspace</span> when you need their builder or campaigns (amber bar = client mode).
+        Turn on <span className="font-medium text-foreground">Allow client to edit agents</span> if they should save changes themselves.
+        Otherwise use <span className="font-medium text-foreground">Edit agents / Full workspace</span> (amber bar = you acting as them).
       </div>
+
+      <section className="rounded-xl border border-border bg-card p-4 flex items-start justify-between gap-4">
+        <div className="min-w-0 space-y-1">
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-semibold">Allow client to edit agents</h2>
+            {client.allowAgentEdit ? (
+              <Badge variant="secondary" className="text-[10px]">On</Badge>
+            ) : (
+              <Badge variant="outline" className="text-[10px]">Off</Badge>
+            )}
+          </div>
+          <p className="text-[12px] text-muted-foreground leading-relaxed">
+            When on, this client can open the agent builder in their own account and save changes.
+            Numbers and wallet stay partner-controlled.
+          </p>
+        </div>
+        <Switch
+          checked={client.allowAgentEdit === true}
+          disabled={allowEditMutation.isPending}
+          onCheckedChange={(v) => allowEditMutation.mutate(v)}
+          aria-label="Allow client to edit agents"
+        />
+      </section>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat label="Wallet" value={inr(client.walletBalanceCents)} />

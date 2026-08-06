@@ -18,7 +18,7 @@ import { VoiceAssistant } from "@/components/VoiceAssistant";
 
 // ── Page imports ─────────────────────────────────────────────────────────────
 // Tabbed wrappers (new routes)
-import AgentsTabPage      from "@/pages/agents/index";
+import AgentsTabPage, { AgentBuilderPage } from "@/pages/agents/index";
 import CampaignsTabPage   from "@/pages/campaigns/tabbed";
 import CallsTabPage       from "@/pages/calls/tabbed";
 import PhoneNumbersTabPage from "@/pages/phone-numbers-tabbed";
@@ -327,7 +327,7 @@ function AppRoutes() {
         {/* ── Agents ── */}
         {/* /app/agents (list, tabbed) — must come BEFORE /app/agents/:id */}
         <Route path="/app/agents" component={AgentsTabPage} />
-        <Route path="/app/agents/:id" component={AgentBuilder} />
+        <Route path="/app/agents/:id" component={AgentBuilderPage} />
 
         {/* ── Squads (list + detail; create opens with ?seedAgent=) ── */}
         <Route path="/app/squads/:id" component={SquadsPage} />

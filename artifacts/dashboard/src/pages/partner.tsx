@@ -40,6 +40,7 @@ interface PartnerClient {
   status: string;
   walletBalanceCents: number;
   rateCentsPerMin: number;
+  allowAgentEdit?: boolean;
   joinedAt: string;
   monthSeconds: number;
   monthSpendCents: number;
