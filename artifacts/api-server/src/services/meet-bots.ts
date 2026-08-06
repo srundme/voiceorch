@@ -181,7 +181,8 @@ export function buildRecallAutomaticLeave(): {
   return {
     everyone_left_timeout: {
       timeout: RECALL_EVERYONE_LEFT_TIMEOUT_SEC,
-      activate_after: 0,
+      // Recall requires activate_after >= 1 (seconds after recording starts).
+      activate_after: 1,
     },
     noone_joined_timeout: RECALL_NOONE_JOINED_TIMEOUT_SEC,
     waiting_room_timeout: RECALL_WAITING_ROOM_TIMEOUT_SEC,
