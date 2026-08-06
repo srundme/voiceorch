@@ -720,6 +720,25 @@ export function injectEnhancedMemory(
  *
  * Returns the id of the current (live) fact row.
  */
+/** Public wrapper for writing a single durable caller fact (e.g. next meeting). */
+export async function rememberCallerFact(opts: {
+  agentId: number;
+  phoneNumber: string;
+  key: string;
+  value: string;
+  sourceCallId: number;
+  confidence?: number;
+}): Promise<void> {
+  await supersedeFact({
+    agentId: opts.agentId,
+    phoneNumber: opts.phoneNumber,
+    key: opts.key,
+    value: opts.value,
+    confidence: opts.confidence ?? 0.9,
+    sourceCallId: opts.sourceCallId,
+  });
+}
+
 async function supersedeFact(opts: {
   agentId: number;
   phoneNumber: string;

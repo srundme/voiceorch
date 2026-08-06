@@ -1502,7 +1502,15 @@ function PromptTab({ form, agentId }: { form: any; agentId?: number }) {
               </FormItem>
             )} />
           </TabsContent>
-          <TabsContent value="meetings" className="mt-3 space-y-2">
+          <TabsContent value="meetings" className="mt-3 space-y-3">
+            <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2.5 text-[11px] text-muted-foreground leading-relaxed">
+              <p className="font-medium text-foreground/90">Meeting ≠ phone call</p>
+              <ul className="mt-1.5 list-disc space-y-0.5 pl-4">
+                <li>People may ask you to wait 2–3 minutes for others — stay quiet after one acknowledgment.</li>
+                <li>Speaker tags like <span className="font-mono text-[10px]">[Speaker: Name]</span> are for you; never read them aloud.</li>
+                <li>Waiting patience &amp; max length are under <span className="text-foreground/80">Tools → Meeting join</span> (not Engine phone silence).</li>
+              </ul>
+            </div>
             <FormField control={form.control} name="meetingPrompt" render={({ field }) => (
               <FormItem className="space-y-0">
                 <FormControl>
@@ -1515,7 +1523,7 @@ function PromptTab({ form, agentId }: { form: any; agentId?: number }) {
                     </div>
                     <Textarea
                       className="min-h-[min(48vh,480px)] resize-y rounded-none border-0 bg-transparent px-3.5 py-3.5 font-mono text-[12.5px] leading-6 shadow-none focus-visible:ring-0"
-                      placeholder="Optional. Leave blank to reuse the call prompt…"
+                      placeholder={"You are a participant in a live video meeting…\nIf asked to wait for others, acknowledge once and stay quiet.\nAddress people by name when speaker tags appear."}
                       {...field}
                       value={field.value ?? ""}
                     />
@@ -1525,7 +1533,7 @@ function PromptTab({ form, agentId }: { form: any; agentId?: number }) {
               </FormItem>
             )} />
             <p className="text-[11px] text-muted-foreground">
-              Phone + meetings agents join Google Meet when Booking is on (Tools). Phone-only agents can book but never join.
+              Phone + meetings agents join Google Meet when Booking is on (Tools). Configure wait time and max meeting length in Tools → Meeting join.
             </p>
           </TabsContent>
         </Tabs>
@@ -2834,8 +2842,11 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
 
               {canAttendMeetings && agentId && (
                 <div className="rounded-lg border border-border/40 bg-background/30 p-3">
-                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/70">
-                    Meeting join
+                  <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/70">
+                    Meeting settings
+                  </p>
+                  <p className="mb-3 text-[11px] text-muted-foreground leading-relaxed">
+                    Who joins, wait patience, max length, and optional presentation deck.
                   </p>
                   <MeetingsChannelCard agentId={agentId} showJoinLink={false} />
                 </div>
@@ -5960,6 +5971,9 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
       agentComposition: "single",
       agentSurfaces: "phone",
       meetingPrompt: "",
+      meetingMaxDurationSeconds: 45 * 60,
+      meetingSilenceTimeoutSeconds: 3 * 60,
+      meetingSilenceHangupEnabled: true,
     },
   });
 
@@ -6109,6 +6123,16 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
       meetingPrompt: typeof (agent as any).agentConfig?.meetings?.meetingPrompt === "string"
         ? (agent as any).agentConfig.meetings.meetingPrompt
         : "",
+      meetingMaxDurationSeconds:
+        typeof (agent as any).agentConfig?.meetings?.maxDurationSeconds === "number"
+          ? (agent as any).agentConfig.meetings.maxDurationSeconds
+          : 45 * 60,
+      meetingSilenceTimeoutSeconds:
+        typeof (agent as any).agentConfig?.meetings?.silenceTimeoutSeconds === "number"
+          ? (agent as any).agentConfig.meetings.silenceTimeoutSeconds
+          : 3 * 60,
+      meetingSilenceHangupEnabled:
+        (agent as any).agentConfig?.meetings?.silenceHangupEnabled !== false,
     });
     if ((agent as any).agentConfig?.voiceStack === "gemini_live") {
       form.setValue("llmProvider", "google");
@@ -6887,6 +6911,11 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
         meetingPrompt: "",
         passMemory: true,
         passCallContext: true,
+        maxDurationSeconds: 45 * 60,
+        silenceTimeoutSeconds: 3 * 60,
+        silenceHangupEnabled: true,
+        presentationUrl: "",
+        presentationAutoStart: false,
       },
     },
   });

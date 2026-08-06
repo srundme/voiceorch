@@ -41,8 +41,10 @@ export async function handleWebcallWebSocket(
     linkId?: number | null;
     hdAudio?: boolean;
     meetMid?: string;
+    meetBotToken?: string;
     meetingMemoryPhone?: string;
     meetingSourceCallId?: number;
+    meetingUrl?: string;
     passMemory?: boolean;
     passCallContext?: boolean;
   },
@@ -192,10 +194,13 @@ export async function handleWebcallWebSocket(
       rawPcmOutputRate: opts?.hdAudio ? 16000 : 8000,
       ...(opts?.meetMid
         ? {
+            meetMid: opts.meetMid,
+            ...(opts.meetBotToken ? { meetBotToken: opts.meetBotToken } : {}),
             ...(opts.meetingMemoryPhone ? { meetingMemoryPhone: opts.meetingMemoryPhone } : {}),
             ...(typeof opts.meetingSourceCallId === "number"
               ? { meetingSourceCallId: opts.meetingSourceCallId }
               : {}),
+            ...(opts.meetingUrl ? { meetingUrl: opts.meetingUrl } : {}),
             ...(opts.passMemory === false ? { passMemory: false } : {}),
             ...(opts.passCallContext === false ? { passCallContext: false } : {}),
           }

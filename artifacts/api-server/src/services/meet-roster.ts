@@ -123,6 +123,12 @@ export function bindMeetRosterBot(mid: string, botId: string): void {
   midByBotId.set(botId, mid);
 }
 
+/** Recall bot id for a live meeting (presentation screenshare controls). */
+export function getMeetRosterBotId(mid: string): string | null {
+  const id = rosters.get(mid)?.botId;
+  return typeof id === "string" && id ? id : null;
+}
+
 /** Attach the live pipeline; replays current roster + speaker immediately. */
 export function attachMeetSession(
   mid: string,

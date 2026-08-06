@@ -53,6 +53,71 @@ const SCHEDULE_CALLBACK_TOOL = {
   },
 };
 
+const SCHEDULE_MEET_REJOIN_TOOL = {
+  name: "schedule_meet_rejoin",
+  description:
+    "Schedule a SnapServe meeting agent to rejoin this same Meet/Zoom/Teams link later. Use for same-URL rejoin; use book/reschedule for a new calendar slot.",
+  parameters: {
+    type: "object" as const,
+    properties: {
+      scheduled_at: {
+        type: "string" as const,
+        description: "When to rejoin as ISO 8601 without timezone suffix.",
+      },
+      meet_url: {
+        type: "string" as const,
+        description: "Optional. Defaults to the current meeting link.",
+      },
+      notes: {
+        type: "string" as const,
+        description: "Short note about the rejoin request.",
+      },
+    },
+    required: ["scheduled_at"] as string[],
+  },
+};
+
+const MEETING_PRESENTATION_TOOLS: Array<{
+  name: string;
+  description: string;
+  parameters: {
+    type: "object";
+    properties: Record<string, { type: string; description?: string }>;
+    required: string[];
+  };
+}> = [
+  {
+    name: "start_presentation",
+    description:
+      "Start screensharing a presentation in this meeting. Uses configured URL unless url is provided.",
+    parameters: {
+      type: "object",
+      properties: {
+        url: {
+          type: "string",
+          description: "Optional https:// Google Slides, PDF, or webpage URL.",
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "stop_presentation",
+    description: "Stop screensharing the presentation.",
+    parameters: { type: "object", properties: {}, required: [] },
+  },
+  {
+    name: "next_slide",
+    description: "Advance to the next slide while presenting.",
+    parameters: { type: "object", properties: {}, required: [] },
+  },
+  {
+    name: "previous_slide",
+    description: "Go back to the previous slide while presenting.",
+    parameters: { type: "object", properties: {}, required: [] },
+  },
+];
+
 export class GeminiLivePipeline implements VoiceSession {
   public endReasonHint: string | null = null;
 
@@ -327,6 +392,9 @@ export class GeminiLivePipeline implements VoiceSession {
 
     const toolDefs = buildToolDefs(this.agent.tools);
     toolDefs.push(SCHEDULE_CALLBACK_TOOL);
+    if (this.agent.isMeetingSession) {
+      toolDefs.push(SCHEDULE_MEET_REJOIN_TOOL, ...MEETING_PRESENTATION_TOOLS);
+    }
     const tools = toGeminiLiveTools(toolDefs);
 
     const thinkingMap: Record<string, ThinkingLevel> = {

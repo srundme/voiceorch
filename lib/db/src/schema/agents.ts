@@ -164,7 +164,7 @@ export type AgentConfig = {
     voiceName?: string;
     thinkingLevel?: "minimal" | "low" | "medium" | "high";
   };
-  /** Meet/Zoom/Teams channel — meeting prompt + who joins (Channels + Builder Talk). */
+  /** Meet/Zoom/Teams channel — meeting prompt + who joins + meeting timing. */
   meetings?: {
     enabled?: boolean;
     whoJoins?: "self" | "delegate";
@@ -172,6 +172,16 @@ export type AgentConfig = {
     delegateAgentId?: number | null;
     passMemory?: boolean;
     passCallContext?: boolean;
+    /** Meeting hard cut-off in seconds (default 45 min). Independent of phone maxDuration. */
+    maxDurationSeconds?: number;
+    /** Silence before soft check-in in seconds (default 180). 0 = never. */
+    silenceTimeoutSeconds?: number;
+    /** When false, silence never ends the meeting. */
+    silenceHangupEnabled?: boolean;
+    /** HTTPS deck/PDF/web URL the bot can screenshare in meetings. */
+    presentationUrl?: string;
+    /** Auto-start screenshare when the bot joins. */
+    presentationAutoStart?: boolean;
   };
 };
 

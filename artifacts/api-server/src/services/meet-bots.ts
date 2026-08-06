@@ -79,7 +79,9 @@ export interface MeetBotTokenPayload {
    * Optional for backward compat with tokens minted before this field existed.
    */
   mid?: string;
-  /** Prior phone call to inject summary into the meeting prompt (Channels → Meetings). */
+  /** Meet/Zoom/Teams URL this bot is joining — used for rejoin tool + prompt context. */
+  meetUrl?: string;
+  /** Prior phone call to inject summary into the meeting prompt. */
   sourceCallId?: number;
   /** E.164 / dialed party for caller memory during the meeting when passMemory is on. */
   memoryPhone?: string;
@@ -166,6 +168,11 @@ export async function createRecallBot(opts: {
   /** Webhook URL for real-time participant / transcript events. */
   eventsUrl?: string;
   eventsList?: string[];
+  /**
+   * Optional presentation webpage streamed as bot screenshare (camera stays
+   * the voice agent page). Mid-call start uses startRecallScreenshare instead.
+   */
+  screensharePageUrl?: string;
 }): Promise<RecallBotSummary> {
   const loginGroupId = (process.env["RECALL_GOOGLE_LOGIN_GROUP_ID"] ?? "").trim();
   const diarized = isRecallDiarizedTranscriptEnabled();
@@ -194,6 +201,7 @@ export async function createRecallBot(opts: {
           ],
         }
       : null;
+  const screenshareUrl = typeof opts.screensharePageUrl === "string" ? opts.screensharePageUrl.trim() : "";
   const res = await recallFetch("/bot/", {
     method: "POST",
     body: JSON.stringify({
@@ -204,6 +212,9 @@ export async function createRecallBot(opts: {
       metadata: { ownerUserId: opts.ownerUserId, agentId: String(opts.agentId) },
       output_media: {
         camera: { kind: "webpage", config: { url: opts.pageUrl } },
+        ...(screenshareUrl
+          ? { screenshare: { kind: "webpage", config: { url: screenshareUrl } } }
+          : {}),
       },
       // The default `web` variant gives the bot's browser only 250 millicores,
       // which starves real-time audio (choppy/"sticky" voice). Recall's own FAQ
@@ -316,6 +327,32 @@ export async function leaveRecallBot(botId: string): Promise<void> {
   if (!res.ok && res.status !== 404) {
     const text = await res.text().catch(() => "");
     throw new Error(`Recall leave call failed (${res.status}): ${text.slice(0, 200)}`);
+  }
+}
+
+/** Start / replace screenshare output_media (does not touch camera / voice page). */
+export async function startRecallScreenshare(botId: string, pageUrl: string): Promise<void> {
+  const res = await recallFetch(`/bot/${encodeURIComponent(botId)}/output_media/`, {
+    method: "POST",
+    body: JSON.stringify({
+      screenshare: { kind: "webpage", config: { url: pageUrl } },
+    }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Recall start screenshare failed (${res.status}): ${text.slice(0, 300)}`);
+  }
+}
+
+/** Stop screenshare only — voice camera page keeps running. */
+export async function stopRecallScreenshare(botId: string): Promise<void> {
+  const res = await recallFetch(`/bot/${encodeURIComponent(botId)}/output_media/`, {
+    method: "DELETE",
+    body: JSON.stringify({ screenshare: true }),
+  });
+  if (!res.ok && res.status !== 404) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Recall stop screenshare failed (${res.status}): ${text.slice(0, 300)}`);
   }
 }
 

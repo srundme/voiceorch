@@ -15,9 +15,7 @@ import { eq, and, sql, gte, lte, ne } from "drizzle-orm";
 import {
   db,
   bookingsTable,
-  callsTable,
   agentsTable,
-  eventTypesTable,
 } from "@workspace/db";
 import { logger } from "../lib/logger.js";
 import { getSelfBaseUrl } from "../lib/app-domain.js";
@@ -34,6 +32,8 @@ import {
   parseMeetingsConfig,
   resolveMeetRuntimeAgentId,
 } from "./meeting-runtime.js";
+import { prepareMeetPresentationAtLaunch } from "./meet-presentation.js";
+import { resolveDispatchContextFromCall } from "./meet-booking.js";
 
 /** In-memory cache of booking IDs for which a meeting bot has already been dispatched */
 const dispatchedBotBookings = new Set<number>();
@@ -82,23 +82,11 @@ export async function dispatchUpcomingMeetingBots(): Promise<void> {
         let sourceCallId: number | undefined;
 
         if (b.callId) {
-          const [callRow] = await db
-            .select({
-              agentId: callsTable.agentId,
-              toNumber: callsTable.toNumber,
-              fromNumber: callsTable.fromNumber,
-            })
-            .from(callsTable)
-            .where(eq(callsTable.id, b.callId))
-            .limit(1);
-          if (callRow?.agentId) {
-            configuredAgentId = callRow.agentId;
-            sourceCallId = b.callId;
-            // Prefer the human party number for memory (outbound → toNumber).
-            const candidate = callRow.toNumber || callRow.fromNumber;
-            if (candidate && !candidate.startsWith("webcall-") && !candidate.startsWith("meetbot-")) {
-              memoryPhone = candidate;
-            }
+          const ctx = await resolveDispatchContextFromCall(b.callId);
+          if (ctx.agentId) {
+            configuredAgentId = ctx.agentId;
+            sourceCallId = ctx.sourceCallId;
+            memoryPhone = ctx.memoryPhone;
           }
         }
 
@@ -166,6 +154,7 @@ export async function dispatchUpcomingMeetingBots(): Promise<void> {
           userId: b.userId,
           exp: Date.now() + 2 * 60 * 60 * 1000, // 2 hour TTL for live meeting
           mid,
+          meetUrl: b.meetLink,
           ...(sourceCallId && meetings.passCallContext ? { sourceCallId } : {}),
           ...(memoryPhone && meetings.passMemory ? { memoryPhone } : {}),
           passMemory: meetings.passMemory,
@@ -176,6 +165,13 @@ export async function dispatchUpcomingMeetingBots(): Promise<void> {
 
         // Register meeting roster early so participant webhooks map correctly
         createMeetRoster(mid, agentName);
+        const { screensharePageUrl } = prepareMeetPresentationAtLaunch({
+          mid,
+          token,
+          baseUrl: base,
+          presentationUrl: meetings.presentationUrl,
+          presentationAutoStart: meetings.presentationAutoStart,
+        });
 
         const bot = await createRecallBot({
           meetingUrl: b.meetLink,
@@ -185,6 +181,7 @@ export async function dispatchUpcomingMeetingBots(): Promise<void> {
           agentId: runtimeAgentId,
           eventsUrl: `${base}/api/meet-bots/recall-events?mb=${encodeURIComponent(token)}`,
           eventsList: recallRealtimeEvents(),
+          ...(screensharePageUrl ? { screensharePageUrl } : {}),
         });
         bindMeetRosterBot(mid, bot.id);
 

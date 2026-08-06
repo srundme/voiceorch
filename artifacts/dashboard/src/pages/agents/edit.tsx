@@ -110,6 +110,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     sarvamHighVadSensitivity, sarvamSpeechEndFlushMs, sarvamIncompleteHoldMs,
     voiceStack, geminiLiveVoiceName, geminiLiveThinkingLevel,
     agentComposition, agentSurfaces, meetingPrompt,
+    meetingMaxDurationSeconds, meetingSilenceTimeoutSeconds, meetingSilenceHangupEnabled,
     // Inbound/outbound phone number assignment is read-only in the agent form —
     // it's managed exclusively from the Phone Numbers page now. Never forward
     // these to the server: they're populated from the agent's own (potentially
@@ -225,10 +226,25 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   // Meeting capacity + prompt. Attendance is owned by agent type:
   // phone_and_meet → enabled (joins Meet when Booking is on); phone → never joins.
   // Deep-merged on the server so whoJoins / memory toggles are preserved when present.
-  if (meetingPrompt !== undefined || agentSurfaces !== undefined) {
+  if (
+    meetingPrompt !== undefined ||
+    agentSurfaces !== undefined ||
+    meetingMaxDurationSeconds !== undefined ||
+    meetingSilenceTimeoutSeconds !== undefined ||
+    meetingSilenceHangupEnabled !== undefined
+  ) {
     agentConfig["meetings"] = {
       meetingPrompt: meetingPrompt ?? "",
       enabled: agentSurfaces === "phone_and_meet",
+      ...(typeof meetingMaxDurationSeconds === "number"
+        ? { maxDurationSeconds: meetingMaxDurationSeconds }
+        : {}),
+      ...(typeof meetingSilenceTimeoutSeconds === "number"
+        ? { silenceTimeoutSeconds: meetingSilenceTimeoutSeconds }
+        : {}),
+      ...(typeof meetingSilenceHangupEnabled === "boolean"
+        ? { silenceHangupEnabled: meetingSilenceHangupEnabled }
+        : {}),
     };
   }
 
@@ -477,6 +493,9 @@ export default function AgentEdit() {
       agentComposition: "single",
       agentSurfaces: "phone",
       meetingPrompt: "",
+      meetingMaxDurationSeconds: 45 * 60,
+      meetingSilenceTimeoutSeconds: 3 * 60,
+      meetingSilenceHangupEnabled: true,
     },
   });
 
@@ -761,6 +780,16 @@ export default function AgentEdit() {
       meetingPrompt: typeof (agent as any).agentConfig?.meetings?.meetingPrompt === "string"
         ? (agent as any).agentConfig.meetings.meetingPrompt
         : "",
+      meetingMaxDurationSeconds:
+        typeof (agent as any).agentConfig?.meetings?.maxDurationSeconds === "number"
+          ? (agent as any).agentConfig.meetings.maxDurationSeconds
+          : 45 * 60,
+      meetingSilenceTimeoutSeconds:
+        typeof (agent as any).agentConfig?.meetings?.silenceTimeoutSeconds === "number"
+          ? (agent as any).agentConfig.meetings.silenceTimeoutSeconds
+          : 3 * 60,
+      meetingSilenceHangupEnabled:
+        (agent as any).agentConfig?.meetings?.silenceHangupEnabled !== false,
     });
     const cfg = (agent as any).agentConfig;
     if (cfg?.voiceStack === "gemini_live") {

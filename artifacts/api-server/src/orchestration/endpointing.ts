@@ -261,6 +261,11 @@ export function inactivityReprompt(lang?: string | null): string {
   return INACTIVITY_REPROMPTS[prefix] ?? INACTIVITY_REPROMPTS["en"]!;
 }
 
+/** Softer check-in for video meetings (waiting for other participants is normal). */
+export function meetingWaitingReprompt(_lang?: string | null): string {
+  return "I'm still here whenever you're ready.";
+}
+
 // Language-aware inactivity farewell — spoken before a silence-timeout hangup
 // when the agent has no configured inactivityMessage, so the line is never
 // dropped silently.
@@ -279,6 +284,10 @@ const INACTIVITY_FAREWELLS: Record<string, string> = {
 export function inactivityFarewell(lang?: string | null): string {
   const prefix = (lang ?? "en").split("-")[0] ?? "en";
   return INACTIVITY_FAREWELLS[prefix] ?? INACTIVITY_FAREWELLS["en"]!;
+}
+
+export function meetingInactivityFarewell(_lang?: string | null): string {
+  return "I'll leave the meeting for now. Feel free to add me again if you need me. Goodbye!";
 }
 
 // Language-aware minimal neutral opener — spoken when the greeting-generating

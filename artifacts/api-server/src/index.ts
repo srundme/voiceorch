@@ -162,8 +162,10 @@ server.on("upgrade", (request, socket, head) => { void (async () => {
   let webcallGuestKey: string | null = null;
   let webcallShareLinkId: number | null = null;
   let webcallMeetMid: string | null = null;
+  let webcallMeetBotToken: string | null = null;
   let webcallMeetMemoryPhone: string | null = null;
   let webcallMeetSourceCallId: number | null = null;
+  let webcallMeetUrl: string | null = null;
   let webcallMeetPassMemory: boolean | undefined;
   let webcallMeetPassCallContext: boolean | undefined;
   if (provider === "webcall") {
@@ -206,11 +208,13 @@ server.on("upgrade", (request, socket, head) => { void (async () => {
         }
         webcallUserId = payload.userId;
         webcallMeetMid = payload.mid ?? null;
+        webcallMeetBotToken = meetBotToken;
         webcallMeetMemoryPhone = typeof payload.memoryPhone === "string" ? payload.memoryPhone : null;
         webcallMeetSourceCallId =
           typeof payload.sourceCallId === "number" && payload.sourceCallId > 0
             ? payload.sourceCallId
             : null;
+        webcallMeetUrl = typeof payload.meetUrl === "string" ? payload.meetUrl : null;
         webcallMeetPassMemory = payload.passMemory;
         webcallMeetPassCallContext = payload.passCallContext;
       } catch (err) {
@@ -331,8 +335,10 @@ server.on("upgrade", (request, socket, head) => { void (async () => {
         void handleWebcallWebSocket(ws, agentId, webcallUserId!, {
           ...(webcallGuestKey ? { guestKey: webcallGuestKey, linkId: webcallShareLinkId } : {}),
           ...(webcallMeetMid ? { meetMid: webcallMeetMid } : {}),
+          ...(webcallMeetBotToken ? { meetBotToken: webcallMeetBotToken } : {}),
           ...(webcallMeetMemoryPhone ? { meetingMemoryPhone: webcallMeetMemoryPhone } : {}),
           ...(webcallMeetSourceCallId ? { meetingSourceCallId: webcallMeetSourceCallId } : {}),
+          ...(webcallMeetUrl ? { meetingUrl: webcallMeetUrl } : {}),
           ...(webcallMeetPassMemory === false ? { passMemory: false } : {}),
           ...(webcallMeetPassCallContext === false ? { passCallContext: false } : {}),
           hdAudio,

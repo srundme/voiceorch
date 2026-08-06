@@ -289,6 +289,11 @@ export interface AgentConfig {
   greetingMessage: string | null;
   endCallPhrases: string[];
   silenceTimeoutSeconds: number | null;
+  /**
+   * True for Recall/meet-bot sessions. Softens silence check-ins and uses
+   * meeting-specific inactivity copy (waiting for other participants).
+   */
+  isMeetingSession?: boolean;
   language: string | null;
   /** When set, overrides the initial currentLang in the pipeline for this specific call.
    *  Used by session.ts to seed the caller's preferred language from memory so the
@@ -687,6 +692,19 @@ export interface SessionConfig {
   providerKeys: Map<string, string>;
   telephonyProvider: SessionTransport;
   callerPhone?: string | null;
+  /**
+   * Original phone call id to attach to bookings created during a meet-bot
+   * session (auto-dispatch memory lineage). Falls back to callId.
+   */
+  bookingLineageCallId?: number | null;
+  /** Live Meet/Zoom/Teams URL for schedule_meet_rejoin defaults. */
+  currentMeetUrl?: string | null;
+  /** Meeting id (roster / presentation state key) for meet-bot sessions. */
+  meetMid?: string | null;
+  /** Signed meet-bot token — builds the screenshare present-page URL for tools. */
+  meetBotToken?: string | null;
+  /** Default deck URL from agent Meeting settings (fallback for start_presentation). */
+  presentationDefaultUrl?: string | null;
   /** Campaign lead ID for outbound calls — enables transfer DB writes + lead timeline */
   campaignLeadId?: number | null;
   onAudioOut: (audio: Buffer) => void;

@@ -133,6 +133,12 @@ export const agentFormSchema = z.object({
   agentSurfaces: z.enum(["phone", "phone_and_meet"]).optional(),
   /** Meeting-room system prompt (agentConfig.meetings.meetingPrompt). */
   meetingPrompt: z.string().optional(),
+  /** Meeting hard cut-off seconds (default 45 min). Independent of phone maxDuration. */
+  meetingMaxDurationSeconds: z.number().min(60).max(7200).optional(),
+  /** Meeting silence patience seconds (default 180). Independent of phone silence. */
+  meetingSilenceTimeoutSeconds: z.number().min(0).max(600).optional(),
+  /** When false, silence never ends a meeting session. */
+  meetingSilenceHangupEnabled: z.boolean().optional(),
 
   // Auto-redial on drop
   autoRedialEnabled:      z.boolean().optional(),

@@ -39,7 +39,7 @@ import { resolveMicSensitivity, resolveBargeInEnergyThreshold } from "./mic-sens
 import { loadPcmLoop, TRACK_PARAMS } from "./ambient.js";
 import type { AgentConfig, AgentTool, TelephonyProvider, SessionTransport, PipelineMetrics } from "./types.js";
 import { logger } from "../lib/logger.js";
-import { parseMeetingsConfig } from "../services/meeting-runtime.js";
+import { MEETING_BEHAVIOR_PROMPT, parseMeetingsConfig } from "../services/meeting-runtime.js";
 import {
   saveSessionMeta,
   patchSessionMeta,
@@ -226,12 +226,18 @@ export async function createSession(params: {
   /** 16000 for browser webcall clients that negotiated HD audio; default 8000. */
   rawPcmOutputRate?: 8000 | 16000;
   /**
-   * Meeting bot (Channels → Meetings): contact phone for caller memory when
-   * passMemory is on. Does not change the call-log fromNumber (still meetbot-*).
+   * Meeting bot: contact phone for caller memory when passMemory is on.
+   * Does not change the call-log fromNumber (still meetbot-*).
    */
   meetingMemoryPhone?: string;
   /** Prior call id whose summary is injected when passCallContext is on. */
   meetingSourceCallId?: number;
+  /** Meet/Zoom/Teams URL for this bot session (rejoin tool + prompt). */
+  meetingUrl?: string;
+  /** Meeting roster id (from meet-bot token mid). */
+  meetMid?: string;
+  /** Full meet-bot token for presentation page URL construction. */
+  meetBotToken?: string;
   /** Snapshot from meet-bot token; default true when omitted. */
   passMemory?: boolean;
   passCallContext?: boolean;
@@ -401,15 +407,29 @@ export async function createSession(params: {
     hour: "2-digit", minute: "2-digit", timeZone: agentTimezone,
   });
   let effectiveSystemPrompt = agent.generatedPrompt ?? agent.systemPrompt;
-  // Meeting bots: Channels → Meetings "meeting prompt" replaces the call prompt
-  // when set. Date/time + memory/context blocks still append below.
+  // Meeting bots: meeting prompt replaces the call prompt when set.
+  // Date/time + memory/context blocks still append below.
   const isMeetBotSession =
     typeof params.fromNumber === "string" && params.fromNumber.startsWith("meetbot-");
+  const meetingsCfg = parseMeetingsConfig(agentCfg);
   if (isMeetBotSession) {
-    const meetingPrompt = parseMeetingsConfig(agentCfg).meetingPrompt.trim();
+    const meetingPrompt = meetingsCfg.meetingPrompt.trim();
     if (meetingPrompt) {
       effectiveSystemPrompt = meetingPrompt;
-      logger.info({ agentId: params.agentId }, "Using Channels meeting prompt for meet-bot session");
+      logger.info({ agentId: params.agentId }, "Using meeting prompt for meet-bot session");
+    }
+    effectiveSystemPrompt += `\n\n${MEETING_BEHAVIOR_PROMPT}`;
+    if (typeof params.meetingUrl === "string" && params.meetingUrl.trim()) {
+      effectiveSystemPrompt +=
+        `\n\n[CURRENT MEETING LINK] ${params.meetingUrl.trim()}\n` +
+        `Use this URL with schedule_meet_rejoin when participants ask you to rejoin later.`;
+    }
+    if (meetingsCfg.presentationUrl) {
+      effectiveSystemPrompt +=
+        `\n\n[PRESENTATION DECK] ${meetingsCfg.presentationUrl}\n` +
+        (meetingsCfg.presentationAutoStart
+          ? `Screenshare may already be active — use next_slide / previous_slide / stop_presentation as needed.`
+          : `Call start_presentation when asked to share slides (url optional).`);
     }
   }
   effectiveSystemPrompt += `\n\n[DATE/TIME CONTEXT] Today is ${dateCtxParts}. Current time is ${timeCtxParts} (${agentTimezone}).`;
@@ -568,7 +588,11 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
           ? { reasoningEffort: null }
           : {}),
     },
-    maxDuration: agent.maxDuration ?? 600,
+    // Meet bots use meeting-specific length/silence (Builder → Meetings), not
+    // phone maxDuration / silenceTimeoutSeconds — waiting for late joiners is normal.
+    maxDuration: isMeetBotSession
+      ? meetingsCfg.maxDurationSeconds
+      : (agent.maxDuration ?? 600),
     asrProvider: agent.asrProvider,
     asrModel: agent.asrModel,
     llmProvider: agent.llmProvider,
@@ -584,8 +608,11 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     endCallPhrases,
     // Fall back to a default so idle/dead-air calls self-terminate instead of
     // lingering until the stuck-call sweep. `?? ` keeps an explicit 0 (disabled)
-    // and any explicit value the agent configured.
-    silenceTimeoutSeconds: agent.silenceTimeoutSeconds ?? DEFAULT_SILENCE_TIMEOUT_SECONDS,
+    // and any explicit value the agent configured. Meet bots: longer patience or off.
+    silenceTimeoutSeconds: isMeetBotSession
+      ? (meetingsCfg.silenceHangupEnabled ? meetingsCfg.silenceTimeoutSeconds : 0)
+      : (agent.silenceTimeoutSeconds ?? DEFAULT_SILENCE_TIMEOUT_SECONDS),
+    ...(isMeetBotSession ? { isMeetingSession: true } : {}),
     // AgentConfig.language is the agent's SPOKEN language — it drives the
     // pipeline's [LANGUAGE — ABSOLUTE RULE] block and the TTS voice language.
     // Use the unified resolver so the language rule, TTS, and STT all agree.
@@ -768,7 +795,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
   //   one key. Placeholder/sentinel + missing numbers resolve to null (cold start).
   const callDirection: CallDirection = params.callDirection ?? "inbound";
   // Meeting bots normally key off meetbot-<mid> (no personal memory). When
-  // Channels → Meetings passMemory + memoryPhone are set (e.g. booking auto-join),
+  // Meeting passMemory + memoryPhone are set (e.g. booking auto-join),
   // load contact memory under that phone while the call log stays on meetbot-*.
   let callerPhone = isWebcall
     ? canonicalizeCallerKey(params.fromNumber)
@@ -893,12 +920,20 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
         })
       : Promise.resolve([] as Array<typeof providersTable.$inferSelect>),
 
-    // 5. Upcoming bookings (pre-fetched in parallel)
-    (!isWebcall && callerPhone)
+    // 5. Upcoming bookings (pre-fetched in parallel). Meet bots use the contact
+    // phone / source call — not meetbot-* synthetic numbers.
+    ((!isWebcall || isMeetBotSession) && callerPhone)
       ? (async () => {
-          const callerRawNumber = callDirection === "outbound" ? params.toNumber : params.fromNumber;
-          if (!callerRawNumber || !agent.id) return [];
+          const callerRawNumber = isMeetBotSession
+            ? (params.meetingMemoryPhone?.trim() || null)
+            : (callDirection === "outbound" ? params.toNumber : params.fromNumber);
+          if (!agent.id) return [];
           const now = new Date();
+          const sourceCallId =
+            isMeetBotSession && typeof params.meetingSourceCallId === "number" && params.meetingSourceCallId > 0
+              ? params.meetingSourceCallId
+              : null;
+          if (!callerRawNumber && !sourceCallId) return [];
           return db
             .select({
               slotStart: bookingsTable.slotStart,
@@ -906,6 +941,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
               status: bookingsTable.status,
               meetLink: bookingsTable.meetLink,
               eventName: eventTypesTable.name,
+              bookingId: bookingsTable.id,
             })
             .from(bookingsTable)
             .innerJoin(callsTable, eq(bookingsTable.callId, callsTable.id))
@@ -914,8 +950,13 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
               and(
                 eq(callsTable.agentId, agent.id),
                 or(
-                  eq(callsTable.fromNumber, callerRawNumber),
-                  eq(callsTable.toNumber, callerRawNumber),
+                  ...(callerRawNumber
+                    ? [
+                        eq(callsTable.fromNumber, callerRawNumber),
+                        eq(callsTable.toNumber, callerRawNumber),
+                      ]
+                    : []),
+                  ...(sourceCallId ? [eq(bookingsTable.callId, sourceCallId)] : []),
                 ),
                 gt(bookingsTable.slotStart, now),
                 ne(bookingsTable.status, "cancelled"),
@@ -1025,7 +1066,9 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
   }
 
   // ── Inject DB-backed upcoming bookings (pre-fetched in parallel) ─────────────
-  if (!isWebcall && callerPhone && upcomingBookingsResult && upcomingBookingsResult.length > 0) {
+  // Meet bots: also inject upcoming bookings when we have a contact phone so
+  // the agent can reschedule without guessing booking ids.
+  if ((!isWebcall || isMeetBotSession) && callerPhone && upcomingBookingsResult && upcomingBookingsResult.length > 0) {
     try {
       const tz = (agentCfg["timezone"] as string | undefined) || "Asia/Kolkata";
       const now = new Date();
@@ -1049,7 +1092,11 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
         });
         const delta = dayDelta(todayYmd, ymdInTz(b.slotStart));
         const title = b.eventName ? `"${b.eventName}"` : "the meeting";
-        return `- ${title} on ${abs} (that is ${relWord(delta)}).`;
+        const idPart = "bookingId" in b && typeof (b as { bookingId?: number }).bookingId === "number"
+          ? ` booking_id=${(b as { bookingId: number }).bookingId}`
+          : "";
+        const linkPart = b.meetLink ? ` meet_link=${b.meetLink}` : "";
+        return `- ${title} on ${abs} (that is ${relWord(delta)}).${idPart}${linkPart}`;
       });
 
       agentConfig.systemPrompt +=
@@ -1059,7 +1106,10 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
         `that may appear in the caller memory above, which could be stale.\n` +
         lines.join("\n") +
         `\nWhen you refer to a meeting, say the relative day-word that is correct for TODAY ` +
-        `(e.g. only say "tomorrow" if it is genuinely the next day; say "today" if it is today).`;
+        `(e.g. only say "tomorrow" if it is genuinely the next day; say "today" if it is today).` +
+        (isMeetBotSession
+          ? `\nTo move a meeting, call reschedule with the booking_id above. A SnapServe agent will auto-join the new slot when a Meet link exists.`
+          : "");
 
       logger.info(
         { agentId: params.agentId, callerPhone, bookingCount: upcomingBookingsResult.length },
@@ -1535,8 +1585,18 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
           ...(params.externalCallId ? { externalCallId: params.externalCallId } : {}),
           ...(params.platformTelephony ? { platformTelephony: true } : {}),
           ...(isWebcall ? { transport: "webcall", isTestCall: true } : {}),
+          ...(isMeetBotSession ? { transport: "meetbot", isTestCall: true } : {}),
           direction: callDirection,
           ...(callerPhone ? { callerKey: callerPhone } : {}),
+          ...(isMeetBotSession && typeof params.meetingSourceCallId === "number"
+            ? { meetingSourceCallId: params.meetingSourceCallId }
+            : {}),
+          ...(isMeetBotSession && params.meetingMemoryPhone
+            ? { meetingMemoryPhone: params.meetingMemoryPhone.trim() }
+            : {}),
+          ...(isMeetBotSession && params.meetingUrl
+            ? { meetUrl: params.meetingUrl.trim() }
+            : {}),
           ...(inboundSheetMeta
             ? {
                 __sheet_pipeline_id: inboundSheetMeta.pipelineId,
@@ -2146,6 +2206,15 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
         providerKeys,
         telephonyProvider: params.telephonyProvider,
         callerPhone,
+        bookingLineageCallId:
+          isMeetBotSession && typeof params.meetingSourceCallId === "number" && params.meetingSourceCallId > 0
+            ? params.meetingSourceCallId
+            : null,
+        currentMeetUrl: isMeetBotSession && params.meetingUrl ? params.meetingUrl.trim() : null,
+        meetMid: isMeetBotSession && params.meetMid ? params.meetMid : null,
+        meetBotToken: isMeetBotSession && params.meetBotToken ? params.meetBotToken : null,
+        presentationDefaultUrl:
+          isMeetBotSession && meetingsCfg.presentationUrl ? meetingsCfg.presentationUrl : null,
         memoryOwnerAgentId,
         campaignLeadId: params.campaignLeadId ?? null,
         onAudioOut: params.onAudioOut,
@@ -2177,6 +2246,15 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     providerKeys,
     telephonyProvider: params.telephonyProvider,
     callerPhone,
+    bookingLineageCallId:
+      isMeetBotSession && typeof params.meetingSourceCallId === "number" && params.meetingSourceCallId > 0
+        ? params.meetingSourceCallId
+        : null,
+    currentMeetUrl: isMeetBotSession && params.meetingUrl ? params.meetingUrl.trim() : null,
+    meetMid: isMeetBotSession && params.meetMid ? params.meetMid : null,
+    meetBotToken: isMeetBotSession && params.meetBotToken ? params.meetBotToken : null,
+    presentationDefaultUrl:
+      isMeetBotSession && meetingsCfg.presentationUrl ? meetingsCfg.presentationUrl : null,
     memoryOwnerAgentId,
     campaignLeadId: params.campaignLeadId ?? null,
     onAudioOut: params.onAudioOut,
