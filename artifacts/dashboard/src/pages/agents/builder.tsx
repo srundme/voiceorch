@@ -6744,8 +6744,43 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
   const [composition, setComposition] = useState<"single" | "team">("single");
   const [surfaces, setSurfaces] = useState<"phone" | "phone_and_meet">("phone");
   const [agentName, setAgentName] = useState("");
+  const [teamName, setTeamName] = useState("");
+  const [agent1Name, setAgent1Name] = useState("");
+  const [agent1Role, setAgent1Role] = useState("Lead Qualifier");
+  const [agent2Name, setAgent2Name] = useState("");
+  const [agent2Role, setAgent2Role] = useState("Meeting Scheduler");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+
+  const buildAgentBody = (name: string): Record<string, unknown> => ({
+    name,
+    asrProvider: "sarvam",
+    asrModel: "saaras:v3",
+    asrLanguage: "",
+    language: "en-IN",
+    telephonyProvider: "vobiz",
+    systemPrompt: "You are a helpful AI voice assistant.",
+    greetingMessage: "Hello! How can I help you today?",
+    tools: [
+      { type: "end_call", name: "end_call", description: "End the call when the conversation is complete." },
+    ],
+    llmProvider: "google",
+    llmModel: "gemini-3.6-flash",
+    ttsProvider: "sarvam",
+    ttsModel: "bulbul:v3",
+    ttsVoice: "priya",
+    // Attendance capacity is fixed by agent type:
+    // phone+meet → joins Meet when Booking is on; phone-only → book only, never join.
+    agentConfig: {
+      meetings: {
+        enabled: surfaces === "phone_and_meet",
+        whoJoins: "self",
+        meetingPrompt: "",
+        passMemory: true,
+        passCallContext: true,
+      },
+    },
+  });
 
   const handleClose = () => {
     if (creating) return;
@@ -6753,6 +6788,11 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
     setComposition("single");
     setSurfaces("phone");
     setAgentName("");
+    setTeamName("");
+    setAgent1Name("");
+    setAgent1Role("Lead Qualifier");
+    setAgent2Name("");
+    setAgent2Role("Meeting Scheduler");
     setCreateError(null);
     onClose();
   };
@@ -6761,53 +6801,93 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
     setCreating(true);
     setCreateError(null);
     try {
-      const name = agentName.trim() || "New Voice Agent";
-      const body: Record<string, unknown> = {
-        name,
-        asrProvider: "sarvam",
-        asrModel: "saaras:v3",
-        asrLanguage: "",
-        language: "en-IN",
-        telephonyProvider: "vobiz",
-        systemPrompt: "You are a helpful AI voice assistant.",
-        greetingMessage: "Hello! How can I help you today?",
-        tools: [
-          { type: "end_call", name: "end_call", description: "End the call when the conversation is complete." },
-        ],
-        llmProvider: "google",
-        llmModel: "gemini-3.6-flash",
-        ttsProvider: "sarvam",
-        ttsModel: "bulbul:v3",
-        ttsVoice: "priya",
-      };
-      // Attendance capacity is fixed by agent type:
-      // phone+meet → joins Meet when Booking is on; phone-only → book only, never join.
-      body.agentConfig = {
-        meetings: {
-          enabled: surfaces === "phone_and_meet",
-          whoJoins: "self",
-          meetingPrompt: "",
-          passMemory: true,
-          passCallContext: true,
-        },
-      };
+      if (composition === "team") {
+        const resolvedTeam = teamName.trim() || "New team";
+        const name1 = agent1Name.trim() || "Lead Qualifier";
+        const name2 = agent2Name.trim() || "Meeting Scheduler";
+        const role1 = agent1Role.trim() || "Lead Qualifier";
+        const role2 = agent2Role.trim() || "Meeting Scheduler";
 
+        const agent1 = await customFetch<{ id: number }>(`${DASH_API}/agents`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(buildAgentBody(name1)),
+        });
+
+        let agent2: { id: number };
+        try {
+          agent2 = await customFetch<{ id: number }>(`${DASH_API}/agents`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(buildAgentBody(name2)),
+          });
+        } catch (err: any) {
+          await queryClient.invalidateQueries({ queryKey: getListAgentsQueryKey() });
+          const issueMsg = Array.isArray(err?.issues) ? err.issues.map((i: any) => `${i.path.join(".")}: ${i.message}`).join(", ") : "";
+          setCreateError(
+            issueMsg
+              ? `Created “${name1}”, but agent 2 failed: ${issueMsg}`
+              : `Created “${name1}”, but agent 2 failed: ${err?.message ?? "Please try again from the agents list."}`,
+          );
+          return;
+        }
+
+        try {
+          await customFetch(`${DASH_API}/squads`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: resolvedTeam,
+              description: null,
+              status: "active",
+              members: [
+                {
+                  agentId: agent1.id,
+                  roleName: role1,
+                  roleType: "specialist",
+                  instructions: "Entry point — hand off when a specialist should take over",
+                  handoffEnabled: true,
+                  sortOrder: 0,
+                },
+                {
+                  agentId: agent2.id,
+                  roleName: role2,
+                  roleType: "specialist",
+                  instructions: null,
+                  handoffEnabled: true,
+                  sortOrder: 1,
+                },
+              ],
+            }),
+          });
+        } catch (err: any) {
+          await queryClient.invalidateQueries({ queryKey: getListAgentsQueryKey() });
+          setCreateError(
+            `Both agents were created, but the team failed: ${err?.message ?? "Open Squads to assemble them manually."}`,
+          );
+          return;
+        }
+
+        await queryClient.invalidateQueries({ queryKey: getListAgentsQueryKey() });
+        await queryClient.invalidateQueries({ queryKey: ["squads"] });
+        handleClose();
+        toast({
+          title: "Team ready",
+          description: `${name1} and ${name2} can hand off mid-call.`,
+        });
+        navigate(`/app/agents/${agent1.id}`);
+        return;
+      }
+
+      const name = agentName.trim() || "New Voice Agent";
       const result = await customFetch<{ id: number }>(`${DASH_API}/agents`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify(buildAgentBody(name)),
       });
       await queryClient.invalidateQueries({ queryKey: getListAgentsQueryKey() });
       handleClose();
-      if (composition === "team") {
-        toast({
-          title: "First agent ready",
-          description: "Add teammates and name the team — then they can hand off mid-call.",
-        });
-        navigate(`/app/squads?seedAgent=${result.id}`);
-      } else {
-        navigate(`/app/agents/${result.id}`);
-      }
+      navigate(`/app/agents/${result.id}`);
     } catch (err: any) {
       const issueMsg = Array.isArray(err?.issues) ? err.issues.map((i: any) => `${i.path.join(".")}: ${i.message}`).join(", ") : "";
       setCreateError(issueMsg ? `Validation failed: ${issueMsg}` : (err?.message ?? "Failed to create agent. Please try again."));
@@ -6819,17 +6899,18 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
   const stepTitle =
     step === "compose" ? "Who is this for?"
       : step === "surfaces" ? "Where will they talk?"
-        : "Name your agent";
+        : composition === "team" ? "Name your team"
+          : "Name your agent";
   const stepDesc =
-    step === "compose" ? "Start with one agent, or plan a handoff team."
+    step === "compose" ? "Start with one agent, or create two that hand off mid-call."
       : step === "surfaces" ? "Phone only (book but never join Meet), or phone + meetings (joins Meet when Booking is on)."
         : composition === "team"
-          ? "We’ll create this agent, then open team setup so you can add teammates."
+          ? "We’ll create both agents and wire handoffs automatically."
           : "You can edit prompts, tools, and settings anytime.";
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose(); }}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className={cn("sm:max-w-md", composition === "team" && step === "name" && "sm:max-w-lg")}>
         <DialogHeader>
           <DialogTitle>{stepTitle}</DialogTitle>
           <DialogDescription>{stepDesc}</DialogDescription>
@@ -6870,7 +6951,7 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
               </div>
               <div>
                 <p className="text-sm font-semibold">Team</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Handoffs across agents</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Create two agents that hand off mid-call</p>
               </div>
             </button>
             <button
@@ -6930,7 +7011,7 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
           </div>
         )}
 
-        {step === "name" && (
+        {step === "name" && composition === "single" && (
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
               <Label htmlFor="scratch-name">Agent name</Label>
@@ -6944,7 +7025,7 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
               />
             </div>
             <p className="text-[11px] text-muted-foreground">
-              {composition === "single" ? "One agent" : "Team (first agent)"}
+              One agent
               {" · "}
               {surfaces === "phone" ? "Phone" : "Phone + meetings"}
             </p>
@@ -6952,7 +7033,78 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
             <DialogFooter>
               <Button variant="ghost" onClick={() => setStep("surfaces")} disabled={creating}>Back</Button>
               <Button onClick={() => void handleCreate()} disabled={creating}>
-                {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : composition === "team" ? "Create & assemble team" : "Create agent"}
+                {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create agent"}
+              </Button>
+            </DialogFooter>
+          </div>
+        )}
+
+        {step === "name" && composition === "team" && (
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="team-name">Team name</Label>
+              <Input
+                id="team-name"
+                placeholder="e.g. Sales team"
+                value={teamName}
+                onChange={e => setTeamName(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <div className="rounded-lg border border-border/60 p-3 space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">Agent 1</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label htmlFor="agent1-name" className="text-[11px]">Name</Label>
+                  <Input
+                    id="agent1-name"
+                    placeholder="e.g. Lead Qualifier"
+                    value={agent1Name}
+                    onChange={e => setAgent1Name(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="agent1-role" className="text-[11px]">Role</Label>
+                  <Input
+                    id="agent1-role"
+                    placeholder="Lead Qualifier"
+                    value={agent1Role}
+                    onChange={e => setAgent1Role(e.target.value)}
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="rounded-lg border border-border/60 p-3 space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">Agent 2</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label htmlFor="agent2-name" className="text-[11px]">Name</Label>
+                  <Input
+                    id="agent2-name"
+                    placeholder="e.g. Meeting Scheduler"
+                    value={agent2Name}
+                    onChange={e => setAgent2Name(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="agent2-role" className="text-[11px]">Role</Label>
+                  <Input
+                    id="agent2-role"
+                    placeholder="Meeting Scheduler"
+                    value={agent2Role}
+                    onChange={e => setAgent2Role(e.target.value)}
+                  />
+                </div>
+              </div>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              Two agents · {surfaces === "phone" ? "Phone" : "Phone + meetings"} · handoffs wired automatically
+            </p>
+            {createError && <p className="text-xs text-destructive">{createError}</p>}
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setStep("surfaces")} disabled={creating}>Back</Button>
+              <Button onClick={() => void handleCreate()} disabled={creating}>
+                {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create team"}
               </Button>
             </DialogFooter>
           </div>
