@@ -28,7 +28,6 @@ import ApiKeysTabPage     from "@/pages/api-keys-tabbed";
 import WalletTabPage      from "@/pages/wallet-tabbed";
 
 // Individual / deep-link pages (unchanged)
-import AgentBuilder            from "@/pages/agents/builder";
 import SquadsPage              from "@/pages/squads/index";
 import MeetPage                from "@/pages/meet/index";
 import CallsList               from "@/pages/calls/index";
