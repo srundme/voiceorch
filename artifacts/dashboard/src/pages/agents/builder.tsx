@@ -878,15 +878,6 @@ function OverviewTab({
             </section>
           )}
 
-          {/* Phone number — assign on the agent (not Connections) */}
-          {agent?.id != null && (
-            <AgentInboundPanel
-              agentId={agent.id}
-              preferredManagedNumber={form.watch("preferredManagedNumber")}
-              telephonyProvider={form.watch("telephonyProvider")}
-            />
-          )}
-
           {/* ── Transcriber / Language dialog ── */}
           <EditConfigDialog
             open={openSection === "transcriber"}
@@ -6312,7 +6303,7 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
             onClick={() => setCallDialog(true)}
           >
             <Phone className="size-3.5" />
-            Phone
+            Call
           </Button>
           <Button
             type="button"
@@ -6363,6 +6354,17 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
           </DropdownMenu>
         </div>
       </header>
+
+      {/* Full phone card under toolbar — same card people liked in the old builder */}
+      <div className="shrink-0 border-b border-border bg-background px-3 py-2.5 sm:px-5">
+        <div className="w-full max-w-lg">
+          <AgentInboundPanel
+            agentId={agent.id}
+            preferredManagedNumber={form.watch("preferredManagedNumber")}
+            telephonyProvider={form.watch("telephonyProvider")}
+          />
+        </div>
+      </div>
 
       {/* Rename Agent dialog — team strip lives on Overview */}
       <Dialog open={renameDialogOpen} onOpenChange={setRenameDialogOpen}>

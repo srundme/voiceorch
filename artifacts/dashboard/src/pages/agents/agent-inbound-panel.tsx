@@ -1,5 +1,6 @@
 /**
  * Inbound / outbound phone assignment for an agent.
+ * Card style matches the old Studio builder phone card people liked.
  */
 
 import { useState } from "react";
@@ -37,7 +38,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError } from "@/lib/format-api-error";
 import { cn } from "@/lib/utils";
-import { Loader2, Phone, PhoneForwarded, Plus } from "lucide-react";
+import { ChevronRight, Loader2, Phone, PhoneForwarded, Plus } from "lucide-react";
 
 const _DASH_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const DASH_API = `${_DASH_BASE}/api`;
@@ -47,11 +48,14 @@ export function AgentInboundPanel({
   preferredManagedNumber,
   telephonyProvider,
   className,
+  compact = false,
 }: {
   agentId: number;
   preferredManagedNumber?: string | null;
   telephonyProvider?: string | null;
   className?: string;
+  /** Single-row chip for tight toolbars; default is the full phone card. */
+  compact?: boolean;
 }) {
   const [, navigate] = useLocation();
   const { toast } = useToast();
@@ -79,10 +83,9 @@ export function AgentInboundPanel({
     staleTime: 15_000,
   });
   const assign = useAssignPhoneNumber();
-  // BYO telephony (Plivo/Twilio): when the agent dials on the user's own
-  // carrier account, its saved fromNumber IS the agent's number — show it
-  // instead of buy/trial nags.
-  const { data: providerKeys } = useListProviders({ query: { queryKey: getListProvidersQueryKey(), staleTime: 60_000 } });
+  const { data: providerKeys } = useListProviders({
+    query: { queryKey: getListProvidersQueryKey(), staleTime: 60_000 },
+  });
   const byo = (telephonyProvider === "plivo" || telephonyProvider === "twilio")
     ? (providerKeys ?? []).find((p) => p.providerType === "telephony" && p.providerName === telephonyProvider && p.isActive)
     : undefined;
@@ -91,7 +94,7 @@ export function AgentInboundPanel({
     try { byoNumber = (JSON.parse(byo.extraConfig ?? "{}") as Record<string, string>)["fromNumber"] ?? null; } catch { /* ignore */ }
   }
   const phoneNumbers = Array.isArray(phoneNumbersRaw) ? phoneNumbersRaw : [];
-  const assigned = phoneNumbers.find(p => p.agentId === agentId);
+  const assigned = phoneNumbers.find((p) => p.agentId === agentId);
   const ownedCount = phoneNumbers.length;
   const managedNumbers = managedData?.numbers ?? [];
   const testingFromNumber =
@@ -119,14 +122,13 @@ export function AgentInboundPanel({
         },
       });
     } catch {
-      // Non-fatal — number is assigned; webhook can be repaired from Phone Numbers.
+      // Non-fatal
     }
   };
 
   const handleSave = async () => {
     const nextId = selectedId === "none" ? null : parseInt(selectedId, 10);
     try {
-      // Agent-centric: clear previous number on this agent if switching/unassigning
       if (assigned && assigned.id !== nextId) {
         await assign.mutateAsync({ id: assigned.id, data: { agentId: null } });
       }
@@ -152,134 +154,225 @@ export function AgentInboundPanel({
   const trialRemaining = quota?.limited ? quota.remaining : null;
   const trialLimit = quota?.limit ?? 3;
   const trialExhausted = quota?.limited && quota.remaining <= 0;
+  const live = Boolean(assigned || byoNumber);
 
-  return (
-    <div className={cn("overflow-hidden rounded-lg border border-border", className)}>
-      {/* Own number row */}
-      <div className="flex min-h-14 items-center gap-3 border-b border-border/70 px-3.5 py-3">
-        <PhoneForwarded className="size-4 shrink-0 text-muted-foreground" />
-        <div className="min-w-0 flex-1">
-          {isLoading ? (
-            <Skeleton className="h-8 w-48" />
-          ) : byoNumber ? (
+  const assignDialog = (
+    <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Attach your phone number</DialogTitle>
+          <DialogDescription>
+            Your purchased number handles inbound routing and outbound caller ID.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3 py-1">
+          {phoneNumbers.length === 0 ? (
+            <div className="space-y-2 rounded-lg border border-border px-3 py-4 text-center">
+              <p className="text-sm text-muted-foreground">You don’t have a purchased number yet.</p>
+              <Button size="sm" className="h-8 gap-1.5 text-xs" onClick={() => { setDialogOpen(false); navigate("/app/phone-numbers"); }}>
+                <Plus className="h-3.5 w-3.5" /> Buy a number
+              </Button>
+            </div>
+          ) : (
             <>
-              <p className="truncate text-[13px] font-medium tabular-nums">{byoNumber}</p>
-              <p className="text-[11px] text-muted-foreground">
-                Your {telephonyProvider === "plivo" ? "Plivo" : "Twilio"} number · unlimited
+              <Label className="text-sm">Phone number</Label>
+              <Select value={selectedId} onValueChange={setSelectedId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a number…" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">— Unassigned —</SelectItem>
+                  {phoneNumbers.map((n) => {
+                    const owner = n.agentId && n.agentId !== agentId
+                      ? agents?.find((a) => a.id === n.agentId)?.name
+                      : null;
+                    return (
+                      <SelectItem key={n.id} value={String(n.id)}>
+                        {n.number}{owner ? ` · ${owner}` : n.agentId === agentId ? " · current" : ""}
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] leading-relaxed text-muted-foreground">
+                Reassigning a number in use by another agent moves inbound and outbound to this agent.
               </p>
             </>
-          ) : assigned ? (
-            <button type="button" onClick={openDialog} className="w-full text-left">
-              <p className="truncate text-[13px] font-medium tabular-nums">{assigned.number}</p>
-              <p className="text-[11px] text-muted-foreground">Assigned · inbound + outbound</p>
-            </button>
-          ) : ownedCount === 0 ? (
-            <>
-              <p className="text-[13px] font-medium">No number assigned</p>
-              <p className="text-[11px] text-muted-foreground">Buy a number to go live on this agent</p>
-            </>
-          ) : (
-            <button type="button" onClick={openDialog} className="w-full text-left">
-              <p className="text-[13px] font-medium">Assign a purchased number</p>
-              <p className="text-[11px] text-muted-foreground">You have a number — attach it here</p>
-            </button>
           )}
         </div>
-        {isLoading ? null : byoNumber ? null : assigned ? (
-          <Button type="button" size="sm" variant="outline" className="h-8 shrink-0 text-xs" onClick={openDialog}>
-            Change
-          </Button>
+        {phoneNumbers.length > 0 && (
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
+            <Button type="button" onClick={handleSave} disabled={assign.isPending}>
+              {assign.isPending ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
+              Save
+            </Button>
+          </DialogFooter>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+
+  if (compact) {
+    const label = isLoading
+      ? "…"
+      : byoNumber
+        ? byoNumber
+        : assigned
+          ? assigned.number
+          : ownedCount > 0
+            ? "Assign number"
+            : "Add number";
+    const sub = isLoading
+      ? ""
+      : byoNumber
+        ? "BYO · unlimited"
+        : assigned
+          ? "Live"
+          : ownedCount > 0
+            ? "Purchased — attach"
+            : "Required to go live";
+
+    return (
+      <div className={cn("flex min-w-0 items-center", className)}>
+        <button
+          type="button"
+          onClick={() => {
+            if (byoNumber) { navigate("/app/phone-numbers"); return; }
+            if (assigned || ownedCount > 0) openDialog();
+            else navigate("/app/phone-numbers");
+          }}
+          className={cn(
+            "inline-flex h-9 max-w-full items-center gap-2 rounded-lg border px-2.5 text-left transition-colors",
+            live
+              ? "border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/15"
+              : "border-amber-500/35 bg-amber-500/10 hover:bg-amber-500/15",
+          )}
+        >
+          <PhoneForwarded className={cn("size-3.5 shrink-0", live ? "text-emerald-500" : "text-amber-500")} />
+          <span className="min-w-0">
+            <span className="block truncate text-[12px] font-medium tabular-nums leading-tight">{label}</span>
+            {sub ? (
+              <span className={cn("block truncate text-[10px] leading-tight", live ? "text-emerald-700/80 dark:text-emerald-400/80" : "text-amber-700/80 dark:text-amber-400/80")}>
+                {sub}
+              </span>
+            ) : null}
+          </span>
+          {!live && ownedCount === 0 ? <Plus className="size-3.5 shrink-0 text-amber-600" /> : <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />}
+        </button>
+        {assignDialog}
+      </div>
+    );
+  }
+
+  return (
+    <div className={cn("space-y-2", className)}>
+      <div className={cn(
+        "rounded-xl border p-3 space-y-2.5",
+        live ? "border-emerald-500/25 bg-emerald-500/5" : "border-amber-500/30 bg-amber-500/5",
+      )}>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <PhoneForwarded className={cn("h-3.5 w-3.5 shrink-0", live ? "text-emerald-500" : "text-amber-500")} />
+            <span className={cn(
+              "text-[10px] font-semibold uppercase tracking-wider",
+              live ? "text-emerald-600/90 dark:text-emerald-400/90" : "text-amber-600/90 dark:text-amber-400/90",
+            )}>
+              Your phone number
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate("/app/phone-numbers")}
+            className="text-[10px] font-medium text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {ownedCount === 0 ? "Buy →" : "Numbers →"}
+          </button>
+        </div>
+
+        {isLoading ? (
+          <Skeleton className="h-9 w-full rounded-lg" />
+        ) : byoNumber ? (
+          <div className="w-full flex items-center justify-between gap-2 rounded-lg border border-border/50 bg-background/50 px-2.5 py-2">
+            <div className="min-w-0">
+              <p className="text-[12px] font-medium truncate tabular-nums text-foreground">{byoNumber}</p>
+              <p className="text-[10px] text-muted-foreground/70 truncate mt-0.5">
+                Your own {telephonyProvider === "plivo" ? "Plivo" : "Twilio"} number — outbound caller ID · unlimited calls
+              </p>
+            </div>
+          </div>
+        ) : assigned ? (
+          <button
+            type="button"
+            onClick={openDialog}
+            className="w-full flex items-center justify-between gap-2 rounded-lg border border-border/50 bg-background/50 px-2.5 py-2 text-left hover:border-border hover:bg-background/70 transition-colors"
+          >
+            <div className="min-w-0">
+              <p className="text-[12px] font-medium truncate tabular-nums text-foreground">{assigned.number}</p>
+              <p className="text-[10px] text-muted-foreground/70 truncate mt-0.5">
+                Live — inbound + outbound caller ID · unlimited tests
+              </p>
+            </div>
+            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          </button>
         ) : ownedCount === 0 ? (
-          <Button type="button" size="sm" className="h-8 shrink-0 gap-1 text-xs" onClick={() => navigate("/app/phone-numbers")}>
-            <Plus className="size-3.5" /> Buy
-          </Button>
+          <div className="space-y-2">
+            <p className="text-[12px] font-medium text-foreground">Required to go live</p>
+            <p className="text-[10px] text-muted-foreground leading-relaxed">
+              Buy your own number for inbound calls, your caller ID on outbound, and unlimited testing. The platform number below is only a short trial.
+            </p>
+            <Button
+              type="button"
+              size="sm"
+              className="h-8 w-full text-xs gap-1.5"
+              onClick={() => navigate("/app/phone-numbers")}
+            >
+              <Plus className="h-3.5 w-3.5" /> Buy a phone number
+            </Button>
+          </div>
         ) : (
-          <Button type="button" size="sm" className="h-8 shrink-0 text-xs" onClick={openDialog}>
-            Assign
-          </Button>
+          <button
+            type="button"
+            onClick={openDialog}
+            className="w-full flex items-center justify-between gap-2 rounded-lg border border-amber-500/30 bg-background/50 px-2.5 py-2 text-left hover:border-amber-500/50 transition-colors"
+          >
+            <div className="min-w-0">
+              <p className="text-[12px] font-medium truncate text-foreground">Number purchased — assign it</p>
+              <p className="text-[10px] text-muted-foreground/70 truncate mt-0.5">
+                Click to attach your number for inbound + outbound
+              </p>
+            </div>
+            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          </button>
         )}
       </div>
 
-      {/* Trial row — only when no own number */}
       {!assigned && !byoNumber && (
-        <div className="flex min-h-12 items-center gap-3 px-3.5 py-2.5">
-          <Phone className="size-4 shrink-0 text-muted-foreground" />
+        <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5 flex items-start gap-2">
+          <Phone className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
           <div className="min-w-0 flex-1">
             <p className="text-[12px] font-medium tabular-nums text-muted-foreground">
               {testingFromNumber ?? "No trial line"}
             </p>
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-[10px] text-muted-foreground/80 leading-relaxed mt-0.5">
               {quota?.unlimitedTrial
-                ? "Shared trial · inbound won't ring this agent"
+                ? "Shared platform trial line — unlimited for your account (admin grant). Still not your number; inbound will not ring this agent. Buy a number to go live."
                 : trialExhausted
-                  ? "Trial used up today"
+                  ? "Free trial calls are used up for today. Buy a number to keep testing and to receive inbound calls."
                   : quota?.limited
-                    ? `Shared trial · ${trialRemaining}/${trialLimit} left today`
-                    : "Shared trial line"}
+                    ? `Shared platform line for a quick listen — ${trialRemaining}/${trialLimit} outbound tests/day. Not your number; inbound will not ring this agent.`
+                    : "Shared platform trial line — inbound will not ring this agent."}
             </p>
           </div>
           {trialExhausted && (
-            <Button type="button" size="sm" variant="outline" className="h-8 shrink-0 text-xs" onClick={() => navigate("/app/phone-numbers")}>
-              Buy number
+            <Button type="button" size="sm" variant="outline" className="h-7 shrink-0 text-[10px]" onClick={() => navigate("/app/phone-numbers")}>
+              Buy
             </Button>
           )}
         </div>
       )}
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Attach your phone number</DialogTitle>
-            <DialogDescription>
-              Your purchased number handles inbound routing and outbound caller ID.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3 py-1">
-            {phoneNumbers.length === 0 ? (
-              <div className="space-y-2 rounded-lg border border-border px-3 py-4 text-center">
-                <p className="text-sm text-muted-foreground">You don’t have a purchased number yet.</p>
-                <Button size="sm" className="h-8 gap-1.5 text-xs" onClick={() => { setDialogOpen(false); navigate("/app/phone-numbers"); }}>
-                  <Plus className="h-3.5 w-3.5" /> Buy a number
-                </Button>
-              </div>
-            ) : (
-              <>
-                <Label className="text-sm">Phone number</Label>
-                <Select value={selectedId} onValueChange={setSelectedId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a number…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">— Unassigned —</SelectItem>
-                    {phoneNumbers.map(n => {
-                      const owner = n.agentId && n.agentId !== agentId
-                        ? agents?.find(a => a.id === n.agentId)?.name
-                        : null;
-                      return (
-                        <SelectItem key={n.id} value={String(n.id)}>
-                          {n.number}{owner ? ` · ${owner}` : n.agentId === agentId ? " · current" : ""}
-                        </SelectItem>
-                      );
-                    })}
-                  </SelectContent>
-                </Select>
-                <p className="text-[11px] leading-relaxed text-muted-foreground">
-                  Reassigning a number in use by another agent moves inbound and outbound to this agent.
-                </p>
-              </>
-            )}
-          </div>
-          {phoneNumbers.length > 0 && (
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-              <Button type="button" onClick={handleSave} disabled={assign.isPending}>
-                {assign.isPending ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
-                Save
-              </Button>
-            </DialogFooter>
-          )}
-        </DialogContent>
-      </Dialog>
+      {assignDialog}
     </div>
   );
 }
