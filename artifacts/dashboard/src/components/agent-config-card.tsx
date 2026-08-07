@@ -54,11 +54,11 @@ export function AgentConfigCard({
         <span className="text-muted-foreground/60 [&_svg]:h-3.5 [&_svg]:w-3.5">{icon}</span>
         {label}
       </div>
-      <div className="text-[15px] font-semibold text-foreground truncate leading-snug tracking-tight">
+      <div className="text-[15px] font-semibold text-foreground line-clamp-2 leading-snug tracking-tight">
         {value || "—"}
       </div>
       {subtext && (
-        <div className="text-[11px] text-muted-foreground/75 mt-1.5 truncate">{subtext}</div>
+        <div className="text-[11px] text-muted-foreground/75 mt-1.5 line-clamp-2">{subtext}</div>
       )}
     </button>
   );

@@ -754,112 +754,52 @@ function OverviewTab({
   }, [overviewPhones, agent?.id]);
   const phoneReady = Boolean(assignedPhone || form.watch("preferredManagedNumber"));
 
-  const readinessItems = [
-    {
-      id: "prompt",
-      label: "Call prompt",
-      ready: promptReady,
-      detail: promptReady ? `${systemPrompt.length.toLocaleString()} chars` : "Add instructions on Prompt",
-      action: onGoToPrompt,
-    },
-    {
-      id: "greeting",
-      label: "Welcome message",
-      ready: greetingReady,
-      detail: greetingReady ? "Set" : "Configure on Prompt",
-      action: onGoToPrompt,
-    },
-    {
-      id: "voice",
-      label: "Voice",
-      ready: voiceReady,
-      detail: isGeminiLive ? (geminiLiveVoiceName || "Kore") : (ttsVoiceLabel || "Select a voice"),
-      action: () => openPipelineDialog("voice"),
-    },
-    {
-      id: "phone",
-      label: "Phone number",
-      ready: phoneReady,
-      detail: phoneReady
-        ? (assignedPhone?.number ?? form.watch("preferredManagedNumber") ?? "Assigned")
-        : "Assign below",
-    },
-    {
-      id: "knowledge",
-      label: "Knowledge",
-      ready: knowledgeIds.length > 0,
-      detail: knowledgeIds.length > 0 ? `${knowledgeIds.length} source${knowledgeIds.length === 1 ? "" : "s"}` : "Optional",
-      optional: true,
-    },
-  ] as const;
-
-  const requiredReady = readinessItems.filter((i) => !("optional" in i && i.optional)).every((i) => i.ready);
+  const missingSetup = [
+    !promptReady ? "call prompt" : null,
+    !greetingReady ? "welcome message" : null,
+    !voiceReady ? "voice" : null,
+    !phoneReady ? "phone number" : null,
+  ].filter(Boolean) as string[];
 
   return (
     <div className="flex flex-col">
-      {/* ── Readiness dashboard ──────────────────────────────────────────────── */}
       <div className="relative min-w-0">
-        <div className="space-y-6 p-5 sm:p-6">
-          <section className="space-y-3">
-            <div className="flex flex-wrap items-end justify-between gap-3">
-              <div className="space-y-0.5">
-                <h2 className="text-[15px] font-semibold tracking-[-0.02em]">Readiness</h2>
-                <p className="text-[12px] text-muted-foreground">
-                  {requiredReady
-                    ? "Core setup looks ready — edit prompts anytime on the Prompt tab."
-                    : "Finish these items before going live."}
-                </p>
-                <AgentCostSummary form={form} rateMap={rateMap} variant="line" />
-              </div>
-              {onGoToPrompt && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-8 gap-1.5 text-xs"
-                  onClick={onGoToPrompt}
-                >
-                  <FileText className="size-3.5" />
-                  Edit prompt
-                </Button>
-              )}
-            </div>
-            <ul className="divide-y divide-border/70 overflow-hidden rounded-xl border border-border/60 bg-card/40">
-              {readinessItems.map((item) => (
-                <li key={item.id} className="flex items-center gap-3 px-3.5 py-2.5">
-                  <span
-                    className={cn(
-                      "flex size-6 shrink-0 items-center justify-center rounded-full",
-                      item.ready
-                        ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
-                        : "optional" in item && item.optional
-                          ? "bg-muted text-muted-foreground"
-                          : "bg-amber-500/15 text-amber-700 dark:text-amber-400",
-                    )}
-                  >
-                    {item.ready ? <Check className="size-3.5" /> : <AlertCircle className="size-3.5" />}
+        <div className="space-y-5 p-5 sm:p-6">
+          {/* Compact status — no duplicate checklist of Phone/Knowledge/Voice */}
+          <section className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+            <div className="min-w-0 space-y-0.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-[15px] font-semibold tracking-[-0.02em]">Overview</h2>
+                {missingSetup.length === 0 ? (
+                  <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
+                    <Check className="size-3" />
+                    Ready
                   </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[13px] font-medium text-foreground">{item.label}</p>
-                    <p className="truncate text-[11px] text-muted-foreground">{item.detail}</p>
-                  </div>
-                  {"action" in item && item.action && !item.ready && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 shrink-0 px-2 text-[11px]"
-                      onClick={item.action}
-                    >
-                      Fix
-                    </Button>
-                  )}
-                </li>
-              ))}
-            </ul>
+                ) : (
+                  <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-800 dark:text-amber-300">
+                    <AlertCircle className="size-3" />
+                    Needs {missingSetup.slice(0, 2).join(", ")}
+                    {missingSetup.length > 2 ? ` +${missingSetup.length - 2}` : ""}
+                  </span>
+                )}
+              </div>
+              <AgentCostSummary form={form} rateMap={rateMap} variant="line" />
+            </div>
+            {onGoToPrompt && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5 text-xs"
+                onClick={onGoToPrompt}
+              >
+                <FileText className="size-3.5" />
+                Edit prompt
+              </Button>
+            )}
           </section>
 
-          {/* Pipeline chips */}
+          {/* Pipeline — primary composition */}
           <section className="space-y-2.5">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/55">Pipeline</p>
             <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
@@ -890,22 +830,48 @@ function OverviewTab({
             </div>
           </section>
 
-          {agent?.id != null && (
-            <section className="space-y-2.5">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/55">Team</p>
-              <AgentTeamStrip agentId={agent.id} compact />
-            </section>
-          )}
+          {/* Phone + Knowledge side by side — one job each, no duplicate Knowledge banner */}
+          <section className="grid grid-cols-1 gap-3 lg:grid-cols-2 lg:items-start">
+            {agent?.id != null && (
+              <div className="space-y-2">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/55">Phone</p>
+                <AgentInboundPanel
+                  agentId={agent.id}
+                  preferredManagedNumber={form.watch("preferredManagedNumber")}
+                  telephonyProvider={form.watch("telephonyProvider")}
+                />
+              </div>
+            )}
+            <div className="space-y-2">
+              <div className="flex items-baseline justify-between gap-2">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/55">Knowledge</p>
+                <span className="text-[10px] text-muted-foreground/70">
+                  {knowledgeIds.length > 0
+                    ? `${knowledgeIds.length} source${knowledgeIds.length === 1 ? "" : "s"}`
+                    : "Optional"}
+                </span>
+              </div>
+              <div className="rounded-xl border border-border/60 bg-card/40 p-3 space-y-2">
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  Documents searched during live calls and injected into context.
+                </p>
+                <FormField control={form.control} name="knowledgeSourceIds" render={({ field }) => (
+                  <FormItem className="space-y-0">
+                    <FormControl>
+                      <KnowledgeSourceMultiSelect
+                        value={(field.value ?? []) as number[]}
+                        onChange={field.onChange}
+                      />
+                    </FormControl>
+                    <FormMessage className="text-[10px]" />
+                  </FormItem>
+                )} />
+              </div>
+            </div>
+          </section>
 
           {agent?.id != null && (
-            <section className="space-y-2.5">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/55">Phone</p>
-              <AgentInboundPanel
-                agentId={agent.id}
-                preferredManagedNumber={form.watch("preferredManagedNumber")}
-                telephonyProvider={form.watch("telephonyProvider")}
-              />
-            </section>
+            <AgentTeamStrip agentId={agent.id} compact />
           )}
 
           {/* ── Transcriber / Language dialog ── */}
@@ -1307,33 +1273,6 @@ function OverviewTab({
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
-
-          {/* Knowledge */}
-          <section className="space-y-3 pb-4">
-            <div className="space-y-0.5">
-              <h3 className="text-[15px] font-semibold tracking-tight text-foreground">Knowledge</h3>
-              <p className="text-[12px] text-muted-foreground">
-                Documents the agent can search during conversations.
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label className="text-[12px] font-medium text-foreground/90">Sources</Label>
-              <FormField control={form.control} name="knowledgeSourceIds" render={({ field }) => (
-                <FormItem className="space-y-0">
-                  <FormControl>
-                    <KnowledgeSourceMultiSelect
-                      value={(field.value ?? []) as number[]}
-                      onChange={field.onChange}
-                    />
-                  </FormControl>
-                  <FormDescription className="text-[11px] text-muted-foreground/70 mt-2 leading-relaxed">
-                    Attached sources are searched during live calls and relevant entries are injected into the agent's context.
-                  </FormDescription>
-                  <FormMessage className="text-[10px]" />
-                </FormItem>
-              )} />
-            </div>
-          </section>
 
         </div>
       </div>
@@ -7024,16 +6963,16 @@ function AgentTeamStrip({ agentId, compact }: { agentId: number; compact?: boole
 
   if (!membership) {
     return (
-      <div className={shell}>
-        <Users className="size-3.5 shrink-0 text-muted-foreground" />
+      <div className={cn(shell, compact && "border-dashed bg-transparent")}>
+        <Users className="size-3.5 shrink-0 text-muted-foreground/70" />
         <p className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">
-          Solo agent — not on a team yet.
+          Solo agent
         </p>
         <Button
           type="button"
           size="sm"
           variant="ghost"
-          className="h-7 shrink-0 gap-1 px-2 text-[11px]"
+          className="h-7 shrink-0 gap-1 px-2 text-[11px] text-muted-foreground"
           onClick={() => navigate(`/app/squads?seedAgent=${agentId}`)}
         >
           <Plus className="size-3" />

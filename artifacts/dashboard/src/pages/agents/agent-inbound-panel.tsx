@@ -293,11 +293,12 @@ export function AgentInboundPanel({
           <div className="space-y-2">
             <p className="text-[12px] font-medium text-foreground">Required to go live</p>
             <p className="text-[10px] text-muted-foreground leading-relaxed">
-              Buy your own number for inbound calls, your caller ID on outbound, and unlimited testing. The platform number below is only a short trial.
+              Buy a number for inbound, your outbound caller ID, and unlimited tests. The shared line below is trial-only.
             </p>
             <Button
               type="button"
               size="sm"
+              variant="outline"
               className="h-8 w-full text-xs gap-1.5"
               onClick={() => navigate("/app/phone-numbers")}
             >
