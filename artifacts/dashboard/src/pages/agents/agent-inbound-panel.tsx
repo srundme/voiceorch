@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
+import { usePartnerManagedWorkspace } from "@/hooks/use-partner";
 import { formatApiError } from "@/lib/format-api-error";
 import { cn } from "@/lib/utils";
 import { ChevronRight, Loader2, Phone, PhoneForwarded, Plus } from "lucide-react";
@@ -60,6 +61,7 @@ export function AgentInboundPanel({
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { isManagedWorkspace } = usePartnerManagedWorkspace();
   const { data: phoneNumbersRaw, isLoading } = useListPhoneNumbers({
     query: { queryKey: getListPhoneNumbersQueryKey(), staleTime: 60_000 },
   });
@@ -143,7 +145,9 @@ export function AgentInboundPanel({
         title: nextId ? "Your number is live on this agent" : "Number cleared",
         description: nextId
           ? "Inbound rings this agent. Outbound caller ID uses your number — unlimited calls."
-          : "Assign a purchased number to go live.",
+          : isManagedWorkspace
+            ? "Number removed from this agent. Reassign it from Phone Numbers, or ask your provider for another line."
+            : "Assign a purchased number to go live.",
       });
       setDialogOpen(false);
     } catch (err) {
@@ -162,16 +166,24 @@ export function AgentInboundPanel({
         <DialogHeader>
           <DialogTitle>Attach your phone number</DialogTitle>
           <DialogDescription>
-            Your purchased number handles inbound routing and outbound caller ID.
+            {isManagedWorkspace
+              ? "Numbers from your provider handle inbound routing and outbound caller ID."
+              : "Your purchased number handles inbound routing and outbound caller ID."}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3 py-1">
           {phoneNumbers.length === 0 ? (
             <div className="space-y-2 rounded-lg border border-border px-3 py-4 text-center">
-              <p className="text-sm text-muted-foreground">You don’t have a purchased number yet.</p>
-              <Button size="sm" className="h-8 gap-1.5 text-xs" onClick={() => { setDialogOpen(false); navigate("/app/phone-numbers"); }}>
-                <Plus className="h-3.5 w-3.5" /> Buy a number
-              </Button>
+              <p className="text-sm text-muted-foreground">
+                {isManagedWorkspace
+                  ? "No numbers on your agents yet. Ask your provider to assign a line."
+                  : "You don’t have a purchased number yet."}
+              </p>
+              {!isManagedWorkspace && (
+                <Button size="sm" className="h-8 gap-1.5 text-xs" onClick={() => { setDialogOpen(false); navigate("/app/phone-numbers"); }}>
+                  <Plus className="h-3.5 w-3.5" /> Buy a number
+                </Button>
+              )}
             </div>
           ) : (
             <>
@@ -220,9 +232,11 @@ export function AgentInboundPanel({
         ? byoNumber
         : assigned
           ? assigned.number
-          : ownedCount > 0
+            : ownedCount > 0
             ? "Assign number"
-            : "Add number";
+            : isManagedWorkspace
+              ? "No number"
+              : "Add number";
 
     return (
       <div className={cn("flex min-w-0 items-center", className)}>
@@ -234,7 +248,7 @@ export function AgentInboundPanel({
             else navigate("/app/phone-numbers");
           }}
           className="inline-flex h-8 max-w-full items-center gap-1.5 rounded-md border border-border/70 bg-muted/25 px-2.5 text-[11px] font-medium text-foreground transition-colors hover:bg-muted/40"
-          title={live ? "Phone number" : "Add a phone number to go live"}
+          title={live ? "Phone number" : isManagedWorkspace ? "Ask your provider for a number" : "Add a phone number to go live"}
         >
           <PhoneForwarded className="size-3.5 shrink-0 text-muted-foreground" />
           <span className="truncate tabular-nums">{label}</span>
@@ -260,7 +274,7 @@ export function AgentInboundPanel({
             onClick={() => navigate("/app/phone-numbers")}
             className="text-[10px] font-medium text-muted-foreground hover:text-foreground transition-colors"
           >
-            {ownedCount === 0 ? "Buy →" : "Numbers →"}
+            {isManagedWorkspace || ownedCount > 0 ? "Numbers →" : "Buy →"}
           </button>
         </div>
 
@@ -284,7 +298,7 @@ export function AgentInboundPanel({
             <div className="min-w-0">
               <p className="text-[12px] font-medium truncate tabular-nums text-foreground">{assigned.number}</p>
               <p className="text-[10px] text-muted-foreground/70 truncate mt-0.5">
-                Live — inbound + outbound caller ID · unlimited tests
+                Live — click to reassign or remove
               </p>
             </div>
             <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
@@ -293,17 +307,32 @@ export function AgentInboundPanel({
           <div className="space-y-2">
             <p className="text-[12px] font-medium text-foreground">Required to go live</p>
             <p className="text-[10px] text-muted-foreground leading-relaxed">
-              Buy a number for inbound, your outbound caller ID, and unlimited tests. The shared line below is trial-only.
+              {isManagedWorkspace
+                ? "Ask your provider for a phone number. Once it’s on an agent, you can reassign it here or on Phone Numbers."
+                : "Buy a number for inbound, your outbound caller ID, and unlimited tests. The shared line below is trial-only."}
             </p>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="h-8 w-full text-xs gap-1.5"
-              onClick={() => navigate("/app/phone-numbers")}
-            >
-              <Plus className="h-3.5 w-3.5" /> Buy a phone number
-            </Button>
+            {!isManagedWorkspace && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-8 w-full text-xs gap-1.5"
+                onClick={() => navigate("/app/phone-numbers")}
+              >
+                <Plus className="h-3.5 w-3.5" /> Buy a phone number
+              </Button>
+            )}
+            {isManagedWorkspace && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-8 w-full text-xs gap-1.5"
+                onClick={() => navigate("/app/phone-numbers")}
+              >
+                Open Phone Numbers
+              </Button>
+            )}
           </div>
         ) : (
           <button
@@ -312,9 +341,11 @@ export function AgentInboundPanel({
             className="flex w-full items-center justify-between gap-2 rounded-lg border border-border/50 bg-background/50 px-2.5 py-2 text-left transition-colors hover:border-border hover:bg-background/70"
           >
             <div className="min-w-0">
-              <p className="text-[12px] font-medium truncate text-foreground">Number purchased — assign it</p>
+              <p className="text-[12px] font-medium truncate text-foreground">
+                {isManagedWorkspace ? "Number available — assign it" : "Number purchased — assign it"}
+              </p>
               <p className="text-[10px] text-muted-foreground/70 truncate mt-0.5">
-                Click to attach your number for inbound + outbound
+                Click to attach for inbound + outbound
               </p>
             </div>
             <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
@@ -322,7 +353,7 @@ export function AgentInboundPanel({
         )}
       </div>
 
-      {!assigned && !byoNumber && (
+      {!assigned && !byoNumber && !isManagedWorkspace && (
         <div className="flex items-start gap-2 rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5">
           <Phone className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
           <div className="min-w-0 flex-1">

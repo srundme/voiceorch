@@ -568,8 +568,8 @@ router.get("/phone-numbers", requireAuth, clientContext, async (req, res): Promi
     ));
 
   // Managed clients also see partner-owned numbers that are assigned to one of
-  // THEIR agents (read-only, flagged partnerAssigned). Partner numbers not
-  // assigned to this client's agents stay invisible.
+  // THEIR agents (flagged partnerAssigned; they may reassign/unassign among
+  // their agents). Partner numbers not on this client's agents stay invisible.
   const managingPartner = await getManagingPartner(clerkId);
   let partnerRows: typeof rows = [];
   if (managingPartner) {
@@ -952,18 +952,67 @@ async function refundOrder(
 }
 
 // ── PATCH /phone-numbers/:id/assign ──────────────────────────────────────────
+// Number owners (and partners assigning to clients) use this freely.
+// Managed clients may reassign/unassign partner-owned numbers that are already
+// on one of their agents — they still cannot buy or release numbers.
 
-router.patch("/phone-numbers/:id/assign", requireAuth, clientContext, denyManagedClient, async (req, res): Promise<void> => {
+router.patch("/phone-numbers/:id/assign", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const params  = AssignPhoneNumberParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: "Validation failed", issues: params.error.issues }); return; }
   const body = AssignPhoneNumberBody.safeParse(req.body);
   if (!body.success) { res.status(400).json({ error: "Validation failed", issues: body.error.issues }); return; }
 
-  const [target] = await db
-    .select({ service: phoneNumbersTable.service, provider: phoneNumbersTable.provider })
+  const managingPartner = await getManagingPartner(clerkId);
+  const isManagedClient = !!(managingPartner && managingPartner.partnerUserId !== clerkId);
+
+  // Prefer numbers owned by the caller.
+  let [target] = await db
+    .select({
+      id: phoneNumbersTable.id,
+      service: phoneNumbersTable.service,
+      provider: phoneNumbersTable.provider,
+      userId: phoneNumbersTable.userId,
+      agentId: phoneNumbersTable.agentId,
+    })
     .from(phoneNumbersTable)
     .where(and(eq(phoneNumbersTable.id, params.data.id), eq(phoneNumbersTable.userId, clerkId)));
+
+  /** DB owner of the phone_numbers row (partner when client reassigns a provided DID). */
+  let numberOwnerId = clerkId;
+  /** Client may only move numbers already on their agents. */
+  let clientScopedReassign = false;
+
+  if (!target && isManagedClient && managingPartner) {
+    const clientAgentRows = await db
+      .select({ id: agentsTable.id })
+      .from(agentsTable)
+      .where(eq(agentsTable.userId, clerkId));
+    const clientAgentIds = clientAgentRows.map((a) => a.id);
+    if (clientAgentIds.length > 0) {
+      const [partnerNum] = await db
+        .select({
+          id: phoneNumbersTable.id,
+          service: phoneNumbersTable.service,
+          provider: phoneNumbersTable.provider,
+          userId: phoneNumbersTable.userId,
+          agentId: phoneNumbersTable.agentId,
+        })
+        .from(phoneNumbersTable)
+        .where(and(
+          eq(phoneNumbersTable.id, params.data.id),
+          eq(phoneNumbersTable.userId, managingPartner.partnerUserId),
+          eq(phoneNumbersTable.status, "active"),
+          inArray(phoneNumbersTable.agentId, clientAgentIds),
+        ));
+      if (partnerNum) {
+        target = partnerNum;
+        numberOwnerId = managingPartner.partnerUserId;
+        clientScopedReassign = true;
+      }
+    }
+  }
+
   if (!target) { res.status(404).json({ error: "Phone number not found" }); return; }
   if (target.service === "whatsapp") {
     res.status(400).json({ error: "This is a WhatsApp number — it can't take voice agents. Manage it on the WhatsApp page." });
@@ -973,15 +1022,19 @@ router.patch("/phone-numbers/:id/assign", requireAuth, clientContext, denyManage
   // Validate the target agent. Normally it must be the caller's own agent, but
   // an ACTIVE partner may also point their number at an agent owned by one of
   // their client accounts (partner buys numbers, provisions them to clients).
-  // Inbound calls on such a number bill the AGENT's owner (the client) at
-  // their partner rate — the number owner only pays the monthly renewal.
+  // Managed clients reassigning a partner DID may only target their own agents.
   if (body.data.agentId) {
     const [agent] = await db
       .select({ id: agentsTable.id, userId: agentsTable.userId })
       .from(agentsTable)
       .where(eq(agentsTable.id, body.data.agentId));
     if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
-    if (agent.userId !== clerkId) {
+    if (clientScopedReassign) {
+      if (agent.userId !== clerkId) {
+        res.status(403).json({ error: "You can only assign this number to your own agents" });
+        return;
+      }
+    } else if (agent.userId !== clerkId) {
       const [clientLink] = await db
         .select({ id: usersTable.id })
         .from(usersTable)
@@ -996,11 +1049,9 @@ router.patch("/phone-numbers/:id/assign", requireAuth, clientContext, denyManage
         return;
       }
     }
-  } else {
-    // Unassigning: revocation clears refs on whichever agents still hold this
-    // number. If any of them belong to ANOTHER account, the caller must be
-    // that account's ACTIVE managing partner — a suspended/removed partner
-    // must not be able to strip a client agent's number (fail closed).
+  } else if (!clientScopedReassign) {
+    // Unassigning as owner/partner: if holders belong to another account, caller
+    // must be that account's ACTIVE managing partner.
     const holders = await db
       .select({ userId: agentsTable.userId })
       .from(agentsTable)
@@ -1031,7 +1082,7 @@ router.patch("/phone-numbers/:id/assign", requireAuth, clientContext, denyManage
   const [row] = await db
     .update(phoneNumbersTable)
     .set({ agentId: body.data.agentId ?? null })
-    .where(and(eq(phoneNumbersTable.id, params.data.id), eq(phoneNumbersTable.userId, clerkId)))
+    .where(and(eq(phoneNumbersTable.id, params.data.id), eq(phoneNumbersTable.userId, numberOwnerId)))
     .returning();
 
   if (!row) { res.status(404).json({ error: "Phone number not found" }); return; }

@@ -944,11 +944,11 @@ function CampaignWizard({
               )}
               {agentId && !agentFromNumber && (
                 <p className="text-[11px] text-amber-600 leading-relaxed">
-                  This agent has no phone number assigned. Assign one on the agent before dialing, or{" "}
+                  This agent has no phone number assigned. Assign one on{" "}
                   <a href={`${BASE}/app/phone-numbers`} className="underline underline-offset-2" target="_blank" rel="noreferrer">
-                    manage numbers
+                    Phone numbers
                   </a>
-                  .
+                  {" "}(or ask your provider if numbers are partner-managed).
                 </p>
               )}
             </div>

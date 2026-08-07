@@ -714,6 +714,8 @@ function NewAgentModal({ open, onClose }: { open: boolean; onClose: () => void }
 
 /* ─── Voice-a-thon Top Notification Banner ───────────────────────────────── */
 function VoiceathonTopBanner() {
+  const { data: partnerCtx } = usePartnerContext();
+  const actingAs = loadActingAs();
   const [dismissed, setDismissed] = useState(() => {
     try {
       return localStorage.getItem("voiceathon_banner_dismissed") === "true";
@@ -723,6 +725,8 @@ function VoiceathonTopBanner() {
   });
 
   useEffect(() => {
+    // Hide SnapServe promo on white-label / partner-client / acting-as workspaces.
+    if (partnerCtx?.branding || partnerCtx?.isManagedClient || actingAs) return;
     const scriptId = "luma-checkout";
     if (!document.getElementById(scriptId)) {
       const script = document.createElement("script");
@@ -731,9 +735,10 @@ function VoiceathonTopBanner() {
       script.async = true;
       document.body.appendChild(script);
     }
-  }, []);
+  }, [partnerCtx?.branding, partnerCtx?.isManagedClient, actingAs?.clientId]);
 
-  if (dismissed) return null;
+  // Hide SnapServe promo on white-label / partner-client / acting-as workspaces.
+  if (partnerCtx?.branding || partnerCtx?.isManagedClient || actingAs || dismissed) return null;
 
   const handleDismiss = () => {
     setDismissed(true);
@@ -931,9 +936,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <div className="flex items-center gap-2 px-4 py-2 bg-amber-500/10 border-b border-amber-500/30">
             <Handshake className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
             <p className="text-[12.5px] text-foreground truncate">
-              Client control panel — editing{" "}
+              Viewing{" "}
               <span className="font-semibold">{actingAs.clientName}</span>
-              {" "}(agents, campaigns, numbers, billing). Changes apply to their account.
+              {" "}— edit agents & campaigns here. Fund wallet and assign new numbers from Partner Hub.
             </p>
             <button
               type="button"

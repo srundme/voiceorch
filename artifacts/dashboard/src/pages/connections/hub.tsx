@@ -1,19 +1,19 @@
 /**
  * Connections — wires used by agents and outreach.
- * Only: Google Sheets · WhatsApp · Brevo email · Website form · Meta Lead Ads.
- * Phone numbers live on the Agent Builder.
+ * Phone numbers · Google Sheets · WhatsApp · Brevo email · Website form · Meta Lead Ads · Meetings.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useSearch } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { customFetch, useListConnections } from "@workspace/api-client-react";
+import { customFetch, useListConnections, useListPhoneNumbers, getListPhoneNumbersQueryKey } from "@workspace/api-client-react";
 import { StripePage } from "@/components/stripe-page";
 import { BrandLogo, BrandLogoBadge, type BrandSlug } from "@/components/brand-logos";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { usePartnerManagedWorkspace } from "@/hooks/use-partner";
 import { cn } from "@/lib/utils";
-import { ArrowRight, Check, Globe, Loader2, Calendar, Video } from "lucide-react";
+import { ArrowRight, Check, Globe, Loader2, Calendar, Phone, Video } from "lucide-react";
 import { EmailChannelCard, useEmailChannelReady } from "@/pages/agents/email-channel-card";
 import FromWebsitePage from "@/pages/campaigns/from-website";
 import MetaLeadsPage from "@/pages/meta-leads";
@@ -28,7 +28,7 @@ type ConnCard = {
   /** Inline setup panel under Connections (?setup=…) */
   setupId?: Exclude<SetupId, null>;
   brand?: BrandSlug;
-  icon?: "globe" | "calendar" | "video";
+  icon?: "globe" | "calendar" | "video" | "phone";
   title: string;
   blurb: string;
   /** Navigate away (e.g. Meeting bots paste-link page) */
@@ -36,7 +36,7 @@ type ConnCard = {
   cta?: string;
 };
 
-const CARDS: ConnCard[] = [
+const BASE_CARDS: ConnCard[] = [
   {
     id: "sheets",
     setupId: "sheets",
@@ -101,6 +101,8 @@ function CardMark({ card }: { card: ConnCard }) {
         <Calendar className="size-5 text-neutral-800" strokeWidth={1.75} />
       ) : card.icon === "video" ? (
         <Video className="size-5 text-neutral-800" strokeWidth={1.75} />
+      ) : card.icon === "phone" ? (
+        <Phone className="size-5 text-neutral-800" strokeWidth={1.75} />
       ) : (
         <Globe className="size-5 text-neutral-800" strokeWidth={1.75} />
       )}
@@ -134,6 +136,24 @@ export default function ConnectionsPage() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const emailReady = useEmailChannelReady();
+  const { isManagedWorkspace } = usePartnerManagedWorkspace();
+  const { data: phoneNumbersRaw } = useListPhoneNumbers({
+    query: { queryKey: getListPhoneNumbersQueryKey(), staleTime: 60_000 },
+  });
+  const phoneCount = Array.isArray(phoneNumbersRaw) ? phoneNumbersRaw.length : 0;
+  const cards = useMemo<ConnCard[]>(() => {
+    const phone: ConnCard = {
+      id: "phone-numbers",
+      icon: "phone",
+      title: "Phone numbers",
+      blurb: isManagedWorkspace
+        ? "Assign provider numbers to agents, or move a line between agents."
+        : "Buy numbers and assign them for inbound + outbound caller ID.",
+      href: "/app/phone-numbers",
+      cta: isManagedWorkspace ? "Assign" : phoneCount > 0 ? "Manage" : "Get a number",
+    };
+    return [phone, ...BASE_CARDS];
+  }, [isManagedWorkspace, phoneCount]);
 
   useEffect(() => {
     if (isSetupId(setupParam)) setSetup(setupParam);
@@ -361,17 +381,23 @@ export default function ConnectionsPage() {
   return (
     <StripePage
       title="Connections"
-      description="Wire Sheets, calendar, meetings, WhatsApp, email, and lead forms for your agents."
+      description="Phone numbers, Sheets, calendar, meetings, WhatsApp, email, and lead forms."
       back={{ href: "/app/home", label: "Home" }}
     >
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {CARDS.map((card) => {
-          const ready = card.setupId ? readyMap[card.setupId] : true;
-          const chipLabel = card.href
-            ? "Open"
-            : ready
-              ? "Ready"
-              : "Set up";
+        {cards.map((card) => {
+          const ready = card.id === "phone-numbers"
+            ? phoneCount > 0
+            : card.setupId
+              ? readyMap[card.setupId]
+              : true;
+          const chipLabel = card.id === "phone-numbers"
+            ? (phoneCount > 0 ? `${phoneCount} ready` : "Set up")
+            : card.href
+              ? "Open"
+              : ready
+                ? "Ready"
+                : "Set up";
           return (
             <button
               key={card.id}
@@ -404,14 +430,6 @@ export default function ConnectionsPage() {
           );
         })}
       </div>
-
-      <p className="mt-8 text-[12px] text-muted-foreground">
-        Phone numbers live on each agent — open{" "}
-        <Link href="/app/agents" className="underline underline-offset-2 hover:text-foreground">
-          Agents
-        </Link>{" "}
-        → Overview to assign a number. For meetings-only, use a dedicated agent (no phone) and paste the link under Meetings.
-      </p>
     </StripePage>
   );
 }

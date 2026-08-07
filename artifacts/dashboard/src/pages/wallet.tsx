@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { useGetWallet, useCreateTopup, useVerifyPayment, useListTransactions, useUpdateAutopay, getGetWalletQueryKey, getListTransactionsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import { usePartnerContext } from "@/hooks/use-partner";
+import { usePartnerManagedWorkspace } from "@/hooks/use-partner";
 
 declare global {
   interface Window {
@@ -74,10 +74,8 @@ function txTypeLabel(type: string): { label: string; color: string; icon: React.
 export default function WalletPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { data: partnerCtx } = usePartnerContext();
-  const isPartner = partnerCtx?.isPartner === true;
-  const isManagedClient = partnerCtx?.isManagedClient === true;
-  const partnerName = partnerCtx?.branding?.companyName ?? "your partner";
+  const { partnerCtx, isManagedWorkspace, partnerName } = usePartnerManagedWorkspace();
+  const isPartner = partnerCtx?.isPartner === true && !isManagedWorkspace;
   const [topupAmount, setTopupAmount]     = useState(1000);
   const [customAmount, setCustomAmount]   = useState("");
   const [loading, setLoading]             = useState(false);
@@ -310,7 +308,7 @@ export default function WalletPage() {
       {/* Toolbar — parent StripeTabPage owns the Billing title */}
       <div className="border-b border-border px-4 sm:px-6 py-3 flex items-center gap-2 sm:gap-3 shrink-0">
         <span className="text-xs text-muted-foreground">
-          {isManagedClient
+          {isManagedWorkspace
             ? `₹${rateInr} / minute · set by ${partnerName}`
             : `₹${rateInr} / minute · INR · GST on top-ups`}
         </span>
@@ -343,7 +341,7 @@ export default function WalletPage() {
               {balanceLow && (
                 <div className="flex items-center gap-1.5 text-foreground text-xs bg-zinc-400/10 border border-zinc-400/20 rounded-lg px-3 py-1.5">
                   <AlertCircle className="w-3.5 h-3.5" />
-                  {isManagedClient
+                  {isManagedWorkspace
                     ? `Low balance — ask ${partnerName} to add funds`
                     : "Low balance — top up to continue making calls"}
                 </div>
@@ -351,7 +349,7 @@ export default function WalletPage() {
             </div>
           </div>
 
-          {isManagedClient ? (
+          {isManagedWorkspace ? (
           <div className="rounded-xl border border-border bg-card p-5 space-y-3">
             <div className="flex items-center gap-2">
               <Wallet className="w-4 h-4 text-muted-foreground" />

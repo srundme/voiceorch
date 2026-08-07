@@ -24,6 +24,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useTheme } from "@/components/theme-provider";
 import { formatApiError } from "@/lib/format-api-error";
 import { useAuth } from "@/lib/auth";
+import { usePartnerManagedWorkspace } from "@/hooks/use-partner";
 
 const TIMEOUT_STORAGE_KEY = "voiceorch:requestTimeoutMs";
 
@@ -305,6 +306,7 @@ function ChangePasswordCard() {
 function AccountBillingCard() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { isManagedWorkspace, partnerName } = usePartnerManagedWorkspace();
   const { data: account, isLoading: accountLoading } = useGetAccount({ query: { queryKey: getGetAccountQueryKey() } });
   const addSlot = useAddConcurrentSlot();
 
@@ -342,21 +344,27 @@ function AccountBillingCard() {
                 <Users className="h-5 w-5 text-primary mt-0.5 shrink-0" />
                 <div>
                   <p className="text-sm font-medium">Concurrent Call Slots</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Max simultaneous active calls. Add more at ₹1,000 / slot (deducted from wallet).</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {isManagedWorkspace
+                      ? `Max simultaneous active calls. Ask ${partnerName} to increase capacity.`
+                      : "Max simultaneous active calls. Add more at ₹1,000 / slot (deducted from wallet)."}
+                  </p>
                 </div>
               </div>
               <div className="flex items-center gap-3 shrink-0">
                 <span className="text-2xl font-bold tabular-nums">{account?.concurrentLimit ?? "—"}</span>
-                <Button
-                  size="sm" className="h-8 text-xs gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90"
-                  disabled={addSlot.isPending}
-                  onClick={() => addSlot.mutate(undefined, {
-                    onSuccess: () => { queryClient.invalidateQueries({ queryKey: getGetAccountQueryKey() }); toast({ title: "Concurrent slot added", description: "Your limit has been increased by 1." }); },
-                    onError: (err: unknown) => toast({ title: "Error", variant: "destructive", description: formatApiError(err) }),
-                  })}
-                >
-                  <Plus className="h-3.5 w-3.5" /> Add Slot (₹1,000)
-                </Button>
+                {!isManagedWorkspace && (
+                  <Button
+                    size="sm" className="h-8 text-xs gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90"
+                    disabled={addSlot.isPending}
+                    onClick={() => addSlot.mutate(undefined, {
+                      onSuccess: () => { queryClient.invalidateQueries({ queryKey: getGetAccountQueryKey() }); toast({ title: "Concurrent slot added", description: "Your limit has been increased by 1." }); },
+                      onError: (err: unknown) => toast({ title: "Error", variant: "destructive", description: formatApiError(err) }),
+                    })}
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Add Slot (₹1,000)
+                  </Button>
+                )}
               </div>
             </div>
 

@@ -28,6 +28,7 @@ import { Button } from "@/components/ui/button";
 import { StripePage } from "@/components/stripe-page";
 import { StatusDot } from "@/components/workspace/workspace";
 import { useMinuteRatesMap, useUserProviderNames } from "@/hooks/use-minute-rates";
+import { usePartnerManagedWorkspace } from "@/hooks/use-partner";
 import { cn } from "@/lib/utils";
 
 type AutoPipeline = {
@@ -68,6 +69,7 @@ function statusTone(status: string): "neutral" | "success" | "warning" | "danger
 
 export default function HomePage() {
   const [, navigate] = useLocation();
+  const { isManagedWorkspace, partnerName } = usePartnerManagedWorkspace();
   const statsQ = useGetDashboardStats({
     query: { queryKey: getGetDashboardStatsQueryKey(), refetchInterval: 30_000, staleTime: 20_000 },
   });
@@ -130,7 +132,11 @@ export default function HomePage() {
   if (lowBalance) {
     issues.push({
       title: "Low wallet balance",
-      detail: availableMinutes == null ? "Top up to keep dialing" : `About ${availableMinutes} minutes remain`,
+      detail: isManagedWorkspace
+        ? (availableMinutes == null
+          ? `Ask ${partnerName} to add funds`
+          : `About ${availableMinutes} minutes remain — ask ${partnerName} to add funds`)
+        : (availableMinutes == null ? "Top up to keep dialing" : `About ${availableMinutes} minutes remain`),
       href: "/app/wallet",
       tone: "danger",
     });
@@ -216,16 +222,10 @@ export default function HomePage() {
       title="Home"
       description={`${statsQ.data?.callsToday ?? "—"} calls today${statsQ.data?.successRate != null ? ` · ${statsQ.data.successRate}% success` : ""}${balanceCents != null ? ` · ₹${(balanceCents / 100).toFixed(0)} balance` : ""}`}
       actions={
-        <div className="flex flex-wrap items-center gap-2">
-          <Button size="sm" variant="outline" className="h-8 gap-1.5 px-3 text-xs" onClick={() => navigate("/app/campaigns")}>
-            <Plus className="size-3.5" />
-            New campaign
-          </Button>
-          <Button size="sm" className="h-8 gap-1.5 px-3 text-xs" onClick={() => navigate("/app/agents?create=1")}>
-            <Plus className="size-3.5" />
-            New agent
-          </Button>
-        </div>
+        <Button size="sm" className="h-8 gap-1.5 px-3 text-xs" onClick={() => navigate("/app/campaigns")}>
+          <Plus className="size-3.5" />
+          New campaign
+        </Button>
       }
       contentClassName="!pt-4"
     >

@@ -4,7 +4,7 @@ import { promisify } from "util";
 import { eq } from "drizzle-orm";
 import { db, usersTable, walletTransactionsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
-import { clientContext } from "../middlewares/clientContext.js";
+import { clientContext, denyManagedClient } from "../middlewares/clientContext.js";
 import { logActivity } from "../lib/activity.js";
 import { issueInvoice } from "../services/invoice.js";
 import { GetPreferencesResponse, UpdatePreferencesBody } from "@workspace/api-zod";
@@ -62,7 +62,7 @@ router.post("/account/regenerate-api-key", requireAuth, clientContext, async (re
   res.json(toAccountInfo(user));
 });
 
-router.post("/account/add-concurrent", requireAuth, clientContext, async (req, res): Promise<void> => {
+router.post("/account/add-concurrent", requireAuth, clientContext, denyManagedClient, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, clerkId));
   if (!user) { res.status(404).json({ error: "User not found" }); return; }

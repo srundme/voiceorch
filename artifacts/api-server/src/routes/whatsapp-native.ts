@@ -22,6 +22,7 @@ import {
   type WhatsappChannel,
 } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
+import { clientContext, denyManagedClient } from "../middlewares/clientContext.js";
 import { logger } from "../lib/logger.js";
 import { getSelfBaseUrl } from "../lib/app-domain.js";
 import { logActivity } from "../lib/activity.js";
@@ -494,7 +495,7 @@ router.get("/whatsapp/numbers/available", requireAuth, async (req, res): Promise
 });
 
 /** Razorpay order for a WhatsApp number — nothing is provisioned until confirm. */
-router.post("/whatsapp/numbers/purchase/initiate", requireAuth, async (req, res): Promise<void> => {
+router.post("/whatsapp/numbers/purchase/initiate", requireAuth, clientContext, denyManagedClient, async (req, res): Promise<void> => {
   const userId = (req as any).clerkUserId as string;
   const body = req.body as { number?: string; countryCode?: string; region?: string };
   const rawNumber = String(body.number ?? "").trim();
@@ -622,7 +623,7 @@ router.post("/whatsapp/numbers/purchase/initiate", requireAuth, async (req, res)
  * channel create fails (usually a bad Meta token), the number is kept — the UI
  * retries via POST /whatsapp/channel/own with numberSource: 'purchased'.
  */
-router.post("/whatsapp/numbers/purchase/confirm", requireAuth, async (req, res): Promise<void> => {
+router.post("/whatsapp/numbers/purchase/confirm", requireAuth, clientContext, denyManagedClient, async (req, res): Promise<void> => {
   const userId = (req as any).clerkUserId as string;
   const body = req.body as {
     purchaseOrderId?: number;

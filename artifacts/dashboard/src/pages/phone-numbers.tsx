@@ -43,7 +43,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { usePartnerContext, partnerFetch } from "@/hooks/use-partner";
+import { usePartnerContext, usePartnerManagedWorkspace, partnerFetch } from "@/hooks/use-partner";
 import { useAuth } from "@/lib/auth";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -292,9 +292,11 @@ function AssignDialog({
     <Dialog open onOpenChange={onClose}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Assign Number</DialogTitle>
+          <DialogTitle>{number.agentId ? "Reassign number" : "Assign number"}</DialogTitle>
           <DialogDescription>
-            Route inbound calls on <span className="font-mono text-foreground">{number.number}</span> to an agent.
+            {(number as { partnerAssigned?: boolean }).partnerAssigned
+              ? <>Move <span className="font-mono text-foreground">{number.number}</span> between your agents, or remove it to return the line to your provider.</>
+              : <>Pick which agent gets inbound + caller ID for <span className="font-mono text-foreground">{number.number}</span>. Leave unassigned to free it for another agent.</>}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3 py-2">
@@ -304,7 +306,11 @@ function AssignDialog({
               <SelectValue placeholder="Select agent…" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="none">— Unassigned —</SelectItem>
+              <SelectItem value="none">
+                {(number as { partnerAssigned?: boolean }).partnerAssigned
+                  ? "— Remove from agent —"
+                  : "— Unassigned (keep in account) —"}
+              </SelectItem>
               {clientGroups.length > 0 ? (
                 <SelectGroup>
                   <SelectLabel>Your agents</SelectLabel>
@@ -919,15 +925,21 @@ function RoutingRulesDialog({ number, onClose }: { number: PhoneNumber; onClose:
 }
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
+// Used by both normal user accounts and partner-client accounts.
+// Clients: assign / reassign / remove only. Owners: buy + assign + release + KYC.
 
-export default function PhoneNumbersPage() {
+export default function PhoneNumbersPage({
+  autoOpenBuy = false,
+  onBuyClosed,
+}: {
+  /** When true (Buy tab), open the purchase dialog once KYC allows it. */
+  autoOpenBuy?: boolean;
+  onBuyClosed?: () => void;
+} = {}) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
-  // Managed clients see a read-only view: numbers are provisioned/assigned by
-  // their partner (server-side enforced; this hides the dead controls).
-  const { data: partnerCtx } = usePartnerContext();
-  const isManagedClient = partnerCtx?.isManagedClient === true;
+  const { isManagedWorkspace } = usePartnerManagedWorkspace();
   const { data: numbers, isLoading } = useListPhoneNumbers({ query: { queryKey: getListPhoneNumbersQueryKey() } });
   // BYO telephony (Plivo/Twilio/VoBiz own account): surface the imported
   // "fromNumber" from each telephony provider key so users can see it here.
@@ -982,12 +994,26 @@ export default function PhoneNumbersPage() {
   }, []);
 
   function handleGetNumber() {
+    if (isManagedWorkspace) return;
     if (!kycLoading && !kycCompleted) {
       setKycGateOpen(true);
     } else {
       setBuyOpen(true);
     }
   }
+
+  // Buy tab (normal users): open purchase form once; partner clients never buy here.
+  const buyTabOpened = React.useRef(false);
+  useEffect(() => {
+    if (!autoOpenBuy) {
+      buyTabOpened.current = false;
+      return;
+    }
+    if (isManagedWorkspace || kycLoading || buyTabOpened.current) return;
+    buyTabOpened.current = true;
+    handleGetNumber();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- open once per Buy-tab visit
+  }, [autoOpenBuy, isManagedWorkspace, kycLoading, kycCompleted]);
 
   function handleStartKycFromGate() {
     startKyc.mutate(undefined, {
@@ -1027,42 +1053,9 @@ export default function PhoneNumbersPage() {
 
   return (
     <div className="h-full overflow-y-auto bg-transparent">
-      {/* Toolbar — parent StripePage owns the "Phone Numbers" title */}
-      {!isManagedClient && numbers && numbers.length > 0 && (
-        <div className="border-b border-border px-4 sm:px-6 py-3 flex flex-wrap items-center gap-3 shrink-0">
-          <span className="text-xs text-muted-foreground">Powered by VoBiz</span>
-          <Button
-            size="sm"
-            className="h-10 min-h-10 gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90 w-full sm:w-auto sm:ml-auto"
-            onClick={handleGetNumber}
-          >
-            <Plus className="h-3.5 w-3.5" /> Get Number
-          </Button>
-        </div>
-      )}
-
       <div className="p-4 sm:p-6 max-w-4xl mx-auto space-y-4">
-        {/* KYC banner (purchasing is a partner concern for managed clients) */}
-        {!isManagedClient && <KycBanner />}
-
-        {/* Info banner */}
-        {isManagedClient ? (
-          <div className="flex items-start gap-3 p-4 rounded-xl border border-border bg-card">
-            <Globe className="h-5 w-5 text-foreground mt-0.5 shrink-0" />
-            <div className="text-sm text-muted-foreground space-y-0.5">
-              <p className="text-foreground font-medium">Numbers managed by your provider</p>
-              <p>Phone numbers are provisioned and assigned to your agents by your service provider. Inbound calls route straight to the assigned agent — contact your provider to add or change numbers.</p>
-            </div>
-          </div>
-        ) : (
-          <div className="flex items-start gap-3 p-4 rounded-xl border border-border bg-card">
-            <Globe className="h-5 w-5 text-foreground mt-0.5 shrink-0" />
-            <div className="text-sm text-muted-foreground space-y-0.5">
-              <p className="text-foreground font-medium">Self-serve number provisioning</p>
-              <p>Search live inventory across 130+ countries via VoBiz. Purchase a number and it's immediately active — assign it to any agent and inbound calls route straight to its pipeline. <span className="text-muted-foreground">Releasing returns the number to inventory.</span></p>
-            </div>
-          </div>
-        )}
+        {/* KYC only for accounts that can buy (not partner clients) */}
+        {!isManagedWorkspace && <KycBanner />}
 
         {/* Imported BYO telephony numbers (from Provider keys) */}
         {importedNumbers.length > 0 && (
@@ -1097,8 +1090,10 @@ export default function PhoneNumbersPage() {
           <div className="flex flex-col items-center justify-center py-24 text-muted-foreground">
             <Phone className="w-12 h-12 mb-4 opacity-30" />
             <p className="text-sm mb-3">No phone numbers yet.</p>
-            {isManagedClient ? (
-              <p className="text-xs text-muted-foreground/70">Your provider will assign numbers to your agents — they'll show up here.</p>
+            {isManagedWorkspace ? (
+              <p className="text-xs text-muted-foreground/70 max-w-sm text-center">
+                No numbers on your agents yet. Ask your provider to assign a line — then you can reassign it here.
+              </p>
             ) : (
               <Button size="sm" className="gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90" onClick={handleGetNumber}>
                 <Plus className="h-3.5 w-3.5" /> Get Your First Number
@@ -1151,42 +1146,48 @@ export default function PhoneNumbersPage() {
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto sm:ml-auto">
-                  {(n as { partnerAssigned?: boolean }).partnerAssigned && (
-                    <Badge variant="secondary" className="text-[10px] shrink-0">Assigned by partner</Badge>
-                  )}
-                  {!isManagedClient && !(n as { partnerAssigned?: boolean }).partnerAssigned && (<>
-                  {n.agentId && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-foreground"
-                      onClick={() => setRoutingTarget(n)}
-                    >
-                      <GitFork className="h-3 w-3" /> Rules
-                    </Button>
-                  )}
-                  {(n as { provider?: string }).provider !== "plivo" && <FixInboundButton number={n} />}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-foreground"
-                    onClick={() => setAssignTarget(n)}
-                  >
-                    <Link2 className="h-3 w-3" /> {n.agentId ? "Reassign" : "Assign"}
-                  </Button>
-                  {/* BYO Plivo numbers can't be "released" — they disappear when
-                      the Plivo key is removed in Settings. */}
-                  {(n as { provider?: string }).provider !== "plivo" && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-foreground"
-                    onClick={() => setReleaseTarget(n)}
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </Button>
-                  )}
-                  </>)}
+                  {(() => {
+                    const partnerAssigned = !!(n as { partnerAssigned?: boolean }).partnerAssigned;
+                    const ownerExtras = !isManagedWorkspace && !partnerAssigned;
+                    return (
+                      <>
+                        {partnerAssigned && (
+                          <Badge variant="secondary" className="text-[10px] shrink-0">From provider</Badge>
+                        )}
+                        {ownerExtras && n.agentId && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-foreground"
+                            onClick={() => setRoutingTarget(n)}
+                          >
+                            <GitFork className="h-3 w-3" /> Rules
+                          </Button>
+                        )}
+                        {ownerExtras && (n as { provider?: string }).provider !== "plivo" && (
+                          <FixInboundButton number={n} />
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-foreground"
+                          onClick={() => setAssignTarget(n)}
+                        >
+                          <Link2 className="h-3 w-3" /> {n.agentId ? "Reassign" : "Assign"}
+                        </Button>
+                        {ownerExtras && (n as { provider?: string }).provider !== "plivo" && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-foreground"
+                            onClick={() => setReleaseTarget(n)}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
             ))}
@@ -1222,12 +1223,22 @@ export default function PhoneNumbersPage() {
       {/* Dialogs */}
       {kycGateOpen && (
         <KycGateDialog
-          onClose={() => setKycGateOpen(false)}
+          onClose={() => {
+            setKycGateOpen(false);
+            if (autoOpenBuy) onBuyClosed?.();
+          }}
           onStartKyc={handleStartKycFromGate}
           isPending={startKyc.isPending}
         />
       )}
-      {buyOpen && <BuyNumberDialog onClose={() => setBuyOpen(false)} />}
+      {buyOpen && (
+        <BuyNumberDialog
+          onClose={() => {
+            setBuyOpen(false);
+            onBuyClosed?.();
+          }}
+        />
+      )}
       {assignTarget && <AssignDialog number={assignTarget} onClose={() => setAssignTarget(null)} />}
       {routingTarget && <RoutingRulesDialog number={routingTarget} onClose={() => setRoutingTarget(null)} />}
     </div>

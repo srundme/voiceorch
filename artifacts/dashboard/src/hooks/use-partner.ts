@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
+import { loadActingAs } from "@/lib/acting-as";
 
 /** Cheap flags for the dashboard shell: partner nav gating + client branding. */
 export interface PartnerContext {
@@ -8,6 +9,9 @@ export interface PartnerContext {
   /**
    * True when this account is linked to an ACTIVE partner. Clients get a full
    * workspace; partner owns ₹/min rate, wallet funding, and phone numbers.
+   *
+   * Note: `/partner/context` always reflects the signed-in auth user — not the
+   * acting-as client. Use `usePartnerManagedWorkspace` for billing/number gates.
    */
   isManagedClient?: boolean;
   /** Always true for managed clients (full agent edit). Kept for API compat. */
@@ -48,4 +52,26 @@ export function usePartnerContext() {
     retry: 1,
     queryFn: () => partnerFetch<PartnerContext>(getToken, "/api/partner/context"),
   });
+}
+
+/**
+ * Workspace mode for buy / top-up / KYC / release gates.
+ * True for managed clients AND when a partner is acting-as a client (partner
+ * context still says isPartner — acting-as must hide owner CTAs in the client UI).
+ */
+export function usePartnerManagedWorkspace() {
+  const { data: partnerCtx, ...rest } = usePartnerContext();
+  const actingAs = loadActingAs();
+  const isManagedWorkspace =
+    partnerCtx?.isManagedClient === true || !!actingAs;
+  return {
+    ...rest,
+    partnerCtx,
+    isManagedWorkspace,
+    /** Provider label for client-facing copy. Acting-as partners fund via Partner Hub. */
+    partnerName:
+      partnerCtx?.branding?.companyName
+      ?? (actingAs ? "Partner Hub" : "your partner"),
+    actingAs,
+  };
 }
