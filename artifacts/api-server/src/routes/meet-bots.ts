@@ -117,6 +117,8 @@ router.post("/meet-bots", requireAuth, async (req, res) => {
   const userId = (req as unknown as { clerkUserId: string }).clerkUserId;
   const agentId = Number(req.body?.agentId);
   const meetingUrl = typeof req.body?.meetingUrl === "string" ? req.body.meetingUrl.trim() : "";
+  // Meet paste-link UI: honor the selected agent; skip booking "delegate" swap.
+  const joinAsSelected = req.body?.joinAsSelected === true;
 
   if (!Number.isInteger(agentId) || agentId <= 0) {
     res.status(400).json({ error: "agentId is required" });
@@ -146,9 +148,9 @@ router.post("/meet-bots", requireAuth, async (req, res) => {
       return;
     }
 
-    // Meeting settings: whoJoins=delegate swaps the runtime agent that enters the room.
+    // Booking flows may use whoJoins=delegate; paste-link Meet page passes joinAsSelected.
     const meetings = parseMeetingsConfig(agent.agentConfig);
-    let runtimeAgentId = resolveMeetRuntimeAgentId(agentId, agent.agentConfig);
+    let runtimeAgentId = joinAsSelected ? agentId : resolveMeetRuntimeAgentId(agentId, agent.agentConfig);
     let botName = agent.name || "Voice Agent";
     if (runtimeAgentId !== agentId) {
       const [delegate] = await db

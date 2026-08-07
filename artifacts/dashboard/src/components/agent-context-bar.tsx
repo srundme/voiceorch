@@ -1,6 +1,6 @@
 import { Link, useLocation, useSearch } from "wouter";
 import { useEffect, useMemo } from "react";
-import { Bot } from "lucide-react";
+import { Bot, Plus } from "lucide-react";
 import {
   getListAgentsQueryKey,
   useListAgents,
@@ -80,11 +80,13 @@ export function AgentContextBar({
   selectedId,
   onChange,
   showEdit = true,
+  showNew = false,
 }: {
   agents: Agent[];
   selectedId: number | null;
   onChange: (id: number) => void;
   showEdit?: boolean;
+  showNew?: boolean;
 }) {
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -103,6 +105,14 @@ export function AgentContextBar({
           ))}
         </SelectContent>
       </Select>
+      {showNew && (
+        <Button asChild variant="outline" size="sm" className="h-8 gap-1.5 text-xs">
+          <Link href="/app/agents?create=1">
+            <Plus className="size-3.5" />
+            New
+          </Link>
+        </Button>
+      )}
       {showEdit && selectedId != null && (
         <Button asChild variant="outline" size="sm" className="h-8 gap-1.5 text-xs">
           <Link href={`/app/agents/${selectedId}`}>
