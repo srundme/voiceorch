@@ -169,23 +169,14 @@ router.get("/partner/context", requireAuth, async (req, res): Promise<void> => {
 
     const isPartner = !!ownPartner && ownPartner.status === "active";
     const isManagedClient = branding !== null && !isPartner;
-    let canEditAgents = false;
-    if (isManagedClient) {
-      const [clientFlags] = await db
-        .select({ allow: usersTable.partnerAllowAgentEdit })
-        .from(usersTable)
-        .where(eq(usersTable.clerkId, clerkId));
-      canEditAgents = clientFlags?.allow === true;
-    }
     res.json({
       isPartner,
       branding,
-      // Managed client = linked to an ACTIVE partner. By default the partner
-      // builds/manages agents; canEditAgents is true when the partner opted
-      // this client into editing their own agents.
+      // Managed client = linked to an ACTIVE partner. Clients get a full
+      // workspace (agents/KB/etc.); partner owns rate, funding, and numbers.
       // A partner linked to their own org (self-partner) is never "managed".
       isManagedClient,
-      canEditAgents,
+      canEditAgents: isManagedClient ? true : false,
     });
   } catch (err) {
     req.log.error({ err }, "partner/context failed");
@@ -505,12 +496,13 @@ router.patch("/partner/clients/:clerkId", requireAuth, async (req, res): Promise
       updates.partnerRateCentsPerMin = rate;
     }
 
+    // allowAgentEdit is deprecated — managed clients always have a full workspace.
     if (typeof body.allowAgentEdit === "boolean") {
-      updates.partnerAllowAgentEdit = body.allowAgentEdit;
+      updates.partnerAllowAgentEdit = true;
     }
 
     if (Object.keys(updates).length === 0) {
-      res.status(400).json({ error: "Provide rateCentsPerMin and/or allowAgentEdit" });
+      res.status(400).json({ error: "Provide rateCentsPerMin" });
       return;
     }
 
@@ -524,7 +516,7 @@ router.patch("/partner/clients/:clerkId", requireAuth, async (req, res): Promise
       rateCentsPerMin: updates.partnerRateCentsPerMin
         ?? client.partnerRateCentsPerMin
         ?? partner.defaultClientRateCentsPerMin,
-      allowAgentEdit: updates.partnerAllowAgentEdit ?? client.partnerAllowAgentEdit === true,
+      allowAgentEdit: true,
     });
   } catch (err) {
     req.log.error({ err }, "partner/clients PATCH failed");
@@ -1212,7 +1204,11 @@ router.post("/partner/invites/accept", requireAuth, async (req, res): Promise<vo
 
       const linkedRows = await tx
         .update(usersTable)
-        .set({ partnerId: partner.id, partnerRateCentsPerMin: rate })
+        .set({
+          partnerId: partner.id,
+          partnerRateCentsPerMin: rate,
+          partnerAllowAgentEdit: true,
+        })
         .where(and(eq(usersTable.id, me.id), isNull(usersTable.partnerId)))
         .returning({ id: usersTable.id });
       if (linkedRows.length === 0) throw new Error("concurrent partner link");

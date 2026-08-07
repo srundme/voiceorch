@@ -19,7 +19,7 @@ import {
   ListAgentMemoryEpisodesResponse,
 } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/requireAuth.js";
-import { clientContext, denyManagedClientUnlessAgentEdit, getManagingPartner } from "../middlewares/clientContext.js";
+import { clientContext, getManagingPartner } from "../middlewares/clientContext.js";
 import { logActivity } from "../lib/activity.js";
 import { encryptKey, decryptKey } from "../lib/crypto.js";
 import {
@@ -125,7 +125,7 @@ router.get("/agents", requireAuth, clientContext, async (req, res): Promise<void
   res.json(ListAgentsResponse.parse(agents.map((a) => prepareAgentForResponse(a, sourceIdMap.get(a.id) ?? []))));
 });
 
-router.post("/agents", requireAuth, clientContext, denyManagedClientUnlessAgentEdit, async (req, res): Promise<void> => {
+router.post("/agents", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const parsed = CreateAgentBody.safeParse(req.body);
   if (!parsed.success) {
@@ -328,7 +328,7 @@ router.get("/agents/:id", requireAuth, clientContext, async (req, res): Promise<
   res.json(GetAgentResponse.parse(prepareAgentForResponse(agent, sourceIdMap.get(agent.id) ?? [])));
 });
 
-router.patch("/agents/:id", requireAuth, clientContext, denyManagedClientUnlessAgentEdit, async (req, res): Promise<void> => {
+router.patch("/agents/:id", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const params = UpdateAgentParams.safeParse(req.params);
   if (!params.success) {
@@ -529,7 +529,7 @@ router.patch("/agents/:id", requireAuth, clientContext, denyManagedClientUnlessA
   })();
 });
 
-router.delete("/agents/:id", requireAuth, clientContext, denyManagedClientUnlessAgentEdit, async (req, res): Promise<void> => {
+router.delete("/agents/:id", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const params = DeleteAgentParams.safeParse(req.params);
   if (!params.success) {
@@ -890,7 +890,7 @@ router.get("/agents/:id/caller-memory/:phone", requireAuth, clientContext, async
 });
 
 // Delete an entire fact key (current + entire supersession chain) for a caller
-router.delete("/agents/:id/caller-memory/:phone/facts/:factId", requireAuth, clientContext, denyManagedClientUnlessAgentEdit, async (req, res): Promise<void> => {
+router.delete("/agents/:id/caller-memory/:phone/facts/:factId", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const agentId = parseInt(String(req.params["id"] ?? ""), 10);
   const factId  = parseInt(String(req.params["factId"] ?? ""), 10);
@@ -929,7 +929,7 @@ router.delete("/agents/:id/caller-memory/:phone/facts/:factId", requireAuth, cli
  *          caller_sentences, caller_facts, caller_call_archive.
  * Keeps: caller_profiles (identity row preserved; next call starts clean).
  */
-router.delete("/agents/:id/caller-memory/:phone", requireAuth, clientContext, denyManagedClientUnlessAgentEdit, async (req, res): Promise<void> => {
+router.delete("/agents/:id/caller-memory/:phone", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const agentId = parseInt(String(req.params["id"] ?? ""), 10);
   const rawPhone = decodeURIComponent(String(req.params["phone"] ?? ""));
@@ -1085,7 +1085,7 @@ router.get("/agents/:id/snapserve-executions", requireAuth, clientContext, async
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-router.patch("/agents/:id/toggle", requireAuth, clientContext, denyManagedClientUnlessAgentEdit, async (req, res): Promise<void> => {
+router.patch("/agents/:id/toggle", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const params = ToggleAgentParams.safeParse(req.params);
   if (!params.success) {

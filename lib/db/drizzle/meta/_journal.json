@@ -652,6 +652,13 @@
       "when": 1790800000000,
       "tag": "0092_bookings_meet_bot",
       "breakpoints": true
+    },
+    {
+      "idx": 93,
+      "version": "7",
+      "when": 1790900000000,
+      "tag": "0093_partner_clients_full_workspace",
+      "breakpoints": true
     }
   ]
 }

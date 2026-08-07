@@ -40,7 +40,8 @@ export const usersTable = pgTable("users", {
    * When true, this managed client may create/edit/save agents in their own
    * dashboard. Default false: partner-only agent management.
    */
-  partnerAllowAgentEdit: boolean("partner_allow_agent_edit").notNull().default(false),
+  /** Legacy flag — always treated as true for managed clients (full workspace). */
+  partnerAllowAgentEdit: boolean("partner_allow_agent_edit").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 }, (t) => [

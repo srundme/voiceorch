@@ -9,7 +9,7 @@ export default function WalletTabPage() {
   return (
     <StripeTabPage
       title="Billing"
-      description="Wallet balance, top-ups, and usage."
+      description="Wallet balance, rate, and usage."
       defaultTab="wallet"
       tabs={[
         { key: "wallet", label: "Wallet", content: <WalletPage /> },

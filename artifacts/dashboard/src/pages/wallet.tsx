@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo, useEffect } from "react";
-import { Plus, RefreshCw, ArrowDownLeft, ArrowUpRight, Zap, CreditCard, ToggleLeft, ToggleRight, AlertCircle, ShieldCheck, CheckCircle2, FileText, Download } from "lucide-react";
+import { Plus, RefreshCw, ArrowDownLeft, ArrowUpRight, Zap, CreditCard, ToggleLeft, ToggleRight, AlertCircle, ShieldCheck, CheckCircle2, FileText, Download, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -76,6 +76,8 @@ export default function WalletPage() {
   const queryClient = useQueryClient();
   const { data: partnerCtx } = usePartnerContext();
   const isPartner = partnerCtx?.isPartner === true;
+  const isManagedClient = partnerCtx?.isManagedClient === true;
+  const partnerName = partnerCtx?.branding?.companyName ?? "your partner";
   const [topupAmount, setTopupAmount]     = useState(1000);
   const [customAmount, setCustomAmount]   = useState("");
   const [loading, setLoading]             = useState(false);
@@ -307,7 +309,11 @@ export default function WalletPage() {
     <div className="flex flex-col h-full overflow-auto">
       {/* Toolbar — parent StripeTabPage owns the Billing title */}
       <div className="border-b border-border px-4 sm:px-6 py-3 flex items-center gap-2 sm:gap-3 shrink-0">
-        <span className="text-xs text-muted-foreground">₹{rateInr} / minute · INR · GST on top-ups</span>
+        <span className="text-xs text-muted-foreground">
+          {isManagedClient
+            ? `₹${rateInr} / minute · set by ${partnerName}`
+            : `₹${rateInr} / minute · INR · GST on top-ups`}
+        </span>
       </div>
 
       <div className="flex-1 overflow-auto p-4 sm:p-6">
@@ -337,12 +343,27 @@ export default function WalletPage() {
               {balanceLow && (
                 <div className="flex items-center gap-1.5 text-foreground text-xs bg-zinc-400/10 border border-zinc-400/20 rounded-lg px-3 py-1.5">
                   <AlertCircle className="w-3.5 h-3.5" />
-                  Low balance — top up to continue making calls
+                  {isManagedClient
+                    ? `Low balance — ask ${partnerName} to add funds`
+                    : "Low balance — top up to continue making calls"}
                 </div>
               )}
             </div>
           </div>
 
+          {isManagedClient ? (
+          <div className="rounded-xl border border-border bg-card p-5 space-y-3">
+            <div className="flex items-center gap-2">
+              <Wallet className="w-4 h-4 text-muted-foreground" />
+              <h2 className="font-medium text-foreground text-sm">Partner-funded wallet</h2>
+            </div>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              Your call rate is <span className="font-medium text-foreground">₹{rateInr}/min</span>{" "}
+              (set by {partnerName}). Usage is deducted from this balance.
+              Self top-ups are disabled — ask {partnerName} to transfer funds from Partner Hub.
+            </p>
+          </div>
+          ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="rounded-xl border border-border bg-card p-5 space-y-4">
               <div className="flex items-center gap-2">
@@ -477,6 +498,7 @@ export default function WalletPage() {
               )}
             </div>
           </div>
+          )}
 
           <div className="rounded-xl border border-border bg-card overflow-hidden">
             <div className="px-5 py-4 border-b border-border flex items-center gap-2">

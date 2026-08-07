@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { requireAuth } from "../middlewares/requireAuth.js";
-import { clientContext, denyManagedClientUnlessAgentEdit } from "../middlewares/clientContext.js";
+import { clientContext } from "../middlewares/clientContext.js";
 import {
   db, agentsTable, platformSettingsTable, schedulingCalendarsTable,
   availabilitySchedulesTable, eventTypesTable,
@@ -619,7 +619,7 @@ async function callGemini(key: string, messages: VibeChatMessage[]): Promise<Gem
 
 /* ── POST /agents/vibe-chat ──────────────────────────────────────────────── */
 
-router.post("/agents/vibe-chat", requireAuth, clientContext, denyManagedClientUnlessAgentEdit, async (req, res): Promise<void> => {
+router.post("/agents/vibe-chat", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const {
     messages,

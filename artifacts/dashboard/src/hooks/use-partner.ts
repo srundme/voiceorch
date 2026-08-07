@@ -6,12 +6,11 @@ export interface PartnerContext {
   isPartner: boolean;
   branding: { companyName: string; logoUrl: string | null } | null;
   /**
-   * True when this account is a client managed by an ACTIVE partner: the
-   * partner builds/manages agents and numbers; the dashboard renders the
-   * restricted read-only client view unless canEditAgents is true.
+   * True when this account is linked to an ACTIVE partner. Clients get a full
+   * workspace; partner owns ₹/min rate, wallet funding, and phone numbers.
    */
   isManagedClient?: boolean;
-  /** Partner opted this managed client into creating/editing/saving agents. */
+  /** Always true for managed clients (full agent edit). Kept for API compat. */
   canEditAgents?: boolean;
 }
 

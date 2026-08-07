@@ -277,7 +277,7 @@ function ClientsTab({ me }: { me: PartnerMe }) {
         <div>
           <h2 className="text-sm font-medium">Your clients</h2>
           <p className="text-[11px] text-muted-foreground mt-0.5">
-            Open Control panel to manage each client&apos;s agents, numbers, rate, and wallet.
+            Clients get a full workspace. You set rate, fund their wallet, and assign numbers.
           </p>
         </div>
         <span className="text-[11px] text-muted-foreground shrink-0">Base {inr(baseRate)}/min</span>
@@ -319,10 +319,10 @@ function ClientsTab({ me }: { me: PartnerMe }) {
                       <Button
                         size="sm"
                         className="h-7 px-2.5 text-xs"
-                        title="Open client control panel in Partner Hub"
+                        title="Open client ops — rate, fund, numbers"
                         onClick={() => navigate(`/app/partner/clients/${encodeURIComponent(c.clerkId)}`)}
                       >
-                        <Settings2 className="w-3 h-3 mr-1" /> Control panel
+                        <Settings2 className="w-3 h-3 mr-1" /> Client ops
                       </Button>
                       <Button size="sm" variant="outline" className="h-7 px-2 text-xs"
                         onClick={() => { setRateClient(c); setRateText((c.rateCentsPerMin / 100).toFixed(2)); }}>

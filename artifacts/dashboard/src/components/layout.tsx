@@ -122,26 +122,6 @@ const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
-/**
- * Managed clients (accounts run by a partner) get a trimmed surface: the
- * partner builds agents and buys numbers on their behalf, so build/outreach
- * sections disappear. Server-side enforcement backs this up — this is UX,
- * not the security boundary.
- */
-const MANAGED_CLIENT_NAV: NavGroup[] = [
-  {
-    items: [
-      { name: "Home",        href: "/app/home",        icon: Home },
-      { name: "Campaigns",  href: "/app/campaigns",  icon: Megaphone },
-      { name: "Agents",      href: "/app/agents",      icon: Bot },
-      { name: "History",     href: "/app/history",     icon: Phone, callbackBadge: true },
-      { name: "Connections", href: "/app/connections", icon: PlugZap },
-    ],
-  },
-];
-
-const MANAGED_CLIENT_SETTINGS_HREFS = ["/app/settings", "/app/wallet"];
-
 const NAV_SETTINGS: NavItem[] = [
   { name: "Workspace",  href: "/app/settings",  icon: Settings },
   { name: "Providers",  href: "/app/providers", icon: Mic2 },
@@ -420,24 +400,19 @@ function SidebarContent({
   };
 
   // Partner hub nav (gated) + white-label branding for partner-managed clients.
-  // While acting as a client, show the full client workspace nav (not Partner Hub)
-  // so partners can control the client's account end-to-end.
+  // Managed clients get the full workspace nav (same as real users); phones stay
+  // partner-owned via the phone-numbers page + server denyManagedClient.
   const { data: partnerCtx } = usePartnerContext();
   const actingAsClient = loadActingAs();
-  const isManagedClient = partnerCtx?.isManagedClient === true && !actingAsClient;
   const navGroups: NavGroup[] = actingAsClient
     ? NAV_GROUPS
-    : isManagedClient
-      ? MANAGED_CLIENT_NAV
-      : partnerCtx?.isPartner
-        ? [
-            ...NAV_GROUPS,
-            { group: "PARTNER", items: [{ name: "Partner Hub", href: "/app/partner", icon: Handshake }] },
-          ]
-        : NAV_GROUPS;
-  const settingsItems: NavItem[] = isManagedClient
-    ? NAV_SETTINGS.filter((s) => MANAGED_CLIENT_SETTINGS_HREFS.includes(s.href))
-    : NAV_SETTINGS;
+    : partnerCtx?.isPartner
+      ? [
+          ...NAV_GROUPS,
+          { group: "PARTNER", items: [{ name: "Partner Hub", href: "/app/partner", icon: Handshake }] },
+        ]
+      : NAV_GROUPS;
+  const settingsItems: NavItem[] = NAV_SETTINGS;
 
   return (
     <div className="flex h-full flex-col border-r border-sidebar-border bg-sidebar">
@@ -521,8 +496,7 @@ function SidebarContent({
         </button>
       </div>
 
-      {/* + New agent CTA — hidden for locked managed clients; partner can unlock via Control panel */}
-      {(!isManagedClient || partnerCtx?.canEditAgents === true) && (
+      {/* + New agent CTA — available to all workspaces including partner-managed clients */}
       <div className="shrink-0 px-2 pb-2">
         <button
           type="button"
@@ -536,7 +510,6 @@ function SidebarContent({
           {!collapsed && <span>New agent</span>}
         </button>
       </div>
-      )}
 
       {/* Primary nav */}
       <div className="min-h-0 flex-1 overflow-y-auto px-2 py-1">
@@ -656,10 +629,7 @@ const MOBILE_BOTTOM_NAV_ITEMS = [
 
 function MobileBottomNav({ onNewAgent }: { onNewAgent?: () => void }) {
   const [location] = useLocation();
-  const { data: partnerCtx } = usePartnerContext();
-  const items = partnerCtx?.isManagedClient === true
-    ? MOBILE_BOTTOM_NAV_ITEMS.filter((i) => i.href !== null)
-    : [...MOBILE_BOTTOM_NAV_ITEMS];
+  const items = [...MOBILE_BOTTOM_NAV_ITEMS];
   return (
     <nav
       className="md:hidden fixed bottom-0 left-0 right-0 z-30 border-t border-border bg-sidebar/95 backdrop-blur-md pb-safe"
@@ -876,26 +846,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
     navigate("/app/partner");
   };
 
-  // Managed clients: restricted surface — bounce hidden sections to Home.
-  // (UX only; the API rejects managed-client writes server-side.)
-  // Partners acting-as a client are not "managed clients" for nav purposes.
-  const isManagedClient = partnerCtx?.isManagedClient === true && !actingAs;
-  useEffect(() => {
-    if (!isManagedClient) return;
-    const allowed = [
-      "/app/home",
-      "/app/campaigns",
-      "/app/agents",
-      "/app/history",
-      "/app/calls",
-      "/app/connections",
-      "/app/phone-numbers",
-      "/app/wallet",
-      "/app/settings",
-    ];
-    if (location === "/app" || allowed.some((p) => location === p || location.startsWith(p + "/"))) return;
-    navigate("/app/home", { replace: true });
-  }, [isManagedClient, location, navigate]);
   const { open: searchOpen, setOpen: setSearchOpen } = useGlobalSearchTrigger();
 
   const [collapsed, setCollapsed] = useState(() => {

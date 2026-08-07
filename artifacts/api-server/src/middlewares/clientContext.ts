@@ -5,7 +5,7 @@ import { db, usersTable, partnersTable } from "@workspace/db";
 /**
  * Managed-client mode (partner acting on behalf of a client).
  *
- * Two cooperating middlewares:
+ * Cooperating middlewares:
  *
  * 1. `clientContext` — honours the `x-client-context: <client clerkId>` header.
  *    When present, the requester must be an ACTIVE partner that manages that
@@ -14,15 +14,13 @@ import { db, usersTable, partnersTable } from "@workspace/db";
  *    downstream handler operates on the client's account exactly as if the
  *    client made the call. `req.actingPartnerClerkId` records who really did.
  *
- * 2. `denyManagedClient` — blocks WRITE endpoints for managed clients acting
- *    on their own (their workspace is partner-managed). Partners acting via
- *    `clientContext` pass through. Responds 403 with code MANAGED_BY_PARTNER.
+ * 2. `denyManagedClient` — blocks partner-reserved writes for managed clients
+ *    acting on their own: phone purchase/assign and wallet self-topup.
+ *    Partners acting via `clientContext` pass through.
+ *    Responds 403 with code MANAGED_BY_PARTNER.
  *
- * 3. `denyManagedClientUnlessAgentEdit` — same, but allows through when the
- *    partner turned on `users.partnerAllowAgentEdit` for this client (agent
- *    create/edit/save + related agent tooling only).
- *
- * Order matters: `requireAuth, clientContext, denyManagedClient, handler`.
+ * Clients otherwise have a full workspace (agents, KB, campaigns, etc.).
+ * Order: `requireAuth, clientContext, denyManagedClient, handler`.
  */
 
 export const CLIENT_CONTEXT_HEADER = "x-client-context";
@@ -139,13 +137,13 @@ export function denyManagedClient(req: Request, res: Response, next: NextFunctio
 }
 
 /**
- * Block managed-client writes unless the partner enabled agent editing for
- * this client. Use on agent create/edit/save and closely related routes.
+ * @deprecated Managed clients always have full agent edit. Prefer no gate,
+ * or `denyManagedClient` only for partner-reserved ops (phones / topup).
  */
 export function denyManagedClientUnlessAgentEdit(
   req: Request,
   res: Response,
   next: NextFunction,
 ): void {
-  runDenyManagedClient(req, res, next, { allowAgentEdit: true });
+  next();
 }

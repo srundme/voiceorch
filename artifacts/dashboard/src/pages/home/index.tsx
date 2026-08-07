@@ -28,7 +28,6 @@ import { Button } from "@/components/ui/button";
 import { StripePage } from "@/components/stripe-page";
 import { StatusDot } from "@/components/workspace/workspace";
 import { useMinuteRatesMap, useUserProviderNames } from "@/hooks/use-minute-rates";
-import { usePartnerContext } from "@/hooks/use-partner";
 import { cn } from "@/lib/utils";
 
 type AutoPipeline = {
@@ -69,8 +68,6 @@ function statusTone(status: string): "neutral" | "success" | "warning" | "danger
 
 export default function HomePage() {
   const [, navigate] = useLocation();
-  const { data: partnerContext } = usePartnerContext();
-  const isManagedClient = partnerContext?.isManagedClient === true;
   const statsQ = useGetDashboardStats({
     query: { queryKey: getGetDashboardStatsQueryKey(), refetchInterval: 30_000, staleTime: 20_000 },
   });
@@ -167,22 +164,6 @@ export default function HomePage() {
   ].slice(0, 6);
 
   if (!hasAgent && !agentsQ.isLoading) {
-    if (isManagedClient) {
-      return (
-        <main className="flex min-h-full items-center justify-center px-5 py-12">
-          <div className="w-full max-w-md text-center">
-            <div className="mx-auto mb-5 flex size-9 items-center justify-center rounded-lg border border-border bg-card">
-              <Bot className="size-4" />
-            </div>
-            <h1 className="text-lg font-semibold tracking-[-0.02em]">No agents assigned</h1>
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              Your managed workspace does not have an agent yet. Contact your workspace provider
-              to configure and assign one.
-            </p>
-          </div>
-        </main>
-      );
-    }
     return (
       <main className="flex min-h-full items-center justify-center px-5 py-12">
         <div className="w-full max-w-lg">
@@ -235,18 +216,16 @@ export default function HomePage() {
       title="Home"
       description={`${statsQ.data?.callsToday ?? "—"} calls today${statsQ.data?.successRate != null ? ` · ${statsQ.data.successRate}% success` : ""}${balanceCents != null ? ` · ₹${(balanceCents / 100).toFixed(0)} balance` : ""}`}
       actions={
-        !isManagedClient ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <Button size="sm" variant="outline" className="h-8 gap-1.5 px-3 text-xs" onClick={() => navigate("/app/campaigns")}>
-              <Plus className="size-3.5" />
-              New campaign
-            </Button>
-            <Button size="sm" className="h-8 gap-1.5 px-3 text-xs" onClick={() => navigate("/app/agents?create=1")}>
-              <Plus className="size-3.5" />
-              New agent
-            </Button>
-          </div>
-        ) : undefined
+        <div className="flex flex-wrap items-center gap-2">
+          <Button size="sm" variant="outline" className="h-8 gap-1.5 px-3 text-xs" onClick={() => navigate("/app/campaigns")}>
+            <Plus className="size-3.5" />
+            New campaign
+          </Button>
+          <Button size="sm" className="h-8 gap-1.5 px-3 text-xs" onClick={() => navigate("/app/agents?create=1")}>
+            <Plus className="size-3.5" />
+            New agent
+          </Button>
+        </div>
       }
       contentClassName="!pt-4"
     >
@@ -334,7 +313,7 @@ export default function HomePage() {
               ))}
             </div>
           </div>
-          {!isManagedClient && !setupDone && (
+          {!setupDone && (
             <section className="rounded-lg border border-border bg-card">
               <div className="border-b border-border px-3.5 py-3">
                 <h2 className="text-[11px] font-semibold">Finish setup</h2>

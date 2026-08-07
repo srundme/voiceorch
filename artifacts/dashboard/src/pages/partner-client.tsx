@@ -1,6 +1,6 @@
 /**
- * Partner Client Control Panel — manage one client from the partner account.
- * Stays in Partner Hub; optional “Edit in workspace” uses acting-as for deep builder/campaigns.
+ * Partner Client ops panel — rate, fund wallet, assign numbers.
+ * Clients have a full workspace of their own; acting-as is an optional shortcut.
  */
 
 import { useMemo, useState } from "react";
@@ -13,7 +13,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -32,7 +31,7 @@ interface PartnerClient {
   status: string;
   walletBalanceCents: number;
   rateCentsPerMin: number;
-  allowAgentEdit: boolean;
+  allowAgentEdit?: boolean;
   joinedAt: string;
   monthSeconds: number;
   monthSpendCents: number;
@@ -171,25 +170,6 @@ export default function PartnerClientPage() {
       toast({ title: "Could not update rate", description: err.message, variant: "destructive" }),
   });
 
-  const allowEditMutation = useMutation({
-    mutationFn: (allowAgentEdit: boolean) =>
-      partnerFetch(getToken, `/api/partner/clients/${encodeURIComponent(clerkId)}`, {
-        method: "PATCH",
-        body: JSON.stringify({ allowAgentEdit }),
-      }),
-    onSuccess: (_data, allowAgentEdit) => {
-      toast({
-        title: allowAgentEdit ? "Client can edit agents" : "Client agent editing off",
-        description: allowAgentEdit
-          ? "They can open the builder and save changes in their own login."
-          : "Only you can edit their agents from this control panel.",
-      });
-      void qc.invalidateQueries({ queryKey: ["partner-clients"] });
-    },
-    onError: (err: Error) =>
-      toast({ title: "Could not update permission", description: err.message, variant: "destructive" }),
-  });
-
   const transferMutation = useMutation({
     mutationFn: (amountCents: number) =>
       partnerFetch(getToken, `/api/partner/clients/${encodeURIComponent(clerkId)}/transfer`, {
@@ -321,7 +301,7 @@ export default function PartnerClientPage() {
             <ArrowLeft className="size-3.5" /> Partner Hub
           </Link>
           <h1 className="mt-1.5 text-xl font-semibold tracking-[-0.02em] truncate">
-            Control panel
+            Client ops
           </h1>
           <p className="mt-0.5 text-[13px] text-muted-foreground truncate">
             {displayName}
@@ -329,46 +309,19 @@ export default function PartnerClientPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button size="sm" className="h-9 text-xs gap-1.5" onClick={() => openWorkspace("/app/agents")}>
-            <Bot className="size-3.5" /> Edit agents
-          </Button>
-          <Button size="sm" variant="outline" className="h-9 text-xs gap-1.5" onClick={() => openWorkspace("/app/campaigns")}>
-            Campaigns
-          </Button>
           <Button size="sm" variant="outline" className="h-9 text-xs gap-1.5" onClick={() => openWorkspace("/app/home")}>
-            <LogIn className="size-3.5" /> Full workspace
+            <LogIn className="size-3.5" /> Open as client
           </Button>
         </div>
       </div>
 
-      <div className="rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2.5 text-[12px] text-muted-foreground leading-relaxed">
-        You are managing this client from <span className="font-medium text-foreground">your partner account</span>.
-        Turn on <span className="font-medium text-foreground">Allow client to edit agents</span> if they should save changes themselves.
-        Otherwise use <span className="font-medium text-foreground">Edit agents / Full workspace</span> (amber bar = you acting as them).
+      <div className="rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-[12px] text-muted-foreground leading-relaxed">
+        This client has a <span className="font-medium text-foreground">full SnapServe workspace</span>.
+        You set their <span className="font-medium text-foreground">₹/min rate</span>,{" "}
+        <span className="font-medium text-foreground">fund their wallet</span>, and{" "}
+        <span className="font-medium text-foreground">assign phone numbers</span>.
+        Optional: open their account (amber bar) if you need to help in-product.
       </div>
-
-      <section className="rounded-xl border border-border bg-card p-4 flex items-start justify-between gap-4">
-        <div className="min-w-0 space-y-1">
-          <div className="flex items-center gap-2">
-            <h2 className="text-sm font-semibold">Allow client to edit agents</h2>
-            {client.allowAgentEdit ? (
-              <Badge variant="secondary" className="text-[10px]">On</Badge>
-            ) : (
-              <Badge variant="outline" className="text-[10px]">Off</Badge>
-            )}
-          </div>
-          <p className="text-[12px] text-muted-foreground leading-relaxed">
-            When on, this client can open the agent builder in their own account and save changes.
-            Numbers and wallet stay partner-controlled.
-          </p>
-        </div>
-        <Switch
-          checked={client.allowAgentEdit === true}
-          disabled={allowEditMutation.isPending}
-          onCheckedChange={(v) => allowEditMutation.mutate(v)}
-          aria-label="Allow client to edit agents"
-        />
-      </section>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat label="Wallet" value={inr(client.walletBalanceCents)} />
@@ -377,12 +330,12 @@ export default function PartnerClientPage() {
         <Stat label="Spend" value={inr(client.monthSpendCents)} sub="Client wallet this month" />
       </div>
 
-      <Tabs defaultValue="agents" className="space-y-4">
+      <Tabs defaultValue="billing" className="space-y-4">
         <TabsList className="h-9 flex-wrap">
-          <TabsTrigger value="agents" className="text-xs">Agents</TabsTrigger>
+          <TabsTrigger value="billing" className="text-xs">Billing</TabsTrigger>
           <TabsTrigger value="numbers" className="text-xs">Numbers</TabsTrigger>
           <TabsTrigger value="calls" className="text-xs">Calls</TabsTrigger>
-          <TabsTrigger value="billing" className="text-xs">Billing</TabsTrigger>
+          <TabsTrigger value="agents" className="text-xs">Agents</TabsTrigger>
           <TabsTrigger value="api-keys" className="text-xs">API keys</TabsTrigger>
         </TabsList>
 
