@@ -129,7 +129,7 @@ const CATEGORIES: Category[] = [
       {
         key: "managed_krutrim_key",
         label: "Krutrim API Key",
-        description: "Qwen3.5-9B, Qwen3.6-35B-A3B, Gemma-4 — Bangalore-hosted, lowest latency for India. Get from cloud.olakrutrim.com.",
+        description: "GPT-OSS 20B / 120B (tool-capable) — Bangalore-hosted, lowest latency for India. Get from cloud.olakrutrim.com.",
         placeholder: "...",
       },
     ],

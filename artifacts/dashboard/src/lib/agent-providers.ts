@@ -7,6 +7,7 @@ export const LLM_PROVIDERS = [
   { value: "google",   label: "Google Gemini" },
   { value: "groq",     label: "Groq" },
   { value: "sarvam",   label: "Sarvam AI (India-hosted)" },
+  { value: "krutrim",  label: "Krutrim Cloud (India-hosted)" },
 ];
 
 export const TTS_PROVIDERS = [
@@ -58,15 +59,10 @@ export const LLM_MODELS: Record<string, { value: string; label: string }[]> = {
     { value: "qwen/qwen3.6-35b-a3b",   label: "Qwen3.6 35B-A3B — ~203ms, low cost (recommended, fastest)" },
     { value: "qwen/qwen3.5-397b-a17b", label: "Qwen3.5 397B-A17B — ~535ms, best for agentic use" },
   ],
+  // Only models with native tool/function calling on Krutrim (see KrutrimLLM TOOL_CAPABLE_MODELS).
   krutrim: [
-    { value: "gpt-oss-20b",        label: "GPT-OSS 20B — Krutrim proprietary, fast, tool-capable (recommended)" },
-    { value: "gpt-oss-120b",       label: "GPT-OSS 120B — Krutrim proprietary, highest quality, tool-capable" },
-    { value: "gemma-4-E4B-it",     label: "Gemma 4 4B-A4B — ultra-fast MoE" },
-    { value: "gemma-4-31b-it",     label: "Gemma 4 31B — balanced quality/speed" },
-    { value: "gemma-4-26B-A4B-it", label: "Gemma 4 26B-A4B — MoE, 262k context" },
-    { value: "Qwen3.5-9B",         label: "Qwen 3.5 9B — thinking model (set Max Tokens ≥ 500)" },
-    { value: "Qwen3.6-27B",        label: "Qwen 3.6 27B — thinking model (set Max Tokens ≥ 500)" },
-    { value: "Qwen3.6-35B-A3B",    label: "Qwen 3.6 35B-A3B — MoE thinking model (set Max Tokens ≥ 500)" },
+    { value: "gpt-oss-20b",  label: "GPT-OSS 20B — fast, tool-capable (recommended)" },
+    { value: "gpt-oss-120b", label: "GPT-OSS 120B — highest quality, tool-capable" },
   ],
 };
 
