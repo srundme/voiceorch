@@ -153,6 +153,13 @@ router.use(voiceathonPublicRouter);
 // Public workflow trigger intake (website / Instagram form leads) — no session
 router.use(workflowsPublicRouter);
 
+// KYC callback/webhook are unauthenticated browser/provider hits. Must mount
+// before any router that does `router.use(requireAuth)` (campaigns, etc.) —
+// Express runs that middleware for every request that enters the router, so
+// an unauthenticated VoBiz redirect would otherwise get 401 JSON and never
+// reach /kyc/callback. Authed /kyc/status + /kyc/start keep their own requireAuth.
+router.use(kycRouter);
+
 router.use(storageRouter);
 router.use(provisionUser);
 router.use(ambientSoundsUserRouter);
@@ -195,7 +202,6 @@ router.use(searchRouter);
 router.use(agentVariablesRouter);
 router.use(batchImportRunsRouter);
 router.use(schedulingRouter);
-router.use(kycRouter);
 router.use(assistantRouter);
 router.use(usageMeRouter);
 router.use(userApiKeysRouter);
