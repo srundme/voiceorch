@@ -504,6 +504,28 @@ async function configureVobizNumberWebhook(
   }
 }
 
+/**
+ * Create/link SnapServe VoBiz app for a number with retries.
+ * Used on purchase + assign so inbound works without a manual "Fix inbound" step.
+ */
+async function ensureVobizInboundLinked(
+  authId: string,
+  authToken: string,
+  e164: string,
+  webhookBase: string,
+  attempts = 3,
+): Promise<ConfigureVobizResult> {
+  let last: ConfigureVobizResult = {
+    appId: null, linked: false, verified: false, detail: "not attempted",
+  };
+  for (let i = 0; i < attempts; i++) {
+    if (i > 0) await new Promise((r) => setTimeout(r, 600 * i));
+    last = await configureVobizNumberWebhook(authId, authToken, e164, webhookBase);
+    if (last.verified) return last;
+  }
+  return last;
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 async function enrichNumber(row: typeof phoneNumbersTable.$inferSelect) {
@@ -834,6 +856,8 @@ router.post("/phone-numbers/purchase/confirm", requireAuth, clientContext, denyM
   }
 
   const webhookBase = deriveWebhookBase(req);
+  // Create/find SnapServe app + get app_id before VoBiz purchase (number may not
+  // exist yet — full verify/retry runs after purchase succeeds).
   const linkResult = await configureVobizNumberWebhook(authId!, authToken!, number, webhookBase);
   const snapserveAppId = linkResult.appId;
 
@@ -920,8 +944,8 @@ router.post("/phone-numbers/purchase/confirm", requireAuth, clientContext, denyM
 
   req.log.info({ number, userId: clerkId, vobizId: vobizNumber.id, nextRenewalAt }, "Phone number purchased and provisioned after confirmed payment");
 
-  // Purchase-with-application_id can still leave VoBiz "Not linked" — re-link + verify.
-  const postLink = await configureVobizNumberWebhook(authId!, authToken!, number, webhookBase);
+  // Purchase-with-application_id can still leave VoBiz "Not linked" — retry until verified.
+  const postLink = await ensureVobizInboundLinked(authId!, authToken!, number, webhookBase);
   req.log.info({ number, ...postLink }, "Vobiz inbound link after purchase");
 
   res.status(201).json({
@@ -1128,34 +1152,52 @@ router.patch("/phone-numbers/:id/assign", requireAuth, clientContext, async (req
       : `Phone number ${row.number} unassigned from agent`,
   });
 
-  // Server-side VoBiz link — numbers are purchased on the platform master
-  // account, so configure inbound webhooks with master credentials.
+  // Linking a number to an agent MUST create/attach the SnapServe VoBiz
+  // application automatically — no separate "Fix inbound" step for users.
   let inboundLink: ConfigureVobizResult | null = null;
   if (body.data.agentId && target.provider === "plivo") {
-    // BYO Plivo number — inbound routes by To-number lookup on our Plivo
-    // webhook; refresh the user's own Plivo app/number link (best-effort).
+    // BYO Plivo number — inbound routes by To-number lookup on our Plivo webhook.
     await syncByoPlivoNumbers(clerkId, { configureAll: true });
-    inboundLink = { appId: null, linked: true, verified: false, detail: "Routed via your Plivo account" };
+    inboundLink = { appId: null, linked: true, verified: true, detail: "Routed via your Plivo account" };
   } else if (body.data.agentId) {
     const platform = getPlatformVobizCreds();
-    if (platform.configured) {
-      inboundLink = await configureVobizNumberWebhook(
-        platform.authId!,
-        platform.authToken!,
-        row.number,
-        deriveWebhookBase(req),
-      );
-      req.log.info(
-        { number: row.number, userId: clerkId, ...inboundLink },
-        "Vobiz inbound link after assign",
-      );
-    } else {
-      inboundLink = {
-        appId: null,
-        linked: false,
-        verified: false,
-        detail: "Platform carrier credentials not configured",
-      };
+    const previousAgentId = target.agentId ?? null;
+    const rollbackAssign = async () => {
+      await db.update(phoneNumbersTable)
+        .set({ agentId: previousAgentId })
+        .where(eq(phoneNumbersTable.id, row.id));
+      await db.update(agentsTable)
+        .set({ inboundPhoneNumberId: null, outboundPhoneNumberId: null })
+        .where(eq(agentsTable.id, body.data.agentId!));
+      if (previousAgentId) {
+        await db.update(agentsTable)
+          .set({ inboundPhoneNumberId: row.id, outboundPhoneNumberId: row.id })
+          .where(eq(agentsTable.id, previousAgentId));
+      }
+    };
+
+    if (!platform.configured) {
+      await rollbackAssign();
+      res.status(503).json({ error: "Phone carrier is not configured. Try again later." });
+      return;
+    }
+    inboundLink = await ensureVobizInboundLinked(
+      platform.authId!,
+      platform.authToken!,
+      row.number,
+      deriveWebhookBase(req),
+    );
+    req.log.info(
+      { number: row.number, userId: clerkId, ...inboundLink },
+      "Vobiz inbound link after assign",
+    );
+    if (!inboundLink.verified) {
+      await rollbackAssign();
+      res.status(502).json({
+        error: "Could not link this number to SnapServe for inbound calls. Please try assigning again.",
+        inboundLink,
+      });
+      return;
     }
   }
 
@@ -1184,7 +1226,7 @@ router.post("/phone-numbers/:id/configure-webhook", requireAuth, clientContext, 
   if (!platform.configured) { res.status(503).json({ error: "Platform carrier credentials not configured." }); return; }
 
   const webhookBase = deriveWebhookBase(req);
-  const result = await configureVobizNumberWebhook(platform.authId!, platform.authToken!, row.number, webhookBase);
+  const result = await ensureVobizInboundLinked(platform.authId!, platform.authToken!, row.number, webhookBase);
 
   req.log.info({ number: row.number, userId: clerkId, ...result }, "Vobiz inbound webhook reconfigured");
 
@@ -1194,7 +1236,7 @@ router.post("/phone-numbers/:id/configure-webhook", requireAuth, clientContext, 
       number: row.number,
       answerUrl: `${webhookBase}/api/webhooks/vobiz/voice`,
       ...result,
-      error: "Could not verify number is linked to the SnapServe app in VoBiz. Retry Fix inbound, or contact support.",
+      error: "Could not verify number is linked to the SnapServe app in VoBiz. Re-assign the number to the agent, or contact support.",
     });
     return;
   }
@@ -1232,7 +1274,7 @@ router.post("/phone-numbers/sync-vobiz-partner", requireAuth, clientContext, den
   const results = [];
 
   for (const num of userNumbers) {
-    const linkResult = await configureVobizNumberWebhook(
+    const linkResult = await ensureVobizInboundLinked(
       platform.authId,
       platform.authToken!,
       num.number,

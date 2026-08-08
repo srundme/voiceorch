@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useLocation } from "wouter";
-import { Phone, Plus, Trash2, Link2, Link2Off, Search, Loader2, Globe, AlertCircle, GitFork, ShieldCheck, ShieldAlert, ExternalLink, CheckCircle2, Lock, X, Wrench } from "lucide-react";
+import { Phone, Plus, Trash2, Link2, Link2Off, Search, Loader2, Globe, AlertCircle, GitFork, ShieldCheck, ShieldAlert, ExternalLink, CheckCircle2, Lock, X } from "lucide-react";
 import {
   useListPhoneNumbers,
   useListAvailablePhoneNumbers,
@@ -264,21 +264,16 @@ function AssignDialog({
           const link = (data as { inboundLink?: { verified?: boolean; detail?: string } | null })?.inboundLink;
           if (newAgentId === null) {
             toast({ title: "Number unassigned" });
-          } else if (link?.verified) {
+          } else if (link?.verified !== false) {
             toast({
               title: "Number assigned",
-              description: "Inbound linked to SnapServe in VoBiz — callers can reach this agent.",
-            });
-          } else if (link) {
-            toast({
-              title: "Assigned — inbound link incomplete",
-              description: "Use Fix inbound on this number so VoBiz shows APP SnapServe. Outbound still works.",
-              variant: "destructive",
+              description: "Inbound is linked to SnapServe — callers can reach this agent.",
             });
           } else {
             toast({
-              title: "Number assigned",
-              description: "If inbound fails, click Fix inbound on this number.",
+              title: "Assignment failed",
+              description: "Could not link inbound automatically. Try again in a moment.",
+              variant: "destructive",
             });
           }
           onClose();
@@ -343,64 +338,6 @@ function AssignDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
-}
-
-async function configureInboundWebhook(numberId: number): Promise<{ ok: boolean; error?: string; verified?: boolean }> {
-  // Uses the shared client so auth + acting-as (x-client-context) apply.
-  try {
-    const body = await customFetch<{ ok?: boolean; error?: string; verified?: boolean; detail?: string }>(
-      `/api/phone-numbers/${numberId}/configure-webhook`,
-      { method: "POST" },
-    );
-    if (body.ok === false || body.verified === false) {
-      return { ok: false, verified: false, error: body.error || body.detail || "Could not verify inbound link" };
-    }
-    return { ok: true, verified: true };
-  } catch (err) {
-    return { ok: false, verified: false, error: err instanceof Error ? err.message : String(err) };
-  }
-}
-
-function FixInboundButton({ number }: { number: PhoneNumber }) {
-  const { toast } = useToast();
-  const [busy, setBusy] = useState(false);
-
-  async function handleFix() {
-    setBusy(true);
-    try {
-      const result = await configureInboundWebhook(number.id);
-      if (result.ok) {
-        toast({
-          title: "Inbound linked",
-          description: `${number.number} is now APP SnapServe in VoBiz. Test with a call in.`,
-        });
-      } else {
-        toast({
-          title: "Could not link inbound",
-          description: result.error || "Retry in a moment. If it keeps failing, contact support.",
-          variant: "destructive",
-        });
-      }
-    } catch (err) {
-      toast({ title: "Error", variant: "destructive", description: formatApiError(err) });
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <Button
-      variant="ghost"
-      size="sm"
-      className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-foreground"
-      onClick={() => void handleFix()}
-      disabled={busy}
-      title="Link this number to the SnapServe app in VoBiz so inbound calls work"
-    >
-      {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Wrench className="h-3 w-3" />}
-      Fix inbound
-    </Button>
   );
 }
 
@@ -1163,9 +1100,6 @@ export default function PhoneNumbersPage({
                           >
                             <GitFork className="h-3 w-3" /> Rules
                           </Button>
-                        )}
-                        {ownerExtras && (n as { provider?: string }).provider !== "plivo" && (
-                          <FixInboundButton number={n} />
                         )}
                         <Button
                           variant="ghost"

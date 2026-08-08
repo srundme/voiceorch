@@ -113,21 +113,6 @@ export function AgentInboundPanel({
     setDialogOpen(true);
   };
 
-  const configureWebhook = async (numberId: number) => {
-    try {
-      const token = localStorage.getItem("voiceorch:session");
-      await fetch(`/api/phone-numbers/${numberId}/configure-webhook`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-      });
-    } catch {
-      // Non-fatal
-    }
-  };
-
   const handleSave = async () => {
     const nextId = selectedId === "none" ? null : parseInt(selectedId, 10);
     try {
@@ -135,8 +120,8 @@ export function AgentInboundPanel({
         await assign.mutateAsync({ id: assigned.id, data: { agentId: null } });
       }
       if (nextId != null) {
+        // Assign API creates/links the SnapServe VoBiz app automatically.
         await assign.mutateAsync({ id: nextId, data: { agentId } });
-        await configureWebhook(nextId);
       }
       queryClient.invalidateQueries({ queryKey: getListPhoneNumbersQueryKey() });
       queryClient.invalidateQueries({ queryKey: getGetAgentQueryKey(agentId) });
