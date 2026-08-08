@@ -9,6 +9,7 @@ vi.mock("@workspace/db", () => ({
   callerSentencesTable: {},
   callerFactSentenceLinksTable: {},
   callerEpisodeFactLinksTable: {},
+  pendingCallerFactsTable: {},
   canonicalizeCallerKey: (p: string) => p,
   isRealPhoneNumber: () => true,
   humanPhone: (p: string) => p,
@@ -19,6 +20,8 @@ import {
   canonicalizeFactKey,
   isDurableFactKey,
   normalizeDurableFact,
+  normalizeFactValue,
+  validateFactCandidate,
 } from "./callerMemory-durable-facts.js";
 import {
   speakerTurns,
@@ -31,8 +34,8 @@ describe("durable fact keys", () => {
     expect(canonicalizeFactKey("full_name")).toBe("name");
     expect(canonicalizeFactKey("Hometown")).toBe("location");
     expect(canonicalizeFactKey("native_place")).toBe("location");
-    expect(canonicalizeFactKey("kids_count")).toBe("children_count");
-    expect(canonicalizeFactKey("family members")).toBe("family_members");
+    expect(canonicalizeFactKey("kids_count")).toBe("family_children_count");
+    expect(canonicalizeFactKey("spouse_name")).toBe("family_spouse_name");
     expect(canonicalizeFactKey("employer")).toBe("company_name");
   });
 
@@ -42,12 +45,13 @@ describe("durable fact keys", () => {
     expect(canonicalizeFactKey("desired_coverage")).toBeNull();
     expect(canonicalizeFactKey("follow_up_needed")).toBeNull();
     expect(canonicalizeFactKey("concerns")).toBeNull();
+    expect(canonicalizeFactKey("family_members")).toBeNull();
   });
 
   it("normalizeDurableFact drops low confidence and product-as-name", () => {
     expect(
       normalizeDurableFact({ key: "location", value: "Chennai", confidence: 0.95 }),
-    ).toEqual({ key: "location", value: "Chennai", confidence: 0.95 });
+    ).toMatchObject({ key: "location", value: "Chennai", confidence: 0.95 });
 
     expect(
       normalizeDurableFact({ key: "budget", value: "5000", confidence: 0.99 }),
@@ -62,9 +66,45 @@ describe("durable fact keys", () => {
     ).toBeNull();
   });
 
+  it("normalizes city aliases and emails", () => {
+    expect(normalizeFactValue("location", "Bangalore")).toBe("Bengaluru");
+    expect(normalizeFactValue("email", "A@B.Co")).toBe("a@b.co");
+  });
+
+  it("validation gate requires caller citations", () => {
+    const callerIds = new Set([10]);
+    expect(validateFactCandidate({
+      key: "location",
+      value: "Chennai",
+      confidence: 0.9,
+      sentenceIds: [10],
+      callerSentenceIds: callerIds,
+      requireCitation: true,
+    }).ok).toBe(true);
+
+    expect(validateFactCandidate({
+      key: "location",
+      value: "Chennai",
+      confidence: 0.9,
+      sentenceIds: [99],
+      callerSentenceIds: callerIds,
+      requireCitation: true,
+    }).reason).toBe("agent_attribution");
+
+    expect(validateFactCandidate({
+      key: "location",
+      value: "Chennai",
+      confidence: 0.9,
+      sentenceIds: [],
+      callerSentenceIds: callerIds,
+      requireCitation: true,
+    }).reason).toBe("missing_citation");
+  });
+
   it("isDurableFactKey only accepts allowlist", () => {
     expect(isDurableFactKey("name")).toBe(true);
-    expect(isDurableFactKey("family_members")).toBe(true);
+    expect(isDurableFactKey("family_children_count")).toBe(true);
+    expect(isDurableFactKey("family_members")).toBe(false);
     expect(isDurableFactKey("budget_range")).toBe(false);
   });
 });

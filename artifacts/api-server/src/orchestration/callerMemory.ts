@@ -31,6 +31,7 @@ import {
   callerSentencesTable,
   callerFactSentenceLinksTable,
   callerEpisodeFactLinksTable,
+  pendingCallerFactsTable,
   canonicalizeCallerKey,
   isRealPhoneNumber,
   humanPhone,
@@ -52,7 +53,9 @@ import {
   DURABLE_FACT_LABELS,
   durableFactsPromptBlock,
   isDurableFactKey,
-  normalizeDurableFact,
+  validateFactCandidate,
+  shouldSupersedeFact,
+  canonicalizeFactKey,
 } from "./callerMemory-durable-facts.js";
 
 export {
@@ -60,6 +63,10 @@ export {
   canonicalizeFactKey,
   isDurableFactKey,
   normalizeDurableFact,
+  validateFactCandidate,
+  shouldSupersedeFact,
+  MIN_FACT_CONFIDENCE,
+  HIGH_CONFIDENCE_OVERRIDE,
 } from "./callerMemory-durable-facts.js";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -776,8 +783,14 @@ async function supersedeFact(opts: {
   confidence: number;
   sourceCallId: number;
   sourceSentenceIds?: number[];
+  /** When false, skip confidence gate (persona marker / explicit language). Default true for caller facts. */
+  respectConfidenceGate?: boolean;
 }): Promise<number | null> {
-  const { agentId, phoneNumber, key, value, confidence, sourceCallId, sourceSentenceIds = [] } = opts;
+  const {
+    agentId, phoneNumber, key, value, confidence, sourceCallId,
+    sourceSentenceIds = [],
+    respectConfidenceGate = true,
+  } = opts;
 
   try {
     // Wrapped in a transaction so the check-then-insert-then-update sequence
@@ -791,7 +804,11 @@ async function supersedeFact(opts: {
     return await db.transaction(async (tx) => {
       // Find current (non-superseded) fact with this key
       const [existing] = await tx
-        .select({ id: callerFactsTable.id, value: callerFactsTable.value })
+        .select({
+          id: callerFactsTable.id,
+          value: callerFactsTable.value,
+          confidence: callerFactsTable.confidence,
+        })
         .from(callerFactsTable)
         .where(and(
           eq(callerFactsTable.agentId, agentId),
@@ -803,8 +820,25 @@ async function supersedeFact(opts: {
         .limit(1)
         .for("update");
 
-      // Same value → no-op
-      if (existing && existing.value === value) return existing.id;
+      if (existing) {
+        const decision = respectConfidenceGate
+          ? shouldSupersedeFact({
+              currentValue: existing.value,
+              currentConfidence: existing.confidence ?? 0,
+              newValue: value,
+              newConfidence: confidence,
+            })
+          : (existing.value === value ? "noop" : "supersede");
+
+        if (decision === "noop") return existing.id;
+        if (decision === "discard") {
+          logger.info(
+            { agentId, phoneNumber, key, currentConfidence: existing.confidence, newConfidence: confidence },
+            "supersedeFact: discarded lower-confidence candidate",
+          );
+          return null;
+        }
+      }
 
       // Insert new fact node
       const [newRow] = await tx
@@ -902,16 +936,17 @@ interface ExtractedLLMResult {
   name?: string | null;
   summary?: string | null;
   sentiment?: string | null;
-  facts?: Array<{ key: string; value: string; confidence: number }>;
+  facts?: Array<{ key: string; value: string; confidence: number; sentence_ids?: number[] }>;
 }
 
 async function runLLMExtraction(opts: {
   llm: LLMAdapter;
-  transcript: string;
+  /** Numbered transcript with [c123]/[a456] tags for citation. */
+  annotatedTranscript: string;
   priorContext: string;
   priorFacts: CallerFact[];
 }): Promise<ExtractedLLMResult> {
-  const { llm, transcript, priorContext, priorFacts } = opts;
+  const { llm, annotatedTranscript, priorContext, priorFacts } = opts;
 
   const durablePrior = priorFacts.filter((f) => isDurableFactKey(f.key));
   const priorFactsStr = durablePrior.length > 0
@@ -934,9 +969,13 @@ async function runLLMExtraction(opts: {
         `  "summary": "1-3 sentence summary",\n` +
         `  "sentiment": "one of: positive | neutral | negative | frustrated | resolved",\n` +
         `  "facts": [\n` +
-        `    { "key": "allowed_durable_key", "value": "the value", "confidence": 0.0-1.0 }\n` +
+        `    { "key": "allowed_durable_key", "value": "the value", "confidence": 0.0-1.0, "sentence_ids": [123] }\n` +
         `  ]\n` +
         `}\n\n` +
+        `Citation rules:\n` +
+        `- Lines tagged [cN] are CALLER utterances (id = N). Lines tagged [aN] are AGENT — never cite them.\n` +
+        `- Every fact MUST include sentence_ids with one or more CALLER ids (the N from [cN]).\n` +
+        `- If you cannot cite a caller line, omit the fact.\n\n` +
         `Sentiment guide:\n` +
         `- positive: caller was happy, satisfied, or grateful\n` +
         `- neutral: routine call, no strong emotion\n` +
@@ -944,9 +983,9 @@ async function runLLMExtraction(opts: {
         `- frustrated: caller was noticeably irritated or escalating\n` +
         `- resolved: caller was frustrated but issue was resolved by end of call\n\n` +
         `${durableFactsPromptBlock()}\n\n` +
-        `Transcript (Caller / Agent speech only):\n${transcript.slice(0, 8000)}`,
+        `Transcript:\n${annotatedTranscript.slice(0, 10000)}`,
     }],
-    "You extract DURABLE caller identity facts from voice call transcripts. Return only a JSON object with 'name' (string|null), 'summary' (string), 'sentiment' (string), and 'facts' (array of {key,value,confidence}). Never invent. Never store ephemeral sales intent as facts.",
+    "You extract DURABLE caller identity facts from voice call transcripts. Return only JSON with 'name', 'summary', 'sentiment', and 'facts' (each fact needs key, value, confidence, sentence_ids citing [cN] caller lines only). Never invent. Never store ephemeral sales intent as facts.",
     () => {},
     (full) => { raw = full; },
   );
@@ -1201,6 +1240,7 @@ export async function updateCallerProfile(opts: {
         value:        explicitLangPref,
         confidence:   0.98,
         sourceCallId: callId,
+        respectConfidenceGate: false,
       });
       if (langFactId !== null) {
         logger.info(
@@ -1236,6 +1276,19 @@ export async function updateCallerProfile(opts: {
     sentiment:       null,  // filled in Phase 3 after LLM extraction
     sentences:       parsedSentences,
   });
+
+  // Numbered transcript for citation-grounded extraction ([cN]=caller, [aN]=agent).
+  const annotatedTranscript = parsedSentences.map((s, i) => {
+    const id = sentenceIds[i];
+    if (id == null) return `${s.speaker === "caller" ? "Caller" : "Agent"}: ${s.text}`;
+    const tag = s.speaker === "caller" ? `c${id}` : `a${id}`;
+    return `[${tag}] ${s.speaker === "caller" ? "Caller" : "Agent"}: ${s.text}`;
+  }).join("\n");
+  const callerSentenceIds = new Set(
+    parsedSentences
+      .map((s, i) => (s.speaker === "caller" ? sentenceIds[i] : undefined))
+      .filter((id): id is number => typeof id === "number"),
+  );
 
   // ── Phase 3: LLM extraction (best-effort) ─────────────────────────────────
   // Mutable: the persona-swap block below clears it so the new persona's first
@@ -1282,6 +1335,7 @@ export async function updateCallerProfile(opts: {
       const markerId = await supersedeFact({
         agentId, phoneNumber,
         key: PERSONA_HASH_FACT_KEY, value: personaHash!, confidence: 1, sourceCallId: callId,
+        respectConfidenceGate: false,
       });
       // These three retirement steps must land together — if one throws
       // partway through (e.g. transient DB error), a non-transactional
@@ -1332,7 +1386,12 @@ export async function updateCallerProfile(opts: {
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
-      extracted = await runLLMExtraction({ llm, transcript, priorContext, priorFacts });
+      extracted = await runLLMExtraction({
+        llm,
+        annotatedTranscript: annotatedTranscript || transcript,
+        priorContext,
+        priorFacts,
+      });
       llmSucceeded = true;
       break;
     } catch (llmErr) {
@@ -1360,39 +1419,65 @@ export async function updateCallerProfile(opts: {
     extracted.name = null;
   }
 
-  // ── Phase 3a: save L0 durable facts with supersession + provenance ────────
-  // Promote the top-level `name` field into the facts array so it gets
-  // stored in caller_facts and shows up in the UI Facts count.
-  const nameFact = extracted.name?.trim()
-    ? [{ key: "name", value: extracted.name.trim(), confidence: 0.95 }]
+  // ── Phase 3a: validation gate → supersession (only facts that pass) ───────
+  // Promote top-level `name` when it can be grounded to any caller sentence
+  // that contains the name (or when a Tier-A mid-call latch already confirmed it).
+  const nameFactCandidates = extracted.name?.trim()
+    ? [{
+        key: "name",
+        value: extracted.name.trim(),
+        confidence: 0.95,
+        sentence_ids: (extracted.facts ?? [])
+          .filter((f) => canonicalizeFactKey(f.key) === "name")
+          .flatMap((f) => f.sentence_ids ?? [])
+          .filter((id): id is number => typeof id === "number"),
+      }]
     : [];
+  // If LLM named them but omitted citation, allow mid-call latch as provenance substitute.
+  if (nameFactCandidates[0] && nameFactCandidates[0].sentence_ids.length === 0 && callerNameInCall) {
+    // Citation optional only when Tier-A latch already wrote/confirmed the name this call.
+    nameFactCandidates[0].sentence_ids = [...callerSentenceIds].slice(0, 1);
+  }
 
-  const droppedKeys: string[] = [];
-  const validFacts = [...nameFact, ...(extracted.facts ?? [])]
+  const rejectReasons: string[] = [];
+  const validFacts = [...nameFactCandidates, ...(extracted.facts ?? [])]
     .map((f) => {
-      const normalized = normalizeDurableFact({
+      const requireCitation = !(
+        canonicalizeFactKey(f.key) === "name"
+        && callerNameInCall
+        && String(f.value).trim().toLowerCase() === callerNameInCall.toLowerCase()
+      );
+      const result = validateFactCandidate({
         key: f.key,
         value: f.value,
         confidence: typeof f.confidence === "number" ? f.confidence : 0,
+        sentenceIds: f.sentence_ids ?? [],
+        callerSentenceIds,
+        // Always require citations on the call-end path (except Tier-A latched name).
+        // If archive/L2 insert failed (empty callerSentenceIds), reject rather than
+        // writing ungrounded facts.
+        requireCitation,
       });
-      if (!normalized) {
-        if (f.key) droppedKeys.push(String(f.key));
+      if (!result.ok || !result.fact) {
+        rejectReasons.push(`${f.key}:${result.reason ?? "rejected"}`);
         return null;
       }
-      return normalized;
+      return result.fact;
     })
     .filter((f): f is NonNullable<typeof f> => f !== null);
 
-  // Deduplicate by canonical key (last wins — later usually higher trust / fresher)
+  // Deduplicate by canonical key (last wins — last-stated in transcript order)
   const byKey = new Map<string, (typeof validFacts)[number]>();
   for (const f of validFacts) byKey.set(f.key, f);
   const uniqueFacts = [...byKey.values()];
 
   const newFactIds: number[] = [];
+  const changedFactIds: number[] = [];
   for (const f of uniqueFacts) {
     // The explicitly-requested language (written above) is ground truth this
     // call — don't let LLM inference from the transcript overwrite it.
     if (explicitLangPref && f.key === "language_pref") continue;
+    const before = priorFacts.find((p) => p.key === f.key);
     const factId = await supersedeFact({
       agentId,
       phoneNumber,
@@ -1400,9 +1485,15 @@ export async function updateCallerProfile(opts: {
       value:             f.value,
       confidence:        f.confidence,
       sourceCallId:      callId,
-      sourceSentenceIds: sentenceIds,
+      sourceSentenceIds: f.sentenceIds,
     });
-    if (factId !== null) newFactIds.push(factId);
+    if (factId !== null) {
+      newFactIds.push(factId);
+      // Link only newly inserted / superseded rows (design §6) — not no-ops or discards.
+      if (!before || before.id !== factId) {
+        changedFactIds.push(factId);
+      }
+    }
   }
 
   logger.info(
@@ -1412,7 +1503,8 @@ export async function updateCallerProfile(opts: {
       callId,
       savedFactKeys: uniqueFacts.map((f) => f.key),
       savedFactCount: newFactIds.length,
-      droppedKeys: [...new Set(droppedKeys)].slice(0, 20),
+      changedFactCount: changedFactIds.length,
+      rejected: [...new Set(rejectReasons)].slice(0, 20),
       sentiment: extracted.sentiment ?? null,
       hasName: !!extracted.name,
       hasSummary: !!extracted.summary,
@@ -1432,10 +1524,11 @@ export async function updateCallerProfile(opts: {
         })
         .where(eq(callerCallArchiveTable.id, archiveId));
 
-      // Insert insight_facts edges via junction table
-      if (newFactIds.length > 0) {
+      // Insert insight_facts edges only for facts this call actually changed (design §6).
+      const linkIds = [...new Set(changedFactIds)];
+      if (linkIds.length > 0) {
         await db.insert(callerEpisodeFactLinksTable).values(
-          newFactIds.map(fid => ({ episodeId: archiveId, factId: fid })),
+          linkIds.map(fid => ({ episodeId: archiveId, factId: fid })),
         );
       }
     } catch { /* non-fatal */ }
@@ -1497,6 +1590,7 @@ export async function updateCallerProfile(opts: {
       await supersedeFact({
         agentId, phoneNumber,
         key: PERSONA_HASH_FACT_KEY, value: personaHash, confidence: 1, sourceCallId: callId,
+        respectConfidenceGate: false,
       });
     } catch (markerErr) {
       logger.warn({ agentId, phoneNumber, callId, markerErr }, "Caller memory: persona marker write failed");
@@ -1756,26 +1850,17 @@ const FACT_PATTERNS: FactPattern[] = [
       /\b(\d{1,3}) years? old\b/i,
     ],
     extract: m => m[1]!,
-    confidence: 0.9,
+    confidence: 0.4,
   },
   {
-    key: "family_size",
-    patterns: [
-      /\bfamily of (\d+)\b/i,
-      /\b(\d+) (?:family )?members?\b/i,
-      /\b(\d+) (?:kids?|children|sons?|daughters?)\b/i,
-    ],
-    extract: m => m[1]!,
-    confidence: 0.85,
-  },
-  {
-    key: "children_count",
+    key: "family_children_count",
     patterns: [
       /\b(\d+) (?:kids?|children)\b/i,
       /\bi have (\d+) (?:kids?|children|sons?|daughters?)\b/i,
+      /\bfamily of (\d+)\b/i,
     ],
     extract: m => m[1]!,
-    confidence: 0.85,
+    confidence: 0.4,
   },
   {
     key: "location",
@@ -1784,7 +1869,7 @@ const FACT_PATTERNS: FactPattern[] = [
       /\bi live in ([A-Z][a-zA-Z\s]{2,30}?)(?:\.|,|$)/,
     ],
     extract: m => m[1]!.trim(),
-    confidence: 0.85,
+    confidence: 0.4,
     isPlausible: isPlausibleLocation,
   },
   {
@@ -1794,15 +1879,16 @@ const FACT_PATTERNS: FactPattern[] = [
       /\bi work as (?:a(?:n)? )?([a-zA-Z\s]{3,40}?)\b(?:\.|,|$)/i,
     ],
     extract: m => m[1]!.trim(),
-    confidence: 0.8,
+    confidence: 0.4,
     isPlausible: isPlausibleOccupation,
   },
 ];
 
 /**
- * Pattern-based fact detection on every user utterance.
- * Uses supersedeFact so changing facts are properly tracked in the graph.
- * Returns an updated map of (key → value) for the current call session.
+ * Mid-call pattern latch — writes CANDIDATES to pending_caller_facts only
+ * (design §2). Never trusted as ground truth; call-end extraction decides
+ * what enters caller_facts. Still updates the in-memory map for this-call
+ * personalization (e.g. saying the city back).
  */
 export async function latchCallerFact(opts: {
   agentId: number;
@@ -1831,19 +1917,24 @@ export async function latchCallerFact(opts: {
         continue;
       }
 
-      // Use supersedeFact — handles insert vs supersession automatically
-      const factId = await supersedeFact({
-        agentId, phoneNumber,
-        key:          fp.key,
-        value,
-        confidence:   fp.confidence,
-        sourceCallId: callId,
-        sourceSentenceIds: [],  // sentences not yet stored at this point
-      });
+      const canonical = canonicalizeFactKey(fp.key);
+      if (!canonical) continue;
 
-      if (factId !== null) {
-        updated.set(fp.key, value);
-        logger.info({ callId, agentId, phoneNumber, key: fp.key, value }, "Caller fact latched in real-time");
+      updated.set(canonical, value);
+      try {
+        await db.insert(pendingCallerFactsTable).values({
+          callId,
+          agentId,
+          phoneNumber,
+          key: canonical,
+          valueRaw: value.slice(0, 512),
+          method: "regex",
+          confidence: fp.confidence,
+        });
+        logger.info({ callId, agentId, phoneNumber, key: canonical, value }, "Caller fact candidate staged (pending)");
+      } catch (err) {
+        // Table may not exist until schema push — personalization map still updated.
+        logger.warn({ err, callId, agentId, phoneNumber, key: canonical }, "pending_caller_facts insert failed");
       }
       break;
     }

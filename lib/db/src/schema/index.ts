@@ -40,6 +40,7 @@ export * from "./callerCallArchive";
 export * from "./callerSentences";
 export * from "./callerFactSentenceLinks";
 export * from "./callerEpisodeFactLinks";
+export * from "./pendingCallerFacts";
 export * from "./agent-versions";
 export * from "./simulation";
 export * from "./trai";
