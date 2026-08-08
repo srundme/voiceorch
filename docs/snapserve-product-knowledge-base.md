@@ -39,4 +39,16 @@ Deep links:
 | `/app/people` | `/app/campaigns` |
 | `/app/call-plans` | `/app/home` |
 
-See also: [SnapServe-Campaign-Book.md](./SnapServe-Campaign-Book.md).
+## Meetings — three join paths
+
+| Path | Where | Use when |
+|------|--------|----------|
+| **Paste link** | `/app/meet` → paste Meet/Zoom/Teams URL | Ad-hoc join now |
+| **Google Calendar (AI meetings)** | `/app/meet` → Connect Google → toggle Join per event | Self-serve: user connects their calendar; SnapServe schedules bots via Recall Calendar V2 |
+| **Booking auto-dispatch** | Scheduling / bookings with `meet_link` | SnapServe booking creates Meet link; worker launches bot near slot time |
+
+Booking “Connect Google Calendar” under Connections is for **creating** booking events (write). AI meetings connect uses **readonly** calendar scopes and hands the refresh token to Recall — do not treat them as the same connect button.
+
+Ops: [recall-calendar-v2-ops.md](./recall-calendar-v2-ops.md)
+
+See also: [SnapServe-Campaign-Book.md](./SnapServe-Campaign-Book.md) · [Brand kit](./brand/BRAND.md) (logo, colors, assets).

@@ -1,6 +1,6 @@
-import { useState } from "react";
-import { Link } from "wouter";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { Link, useSearch } from "wouter";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { useAgentFromSearch } from "@/components/agent-context-bar";
 import { StripePage } from "@/components/stripe-page";
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -16,15 +17,58 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Video, Loader2, LogOut, Bot, Plus } from "lucide-react";
+import { Video, Loader2, LogOut, Bot, Plus, CalendarDays, Unplug } from "lucide-react";
 import { MeetingsChannelCard } from "@/pages/agents/meetings-channel-card";
 
 const API = "/api";
 
 type ActiveBot = { botId: string; agentName: string; meetingUrl: string };
 
+type CalendarConnection = {
+  connected: boolean;
+  id?: string;
+  email?: string;
+  status?: string;
+};
+
+type CalendarEventRow = {
+  id: string;
+  title: string;
+  startTime: string | null;
+  endTime: string | null;
+  meetingUrl: string | null;
+  canJoin: boolean;
+  botEnabled: boolean;
+  agentId: number | null;
+  botId: string | null;
+};
+
+function formatWhen(iso: string | null): string {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleString(undefined, {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  } catch {
+    return iso;
+  }
+}
+
+async function openMeetCalendarConnectPopup(): Promise<void> {
+  const { url } = await customFetch<{ url: string }>(
+    `${API}/meet-calendar/google/connect-url?returnOrigin=${encodeURIComponent(window.location.origin)}`,
+  );
+  window.open(url, "_blank", "noopener,width=520,height=680");
+}
+
 export default function MeetPage() {
   const { toast } = useToast();
+  const qc = useQueryClient();
+  const search = useSearch();
   const { agents, selectedId, setAgentId, isLoading: agentsLoading } = useAgentFromSearch();
   const agentId = selectedId != null ? String(selectedId) : "";
   const agentIdNum = selectedId != null && selectedId > 0 ? selectedId : 0;
@@ -33,6 +77,7 @@ export default function MeetPage() {
   const [meetingUrl, setMeetingUrl] = useState("");
   const [bots, setBots] = useState<ActiveBot[]>([]);
   const [showSettings, setShowSettings] = useState(false);
+  const [togglingEventId, setTogglingEventId] = useState<string | null>(null);
 
   const identityQ = useQuery({
     queryKey: ["meet-bot-identity"],
@@ -41,6 +86,110 @@ export default function MeetPage() {
     staleTime: 60_000,
   });
 
+  const connectionQ = useQuery({
+    queryKey: ["meet-calendar-connection"],
+    queryFn: () => customFetch<CalendarConnection>(`${API}/meet-calendar/connection`),
+    staleTime: 15_000,
+  });
+
+  const eventsQ = useQuery({
+    queryKey: ["meet-calendar-events"],
+    queryFn: () =>
+      customFetch<{ events: CalendarEventRow[]; email?: string; status?: string }>(
+        `${API}/meet-calendar/events`,
+      ),
+    enabled: Boolean(connectionQ.data?.connected && connectionQ.data.status !== "disconnected"),
+    refetchInterval: 60_000,
+  });
+
+  useEffect(() => {
+    const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+    const calendar = params.get("calendar");
+    if (calendar === "connected") {
+      toast({ title: "Google Calendar connected", description: "Toggle Join on meetings below." });
+      void qc.invalidateQueries({ queryKey: ["meet-calendar-connection"] });
+      void qc.invalidateQueries({ queryKey: ["meet-calendar-events"] });
+    } else if (calendar === "error") {
+      toast({
+        title: "Could not connect Google Calendar",
+        description: "Try again, or publish your Google OAuth app if tokens expire in 7 days.",
+        variant: "destructive",
+      });
+    }
+  }, [search, toast, qc]);
+
+  useEffect(() => {
+    const onMsg = (ev: MessageEvent) => {
+      if (ev.data?.type === "meet-calendar-oauth" && ev.data?.ok) {
+        void qc.invalidateQueries({ queryKey: ["meet-calendar-connection"] });
+        void qc.invalidateQueries({ queryKey: ["meet-calendar-events"] });
+      }
+    };
+    window.addEventListener("message", onMsg);
+    let ch: BroadcastChannel | null = null;
+    try {
+      ch = new BroadcastChannel("meet-calendar-oauth");
+      ch.onmessage = () => {
+        void qc.invalidateQueries({ queryKey: ["meet-calendar-connection"] });
+        void qc.invalidateQueries({ queryKey: ["meet-calendar-events"] });
+      };
+    } catch {
+      /* ignore */
+    }
+    return () => {
+      window.removeEventListener("message", onMsg);
+      ch?.close();
+    };
+  }, [qc]);
+
+  const connectMut = useMutation({
+    mutationFn: () => openMeetCalendarConnectPopup(),
+    onError: (err: Error) =>
+      toast({ title: "Could not start Google connect", description: err.message, variant: "destructive" }),
+  });
+
+  const disconnectMut = useMutation({
+    mutationFn: () => customFetch(`${API}/meet-calendar/connection`, { method: "DELETE" }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["meet-calendar-connection"] });
+      void qc.invalidateQueries({ queryKey: ["meet-calendar-events"] });
+      toast({ title: "Disconnected Google Calendar" });
+    },
+    onError: (err: Error) =>
+      toast({ title: "Disconnect failed", description: err.message, variant: "destructive" }),
+  });
+
+  const toggleBot = async (ev: CalendarEventRow, enable: boolean) => {
+    if (!agentIdNum && enable) {
+      toast({ title: "Select an agent first", variant: "destructive" });
+      return;
+    }
+    setTogglingEventId(ev.id);
+    try {
+      if (enable) {
+        await customFetch(`${API}/meet-calendar/events/${encodeURIComponent(ev.id)}/bot`, {
+          method: "POST",
+          body: JSON.stringify({ agentId: agentIdNum }),
+        });
+        toast({ title: "Bot scheduled", description: ev.title });
+      } else {
+        await customFetch(`${API}/meet-calendar/events/${encodeURIComponent(ev.id)}/bot`, {
+          method: "DELETE",
+        });
+        toast({ title: "Bot removed", description: ev.title });
+      }
+      await qc.invalidateQueries({ queryKey: ["meet-calendar-events"] });
+    } catch (err: unknown) {
+      toast({
+        title: enable ? "Could not schedule bot" : "Could not remove bot",
+        description: err instanceof Error ? err.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setTogglingEventId(null);
+    }
+  };
+
   const launch = useMutation({
     mutationFn: async () =>
       customFetch<{ botId: string; status: string; agentId?: number; configuredAgentId?: number }>(`${API}/meet-bots`, {
@@ -48,7 +197,6 @@ export default function MeetPage() {
         body: JSON.stringify({
           agentId: Number(agentId),
           meetingUrl: meetingUrl.trim(),
-          // Meet page: the agent picker above is who joins — ignore booking "delegate".
           joinAsSelected: true,
         }),
       }),
@@ -78,14 +226,17 @@ export default function MeetPage() {
       toast({ title: "Could not remove bot", description: err?.message ?? "Unknown error", variant: "destructive" }),
   });
 
+  const connected = Boolean(connectionQ.data?.connected);
+  const calendarStatus = connectionQ.data?.status;
+
   return (
     <StripePage
       title="Meetings"
-      description="Send an agent into Google Meet, Zoom, or Teams."
+      description="Send an agent into Google Meet, Zoom, or Teams — paste a link or connect your calendar."
       back={{ href: "/app/connections", label: "Connections" }}
     >
       <div className="mx-auto max-w-xl space-y-6">
-        {/* 1. Agent — primary, findable */}
+        {/* 1. Agent */}
         <section className="space-y-2.5">
           <div className="flex items-baseline justify-between gap-2">
             <h2 className="text-[13px] font-semibold tracking-tight">1. Agent</h2>
@@ -138,17 +289,115 @@ export default function MeetPage() {
           )}
           {selectedId != null && (
             <p className="text-[11px] text-muted-foreground">
-              <span className="font-medium text-foreground">{selectedName}</span> will join the call.
-              Use a Phone + meetings agent (no number required for Meet-only).
+              <span className="font-medium text-foreground">{selectedName}</span> will join when you toggle Join or paste a link.
             </p>
           )}
         </section>
 
-        {/* 2. Link + join */}
+        {/* 2. Calendar connect */}
         <section className="space-y-3 rounded-xl border border-border bg-card p-4">
-          <h2 className="text-[13px] font-semibold tracking-tight">2. Meeting link</h2>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 className="text-[13px] font-semibold tracking-tight flex items-center gap-1.5">
+                <CalendarDays className="size-3.5" />
+                2. Google Calendar for AI meetings
+              </h2>
+              <p className="mt-1 text-[11px] text-muted-foreground leading-relaxed">
+                Connect your Google account so SnapServe can schedule the agent onto meetings you choose.
+                Separate from booking calendars under Connections.
+              </p>
+            </div>
+          </div>
+
+          {!connected ? (
+            <Button
+              className="h-10 w-full sm:w-auto"
+              disabled={connectMut.isPending}
+              onClick={() => connectMut.mutate()}
+            >
+              {connectMut.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <CalendarDays className="mr-2 h-4 w-4" />
+              )}
+              Connect Google Calendar
+            </Button>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant={calendarStatus === "disconnected" ? "destructive" : "secondary"}>
+                  {calendarStatus === "disconnected" ? "Disconnected" : calendarStatus || "Connected"}
+                </Badge>
+                <span className="text-xs text-muted-foreground truncate">
+                  {connectionQ.data?.email}
+                </span>
+                <div className="flex-1" />
+                {calendarStatus === "disconnected" ? (
+                  <Button size="sm" variant="outline" onClick={() => connectMut.mutate()}>
+                    Reconnect
+                  </Button>
+                ) : null}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-muted-foreground"
+                  disabled={disconnectMut.isPending}
+                  onClick={() => disconnectMut.mutate()}
+                >
+                  <Unplug className="mr-1 h-3.5 w-3.5" />
+                  Disconnect
+                </Button>
+              </div>
+
+              {calendarStatus === "disconnected" ? (
+                <p className="text-[11px] text-destructive">
+                  Google revoked access (or OAuth app is still in testing mode). Reconnect to continue.
+                </p>
+              ) : eventsQ.isLoading ? (
+                <div className="h-16 animate-pulse rounded-lg bg-muted/40" />
+              ) : eventsQ.isError ? (
+                <p className="text-[11px] text-destructive">
+                  {(eventsQ.error as Error)?.message || "Could not load events"}
+                </p>
+              ) : (eventsQ.data?.events?.length ?? 0) === 0 ? (
+                <p className="text-[11px] text-muted-foreground">No upcoming calendar events found.</p>
+              ) : (
+                <ul className="divide-y divide-border rounded-lg border border-border">
+                  {eventsQ.data!.events.map((ev) => (
+                    <li key={ev.id} className="flex items-center gap-3 px-3 py-2.5">
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-medium">{ev.title}</div>
+                        <div className="truncate text-[11px] text-muted-foreground">
+                          {formatWhen(ev.startTime)}
+                          {!ev.canJoin ? " · no Meet/Zoom/Teams link" : ""}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {ev.botEnabled && (
+                          <Badge variant="secondary" className="text-[10px]">
+                            Joining
+                          </Badge>
+                        )}
+                        <Switch
+                          checked={ev.botEnabled}
+                          disabled={!ev.canJoin || togglingEventId === ev.id || !agentIdNum}
+                          onCheckedChange={(on) => void toggleBot(ev, on)}
+                          aria-label={`Join ${ev.title}`}
+                        />
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </section>
+
+        {/* 3. Paste link */}
+        <section className="space-y-3 rounded-xl border border-border bg-card p-4">
+          <h2 className="text-[13px] font-semibold tracking-tight">3. Or paste a meeting link</h2>
           <div className="space-y-2">
-            <Label className="text-[12px]">Paste Meet / Zoom / Teams URL</Label>
+            <Label className="text-[12px]">Meet / Zoom / Teams URL</Label>
             <Input
               className="h-10"
               placeholder="https://meet.google.com/abc-defg-hij"
@@ -175,7 +424,6 @@ export default function MeetPage() {
           </Button>
         </section>
 
-        {/* Active bots */}
         {bots.length > 0 && (
           <section className="space-y-2">
             <h2 className="text-[13px] font-semibold tracking-tight">In this session</h2>
@@ -185,7 +433,6 @@ export default function MeetPage() {
           </section>
         )}
 
-        {/* 3. Optional settings — collapsed by default */}
         {agentIdNum > 0 && (
           <section className="space-y-3">
             <button
@@ -193,7 +440,7 @@ export default function MeetPage() {
               onClick={() => setShowSettings((v) => !v)}
               className="flex w-full items-center justify-between rounded-lg border border-border/70 bg-muted/20 px-3 py-2.5 text-left text-[13px] font-medium hover:bg-muted/35"
             >
-              <span>3. Waiting, length &amp; presentation</span>
+              <span>4. Waiting, length &amp; presentation</span>
               <span className="text-[11px] font-normal text-muted-foreground">
                 {showSettings ? "Hide" : "Show"}
               </span>

@@ -93,6 +93,7 @@ import squadsRouter from "./squads.js";
 import whatsappRouter from "./whatsapp.js";
 import webcallLinksRouter from "./webcall-links.js";
 import meetBotsRouter from "./meet-bots.js";
+import meetCalendarRouter from "./meet-calendar.js";
 import { provisionUser } from "../middlewares/userProvisioning.js";
 
 const router: IRouter = Router();
@@ -128,6 +129,8 @@ router.use(webcallLinksRouter);
 
 // Meeting bots (Recall.ai): public bot page (token-authed) + authed launch/status
 router.use(meetBotsRouter);
+// Recall Calendar V2: Google connect + opt-in event bots (webhook is public)
+router.use(meetCalendarRouter);
 
 
 // Public docs routes — changelog API (no session required)

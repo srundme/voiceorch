@@ -42,8 +42,10 @@ export function isRecallDiarizedTranscriptEnabled(): boolean {
 // confusing 401. Resolve the working region ONCE by probing (configured
 // region first), then cache for the process lifetime.
 let resolvedRegion: string | null = null;
-async function resolveRecallBase(): Promise<string> {
-  if (resolvedRegion) return `https://${resolvedRegion}.recall.ai/api/v1`;
+
+/** Resolve working Recall region once (API keys are region-scoped). */
+export async function resolveRecallRegion(): Promise<string> {
+  if (resolvedRegion) return resolvedRegion;
   const candidates = [RECALL_REGION(), ...RECALL_REGIONS.filter((r) => r !== RECALL_REGION())];
   for (const region of candidates) {
     try {
@@ -52,7 +54,7 @@ async function resolveRecallBase(): Promise<string> {
       });
       if (res.ok) {
         resolvedRegion = region;
-        return `https://${region}.recall.ai/api/v1`;
+        return region;
       }
     } catch {
       /* network error — try next region */
@@ -61,6 +63,31 @@ async function resolveRecallBase(): Promise<string> {
   throw new Error(
     "Recall API key was rejected by every Recall region — verify RECALL_API_KEY is the API key from the Recall.ai dashboard (not a webhook secret)",
   );
+}
+
+async function resolveRecallBase(): Promise<string> {
+  const region = await resolveRecallRegion();
+  return `https://${region}.recall.ai/api/v1`;
+}
+
+/** Calendar V2 lives under /api/v2 on the same region host. */
+export async function resolveRecallV2Base(): Promise<string> {
+  const region = await resolveRecallRegion();
+  return `https://${region}.recall.ai/api/v2`;
+}
+
+export async function recallFetchV2(path: string, init?: RequestInit): Promise<Response> {
+  const base = await resolveRecallV2Base();
+  const p = path.startsWith("/") ? path : `/${path}`;
+  return fetch(`${base}${p}`, {
+    ...init,
+    headers: {
+      accept: "application/json",
+      "content-type": "application/json",
+      authorization: recallKey(),
+      ...(init?.headers ?? {}),
+    },
+  });
 }
 
 // ── Signed page/WS token ─────────────────────────────────────────────────────
@@ -228,7 +255,7 @@ export function buildRecallRecordingRetention(): { type: "timed"; hours: number 
   return { type: "timed", hours: RECALL_RECORDING_RETENTION_HOURS };
 }
 
-export async function createRecallBot(opts: {
+export type RecallBotCreateOpts = {
   meetingUrl: string;
   botName: string;
   pageUrl: string;
@@ -247,7 +274,14 @@ export async function createRecallBot(opts: {
    * on-time join. Omit for immediate (ad-hoc) join.
    */
   joinAt?: Date | string;
-}): Promise<RecallBotSummary> {
+  /**
+   * When true, omit meeting_url / join_at (Calendar V2 fills these from the event).
+   */
+  forCalendarEvent?: boolean;
+};
+
+/** Shared bot JSON for Create Bot and Calendar V2 Schedule Bot For Event. */
+export function buildRecallBotConfig(opts: RecallBotCreateOpts): Record<string, unknown> {
   const loginGroupId = (process.env["RECALL_GOOGLE_LOGIN_GROUP_ID"] ?? "").trim();
   const diarized = isRecallDiarizedTranscriptEnabled();
   // Low-latency streaming requires language_code=en per Recall docs.
@@ -291,48 +325,55 @@ export async function createRecallBot(opts: {
       joinAtIso = d.toISOString();
     }
   }
+  const body: Record<string, unknown> = {
+    bot_name: opts.botName,
+    // Ownership is enforced on every status/leave call by reading this back
+    // from Recall (no local DB row to drift or lose on restart).
+    metadata: { ownerUserId: opts.ownerUserId, agentId: String(opts.agentId) },
+    output_media: {
+      camera: { kind: "webpage", config: { url: opts.pageUrl } },
+      ...(screenshareUrl
+        ? { screenshare: { kind: "webpage", config: { url: screenshareUrl } } }
+        : {}),
+    },
+    // The default `web` variant gives the bot's browser only 250 millicores,
+    // which starves real-time audio (choppy/"sticky" voice). Recall's own FAQ
+    // prescribes web_4_core for output-media agents (+ separate audio).
+    variant: {
+      google_meet: "web_4_core",
+      zoom: "web_4_core",
+      microsoft_teams: "web_4_core",
+    },
+    // Leave empty / idle rooms quickly — stops Recall + SnapServe minute burn.
+    automatic_leave: buildRecallAutomaticLeave(),
+    chat: buildRecordingConsentChat(platform),
+    // Zoom: follow breakout invites so the agent stays with participants.
+    ...(platform === "zoom"
+      ? { breakout_room: { mode: "auto_accept_all_invites" } }
+      : {}),
+    // Signed-in Google Meet bot so the admit screen shows a real email address
+    // (also invited as calendar attendee when RECALL_BOT_EMAIL is set).
+    ...(loginGroupId
+      ? {
+          google_meet: {
+            google_login_group_id: loginGroupId,
+            login_required: true,
+          },
+        }
+      : {}),
+    recording_config: recordingConfig,
+  };
+  if (!opts.forCalendarEvent) {
+    body["meeting_url"] = opts.meetingUrl;
+    if (joinAtIso) body["join_at"] = joinAtIso;
+  }
+  return body;
+}
+
+export async function createRecallBot(opts: RecallBotCreateOpts): Promise<RecallBotSummary> {
   const res = await recallFetch("/bot/", {
     method: "POST",
-    body: JSON.stringify({
-      meeting_url: opts.meetingUrl,
-      bot_name: opts.botName,
-      ...(joinAtIso ? { join_at: joinAtIso } : {}),
-      // Ownership is enforced on every status/leave call by reading this back
-      // from Recall (no local DB row to drift or lose on restart).
-      metadata: { ownerUserId: opts.ownerUserId, agentId: String(opts.agentId) },
-      output_media: {
-        camera: { kind: "webpage", config: { url: opts.pageUrl } },
-        ...(screenshareUrl
-          ? { screenshare: { kind: "webpage", config: { url: screenshareUrl } } }
-          : {}),
-      },
-      // The default `web` variant gives the bot's browser only 250 millicores,
-      // which starves real-time audio (choppy/"sticky" voice). Recall's own FAQ
-      // prescribes web_4_core for output-media agents (+ separate audio).
-      variant: {
-        google_meet: "web_4_core",
-        zoom: "web_4_core",
-        microsoft_teams: "web_4_core",
-      },
-      // Leave empty / idle rooms quickly — stops Recall + SnapServe minute burn.
-      automatic_leave: buildRecallAutomaticLeave(),
-      chat: buildRecordingConsentChat(platform),
-      // Zoom: follow breakout invites so the agent stays with participants.
-      ...(platform === "zoom"
-        ? { breakout_room: { mode: "auto_accept_all_invites" } }
-        : {}),
-      // Signed-in Google Meet bot so the admit screen shows a real email address
-      // (also invited as calendar attendee when RECALL_BOT_EMAIL is set).
-      ...(loginGroupId
-        ? {
-            google_meet: {
-              google_login_group_id: loginGroupId,
-              login_required: true,
-            },
-          }
-        : {}),
-      recording_config: recordingConfig,
-    }),
+    body: JSON.stringify(buildRecallBotConfig(opts)),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
