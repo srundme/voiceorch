@@ -6532,26 +6532,7 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
           )}
         </div>
 
-        {/* Phone chip fills the middle toolbar gap — full card stays on Overview */}
-        <div className="hidden min-w-0 flex-1 items-center justify-center px-3 md:flex">
-          <AgentInboundPanel
-            agentId={agent.id}
-            preferredManagedNumber={form.watch("preferredManagedNumber")}
-            telephonyProvider={form.watch("telephonyProvider")}
-            compact
-            className="max-w-[260px]"
-          />
-        </div>
-
         <div className="flex shrink-0 items-center gap-1.5">
-          <div className="md:hidden">
-            <AgentInboundPanel
-              agentId={agent.id}
-              preferredManagedNumber={form.watch("preferredManagedNumber")}
-              telephonyProvider={form.watch("telephonyProvider")}
-              compact
-            />
-          </div>
           <AgentCostSummary form={form} rateMap={rateMap} variant="chip" />
           <Button
             type="button"
