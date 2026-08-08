@@ -1,24 +1,41 @@
+import { useMemo } from "react";
 import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
+} from "recharts";
 import {
   ArrowRight,
   Bot,
   Check,
   CircleAlert,
+  Clock,
   FileSpreadsheet,
   Phone,
+  PhoneCall,
   Plus,
   Sparkles,
+  TrendingUp,
   Wallet,
   Zap,
 } from "lucide-react";
+import { format, parseISO, subDays } from "date-fns";
 import {
   customFetch,
   getGetDashboardStatsQueryKey,
+  getGetDailyCallVolumeQueryKey,
   getListAgentsQueryKey,
   getListCallsQueryKey,
   getListCampaignsQueryKey,
   useGetDashboardStats,
+  useGetDailyCallVolume,
   useGetWallet,
   useListAgents,
   useListCalls,
@@ -27,6 +44,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { StripePage } from "@/components/stripe-page";
 import { StatusDot } from "@/components/workspace/workspace";
+import { MetricCard, MetricStrip } from "@/components/metric-strip";
+import { useChartTheme } from "@/hooks/use-chart-theme";
 import { useMinuteRatesMap, useUserProviderNames } from "@/hooks/use-minute-rates";
 import { usePartnerManagedWorkspace } from "@/hooks/use-partner";
 import { cn } from "@/lib/utils";
@@ -67,11 +86,36 @@ function statusTone(status: string): "neutral" | "success" | "warning" | "danger
   return "neutral";
 }
 
+function fillDailyVolume(
+  rows: Array<{ date: string; total: number; completed: number; failed: number }> | undefined,
+): Array<{ date: string; label: string; completed: number; failed: number; total: number }> {
+  const byDate = new Map((rows ?? []).map((r) => [r.date, r]));
+  const today = new Date();
+  const out: Array<{ date: string; label: string; completed: number; failed: number; total: number }> = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = subDays(today, i);
+    const key = format(d, "yyyy-MM-dd");
+    const row = byDate.get(key);
+    out.push({
+      date: key,
+      label: format(d, "EEE"),
+      completed: row?.completed ?? 0,
+      failed: row?.failed ?? 0,
+      total: row?.total ?? 0,
+    });
+  }
+  return out;
+}
+
 export default function HomePage() {
   const [, navigate] = useLocation();
+  const ct = useChartTheme();
   const { isManagedWorkspace, partnerName } = usePartnerManagedWorkspace();
   const statsQ = useGetDashboardStats({
     query: { queryKey: getGetDashboardStatsQueryKey(), refetchInterval: 30_000, staleTime: 20_000 },
+  });
+  const volumeQ = useGetDailyCallVolume({
+    query: { queryKey: getGetDailyCallVolumeQueryKey(), refetchInterval: 60_000, staleTime: 30_000 },
   });
   const callsQ = useListCalls(undefined, {
     query: { queryKey: [...getListCallsQueryKey(), "home"], refetchInterval: 30_000 },
@@ -99,6 +143,10 @@ export default function HomePage() {
     ["failed", "error"].includes(String(call.status ?? "").toLowerCase()),
   );
 
+  const chartData = useMemo(() => fillDailyVolume(volumeQ.data), [volumeQ.data]);
+  const weekTotal = chartData.reduce((sum, d) => sum + d.total, 0);
+  const weekCompleted = chartData.reduce((sum, d) => sum + d.completed, 0);
+
   const rateMap = useMinuteRatesMap();
   const providers = useUserProviderNames();
   const wallet = walletQ.data;
@@ -111,6 +159,7 @@ export default function HomePage() {
 
   const hasAgent = agents.length > 0;
   const hasLeads = campaigns.length > 0;
+  const firstAgentId = agents[0]?.id as number | undefined;
   const setup = [
     { label: "Create an agent", done: hasAgent, href: "/app/agents?create=1" },
     { label: "Create a campaign", done: hasLeads, href: "/app/campaigns" },
@@ -217,208 +266,382 @@ export default function HomePage() {
     );
   }
 
+  const stats = statsQ.data;
+  const avgDur = stats?.avgDurationSeconds;
+
   return (
     <StripePage
       title="Home"
-      description={`${statsQ.data?.callsToday ?? "—"} calls today${statsQ.data?.successRate != null ? ` · ${statsQ.data.successRate}% success` : ""}${balanceCents != null ? ` · ₹${(balanceCents / 100).toFixed(0)} balance` : ""}`}
+      description="Call volume, success, and what to dial next."
       actions={
-        <Button size="sm" className="h-8 gap-1.5 px-3 text-xs" onClick={() => navigate("/app/campaigns")}>
-          <Plus className="size-3.5" />
-          New campaign
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 gap-1.5 px-3 text-xs"
+            onClick={() => navigate(firstAgentId != null ? `/app/agents/${firstAgentId}` : "/app/agents")}
+          >
+            <PhoneCall className="size-3.5" />
+            Open agent
+          </Button>
+          <Button size="sm" className="h-8 gap-1.5 px-3 text-xs" onClick={() => navigate("/app/campaigns")}>
+            <Plus className="size-3.5" />
+            New campaign
+          </Button>
+        </div>
       }
       contentClassName="!pt-4"
     >
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
-        <div className="min-w-0 overflow-hidden rounded-lg border border-border">
-          <div className="flex h-10 items-center justify-between border-b border-border px-3.5">
-            <h2 className="text-[13px] font-semibold">What’s running</h2>
-            <Link href="/app/history" className="text-[11px] text-muted-foreground hover:text-foreground">
-              History
-            </Link>
-          </div>
-          {recentReach.length === 0 ? (
-            <div className="px-3.5 py-10 text-center">
-              <p className="text-[12px] font-medium text-foreground">Nothing in the queue yet</p>
-              <p className="mt-1.5 text-[11px] text-muted-foreground leading-relaxed max-w-sm mx-auto">
-                Create an agent, then start a campaign to upload leads and dial.
-              </p>
-              <div className="mt-4 flex justify-center gap-2">
-                {!hasAgent ? (
-                  <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => navigate("/app/agents?create=1")}>
-                    <Plus className="size-3.5" />
-                    Create agent
-                  </Button>
-                ) : (
-                  <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => navigate("/app/campaigns")}>
-                    <Plus className="size-3.5" />
-                    New campaign
-                  </Button>
+      <div className="space-y-5">
+        <MetricStrip cols={4}>
+          <MetricCard
+            label="Calls today"
+            value={statsQ.isLoading ? "—" : (stats?.callsToday ?? 0).toLocaleString()}
+            sub={stats?.totalCalls != null ? `${stats.totalCalls.toLocaleString()} all time` : undefined}
+            icon={<Phone className="size-4" />}
+            loading={statsQ.isLoading}
+          />
+          <MetricCard
+            label="Success rate"
+            value={statsQ.isLoading ? "—" : `${stats?.successRate ?? 0}%`}
+            sub={avgDur != null ? `Avg ${durationLabel(avgDur)}` : "Completed / total"}
+            icon={<TrendingUp className="size-4" />}
+            loading={statsQ.isLoading}
+          />
+          <MetricCard
+            label="This week"
+            value={
+              statsQ.isLoading && volumeQ.isLoading
+                ? "—"
+                : (stats?.callsThisWeek ?? weekTotal).toLocaleString()
+            }
+            sub={`${weekCompleted.toLocaleString()} completed`}
+            icon={<Zap className="size-4" />}
+            loading={statsQ.isLoading && volumeQ.isLoading}
+          />
+          <MetricCard
+            label="Minutes left"
+            value={
+              walletQ.isLoading
+                ? "—"
+                : availableMinutes != null
+                  ? `~${availableMinutes.toLocaleString()}`
+                  : "—"
+            }
+            sub={
+              balanceCents != null
+                ? `₹${(balanceCents / 100).toFixed(0)} wallet`
+                : isManagedWorkspace
+                  ? "Partner-funded"
+                  : "Top up to dial"
+            }
+            icon={<Clock className="size-4" />}
+            loading={walletQ.isLoading}
+            accent={lowBalance ? "text-amber-600 dark:text-amber-400" : undefined}
+          />
+        </MetricStrip>
+
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
+          <div className="min-w-0 space-y-5">
+            <section className="overflow-hidden rounded-lg border border-border bg-card">
+              <div className="flex h-10 items-center justify-between border-b border-border px-3.5">
+                <div className="min-w-0">
+                  <h2 className="text-[13px] font-semibold">Call volume</h2>
+                  <p className="text-[10px] text-muted-foreground">Last 7 days · completed vs failed</p>
+                </div>
+                <Link
+                  href="/app/analytics"
+                  className="text-[11px] text-muted-foreground hover:text-foreground shrink-0"
+                >
+                  View analytics
+                </Link>
+              </div>
+              <div className="px-2 pt-3 pb-2 sm:px-3">
+                <ResponsiveContainer width="100%" height={220}>
+                  <AreaChart data={chartData} margin={{ top: 8, right: 12, bottom: 0, left: -12 }}>
+                    <defs>
+                      <linearGradient id="homeCompleted" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={ct.palette.completed} stopOpacity={0.28} />
+                        <stop offset="95%" stopColor={ct.palette.completed} stopOpacity={0} />
+                      </linearGradient>
+                      <linearGradient id="homeFailed" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={ct.palette.failed} stopOpacity={0.22} />
+                        <stop offset="95%" stopColor={ct.palette.failed} stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid stroke={ct.gridColor} strokeDasharray="3 3" vertical={false} />
+                    <XAxis
+                      dataKey="label"
+                      tick={{ fontSize: 10, fill: ct.tickColor }}
+                      tickLine={false}
+                      axisLine={false}
+                    />
+                    <YAxis
+                      tick={{ fontSize: 10, fill: ct.tickColor }}
+                      tickLine={false}
+                      axisLine={false}
+                      allowDecimals={false}
+                      width={28}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        background: ct.tooltipBg,
+                        border: `1px solid ${ct.tooltipBorder}`,
+                        borderRadius: 6,
+                        fontSize: 11,
+                        color: ct.tooltipText,
+                        boxShadow: ct.tooltipShadow,
+                      }}
+                      labelFormatter={(_, payload) => {
+                        const date = payload?.[0]?.payload?.date as string | undefined;
+                        if (!date) return "";
+                        try {
+                          return format(parseISO(date), "MMM d, yyyy");
+                        } catch {
+                          return date;
+                        }
+                      }}
+                    />
+                    <Legend wrapperStyle={{ fontSize: 11, color: ct.tickColor }} />
+                    <Area
+                      type="monotone"
+                      dataKey="completed"
+                      name="Completed"
+                      stroke={ct.palette.completed}
+                      fill="url(#homeCompleted)"
+                      strokeWidth={1.75}
+                      dot={false}
+                      activeDot={{ r: 3 }}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="failed"
+                      name="Failed"
+                      stroke={ct.palette.failed}
+                      fill="url(#homeFailed)"
+                      strokeWidth={1.5}
+                      dot={false}
+                      activeDot={{ r: 3 }}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+                {weekTotal === 0 && !volumeQ.isLoading && (
+                  <p className="px-2 pb-3 text-center text-[11px] text-muted-foreground">
+                    Your first dials fill this chart — start a campaign to upload leads and call.
+                  </p>
                 )}
               </div>
-            </div>
-          ) : (
-            <div className="divide-y divide-border/70">
-              {recentReach.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <Link
-                    key={item.id}
-                    href={item.href}
-                    className="flex min-h-12 items-center gap-2.5 px-3.5 hover:bg-muted/35"
-                  >
-                    <div className="flex size-7 shrink-0 items-center justify-center rounded-md border border-border bg-background">
-                      <Icon className="size-3.5 text-muted-foreground" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-[13px] font-medium">{item.name}</p>
-                      <p className="truncate text-[11px] text-muted-foreground">{item.detail}</p>
-                    </div>
-                    <StatusDot tone={statusTone(item.status)} />
-                  </Link>
-                );
-              })}
-            </div>
-          )}
-        </div>
+            </section>
 
-        <aside className="space-y-5">
-          <div className="min-w-0 overflow-hidden rounded-lg border border-border">
-            <div className="flex h-10 items-center justify-between border-b border-border px-3.5">
-              <h2 className="text-[13px] font-semibold">Agents</h2>
-              <Link href="/app/agents" className="text-[11px] text-muted-foreground hover:text-foreground">
-                View all
-              </Link>
-            </div>
-            <div className="divide-y divide-border/70">
-              {agents.slice(0, 5).map((agent: any) => (
-                <Link
-                  key={agent.id}
-                  href={`/app/agents/${agent.id}`}
-                  className="group grid min-h-12 grid-cols-[minmax(0,1fr)_auto] items-center gap-4 px-3.5 transition-colors hover:bg-muted/35"
-                >
-                  <div className="flex min-w-0 items-center gap-3">
-                    <div className="flex size-7 shrink-0 items-center justify-center rounded-md border border-border bg-background">
-                      <Bot className="size-3.5 text-muted-foreground" />
+            <div className="min-w-0 overflow-hidden rounded-lg border border-border">
+              <div className="flex h-10 items-center justify-between border-b border-border px-3.5">
+                <h2 className="text-[13px] font-semibold">What’s running</h2>
+                <Link href="/app/history" className="text-[11px] text-muted-foreground hover:text-foreground">
+                  History
+                </Link>
+              </div>
+              {recentReach.length === 0 ? (
+                <div className="px-3.5 py-8">
+                  <div className="mx-auto max-w-md text-center">
+                    <div className="mx-auto mb-3 flex size-9 items-center justify-center rounded-lg border border-border bg-muted/40">
+                      <PhoneCall className="size-4 text-muted-foreground" />
                     </div>
-                    <div className="min-w-0">
-                      <p className="truncate text-[13px] font-medium">{agent.name ?? `Agent ${agent.id}`}</p>
-                      <p className="mt-0.5 truncate text-[11px] capitalize text-muted-foreground">
-                        {agent.status ?? "draft"}
-                      </p>
+                    <p className="text-[13px] font-medium text-foreground">Nothing in the queue yet</p>
+                    <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
+                      Create a campaign, upload leads, and start dialing — your volume chart updates live.
+                    </p>
+                    <div className="mt-4 flex flex-wrap justify-center gap-2">
+                      <Button
+                        size="sm"
+                        className="h-8 gap-1.5 text-xs"
+                        onClick={() => navigate("/app/campaigns")}
+                      >
+                        <Plus className="size-3.5" />
+                        New campaign
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 gap-1.5 text-xs"
+                        onClick={() =>
+                          navigate(firstAgentId != null ? `/app/agents/${firstAgentId}` : "/app/agents")
+                        }
+                      >
+                        <Bot className="size-3.5" />
+                        Open agent
+                      </Button>
                     </div>
                   </div>
-                  <ArrowRight className="size-3 text-muted-foreground/50 opacity-0 transition-opacity group-hover:opacity-100" />
-                </Link>
-              ))}
+                </div>
+              ) : (
+                <div className="divide-y divide-border/70">
+                  {recentReach.map((item) => {
+                    const Icon = item.icon;
+                    return (
+                      <Link
+                        key={item.id}
+                        href={item.href}
+                        className="flex min-h-12 items-center gap-2.5 px-3.5 hover:bg-muted/35"
+                      >
+                        <div className="flex size-7 shrink-0 items-center justify-center rounded-md border border-border bg-background">
+                          <Icon className="size-3.5 text-muted-foreground" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-[13px] font-medium">{item.name}</p>
+                          <p className="truncate text-[11px] text-muted-foreground">{item.detail}</p>
+                        </div>
+                        <StatusDot tone={statusTone(item.status)} />
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
-          {!setupDone && (
-            <section className="rounded-lg border border-border bg-card">
-              <div className="border-b border-border px-3.5 py-3">
-                <h2 className="text-[11px] font-semibold">Finish setup</h2>
-                <p className="mt-0.5 text-[10px] text-muted-foreground">Agent → Campaign → dial.</p>
-              </div>
-              <div className="p-2">
-                {setup.map((item, index) => (
-                  <Link
-                    key={item.label}
-                    href={item.href}
-                    className="flex min-h-9 items-center gap-2 rounded-md px-2 text-[11px] transition-colors hover:bg-muted/40"
-                  >
-                    <span
-                      className={cn(
-                        "flex size-4 shrink-0 items-center justify-center rounded-full border text-[8px]",
-                        item.done
-                          ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600"
-                          : "border-border text-muted-foreground",
-                      )}
-                    >
-                      {item.done ? <Check className="size-2.5" /> : index + 1}
-                    </span>
-                    <span className={cn("min-w-0 flex-1 truncate", item.done && "text-muted-foreground")}>
-                      {item.label}
-                    </span>
-                    <ArrowRight className="size-3 text-muted-foreground/40" />
-                  </Link>
-                ))}
-              </div>
-            </section>
-          )}
-          {issues.length > 0 && (
-            <section className="rounded-lg border border-border bg-card">
-              <div className="border-b border-border px-3.5 py-3">
-                <h2 className="text-[11px] font-semibold">Needs attention</h2>
-              </div>
-              <div className="divide-y divide-border/70">
-                {issues.map((issue) => (
-                  <Link
-                    key={issue.title}
-                    href={issue.href}
-                    className="flex min-h-11 items-start gap-2 px-3.5 py-2.5 hover:bg-muted/35"
-                  >
-                    <CircleAlert
-                      className={cn(
-                        "mt-0.5 size-3.5 shrink-0",
-                        issue.tone === "danger" ? "text-destructive" : "text-amber-500",
-                      )}
-                    />
-                    <div className="min-w-0">
-                      <p className="text-[11px] font-medium">{issue.title}</p>
-                      <p className="text-[10px] text-muted-foreground">{issue.detail}</p>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            </section>
-          )}
-          {balanceCents != null && (
-            <Link
-              href="/app/wallet"
-              className="flex items-center gap-2.5 rounded-lg border border-border px-3.5 py-3 hover:bg-muted/35"
-            >
-              <Wallet className="size-3.5 text-muted-foreground" />
-              <div className="min-w-0 flex-1">
-                <p className="text-[11px] font-medium">Wallet</p>
-                <p className="text-[10px] text-muted-foreground">
-                  ₹{(balanceCents / 100).toFixed(0)}
-                  {availableMinutes != null ? ` · ~${availableMinutes} min` : ""}
-                </p>
-              </div>
-              <ArrowRight className="size-3 text-muted-foreground/40" />
-            </Link>
-          )}
-          {calls.slice(0, 4).length > 0 && (
-            <section className="rounded-lg border border-border bg-card">
+
+          <aside className="space-y-5">
+            <div className="min-w-0 overflow-hidden rounded-lg border border-border">
               <div className="flex h-10 items-center justify-between border-b border-border px-3.5">
-                <h2 className="text-[11px] font-semibold">Recent calls</h2>
-                <Link href="/app/history" className="text-[10px] text-muted-foreground hover:text-foreground">
-                  All
+                <h2 className="text-[13px] font-semibold">Agents</h2>
+                <Link href="/app/agents" className="text-[11px] text-muted-foreground hover:text-foreground">
+                  View all
                 </Link>
               </div>
               <div className="divide-y divide-border/70">
-                {calls.slice(0, 4).map((call: any) => (
+                {agents.slice(0, 5).map((agent: any) => (
                   <Link
-                    key={call.id}
-                    href={`/app/history/${call.id}`}
-                    className="flex min-h-10 items-center gap-2 px-3.5 hover:bg-muted/35"
+                    key={agent.id}
+                    href={`/app/agents/${agent.id}`}
+                    className="group grid min-h-12 grid-cols-[minmax(0,1fr)_auto] items-center gap-4 px-3.5 transition-colors hover:bg-muted/35"
                   >
-                    <Phone className="size-3 text-muted-foreground shrink-0" />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-[11px] font-medium">
-                        {call.toNumber || call.fromNumber || `Call ${call.id}`}
-                      </p>
-                      <p className="truncate text-[10px] text-muted-foreground">
-                        {relativeTime(call.startedAt ?? call.createdAt)} · {durationLabel(call.durationSeconds)}
-                      </p>
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className="flex size-7 shrink-0 items-center justify-center rounded-md border border-border bg-background">
+                        <Bot className="size-3.5 text-muted-foreground" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="truncate text-[13px] font-medium">{agent.name ?? `Agent ${agent.id}`}</p>
+                        <p className="mt-0.5 truncate text-[11px] capitalize text-muted-foreground">
+                          {agent.status ?? "draft"}
+                        </p>
+                      </div>
                     </div>
-                    <StatusDot tone={statusTone(String(call.status ?? ""))} />
+                    <ArrowRight className="size-3 text-muted-foreground/50 opacity-0 transition-opacity group-hover:opacity-100" />
                   </Link>
                 ))}
               </div>
-            </section>
-          )}
-        </aside>
+            </div>
+
+            {!setupDone && (
+              <section className="rounded-lg border border-border bg-card">
+                <div className="border-b border-border px-3.5 py-3">
+                  <h2 className="text-[11px] font-semibold">Finish setup</h2>
+                  <p className="mt-0.5 text-[10px] text-muted-foreground">Agent → Campaign → dial.</p>
+                </div>
+                <div className="p-2">
+                  {setup.map((item, index) => (
+                    <Link
+                      key={item.label}
+                      href={item.href}
+                      className="flex min-h-9 items-center gap-2 rounded-md px-2 text-[11px] transition-colors hover:bg-muted/40"
+                    >
+                      <span
+                        className={cn(
+                          "flex size-4 shrink-0 items-center justify-center rounded-full border text-[8px]",
+                          item.done
+                            ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600"
+                            : "border-border text-muted-foreground",
+                        )}
+                      >
+                        {item.done ? <Check className="size-2.5" /> : index + 1}
+                      </span>
+                      <span className={cn("min-w-0 flex-1 truncate", item.done && "text-muted-foreground")}>
+                        {item.label}
+                      </span>
+                      <ArrowRight className="size-3 text-muted-foreground/40" />
+                    </Link>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {issues.length > 0 && (
+              <section className="rounded-lg border border-border bg-card">
+                <div className="border-b border-border px-3.5 py-3">
+                  <h2 className="text-[11px] font-semibold">Needs attention</h2>
+                </div>
+                <div className="divide-y divide-border/70">
+                  {issues.map((issue) => (
+                    <Link
+                      key={issue.title}
+                      href={issue.href}
+                      className="flex min-h-11 items-start gap-2 px-3.5 py-2.5 hover:bg-muted/35"
+                    >
+                      <CircleAlert
+                        className={cn(
+                          "mt-0.5 size-3.5 shrink-0",
+                          issue.tone === "danger" ? "text-destructive" : "text-amber-500",
+                        )}
+                      />
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-medium">{issue.title}</p>
+                        <p className="text-[10px] text-muted-foreground">{issue.detail}</p>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {balanceCents != null && (
+              <Link
+                href="/app/wallet"
+                className="flex items-center gap-2.5 rounded-lg border border-border px-3.5 py-3 hover:bg-muted/35"
+              >
+                <Wallet className="size-3.5 text-muted-foreground" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11px] font-medium">Wallet</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    ₹{(balanceCents / 100).toFixed(0)}
+                    {availableMinutes != null ? ` · ~${availableMinutes} min` : ""}
+                    {isManagedWorkspace ? " · partner-funded" : ""}
+                  </p>
+                </div>
+                <ArrowRight className="size-3 text-muted-foreground/40" />
+              </Link>
+            )}
+
+            {calls.slice(0, 4).length > 0 && (
+              <section className="rounded-lg border border-border bg-card">
+                <div className="flex h-10 items-center justify-between border-b border-border px-3.5">
+                  <h2 className="text-[11px] font-semibold">Recent calls</h2>
+                  <Link href="/app/history" className="text-[10px] text-muted-foreground hover:text-foreground">
+                    All
+                  </Link>
+                </div>
+                <div className="divide-y divide-border/70">
+                  {calls.slice(0, 4).map((call: any) => (
+                    <Link
+                      key={call.id}
+                      href={`/app/history/${call.id}`}
+                      className="flex min-h-10 items-center gap-2 px-3.5 hover:bg-muted/35"
+                    >
+                      <Phone className="size-3 shrink-0 text-muted-foreground" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[11px] font-medium">
+                          {call.toNumber || call.fromNumber || `Call ${call.id}`}
+                        </p>
+                        <p className="truncate text-[10px] text-muted-foreground">
+                          {relativeTime(call.startedAt ?? call.createdAt)} · {durationLabel(call.durationSeconds)}
+                        </p>
+                      </div>
+                      <StatusDot tone={statusTone(String(call.status ?? ""))} />
+                    </Link>
+                  ))}
+                </div>
+              </section>
+            )}
+          </aside>
+        </div>
       </div>
     </StripePage>
   );
