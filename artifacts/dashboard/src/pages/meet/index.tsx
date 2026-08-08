@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useSearch } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { customFetch } from "@workspace/api-client-react";
+import { customFetch, type Agent } from "@workspace/api-client-react";
 import { useAgentFromSearch } from "@/components/agent-context-bar";
 import { StripePage } from "@/components/stripe-page";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,21 @@ import { Video, Loader2, LogOut, Bot, Plus, CalendarDays, Unplug } from "lucide-
 import { MeetingsChannelCard } from "@/pages/agents/meetings-channel-card";
 
 const API = "/api";
+
+/**
+ * Meetings page only lists agents that can join Meet/Zoom/Teams:
+ * - created as Phone + meetings (`agentConfig.meetings.enabled === true`), or
+ * - have a non-empty meeting prompt.
+ * Matches Builder: phone-only agents book meetings but do not join them.
+ */
+function isMeetingCapableAgent(agent: Agent): boolean {
+  const cfg = (agent as { agentConfig?: { meetings?: unknown } }).agentConfig;
+  const meetings = cfg?.meetings;
+  if (!meetings || typeof meetings !== "object") return false;
+  const m = meetings as { enabled?: unknown; meetingPrompt?: unknown };
+  if (m.enabled === true) return true;
+  return typeof m.meetingPrompt === "string" && m.meetingPrompt.trim().length > 0;
+}
 
 type ActiveBot = { botId: string; agentName: string; meetingUrl: string };
 
@@ -69,7 +84,32 @@ export default function MeetPage() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const search = useSearch();
-  const { agents, selectedId, setAgentId, isLoading: agentsLoading } = useAgentFromSearch();
+  const {
+    agents: allAgents,
+    selectedId: rawSelectedId,
+    setAgentId,
+    isLoading: agentsLoading,
+  } = useAgentFromSearch();
+
+  const agents = useMemo(
+    () => allAgents.filter(isMeetingCapableAgent),
+    [allAgents],
+  );
+
+  // Prefer URL selection when it is meeting-capable; otherwise first meeting agent.
+  const selectedId = useMemo(() => {
+    if (rawSelectedId != null && agents.some((a) => a.id === rawSelectedId)) {
+      return rawSelectedId;
+    }
+    return agents[0]?.id ?? null;
+  }, [agents, rawSelectedId]);
+
+  useEffect(() => {
+    if (selectedId == null) return;
+    if (rawSelectedId === selectedId) return;
+    setAgentId(selectedId);
+  }, [rawSelectedId, selectedId, setAgentId]);
+
   const agentId = selectedId != null ? String(selectedId) : "";
   const agentIdNum = selectedId != null && selectedId > 0 ? selectedId : 0;
   const selectedName = agents.find((a) => a.id === selectedId)?.name ?? "Agent";
@@ -252,11 +292,15 @@ export default function MeetPage() {
             <div className="h-10 animate-pulse rounded-lg bg-muted/40" />
           ) : agents.length === 0 ? (
             <div className="rounded-lg border border-dashed border-border px-4 py-5 text-center">
-              <p className="text-sm text-muted-foreground">No agents yet.</p>
+              <p className="text-sm text-muted-foreground">
+                {allAgents.length === 0
+                  ? "No agents yet."
+                  : "No phone + meetings agents yet. Create one with meetings enabled, or add a meeting prompt."}
+              </p>
               <Button asChild size="sm" className="mt-3 h-8 gap-1.5 text-xs">
                 <Link href="/app/agents?create=1">
                   <Plus className="size-3.5" />
-                  Create an agent
+                  Create phone + meetings agent
                 </Link>
               </Button>
             </div>
@@ -290,6 +334,7 @@ export default function MeetPage() {
           {selectedId != null && (
             <p className="text-[11px] text-muted-foreground">
               <span className="font-medium text-foreground">{selectedName}</span> will join when you toggle Join or paste a link.
+              Only phone + meetings agents (or agents with a meeting prompt) are listed.
             </p>
           )}
         </section>
