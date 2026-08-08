@@ -7,12 +7,13 @@ import { Router, type IRouter } from "express";
 import { eq, and, desc } from "drizzle-orm";
 import { db, callTransfersTable, callsTable, agentsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
+import { clientContext } from "../middlewares/clientContext.js";
 
 const router: IRouter = Router();
 
 /* ── GET /transfers ─────────────────────────────────────────────────────── */
 
-router.get("/transfers", requireAuth, async (req, res): Promise<void> => {
+router.get("/transfers", requireAuth, clientContext, async (req, res): Promise<void> => {
   const userId = (req as any).clerkUserId as string;
 
   const rows = await db
@@ -41,7 +42,7 @@ router.get("/transfers", requireAuth, async (req, res): Promise<void> => {
 
 /* ── GET /transfers/:id ──────────────────────────────────────────────────── */
 
-router.get("/transfers/:id", requireAuth, async (req, res): Promise<void> => {
+router.get("/transfers/:id", requireAuth, clientContext, async (req, res): Promise<void> => {
   const userId = (req as any).clerkUserId as string;
   const id     = Number(req.params["id"]);
 

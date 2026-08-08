@@ -6,14 +6,16 @@
 
 import { Router, type IRouter } from "express";
 import { getAuth } from "../lib/auth-compat.js";
+import { requireAuth } from "../middlewares/requireAuth.js";
+import { clientContext } from "../middlewares/clientContext.js";
 import { db, scheduledCallbacksTable, agentsTable } from "@workspace/db";
-import { eq, and, desc, sql, or, ilike, inArray } from "drizzle-orm";
+import { eq, and, desc, sql, or, inArray } from "drizzle-orm";
 
 const router: IRouter = Router();
 
 // ── GET /callbacks — list all callbacks for the authenticated user ─────────
 
-router.get("/callbacks", async (req, res): Promise<void> => {
+router.get("/callbacks", requireAuth, clientContext, async (req, res): Promise<void> => {
   const { userId } = getAuth(req);
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
 
@@ -108,7 +110,7 @@ router.get("/callbacks", async (req, res): Promise<void> => {
 
 // ── DELETE /callbacks/:id — cancel a pending callback ─────────────────────
 
-router.delete("/callbacks/:id", async (req, res): Promise<void> => {
+router.delete("/callbacks/:id", requireAuth, clientContext, async (req, res): Promise<void> => {
   const { userId } = getAuth(req);
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
 
@@ -140,7 +142,7 @@ router.delete("/callbacks/:id", async (req, res): Promise<void> => {
 
 // ── PATCH /callbacks/:id — reschedule a pending callback ──────────────────
 
-router.patch("/callbacks/:id", async (req, res): Promise<void> => {
+router.patch("/callbacks/:id", requireAuth, clientContext, async (req, res): Promise<void> => {
   const { userId } = getAuth(req);
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
 
@@ -177,7 +179,7 @@ router.patch("/callbacks/:id", async (req, res): Promise<void> => {
 
 // ── GET /callbacks/stats — quick summary ─────────────────────────────────
 
-router.get("/callbacks/stats", async (req, res): Promise<void> => {
+router.get("/callbacks/stats", requireAuth, clientContext, async (req, res): Promise<void> => {
   const { userId } = getAuth(req);
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
 

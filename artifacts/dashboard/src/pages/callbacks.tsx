@@ -454,27 +454,47 @@ function CallbackList({
   );
 }
 
+const STATUS_TABS = ["pending", "triggered", "cancelled"] as const;
+type StatusTab = (typeof STATUS_TABS)[number];
+
+function parseStatusTab(raw: string | null | undefined): StatusTab {
+  if (raw === "triggered" || raw === "cancelled") return raw;
+  return "pending";
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
+// Nested under History as /app/history?tab=callbacks. Inner status uses `cb=`
+// so it never collides with History's outer `tab=callbacks`.
 
 export default function CallbacksPage() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [, navigate] = useLocation();
   const initialParams = useMemo(() => new URLSearchParams(window.location.search), []);
-  const [tab, setTab] = useState(() => initialParams.get("tab") ?? "pending");
+  // Prefer `cb` / `status`. Never treat History's `tab=callbacks` as a status.
+  const [tab, setTab] = useState<StatusTab>(() =>
+    parseStatusTab(initialParams.get("cb") ?? initialParams.get("status")),
+  );
   const [reasonFilter, setReasonFilter] = useState(() => initialParams.get("reason") ?? "all");
   const [toCancel, setToCancel] = useState<CallbackItem | null>(null);
   const [toReschedule, setToReschedule] = useState<CallbackItem | null>(null);
   const [selectedCallId, setSelectedCallId] = useState<number | null>(null);
 
-  // Mirror tab + filter into the URL so returning to this page restores them.
+  // Keep History shell tab + restore inner status/reason on share/refresh.
   useEffect(() => {
-    const params = new URLSearchParams();
-    if (tab !== "pending") params.set("tab", tab);
+    const path = window.location.pathname.startsWith("/app/history")
+      ? "/app/history"
+      : "/app/history";
+    const params = new URLSearchParams(window.location.search);
+    params.set("tab", "callbacks");
+    if (tab !== "pending") params.set("cb", tab);
+    else params.delete("cb");
+    params.delete("status"); // legacy inner param
     if (reasonFilter !== "all") params.set("reason", reasonFilter);
+    else params.delete("reason");
     const qs = params.toString();
-    const next = qs ? `/app/callbacks?${qs}` : "/app/callbacks";
-    const current = `/app/callbacks${window.location.search}`;
+    const next = `${path}?${qs}`;
+    const current = `${window.location.pathname}${window.location.search}`;
     if (next !== current) navigate(next, { replace: true });
   }, [tab, reasonFilter, navigate]);
 
@@ -524,7 +544,7 @@ export default function CallbacksPage() {
       </div>
 
       {/* Tabs */}
-      <Tabs value={tab} onValueChange={setTab}>
+      <Tabs value={tab} onValueChange={(v) => setTab(parseStatusTab(v))}>
         <TabsList className="mb-4">
           <TabsTrigger value="pending">Pending</TabsTrigger>
           <TabsTrigger value="triggered">Triggered</TabsTrigger>
