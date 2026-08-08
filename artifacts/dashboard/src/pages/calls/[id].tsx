@@ -18,6 +18,7 @@ import {
   getGetCallQueryKey,
   getGetAgentQueryKey,
   getGetCallCallerMemoryQueryKey,
+  getClientContext,
 } from "@workspace/api-client-react";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
@@ -937,7 +938,10 @@ function CallRecordingPlayer({ src, callId }: { src: string; callId: number | st
       try {
         setLoadError(null);
         const token = await getToken();
-        const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
+        const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+        // Partner acting-as-client — same header customFetch sends on history APIs.
+        const clientCtx = getClientContext();
+        if (clientCtx) headers["x-client-context"] = clientCtx;
         const r = await fetch(src, { headers });
         if (!r.ok) throw new Error(`Failed to load recording (${r.status})`);
         const blob = await r.blob();

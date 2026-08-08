@@ -8,7 +8,7 @@
 import { useState, useEffect } from "react";
 import { useRoute, Link } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useUpdateLeadCallback, useRetryCampaignLead } from "@workspace/api-client-react";
+import { useUpdateLeadCallback, useRetryCampaignLead, getClientContext } from "@workspace/api-client-react";
 import type { UpdateLeadCallbackBodyStatus } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { DetailNav } from "@/components/detail-nav";
@@ -47,7 +47,9 @@ function RecordingAudio({ src, className }: { src: string; className?: string })
       try {
         setError(null);
         const token = await getToken();
-        const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
+        const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+        const clientCtx = getClientContext();
+        if (clientCtx) headers["x-client-context"] = clientCtx;
         const r = await fetch(src, { headers });
         if (!r.ok) throw new Error(`Failed to load recording (${r.status})`);
         const blob = await r.blob();
