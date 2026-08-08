@@ -406,7 +406,7 @@ function AgentCostSummary({
   const totalPerMin = platformCents / 100; // paise → INR (map already reflects account-level partner rates)
 
   const segments = [
-    { key: "platform", label: "Platform", provider: "SnapServe", cost: totalPerMin, color: "#6366f1" },
+    { key: "platform", label: "Platform", provider: "SnapServe", cost: totalPerMin, color: "#059669" },
   ];
   const breakdown = segments.filter(s => s.cost > 0);
   const barTotal = Math.max(breakdown.reduce((s, x) => s + x.cost, 0), 0.0001);
@@ -416,8 +416,10 @@ function AgentCostSummary({
     return (
       <p className="text-[12px] text-muted-foreground">
         Billed at{" "}
-        <span className="font-medium tabular-nums text-foreground">₹{totalPerMin.toFixed(2)}</span>
-        /min
+        <span className="font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">
+          ₹{totalPerMin.toFixed(2)}
+        </span>
+        <span className="text-emerald-700/70 dark:text-emerald-400/70">/min</span>
         {isByop ? " · BYOP" : ""}
       </p>
     );
@@ -427,10 +429,12 @@ function AgentCostSummary({
     return (
       <Tooltip>
         <TooltipTrigger asChild>
-          <div className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border/70 bg-muted/25 px-2.5 text-[11px] text-muted-foreground cursor-default">
-            <span className="hidden text-muted-foreground/70 sm:inline">Est.</span>
-            <span className="font-semibold tabular-nums text-foreground">₹{totalPerMin.toFixed(2)}</span>
-            <span className="text-muted-foreground/55">/min</span>
+          <div className="inline-flex h-8 items-center gap-1.5 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2.5 text-[11px] cursor-default">
+            <span className="hidden text-emerald-800/55 dark:text-emerald-300/55 sm:inline">Est.</span>
+            <span className="font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">
+              ₹{totalPerMin.toFixed(2)}
+            </span>
+            <span className="text-emerald-700/65 dark:text-emerald-400/65">/min</span>
           </div>
         </TooltipTrigger>
         <TooltipContent side="bottom" className="text-xs space-y-1">
@@ -438,7 +442,9 @@ function AgentCostSummary({
           {breakdown.map(seg => (
             <div key={seg.key} className="flex items-center justify-between gap-3">
               <span className="font-medium">{seg.label}</span>
-              <span className="tabular-nums">₹{seg.cost.toFixed(2)}/min</span>
+              <span className="tabular-nums text-emerald-700 dark:text-emerald-400">
+                ₹{seg.cost.toFixed(2)}/min
+              </span>
             </div>
           ))}
         </TooltipContent>
@@ -453,7 +459,7 @@ function AgentCostSummary({
         <span className="text-muted-foreground">Cost per min</span>
         <Tooltip>
           <TooltipTrigger asChild>
-            <span className="font-semibold tabular-nums text-foreground cursor-default">
+            <span className="font-semibold tabular-nums text-emerald-700 dark:text-emerald-400 cursor-default">
               ₹{totalPerMin.toFixed(2)}
             </span>
           </TooltipTrigger>
@@ -466,7 +472,9 @@ function AgentCostSummary({
                     <span className="text-muted-foreground ml-1 capitalize">({seg.provider})</span>
                   )}
                 </span>
-                <span className="tabular-nums">₹{seg.cost.toFixed(2)}/min</span>
+                <span className="tabular-nums text-emerald-700 dark:text-emerald-400">
+                  ₹{seg.cost.toFixed(2)}/min
+                </span>
               </div>
             ))}
           </TooltipContent>
