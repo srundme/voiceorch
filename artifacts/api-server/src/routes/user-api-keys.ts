@@ -18,7 +18,7 @@ function generateApiKey(): { key: string; prefix: string; hash: string } {
   return { key, prefix, hash };
 }
 
-function hashKey(key: string): string {
+export function hashKey(key: string): string {
   return createHash("sha256").update(key).digest("hex");
 }
 

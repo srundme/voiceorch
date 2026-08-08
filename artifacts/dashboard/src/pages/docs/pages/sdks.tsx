@@ -34,10 +34,31 @@ const call = await snapserve.calls.createOutbound({
 
       <h2 id="mcp">MCP Server — use SnapServe from Claude, Cursor &amp; other AI tools</h2>
       <p>
-        The official MCP (Model Context Protocol) server lets AI assistants like Claude Desktop and
-        Cursor manage your SnapServe account in plain English — list agents, place calls, read
-        transcripts, check analytics and wallet balance. Requires Node.js on your machine.
+        The official MCP (Model Context Protocol) server lets AI assistants manage your SnapServe
+        account in plain English — list agents, place calls, read transcripts, check analytics and
+        wallet balance.
       </p>
+
+      <h3 id="mcp-remote">Hosted remote MCP (Claude custom connectors)</h3>
+      <p>
+        Use this URL in Claude → Customize → Connectors → Add custom connector (name{" "}
+        <code>snapserve</code>):
+      </p>
+      <CodeBlock language="text" code={`https://app.snapserve.ai/api/mcp`} />
+      <p>
+        Click <strong>Connect</strong>, then paste a Dashboard → API Keys <code>sk_live_…</code> key
+        on the SnapServe authorize page. Or, if your Claude plan shows Request headers, set{" "}
+        <code>authorization</code> to <code>Bearer sk_live_…</code>.
+      </p>
+      <CodeBlock
+        language="bash"
+        code={`claude mcp add snapserve --transport http \\
+  --url https://app.snapserve.ai/api/mcp \\
+  --header "Authorization: Bearer sk_live_..."`}
+      />
+
+      <h3 id="mcp-stdio">Local stdio (Claude Desktop / Cursor)</h3>
+      <p>Requires Node.js on your machine:</p>
       <CodeBlock
         language="json"
         code={`{
