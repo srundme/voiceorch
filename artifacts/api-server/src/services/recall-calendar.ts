@@ -32,8 +32,13 @@ const MEET_URL_RE =
   /^https:\/\/(meet\.google\.com|[a-z0-9.-]*zoom\.us|teams\.microsoft\.com|teams\.live\.com)\//i;
 const PAGE_TOKEN_TTL_MS = 4 * 60 * 60 * 1000;
 
+/**
+ * Same scopes as booking Google Calendar OAuth (already Google-verified for SnapServe).
+ * Recall Calendar V2 accepts full `calendar` (superset of events.readonly).
+ * Using a separate readonly scope triggered "Google hasn't verified this app".
+ */
 export const MEET_CALENDAR_SCOPES = [
-  "https://www.googleapis.com/auth/calendar.events.readonly",
+  "https://www.googleapis.com/auth/calendar",
   "https://www.googleapis.com/auth/userinfo.email",
 ];
 

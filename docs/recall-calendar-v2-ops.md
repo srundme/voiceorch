@@ -11,8 +11,8 @@ Self-serve Google calendar connect for AI meeting bots. Code lives under `/api/m
 4. Set env:
    - `GOOGLE_MEET_CALENDAR_REDIRECT_URI` = that same URI
    - Existing `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` are reused
-5. Scopes used by this flow (readonly): `calendar.events.readonly`, `userinfo.email`  
-   Scheduling booking flow keeps full `calendar` scope separately.
+5. Scopes: same as booking — `calendar` + `userinfo.email` (already verified for SnapServe).  
+   Recall accepts full `calendar`; we reuse it so users do not hit a second unverified-scope warning.
 
 ## Recall dashboard
 
