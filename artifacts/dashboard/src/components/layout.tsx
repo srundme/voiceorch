@@ -3,7 +3,7 @@ import { Link, useLocation } from "wouter";
 import { useTheme } from "@/components/theme-provider";
 import { GlobalSearch, useGlobalSearchTrigger } from "@/components/GlobalSearch";
 import {
-  Home, Bot, Phone, Hash, Workflow, Radio,
+  Home, Bot, Phone, Hash, Workflow, Radio, History as HistoryIcon,
   Settings, Wallet, Mic2, Key,
   Menu, ChevronDown, ChevronLeft, ChevronRight,
   LogOut, Bell, Search, SlidersHorizontal, BookOpen, PlugZap, Sun, Moon, Sparkles,
@@ -98,16 +98,17 @@ interface NavGroup {
 }
 
 /**
- * Primary: Home · Campaigns · Agents · Connections · History
+ * Primary: Home · Campaigns · Agents · Phone numbers · Connections · History
  */
 const NAV_GROUPS: NavGroup[] = [
   {
     items: [
-      { name: "Home",        href: "/app/home",        icon: Home },
-      { name: "Campaigns",  href: "/app/campaigns",  icon: Megaphone },
-      { name: "Agents",      href: "/app/agents",      icon: Bot },
-      { name: "Connections", href: "/app/connections", icon: PlugZap },
-      { name: "History",     href: "/app/history",     icon: Phone, callbackBadge: true },
+      { name: "Home",          href: "/app/home",           icon: Home },
+      { name: "Campaigns",    href: "/app/campaigns",     icon: Megaphone },
+      { name: "Agents",        href: "/app/agents",         icon: Bot },
+      { name: "Phone numbers", href: "/app/phone-numbers",  icon: Phone },
+      { name: "Connections",   href: "/app/connections",    icon: PlugZap },
+      { name: "History",       href: "/app/history",        icon: HistoryIcon, callbackBadge: true },
     ],
   },
   {
@@ -624,7 +625,7 @@ const MOBILE_BOTTOM_NAV_ITEMS = [
   { name: "Campaigns", href: "/app/campaigns",  icon: Megaphone },
   { name: "Create",    href: null,              icon: Sparkles }, // opens modal
   { name: "Agents",    href: "/app/agents",     icon: Bot },
-  { name: "History",   href: "/app/history",    icon: Phone },
+  { name: "History",   href: "/app/history",    icon: HistoryIcon },
 ] as const;
 
 function MobileBottomNav({ onNewAgent }: { onNewAgent?: () => void }) {

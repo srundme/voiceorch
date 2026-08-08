@@ -45,7 +45,7 @@ export default function PhoneNumbersTabPage() {
           ? "Assign provider numbers to your agents, move them between agents, or remove a line."
           : "Buy a number, assign it to an agent for inbound + caller ID, reassign or release anytime."
       }
-      back={{ href: "/app/connections", label: "Connections" }}
+      back={{ href: "/app/home", label: "Home" }}
       actions={
         !isManagedWorkspace ? (
           <Button
