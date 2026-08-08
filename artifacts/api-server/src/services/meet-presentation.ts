@@ -192,7 +192,8 @@ export function presentationPublicState(mid: string): {
 /** Built-in meeting tools: start / stop / next / previous slide. */
 export async function executeMeetPresentationTool(opts: {
   toolName: string;
-  args: Record<string, unknown>;
+  /** LLM may omit args entirely (null) — treat as {}. */
+  args: Record<string, unknown> | null | undefined;
   meetMid: string | null | undefined;
   meetBotToken: string | null | undefined;
   /** Fallback deck URL from agent Meeting settings. */
@@ -203,6 +204,7 @@ export async function executeMeetPresentationTool(opts: {
   if (!mid || !token) {
     return "error: presentation tools require an active meeting bot session";
   }
+  const args = opts.args && typeof opts.args === "object" ? opts.args : {};
   const { getMeetRosterBotId } = await import("./meet-roster.js");
   const botId = getMeetRosterBotId(mid);
   if (!botId) {
@@ -220,7 +222,7 @@ export async function executeMeetPresentationTool(opts: {
 
   switch (opts.toolName) {
     case "start_presentation": {
-      const url = typeof opts.args["url"] === "string" ? opts.args["url"].trim() : "";
+      const url = typeof args["url"] === "string" ? args["url"].trim() : "";
       return startMeetPresentation({
         mid,
         botId,

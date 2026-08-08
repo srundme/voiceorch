@@ -6084,9 +6084,10 @@ export class OrchestrationPipeline implements VoiceSession {
         if (!this.agent.isMeetingSession) {
           return `error: ${toolName} is only available during meeting sessions`;
         }
+        const safeArgs = args && typeof args === "object" ? args : {};
         return executeMeetPresentationTool({
           toolName,
-          args,
+          args: safeArgs,
           meetMid: this.config.meetMid,
           meetBotToken: this.config.meetBotToken,
           presentationDefaultUrl: this.config.presentationDefaultUrl,
@@ -6096,10 +6097,11 @@ export class OrchestrationPipeline implements VoiceSession {
         if (!this.agent.isMeetingSession) {
           return "error: send_meeting_chat is only available during meeting sessions";
         }
+        const safeArgs = args && typeof args === "object" ? args : {};
         return executeMeetChatTool({
           meetMid: this.config.meetMid,
-          message: typeof args["message"] === "string" ? args["message"] : "",
-          pin: args["pin"] === true,
+          message: typeof safeArgs["message"] === "string" ? safeArgs["message"] : "",
+          pin: safeArgs["pin"] === true,
         });
       }
       logger.warn({ callId: this.config.callId, toolName }, "LLM called unknown tool — ignoring");

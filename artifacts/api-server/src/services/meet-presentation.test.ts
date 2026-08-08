@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   detectPresentationKind,
+  executeMeetPresentationTool,
   isAllowedPresentationUrl,
   normalizePresentationUrl,
 } from "./meet-presentation.js";
@@ -24,5 +25,19 @@ describe("meet-presentation helpers", () => {
     );
     expect(out).toContain("/embed?");
     expect(out).toContain("ABC123");
+  });
+
+  it("does not throw when start_presentation args are null", async () => {
+    const out = await executeMeetPresentationTool({
+      toolName: "start_presentation",
+      args: null,
+      meetMid: "mid-test",
+      meetBotToken: "tok",
+      presentationDefaultUrl: null,
+    });
+    // Missing roster bot id or missing URL — must be a string error, not a crash.
+    expect(typeof out).toBe("string");
+    expect(out.startsWith("error:")).toBe(true);
+    expect(out.toLowerCase()).not.toContain("cannot read properties of null");
   });
 });

@@ -115,9 +115,10 @@ export async function runLiveToolCall(
     if (!agent.isMeetingSession) {
       return { error: `${toolName} is only available during meeting sessions` };
     }
+    const safeArgs = args && typeof args === "object" ? args : {};
     const output = await executeMeetPresentationTool({
       toolName,
-      args,
+      args: safeArgs,
       meetMid: config.meetMid,
       meetBotToken: config.meetBotToken,
       presentationDefaultUrl: config.presentationDefaultUrl,
@@ -129,10 +130,11 @@ export async function runLiveToolCall(
     if (!agent.isMeetingSession) {
       return { error: "send_meeting_chat is only available during meeting sessions" };
     }
+    const safeArgs = args && typeof args === "object" ? args : {};
     const output = await executeMeetChatTool({
       meetMid: config.meetMid,
-      message: typeof args["message"] === "string" ? args["message"] : "",
-      pin: args["pin"] === true,
+      message: typeof safeArgs["message"] === "string" ? safeArgs["message"] : "",
+      pin: safeArgs["pin"] === true,
     });
     return { output };
   }
