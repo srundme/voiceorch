@@ -7459,7 +7459,7 @@ export class OrchestrationPipeline implements VoiceSession {
           `[Speaker: ${this.meetingSpeakerName}] ${lastTurn.content}\n\n` +
           `[Meeting speaker is "${this.meetingSpeakerName}". ` +
           `If this name matches KNOWN PEOPLE / founders / teammates in your instructions, ` +
-          `greet by name and do NOT ask which company or role.]`;
+          `do NOT ask which company or role. Use their name sparingly — not every turn.]`;
         historyForLlm = [
           ...historyForLlm.slice(0, -1),
           { ...lastTurn, content: speakerHint },
