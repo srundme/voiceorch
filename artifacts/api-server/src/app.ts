@@ -197,7 +197,8 @@ if (frontendDistPath) {
     }));
     // SPA fallback — send index.html for any non-/api, non-/admin-ui and
     // non-/snapserve-book route.
-    app.get(/^\/(?!api|admin-ui|snapserve-book).*/, (_req, res) => {
+    // Exclude /.well-known (MCP OAuth discovery) from the SPA fallback.
+    app.get(/^\/(?!api|admin-ui|snapserve-book|\.well-known).*/, (_req, res) => {
       res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
       res.setHeader("Pragma", "no-cache");
       res.setHeader("Expires", "0");

@@ -10,6 +10,8 @@ COPY lib/db/package.json ./lib/db/
 COPY lib/api-spec/package.json ./lib/api-spec/
 COPY lib/api-zod/package.json ./lib/api-zod/
 COPY lib/api-client-react/package.json ./lib/api-client-react/
+COPY lib/sdk-node/package.json ./lib/sdk-node/
+COPY lib/mcp/package.json ./lib/mcp/
 COPY artifacts/api-server/package.json ./artifacts/api-server/
 COPY artifacts/dashboard/package.json ./artifacts/dashboard/
 COPY artifacts/admin/package.json ./artifacts/admin/
@@ -29,7 +31,9 @@ RUN PORT=3000 BASE_PATH=/ pnpm --filter @workspace/dashboard run build
 
 RUN PORT=3000 BASE_PATH=/admin-ui/ pnpm --filter @workspace/admin run build
 
-RUN pnpm --filter @workspace/api-server run build
+RUN pnpm --filter @snapserveai/sdk build \
+ && pnpm --filter @snapserveai/mcp build \
+ && pnpm --filter @workspace/api-server run build
 
 FROM node:22-slim
 WORKDIR /workspace
@@ -46,6 +50,8 @@ COPY lib/db/package.json ./lib/db/
 COPY lib/api-spec/package.json ./lib/api-spec/
 COPY lib/api-zod/package.json ./lib/api-zod/
 COPY lib/api-client-react/package.json ./lib/api-client-react/
+COPY lib/sdk-node/package.json ./lib/sdk-node/
+COPY lib/mcp/package.json ./lib/mcp/
 COPY artifacts/api-server/package.json ./artifacts/api-server/
 
 RUN pnpm install --frozen-lockfile --prod
@@ -53,6 +59,8 @@ RUN pnpm install --frozen-lockfile --prod
 COPY --from=builder /workspace/artifacts/api-server/dist ./artifacts/api-server/dist
 COPY --from=builder /workspace/artifacts/dashboard/dist ./artifacts/dashboard/dist
 COPY --from=builder /workspace/artifacts/admin/dist ./artifacts/admin/dist
+COPY --from=builder /workspace/lib/sdk-node/dist ./lib/sdk-node/dist
+COPY --from=builder /workspace/lib/mcp/dist ./lib/mcp/dist
 COPY lib/db/drizzle ./lib/db/drizzle
 
 ENV NODE_ENV=production

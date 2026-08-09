@@ -69,9 +69,12 @@ export async function registerOauthClient(input: {
   token_endpoint_auth_method?: string;
 }): Promise<{
   client_id: string;
-  client_secret?: string;
+  client_secret: string;
+  client_id_issued_at: number;
   client_name?: string;
   redirect_uris: string[];
+  grant_types: string[];
+  response_types: string[];
   token_endpoint_auth_method: string;
 }> {
   const redirectUris = (input.redirect_uris ?? []).filter((u) => typeof u === "string" && u.length > 0);
@@ -84,17 +87,25 @@ export async function registerOauthClient(input: {
   if (authMethod !== "none") {
     clientSecret = `mcp_sec_${randomBytes(24).toString("hex")}`;
   }
+  // Always mint a secret — Claude custom connectors often expect both client_id
+  // and client_secret even when auth_method is "none".
+  if (!clientSecret) {
+    clientSecret = `mcp_sec_${randomBytes(24).toString("hex")}`;
+  }
   await db.insert(mcpOauthClientsTable).values({
     clientId,
-    clientSecret: clientSecret ? sha256Hex(clientSecret) : null,
+    clientSecret: sha256Hex(clientSecret),
     clientName: input.client_name ?? null,
     redirectUris: JSON.stringify(redirectUris),
   });
   return {
     client_id: clientId,
-    ...(clientSecret ? { client_secret: clientSecret } : {}),
+    client_secret: clientSecret,
+    client_id_issued_at: Math.floor(Date.now() / 1000),
     client_name: input.client_name,
     redirect_uris: redirectUris,
+    grant_types: ["authorization_code"],
+    response_types: ["code"],
     token_endpoint_auth_method: authMethod,
   };
 }
@@ -166,8 +177,10 @@ export async function exchangeAuthorizationCode(opts: {
 }): Promise<{ access_token: string; token_type: "Bearer"; expires_in: number; scope: string }> {
   const client = await getClient(opts.clientId);
   if (!client) throw new Error("Invalid client");
-  if (client.clientSecret) {
-    if (!opts.clientSecret || sha256Hex(opts.clientSecret) !== client.clientSecret) {
+  // Public clients (Claude DCR with auth_method=none) often omit client_secret
+  // and rely on PKCE. If a secret is supplied, it must match.
+  if (opts.clientSecret && client.clientSecret) {
+    if (sha256Hex(opts.clientSecret) !== client.clientSecret) {
       throw new Error("Invalid client credentials");
     }
   }
