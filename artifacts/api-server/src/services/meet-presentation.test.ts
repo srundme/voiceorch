@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  configureMeetPresentation,
   detectPresentationKind,
   executeMeetPresentationTool,
+  getMeetPresentation,
   isAllowedPresentationUrl,
   normalizePresentationUrl,
+  setMeetPresentationSlide,
 } from "./meet-presentation.js";
 
 describe("meet-presentation helpers", () => {
@@ -39,5 +42,23 @@ describe("meet-presentation helpers", () => {
     expect(typeof out).toBe("string");
     expect(out.startsWith("error:")).toBe(true);
     expect(out.toLowerCase()).not.toContain("cannot read properties of null");
+  });
+
+  it("goto_slide requires a valid slide number", async () => {
+    const out = await executeMeetPresentationTool({
+      toolName: "goto_slide",
+      args: { slide: 0 },
+      meetMid: "mid-goto",
+      meetBotToken: "tok",
+      presentationDefaultUrl: "https://example.com/deck.pdf",
+    });
+    expect(out.startsWith("error:")).toBe(true);
+  });
+
+  it("setMeetPresentationSlide jumps to N", () => {
+    configureMeetPresentation("mid-jump", "https://example.com/deck.pdf");
+    const s = setMeetPresentationSlide("mid-jump", 4);
+    expect(s?.slideIndex).toBe(4);
+    expect(getMeetPresentation("mid-jump")?.slideIndex).toBe(4);
   });
 });

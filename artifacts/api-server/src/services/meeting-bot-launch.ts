@@ -17,6 +17,7 @@ import {
 } from "./meet-roster.js";
 import {
   parseMeetingsConfig,
+  resolveMeetBotDisplayName,
   resolveMeetRuntimeAgentId,
 } from "./meeting-runtime.js";
 import { prepareMeetPresentationAtLaunch } from "./meet-presentation.js";
@@ -52,12 +53,14 @@ export async function launchMeetingBotForAgent(opts: {
 
   const meetings = parseMeetingsConfig(agent.agentConfig);
   let runtimeAgentId = resolveMeetRuntimeAgentId(opts.configuredAgentId, agent.agentConfig);
-  let botName = agent.name || "Voice Agent";
+  let runtimeName = agent.name || "Voice Agent";
+  let runtimeMeetings = meetings;
   if (runtimeAgentId !== opts.configuredAgentId) {
     const [delegate] = await db
       .select({
         userId: agentsTable.userId,
         name: agentsTable.name,
+        agentConfig: agentsTable.agentConfig,
       })
       .from(agentsTable)
       .where(eq(agentsTable.id, runtimeAgentId))
@@ -65,8 +68,10 @@ export async function launchMeetingBotForAgent(opts: {
     if (!delegate || delegate.userId !== opts.userId) {
       throw new Error("Meeting delegate agent not found or not owned");
     }
-    botName = delegate.name || botName;
+    runtimeName = delegate.name || runtimeName;
+    runtimeMeetings = parseMeetingsConfig(delegate.agentConfig);
   }
+  const botName = resolveMeetBotDisplayName(runtimeMeetings, runtimeName);
 
   const mid = randomUUID();
   const token = signMeetBotToken({

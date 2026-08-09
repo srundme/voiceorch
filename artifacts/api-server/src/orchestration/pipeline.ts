@@ -103,6 +103,10 @@ import {
 } from "../services/meet-booking.js";
 import { executeMeetPresentationTool } from "../services/meet-presentation.js";
 import { executeMeetChatTool } from "../services/meet-chat.js";
+import {
+  executeLeaveMeetingTool,
+  executeMuteMeetingTool,
+} from "../services/meet-control.js";
 
 /** Built-in tool always injected into the LLM tool list (telephony calls only). */
 const SCHEDULE_CALLBACK_TOOL_DEF: ToolDefinition = {
@@ -187,6 +191,21 @@ const PREVIOUS_SLIDE_TOOL_DEF: ToolDefinition = {
   parameters: { type: "object", properties: {} },
 };
 
+const GOTO_SLIDE_TOOL_DEF: ToolDefinition = {
+  name: "goto_slide",
+  description: "Jump to a specific slide number (1-based) while presenting.",
+  parameters: {
+    type: "object",
+    properties: {
+      slide: {
+        type: "number",
+        description: "Slide number to show (starting at 1).",
+      },
+    },
+    required: ["slide"],
+  },
+};
+
 const SEND_MEETING_CHAT_TOOL_DEF: ToolDefinition = {
   name: "send_meeting_chat",
   description:
@@ -209,16 +228,42 @@ const SEND_MEETING_CHAT_TOOL_DEF: ToolDefinition = {
   },
 };
 
+const LEAVE_MEETING_TOOL_DEF: ToolDefinition = {
+  name: "leave_meeting",
+  description:
+    "Leave the video meeting now. Call when the host wraps up or clearly asks you to leave. " +
+    "Say a brief goodbye before calling this if you have not already.",
+  parameters: { type: "object", properties: {} },
+};
+
+const MUTE_MEETING_TOOL_DEF: ToolDefinition = {
+  name: "mute_meeting",
+  description:
+    "Mute your audio output into the meeting (soft mute). Call when asked to mute yourself. " +
+    "You must unmute_meeting before speaking again.",
+  parameters: { type: "object", properties: {} },
+};
+
+const UNMUTE_MEETING_TOOL_DEF: ToolDefinition = {
+  name: "unmute_meeting",
+  description: "Unmute your audio output into the meeting so you can speak again.",
+  parameters: { type: "object", properties: {} },
+};
+
 const MEETING_PRESENTATION_TOOL_DEFS: ToolDefinition[] = [
   START_PRESENTATION_TOOL_DEF,
   STOP_PRESENTATION_TOOL_DEF,
   NEXT_SLIDE_TOOL_DEF,
   PREVIOUS_SLIDE_TOOL_DEF,
+  GOTO_SLIDE_TOOL_DEF,
 ];
 
 const MEETING_SESSION_TOOL_DEFS: ToolDefinition[] = [
   ...MEETING_PRESENTATION_TOOL_DEFS,
   SEND_MEETING_CHAT_TOOL_DEF,
+  LEAVE_MEETING_TOOL_DEF,
+  MUTE_MEETING_TOOL_DEF,
+  UNMUTE_MEETING_TOOL_DEF,
 ];
 
 const VAD_SILENCE_MS          = 150;    // default silence window before STT flush (per-agent tunable via vadSilenceMs)
@@ -1065,6 +1110,10 @@ export class OrchestrationPipeline implements VoiceSession {
   private meetingRosterLine: string | null = null;
   private meetingSpeakerName: string | null = null;
   private pendingMeetingNotes: string[] = [];
+  /** Explicit mute_meeting tool — blocks all bot audio into the room. */
+  private meetingForceMuted = false;
+  /** From Meeting settings: only emit audio while actively speaking TTS. */
+  private meetingMuteWhenIdle = false;
 
   // ── Bolna-parity: conversation-quality metrics ────────────────────────────
   /** Total characters spoken by the agent across all turns (proxy for speak time). */
@@ -2113,7 +2162,15 @@ export class OrchestrationPipeline implements VoiceSession {
   }
 
   constructor(config: SessionConfig) {
-    this.config = config;
+    const rawAudioOut = config.onAudioOut;
+    this.config = {
+      ...config,
+      onAudioOut: (audio: Buffer) => {
+        if (this.blocksMeetingAudioOut()) return;
+        rawAudioOut(audio);
+      },
+    };
+    this.meetingMuteWhenIdle = config.meetingMuteWhenIdle === true;
     this.callDirection = config.callDirection ?? "inbound";
     this.isResumeDroppedCall = config.isResumeDroppedCall === true;
     this.agent = config.agentConfig;
@@ -6079,7 +6136,8 @@ export class OrchestrationPipeline implements VoiceSession {
         toolName === "start_presentation" ||
         toolName === "stop_presentation" ||
         toolName === "next_slide" ||
-        toolName === "previous_slide"
+        toolName === "previous_slide" ||
+        toolName === "goto_slide"
       ) {
         if (!this.agent.isMeetingSession) {
           return `error: ${toolName} is only available during meeting sessions`;
@@ -6102,6 +6160,21 @@ export class OrchestrationPipeline implements VoiceSession {
           meetMid: this.config.meetMid,
           message: typeof safeArgs["message"] === "string" ? safeArgs["message"] : "",
           pin: safeArgs["pin"] === true,
+        });
+      }
+      if (toolName === "leave_meeting") {
+        if (!this.agent.isMeetingSession) {
+          return "error: leave_meeting is only available during meeting sessions";
+        }
+        return executeLeaveMeetingTool({ meetMid: this.config.meetMid });
+      }
+      if (toolName === "mute_meeting" || toolName === "unmute_meeting") {
+        if (!this.agent.isMeetingSession) {
+          return `error: ${toolName} is only available during meeting sessions`;
+        }
+        return executeMuteMeetingTool({
+          meetMid: this.config.meetMid,
+          muted: toolName === "mute_meeting",
         });
       }
       logger.warn({ callId: this.config.callId, toolName }, "LLM called unknown tool — ignoring");
@@ -9454,6 +9527,74 @@ export class OrchestrationPipeline implements VoiceSession {
     const n = note.trim().slice(0, 200);
     if (!n || this.pendingMeetingNotes.length >= 10) return;
     this.pendingMeetingNotes.push(n);
+  }
+
+  /** Inbound meeting chat → user turn so the agent can act on typed instructions. */
+  injectMeetingChat(from: string, text: string): void {
+    const who = from.trim().slice(0, 60) || "Participant";
+    const body = text.replace(/\s+/g, " ").trim().slice(0, 400);
+    if (!body || this.closed) return;
+    const line = `[Meeting chat from ${who}]: ${body}`;
+    logger.info(
+      { callId: this.config.callId, from: who, chars: body.length },
+      "Injecting meeting chat as user turn",
+    );
+    if (this.isProcessing) {
+      this.pendingTranscriptQueue.push({
+        text: line,
+        emittedAt: Date.now(),
+        closeReason: "stt_final",
+      });
+      return;
+    }
+    this.isProcessing = true;
+    void this.processTurn(line, 0)
+      .catch((err) => {
+        logger.error({ callId: this.config.callId, err }, "Meeting chat turn error");
+      })
+      .finally(() => {
+        this.isProcessing = false;
+        if (this.closed || this.endCallInitiated) return;
+        const next = this.drainPendingTranscripts();
+        if (next) {
+          this.isProcessing = true;
+          void this.processTurn(next.text, 0)
+            .catch((err) => {
+              logger.error({ callId: this.config.callId, err }, "Queued turn error after meeting chat");
+            })
+            .finally(() => {
+              this.isProcessing = false;
+            });
+        }
+      });
+  }
+
+  setMeetingOutputMuted(muted: boolean): void {
+    this.meetingForceMuted = muted === true;
+    if (this.meetingForceMuted) {
+      try {
+        this.bargeInCallback?.();
+      } catch {
+        /* ignore */
+      }
+    }
+    logger.info(
+      { callId: this.config.callId, muted: this.meetingForceMuted },
+      "Meeting output mute changed",
+    );
+  }
+
+  isMeetingOutputMuted(): boolean {
+    return this.meetingForceMuted;
+  }
+
+  /** Soft-mute gate used by wrapped onAudioOut. */
+  blocksMeetingAudioOut(): boolean {
+    if (!this.agent.isMeetingSession) return false;
+    if (this.meetingForceMuted) return true;
+    if (!this.meetingMuteWhenIdle) return false;
+    // Only forward audio while actively speaking TTS into the meeting.
+    return !(this.isPlaying || this.isSendingTtsAudio);
   }
 
   /** Roster cost-cut: end the SnapServe session when the meeting is over. */

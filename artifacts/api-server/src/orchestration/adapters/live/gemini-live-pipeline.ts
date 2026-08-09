@@ -118,6 +118,17 @@ const MEETING_PRESENTATION_TOOLS: Array<{
     parameters: { type: "object", properties: {}, required: [] },
   },
   {
+    name: "goto_slide",
+    description: "Jump to a specific slide number (1-based) while presenting.",
+    parameters: {
+      type: "object",
+      properties: {
+        slide: { type: "number", description: "Slide number to show (starting at 1)." },
+      },
+      required: ["slide"],
+    },
+  },
+  {
     name: "send_meeting_chat",
     description:
       "Post a short message to the meeting chat (links, agenda, summary). Keep under ~500 characters.",
@@ -129,6 +140,21 @@ const MEETING_PRESENTATION_TOOLS: Array<{
       },
       required: ["message"],
     },
+  },
+  {
+    name: "leave_meeting",
+    description: "Leave the video meeting now when the host wraps up or asks you to leave.",
+    parameters: { type: "object", properties: {}, required: [] },
+  },
+  {
+    name: "mute_meeting",
+    description: "Mute your audio output into the meeting. Call unmute_meeting before speaking again.",
+    parameters: { type: "object", properties: {}, required: [] },
+  },
+  {
+    name: "unmute_meeting",
+    description: "Unmute your audio output into the meeting so you can speak again.",
+    parameters: { type: "object", properties: {}, required: [] },
   },
 ];
 
@@ -188,8 +214,20 @@ export class GeminiLivePipeline implements VoiceSession {
   // firing handlers unordered lets late audio/transcripts overtake an
   // interruption (stale-answer symptom).
   private msgChain: Promise<void> = Promise.resolve();
+  private meetingForceMuted = false;
+  private meetingMuteWhenIdle = false;
+  private pendingMeetingNotes: string[] = [];
+
   constructor(config: SessionConfig) {
-    this.config = config;
+    const rawAudioOut = config.onAudioOut;
+    this.config = {
+      ...config,
+      onAudioOut: (audio: Buffer) => {
+        if (this.blocksMeetingAudioOut()) return;
+        rawAudioOut(audio);
+      },
+    };
+    this.meetingMuteWhenIdle = config.meetingMuteWhenIdle === true;
     this.agent = config.agentConfig;
     const key = config.providerKeys.get("google") ?? config.providerKeys.get("gemini");
     if (!key) {
@@ -372,6 +410,49 @@ export class GeminiLivePipeline implements VoiceSession {
 
   getLastMediaAtMs(): number | null {
     return this.recording.getLastWriteAtMs();
+  }
+
+  injectMeetingNote(note: string): void {
+    const n = note.trim().slice(0, 200);
+    if (!n || this.pendingMeetingNotes.length >= 10) return;
+    this.pendingMeetingNotes.push(n);
+  }
+
+  injectMeetingChat(from: string, text: string): void {
+    const who = from.trim().slice(0, 60) || "Participant";
+    const body = text.replace(/\s+/g, " ").trim().slice(0, 400);
+    if (!body || this.closed) return;
+    const line = `[Meeting chat from ${who}]: ${body}`;
+    void this.ensureConnected().then(() => {
+      if (this.closed) return;
+      this.session?.sendClientContent({
+        turns: [{ role: "user", parts: [{ text: line }] }],
+        turnComplete: true,
+      });
+      this.config.onTranscript("user", line);
+      this.appendUser(line);
+    }).catch((err) => {
+      logger.warn({ callId: this.config.callId, err }, "Meeting chat inject failed");
+    });
+  }
+
+  setMeetingOutputMuted(muted: boolean): void {
+    this.meetingForceMuted = muted === true;
+    if (this.meetingForceMuted) {
+      this.outFrames8k.length = 0;
+      this.config.onBargeIn?.();
+    }
+  }
+
+  isMeetingOutputMuted(): boolean {
+    return this.meetingForceMuted;
+  }
+
+  blocksMeetingAudioOut(): boolean {
+    if (!this.agent.isMeetingSession) return false;
+    if (this.meetingForceMuted) return true;
+    if (!this.meetingMuteWhenIdle) return false;
+    return !(this.isPlayingOut || this.outFrames8k.length > 0);
   }
 
   /** Meeting roster cost-cut: end SnapServe session when the room empties. */

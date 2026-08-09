@@ -96,4 +96,23 @@ describe("meet roster empty-room cost cut", () => {
     expect(endMeetingSession).toHaveBeenCalledTimes(1);
     expect(leaveRecallBot).toHaveBeenCalledTimes(1);
   });
+
+  it("routes inbound chat to injectMeetingChat", () => {
+    const mid = "mid-chat";
+    const injectMeetingChat = vi.fn();
+    createMeetRoster(mid, "Agent");
+    attachMeetSession(mid, { injectMeetingChat });
+
+    handleRecallParticipantEvent(mid, {
+      event: "participant_events.chat_message",
+      data: {
+        data: {
+          participant: { id: 7, name: "Karthik", is_host: true },
+          data: { text: "Next topic: pricing", to: "everyone" },
+        },
+      },
+    });
+
+    expect(injectMeetingChat).toHaveBeenCalledWith("Karthik", "Next topic: pricing");
+  });
 });

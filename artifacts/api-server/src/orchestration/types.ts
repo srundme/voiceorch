@@ -705,6 +705,8 @@ export interface SessionConfig {
   meetBotToken?: string | null;
   /** Default deck URL from agent Meeting settings (fallback for start_presentation). */
   presentationDefaultUrl?: string | null;
+  /** Soft-mute bot audio between replies in meeting sessions. */
+  meetingMuteWhenIdle?: boolean;
   /** Campaign lead ID for outbound calls — enables transfer DB writes + lead timeline */
   campaignLeadId?: number | null;
   onAudioOut: (audio: Buffer) => void;

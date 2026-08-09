@@ -38,6 +38,16 @@ export type MeetingsChannelConfig = {
   presentationUrl: string;
   /** When true and presentationUrl is set, start screenshare as soon as the bot joins. */
   presentationAutoStart: boolean;
+  /**
+   * Display name shown in Meet/Zoom/Teams for the bot (Recall bot_name).
+   * Empty = use the joining agent's name.
+   */
+  botDisplayName: string;
+  /**
+   * When true, only emit bot audio into the meeting while the agent is speaking
+   * (soft-mute between replies). Explicit mute_meeting still forces mute.
+   */
+  muteWhenIdle: boolean;
 };
 
 /** Default meeting length — longer than typical phone calls. */
@@ -57,6 +67,8 @@ export const DEFAULT_MEETINGS_CONFIG: MeetingsChannelConfig = {
   silenceHangupEnabled: true,
   presentationUrl: "",
   presentationAutoStart: false,
+  botDisplayName: "",
+  muteWhenIdle: true,
 };
 
 function clampInt(raw: unknown, min: number, max: number, fallback: number): number {
@@ -104,7 +116,21 @@ export function parseMeetingsConfig(agentConfig: unknown): MeetingsChannelConfig
     silenceHangupEnabled: m["silenceHangupEnabled"] !== false,
     presentationUrl: typeof m["presentationUrl"] === "string" ? m["presentationUrl"].trim() : "",
     presentationAutoStart: m["presentationAutoStart"] === true,
+    botDisplayName:
+      typeof m["botDisplayName"] === "string" ? m["botDisplayName"].trim().slice(0, 60) : "",
+    // Default on — only disable when explicitly false.
+    muteWhenIdle: m["muteWhenIdle"] !== false,
   };
+}
+
+/** Recall participant name: custom Meeting setting, else agent name. */
+export function resolveMeetBotDisplayName(
+  meetings: MeetingsChannelConfig,
+  agentName: string,
+): string {
+  const custom = meetings.botDisplayName.trim();
+  if (custom) return custom.slice(0, 60);
+  return (agentName.trim() || "Voice Agent").slice(0, 60);
 }
 
 /** Agent id that should run inside the meeting given the configured owner's config. */
@@ -128,13 +154,16 @@ export const MEETING_BEHAVIOR_PROMPT =
   `If the speaker name matches anyone listed as known in your instructions (KNOWN PEOPLE, founders, teammates, etc.), ` +
   `greet them by name once and SKIP asking which company or role — treat discovery as already done for that person. ` +
   `Only ask company/role for speakers who are NOT on your known list. ` +
-  `Do not use phone openers like "am I speaking with…". Leave only when the host wraps up or clearly asks you to go.\n` +
+  `Do not use phone openers like "am I speaking with…". When the host wraps up or clearly asks you to leave, call leave_meeting.\n` +
   `[MEETING SCHEDULING] If participants want another time: use list_bookings / reschedule / book tools when available. ` +
   `After a successful reschedule or booking with a Meet link, confirm the new time and that a SnapServe meeting agent will join automatically near that time. ` +
   `If they want YOU to rejoin THIS same Meet link later (same URL, later clock time), call schedule_meet_rejoin with that time — do not invent a new Meet link. ` +
   `Never claim a booking or rejoin is set unless the tool returned success.\n` +
   `[MEETING PRESENTATION] When participants ask you to present or share slides, call start_presentation (optional url if they give a different HTTPS link). ` +
-  `Use next_slide / previous_slide to advance; stop_presentation when done. ` +
+  `Use next_slide / previous_slide to advance, goto_slide with a slide number to jump, stop_presentation when done. ` +
   `Do not claim you are sharing unless the tool returned success. Voice stays on; screenshare is the deck.\n` +
+  `[MEETING MUTE] If asked to mute yourself, call mute_meeting. Call unmute_meeting before speaking again after a mute. ` +
+  `Between replies your output may already be soft-muted (mute when idle).\n` +
   `[MEETING CHAT] Use send_meeting_chat to post links, agendas, or short summaries in the meeting chat when helpful. ` +
-  `Keep messages brief; pin only for important notices late joiners should see. Never invent that chat was sent unless the tool succeeded.`;
+  `Keep messages brief; pin only for important notices late joiners should see. Never invent that chat was sent unless the tool succeeded. ` +
+  `Incoming chat appears as user lines tagged [Meeting chat from Name] — treat those as typed instructions (e.g. next topic) and respond aloud when helpful.`;

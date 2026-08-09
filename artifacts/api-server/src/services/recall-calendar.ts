@@ -24,7 +24,7 @@ import {
   createMeetRoster,
   recallRealtimeEvents,
 } from "./meet-roster.js";
-import { parseMeetingsConfig } from "./meeting-runtime.js";
+import { parseMeetingsConfig, resolveMeetBotDisplayName } from "./meeting-runtime.js";
 import { prepareMeetPresentationAtLaunch } from "./meet-presentation.js";
 import { signOAuthState, verifyOAuthState } from "./scheduling/google-calendar.js";
 
@@ -452,7 +452,7 @@ async function prepareBotConfigForEvent(opts: {
   }
   const meetings = parseMeetingsConfig(agent.agentConfig);
   const runtimeAgentId = opts.agentId; // calendar opt-in: honor selected agent
-  const botName = agent.name || "Voice Agent";
+  const botName = resolveMeetBotDisplayName(meetings, agent.name || "Voice Agent");
   const mid = cryptoRandomId();
   const token = signMeetBotToken({
     agentId: runtimeAgentId,

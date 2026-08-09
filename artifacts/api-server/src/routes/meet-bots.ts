@@ -28,6 +28,7 @@ import {
 } from "../services/meet-roster.js";
 import {
   parseMeetingsConfig,
+  resolveMeetBotDisplayName,
   resolveMeetRuntimeAgentId,
 } from "../services/meeting-runtime.js";
 import {
@@ -54,10 +55,12 @@ router.get("/meet-bots/page", async (req, res) => {
   let agentName = "Voice Agent";
   try {
     const rows = await db
-      .select({ name: agentsTable.name })
+      .select({ name: agentsTable.name, agentConfig: agentsTable.agentConfig })
       .from(agentsTable)
       .where(eq(agentsTable.id, payload.agentId));
-    if (rows[0]?.name) agentName = rows[0].name;
+    if (rows[0]) {
+      agentName = resolveMeetBotDisplayName(parseMeetingsConfig(rows[0].agentConfig), rows[0].name || agentName);
+    }
   } catch (err) {
     logger.warn({ err, agentId: payload.agentId }, "meet-bots page: agent name lookup failed");
   }
@@ -151,7 +154,8 @@ router.post("/meet-bots", requireAuth, async (req, res) => {
     // Booking flows may use whoJoins=delegate; paste-link Meet page passes joinAsSelected.
     const meetings = parseMeetingsConfig(agent.agentConfig);
     let runtimeAgentId = joinAsSelected ? agentId : resolveMeetRuntimeAgentId(agentId, agent.agentConfig);
-    let botName = agent.name || "Voice Agent";
+    let runtimeName = agent.name || "Voice Agent";
+    let runtimeMeetings = meetings;
     if (runtimeAgentId !== agentId) {
       const [delegate] = await db
         .select({
@@ -165,8 +169,10 @@ router.post("/meet-bots", requireAuth, async (req, res) => {
         res.status(400).json({ error: "Meeting delegate agent not found or not owned by you" });
         return;
       }
-      botName = delegate.name || botName;
+      runtimeName = delegate.name || runtimeName;
+      runtimeMeetings = parseMeetingsConfig(delegate.agentConfig);
     }
+    const botName = resolveMeetBotDisplayName(runtimeMeetings, runtimeName);
 
     const mid = randomUUID();
     const token = signMeetBotToken({

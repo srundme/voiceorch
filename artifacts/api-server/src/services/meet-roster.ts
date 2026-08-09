@@ -29,6 +29,7 @@ import {
   RECALL_EVERYONE_LEFT_TIMEOUT_SEC,
   RECALL_NOONE_JOINED_TIMEOUT_SEC,
 } from "./meet-bots.js";
+import { bindMeetMuteController, unbindMeetMuteController } from "./meet-control.js";
 
 /** The subset of pipeline surface the roster drives (all optional on VoiceSession). */
 export interface MeetingAwareSession {
@@ -36,6 +37,10 @@ export interface MeetingAwareSession {
   setMeetingRoster?(line: string | null): void;
   setMeetingSpeaker?(name: string | null): void;
   injectMeetingNote?(note: string): void;
+  /** Inbound meeting chat → agent turn (typed instructions). */
+  injectMeetingChat?(from: string, text: string): void;
+  setMeetingOutputMuted?(muted: boolean): void;
+  isMeetingOutputMuted?(): boolean;
   /** Tear down SnapServe voice session (cost cut when room empties). */
   endMeetingSession?(reason?: string): void;
 }
@@ -218,6 +223,7 @@ export function attachMeetSession(
   if (typeof callId === "number" && callId > 0) r.callId = callId;
   pushRoster(r);
   if (r.lastSpeaker) session.setMeetingSpeaker?.(r.lastSpeaker);
+  bindMeetMuteController(mid, session);
   // Persist bot id early so call-log can show "Meeting recording" before archive.
   if (r.botId && typeof callId === "number" && callId > 0) {
     void stampRecallBotIdOnCall(callId, r.botId);
@@ -256,6 +262,7 @@ export function detachMeetSession(mid: string): void {
   const r = rosters.get(mid);
   if (!r) return;
   r.session = null;
+  unbindMeetMuteController(mid);
   clearEmptyRoomTimer(r);
   clearNooneJoinedTimer(r);
   // Meeting audio session ended — start async archive if we have a bot id.
@@ -417,6 +424,11 @@ export function handleRecallParticipantEvent(mid: string, body: unknown): void {
     return;
   }
 
+  if (evt === "participant_events.chat_message") {
+    handleChatMessageEvent(mid, r, body);
+    return;
+  }
+
   const inner = (body as { data?: { data?: { participant?: unknown } } })?.data?.data;
   const p = inner?.participant as {
     id?: unknown;
@@ -473,6 +485,38 @@ export function handleRecallParticipantEvent(mid: string, body: unknown): void {
     // speech window, so the label must survive until someone ELSE speaks.
     default:
       break;
+  }
+}
+
+/** Inbound chat → agent context / turn (hosts can type the next topic). */
+function handleChatMessageEvent(mid: string, r: Roster, body: unknown): void {
+  const inner = (body as {
+    data?: {
+      data?: {
+        participant?: { id?: unknown; name?: unknown; is_host?: unknown; email?: unknown };
+        data?: { text?: unknown; to?: unknown };
+      };
+    };
+  })?.data?.data;
+  const p = inner?.participant;
+  const name = sanitizeName(p?.name) ?? "Participant";
+  if (isBotItself(r, name)) return; // ignore our own outbound chat echoes
+  const text =
+    typeof inner?.data?.text === "string"
+      ? inner.data.text.replace(/\s+/g, " ").trim().slice(0, 500)
+      : "";
+  if (!text) return;
+  const id = typeof p?.id === "number" ? p.id : null;
+  if (id !== null) {
+    upsertParticipant(r, id, name, p?.is_host === true, p?.email);
+    noteHumanPresent(mid, r);
+    pushRoster(r);
+  }
+  logger.info({ mid, from: name, chars: text.length }, "Meeting inbound chat");
+  if (r.session?.injectMeetingChat) {
+    r.session.injectMeetingChat(name, text);
+  } else {
+    r.session?.injectMeetingNote?.(`Chat from ${name}: ${text.slice(0, 180)}`);
   }
 }
 
@@ -671,6 +715,7 @@ export const RECALL_PARTICIPANT_EVENTS = [
   "participant_events.update",
   "participant_events.speech_on",
   "participant_events.speech_off",
+  "participant_events.chat_message",
 ];
 
 /** Full realtime event list for bot create (includes transcript when enabled). */

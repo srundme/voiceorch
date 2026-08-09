@@ -34,6 +34,7 @@ import {
 } from "./meet-roster.js";
 import {
   parseMeetingsConfig,
+  resolveMeetBotDisplayName,
   resolveMeetRuntimeAgentId,
 } from "./meeting-runtime.js";
 import { prepareMeetPresentationAtLaunch } from "./meet-presentation.js";
@@ -173,12 +174,14 @@ export async function dispatchUpcomingMeetingBots(): Promise<void> {
 
         let runtimeAgentId = resolveMeetRuntimeAgentId(configuredAgentId, configured.agentConfig);
         let agentName = configured.name || "SnapServe AI Assistant";
+        let runtimeMeetings = meetings;
         if (runtimeAgentId !== configuredAgentId) {
           const [delegate] = await db
             .select({
               id: agentsTable.id,
               name: agentsTable.name,
               userId: agentsTable.userId,
+              agentConfig: agentsTable.agentConfig,
             })
             .from(agentsTable)
             .where(eq(agentsTable.id, runtimeAgentId))
@@ -191,8 +194,10 @@ export async function dispatchUpcomingMeetingBots(): Promise<void> {
             runtimeAgentId = configuredAgentId;
           } else {
             agentName = delegate.name || agentName;
+            runtimeMeetings = parseMeetingsConfig(delegate.agentConfig);
           }
         }
+        const botDisplayName = resolveMeetBotDisplayName(runtimeMeetings, agentName);
 
         const mid = randomUUID();
         const attendeeEmail =
@@ -216,7 +221,7 @@ export async function dispatchUpcomingMeetingBots(): Promise<void> {
         const base = getSelfBaseUrl();
         const pageUrl = `${base}/api/meet-bots/page?mb=${encodeURIComponent(token)}`;
 
-        createMeetRoster(mid, agentName);
+        createMeetRoster(mid, botDisplayName);
         if (attendeeEmail) {
           setMeetAttendeeHints(mid, [{ name: attendeeName || attendeeEmail, email: attendeeEmail }]);
         }
@@ -231,7 +236,7 @@ export async function dispatchUpcomingMeetingBots(): Promise<void> {
         const joinAt = plan.action === "schedule" ? plan.joinAt : undefined;
         const bot = await createRecallBot({
           meetingUrl: b.meetLink,
-          botName: agentName,
+          botName: botDisplayName,
           pageUrl,
           ownerUserId: b.userId,
           agentId: runtimeAgentId,

@@ -436,7 +436,7 @@ export async function createSession(params: {
       effectiveSystemPrompt +=
         `\n\n[PRESENTATION DECK] ${meetingsCfg.presentationUrl}\n` +
         (meetingsCfg.presentationAutoStart
-          ? `Screenshare may already be active — use next_slide / previous_slide / stop_presentation as needed.`
+          ? `Screenshare may already be active — use next_slide / previous_slide / goto_slide / stop_presentation as needed.`
           : `Call start_presentation when asked to share slides (url optional).`);
     }
     if (typeof params.meetingMemoryEmail === "string" && params.meetingMemoryEmail.trim()) {
@@ -2252,6 +2252,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
         meetBotToken: isMeetBotSession && params.meetBotToken ? params.meetBotToken : null,
         presentationDefaultUrl:
           isMeetBotSession && meetingsCfg.presentationUrl ? meetingsCfg.presentationUrl : null,
+        meetingMuteWhenIdle: isMeetBotSession ? meetingsCfg.muteWhenIdle : false,
         memoryOwnerAgentId,
         campaignLeadId: params.campaignLeadId ?? null,
         onAudioOut: params.onAudioOut,
@@ -2292,6 +2293,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     meetBotToken: isMeetBotSession && params.meetBotToken ? params.meetBotToken : null,
     presentationDefaultUrl:
       isMeetBotSession && meetingsCfg.presentationUrl ? meetingsCfg.presentationUrl : null,
+    meetingMuteWhenIdle: isMeetBotSession ? meetingsCfg.muteWhenIdle : false,
     memoryOwnerAgentId,
     campaignLeadId: params.campaignLeadId ?? null,
     onAudioOut: params.onAudioOut,
