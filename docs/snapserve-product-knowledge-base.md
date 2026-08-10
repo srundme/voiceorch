@@ -4,8 +4,8 @@
 
 ## Primary navigation
 
-Home · **Campaigns** · Agents · Phone numbers · **Connections** · History  
-(+ Knowledge, Memory, Squads, Analytics, Bookings)
+Home · **Campaigns** · Agents · Phone numbers · **Connections** · History · **Analytics**  
+(+ Knowledge, Memory, Squads, Bookings under More)
 
 ## Default path (phone)
 

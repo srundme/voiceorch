@@ -5,7 +5,7 @@ import {
   Bot, Plus, Search, Phone, Mic, Brain, Webhook, PhoneForwarded,
   Save, MoreHorizontal, Trash2, Settings, FileText, Wrench,
   VoicemailIcon, TestTube2, ChevronRight, ChevronLeft,
-  Volume2, Check, X, Pencil, ChevronDown, List, Globe, BarChart3,
+  Volume2, Check, X, Pencil, ChevronDown, List, Globe,
   User2, Users, Sparkles, BookOpen, ToggleLeft, ToggleRight, Tag, Loader2, Square, AudioLines,
   Play, Pause,
   Timer, ShieldCheck, Layers, Gauge, MicOff, HelpCircle, PhoneOff, Mail, MessageCircle,
