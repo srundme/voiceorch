@@ -568,7 +568,12 @@ function isStubGreeting(text: string): boolean {
  */
 const GREETING_FULL_PROMPT_MAX_CHARS = 12_000;
 
-function buildCompactGreetingPrompt(fullSystemPrompt: string, language: string, resumeDropped = false): string {
+function buildCompactGreetingPrompt(
+  fullSystemPrompt: string,
+  language: string,
+  resumeDropped = false,
+  opts?: { callDirection?: "inbound" | "outbound" | string | null; agentName?: string | null },
+): string {
   const memoryMatch = fullSystemPrompt.match(
     /=== CALLER MEMORY[\s\S]*?={20,}/,
   );
@@ -621,9 +626,21 @@ function buildCompactGreetingPrompt(fullSystemPrompt: string, language: string, 
       ? "[OPENING] Speak the GREETING / opening from CALL FLOW above as a single uninterrupted turn. " +
         "Use the caller's company/contact name when present. Do not replace the scripted pitch with a one-word Hello."
       : "[OPENING LENGTH] Your opening line must be ONE short, natural sentence — a brief greeting only. Do not list services, ask multiple questions, or explain anything yet; wait for the caller to respond.";
+  // Call 7943: agent display name "voiceathon new agent" leaked into spoken opener
+  // as "Thanks for calling voiceathon" even though the prompt never named that brand.
+  const agentLabel = (opts?.agentName ?? "").trim();
   const antiInventionRule =
-    "[NEVER INVENT] Use ONLY the company name, brand names, and facts written in the instructions above. " +
-    "If no company name is given above, greet WITHOUT naming any company — NEVER make up a company, product, or service.";
+    "[NEVER INVENT] Use ONLY the company name, brand names, and facts written in the scripted instructions above " +
+    "(IDENTITY / CALL FLOW / GREETING). " +
+    "If no company name is given there, greet WITHOUT naming any company — NEVER make up a company, product, or service. " +
+    "The agent/workspace display name is an internal label, NOT a company brand — never say " +
+    `"thanks for calling <agent name>"` +
+    (agentLabel ? ` (do not say "${agentLabel}" or a shortened form of it as the company).` : ".");
+  const directionRule =
+    opts?.callDirection === "outbound"
+      ? "[OUTBOUND] You placed this call. Do NOT say \"thanks for calling\" / \"thank you for calling\". " +
+        "Open as the caller (introduce yourself / your company from the script), not as an inbound receptionist."
+      : "";
   const returningCallerRule = memoryBlock && !resumeDropped
     ? "[RETURNING CALLER] If the CALLER MEMORY above contains actual facts about this caller (not just an empty template), " +
       "this is a repeat conversation: briefly acknowledge it naturally in ONE short clause and skip the first-time welcome. " +
@@ -640,6 +657,7 @@ function buildCompactGreetingPrompt(fullSystemPrompt: string, language: string, 
       fullSystemPrompt,
       languageInstruction,
       fullOpeningRule,
+      directionRule,
       returningCallerRule,
       antiInventionRule,
     ].filter(Boolean).join("\n\n");
@@ -649,6 +667,7 @@ function buildCompactGreetingPrompt(fullSystemPrompt: string, language: string, 
     scriptBlock,
     languageInstruction,
     openingLengthRule,
+    directionRule,
     returningCallerRule,
     antiInventionRule,
   ].filter(Boolean);
@@ -4464,6 +4483,10 @@ export class OrchestrationPipeline implements VoiceSession {
               this.agent.systemPrompt,
               greetLang,
               resumeDropped,
+              {
+                callDirection: this.callDirection,
+                agentName: this.agent.name,
+              },
             ),
             this.salutationFor(null),
           );
