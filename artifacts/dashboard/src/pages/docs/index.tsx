@@ -10,6 +10,7 @@ import AgentsPage from "./pages/agents";
 import VariablesPage from "./pages/variables";
 import KnowledgeBasePage from "./pages/knowledge-base";
 import CalendarPage from "./pages/calendar";
+import MeetingsPage from "./pages/meetings";
 import OutboundCallsPage from "./pages/outbound-calls";
 import CampaignsPage from "./pages/campaigns";
 import WebhooksPage from "./pages/webhooks";
@@ -92,6 +93,9 @@ export default function DocsPage() {
       break;
     case "calendar":
       Content = CalendarPage;
+      break;
+    case "meetings":
+      Content = MeetingsPage;
       break;
     case "outbound-calls":
       Content = OutboundCallsPage;

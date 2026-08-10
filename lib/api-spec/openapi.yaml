@@ -64,6 +64,8 @@ tags:
     description: The SnapServe Book — anonymous per-device reading progress
   - name: wizard
     description: Agent-builder wizard helpers (voices, layered system-prompt generation)
+  - name: meetings
+    description: Meeting bots — join Google Meet / Zoom / Teams, calendar join toggles
 
 paths:
   /healthz:
@@ -6616,6 +6618,204 @@ paths:
                 $ref: "#/components/schemas/BookExamAttempts"
         "400":
           description: Invalid deviceId
+
+  # ── Meetings (Meet / Zoom / Teams bots + calendar join) ─────────────────────
+  /meet-bots:
+    post:
+      operationId: createMeetBot
+      tags: [meetings]
+      summary: Launch a meeting bot into Meet / Zoom / Teams
+      description: |
+        Sends the selected agent into a video meeting. Requires a logged-in session
+        (dashboard). Enable Meetings on the agent and set a meeting prompt first.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [agentId, meetingUrl]
+              properties:
+                agentId:
+                  type: integer
+                  description: Agent configured for meetings
+                meetingUrl:
+                  type: string
+                  format: uri
+                  description: Google Meet, Zoom, or Teams URL
+                joinAsSelected:
+                  type: boolean
+                  description: When true, skip booking delegate swap and join as agentId
+      responses:
+        "200":
+          description: Bot created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [botId, status, agentId]
+                properties:
+                  botId: { type: string }
+                  status: { type: string }
+                  agentId: { type: integer }
+                  configuredAgentId: { type: integer }
+        "400":
+          description: Invalid agentId or meetingUrl
+        "404":
+          description: Agent not found
+        "503":
+          description: Meeting bots not configured
+
+  /meet-bots/identity:
+    get:
+      operationId: getMeetBotIdentity
+      tags: [meetings]
+      summary: Bot email / Meet identity for invites and admit
+      responses:
+        "200":
+          description: Identity payload
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /meet-bots/{botId}:
+    get:
+      operationId: getMeetBot
+      tags: [meetings]
+      summary: Get meeting bot status
+      parameters:
+        - name: botId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Bot status
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [botId, status]
+                properties:
+                  botId: { type: string }
+                  status: { type: string }
+        "404":
+          description: Bot not found
+    delete:
+      operationId: leaveMeetBot
+      tags: [meetings]
+      summary: Make the meeting bot leave
+      parameters:
+        - name: botId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Left
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok: { type: boolean }
+        "404":
+          description: Bot not found
+
+  /meet-calendar/connection:
+    get:
+      operationId: getMeetCalendarConnection
+      tags: [meetings]
+      summary: AI meetings Google Calendar connection status
+      description: Readonly calendar connect used for Join toggles on /app/meet (not booking write calendar).
+      responses:
+        "200":
+          description: Connection status
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+    delete:
+      operationId: disconnectMeetCalendar
+      tags: [meetings]
+      summary: Disconnect AI meetings Google Calendar
+      responses:
+        "200":
+          description: Disconnected
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /meet-calendar/events:
+    get:
+      operationId: listMeetCalendarEvents
+      tags: [meetings]
+      summary: List upcoming calendar events with Join flags
+      responses:
+        "200":
+          description: Events
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /meet-calendar/events/{eventId}/bot:
+    post:
+      operationId: enableMeetCalendarEventBot
+      tags: [meetings]
+      summary: Enable agent auto-join for a calendar event
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [agentId]
+              properties:
+                agentId: { type: integer }
+      responses:
+        "200":
+          description: Join enabled
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          description: Invalid request
+    delete:
+      operationId: disableMeetCalendarEventBot
+      tags: [meetings]
+      summary: Disable agent auto-join for a calendar event
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Join disabled
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
 
 components:
   securitySchemes:

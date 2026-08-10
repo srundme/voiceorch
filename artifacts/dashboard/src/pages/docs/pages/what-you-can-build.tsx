@@ -30,9 +30,16 @@ export default function WhatYouCanBuildPage() {
 
       <h2 id="campaigns">Campaigns (dashboard)</h2>
       <p>
-        Batch-dial CSV leads with retries and dispositions without writing a dialer. Good for
-        sales teams; API builders usually orchestrate calls from their own app instead. See{" "}
+        Batch-dial CSV / Sheets / website / Meta leads with retries, dispositions, and lead
+        transfer to webhook or Sheets. After-call WhatsApp/email rules live on the agent. See{" "}
         <Link href="/docs/campaigns">Campaigns</Link>.
+      </p>
+
+      <h2 id="meetings">Meeting agents</h2>
+      <p>
+        Send the same agent into Google Meet, Zoom, or Teams — paste a link, auto-join calendar
+        events, or dispatch from bookings. In-meeting tools cover leave, mute, chat, and slides.{" "}
+        <Link href="/docs/meetings">Meetings guide</Link>.
       </p>
 
       <h2 id="embed">Apps on top of the API</h2>

@@ -9,6 +9,26 @@ export default function ChangelogPage() {
         description="Notable documentation and API-consumer changes."
       />
 
+      <h2 id="2026-08-10-clarity">2026-08-10 — Product clarity, meetings, playbook</h2>
+      <ul>
+        <li>
+          <strong>Platform concepts</strong> — agent vs campaign vs Connections vs Outcomes /
+          after-call messages vs lead transfer vs squads vs meetings.
+        </li>
+        <li>
+          <strong>Meetings guide</strong> — paste link, calendar Join, booking dispatch, in-meeting
+          tools; API Reference tag <strong>Meetings</strong>.
+        </li>
+        <li>
+          <strong>Agents / Campaigns guides</strong> — Outcomes + after-call on agent; lead transfer
+          on campaign.
+        </li>
+        <li>
+          <strong>Voiceathon playbook</strong> — rewritten for Connections hub, disposition dynamics,
+          meetings, and current nav (see repo <code>docs/voiceathon-participant-playbook.md</code>).
+        </li>
+      </ul>
+
       <h2 id="2026-07-30-claude">2026-07-30 — Claude skill &amp; MCP</h2>
       <ul>
         <li>

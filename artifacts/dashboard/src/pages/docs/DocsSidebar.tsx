@@ -18,6 +18,7 @@ import {
   Wallet,
   Webhook,
   MessageSquare,
+  Video,
   type LucideIcon,
 } from "lucide-react";
 import { ExternalFooterLink } from "./DocsUi";
@@ -55,6 +56,7 @@ const NAV_GROUPS: NavGroup[] = [
       { title: "Variables", slug: "variables", icon: Variable },
       { title: "Knowledge base", slug: "knowledge-base", icon: Database },
       { title: "Calendar & booking", slug: "calendar", icon: Calendar },
+      { title: "Meeting agents", slug: "meetings", icon: Video },
       { title: "Phone numbers", slug: "phone-numbers", icon: Phone },
       { title: "Calls & history", slug: "outbound-calls", icon: PhoneCall },
       { title: "Campaigns", slug: "campaigns", icon: PhoneCall },
