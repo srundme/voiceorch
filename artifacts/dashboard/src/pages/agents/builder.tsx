@@ -6598,8 +6598,8 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
     resolver: zodResolver(agentFormSchema),
     defaultValues: {
       name: "", description: "", asrProvider: "sarvam", asrModel: "saaras:v3",
-      llmProvider: "sarvam", llmModel: "sarvam-105b", ttsProvider: "sarvam",
-      ttsVoice: "priya", ttsModel: "bulbul:v3", telephonyProvider: "vobiz",
+      llmProvider: "sarvam", llmModel: "sarvam-105b", ttsProvider: "cartesia",
+      ttsVoice: "c45bc5ec-dc68-4feb-8829-6ac1e9f4f478", ttsModel: "sonic-3.5", telephonyProvider: "vobiz",
       systemPrompt: "", temperature: 0.40, maxDuration: 480,
       greetingMessage: "Hello", firstSpeaker: "assistant", endCallPhrases: "", silenceTimeoutSeconds: 30,
       language: "en-US", asrLanguage: "", backchannelingEnabled: true,
@@ -7569,9 +7569,9 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
     ],
     llmProvider: "google",
     llmModel: "gemini-3.6-flash",
-    ttsProvider: "sarvam",
-    ttsModel: "bulbul:v3",
-    ttsVoice: "priya",
+    ttsProvider: "cartesia",
+    ttsModel: "sonic-3.5",
+    ttsVoice: "c45bc5ec-dc68-4feb-8829-6ac1e9f4f478",
     // Attendance capacity is fixed by agent type:
     // phone+meet → can join Meet (paste-link or booking); phone-only → book only, never join.
     agentConfig: {
