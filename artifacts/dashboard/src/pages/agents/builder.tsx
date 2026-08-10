@@ -4195,6 +4195,7 @@ type DispConfigRow = {
 function DispositionSettingsPanel({ agentId }: { agentId: number }) {
   const { toast } = useToast();
   const qc = useQueryClient();
+  const [, navigate] = useLocation();
   const [categories, setCategories] = useState<DispositionCategory[]>([]);
   const [fields, setFields] = useState<UiDomainField[]>([]);
   const [rules, setRules] = useState<unknown[]>([]);
@@ -4218,6 +4219,37 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
     staleTime: 60_000,
     enabled: agentId > 0,
   });
+
+  const { data: waConnections } = useQuery({
+    queryKey: ["builder-whatsapp-connections", agentId],
+    queryFn: () =>
+      customFetch<{
+        connections: Array<{ id: string; active: boolean; agentId: number | null }>;
+      }>(`${DASH_API}/whatsapp/connections`),
+    staleTime: 60_000,
+    enabled: agentId > 0,
+  });
+  const { data: waChannel } = useQuery({
+    queryKey: ["builder-whatsapp-channel", agentId],
+    queryFn: () =>
+      customFetch<{ channel: { active?: boolean } | null }>(`${DASH_API}/whatsapp/channel`),
+    staleTime: 60_000,
+    enabled: agentId > 0,
+  });
+  const { data: emailChannel } = useQuery({
+    queryKey: ["email-channel"],
+    queryFn: () =>
+      customFetch<{ channel: { active?: boolean } | null }>(`${DASH_API}/email/channel`),
+    staleTime: 60_000,
+    enabled: agentId > 0,
+  });
+
+  const waConnList = Array.isArray(waConnections?.connections) ? waConnections.connections : [];
+  const whatsappReady = !!(
+    waConnList.some((c) => c.active && (c.agentId === agentId || c.agentId == null)) ||
+    waChannel?.channel?.active
+  );
+  const emailReady = !!emailChannel?.channel?.active;
 
   useEffect(() => {
     if (!dispConfig) return;
@@ -4525,7 +4557,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                   <h4 className="text-xs font-semibold text-foreground">After-call messages</h4>
                 </div>
                 <p className="text-[10px] text-muted-foreground mt-0.5">
-                  Send WhatsApp / email from this agent. Templates live in Connections. Campaigns only push leads to CRM/Sheets.
+                  Send WhatsApp / email from this agent. Campaigns only push leads to CRM/Sheets.
                 </p>
               </div>
               <Button
@@ -4553,6 +4585,91 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                 <Plus className="h-3.5 w-3.5" /> Add rule
               </Button>
             </div>
+
+            {(!whatsappReady || !emailReady) && (
+              <div className="rounded-xl border border-amber-500/25 bg-amber-500/5 p-3 mb-3 space-y-2">
+                <p className="text-[12px] font-medium text-foreground">
+                  {!whatsappReady && !emailReady
+                    ? "Connect WhatsApp or email first"
+                    : !whatsappReady
+                      ? "WhatsApp not connected yet"
+                      : "Email not connected yet"}
+                </p>
+                <p className="text-[10px] text-muted-foreground">
+                  You can still save rules now — messages only send after the channel is live under Connections.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {!whatsappReady && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="h-7 text-[10px]"
+                      onClick={() => navigate(`/app/connections?setup=whatsapp&agentId=${agentId}`)}
+                    >
+                      Set up WhatsApp
+                    </Button>
+                  )}
+                  {!emailReady && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={whatsappReady ? "default" : "outline"}
+                      className="h-7 text-[10px]"
+                      onClick={() => navigate(`/app/connections?setup=email&agentId=${agentId}`)}
+                    >
+                      Set up email
+                    </Button>
+                  )}
+                  {(whatsappReady || emailReady) && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 text-[10px]"
+                      onClick={() => navigate("/app/connections")}
+                    >
+                      Open Connections
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {(whatsappReady || emailReady) && (
+              <div className="flex flex-wrap items-center gap-2 mb-3">
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium",
+                    whatsappReady
+                      ? "bg-emerald-500/12 text-emerald-600 dark:text-emerald-400"
+                      : "bg-muted text-muted-foreground",
+                  )}
+                >
+                  <span className={cn("size-1.5 rounded-full", whatsappReady ? "bg-emerald-500" : "bg-muted-foreground/50")} />
+                  WhatsApp {whatsappReady ? "ready" : "not connected"}
+                </span>
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium",
+                    emailReady
+                      ? "bg-emerald-500/12 text-emerald-600 dark:text-emerald-400"
+                      : "bg-muted text-muted-foreground",
+                  )}
+                >
+                  <span className={cn("size-1.5 rounded-full", emailReady ? "bg-emerald-500" : "bg-muted-foreground/50")} />
+                  Email {emailReady ? "ready" : "not connected"}
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 text-[10px] px-2"
+                  onClick={() => navigate("/app/connections")}
+                >
+                  Connections
+                </Button>
+              </div>
+            )}
 
             <div className="rounded-xl border border-border/60 bg-card/20 p-3 space-y-3 mb-3">
               <div className="flex items-center justify-between gap-3">

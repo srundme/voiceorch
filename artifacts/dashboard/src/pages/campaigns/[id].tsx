@@ -7,6 +7,7 @@ import {
   getListCampaignBatchesQueryKey, getGetCampaignQueryKey,
   getGetBatchAnalyticsQueryOptions,
   useListCrmConnections, useUpdateCrmConnection, getListCrmConnectionsQueryKey,
+  customFetch,
 } from "@workspace/api-client-react";
 import type { CampaignBatch, CrmConnection } from "@workspace/api-client-react";
 import { CrmImportDialog } from "../connections";
@@ -57,8 +58,6 @@ import {
   toLeadTransferPayload,
   type LeadTransferForm,
 } from "./lead-transfer-settings";
-import {
-import { customFetch } from "@workspace/api-client-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
