@@ -1,5 +1,6 @@
 /**
- * WhatsApp + Email setup for Tools tab (replaces Channels → messaging).
+ * Thin WhatsApp + Email status for Tools tab.
+ * Credentials live under Connections — Tools only toggles capability + template pick when ready.
  */
 
 import { useLocation } from "wouter";
@@ -8,7 +9,7 @@ import { customFetch } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { EmailChannelCard } from "./email-channel-card";
+import { useEmailChannelReady } from "./email-channel-card";
 import {
   AgentWhatsappTemplatePicks,
   type AgentWaTemplates,
@@ -76,74 +77,54 @@ export function ToolsWhatsappSetup({ agentId }: { agentId: number }) {
 
   return (
     <div className="space-y-3 border-t border-border/30 px-4 pb-4 pt-3">
-      <p className="text-[11px] text-muted-foreground leading-relaxed">
-        Pick the WhatsApp connection and templates this agent can send mid-call.
-      </p>
-      <div className="flex justify-end">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-7 text-[10px]"
-          onClick={() => navigate(`/app/connections?setup=whatsapp&agentId=${agentId}`)}
-        >
-          Connections
-        </Button>
-      </div>
       {waLoading ? (
-        <Skeleton className="h-14 w-full rounded-md" />
-      ) : agentConnection ? (
+        <Skeleton className="h-10 w-full rounded-md" />
+      ) : agentConnection || waData?.channel ? (
         <div className="space-y-3">
-          <div className="flex items-center justify-between gap-3 rounded-lg bg-muted/30 px-3 py-2.5">
+          <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
               <p className="truncate text-[12px] font-medium">
-                {agentConnection.name || "WhatsApp connection"}
+                {agentConnection?.name
+                  || waData?.channel?.businessName
+                  || "WhatsApp connected"}
               </p>
               <p className="text-[10px] text-muted-foreground">
-                {agentConnection.metaPhoneNumberId || agentConnection.metaConnected
-                  ? "WhatsApp Business · Meta API"
-                  : "BSP webhook"}
+                Credentials live under Connections. Pick mid-call templates here.
               </p>
             </div>
-            <StatusLine ready label="Active" />
+            <div className="flex items-center gap-2 shrink-0">
+              <StatusLine ready label="Ready" />
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 text-[10px]"
+                onClick={() => navigate(`/app/connections?setup=whatsapp&agentId=${agentId}`)}
+              >
+                Connections
+              </Button>
+            </div>
           </div>
-          {(agentConnection.metaPhoneNumberId || agentConnection.metaConnected) ? (
+          {agentConnection && (agentConnection.metaPhoneNumberId || agentConnection.metaConnected) ? (
             <AgentWhatsappTemplatePicks
               agentId={agentId}
               connectionId={agentConnection.id}
               initialTemplates={agentConnection.metaTemplates}
               initialCatalog={agentConnection.templateCatalog}
             />
-          ) : null}
-        </div>
-      ) : waData?.channel ? (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between gap-3 rounded-lg bg-muted/30 px-3 py-2.5">
-            <div className="min-w-0">
-              <p className="truncate text-[12px] font-medium">
-                {waData.channel.businessName || "WhatsApp channel"}
-              </p>
-              <p className="text-[10px] text-muted-foreground">
-                {waData.channel.mode === "own" ? "Own number" : "Legacy Instant"}
-                {waData.channel.phoneE164 ? ` · ${waData.channel.phoneE164}` : ""}
-              </p>
-            </div>
-            <StatusLine
-              ready={!!waData.channel.active}
-              label={waData.channel.status || (waData.channel.active ? "Active" : "Inactive")}
+          ) : waData?.channel ? (
+            <AgentWhatsappTemplatePicks
+              agentId={agentId}
+              nativeMode
+              initialCatalog={waData.channel.templateCatalog}
             />
-          </div>
-          <AgentWhatsappTemplatePicks
-            agentId={agentId}
-            nativeMode
-            initialCatalog={waData.channel.templateCatalog}
-          />
+          ) : null}
         </div>
       ) : (
         <div className="rounded-lg bg-muted/25 px-3 py-3">
-          <p className="text-[12px] font-medium">No WhatsApp connected</p>
+          <p className="text-[12px] font-medium">WhatsApp not connected</p>
           <p className="mt-0.5 text-[10px] text-muted-foreground">
-            Connect one under Connections, then select templates here.
+            Set up Instant WhatsApp under Connections, then return here for templates.
           </p>
           <Button
             type="button"
@@ -160,9 +141,35 @@ export function ToolsWhatsappSetup({ agentId }: { agentId: number }) {
 }
 
 export function ToolsEmailSetup() {
+  const [, navigate] = useLocation();
+  const ready = useEmailChannelReady();
+
   return (
     <div className="border-t border-border/30 px-4 pb-4 pt-3">
-      <EmailChannelCard forceExpanded />
+      <div className="flex items-center justify-between gap-3 rounded-lg bg-muted/25 px-3 py-3">
+        <div className="min-w-0">
+          <p className="text-[12px] font-medium">
+            {ready ? "Brevo email ready" : "Email not connected"}
+          </p>
+          <p className="mt-0.5 text-[10px] text-muted-foreground">
+            {ready
+              ? "Sender and template are managed under Connections."
+              : "Connect Brevo under Connections (from address + API key + test)."}
+          </p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <StatusLine ready={ready} label={ready ? "Ready" : "Needs setup"} />
+          <Button
+            type="button"
+            size="sm"
+            variant={ready ? "outline" : "default"}
+            className="h-7 text-[10px]"
+            onClick={() => navigate("/app/connections?setup=email")}
+          >
+            {ready ? "Connections" : "Set up email"}
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }

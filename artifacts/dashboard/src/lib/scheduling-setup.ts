@@ -215,6 +215,8 @@ export async function createMeeting(input: {
       description: input.description?.trim() || undefined,
       durationMinutes: input.durationMinutes,
       isActive: true,
+      // Invites must include a Meet link — wizard copy promises this.
+      enableGoogleMeet: true,
     }),
   });
   return mapMeeting(r);

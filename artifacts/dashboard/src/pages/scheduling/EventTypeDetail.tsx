@@ -209,7 +209,7 @@ export default function EventTypeDetailPage({ id: idProp, embedded = false, onSa
       confirmationMode: et.confirmationMode,
       maxBookingsPerSlot: et.maxBookingsPerSlot,
       isActive: et.isActive,
-      enableGoogleMeet: et.enableGoogleMeet ?? false,
+      enableGoogleMeet: et.enableGoogleMeet ?? true,
     });
   }
 

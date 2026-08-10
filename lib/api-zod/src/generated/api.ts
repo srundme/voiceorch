@@ -4962,7 +4962,7 @@ export const createEventTypeBodyBufferBeforeMinsDefault = 0;
 export const createEventTypeBodyBufferAfterMinsDefault = 0;
 export const createEventTypeBodyConfirmationModeDefault = `instant`;
 export const createEventTypeBodyMaxBookingsPerSlotDefault = 1;
-export const createEventTypeBodyEnableGoogleMeetDefault = false;
+export const createEventTypeBodyEnableGoogleMeetDefault = true;
 export const createEventTypeBodyIsActiveDefault = true;
 
 export const CreateEventTypeBody = zod.object({

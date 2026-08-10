@@ -10299,7 +10299,8 @@ components:
           default: 1
         enableGoogleMeet:
           type: boolean
-          default: false
+          default: true
+          description: When true, Google Calendar invites include a Meet link
         isActive:
           type: boolean
           default: true

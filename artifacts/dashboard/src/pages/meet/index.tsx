@@ -271,15 +271,37 @@ export default function MeetPage() {
 
   return (
     <StripePage
-      title="Meetings"
-      description="Send an agent into Google Meet, Zoom, or Teams — paste a link or connect your calendar."
+      title="Meeting bots"
+      description="Send an agent into a Meet / Zoom / Teams room that already exists. This is not the same as booking a calendar appointment."
       back={{ href: "/app/connections", label: "Connections" }}
     >
       <div className="mx-auto max-w-xl space-y-6">
+        <div className="rounded-xl border border-border bg-muted/20 px-4 py-3 space-y-2">
+          <p className="text-[12px] font-medium text-foreground">Three ways to join</p>
+          <ul className="space-y-1.5 text-[11px] text-muted-foreground leading-relaxed">
+            <li>
+              <span className="font-medium text-foreground">Join now</span> — paste a Meet/Zoom/Teams link (manual).
+            </li>
+            <li>
+              <span className="font-medium text-foreground">Calendar Join</span> — connect Google below, toggle Join on events (semi-auto).
+            </li>
+            <li>
+              <span className="font-medium text-foreground">From bookings</span> — when a booking invite has a Meet link and this agent has meetings enabled, SnapServe can auto-join near the slot.
+            </li>
+          </ul>
+          <p className="text-[11px] text-muted-foreground">
+            To <span className="font-medium text-foreground">create</span> calendar appointments with Meet links, use{" "}
+            <Link href="/app/connections?setup=calendar" className="underline underline-offset-2 text-foreground">
+              Connections → Bookings calendar
+            </Link>
+            — that is a different Google connect.
+          </p>
+        </div>
+
         {/* 1. Agent */}
         <section className="space-y-2.5">
           <div className="flex items-baseline justify-between gap-2">
-            <h2 className="text-[13px] font-semibold tracking-tight">1. Agent</h2>
+            <h2 className="text-[13px] font-semibold tracking-tight">1. Pick agent</h2>
             <Link
               href="/app/agents?create=1"
               className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground"
@@ -339,17 +361,63 @@ export default function MeetPage() {
           )}
         </section>
 
-        {/* 2. Calendar connect */}
+        {/* 2. Paste link — primary / clearest path */}
+        <section className="space-y-3 rounded-xl border border-border bg-card p-4">
+          <h2 className="text-[13px] font-semibold tracking-tight flex items-center gap-1.5">
+            <Video className="size-3.5" />
+            2. Join now (paste link)
+          </h2>
+          <p className="text-[11px] text-muted-foreground leading-relaxed">
+            Manual: paste a room URL and send the agent in immediately.
+          </p>
+          <div className="space-y-2">
+            <Label className="text-[12px]">Meet / Zoom / Teams URL</Label>
+            <Input
+              className="h-10"
+              placeholder="https://meet.google.com/abc-defg-hij"
+              value={meetingUrl}
+              onChange={(e) => setMeetingUrl(e.target.value)}
+            />
+          </div>
+          {identityQ.data?.botEmail ? (
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              Admit <span className="font-mono text-foreground">{identityQ.data.botEmail}</span> if asked.
+            </p>
+          ) : (
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              Host may need to admit the bot from the waiting room.
+            </p>
+          )}
+          <Button
+            className="h-10 w-full sm:w-auto"
+            disabled={!agentId || !meetingUrl.trim() || launch.isPending}
+            onClick={() => launch.mutate()}
+          >
+            {launch.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Video className="mr-2 h-4 w-4" />}
+            Join meeting
+          </Button>
+        </section>
+
+        {bots.length > 0 && (
+          <section className="space-y-2">
+            <h2 className="text-[13px] font-semibold tracking-tight">In this session</h2>
+            {bots.map((b) => (
+              <BotRow key={b.botId} bot={b} onRemove={() => remove.mutate(b.botId)} removing={remove.isPending} />
+            ))}
+          </section>
+        )}
+
+        {/* 3. Calendar Join */}
         <section className="space-y-3 rounded-xl border border-border bg-card p-4">
           <div className="flex items-start justify-between gap-3">
             <div>
               <h2 className="text-[13px] font-semibold tracking-tight flex items-center gap-1.5">
                 <CalendarDays className="size-3.5" />
-                2. Google Calendar for AI meetings
+                3. Calendar Join (auto on events you choose)
               </h2>
               <p className="mt-1 text-[11px] text-muted-foreground leading-relaxed">
-                Connect your Google account so SnapServe can schedule the agent onto meetings you choose.
-                Separate from booking calendars under Connections.
+                Connect Google so you can toggle <span className="font-medium text-foreground">Join</span> on upcoming
+                events. This calendar is for meeting bots only — not the Bookings calendar under Connections.
               </p>
             </div>
           </div>
@@ -438,45 +506,18 @@ export default function MeetPage() {
           )}
         </section>
 
-        {/* 3. Paste link */}
-        <section className="space-y-3 rounded-xl border border-border bg-card p-4">
-          <h2 className="text-[13px] font-semibold tracking-tight">3. Or paste a meeting link</h2>
-          <div className="space-y-2">
-            <Label className="text-[12px]">Meet / Zoom / Teams URL</Label>
-            <Input
-              className="h-10"
-              placeholder="https://meet.google.com/abc-defg-hij"
-              value={meetingUrl}
-              onChange={(e) => setMeetingUrl(e.target.value)}
-            />
-          </div>
-          {identityQ.data?.botEmail ? (
-            <p className="text-[11px] text-muted-foreground leading-relaxed">
-              Admit <span className="font-mono text-foreground">{identityQ.data.botEmail}</span> if asked.
-            </p>
-          ) : (
-            <p className="text-[11px] text-muted-foreground leading-relaxed">
-              Host may need to admit the bot from the waiting room.
-            </p>
-          )}
-          <Button
-            className="h-10 w-full sm:w-auto"
-            disabled={!agentId || !meetingUrl.trim() || launch.isPending}
-            onClick={() => launch.mutate()}
-          >
-            {launch.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Video className="mr-2 h-4 w-4" />}
-            Join meeting
-          </Button>
+        <section className="rounded-xl border border-dashed border-border/70 px-4 py-3 space-y-1">
+          <p className="text-[12px] font-medium text-foreground">From bookings</p>
+          <p className="text-[11px] text-muted-foreground leading-relaxed">
+            When the agent books a slot (Tools → Booking) and the invite has a Meet link, SnapServe can
+            auto-dispatch this meeting bot near the start time — if this agent has meetings enabled.
+            Set up invites under{" "}
+            <Link href="/app/connections?setup=calendar" className="underline underline-offset-2 text-foreground">
+              Bookings calendar
+            </Link>
+            .
+          </p>
         </section>
-
-        {bots.length > 0 && (
-          <section className="space-y-2">
-            <h2 className="text-[13px] font-semibold tracking-tight">In this session</h2>
-            {bots.map((b) => (
-              <BotRow key={b.botId} bot={b} onRemove={() => remove.mutate(b.botId)} removing={remove.isPending} />
-            ))}
-          </section>
-        )}
 
         {agentIdNum > 0 && (
           <section className="space-y-3">
@@ -485,7 +526,7 @@ export default function MeetPage() {
               onClick={() => setShowSettings((v) => !v)}
               className="flex w-full items-center justify-between rounded-lg border border-border/70 bg-muted/20 px-3 py-2.5 text-left text-[13px] font-medium hover:bg-muted/35"
             >
-              <span>4. Waiting, length &amp; presentation</span>
+              <span>Advanced — waiting room, length, slides</span>
               <span className="text-[11px] font-normal text-muted-foreground">
                 {showSettings ? "Hide" : "Show"}
               </span>

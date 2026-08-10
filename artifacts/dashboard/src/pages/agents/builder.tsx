@@ -113,7 +113,6 @@ import {
   type AgentTeamMembership,
 } from "./agent-team";
 import { ToolsWhatsappSetup, ToolsEmailSetup } from "./tools-messaging";
-import { MeetingsChannelCard } from "./meetings-channel-card";
 import {
   PropertyRow,
   StatusDot,
@@ -2594,7 +2593,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
       icon: <Mail className="h-4 w-4" />,
       color: "sky",
       label: "Send Email",
-      description: "Lets the agent email the caller mid-call using your Brevo sender (configure below). Asks for their address, then sends the email template.",
+      description: "Lets the agent email mid-call. Connect Brevo under Connections first; pick templates there.",
       needsEventType: false,
     },
     {
@@ -2602,7 +2601,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
       icon: <MessageCircle className="h-4 w-4" />,
       color: "emerald",
       label: "Send WhatsApp",
-      description: "Lets the agent send a WhatsApp template mid-call. Pick connection + templates below when enabled.",
+      description: "Lets the agent send WhatsApp mid-call. Connect WhatsApp under Connections; pick templates below when ready.",
       needsEventType: false,
     },
   ] as const;
@@ -2675,8 +2674,8 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                 <div className="mt-1.5 space-y-1">
                   <p className="text-[11px] leading-relaxed text-muted-foreground">
                     {canAttendMeetings
-                      ? "This is a phone + meetings agent — Booking can create Meet links; join settings are under Meetings below (works for paste-link too)."
-                      : "Phone-only agent — can book the calendar, but will not join the Meet."}
+                      ? "Booking creates calendar invites with a Meet link. To send this agent into the room, use Meeting bots (/app/meet) — separate from booking."
+                      : "Phone-only agent — can book the calendar with a Meet link, but will not join the room."}
                   </p>
                   {!canAttendMeetings && (
                     <button
@@ -2888,35 +2887,38 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
           )}
         </div>
 
-        {/* Meeting join settings — independent of Booking (paste-link Meet bots need this too). */}
+        {/* Meeting bots — join actions live on /app/meet; Tools only explains capability. */}
         {canAttendMeetings && (
           <>
             <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-1 mt-4">
-              Meetings
+              Meeting bots
             </p>
             <div className="rounded-xl border border-border/70 bg-card/40 p-4">
-              <div className="mb-3 flex items-start gap-3">
+              <div className="flex items-start gap-3">
                 <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted/30">
                   <Video className="h-4 w-4 text-foreground/70" />
                 </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-semibold text-foreground/80">Meeting settings</p>
-                  <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground/60">
-                    Applies whenever this agent joins Meet/Zoom/Teams — paste-link from the Meet page or auto-join from a booking. Booking tools are optional.
+                <div className="min-w-0 flex-1 space-y-2">
+                  <p className="text-xs font-semibold text-foreground/80">Can join Meet / Zoom / Teams</p>
+                  <p className="text-[11px] leading-relaxed text-muted-foreground/60">
+                    Join now, calendar Join toggles, and bot settings (waiting room, slides) live on the Meeting bots page — not here.
+                    Booking a calendar slot is separate (switch above).
                   </p>
+                  {agentId ? (
+                    <Button asChild type="button" variant="outline" size="sm" className="h-7 text-[11px]">
+                      <Link href={`/app/meet?agentId=${agentId}`}>Open Meeting bots</Link>
+                    </Button>
+                  ) : (
+                    <p className="text-[11px] text-amber-400/80">Save the agent first, then open Meeting bots.</p>
+                  )}
                 </div>
               </div>
-              {agentId ? (
-                <MeetingsChannelCard agentId={agentId} showJoinLink={false} />
-              ) : (
-                <p className="text-[11px] text-amber-400/80">Save the agent first to edit meeting settings.</p>
-              )}
             </div>
           </>
         )}
 
         <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-1 mt-4">Messaging</p>
-        {CALL_CONTROL_TOOLS.filter((t) => t.type === "send_email" || t.type === "send_whatsapp").map(({ type, icon, color, label, description }) => {
+        {CALL_CONTROL_TOOLS.filter((t) => t.type === "send_email" || t.type === "send_whatsapp").map(({ type, icon, label, description }) => {
           const isOn = hasNativeTool(type);
           return (
             <div key={type} className={cn("rounded-xl border transition-all duration-150", isOn ? "border-border/70 bg-card/40" : "border-border/40 bg-card/20")}>

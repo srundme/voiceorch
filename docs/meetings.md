@@ -1,6 +1,8 @@
-# SnapServe Meetings — feature map
+# SnapServe Meeting bots — feature map
 
 Send a voice **agent** into **Google Meet / Zoom / Microsoft Teams**. Same agent brain as phone calls; different channel (Recall.ai bot + WebRTC page).
+
+**Not the same as Bookings calendar:** Connections → Bookings calendar creates appointments with a Meet link on the invite. Meeting bots (`/app/meet`) join a room that already exists.
 
 ## Enable meetings on an agent
 

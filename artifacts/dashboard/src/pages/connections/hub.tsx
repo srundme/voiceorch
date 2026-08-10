@@ -48,16 +48,16 @@ const BASE_CARDS: ConnCard[] = [
     id: "calendar",
     setupId: "calendar",
     icon: "calendar",
-    title: "Calendar & booking",
-    blurb: "Google Calendar setup for mid-call appointments.",
+    title: "Bookings calendar",
+    blurb: "Google Calendar for appointments — invites include a Meet link.",
   },
   {
     id: "meetings",
     icon: "video",
-    title: "Meetings",
-    blurb: "Paste a Meet / Zoom / Teams link and send an agent into the call.",
+    title: "Meeting bots",
+    blurb: "Send an agent into Meet / Zoom / Teams (paste link or calendar Join).",
     href: "/app/meet",
-    cta: "Join with link",
+    cta: "Open meeting bots",
   },
   {
     id: "whatsapp",
@@ -71,7 +71,7 @@ const BASE_CARDS: ConnCard[] = [
     setupId: "email",
     brand: "brevo",
     title: "Email (Brevo)",
-    blurb: "Bring your Brevo key to email people from the agent.",
+    blurb: "From address + API key. Agents use this for email.",
   },
   {
     id: "website",
@@ -265,11 +265,11 @@ export default function ConnectionsPage() {
     return (
       <StripePage
         title="Email (Brevo)"
-        description="Bring your own Brevo API key. Agents use this for Send email."
+        description="Three steps: from address, API key, test. Template is optional."
         back={{ href: "/app/connections", label: "Connections" }}
       >
-        <div className="max-w-xl">
-          <EmailChannelCard forceExpanded />
+        <div className="max-w-lg">
+          <EmailChannelCard forceExpanded setupMode />
         </div>
       </StripePage>
     );

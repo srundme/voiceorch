@@ -45,7 +45,7 @@ export const eventTypesTable = pgTable("event_types", {
   bufferAfterMins: integer("buffer_after_mins").notNull().default(0),
   confirmationMode: text("confirmation_mode").notNull().default("instant"),
   maxBookingsPerSlot: integer("max_bookings_per_slot").notNull().default(1),
-  enableGoogleMeet: boolean("enable_google_meet").notNull().default(false),
+  enableGoogleMeet: boolean("enable_google_meet").notNull().default(true),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
