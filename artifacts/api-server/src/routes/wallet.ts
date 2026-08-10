@@ -5,7 +5,7 @@ import { db } from "@workspace/db";
 import { usersTable, walletTransactionsTable, invoicesTable, partnersTable } from "@workspace/db/schema";
 import { eq, desc, sql, and } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
-import { clientContext } from "../middlewares/clientContext.js";
+import { clientContext, denyManagedClient } from "../middlewares/clientContext.js";
 import { logger } from "../lib/logger.js";
 import { resolvePartnerBilling } from "../services/partner-billing.js";
 import { getFlatRateCentsPerMin } from "../services/minute-rates.js";
@@ -87,7 +87,7 @@ router.get("/wallet", requireAuth, clientContext, async (req, res) => {
 });
 
 // POST /api/wallet/topup — create Razorpay INR order (base credit + 18% GST payable)
-router.post("/wallet/topup", requireAuth, clientContext, async (req, res) => {
+router.post("/wallet/topup", requireAuth, clientContext, denyManagedClient, async (req, res) => {
   if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
     res.status(503).json({ error: "Payment gateway not configured" });
     return;
@@ -184,7 +184,7 @@ router.post("/wallet/topup", requireAuth, clientContext, async (req, res) => {
 });
 
 // POST /api/wallet/verify-payment — verify signature, save mandate token, credit wallet
-router.post("/wallet/verify-payment", requireAuth, clientContext, async (req, res) => {
+router.post("/wallet/verify-payment", requireAuth, clientContext, denyManagedClient, async (req, res) => {
   const clerkId = (req as any).clerkUserId as string;
   const { razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body as {
     razorpayOrderId: string;
@@ -438,7 +438,7 @@ router.get("/wallet/transactions", requireAuth, clientContext, async (req, res) 
 });
 
 // PATCH /api/wallet/autopay
-router.patch("/wallet/autopay", requireAuth, clientContext, async (req, res) => {
+router.patch("/wallet/autopay", requireAuth, clientContext, denyManagedClient, async (req, res) => {
   const clerkId = (req as any).clerkUserId as string;
   const { autoPayEnabled, autoPayThresholdCents, autoPayAmountCents } = req.body as {
     autoPayEnabled?: boolean;

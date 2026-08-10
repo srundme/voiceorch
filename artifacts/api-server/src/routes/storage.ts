@@ -8,6 +8,7 @@ import { Router, type IRouter, type Response, type Request } from "express";
 import { eq, desc } from "drizzle-orm";
 import { db, callsTable, callRecordingsTable, agentsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
+import { clientContext } from "../middlewares/clientContext.js";
 import { verifyRecordingShareToken } from "../services/recording-share.js";
 
 const router: IRouter = Router();
@@ -81,7 +82,9 @@ router.get("/storage/recordings/share/:token", async (req, res): Promise<void> =
   streamRecordingAudio(req, res, rec.audio, rec.contentType);
 });
 
-router.get("/storage/recordings/:callId", requireAuth, async (req, res): Promise<void> => {
+// clientContext: partners acting-as a managed client must resolve ownership
+// against the client's Clerk id (same as GET /calls/:id), not the partner's.
+router.get("/storage/recordings/:callId", requireAuth, clientContext, async (req, res): Promise<void> => {
   const rawId = (req.params as { callId?: string | string[] }).callId;
   const idStr = Array.isArray(rawId) ? rawId[0] ?? "" : rawId ?? "";
   const callId = Number.parseInt(idStr, 10);

@@ -1,4 +1,4 @@
-// trigger rebuild — campaigns list CSV export button (dashboard Vite bundle)
+// trigger rebuild — Phone numbers sidebar nav (dashboard Vite bundle)
 import http from "http";
 import { randomBytes } from "crypto";
 import { fileURLToPath } from "url";

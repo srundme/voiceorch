@@ -13,7 +13,7 @@ describe("Recall cost-control create payload", () => {
   it("sets everyone_left / noone_joined / waiting_room timeouts", () => {
     const leave = buildRecallAutomaticLeave();
     expect(leave.everyone_left_timeout.timeout).toBe(RECALL_EVERYONE_LEFT_TIMEOUT_SEC);
-    expect(leave.everyone_left_timeout.activate_after).toBe(0);
+    expect(leave.everyone_left_timeout.activate_after).toBe(1);
     expect(leave.noone_joined_timeout).toBe(RECALL_NOONE_JOINED_TIMEOUT_SEC);
     expect(leave.waiting_room_timeout).toBe(RECALL_WAITING_ROOM_TIMEOUT_SEC);
     expect(leave.recording_permission_denied_timeout).toBe(60);

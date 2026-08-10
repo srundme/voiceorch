@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { eq, and, sql, inArray } from "drizzle-orm";
 import { db, knowledgeSourcesTable, knowledgeEntriesTable, agentsTable, agentKnowledgeSourcesTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
-import { clientContext, denyManagedClientUnlessAgentEdit } from "../middlewares/clientContext.js";
+import { clientContext } from "../middlewares/clientContext.js";
 import { logger } from "../lib/logger.js";
 import { ingestKbTextEntries, type KbEntryInput } from "../services/kb-ingest.js";
 import { isKbVectorReady, kickKbEmbedWorker } from "../services/kb-embeddings.js";
@@ -359,7 +359,7 @@ router.get("/knowledge-sources", requireAuth, clientContext, async (req, res) =>
 
 /* ── Create ──────────────────────────────────────────────────────────────── */
 
-router.post("/knowledge-sources", requireAuth, clientContext, denyManagedClientUnlessAgentEdit, async (req, res) => {
+router.post("/knowledge-sources", requireAuth, clientContext, async (req, res) => {
   const userId = (req as any).clerkUserId as string;
   const { name, type, url, entries = [] } = req.body as {
     name: string;
@@ -581,7 +581,7 @@ router.post("/knowledge-sources", requireAuth, clientContext, denyManagedClientU
 
 /* ── Upload document (file source) ───────────────────────────────────────── */
 
-router.post("/knowledge-sources/upload", requireAuth, clientContext, denyManagedClientUnlessAgentEdit, upload.single("file"), async (req, res) => {
+router.post("/knowledge-sources/upload", requireAuth, clientContext, upload.single("file"), async (req, res) => {
   const userId = (req as any).clerkUserId as string;
   const name = String((req.body?.name ?? "")).trim();
   const file = req.file;
@@ -696,7 +696,7 @@ router.post("/knowledge-sources/upload", requireAuth, clientContext, denyManaged
 
 /* ── Extract text only (used by Vibe Build chat — no DB write) ─────────── */
 
-router.post("/knowledge-sources/extract-text", requireAuth, clientContext, denyManagedClientUnlessAgentEdit, upload.single("file"), async (req, res) => {
+router.post("/knowledge-sources/extract-text", requireAuth, clientContext, upload.single("file"), async (req, res) => {
   const file = req.file;
   if (!file) { res.status(400).json({ error: "file is required" }); return; }
 
@@ -740,7 +740,7 @@ router.get("/knowledge-sources/:id", requireAuth, clientContext, async (req, res
 
 /* ── Update (rename) ─────────────────────────────────────────────────────── */
 
-router.patch("/knowledge-sources/:id", requireAuth, clientContext, denyManagedClientUnlessAgentEdit, async (req, res) => {
+router.patch("/knowledge-sources/:id", requireAuth, clientContext, async (req, res) => {
   const userId = (req as any).clerkUserId as string;
   const id = Number(req.params["id"]);
   const { name } = req.body as { name?: string };
@@ -757,7 +757,7 @@ router.patch("/knowledge-sources/:id", requireAuth, clientContext, denyManagedCl
 
 /* ── Delete source ───────────────────────────────────────────────────────── */
 
-router.delete("/knowledge-sources/:id", requireAuth, clientContext, denyManagedClientUnlessAgentEdit, async (req, res) => {
+router.delete("/knowledge-sources/:id", requireAuth, clientContext, async (req, res) => {
   const userId = (req as any).clerkUserId as string;
   const id = Number(req.params["id"]);
   const [deleted] = await db
@@ -770,7 +770,7 @@ router.delete("/knowledge-sources/:id", requireAuth, clientContext, denyManagedC
 
 /* ── Add entry ───────────────────────────────────────────────────────────── */
 
-router.post("/knowledge-sources/:id/entries", requireAuth, clientContext, denyManagedClientUnlessAgentEdit, async (req, res) => {
+router.post("/knowledge-sources/:id/entries", requireAuth, clientContext, async (req, res) => {
   const userId = (req as any).clerkUserId as string;
   const sourceId = Number(req.params["id"]);
   const { title, content, keywords } = req.body as { title?: string; content: string; keywords?: string };
@@ -799,7 +799,7 @@ router.post("/knowledge-sources/:id/entries", requireAuth, clientContext, denyMa
 
 /* ── Update entry ────────────────────────────────────────────────────────── */
 
-router.patch("/knowledge-sources/:id/entries/:entryId", requireAuth, clientContext, denyManagedClientUnlessAgentEdit, async (req, res) => {
+router.patch("/knowledge-sources/:id/entries/:entryId", requireAuth, clientContext, async (req, res) => {
   const userId = (req as any).clerkUserId as string;
   const sourceId = Number(req.params["id"]);
   const entryId = Number(req.params["entryId"]);
@@ -839,7 +839,7 @@ router.patch("/knowledge-sources/:id/entries/:entryId", requireAuth, clientConte
 
 /* ── Delete entry ────────────────────────────────────────────────────────── */
 
-router.delete("/knowledge-sources/:id/entries/:entryId", requireAuth, clientContext, denyManagedClientUnlessAgentEdit, async (req, res) => {
+router.delete("/knowledge-sources/:id/entries/:entryId", requireAuth, clientContext, async (req, res) => {
   const userId = (req as any).clerkUserId as string;
   const sourceId = Number(req.params["id"]);
   const entryId = Number(req.params["entryId"]);
@@ -861,7 +861,7 @@ router.delete("/knowledge-sources/:id/entries/:entryId", requireAuth, clientCont
 
 /* ── Attach source to agent (deferred — for sources still crawling at build time) ── */
 
-router.post("/knowledge-sources/:id/attach-agent/:agentId", requireAuth, clientContext, denyManagedClientUnlessAgentEdit, async (req, res) => {
+router.post("/knowledge-sources/:id/attach-agent/:agentId", requireAuth, clientContext, async (req, res) => {
   const userId   = (req as any).clerkUserId as string;
   const sourceId = Number(req.params["id"]);
   const agentId  = Number(req.params["agentId"]);
@@ -922,7 +922,7 @@ router.post("/knowledge-sources/:id/search", requireAuth, clientContext, async (
 
 /* ── Retry failed website pages ──────────────────────────────────────────── */
 
-router.post("/knowledge-sources/:id/retry-crawl", requireAuth, clientContext, denyManagedClientUnlessAgentEdit, async (req, res) => {
+router.post("/knowledge-sources/:id/retry-crawl", requireAuth, clientContext, async (req, res) => {
   const userId = (req as any).clerkUserId as string;
   const sourceId = Number(req.params["id"]);
   if (!Number.isFinite(sourceId)) { res.status(400).json({ error: "Invalid id" }); return; }

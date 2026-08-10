@@ -39,6 +39,10 @@ export type MeetingsForm = {
   presentationUrl: string;
   /** Start screenshare when the bot joins. */
   presentationAutoStart: boolean;
+  /** Custom name shown in Meet/Zoom/Teams (empty = agent name). */
+  botDisplayName: string;
+  /** Soft-mute bot audio between replies. */
+  muteWhenIdle: boolean;
 };
 
 const DEFAULT_MAX = 45 * 60;
@@ -56,6 +60,8 @@ const EMPTY: MeetingsForm = {
   silenceHangupEnabled: true,
   presentationUrl: "",
   presentationAutoStart: false,
+  botDisplayName: "",
+  muteWhenIdle: true,
 };
 
 function clamp(n: number, min: number, max: number) {
@@ -87,6 +93,8 @@ export function readMeetings(agent: any): MeetingsForm {
     silenceHangupEnabled: m.silenceHangupEnabled !== false,
     presentationUrl: typeof m.presentationUrl === "string" ? m.presentationUrl.trim() : "",
     presentationAutoStart: m.presentationAutoStart === true,
+    botDisplayName: typeof m.botDisplayName === "string" ? m.botDisplayName.trim().slice(0, 60) : "",
+    muteWhenIdle: m.muteWhenIdle !== false,
   };
 }
 
@@ -98,10 +106,14 @@ function fmtMins(secs: number): string {
 export function MeetingsChannelCard({
   agentId,
   showJoinLink: _showJoinLink = true,
+  /** Meet paste-link page: hide Who joins (top agent picker is authoritative). */
+  variant = "default",
 }: {
   agentId: number;
   showJoinLink?: boolean;
+  variant?: "default" | "meet-page";
 }) {
+  const meetPage = variant === "meet-page";
   const { toast } = useToast();
   const qc = useQueryClient();
   const agentQ = useGetAgent(agentId, {
@@ -173,6 +185,8 @@ export function MeetingsChannelCard({
               silenceHangupEnabled: form.silenceHangupEnabled,
               presentationUrl: deck,
               presentationAutoStart: deck ? form.presentationAutoStart : false,
+              botDisplayName: form.botDisplayName.trim().slice(0, 60),
+              muteWhenIdle: form.muteWhenIdle,
             },
           } as any,
         },
@@ -202,81 +216,74 @@ export function MeetingsChannelCard({
 
   return (
     <div className="space-y-5">
-      <p className="text-[12px] text-muted-foreground leading-relaxed">
-        Meetings are not phone calls — people often ask the bot to wait 2–3 minutes for others.
-        Set patience and length here (separate from Engine phone silence / Limits).
-      </p>
+      {!meetPage && (
+        <>
+          <p className="text-[12px] text-muted-foreground leading-relaxed">
+            For booked meetings: optionally send a different agent into the room than the one that took the call.
+          </p>
 
-      <div className="rounded-lg border border-border/60 bg-muted/15 px-3 py-2.5 text-[11px] text-muted-foreground leading-relaxed">
-        <p className="font-medium text-foreground text-[12px]">Waiting room &amp; admit</p>
-        <p className="mt-1">
-          Meet/Zoom/Teams may ask the host to admit the bot. SnapServe cannot auto-admit guests from the
-          waiting room. Booked Meet invites include the platform bot email when configured; otherwise admit
-          the agent by name. Zoom/Teams may also show a recording consent prompt — participants should accept
-          it so the meeting can be recorded.
-        </p>
-      </div>
-
-      <div className="space-y-2">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/70">
-          Who joins
-        </p>
-        <div className="grid gap-2 sm:grid-cols-2">
-          <button
-            type="button"
-            onClick={() => set({ whoJoins: "self" })}
-            className={
-              form.whoJoins === "self"
-                ? "rounded-lg border border-foreground/20 bg-foreground px-3 py-2.5 text-left text-background"
-                : "rounded-lg border border-border/50 bg-muted/35 px-3 py-2.5 text-left hover:bg-muted/55"
-            }
-          >
-            <p className="text-[12px] font-medium">This agent</p>
-            <p className={`text-[10px] mt-0.5 ${form.whoJoins === "self" ? "text-background/70" : "text-muted-foreground"}`}>
-              Uses the meeting prompt from Builder
+          <div className="space-y-2">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/70">
+              Who joins (bookings)
             </p>
-          </button>
-          <button
-            type="button"
-            onClick={() => set({ whoJoins: "delegate" })}
-            className={
-              form.whoJoins === "delegate"
-                ? "rounded-lg border border-foreground/20 bg-foreground px-3 py-2.5 text-left text-background"
-                : "rounded-lg border border-border/50 bg-muted/35 px-3 py-2.5 text-left hover:bg-muted/55"
-            }
-          >
-            <p className="text-[12px] font-medium">Another agent</p>
-            <p className={`text-[10px] mt-0.5 ${form.whoJoins === "delegate" ? "text-background/70" : "text-muted-foreground"}`}>
-              Delegate joins the room
-            </p>
-          </button>
-        </div>
-        {form.whoJoins === "delegate" && (
-          <Select
-            value={form.delegateAgentId || undefined}
-            onValueChange={(v) => set({ delegateAgentId: v })}
-          >
-            <SelectTrigger className="h-9 text-xs">
-              <SelectValue placeholder={others.length ? "Choose agent…" : "Create another agent first"} />
-            </SelectTrigger>
-            <SelectContent>
-              {others.map((a) => (
-                <SelectItem key={a.id} value={String(a.id)} className="text-xs">
-                  {a.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-        {form.whoJoins === "self" && (
-          <Link
-            href={`/app/agents/${agentId}?section=prompt`}
-            className="inline-flex text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-          >
-            Edit meeting prompt
-          </Link>
-        )}
-      </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => set({ whoJoins: "self" })}
+                className={
+                  form.whoJoins === "self"
+                    ? "rounded-lg border border-foreground/20 bg-foreground px-3 py-2.5 text-left text-background"
+                    : "rounded-lg border border-border/50 bg-muted/35 px-3 py-2.5 text-left hover:bg-muted/55"
+                }
+              >
+                <p className="text-[12px] font-medium">This agent</p>
+                <p className={`text-[10px] mt-0.5 ${form.whoJoins === "self" ? "text-background/70" : "text-muted-foreground"}`}>
+                  Uses the meeting prompt from Builder
+                </p>
+              </button>
+              <button
+                type="button"
+                onClick={() => set({ whoJoins: "delegate" })}
+                className={
+                  form.whoJoins === "delegate"
+                    ? "rounded-lg border border-foreground/20 bg-foreground px-3 py-2.5 text-left text-background"
+                    : "rounded-lg border border-border/50 bg-muted/35 px-3 py-2.5 text-left hover:bg-muted/55"
+                }
+              >
+                <p className="text-[12px] font-medium">Another agent</p>
+                <p className={`text-[10px] mt-0.5 ${form.whoJoins === "delegate" ? "text-background/70" : "text-muted-foreground"}`}>
+                  Delegate joins the room
+                </p>
+              </button>
+            </div>
+            {form.whoJoins === "delegate" && (
+              <Select
+                value={form.delegateAgentId || undefined}
+                onValueChange={(v) => set({ delegateAgentId: v })}
+              >
+                <SelectTrigger className="h-9 text-xs">
+                  <SelectValue placeholder={others.length ? "Choose agent…" : "Create another agent first"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {others.map((a) => (
+                    <SelectItem key={a.id} value={String(a.id)} className="text-xs">
+                      {a.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            {form.whoJoins === "self" && (
+              <Link
+                href={`/app/agents/${agentId}?section=prompt`}
+                className="inline-flex text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+              >
+                Edit meeting prompt
+              </Link>
+            )}
+          </div>
+        </>
+      )}
 
       <div className="space-y-3 rounded-lg border border-border/60 bg-muted/15 p-3">
         <div>
@@ -284,7 +291,7 @@ export function MeetingsChannelCard({
             Waiting &amp; length
           </p>
           <p className="mt-1 text-[11px] text-muted-foreground leading-relaxed">
-            Phone silence (~15s) does not apply here. Default: wait quietly for 3 minutes, then a soft check-in.
+            Default: wait quietly for 3 minutes, then a soft check-in (separate from phone silence).
           </p>
         </div>
 
@@ -352,6 +359,43 @@ export function MeetingsChannelCard({
             Hard cut-off for the meeting bot only — does not change phone call limits.
           </p>
         </div>
+      </div>
+
+      <div className="space-y-3 rounded-lg border border-border/60 bg-muted/15 p-3">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/70">
+            Identity &amp; audio
+          </p>
+          <p className="mt-1 text-[11px] text-muted-foreground leading-relaxed">
+            Name shown in the meeting tile, and whether the bot stays soft-muted between replies.
+          </p>
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-[12px] font-medium" htmlFor="meet-bot-display-name">
+            Bot display name
+          </label>
+          <input
+            id="meet-bot-display-name"
+            type="text"
+            maxLength={60}
+            placeholder="Leave empty to use the agent name"
+            value={form.botDisplayName}
+            onChange={(e) => set({ botDisplayName: e.target.value })}
+            className="h-9 w-full rounded-md border border-border/60 bg-background px-3 text-[12px] outline-none focus:border-foreground/30"
+          />
+        </div>
+        <label className="flex cursor-pointer items-center justify-between gap-3">
+          <span>
+            <span className="block text-[13px] font-medium">Mute when not speaking</span>
+            <span className="block text-[11px] text-muted-foreground">
+              Soft-mute between replies; agent can still mute/unmute when asked
+            </span>
+          </span>
+          <Switch
+            checked={form.muteWhenIdle}
+            onCheckedChange={(v) => set({ muteWhenIdle: v })}
+          />
+        </label>
       </div>
 
       <div className="space-y-3 rounded-lg border border-border/60 bg-muted/15 p-3">

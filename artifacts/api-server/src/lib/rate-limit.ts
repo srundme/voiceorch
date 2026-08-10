@@ -193,6 +193,11 @@ export const exemptPaths = [
   "/api/webhooks",
   "/api/webcall-notify",
   "/api/admin",
+  "/api/meet-calendar/recall-webhooks",
+  "/api/meet-bots/recall-events",
+  "/api/mcp",
+  "/.well-known/oauth-authorization-server",
+  "/.well-known/oauth-protected-resource",
 ];
 
 export function isRateLimitExempt(url: string): boolean {

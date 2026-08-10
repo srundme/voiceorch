@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>SnapServe Brand Kit</title>
+  <style>
+    @page { size: A4; margin: 0; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: Helvetica, Arial, sans-serif;
+      color: #0F172A;
+      background: #fff;
+      font-size: 11pt;
+      line-height: 1.45;
+    }
+    .page {
+      width: 210mm;
+      height: 297mm;
+      padding: 16mm 18mm 20mm;
+      page-break-after: always;
+      page-break-inside: avoid;
+      position: relative;
+      overflow: hidden;
+    }
+    .page:last-child { page-break-after: auto; }
+    .eyebrow {
+      font-size: 9pt;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: #64748B;
+      margin-bottom: 8px;
+    }
+    h1 {
+      font-size: 28pt;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 6px;
+    }
+    h1 .serve { font-weight: 400; }
+    h2 {
+      font-size: 14pt;
+      font-weight: 700;
+      margin: 22px 0 10px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid #E2E8F0;
+    }
+    h3 {
+      font-size: 10pt;
+      font-weight: 700;
+      margin: 14px 0 8px;
+      color: #334155;
+    }
+    p, li { color: #334155; }
+    .lead { color: #475569; font-size: 11pt; max-width: 420px; margin-bottom: 18px; }
+    .meta { font-size: 9pt; color: #64748B; margin-bottom: 20px; }
+    .hero {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      padding: 22px 24px;
+      background: #F4F7FA;
+      border-radius: 12px;
+      margin-bottom: 8px;
+    }
+    .hero-dark {
+      background: #0F172A;
+      color: #fff;
+      margin-top: 10px;
+    }
+    .hero-dark .wm { color: #fff; }
+    .mark { width: 64px; height: 64px; flex-shrink: 0; }
+    .wm {
+      font-family: Helvetica, Arial, sans-serif;
+      font-size: 28pt;
+      letter-spacing: -0.02em;
+      color: #0F172A;
+    }
+    .wm b { font-weight: 700; }
+    .wm span { font-weight: 400; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 10pt;
+      margin: 8px 0 4px;
+    }
+    th, td {
+      text-align: left;
+      padding: 8px 10px;
+      border-bottom: 1px solid #E2E8F0;
+      vertical-align: middle;
+    }
+    th {
+      font-size: 8.5pt;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #64748B;
+      font-weight: 600;
+    }
+    .swatch {
+      display: inline-block;
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      vertical-align: middle;
+      margin-right: 10px;
+      border: 1px solid rgba(15, 23, 42, 0.08);
+    }
+    .swatch-row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin: 10px 0 4px;
+    }
+    .swatch-card {
+      width: 118px;
+      border: 1px solid #E2E8F0;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .swatch-card .chip { height: 52px; }
+    .swatch-card .label {
+      padding: 8px 10px;
+      font-size: 9pt;
+    }
+    .swatch-card .hex {
+      font-family: "SF Mono", Menlo, monospace;
+      font-size: 8.5pt;
+      color: #64748B;
+    }
+    .gradient {
+      height: 40px;
+      border-radius: 8px;
+      margin: 10px 0;
+      background: linear-gradient(135deg, #FF9933 0%, #14B8A6 50%, #6366F1 100%);
+    }
+    .cols { display: flex; gap: 28px; }
+    .cols > div { flex: 1; }
+    ul { padding-left: 18px; margin: 6px 0; }
+    li { margin: 4px 0; }
+    .note {
+      background: #FFF7ED;
+      border: 1px solid #FED7AA;
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 9.5pt;
+      color: #9A3412;
+      margin-top: 12px;
+    }
+    .footer {
+      position: absolute;
+      bottom: 14mm;
+      left: 18mm;
+      right: 18mm;
+      display: flex;
+      justify-content: space-between;
+      font-size: 8.5pt;
+      color: #94A3B8;
+      border-top: 1px solid #E2E8F0;
+      padding-top: 8px;
+    }
+    .tag {
+      display: inline-block;
+      font-size: 8pt;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: #E2E8F0;
+      color: #334155;
+    }
+    .tag.mkt { background: #CCFBF1; color: #0F766E; }
+  </style>
+</head>
+<body>
+  <!-- Page 1 -->
+  <section class="page">
+    <div class="eyebrow">Official brand kit</div>
+    <h1>Snap<span class="serve">Serve</span></h1>
+    <p class="lead">Visual identity for SnapServe — mark, wordmark, colors, type, and usage. Product: app.snapserve.ai</p>
+    <p class="meta">Indic-first AI voice agents · Formalizes shipping product assets · Not a redesign</p>
+
+    <div class="hero">
+      <svg class="mark" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <rect x="6" y="14" width="88" height="20" rx="10" fill="#0F172A"/>
+        <rect x="14" y="42" width="72" height="20" rx="10" fill="#0F172A" opacity="0.60"/>
+        <rect x="22" y="70" width="56" height="20" rx="10" fill="#0F172A" opacity="0.36"/>
+      </svg>
+      <div class="wm"><b>Snap</b><span>Serve</span></div>
+    </div>
+    <div class="hero hero-dark">
+      <svg class="mark" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <rect x="6" y="14" width="88" height="20" rx="10" fill="#FFFFFF"/>
+        <rect x="14" y="42" width="72" height="20" rx="10" fill="#FFFFFF" opacity="0.60"/>
+        <rect x="22" y="70" width="56" height="20" rx="10" fill="#FFFFFF" opacity="0.36"/>
+      </svg>
+      <div class="wm"><b>Snap</b><span>Serve</span></div>
+    </div>
+
+    <h2>Name</h2>
+    <table>
+      <thead><tr><th>Correct</th><th>Incorrect</th></tr></thead>
+      <tbody>
+        <tr><td><strong>SnapServe</strong> — one word, capital S / S</td><td>Snap Serve · Snapserve · SNAPSERVE</td></tr>
+      </tbody>
+    </table>
+
+    <h2>Mark &amp; wordmark</h2>
+    <p>Three horizontal rounded bars (signal / equalizer), stacked and tapering in width and opacity. Wordmark: <strong>Snap</strong> (Bold 700) + Serve (Regular 400). Type: Tex Gyre Heros → Helvetica → Arial.</p>
+    <div class="note">Do not use the green <code>logo.svg</code> placeholder in the dashboard public folder as the SnapServe logo.</div>
+
+    <div class="footer">
+      <span>SnapServe Brand Kit</span>
+      <span>1 / 2 · docs/brand/</span>
+    </div>
+  </section>
+
+  <!-- Page 2 -->
+  <section class="page">
+    <div class="eyebrow">Color · Type · Usage</div>
+    <h1 style="font-size: 22pt;">Palette &amp; rules</h1>
+
+    <h2>Product UI <span class="tag">Chrome</span></h2>
+    <p style="font-size: 10pt; margin-bottom: 6px;">App primary is ink / greyscale — not teal or saffron.</p>
+    <div class="swatch-row">
+      <div class="swatch-card">
+        <div class="chip" style="background:#0F172A"></div>
+        <div class="label">Ink primary<br><span class="hex">#0F172A</span></div>
+      </div>
+      <div class="swatch-card">
+        <div class="chip" style="background:#F4F7FA; border-bottom:1px solid #E2E8F0"></div>
+        <div class="label">Paper<br><span class="hex">#F4F7FA</span></div>
+      </div>
+      <div class="swatch-card">
+        <div class="chip" style="background:#FAFAFA; border-bottom:1px solid #E2E8F0"></div>
+        <div class="label">Primary (dark)<br><span class="hex">#FAFAFA</span></div>
+      </div>
+    </div>
+
+    <h2>Marketing accents <span class="tag mkt">Marketing only</span></h2>
+    <p style="font-size: 10pt; margin-bottom: 6px;">Landing, posters, Voiceathon, gradients — not default app CTAs.</p>
+    <div class="swatch-row">
+      <div class="swatch-card">
+        <div class="chip" style="background:#FF9933"></div>
+        <div class="label">Saffron<br><span class="hex">#FF9933</span></div>
+      </div>
+      <div class="swatch-card">
+        <div class="chip" style="background:#14B8A6"></div>
+        <div class="label">Teal<br><span class="hex">#14B8A6</span></div>
+      </div>
+      <div class="swatch-card">
+        <div class="chip" style="background:#6366F1"></div>
+        <div class="label">Indigo<br><span class="hex">#6366F1</span></div>
+      </div>
+    </div>
+    <div class="gradient"></div>
+    <p style="font-size: 9pt; color:#64748B;">Brand gradient: #FF9933 → #14B8A6 → #6366F1</p>
+
+    <h2>Typography</h2>
+    <table>
+      <thead><tr><th>Role</th><th>Stack</th></tr></thead>
+      <tbody>
+        <tr><td>Wordmark</td><td>Tex Gyre Heros, Helvetica, Arial</td></tr>
+        <tr><td>App UI</td><td>Inter, system-ui</td></tr>
+        <tr><td>Display</td><td>Plus Jakarta Sans, Inter</td></tr>
+        <tr><td>Mono</td><td>JetBrains Mono, SF Mono, Menlo</td></tr>
+      </tbody>
+    </table>
+
+    <div class="cols">
+      <div>
+        <h2>Do</h2>
+        <ul>
+          <li>Use the three-bar mark + SnapServe wordmark from this kit</li>
+          <li>Keep product UI ink / white</li>
+          <li>Reserve saffron / teal / indigo for marketing</li>
+          <li>Keep SnapServe first when co-branding with Sarvam</li>
+          <li>Clear space ≥ ½ mark height; min mark 16×16 px (prefer 20–24)</li>
+        </ul>
+      </div>
+      <div>
+        <h2>Don’t</h2>
+        <ul>
+          <li>Use the green logo.svg placeholder</li>
+          <li>Stretch, skew, or rotate the mark</li>
+          <li>Recolor bars arbitrarily</li>
+          <li>Write “Snap Serve” as two words</li>
+          <li>Stack competing logos above SnapServe</li>
+        </ul>
+      </div>
+    </div>
+
+    <h2>Co-brand &amp; assets</h2>
+    <p style="font-size: 10pt;">SnapServe is the product; Sarvam is powered-by. Official lockup: <code>assets/snapserve-powered-by-sarvam.png</code>. Full kit: <code>docs/brand/</code> · Markdown: <code>BRAND.md</code> · Vectors: <code>snapserve-mark.svg</code>, <code>snapserve-mark-white.svg</code>.</p>
+
+    <div class="footer">
+      <span>SnapServe Brand Kit · app.snapserve.ai</span>
+      <span>2 / 2 · docs/brand/SnapServe-Brand-Kit.pdf</span>
+    </div>
+  </section>
+</body>
+</html>

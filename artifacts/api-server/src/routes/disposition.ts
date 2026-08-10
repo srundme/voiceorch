@@ -13,9 +13,10 @@ const TaxonomyMapSchema = z.record(z.string(), z.array(z.string()));
 const UpsertConfigBody = z.object({
   taxonomy:     TaxonomyMapSchema,
   domainFields: z.array(z.object({
-    key:  z.string(),
-    type: z.enum(["string", "number", "boolean"]),
-    enum: z.array(z.string()).optional(),
+    key:   z.string().min(1).max(64),
+    type:  z.enum(["string", "number", "boolean"]),
+    label: z.string().max(120).optional(),
+    enum:  z.array(z.string()).optional(),
   })).optional().default([]),
   rules: z.array(z.object({
     when:       z.string(),

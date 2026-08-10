@@ -13,6 +13,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { usePartnerManagedWorkspace } from "@/hooks/use-partner";
 import { ByonPanel } from "@/components/whatsapp/byon-flow";
 import { EngageSection } from "@/components/whatsapp/engage-section";
 import {
@@ -185,6 +186,7 @@ function NativeSection({
 }) {
   const { toast } = useToast();
   const qc = useQueryClient();
+  const { isManagedWorkspace } = usePartnerManagedWorkspace();
 
   const { data, isLoading } = useQuery({
     queryKey: ["whatsapp-channel"],
@@ -209,7 +211,9 @@ function NativeSection({
   const [sharedOpen, setSharedOpen] = useState(false);
   const [bizOpen, setBizOpen] = useState(false);
   const [bizStep, setBizStep] = useState<1 | 2>(1);
-  const [numberChoice, setNumberChoice] = useState<"buy" | "direct" | "voice">("buy");
+  const [numberChoice, setNumberChoice] = useState<"buy" | "direct" | "voice">(
+    isManagedWorkspace ? "direct" : "buy",
+  );
   const [selectedNumber, setSelectedNumber] = useState<string | null>(null);
   const [voiceNumberId, setVoiceNumberId] = useState<number | null>(null);
   /** Set when reconnecting an already-purchased WhatsApp number (channel create failed). */
@@ -434,17 +438,19 @@ function NativeSection({
                 <Button size="sm" variant="outline" className="h-7 text-[11px]" onClick={() => openBizWizard(data.purchasedNumber!.number)}>
                   Finish connecting
                 </Button>
-                <Button
-                  size="sm" variant="ghost" className="h-7 text-[11px] text-red-400"
-                  disabled={releaseNumber.isPending}
-                  onClick={() => {
-                    if (confirm(`Release ${data.purchasedNumber!.number}? The 30-day renewal billing stops and the number is gone for good.`)) {
-                      releaseNumber.mutate(data.purchasedNumber!.id);
-                    }
-                  }}
-                >
-                  Release
-                </Button>
+                {!isManagedWorkspace && (
+                  <Button
+                    size="sm" variant="ghost" className="h-7 text-[11px] text-red-400"
+                    disabled={releaseNumber.isPending}
+                    onClick={() => {
+                      if (confirm(`Release ${data.purchasedNumber!.number}? The 30-day renewal billing stops and the number is gone for good.`)) {
+                        releaseNumber.mutate(data.purchasedNumber!.id);
+                      }
+                    }}
+                  >
+                    Release
+                  </Button>
+                )}
               </div>
             </div>
           )}
@@ -578,17 +584,19 @@ function NativeSection({
                   <> · renews {new Date(data.purchasedNumber.nextRenewalAt).toLocaleDateString()} ({inr(data.purchasedNumber.renewalPaise)} from wallet)</>
                 )}
               </span>
-              <button
-                type="button"
-                className="text-red-400 hover:text-red-300"
-                onClick={() => {
-                  if (confirm(`Release ${data.purchasedNumber!.number}? WhatsApp sends from this number stop and renewal billing ends.`)) {
-                    releaseNumber.mutate(data.purchasedNumber!.id);
-                  }
-                }}
-              >
-                Release
-              </button>
+              {!isManagedWorkspace && (
+                <button
+                  type="button"
+                  className="text-red-400 hover:text-red-300"
+                  onClick={() => {
+                    if (confirm(`Release ${data.purchasedNumber!.number}? WhatsApp sends from this number stop and renewal billing ends.`)) {
+                      releaseNumber.mutate(data.purchasedNumber!.id);
+                    }
+                  }}
+                >
+                  Release
+                </button>
+              )}
             </div>
           )}
 
@@ -841,7 +849,8 @@ function NativeSection({
             </div>
           ) : (
             <div className="space-y-3">
-              {/* Option A — buy from SnapServe */}
+              {/* Option A — buy from SnapServe (owners only; partner funds client numbers) */}
+              {!isManagedWorkspace && (
               <label className={`block rounded-lg border p-3 cursor-pointer transition-colors ${numberChoice === "buy" ? "border-sky-500/50 bg-sky-500/[0.04]" : "border-border/60 hover:border-border"}`}>
                 <div className="flex items-start gap-2">
                   <input type="radio" className="mt-1" checked={numberChoice === "buy"} onChange={() => setNumberChoice("buy")} />
@@ -884,6 +893,7 @@ function NativeSection({
                   </div>
                 </div>
               </label>
+              )}
 
               {/* Option B — Meta-registered number */}
               <label className={`block rounded-lg border p-3 cursor-pointer transition-colors ${numberChoice === "direct" ? "border-sky-500/50 bg-sky-500/[0.04]" : "border-border/60 hover:border-border"}`}>
@@ -911,7 +921,8 @@ function NativeSection({
                 </div>
               </label>
 
-              {/* Option C — WhatsApp-enable an existing voice number (BYON) */}
+              {/* Option C — WhatsApp-enable an existing voice number (owners only) */}
+              {!isManagedWorkspace && (
               <label className={`block rounded-lg border p-3 cursor-pointer transition-colors ${numberChoice === "voice" ? "border-sky-500/50 bg-sky-500/[0.04]" : "border-border/60 hover:border-border"}`}>
                 <div className="flex items-start gap-2">
                   <input type="radio" className="mt-1" checked={numberChoice === "voice"} onChange={() => setNumberChoice("voice")} />
@@ -932,6 +943,7 @@ function NativeSection({
                   </div>
                 </div>
               </label>
+              )}
             </div>
           )}
 

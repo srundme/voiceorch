@@ -79,6 +79,19 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError, mapApiErrors, isDestinationUnverifiedError } from "@/lib/format-api-error";
 import {
+  OUTCOME_PRESETS,
+  DOMAIN_FIELD_QUICK_ADDS,
+  taxonomyToCategories,
+  categoriesToTaxonomy,
+  fromStoredDomainField,
+  toStoredDomainField,
+  slugDispositionKey,
+  type DispositionCategory,
+  type UiDomainField,
+  type UiDomainFieldType,
+  type StoredDomainField,
+} from "@/lib/disposition-fields";
+import {
   ASR_PROVIDERS, LLM_PROVIDERS, TTS_PROVIDERS,
   LANGUAGES, SARVAM_PERSONALISATION_LANGUAGES, ASR_MODELS, LLM_MODELS, TTS_MODELS, TTS_VOICES, AGENT_TIMEZONES,
   filterVoicesForLanguage, isVoiceCompatibleWithLanguage,
@@ -393,7 +406,7 @@ function AgentCostSummary({
   const totalPerMin = platformCents / 100; // paise → INR (map already reflects account-level partner rates)
 
   const segments = [
-    { key: "platform", label: "Platform", provider: "SnapServe", cost: totalPerMin, color: "#6366f1" },
+    { key: "platform", label: "Platform", provider: "SnapServe", cost: totalPerMin, color: "#059669" },
   ];
   const breakdown = segments.filter(s => s.cost > 0);
   const barTotal = Math.max(breakdown.reduce((s, x) => s + x.cost, 0), 0.0001);
@@ -403,8 +416,10 @@ function AgentCostSummary({
     return (
       <p className="text-[12px] text-muted-foreground">
         Billed at{" "}
-        <span className="font-medium tabular-nums text-foreground">₹{totalPerMin.toFixed(2)}</span>
-        /min
+        <span className="font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">
+          ₹{totalPerMin.toFixed(2)}
+        </span>
+        <span className="text-emerald-700/70 dark:text-emerald-400/70">/min</span>
         {isByop ? " · BYOP" : ""}
       </p>
     );
@@ -414,10 +429,12 @@ function AgentCostSummary({
     return (
       <Tooltip>
         <TooltipTrigger asChild>
-          <div className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border/70 bg-muted/25 px-2.5 text-[11px] text-muted-foreground cursor-default">
-            <span className="hidden text-muted-foreground/70 sm:inline">Est.</span>
-            <span className="font-semibold tabular-nums text-foreground">₹{totalPerMin.toFixed(2)}</span>
-            <span className="text-muted-foreground/55">/min</span>
+          <div className="inline-flex h-8 items-center gap-1.5 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2.5 text-[11px] cursor-default">
+            <span className="hidden text-emerald-800/55 dark:text-emerald-300/55 sm:inline">Est.</span>
+            <span className="font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">
+              ₹{totalPerMin.toFixed(2)}
+            </span>
+            <span className="text-emerald-700/65 dark:text-emerald-400/65">/min</span>
           </div>
         </TooltipTrigger>
         <TooltipContent side="bottom" className="text-xs space-y-1">
@@ -425,7 +442,9 @@ function AgentCostSummary({
           {breakdown.map(seg => (
             <div key={seg.key} className="flex items-center justify-between gap-3">
               <span className="font-medium">{seg.label}</span>
-              <span className="tabular-nums">₹{seg.cost.toFixed(2)}/min</span>
+              <span className="tabular-nums text-emerald-700 dark:text-emerald-400">
+                ₹{seg.cost.toFixed(2)}/min
+              </span>
             </div>
           ))}
         </TooltipContent>
@@ -440,7 +459,7 @@ function AgentCostSummary({
         <span className="text-muted-foreground">Cost per min</span>
         <Tooltip>
           <TooltipTrigger asChild>
-            <span className="font-semibold tabular-nums text-foreground cursor-default">
+            <span className="font-semibold tabular-nums text-emerald-700 dark:text-emerald-400 cursor-default">
               ₹{totalPerMin.toFixed(2)}
             </span>
           </TooltipTrigger>
@@ -453,7 +472,9 @@ function AgentCostSummary({
                     <span className="text-muted-foreground ml-1 capitalize">({seg.provider})</span>
                   )}
                 </span>
-                <span className="tabular-nums">₹{seg.cost.toFixed(2)}/min</span>
+                <span className="tabular-nums text-emerald-700 dark:text-emerald-400">
+                  ₹{seg.cost.toFixed(2)}/min
+                </span>
               </div>
             ))}
           </TooltipContent>
@@ -741,112 +762,52 @@ function OverviewTab({
   }, [overviewPhones, agent?.id]);
   const phoneReady = Boolean(assignedPhone || form.watch("preferredManagedNumber"));
 
-  const readinessItems = [
-    {
-      id: "prompt",
-      label: "Call prompt",
-      ready: promptReady,
-      detail: promptReady ? `${systemPrompt.length.toLocaleString()} chars` : "Add instructions on Prompt",
-      action: onGoToPrompt,
-    },
-    {
-      id: "greeting",
-      label: "Welcome message",
-      ready: greetingReady,
-      detail: greetingReady ? "Set" : "Configure on Prompt",
-      action: onGoToPrompt,
-    },
-    {
-      id: "voice",
-      label: "Voice",
-      ready: voiceReady,
-      detail: isGeminiLive ? (geminiLiveVoiceName || "Kore") : (ttsVoiceLabel || "Select a voice"),
-      action: () => openPipelineDialog("voice"),
-    },
-    {
-      id: "phone",
-      label: "Phone number",
-      ready: phoneReady,
-      detail: phoneReady
-        ? (assignedPhone?.number ?? form.watch("preferredManagedNumber") ?? "Assigned")
-        : "Assign below",
-    },
-    {
-      id: "knowledge",
-      label: "Knowledge",
-      ready: knowledgeIds.length > 0,
-      detail: knowledgeIds.length > 0 ? `${knowledgeIds.length} source${knowledgeIds.length === 1 ? "" : "s"}` : "Optional",
-      optional: true,
-    },
-  ] as const;
-
-  const requiredReady = readinessItems.filter((i) => !("optional" in i && i.optional)).every((i) => i.ready);
+  const missingSetup = [
+    !promptReady ? "call prompt" : null,
+    !greetingReady ? "welcome message" : null,
+    !voiceReady ? "voice" : null,
+    !phoneReady ? "phone number" : null,
+  ].filter(Boolean) as string[];
 
   return (
     <div className="flex flex-col">
-      {/* ── Readiness dashboard ──────────────────────────────────────────────── */}
       <div className="relative min-w-0">
-        <div className="space-y-6 p-5 sm:p-6">
-          <section className="space-y-3">
-            <div className="flex flex-wrap items-end justify-between gap-3">
-              <div className="space-y-0.5">
-                <h2 className="text-[15px] font-semibold tracking-[-0.02em]">Readiness</h2>
-                <p className="text-[12px] text-muted-foreground">
-                  {requiredReady
-                    ? "Core setup looks ready — edit prompts anytime on the Prompt tab."
-                    : "Finish these items before going live."}
-                </p>
-                <AgentCostSummary form={form} rateMap={rateMap} variant="line" />
-              </div>
-              {onGoToPrompt && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-8 gap-1.5 text-xs"
-                  onClick={onGoToPrompt}
-                >
-                  <FileText className="size-3.5" />
-                  Edit prompt
-                </Button>
-              )}
-            </div>
-            <ul className="divide-y divide-border/70 overflow-hidden rounded-xl border border-border/60 bg-card/40">
-              {readinessItems.map((item) => (
-                <li key={item.id} className="flex items-center gap-3 px-3.5 py-2.5">
-                  <span
-                    className={cn(
-                      "flex size-6 shrink-0 items-center justify-center rounded-full",
-                      item.ready
-                        ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
-                        : "optional" in item && item.optional
-                          ? "bg-muted text-muted-foreground"
-                          : "bg-amber-500/15 text-amber-700 dark:text-amber-400",
-                    )}
-                  >
-                    {item.ready ? <Check className="size-3.5" /> : <AlertCircle className="size-3.5" />}
+        <div className="space-y-5 p-5 sm:p-6">
+          {/* Compact status — no duplicate checklist of Phone/Knowledge/Voice */}
+          <section className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+            <div className="min-w-0 space-y-0.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-[15px] font-semibold tracking-[-0.02em]">Overview</h2>
+                {missingSetup.length === 0 ? (
+                  <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
+                    <Check className="size-3" />
+                    Ready
                   </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[13px] font-medium text-foreground">{item.label}</p>
-                    <p className="truncate text-[11px] text-muted-foreground">{item.detail}</p>
-                  </div>
-                  {"action" in item && item.action && !item.ready && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 shrink-0 px-2 text-[11px]"
-                      onClick={item.action}
-                    >
-                      Fix
-                    </Button>
-                  )}
-                </li>
-              ))}
-            </ul>
+                ) : (
+                  <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-800 dark:text-amber-300">
+                    <AlertCircle className="size-3" />
+                    Needs {missingSetup.slice(0, 2).join(", ")}
+                    {missingSetup.length > 2 ? ` +${missingSetup.length - 2}` : ""}
+                  </span>
+                )}
+              </div>
+              <AgentCostSummary form={form} rateMap={rateMap} variant="line" />
+            </div>
+            {onGoToPrompt && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5 text-xs"
+                onClick={onGoToPrompt}
+              >
+                <FileText className="size-3.5" />
+                Edit prompt
+              </Button>
+            )}
           </section>
 
-          {/* Pipeline chips */}
+          {/* Pipeline — primary composition */}
           <section className="space-y-2.5">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/55">Pipeline</p>
             <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
@@ -877,22 +838,48 @@ function OverviewTab({
             </div>
           </section>
 
-          {agent?.id != null && (
-            <section className="space-y-2.5">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/55">Team</p>
-              <AgentTeamStrip agentId={agent.id} compact />
-            </section>
-          )}
+          {/* Phone + Knowledge side by side — one job each, no duplicate Knowledge banner */}
+          <section className="grid grid-cols-1 gap-3 lg:grid-cols-2 lg:items-start">
+            {agent?.id != null && (
+              <div className="space-y-2">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/55">Phone</p>
+                <AgentInboundPanel
+                  agentId={agent.id}
+                  preferredManagedNumber={form.watch("preferredManagedNumber")}
+                  telephonyProvider={form.watch("telephonyProvider")}
+                />
+              </div>
+            )}
+            <div className="space-y-2">
+              <div className="flex items-baseline justify-between gap-2">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/55">Knowledge</p>
+                <span className="text-[10px] text-muted-foreground/70">
+                  {knowledgeIds.length > 0
+                    ? `${knowledgeIds.length} source${knowledgeIds.length === 1 ? "" : "s"}`
+                    : "Optional"}
+                </span>
+              </div>
+              <div className="rounded-xl border border-border/60 bg-card/40 p-3 space-y-2">
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  Documents searched during live calls and injected into context.
+                </p>
+                <FormField control={form.control} name="knowledgeSourceIds" render={({ field }) => (
+                  <FormItem className="space-y-0">
+                    <FormControl>
+                      <KnowledgeSourceMultiSelect
+                        value={(field.value ?? []) as number[]}
+                        onChange={field.onChange}
+                      />
+                    </FormControl>
+                    <FormMessage className="text-[10px]" />
+                  </FormItem>
+                )} />
+              </div>
+            </div>
+          </section>
 
           {agent?.id != null && (
-            <section className="space-y-2.5">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/55">Phone</p>
-              <AgentInboundPanel
-                agentId={agent.id}
-                preferredManagedNumber={form.watch("preferredManagedNumber")}
-                telephonyProvider={form.watch("telephonyProvider")}
-              />
-            </section>
+            <AgentTeamStrip agentId={agent.id} compact />
           )}
 
           {/* ── Transcriber / Language dialog ── */}
@@ -1295,33 +1282,6 @@ function OverviewTab({
             </AlertDialogContent>
           </AlertDialog>
 
-          {/* Knowledge */}
-          <section className="space-y-3 pb-4">
-            <div className="space-y-0.5">
-              <h3 className="text-[15px] font-semibold tracking-tight text-foreground">Knowledge</h3>
-              <p className="text-[12px] text-muted-foreground">
-                Documents the agent can search during conversations.
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label className="text-[12px] font-medium text-foreground/90">Sources</Label>
-              <FormField control={form.control} name="knowledgeSourceIds" render={({ field }) => (
-                <FormItem className="space-y-0">
-                  <FormControl>
-                    <KnowledgeSourceMultiSelect
-                      value={(field.value ?? []) as number[]}
-                      onChange={field.onChange}
-                    />
-                  </FormControl>
-                  <FormDescription className="text-[11px] text-muted-foreground/70 mt-2 leading-relaxed">
-                    Attached sources are searched during live calls and relevant entries are injected into the agent's context.
-                  </FormDescription>
-                  <FormMessage className="text-[10px]" />
-                </FormItem>
-              )} />
-            </div>
-          </section>
-
         </div>
       </div>
     </div>
@@ -1508,7 +1468,7 @@ function PromptTab({ form, agentId }: { form: any; agentId?: number }) {
               <ul className="mt-1.5 list-disc space-y-0.5 pl-4">
                 <li>People may ask you to wait 2–3 minutes for others — stay quiet after one acknowledgment.</li>
                 <li>Speaker tags like <span className="font-mono text-[10px]">[Speaker: Name]</span> are for you; never read them aloud.</li>
-                <li>Waiting patience &amp; max length are under <span className="text-foreground/80">Tools → Meeting join</span> (not Engine phone silence).</li>
+                <li>Waiting patience &amp; max length are under <span className="text-foreground/80">Tools → Meetings</span> (not Engine phone silence).</li>
               </ul>
             </div>
             <FormField control={form.control} name="meetingPrompt" render={({ field }) => (
@@ -1533,7 +1493,7 @@ function PromptTab({ form, agentId }: { form: any; agentId?: number }) {
               </FormItem>
             )} />
             <p className="text-[11px] text-muted-foreground">
-              Phone + meetings agents join Google Meet when Booking is on (Tools). Configure wait time and max meeting length in Tools → Meeting join.
+              Phone + meetings agents can join Meet/Zoom/Teams from the Meet page (paste link) or from a booking. Configure wait time, max length, and deck under Tools → Meetings.
             </p>
           </TabsContent>
         </Tabs>
@@ -2715,7 +2675,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                 <div className="mt-1.5 space-y-1">
                   <p className="text-[11px] leading-relaxed text-muted-foreground">
                     {canAttendMeetings
-                      ? "This is a phone + meetings agent — it joins Google Meet when a booking is made."
+                      ? "This is a phone + meetings agent — Booking can create Meet links; join settings are under Meetings below (works for paste-link too)."
                       : "Phone-only agent — can book the calendar, but will not join the Meet."}
                   </p>
                   {!canAttendMeetings && (
@@ -2791,9 +2751,9 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                   {(!calendarIdForEt || (agentEventTypes ?? []).length === 0) && (
                     <p className="text-[10px] text-amber-400/80">
                       {!calendarIdForEt ? "No calendar yet. " : "No meeting yet. "}
-                      <a href="/app/connections?setup=calendar" className="underline underline-offset-2">
+                      <Link href="/app/connections?setup=calendar" className="underline underline-offset-2">
                         Finish Calendar & booking setup
-                      </a>
+                      </Link>
                       .
                     </p>
                   )}
@@ -2807,17 +2767,17 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                   ) : !agentCalendar ? (
                     <p className="text-[10px] text-amber-400/80">
                       No calendar found for this agent.{" "}
-                      <a href="/app/connections?setup=calendar" className="underline underline-offset-2">
+                      <Link href="/app/connections?setup=calendar" className="underline underline-offset-2">
                         Finish calendar setup
-                      </a>
+                      </Link>
                       .
                     </p>
                   ) : !(agentCalendar as any).connectedGoogleEmail ? (
                     <span className="text-[10px] text-amber-400/80">
                       No Google account connected.{" "}
-                      <a href="/app/connections?setup=calendar" className="underline underline-offset-2">
+                      <Link href="/app/connections?setup=calendar" className="underline underline-offset-2">
                         Finish calendar setup
-                      </a>
+                      </Link>
                       .
                     </span>
                   ) : (
@@ -2839,18 +2799,6 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                   <ChevronDown className={cn("h-3 w-3 transition-transform", bookingDetailsOpen && "rotate-180")} />
                 </Button>
               </div>
-
-              {canAttendMeetings && agentId && (
-                <div className="rounded-lg border border-border/40 bg-background/30 p-3">
-                  <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/70">
-                    Meeting settings
-                  </p>
-                  <p className="mb-3 text-[11px] text-muted-foreground leading-relaxed">
-                    Who joins, wait patience, max length, and optional presentation deck.
-                  </p>
-                  <MeetingsChannelCard agentId={agentId} showJoinLink={false} />
-                </div>
-              )}
 
               {bookingDetailsOpen && (
                 <div className="space-y-2 rounded-lg border border-border/40 bg-muted/15 p-3">
@@ -2939,6 +2887,33 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
             </div>
           )}
         </div>
+
+        {/* Meeting join settings — independent of Booking (paste-link Meet bots need this too). */}
+        {canAttendMeetings && (
+          <>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-1 mt-4">
+              Meetings
+            </p>
+            <div className="rounded-xl border border-border/70 bg-card/40 p-4">
+              <div className="mb-3 flex items-start gap-3">
+                <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted/30">
+                  <Video className="h-4 w-4 text-foreground/70" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-foreground/80">Meeting settings</p>
+                  <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground/60">
+                    Applies whenever this agent joins Meet/Zoom/Teams — paste-link from the Meet page or auto-join from a booking. Booking tools are optional.
+                  </p>
+                </div>
+              </div>
+              {agentId ? (
+                <MeetingsChannelCard agentId={agentId} showJoinLink={false} />
+              ) : (
+                <p className="text-[11px] text-amber-400/80">Save the agent first to edit meeting settings.</p>
+              )}
+            </div>
+          </>
+        )}
 
         <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-1 mt-4">Messaging</p>
         {CALL_CONTROL_TOOLS.filter((t) => t.type === "send_email" || t.type === "send_whatsapp").map(({ type, icon, color, label, description }) => {
@@ -4153,18 +4128,24 @@ function AgentListPanel({ selectedId, onSelect, className }: {
 
 /* ── Tab: Analysis (Journey) ────────────────────────────────────────────────── */
 
-type DispositionCategory = { id: string; name: string; values: string };
+type DispConfigRow = {
+  taxonomy: Record<string, string[]>;
+  domainFields?: StoredDomainField[];
+  rules?: unknown[];
+};
 
 function DispositionSettingsPanel({ agentId }: { agentId: number }) {
   const { toast } = useToast();
   const [categories, setCategories] = useState<DispositionCategory[]>([]);
+  const [fields, setFields] = useState<UiDomainField[]>([]);
+  const [rules, setRules] = useState<unknown[]>([]);
   const [dirty, setDirty] = useState(false);
 
-  const { data: dispConfig, isLoading: dispLoading } = useQuery<{ taxonomy: Record<string, string[]> } | null>({
+  const { data: dispConfig, isLoading: dispLoading } = useQuery<DispConfigRow | null>({
     queryKey: ["disposition-config", agentId],
     queryFn: async () => {
       try {
-        return await customFetch<{ taxonomy: Record<string, string[]> }>(`${DASH_API}/disposition/config/${agentId}`);
+        return await customFetch<DispConfigRow>(`${DASH_API}/disposition/config/${agentId}`);
       } catch {
         return null;
       }
@@ -4174,32 +4155,27 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
   });
 
   useEffect(() => {
-    if (dispConfig?.taxonomy) {
-      setCategories(
-        Object.entries(dispConfig.taxonomy).map(([name, vals]) => ({
-          id: crypto.randomUUID(),
-          name,
-          values: vals.join(", "),
-        })),
-      );
-    }
+    if (!dispConfig) return;
+    setCategories(taxonomyToCategories(dispConfig.taxonomy ?? {}));
+    setFields((dispConfig.domainFields ?? []).map(fromStoredDomainField));
+    setRules(Array.isArray(dispConfig.rules) ? dispConfig.rules : []);
     setDirty(false);
   }, [dispConfig]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const taxonomy: Record<string, string[]> = {};
-      for (const cat of categories) {
-        const name = cat.name.trim();
-        if (!name) continue;
-        taxonomy[name] = cat.values
-          .split(",")
-          .map((v) => v.trim())
-          .filter(Boolean);
+      let taxonomy = categoriesToTaxonomy(categories);
+      // LLM disposeCall requires at least one outcome category; if user only
+      // added data fields, seed a minimal Sales outcome set.
+      if (Object.keys(taxonomy).length === 0 && fields.length > 0) {
+        taxonomy = { ...OUTCOME_PRESETS.find((p) => p.id === "sales")!.taxonomy };
       }
+      const domainFields = fields
+        .map(toStoredDomainField)
+        .filter((f): f is StoredDomainField => !!f);
       await customFetch(`${DASH_API}/disposition/config/${agentId}`, {
         method: "PUT",
-        body: JSON.stringify({ taxonomy }),
+        body: JSON.stringify({ taxonomy, domainFields, rules }),
       });
     },
     onSuccess: () => {
@@ -4210,6 +4186,13 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
       toast({ title: "Failed to save", variant: "destructive" });
     },
   });
+
+  function applyPreset(presetId: string) {
+    const preset = OUTCOME_PRESETS.find((p) => p.id === presetId);
+    if (!preset) return;
+    setCategories(taxonomyToCategories(preset.taxonomy));
+    setDirty(true);
+  }
 
   function addCategory() {
     setCategories((prev) => [...prev, { id: crypto.randomUUID(), name: "", values: "" }]);
@@ -4226,6 +4209,44 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
     setDirty(true);
   }
 
+  function addField(partial?: Partial<UiDomainField>) {
+    const label = partial?.label ?? "";
+    const key = partial?.key ?? (label ? slugDispositionKey(label) : "");
+    setFields((prev) => {
+      if (key && prev.some((f) => f.key === key)) return prev;
+      return [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          label,
+          key,
+          uiType: partial?.uiType ?? "text",
+          optionsText: partial?.optionsText ?? "",
+        },
+      ];
+    });
+    setDirty(true);
+  }
+
+  function removeField(id: string) {
+    setFields((prev) => prev.filter((f) => f.id !== id));
+    setDirty(true);
+  }
+
+  function updateField(id: string, patch: Partial<UiDomainField>) {
+    setFields((prev) =>
+      prev.map((f) => {
+        if (f.id !== id) return f;
+        const next = { ...f, ...patch };
+        if (patch.label != null && (!f.key || f.key === slugDispositionKey(f.label))) {
+          next.key = slugDispositionKey(patch.label);
+        }
+        return next;
+      }),
+    );
+    setDirty(true);
+  }
+
   if (agentId <= 0) {
     return (
       <div>
@@ -4234,94 +4255,221 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
           <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Call Disposition</h3>
         </div>
         <p className="text-[11px] text-muted-foreground mt-0.5">
-          Save the agent first to define disposition categories.
+          Save the agent first to define outcomes and data fields.
         </p>
       </div>
     );
   }
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-1">
-        <div className="flex items-center gap-2">
+    <div className="space-y-8">
+      <div>
+        <div className="flex items-center gap-2 mb-1">
           <Tag className="h-4 w-4 text-amber-400" />
           <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Call Disposition</h3>
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-7 text-xs gap-1"
-          onClick={addCategory}
-        >
-          <Plus className="h-3.5 w-3.5" /> Add Category
-        </Button>
+        <p className="text-[11px] text-muted-foreground">
+          After each call, AI picks an outcome and fills the data fields you define (WhatsApp, email, city…). Values show on the call detail page.
+        </p>
       </div>
-      <p className="text-[11px] text-muted-foreground mb-4">
-        Define categories and their possible values. After each call the AI automatically picks the best match from the transcript and saves it. Results appear in the call detail page.
-      </p>
 
       {dispLoading ? (
         <div className="space-y-2">
-          {[1, 2].map((i) => <div key={i} className="h-16 rounded-xl bg-muted/20 animate-pulse" />)}
-        </div>
-      ) : categories.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-border/50 p-8 text-center">
-          <Tag className="h-7 w-7 text-muted-foreground/20 mx-auto mb-2" />
-          <p className="text-sm font-medium text-muted-foreground/50">No categories yet</p>
-          <p className="text-xs text-muted-foreground/30 mt-0.5">Add a category to start capturing structured call outcomes</p>
+          {[1, 2, 3].map((i) => <div key={i} className="h-16 rounded-xl bg-muted/20 animate-pulse" />)}
         </div>
       ) : (
-        <div className="space-y-3">
-          {categories.map((cat) => (
-            <div key={cat.id} className="rounded-xl border border-border/60 bg-card/20 p-4">
-              <div className="flex items-start gap-3">
-                <div className="flex-1 grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Category name</label>
-                    <Input
-                      className="h-8 text-xs"
-                      placeholder="e.g. intent"
-                      value={cat.name}
-                      onChange={(e) => updateCategory(cat.id, "name", e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Possible values <span className="normal-case">(comma-separated)</span></label>
-                    <Input
-                      className="h-8 text-xs"
-                      placeholder="e.g. interested, not_interested, callback"
-                      value={cat.values}
-                      onChange={(e) => updateCategory(cat.id, "values", e.target.value)}
-                    />
-                  </div>
-                </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 mt-5 text-muted-foreground hover:text-destructive shrink-0"
-                  onClick={() => removeCategory(cat.id)}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
+        <>
+          {/* ── Outcomes ─────────────────────────────────────────────── */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <div>
+                <h4 className="text-xs font-semibold text-foreground">Outcomes</h4>
+                <p className="text-[10px] text-muted-foreground mt-0.5">Category → allowed values the AI can pick</p>
               </div>
-              {cat.values && (
-                <div className="flex flex-wrap gap-1 mt-3">
-                  {cat.values.split(",").map((v) => v.trim()).filter(Boolean).map((v) => (
-                    <span key={v} className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                      {v}
-                    </span>
-                  ))}
-                </div>
-              )}
+              <Button type="button" variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={addCategory}>
+                <Plus className="h-3.5 w-3.5" /> Add category
+              </Button>
             </div>
-          ))}
-        </div>
+            <div className="flex flex-wrap gap-1.5 mb-3">
+              {OUTCOME_PRESETS.map((p) => (
+                <Button
+                  key={p.id}
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="h-7 text-[11px]"
+                  onClick={() => applyPreset(p.id)}
+                >
+                  Use {p.name} preset
+                </Button>
+              ))}
+            </div>
+            {categories.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-border/50 p-6 text-center">
+                <p className="text-sm font-medium text-muted-foreground/60">No outcomes yet</p>
+                <p className="text-xs text-muted-foreground/40 mt-0.5">Pick a preset or add a category</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {categories.map((cat) => (
+                  <div key={cat.id} className="rounded-xl border border-border/60 bg-card/20 p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="flex-1 grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Category</label>
+                          <Input
+                            className="h-8 text-xs"
+                            placeholder="e.g. outcome"
+                            value={cat.name}
+                            onChange={(e) => updateCategory(cat.id, "name", e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                            Values <span className="normal-case">(comma-separated)</span>
+                          </label>
+                          <Input
+                            className="h-8 text-xs"
+                            placeholder="interested, callback, no_answer"
+                            value={cat.values}
+                            onChange={(e) => updateCategory(cat.id, "values", e.target.value)}
+                          />
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 mt-5 text-muted-foreground hover:text-destructive shrink-0"
+                        onClick={() => removeCategory(cat.id)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                    {cat.values && (
+                      <div className="flex flex-wrap gap-1 mt-3">
+                        {cat.values.split(",").map((v) => v.trim()).filter(Boolean).map((v) => (
+                          <span key={v} className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                            {v}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* ── Data to collect ──────────────────────────────────────── */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <div>
+                <h4 className="text-xs font-semibold text-foreground">Data to collect</h4>
+                <p className="text-[10px] text-muted-foreground mt-0.5">
+                  Extracted as bare values (WhatsApp → digits only, not a paragraph)
+                </p>
+              </div>
+              <Button type="button" variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => addField()}>
+                <Plus className="h-3.5 w-3.5" /> Add field
+              </Button>
+            </div>
+            <div className="flex flex-wrap gap-1.5 mb-3">
+              {DOMAIN_FIELD_QUICK_ADDS.map((q) => (
+                <Button
+                  key={q.key}
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="h-7 text-[11px]"
+                  disabled={fields.some((f) => f.key === q.key)}
+                  onClick={() => addField(q)}
+                >
+                  + {q.label}
+                </Button>
+              ))}
+            </div>
+            {fields.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-border/50 p-6 text-center">
+                <p className="text-sm font-medium text-muted-foreground/60">No data fields</p>
+                <p className="text-xs text-muted-foreground/40 mt-0.5">Quick-add WhatsApp, email, city…</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {fields.map((field) => (
+                  <div key={field.id} className="rounded-xl border border-border/60 bg-card/20 p-4 space-y-3">
+                    <div className="flex items-start gap-3">
+                      <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Label</label>
+                          <Input
+                            className="h-8 text-xs"
+                            placeholder="WhatsApp number"
+                            value={field.label}
+                            onChange={(e) => updateField(field.id, { label: e.target.value })}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Key</label>
+                          <Input
+                            className="h-8 text-xs font-mono"
+                            placeholder="whatsapp_number"
+                            value={field.key}
+                            onChange={(e) => updateField(field.id, { key: e.target.value })}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Type</label>
+                          <Select
+                            value={field.uiType}
+                            onValueChange={(v) => updateField(field.id, { uiType: v as UiDomainFieldType })}
+                          >
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="phone">Phone / WhatsApp</SelectItem>
+                              <SelectItem value="text">Short text</SelectItem>
+                              <SelectItem value="number">Number</SelectItem>
+                              <SelectItem value="yes_no">Yes / No</SelectItem>
+                              <SelectItem value="choice">Choice</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 mt-5 text-muted-foreground hover:text-destructive shrink-0"
+                        onClick={() => removeField(field.id)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                    {field.uiType === "choice" && (
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                          Options <span className="normal-case">(comma-separated)</span>
+                        </label>
+                        <Input
+                          className="h-8 text-xs"
+                          placeholder="yes, no, maybe"
+                          value={field.optionsText ?? ""}
+                          onChange={(e) => updateField(field.id, { optionsText: e.target.value })}
+                        />
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
       )}
 
-      {(categories.length > 0 || dirty) && (
-        <div className="flex justify-end mt-4">
+      {(categories.length > 0 || fields.length > 0 || dirty) && (
+        <div className="flex justify-end">
           <Button
             type="button"
             size="sm"
@@ -6384,26 +6532,7 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
           )}
         </div>
 
-        {/* Phone chip fills the middle toolbar gap — full card stays on Overview */}
-        <div className="hidden min-w-0 flex-1 items-center justify-center px-3 md:flex">
-          <AgentInboundPanel
-            agentId={agent.id}
-            preferredManagedNumber={form.watch("preferredManagedNumber")}
-            telephonyProvider={form.watch("telephonyProvider")}
-            compact
-            className="max-w-[260px]"
-          />
-        </div>
-
         <div className="flex shrink-0 items-center gap-1.5">
-          <div className="md:hidden">
-            <AgentInboundPanel
-              agentId={agent.id}
-              preferredManagedNumber={form.watch("preferredManagedNumber")}
-              telephonyProvider={form.watch("telephonyProvider")}
-              compact
-            />
-          </div>
           <AgentCostSummary form={form} rateMap={rateMap} variant="chip" />
           <Button
             type="button"
@@ -6823,16 +6952,16 @@ function AgentTeamStrip({ agentId, compact }: { agentId: number; compact?: boole
 
   if (!membership) {
     return (
-      <div className={shell}>
-        <Users className="size-3.5 shrink-0 text-muted-foreground" />
+      <div className={cn(shell, compact && "border-dashed bg-transparent")}>
+        <Users className="size-3.5 shrink-0 text-muted-foreground/70" />
         <p className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">
-          Solo agent — not on a team yet.
+          Solo agent
         </p>
         <Button
           type="button"
           size="sm"
           variant="ghost"
-          className="h-7 shrink-0 gap-1 px-2 text-[11px]"
+          className="h-7 shrink-0 gap-1 px-2 text-[11px] text-muted-foreground"
           onClick={() => navigate(`/app/squads?seedAgent=${agentId}`)}
         >
           <Plus className="size-3" />
@@ -6903,7 +7032,7 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
     ttsModel: "bulbul:v3",
     ttsVoice: "priya",
     // Attendance capacity is fixed by agent type:
-    // phone+meet → joins Meet when Booking is on; phone-only → book only, never join.
+    // phone+meet → can join Meet (paste-link or booking); phone-only → book only, never join.
     agentConfig: {
       meetings: {
         enabled: surfaces === "phone_and_meet",
@@ -7041,7 +7170,7 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
           : "Name your agent";
   const stepDesc =
     step === "compose" ? "Start with one agent, or create two that hand off mid-call."
-      : step === "surfaces" ? "Phone only (book but never join Meet), or phone + meetings (joins Meet when Booking is on)."
+      : step === "surfaces" ? "Phone only (book but never join Meet), or phone + meetings (paste-link Meet bots + optional booking join)."
         : composition === "team"
           ? "We’ll create both agents and wire handoffs automatically."
           : "You can edit prompts, tools, and settings anytime.";

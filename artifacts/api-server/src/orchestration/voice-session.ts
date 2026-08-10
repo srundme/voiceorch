@@ -53,6 +53,12 @@ export interface VoiceSession {
   setMeetingRoster?(line: string | null): void;
   setMeetingSpeaker?(name: string | null): void;
   injectMeetingNote?(note: string): void;
+  /** Inbound meeting chat as a user turn (typed instructions). */
+  injectMeetingChat?(from: string, text: string): void;
+  setMeetingOutputMuted?(muted: boolean): void;
+  isMeetingOutputMuted?(): boolean;
+  /** When true, carrier should drop this audio frame (soft mute / mute-when-idle). */
+  blocksMeetingAudioOut?(): boolean;
   /** Cost cut: end voice session when the meeting room empties / bot leaves. */
   endMeetingSession?(reason?: string): void;
 }

@@ -10,6 +10,7 @@ import {
   type CallEvent,
   type DispositionResult,
 } from "../lib/disposition/index.js";
+import { fillMissingPhoneFields } from "../lib/disposition/fill-phone-fields.js";
 import { getDispositionLLM } from "./disposition-llm.js";
 
 // ── Config cache (60-second TTL) ─────────────────────────────────────────────
@@ -40,6 +41,11 @@ async function loadConfig(agentId: number): Promise<DispositionConfig | null> {
     rules:        (row.rules as DispositionConfig["rules"]) ?? [],
   };
 
+  // Empty taxonomy + no domain fields ⇒ treat as unconfigured
+  if (Object.keys(cfg.taxonomy).length === 0 && cfg.domainFields.length === 0) {
+    return null;
+  }
+
   configCache.set(agentId, { cfg, expiresAt: Date.now() + CACHE_TTL_MS });
   return cfg;
 }
@@ -58,6 +64,8 @@ export interface DisposeCallInput {
   callEvents?: CallEvent[];
   /** When the call happened — anchors relative dates ("tomorrow") in the LLM prompt. */
   callStartedAt?: Date | null;
+  /** Dialed / connected party number — used for "same number" WhatsApp fill. */
+  calledNumber?: string | null;
 }
 
 export async function disposeCall(input: DisposeCallInput): Promise<DispositionResult | null> {
@@ -85,7 +93,7 @@ export async function disposeCall(input: DisposeCallInput): Promise<DispositionR
     // 2. LLM extract
     const llm = await getDispositionLLM();
     if (!llm || !transcript?.trim()) {
-      const fallbackResult: DispositionResult = {
+      result = {
         primary: "NOT_CONNECTED",
         sub: "no_answer",
         confidence: 0,
@@ -95,37 +103,46 @@ export async function disposeCall(input: DisposeCallInput): Promise<DispositionR
         needsReview: true,
         error: "LLM unavailable or transcript empty",
       };
-      await persistResult(agentId, callId, transcript, callEvents, fallbackResult);
-      return fallbackResult;
+    } else {
+      const systemPrompt = buildPrompt(cfg, input.callStartedAt ?? null, input.calledNumber ?? null);
+      const schema       = buildSchema(cfg);
+
+      try {
+        const rawOut = await llm.extract(systemPrompt, schema, transcript);
+        result = validate(cfg, rawOut, callEvents);
+      } catch (err) {
+        logger.error({ agentId, callId, err }, "disposition: LLM extract failed");
+        result = {
+          primary: "NOT_CONNECTED",
+          sub: "no_answer",
+          confidence: 0,
+          evidence: "",
+          summary: "LLM extraction failed",
+          flags: ["llm_error"],
+          needsReview: true,
+          error: String(err),
+        };
+      }
     }
+  }
 
-    const systemPrompt = buildPrompt(cfg, input.callStartedAt ?? null);
-    const schema       = buildSchema(cfg);
+  // 3. Regex / same-number fill when LLM left phone fields empty (common on Live).
+  result = fillMissingPhoneFields(cfg, result, transcript, input.calledNumber);
 
-    let rawOut: Record<string, unknown>;
-    try {
-      rawOut = await llm.extract(systemPrompt, schema, transcript);
-    } catch (err) {
-      logger.error({ agentId, callId, err }, "disposition: LLM extract failed");
-      const errResult: DispositionResult = {
-        primary: "NOT_CONNECTED",
-        sub: "no_answer",
-        confidence: 0,
-        evidence: "",
-        summary: "LLM extraction failed",
-        flags: ["llm_error"],
-        needsReview: true,
-        error: String(err),
-      };
-      await persistResult(agentId, callId, transcript, callEvents, errResult);
-      return errResult;
-    }
-
-    result = validate(cfg, rawOut, callEvents);
+  // If we recovered phone fields from the transcript, drop the hard error so
+  // flatDispositionFromTaxonomy + call UI still persist Collected data.
+  if (result.error && hasDomainScalars(result)) {
+    const { error: _drop, ...rest } = result;
+    result = { ...rest, flags: [...(result.flags ?? []), "partial_from_transcript"] };
   }
 
   await persistResult(agentId, callId, transcript, callEvents, result);
   return result;
+}
+
+function hasDomainScalars(result: DispositionResult): boolean {
+  if (!result.domainFields) return false;
+  return Object.values(result.domainFields).some((v) => v != null && v !== "");
 }
 
 async function persistResult(
@@ -148,28 +165,48 @@ async function persistResult(
     logger.error({ agentId, callId, err }, "disposition: failed to persist result");
   }
 
-  // Also persist a flat, display-friendly representation onto the call record
-  // (calls.disposition_result) so the call log table + detail panel can read it.
-  // Shape: { <category>: <chosen value>, confidence, summary }. Skip failure
-  // fallbacks (no LLM / empty transcript / extraction error) so we never clobber
-  // the column with placeholder values like NOT_CONNECTED.
-  if (!result.error && result.primary && result.sub) {
-    const flat: Record<string, string | number | boolean> = {
-      [result.primary]: result.sub,
-    };
+  // Flat display shape on calls.disposition_result for call log / detail.
+  // Skip pure failure placeholders (NOT_CONNECTED + error + no domain data).
+  const domainEntries: Record<string, string | number | boolean> = {};
+  if (result.domainFields) {
+    for (const [k, v] of Object.entries(result.domainFields)) {
+      if (v == null || v === "") continue;
+      if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") {
+        domainEntries[k] = v;
+      }
+    }
+  }
+
+  const hasOutcome = !result.error && !!result.primary && !!result.sub;
+  const hasDomain = Object.keys(domainEntries).length > 0;
+  if (!hasOutcome && !hasDomain) return;
+
+  const flat: Record<string, string | number | boolean> = { ...domainEntries };
+  if (hasOutcome) {
+    flat[result.primary] = result.sub;
+    flat["primary"] = result.primary;
+    flat["sub"] = result.sub;
     if (typeof result.confidence === "number") flat["confidence"] = result.confidence;
     if (result.summary) flat["summary"] = result.summary;
-    try {
-      await db
-        .update(callsTable)
-        .set({ dispositionResult: flat })
-        .where(eq(callsTable.id, callId));
-      logger.info(
-        { agentId, callId, primary: result.primary, sub: result.sub, confidence: result.confidence },
-        "disposition: persisted taxonomy classification onto call",
-      );
-    } catch (err) {
-      logger.error({ agentId, callId, err }, "disposition: failed to persist flat result onto call");
-    }
+  }
+
+  try {
+    await db
+      .update(callsTable)
+      .set({ dispositionResult: flat })
+      .where(eq(callsTable.id, callId));
+    logger.info(
+      {
+        agentId,
+        callId,
+        primary: result.primary,
+        sub: result.sub,
+        confidence: result.confidence,
+        domainKeys: Object.keys(domainEntries),
+      },
+      "disposition: persisted taxonomy classification onto call",
+    );
+  } catch (err) {
+    logger.error({ agentId, callId, err }, "disposition: failed to persist flat result onto call");
   }
 }

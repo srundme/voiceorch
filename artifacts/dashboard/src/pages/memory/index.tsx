@@ -373,7 +373,7 @@ function EpisodeTimeline({ episodes }: { episodes: AgentMemoryEpisode[] }) {
           )}
           {ep.callId != null && (
             <Link
-              href={`/app/calls/${ep.callId}`}
+              href={`/app/history/${ep.callId}`}
               className="text-[11px] text-foreground/80 hover:text-foreground inline-flex items-center gap-1 mt-1.5"
             >
               View call <ChevronRight className="w-3 h-3" />
@@ -436,7 +436,7 @@ function TimelineFeed({
                 )}
                 {it.episode.callId != null && (
                   <Link
-                    href={`/app/calls/${it.episode.callId}`}
+                    href={`/app/history/${it.episode.callId}`}
                     className="text-[11px] text-foreground/80 hover:text-foreground inline-flex items-center gap-1 mt-1.5"
                   >
                     View call <ChevronRight className="w-3 h-3" />
@@ -509,7 +509,7 @@ function CallList({ calls }: { calls: Call[] }) {
               <td className="px-3 py-3 text-muted-foreground truncate max-w-[140px]">{call.agentName}</td>
               <td className="px-3 py-3 text-right rounded-r-lg">
                 <Link
-                  href={`/app/calls/${call.id}`}
+                  href={`/app/history/${call.id}`}
                   className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground"
                 >
                   <ExternalLink className="w-3.5 h-3.5" />

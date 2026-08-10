@@ -1,8 +1,30 @@
 # @snapserveai/mcp
 
-Official [MCP](https://modelcontextprotocol.io) server for [SnapServe](https://app.snapserve.ai) — control your AI voice agents, phone calls, numbers, analytics and wallet from Claude Desktop, Cursor, or any MCP-compatible client.
+Official [MCP](https://modelcontextprotocol.io) server for [SnapServe](https://app.snapserve.ai) — control your AI voice agents, phone calls, numbers, analytics and wallet from Claude, Cursor, or any MCP-compatible client.
 
-## Setup
+## Hosted remote MCP (Claude custom connectors)
+
+**URL:** `https://app.snapserve.ai/api/mcp`
+
+### Claude.ai / Claude Desktop (custom connector)
+
+1. Create an API key: Dashboard → **API Keys** → `sk_live_...`
+2. Claude → **Customize → Connectors → Add custom connector**
+3. Name: `snapserve`
+4. Remote MCP server URL: `https://app.snapserve.ai/api/mcp`
+5. Click **Add**, then **Connect** — paste your `sk_live_...` key on the SnapServe authorize page
+
+Optional (if your Claude plan shows **Request headers**): set header `authorization` to `Bearer sk_live_...` and skip OAuth.
+
+### Claude Code
+
+```bash
+claude mcp add snapserve --transport http \
+  --url https://app.snapserve.ai/api/mcp \
+  --header "Authorization: Bearer sk_live_..."
+```
+
+## Local stdio (Claude Desktop / Cursor)
 
 1. Create an API key in **SnapServe Dashboard → API Keys** (`sk_live_...`).
 2. Add to your MCP client config:

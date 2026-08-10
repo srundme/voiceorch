@@ -17,6 +17,7 @@
  *  - GET  /partner/clients/:clerkId/calls     → recent calls for one client
  *  - GET  /partner/clients/:clerkId/config    → client agents + partner number provisioning
  *  - POST /partner/clients/:clerkId/agents    → copy one of the partner's agents into the client account
+ *  - GET/POST/DELETE /partner/clients/:clerkId/api-keys → issue SDK keys for the client
  *  - GET/POST/DELETE /partner/invites         → invite lifecycle
  *  - GET  /partner/invites/preview?token=     → invite details for the accept page
  *  - POST /partner/invites/accept             → link the signed-in user to the partner
@@ -25,7 +26,7 @@
  */
 
 import { Router } from "express";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import {
   db,
   usersTable,
@@ -35,11 +36,20 @@ import {
   callsTable,
   agentsTable,
   phoneNumbersTable,
+  userApiKeysTable,
 } from "@workspace/db";
 import { and, desc, eq, gte, inArray, isNull, sql, count } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { sendBrevoEmail } from "../services/brevo.js";
 import { getSelfBaseUrl } from "../lib/app-domain.js";
+
+function generateClientApiKey(): { key: string; prefix: string; hash: string } {
+  const secret = randomBytes(32).toString("hex");
+  const key = `sk_live_${secret}`;
+  const prefix = key.slice(0, 16);
+  const hash = createHash("sha256").update(key).digest("hex");
+  return { key, prefix, hash };
+}
 
 const router: Router = Router();
 
@@ -159,23 +169,14 @@ router.get("/partner/context", requireAuth, async (req, res): Promise<void> => {
 
     const isPartner = !!ownPartner && ownPartner.status === "active";
     const isManagedClient = branding !== null && !isPartner;
-    let canEditAgents = false;
-    if (isManagedClient) {
-      const [clientFlags] = await db
-        .select({ allow: usersTable.partnerAllowAgentEdit })
-        .from(usersTable)
-        .where(eq(usersTable.clerkId, clerkId));
-      canEditAgents = clientFlags?.allow === true;
-    }
     res.json({
       isPartner,
       branding,
-      // Managed client = linked to an ACTIVE partner. By default the partner
-      // builds/manages agents; canEditAgents is true when the partner opted
-      // this client into editing their own agents.
+      // Managed client = linked to an ACTIVE partner. Clients get a full
+      // workspace (agents/KB/etc.); partner owns rate, funding, and numbers.
       // A partner linked to their own org (self-partner) is never "managed".
       isManagedClient,
-      canEditAgents,
+      canEditAgents: isManagedClient ? true : false,
     });
   } catch (err) {
     req.log.error({ err }, "partner/context failed");
@@ -495,12 +496,13 @@ router.patch("/partner/clients/:clerkId", requireAuth, async (req, res): Promise
       updates.partnerRateCentsPerMin = rate;
     }
 
+    // allowAgentEdit is deprecated — managed clients always have a full workspace.
     if (typeof body.allowAgentEdit === "boolean") {
-      updates.partnerAllowAgentEdit = body.allowAgentEdit;
+      updates.partnerAllowAgentEdit = true;
     }
 
     if (Object.keys(updates).length === 0) {
-      res.status(400).json({ error: "Provide rateCentsPerMin and/or allowAgentEdit" });
+      res.status(400).json({ error: "Provide rateCentsPerMin" });
       return;
     }
 
@@ -514,7 +516,7 @@ router.patch("/partner/clients/:clerkId", requireAuth, async (req, res): Promise
       rateCentsPerMin: updates.partnerRateCentsPerMin
         ?? client.partnerRateCentsPerMin
         ?? partner.defaultClientRateCentsPerMin,
-      allowAgentEdit: updates.partnerAllowAgentEdit ?? client.partnerAllowAgentEdit === true,
+      allowAgentEdit: true,
     });
   } catch (err) {
     req.log.error({ err }, "partner/clients PATCH failed");
@@ -789,6 +791,112 @@ router.post("/partner/clients/:clerkId/agents", requireAuth, async (req, res): P
     res.status(201).json(created);
   } catch (err) {
     req.log.error({ err }, "partner send agent failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+/* ─── Client API keys (SDK / automations for the managed client) ───────────── */
+
+router.get("/partner/clients/:clerkId/api-keys", requireAuth, async (req, res): Promise<void> => {
+  try {
+    const partner = await requireActivePartner(req, res);
+    if (!partner) return;
+    const client = await getOwnedClient(partner.id, String(req.params.clerkId ?? ""));
+    if (!client) { res.status(404).json({ error: "Client not found" }); return; }
+
+    const keys = await db
+      .select({
+        id: userApiKeysTable.id,
+        name: userApiKeysTable.name,
+        keyPrefix: userApiKeysTable.keyPrefix,
+        lastUsedAt: userApiKeysTable.lastUsedAt,
+        createdAt: userApiKeysTable.createdAt,
+        revokedAt: userApiKeysTable.revokedAt,
+      })
+      .from(userApiKeysTable)
+      .where(eq(userApiKeysTable.userId, client.clerkId))
+      .orderBy(userApiKeysTable.createdAt);
+
+    res.json({ keys });
+  } catch (err) {
+    req.log.error({ err }, "partner client api-keys list failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/partner/clients/:clerkId/api-keys", requireAuth, async (req, res): Promise<void> => {
+  try {
+    const partner = await requireActivePartner(req, res);
+    if (!partner) return;
+    const client = await getOwnedClient(partner.id, String(req.params.clerkId ?? ""));
+    if (!client) { res.status(404).json({ error: "Client not found" }); return; }
+
+    const name = (req.body as { name?: string }).name?.trim() || "Partner issued";
+
+    const existing = await db
+      .select({ id: userApiKeysTable.id })
+      .from(userApiKeysTable)
+      .where(and(eq(userApiKeysTable.userId, client.clerkId), isNull(userApiKeysTable.revokedAt)));
+
+    if (existing.length >= 5) {
+      res.status(400).json({ error: "Maximum 5 active API keys allowed for this client. Revoke one first." });
+      return;
+    }
+
+    const { key, prefix, hash } = generateClientApiKey();
+    await db.insert(userApiKeysTable).values({
+      userId: client.clerkId,
+      name,
+      keyHash: hash,
+      keyPrefix: prefix,
+    });
+
+    req.log.info(
+      { partnerId: partner.id, clientClerkId: client.clerkId, prefix },
+      "partner issued API key for client",
+    );
+    res.status(201).json({
+      key,
+      prefix,
+      name,
+      message: "Save this key — it will not be shown again. It authenticates as this client.",
+    });
+  } catch (err) {
+    req.log.error({ err }, "partner client api-key create failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.delete("/partner/clients/:clerkId/api-keys/:id", requireAuth, async (req, res): Promise<void> => {
+  try {
+    const partner = await requireActivePartner(req, res);
+    if (!partner) return;
+    const client = await getOwnedClient(partner.id, String(req.params.clerkId ?? ""));
+    if (!client) { res.status(404).json({ error: "Client not found" }); return; }
+
+    const id = Number(req.params["id"]);
+    if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid key id" }); return; }
+
+    const [row] = await db
+      .select()
+      .from(userApiKeysTable)
+      .where(and(eq(userApiKeysTable.id, id), eq(userApiKeysTable.userId, client.clerkId)));
+
+    if (!row) { res.status(404).json({ error: "Key not found" }); return; }
+    if (row.revokedAt) { res.status(400).json({ error: "Key already revoked" }); return; }
+
+    await db
+      .update(userApiKeysTable)
+      .set({ revokedAt: new Date() })
+      .where(eq(userApiKeysTable.id, id));
+
+    req.log.info(
+      { partnerId: partner.id, clientClerkId: client.clerkId, id },
+      "partner revoked client API key",
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    req.log.error({ err }, "partner client api-key revoke failed");
     res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -1096,7 +1204,11 @@ router.post("/partner/invites/accept", requireAuth, async (req, res): Promise<vo
 
       const linkedRows = await tx
         .update(usersTable)
-        .set({ partnerId: partner.id, partnerRateCentsPerMin: rate })
+        .set({
+          partnerId: partner.id,
+          partnerRateCentsPerMin: rate,
+          partnerAllowAgentEdit: true,
+        })
         .where(and(eq(usersTable.id, me.id), isNull(usersTable.partnerId)))
         .returning({ id: usersTable.id });
       if (linkedRows.length === 0) throw new Error("concurrent partner link");

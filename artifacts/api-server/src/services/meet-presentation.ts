@@ -142,7 +142,7 @@ export async function startMeetPresentation(opts: {
     s.presenting = true;
     s.updatedAt = Date.now();
     logger.info({ mid: opts.mid, botId: opts.botId, slide: s.slideIndex }, "Meet presentation screenshare started");
-    return `presentation_started: slide=${s.slideIndex}, url=${s.sourceUrl}. Tell participants you are sharing the deck. Use next_slide / previous_slide to advance.`;
+    return `presentation_started: slide=${s.slideIndex}, url=${s.sourceUrl}. Tell participants you are sharing the deck. Use next_slide / previous_slide / goto_slide to advance.`;
   } catch (err) {
     logger.warn({ err, mid: opts.mid, botId: opts.botId }, "Meet presentation start failed");
     return `error: could not start presentation — ${err instanceof Error ? err.message : "unknown error"}`;
@@ -192,7 +192,8 @@ export function presentationPublicState(mid: string): {
 /** Built-in meeting tools: start / stop / next / previous slide. */
 export async function executeMeetPresentationTool(opts: {
   toolName: string;
-  args: Record<string, unknown>;
+  /** LLM may omit args entirely (null) — treat as {}. */
+  args: Record<string, unknown> | null | undefined;
   meetMid: string | null | undefined;
   meetBotToken: string | null | undefined;
   /** Fallback deck URL from agent Meeting settings. */
@@ -203,6 +204,7 @@ export async function executeMeetPresentationTool(opts: {
   if (!mid || !token) {
     return "error: presentation tools require an active meeting bot session";
   }
+  const args = opts.args && typeof opts.args === "object" ? opts.args : {};
   const { getMeetRosterBotId } = await import("./meet-roster.js");
   const botId = getMeetRosterBotId(mid);
   if (!botId) {
@@ -220,7 +222,7 @@ export async function executeMeetPresentationTool(opts: {
 
   switch (opts.toolName) {
     case "start_presentation": {
-      const url = typeof opts.args["url"] === "string" ? opts.args["url"].trim() : "";
+      const url = typeof args["url"] === "string" ? args["url"].trim() : "";
       return startMeetPresentation({
         mid,
         botId,
@@ -240,6 +242,24 @@ export async function executeMeetPresentationTool(opts: {
     }
     case "previous_slide": {
       const s = bumpMeetPresentationSlide(mid, -1);
+      if (!s) return "error: no presentation configured — call start_presentation first";
+      if (!s.presenting) {
+        return `slide_ready: ${s.slideIndex} (not sharing yet — call start_presentation)`;
+      }
+      return `slide=${s.slideIndex}. Brief participants on this slide if helpful.`;
+    }
+    case "goto_slide": {
+      const raw = args["slide"];
+      const n =
+        typeof raw === "number"
+          ? raw
+          : typeof raw === "string" && raw.trim() !== ""
+            ? Number(raw)
+            : NaN;
+      if (!Number.isFinite(n) || n < 1) {
+        return "error: goto_slide requires slide >= 1";
+      }
+      const s = setMeetPresentationSlide(mid, n);
       if (!s) return "error: no presentation configured — call start_presentation first";
       if (!s.presenting) {
         return `slide_ready: ${s.slideIndex} (not sharing yet — call start_presentation)`;

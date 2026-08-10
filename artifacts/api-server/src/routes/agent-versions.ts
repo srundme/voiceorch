@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { eq, and, count, desc, asc, inArray } from "drizzle-orm";
 import { db, agentsTable, agentVersionsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
-import { clientContext, denyManagedClientUnlessAgentEdit } from "../middlewares/clientContext.js";
+import { clientContext } from "../middlewares/clientContext.js";
 
 const router: IRouter = Router();
 
@@ -66,7 +66,7 @@ router.get("/agents/:id/versions", requireAuth, clientContext, async (req, res):
 });
 
 // ── Publish a new version snapshot ───────────────────────────────────────────
-router.post("/agents/:id/versions", requireAuth, clientContext, denyManagedClientUnlessAgentEdit, async (req, res): Promise<void> => {
+router.post("/agents/:id/versions", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const agentId = parseInt(String(req.params["id"] ?? ""), 10);
   if (isNaN(agentId)) { res.status(400).json({ error: "Invalid agent id" }); return; }
@@ -187,7 +187,7 @@ router.get("/agents/:id/versions/:versionId", requireAuth, clientContext, async 
 });
 
 // ── Restore: create a new draft from a snapshot ───────────────────────────────
-router.post("/agents/:id/versions/:versionId/restore", requireAuth, clientContext, denyManagedClientUnlessAgentEdit, async (req, res): Promise<void> => {
+router.post("/agents/:id/versions/:versionId/restore", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const agentId = parseInt(String(req.params["id"] ?? ""), 10);
   const versionId = parseInt(String(req.params["versionId"] ?? ""), 10);
@@ -252,7 +252,7 @@ router.post("/agents/:id/versions/:versionId/restore", requireAuth, clientContex
 });
 
 // ── Delete a draft version ────────────────────────────────────────────────────
-router.delete("/agents/:id/versions/:versionId", requireAuth, clientContext, denyManagedClientUnlessAgentEdit, async (req, res): Promise<void> => {
+router.delete("/agents/:id/versions/:versionId", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const agentId = parseInt(String(req.params["id"] ?? ""), 10);
   const versionId = parseInt(String(req.params["versionId"] ?? ""), 10);
@@ -283,7 +283,7 @@ router.delete("/agents/:id/versions/:versionId", requireAuth, clientContext, den
 });
 
 // ── Archive a version ─────────────────────────────────────────────────────────
-router.patch("/agents/:id/versions/:versionId/archive", requireAuth, clientContext, denyManagedClientUnlessAgentEdit, async (req, res): Promise<void> => {
+router.patch("/agents/:id/versions/:versionId/archive", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const agentId = parseInt(String(req.params["id"] ?? ""), 10);
   const versionId = parseInt(String(req.params["versionId"] ?? ""), 10);

@@ -652,6 +652,34 @@
       "when": 1790800000000,
       "tag": "0092_bookings_meet_bot",
       "breakpoints": true
+    },
+    {
+      "idx": 93,
+      "version": "7",
+      "when": 1790900000000,
+      "tag": "0093_partner_clients_full_workspace",
+      "breakpoints": true
+    },
+    {
+      "idx": 94,
+      "version": "7",
+      "when": 1791000000000,
+      "tag": "0094_pending_caller_facts",
+      "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "7",
+      "when": 1791100000000,
+      "tag": "0095_recall_calendar",
+      "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": "7",
+      "when": 1791200000000,
+      "tag": "0096_mcp_oauth",
+      "breakpoints": true
     }
   ]
 }

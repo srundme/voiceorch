@@ -103,6 +103,10 @@ import {
 } from "../services/meet-booking.js";
 import { executeMeetPresentationTool } from "../services/meet-presentation.js";
 import { executeMeetChatTool } from "../services/meet-chat.js";
+import {
+  executeLeaveMeetingTool,
+  executeMuteMeetingTool,
+} from "../services/meet-control.js";
 
 /** Built-in tool always injected into the LLM tool list (telephony calls only). */
 const SCHEDULE_CALLBACK_TOOL_DEF: ToolDefinition = {
@@ -187,6 +191,21 @@ const PREVIOUS_SLIDE_TOOL_DEF: ToolDefinition = {
   parameters: { type: "object", properties: {} },
 };
 
+const GOTO_SLIDE_TOOL_DEF: ToolDefinition = {
+  name: "goto_slide",
+  description: "Jump to a specific slide number (1-based) while presenting.",
+  parameters: {
+    type: "object",
+    properties: {
+      slide: {
+        type: "number",
+        description: "Slide number to show (starting at 1).",
+      },
+    },
+    required: ["slide"],
+  },
+};
+
 const SEND_MEETING_CHAT_TOOL_DEF: ToolDefinition = {
   name: "send_meeting_chat",
   description:
@@ -209,16 +228,42 @@ const SEND_MEETING_CHAT_TOOL_DEF: ToolDefinition = {
   },
 };
 
+const LEAVE_MEETING_TOOL_DEF: ToolDefinition = {
+  name: "leave_meeting",
+  description:
+    "Leave the video meeting now. Call when the host wraps up or clearly asks you to leave. " +
+    "Say a brief goodbye before calling this if you have not already.",
+  parameters: { type: "object", properties: {} },
+};
+
+const MUTE_MEETING_TOOL_DEF: ToolDefinition = {
+  name: "mute_meeting",
+  description:
+    "Mute your audio output into the meeting (soft mute). Call when asked to mute yourself. " +
+    "You must unmute_meeting before speaking again.",
+  parameters: { type: "object", properties: {} },
+};
+
+const UNMUTE_MEETING_TOOL_DEF: ToolDefinition = {
+  name: "unmute_meeting",
+  description: "Unmute your audio output into the meeting so you can speak again.",
+  parameters: { type: "object", properties: {} },
+};
+
 const MEETING_PRESENTATION_TOOL_DEFS: ToolDefinition[] = [
   START_PRESENTATION_TOOL_DEF,
   STOP_PRESENTATION_TOOL_DEF,
   NEXT_SLIDE_TOOL_DEF,
   PREVIOUS_SLIDE_TOOL_DEF,
+  GOTO_SLIDE_TOOL_DEF,
 ];
 
 const MEETING_SESSION_TOOL_DEFS: ToolDefinition[] = [
   ...MEETING_PRESENTATION_TOOL_DEFS,
   SEND_MEETING_CHAT_TOOL_DEF,
+  LEAVE_MEETING_TOOL_DEF,
+  MUTE_MEETING_TOOL_DEF,
+  UNMUTE_MEETING_TOOL_DEF,
 ];
 
 const VAD_SILENCE_MS          = 150;    // default silence window before STT flush (per-agent tunable via vadSilenceMs)
@@ -806,6 +851,12 @@ export class OrchestrationPipeline implements VoiceSession {
    * already in progress.
    */
   private transferInitiated = false;
+  /**
+   * Set when end_call begins (before onCallEnd → close()). Stops stall silence
+   * reprompts and STT drain from restarting Listening while teardown is in flight
+   * (meet bots: call 6026 had two Silence Reprompts after bye/end_call).
+   */
+  private endCallInitiated = false;
 
   // Barge-in state
   private isPlaying = false;
@@ -1059,6 +1110,10 @@ export class OrchestrationPipeline implements VoiceSession {
   private meetingRosterLine: string | null = null;
   private meetingSpeakerName: string | null = null;
   private pendingMeetingNotes: string[] = [];
+  /** Explicit mute_meeting tool — blocks all bot audio into the room. */
+  private meetingForceMuted = false;
+  /** From Meeting settings: only emit audio while actively speaking TTS. */
+  private meetingMuteWhenIdle = false;
 
   // ── Bolna-parity: conversation-quality metrics ────────────────────────────
   /** Total characters spoken by the agent across all turns (proxy for speak time). */
@@ -2107,7 +2162,15 @@ export class OrchestrationPipeline implements VoiceSession {
   }
 
   constructor(config: SessionConfig) {
-    this.config = config;
+    const rawAudioOut = config.onAudioOut;
+    this.config = {
+      ...config,
+      onAudioOut: (audio: Buffer) => {
+        if (this.blocksMeetingAudioOut()) return;
+        rawAudioOut(audio);
+      },
+    };
+    this.meetingMuteWhenIdle = config.meetingMuteWhenIdle === true;
     this.callDirection = config.callDirection ?? "inbound";
     this.isResumeDroppedCall = config.isResumeDroppedCall === true;
     this.agent = config.agentConfig;
@@ -2853,6 +2916,14 @@ export class OrchestrationPipeline implements VoiceSession {
       this.logDiscardedTranscript(transcript, "transfer_in_progress");
       return;
     }
+    if (this.endCallInitiated) {
+      logger.info(
+        { callId: this.config.callId, transcript },
+        "Streaming STT: discarding transcript — end_call already in progress",
+      );
+      this.logDiscardedTranscript(transcript, "end_call_in_progress");
+      return;
+    }
 
     // Language auto-detection — runs AFTER all discard guards so echoed transcripts
     // can never drive language switching or increment the consecutive-detection counter.
@@ -3170,11 +3241,11 @@ export class OrchestrationPipeline implements VoiceSession {
       }
       // If the call ended (transfer or end_call) while this turn was processing,
       // do NOT drain the pending queue — those transcripts must be discarded.
-      if (this.closed) return;
+      if (this.closed || this.endCallInitiated) return;
       const next = this.drainPendingTranscripts();
       if (next) {
         void this.handleStreamingTranscript(next.text, next.emittedAt, next.closeReason);
-      } else if (!this.closed) {
+      } else if (!this.closed && !this.endCallInitiated) {
         // Turn fully done — re-enter Listening and re-arm the stall backstop.
         this.safetyNet.beginListening();
       }
@@ -3274,9 +3345,12 @@ export class OrchestrationPipeline implements VoiceSession {
   }
 
   private async stallReprompt(): Promise<void> {
-    if (this.closed || this.isProcessing || this.isPlaying) {
+    if (this.closed || this.endCallInitiated) {
+      return;
+    }
+    if (this.isProcessing || this.isPlaying) {
       // Activity resumed between expiry and handling — just re-arm.
-      if (!this.closed) this.safetyNet.beginListening();
+      if (!this.closed && !this.endCallInitiated) this.safetyNet.beginListening();
       return;
     }
     // Caller energy pulsed recently (VAD before STT) — don't say "can't hear".
@@ -5991,6 +6065,8 @@ export class OrchestrationPipeline implements VoiceSession {
         logger.info({ callId: this.config.callId }, "Built-in end_call invoked by LLM");
         // Speak the configured goodbye message, or a sensible default, before
         // hanging up — never drop the connection silently.
+        this.endCallInitiated = true;
+        this.safetyNet?.clear();
         const endCallTool = this.agent.tools.find(t => t.type === "end_call");
         const goodbye = resolveGoodbyeMessage(
           endCallTool?.type === "end_call" ? endCallTool.goodbyeMessage : undefined,
@@ -6060,14 +6136,16 @@ export class OrchestrationPipeline implements VoiceSession {
         toolName === "start_presentation" ||
         toolName === "stop_presentation" ||
         toolName === "next_slide" ||
-        toolName === "previous_slide"
+        toolName === "previous_slide" ||
+        toolName === "goto_slide"
       ) {
         if (!this.agent.isMeetingSession) {
           return `error: ${toolName} is only available during meeting sessions`;
         }
+        const safeArgs = args && typeof args === "object" ? args : {};
         return executeMeetPresentationTool({
           toolName,
-          args,
+          args: safeArgs,
           meetMid: this.config.meetMid,
           meetBotToken: this.config.meetBotToken,
           presentationDefaultUrl: this.config.presentationDefaultUrl,
@@ -6077,10 +6155,26 @@ export class OrchestrationPipeline implements VoiceSession {
         if (!this.agent.isMeetingSession) {
           return "error: send_meeting_chat is only available during meeting sessions";
         }
+        const safeArgs = args && typeof args === "object" ? args : {};
         return executeMeetChatTool({
           meetMid: this.config.meetMid,
-          message: typeof args["message"] === "string" ? args["message"] : "",
-          pin: args["pin"] === true,
+          message: typeof safeArgs["message"] === "string" ? safeArgs["message"] : "",
+          pin: safeArgs["pin"] === true,
+        });
+      }
+      if (toolName === "leave_meeting") {
+        if (!this.agent.isMeetingSession) {
+          return "error: leave_meeting is only available during meeting sessions";
+        }
+        return executeLeaveMeetingTool({ meetMid: this.config.meetMid });
+      }
+      if (toolName === "mute_meeting" || toolName === "unmute_meeting") {
+        if (!this.agent.isMeetingSession) {
+          return `error: ${toolName} is only available during meeting sessions`;
+        }
+        return executeMuteMeetingTool({
+          meetMid: this.config.meetMid,
+          muted: toolName === "mute_meeting",
         });
       }
       logger.warn({ callId: this.config.callId, toolName }, "LLM called unknown tool — ignoring");
@@ -6275,6 +6369,8 @@ export class OrchestrationPipeline implements VoiceSession {
 
   private async executeEndCall(tool: AgentTool & { type: "end_call" }): Promise<void> {
     logger.info({ callId: this.config.callId }, "End Call tool invoked by LLM");
+    this.endCallInitiated = true;
+    this.safetyNet?.clear();
     {
       const goodbye = resolveGoodbyeMessage(tool.goodbyeMessage, this.agent.endCallPhrases);
       this.conversationHistory.appendAssistant(goodbye);
@@ -7427,12 +7523,19 @@ export class OrchestrationPipeline implements VoiceSession {
     // Meeting speaker identification: tag the caller's utterance with the name
     // of the participant Recall last reported speaking, so the LLM knows WHO in
     // the meeting said it. LLM-history-only — UI transcripts stay untagged.
+    // Also append a short reminder so "ask company" prompt steps don't override
+    // KNOWN PEOPLE when the speaker tag already matches (call 6026).
     if (this.meetingSpeakerName && historyForLlm.length > 0) {
       const lastTurn = historyForLlm[historyForLlm.length - 1]!;
       if (lastTurn.role === "user") {
+        const speakerHint =
+          `[Speaker: ${this.meetingSpeakerName}] ${lastTurn.content}\n\n` +
+          `[Meeting speaker is "${this.meetingSpeakerName}". ` +
+          `If this name matches KNOWN PEOPLE / founders / teammates in your instructions, ` +
+          `do NOT ask which company or role. Use their name sparingly — not every turn.]`;
         historyForLlm = [
           ...historyForLlm.slice(0, -1),
-          { ...lastTurn, content: `[Speaker: ${this.meetingSpeakerName}] ${lastTurn.content}` },
+          { ...lastTurn, content: speakerHint },
         ];
       }
     }
@@ -8488,6 +8591,8 @@ export class OrchestrationPipeline implements VoiceSession {
     // drain have completed (the final words are already out uncut).
     if (this.agentSaidEndCallPhrase(spokenResponse)) {
       logger.info({ callId: this.config.callId, response: spokenResponse.slice(0, 80) }, "Agent used end-call phrase — hanging up after playback");
+      this.endCallInitiated = true;
+      this.safetyNet?.clear();
       this.config.onCallEnd();
       return;
     }
@@ -9422,6 +9527,74 @@ export class OrchestrationPipeline implements VoiceSession {
     const n = note.trim().slice(0, 200);
     if (!n || this.pendingMeetingNotes.length >= 10) return;
     this.pendingMeetingNotes.push(n);
+  }
+
+  /** Inbound meeting chat → user turn so the agent can act on typed instructions. */
+  injectMeetingChat(from: string, text: string): void {
+    const who = from.trim().slice(0, 60) || "Participant";
+    const body = text.replace(/\s+/g, " ").trim().slice(0, 400);
+    if (!body || this.closed) return;
+    const line = `[Meeting chat from ${who}]: ${body}`;
+    logger.info(
+      { callId: this.config.callId, from: who, chars: body.length },
+      "Injecting meeting chat as user turn",
+    );
+    if (this.isProcessing) {
+      this.pendingTranscriptQueue.push({
+        text: line,
+        emittedAt: Date.now(),
+        closeReason: "stt_final",
+      });
+      return;
+    }
+    this.isProcessing = true;
+    void this.processTurn(line, 0)
+      .catch((err) => {
+        logger.error({ callId: this.config.callId, err }, "Meeting chat turn error");
+      })
+      .finally(() => {
+        this.isProcessing = false;
+        if (this.closed || this.endCallInitiated) return;
+        const next = this.drainPendingTranscripts();
+        if (next) {
+          this.isProcessing = true;
+          void this.processTurn(next.text, 0)
+            .catch((err) => {
+              logger.error({ callId: this.config.callId, err }, "Queued turn error after meeting chat");
+            })
+            .finally(() => {
+              this.isProcessing = false;
+            });
+        }
+      });
+  }
+
+  setMeetingOutputMuted(muted: boolean): void {
+    this.meetingForceMuted = muted === true;
+    if (this.meetingForceMuted) {
+      try {
+        this.bargeInCallback?.();
+      } catch {
+        /* ignore */
+      }
+    }
+    logger.info(
+      { callId: this.config.callId, muted: this.meetingForceMuted },
+      "Meeting output mute changed",
+    );
+  }
+
+  isMeetingOutputMuted(): boolean {
+    return this.meetingForceMuted;
+  }
+
+  /** Soft-mute gate used by wrapped onAudioOut. */
+  blocksMeetingAudioOut(): boolean {
+    if (!this.agent.isMeetingSession) return false;
+    if (this.meetingForceMuted) return true;
+    if (!this.meetingMuteWhenIdle) return false;
+    // Only forward audio while actively speaking TTS into the meeting.
+    return !(this.isPlaying || this.isSendingTtsAudio);
   }
 
   /** Roster cost-cut: end the SnapServe session when the meeting is over. */

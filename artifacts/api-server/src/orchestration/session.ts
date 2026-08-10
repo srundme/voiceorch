@@ -49,6 +49,11 @@ import {
 import { destroyAudioSession } from "./audioPool.js";
 import { disposeCall } from "../services/disposition.js";
 import {
+  DISPOSITION_EXTRACT_SYSTEM,
+  formatDispositionFieldList,
+  normalizeDispositionSchemaResult,
+} from "../lib/disposition/normalize-fields.js";
+import {
   buildCallEndedWebhookPayload,
   dispatchWebhooks,
   flatDispositionFromTaxonomy,
@@ -431,7 +436,7 @@ export async function createSession(params: {
       effectiveSystemPrompt +=
         `\n\n[PRESENTATION DECK] ${meetingsCfg.presentationUrl}\n` +
         (meetingsCfg.presentationAutoStart
-          ? `Screenshare may already be active — use next_slide / previous_slide / stop_presentation as needed.`
+          ? `Screenshare may already be active — use next_slide / previous_slide / goto_slide / stop_presentation as needed.`
           : `Call start_presentation when asked to share slides (url optional).`);
     }
     if (typeof params.meetingMemoryEmail === "string" && params.meetingMemoryEmail.trim()) {
@@ -2247,6 +2252,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
         meetBotToken: isMeetBotSession && params.meetBotToken ? params.meetBotToken : null,
         presentationDefaultUrl:
           isMeetBotSession && meetingsCfg.presentationUrl ? meetingsCfg.presentationUrl : null,
+        meetingMuteWhenIdle: isMeetBotSession ? meetingsCfg.muteWhenIdle : false,
         memoryOwnerAgentId,
         campaignLeadId: params.campaignLeadId ?? null,
         onAudioOut: params.onAudioOut,
@@ -2287,6 +2293,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     meetBotToken: isMeetBotSession && params.meetBotToken ? params.meetBotToken : null,
     presentationDefaultUrl:
       isMeetBotSession && meetingsCfg.presentationUrl ? meetingsCfg.presentationUrl : null,
+    meetingMuteWhenIdle: isMeetBotSession ? meetingsCfg.muteWhenIdle : false,
     memoryOwnerAgentId,
     campaignLeadId: params.campaignLeadId ?? null,
     onAudioOut: params.onAudioOut,
@@ -3449,10 +3456,41 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
           }
 
           // 2. Extract disposition BEFORE webhooks.
-          // Prefer legacy dispositionSchema when present; otherwise run taxonomy disposeCall
-          // (agent_dispositions). Must finish before webhook so disposition is never null
-          // when taxonomy/schema is configured.
-          if (dispositionSchema.length > 0 && transcript && transcript.length > 50 && ag.userId) {
+          // Prefer Builder taxonomy (agent_dispositions) — that path owns Outcomes +
+          // Data to collect (WhatsApp etc.). Legacy agents.dispositionSchema only runs
+          // when no taxonomy config exists; otherwise it would skip WhatsApp fill.
+          try {
+            const taxResult = await disposeCall({
+              agentId: call.agentId,
+              callId: session.callId,
+              transcript: transcript || null,
+              callEvents: [{ type: "duration", durationSec: durationSeconds }],
+              callStartedAt: call.createdAt ?? null,
+              calledNumber: call.toNumber ?? null,
+            });
+            dispositionResult = flatDispositionFromTaxonomy(taxResult);
+            if (dispositionResult) {
+              logger.info(
+                {
+                  sessionId,
+                  primary: dispositionResult["primary"],
+                  sub: dispositionResult["sub"],
+                  whatsapp: dispositionResult["whatsapp_number"] ?? null,
+                },
+                "Taxonomy disposition ready for webhook",
+              );
+            }
+          } catch (dispErr) {
+            logger.warn({ sessionId, dispErr }, "Post-call taxonomy disposition failed");
+          }
+
+          if (
+            !dispositionResult &&
+            dispositionSchema.length > 0 &&
+            transcript &&
+            transcript.length > 50 &&
+            ag.userId
+          ) {
             try {
               const llmProvs = await db.select().from(providersTable).where(
                 and(
@@ -3474,22 +3512,30 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
               }
               if (llmKey) {
                 const llm = createLLMAdapter(dispProvider, llmKey, dispModel);
-                const fieldList = dispositionSchema
-                  .map(f => `- "${f.key}" (${f.label}, type: ${f.type}${f.options?.length ? `, options: [${f.options.join(", ")}]` : ""})`)
-                  .join("\n");
+                const fieldList = formatDispositionFieldList(dispositionSchema);
                 let raw = "";
                 await llm.chat(
-                  [{ role: "user", content: `Based on this call transcript, extract the following disposition fields and return valid JSON only (no markdown, no commentary):\n\nFields:\n${fieldList}\n\nTranscript:\n${transcript.slice(0, 8000)}` }],
-                  "You extract structured data from call transcripts. Return only a flat JSON object with the specified keys. For boolean fields use true/false. For number fields use numbers. For choice fields use only the specified option values. If a field cannot be determined, use null.",
+                  [{
+                    role: "user",
+                    content:
+                      `Extract disposition fields from this call transcript. Return valid JSON only.\n\n` +
+                      `Fields:\n${fieldList}\n\n` +
+                      `Transcript:\n${transcript.slice(0, 8000)}`,
+                  }],
+                  DISPOSITION_EXTRACT_SYSTEM,
                   () => {},
-                  (full) => { raw = full; }
+                  (full) => { raw = full; },
                 );
                 if (raw) {
                   try {
                     const jsonStr = raw.replace(/```(?:json)?\s*/gi, "").replace(/```\s*/g, "").trim();
-                    const result = JSON.parse(jsonStr);
-                    if (result && typeof result === "object" && !Array.isArray(result)) {
-                      dispositionResult = result as Record<string, unknown>;
+                    const parsed = JSON.parse(jsonStr);
+                    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+                      const result = normalizeDispositionSchemaResult(
+                        dispositionSchema,
+                        parsed as Record<string, unknown>,
+                      );
+                      dispositionResult = result;
                       await db.update(callsTable).set({ dispositionResult: result }).where(eq(callsTable.id, session.callId));
                     }
                   } catch {
@@ -3499,29 +3545,6 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
               }
             } catch (dispErr) {
               logger.warn({ sessionId, dispErr }, "Post-call disposition extraction failed");
-            }
-          } else {
-            try {
-              const taxResult = await disposeCall({
-                agentId: call.agentId,
-                callId: session.callId,
-                transcript: transcript || null,
-                callEvents: [{ type: "duration", durationSec: durationSeconds }],
-                callStartedAt: call.createdAt ?? null,
-              });
-              dispositionResult = flatDispositionFromTaxonomy(taxResult);
-              if (dispositionResult) {
-                logger.info(
-                  {
-                    sessionId,
-                    primary: dispositionResult["primary"],
-                    sub: dispositionResult["sub"],
-                  },
-                  "Taxonomy disposition ready for webhook",
-                );
-              }
-            } catch (dispErr) {
-              logger.warn({ sessionId, dispErr }, "Post-call taxonomy disposition failed");
             }
           }
 

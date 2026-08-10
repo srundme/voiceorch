@@ -1,13 +1,16 @@
 import type { ReactNode } from "react";
 import { useLocation } from "wouter";
 import { ChevronLeft } from "lucide-react";
-import { canGoBackInApp } from "@/lib/nav-history";
 import { cn } from "@/lib/utils";
 
 /**
  * Canonical Stripe-style full page:
  * single h1 · one-line description · right actions · optional tabs · constrained content.
  * Layout must not render a duplicate page title (utility strip only).
+ *
+ * Back always navigates to `back.href` so the label matches the destination.
+ * (history.back() previously skipped parent hubs after Connections setup used
+ * replace — Agents → Connections → WhatsApp → Back landed on Agents.)
  */
 export function StripePage({
   title,
@@ -39,8 +42,7 @@ export function StripePage({
 
   const onBack = () => {
     if (!back) return;
-    if (canGoBackInApp()) window.history.back();
-    else navigate(back.href);
+    navigate(back.href);
   };
 
   return (

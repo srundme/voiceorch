@@ -93,6 +93,8 @@ import squadsRouter from "./squads.js";
 import whatsappRouter from "./whatsapp.js";
 import webcallLinksRouter from "./webcall-links.js";
 import meetBotsRouter from "./meet-bots.js";
+import meetCalendarRouter from "./meet-calendar.js";
+import mcpRouter from "./mcp.js";
 import { provisionUser } from "../middlewares/userProvisioning.js";
 
 const router: IRouter = Router();
@@ -128,7 +130,12 @@ router.use(webcallLinksRouter);
 
 // Meeting bots (Recall.ai): public bot page (token-authed) + authed launch/status
 router.use(meetBotsRouter);
+// Recall Calendar V2: Google connect + opt-in event bots (webhook is public)
+router.use(meetCalendarRouter);
 
+
+// Hosted remote MCP + OAuth (Claude custom connectors) — before provisionUser
+router.use(mcpRouter);
 
 // Public docs routes — changelog API (no session required)
 router.use(docsRouter);
@@ -152,6 +159,13 @@ router.use(voiceathonPublicRouter);
 
 // Public workflow trigger intake (website / Instagram form leads) — no session
 router.use(workflowsPublicRouter);
+
+// KYC callback/webhook are unauthenticated browser/provider hits. Must mount
+// before any router that does `router.use(requireAuth)` (campaigns, etc.) —
+// Express runs that middleware for every request that enters the router, so
+// an unauthenticated VoBiz redirect would otherwise get 401 JSON and never
+// reach /kyc/callback. Authed /kyc/status + /kyc/start keep their own requireAuth.
+router.use(kycRouter);
 
 router.use(storageRouter);
 router.use(provisionUser);
@@ -195,7 +209,6 @@ router.use(searchRouter);
 router.use(agentVariablesRouter);
 router.use(batchImportRunsRouter);
 router.use(schedulingRouter);
-router.use(kycRouter);
 router.use(assistantRouter);
 router.use(usageMeRouter);
 router.use(userApiKeysRouter);

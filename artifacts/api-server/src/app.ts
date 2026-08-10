@@ -10,6 +10,7 @@ import { attachSession } from "./middlewares/session.js";
 import { detectImpersonation } from "./middlewares/detectImpersonation.js";
 import { authenticateApiKey } from "./routes/user-api-keys.js";
 import router from "./routes";
+import { mountMcpWellKnown } from "./routes/mcp.js";
 import { logger } from "./lib/logger";
 import { ipRateLimit, authRateLimit, isRateLimitExempt } from "./lib/rate-limit.js";
 
@@ -56,6 +57,24 @@ import { getAppOrigins } from "./lib/app-domain.js";
 app.use(
   ["/api/webhooks/lead", "/api/widget/lead-capture.js"],
   cors({ origin: "*", methods: ["GET", "POST", "OPTIONS"] }),
+);
+
+// Remote MCP + OAuth authorize page (Claude / MCP Inspector may preflight from browsers).
+app.use(
+  ["/api/mcp", "/.well-known/oauth-authorization-server", "/.well-known/oauth-protected-resource"],
+  cors({
+    origin: true,
+    methods: ["GET", "POST", "DELETE", "OPTIONS"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "x-api-key",
+      "mcp-session-id",
+      "Last-Event-ID",
+      "Accept",
+    ],
+    exposedHeaders: ["mcp-session-id"],
+  }),
 );
 
 // In production restrict CORS to known dashboard origins; in dev allow all.
@@ -112,6 +131,9 @@ app.use((req, res, next) => {
     authRateLimit(req, res, next);
   }
 });
+
+// MCP OAuth discovery (RFC 8414 / protected resource metadata) at site root
+mountMcpWellKnown(app);
 
 app.use("/api", router);
 
@@ -175,7 +197,8 @@ if (frontendDistPath) {
     }));
     // SPA fallback — send index.html for any non-/api, non-/admin-ui and
     // non-/snapserve-book route.
-    app.get(/^\/(?!api|admin-ui|snapserve-book).*/, (_req, res) => {
+    // Exclude /.well-known (MCP OAuth discovery) from the SPA fallback.
+    app.get(/^\/(?!api|admin-ui|snapserve-book|\.well-known).*/, (_req, res) => {
       res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
       res.setHeader("Pragma", "no-cache");
       res.setHeader("Expires", "0");

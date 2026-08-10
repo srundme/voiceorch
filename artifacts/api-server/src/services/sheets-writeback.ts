@@ -554,8 +554,10 @@ async function scheduleSheetCallback(opts: {
       scheduledAt,
       createdFromCallId: opts.callId,
       campaignLeadId: opts.campaignLeadId,
-      reason: opts.dispositionText.slice(0, 500) || "callback_requested",
-      notes: "sheet_auto_call_callback",
+      reason: "callback_requested",
+      notes: opts.dispositionText
+        ? `sheet_auto_call_callback: ${opts.dispositionText.slice(0, 480)}`
+        : "sheet_auto_call_callback",
     });
     logger.info(
       { callId: opts.callId, scheduledAt, phone: opts.phone },

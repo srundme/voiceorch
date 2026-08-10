@@ -3,6 +3,8 @@ export type TaxonomyMap = Record<string, string[]>;
 export interface DomainField {
   key: string;
   type: "string" | "number" | "boolean";
+  /** Human label for prompts / UI (optional for older configs). */
+  label?: string;
   enum?: string[];
 }
 

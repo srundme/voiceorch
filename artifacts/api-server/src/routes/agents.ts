@@ -1,8 +1,23 @@
 // agents router — supports call_transfer + webhook (custom function) tools + AMD voicemail detection
 import { Router, type IRouter } from "express";
-import { eq, and, count, desc, asc, isNull, inArray, max } from "drizzle-orm";
+import { eq, and, count, desc, asc, isNull, inArray, max, ne, sql } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
 import { db, agentsTable, agentVersionsTable, callerProfilesTable, callerFactsTable, callerVoiceprintsTable, callerCallArchiveTable, callerSentencesTable, callerFactSentenceLinksTable, callerEpisodeFactLinksTable, providersTable, agentKnowledgeSourcesTable, phoneNumbersTable, callsTable, executionLogsTable, schedulingCalendarsTable, availabilitySchedulesTable, type AgentConfig } from "@workspace/db";
+import { PERSONA_HASH_FACT_KEY } from "../orchestration/callerMemory.js";
+
+/** Internal keys (e.g. __agent_persona_hash) stay in DB for runtime, but never surface in Memory UI. */
+function isUserVisibleFactKey(key: string): boolean {
+  return !key.startsWith("__");
+}
+
+/** Current facts the Memory UI should show (excludes superseded + keys starting with __). */
+const visibleCurrentFactsWhere = (agentId: number) => and(
+  eq(callerFactsTable.agentId, agentId),
+  isNull(callerFactsTable.supersededById),
+  // LIKE '_' is a wildcard — use left() so we don't match durable keys like "name".
+  sql`left(${callerFactsTable.key}, 2) <> '__'`,
+  ne(callerFactsTable.key, PERSONA_HASH_FACT_KEY),
+);
 import {
   CreateAgentBody,
   UpdateAgentBody,
@@ -19,7 +34,7 @@ import {
   ListAgentMemoryEpisodesResponse,
 } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/requireAuth.js";
-import { clientContext, denyManagedClientUnlessAgentEdit, getManagingPartner } from "../middlewares/clientContext.js";
+import { clientContext, getManagingPartner } from "../middlewares/clientContext.js";
 import { logActivity } from "../lib/activity.js";
 import { encryptKey, decryptKey } from "../lib/crypto.js";
 import {
@@ -125,7 +140,7 @@ router.get("/agents", requireAuth, clientContext, async (req, res): Promise<void
   res.json(ListAgentsResponse.parse(agents.map((a) => prepareAgentForResponse(a, sourceIdMap.get(a.id) ?? []))));
 });
 
-router.post("/agents", requireAuth, clientContext, denyManagedClientUnlessAgentEdit, async (req, res): Promise<void> => {
+router.post("/agents", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const parsed = CreateAgentBody.safeParse(req.body);
   if (!parsed.success) {
@@ -328,7 +343,7 @@ router.get("/agents/:id", requireAuth, clientContext, async (req, res): Promise<
   res.json(GetAgentResponse.parse(prepareAgentForResponse(agent, sourceIdMap.get(agent.id) ?? [])));
 });
 
-router.patch("/agents/:id", requireAuth, clientContext, denyManagedClientUnlessAgentEdit, async (req, res): Promise<void> => {
+router.patch("/agents/:id", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const params = UpdateAgentParams.safeParse(req.params);
   if (!params.success) {
@@ -529,7 +544,7 @@ router.patch("/agents/:id", requireAuth, clientContext, denyManagedClientUnlessA
   })();
 });
 
-router.delete("/agents/:id", requireAuth, clientContext, denyManagedClientUnlessAgentEdit, async (req, res): Promise<void> => {
+router.delete("/agents/:id", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const params = DeleteAgentParams.safeParse(req.params);
   if (!params.success) {
@@ -619,7 +634,12 @@ router.get("/agents/memory/summary", requireAuth, clientContext, async (req, res
       .groupBy(callsTable.agentId),
     db.select({ agentId: callerFactsTable.agentId, cnt: count() })
       .from(callerFactsTable)
-      .where(and(inArray(callerFactsTable.agentId, ids), isNull(callerFactsTable.supersededById)))
+      .where(and(
+        inArray(callerFactsTable.agentId, ids),
+        isNull(callerFactsTable.supersededById),
+        sql`left(${callerFactsTable.key}, 2) <> '__'`,
+        ne(callerFactsTable.key, PERSONA_HASH_FACT_KEY),
+      ))
       .groupBy(callerFactsTable.agentId),
     db.select({ agentId: callerCallArchiveTable.agentId, cnt: count() })
       .from(callerCallArchiveTable)
@@ -661,7 +681,7 @@ router.get("/agents/:id/memory/facts", requireAuth, clientContext, async (req, r
 
   const facts = await db.select()
     .from(callerFactsTable)
-    .where(and(eq(callerFactsTable.agentId, agentId), isNull(callerFactsTable.supersededById)))
+    .where(visibleCurrentFactsWhere(agentId))
     .orderBy(desc(callerFactsTable.createdAt));
 
   res.json(ListAgentMemoryFactsResponse.parse(facts.map(f => ({
@@ -730,7 +750,7 @@ router.get("/agents/:id/caller-memory", requireAuth, clientContext, async (req, 
       .orderBy(desc(callerProfilesTable.lastCalledAt)),
     db.select({ phoneNumber: callerFactsTable.phoneNumber, cnt: count() })
       .from(callerFactsTable)
-      .where(eq(callerFactsTable.agentId, agentId))
+      .where(visibleCurrentFactsWhere(agentId))
       .groupBy(callerFactsTable.phoneNumber),
     db.select({ phoneNumber: callerCallArchiveTable.phoneNumber, cnt: count() })
       .from(callerCallArchiveTable)
@@ -856,9 +876,10 @@ router.get("/agents/:id/caller-memory/:phone", requireAuth, clientContext, async
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
   }
 
-  // Current (non-superseded) facts with history chains + fact_sources from junction table
+  // Current (non-superseded) user-visible facts only — hide internal markers
+  // like __agent_persona_hash from Memory UI ("what the agent knows").
   const currentFacts = allFacts
-    .filter(f => f.supersededById === null)
+    .filter(f => f.supersededById === null && isUserVisibleFactKey(f.key))
     .map(f => ({
       id:                f.id,
       key:               f.key,
@@ -890,7 +911,7 @@ router.get("/agents/:id/caller-memory/:phone", requireAuth, clientContext, async
 });
 
 // Delete an entire fact key (current + entire supersession chain) for a caller
-router.delete("/agents/:id/caller-memory/:phone/facts/:factId", requireAuth, clientContext, denyManagedClientUnlessAgentEdit, async (req, res): Promise<void> => {
+router.delete("/agents/:id/caller-memory/:phone/facts/:factId", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const agentId = parseInt(String(req.params["id"] ?? ""), 10);
   const factId  = parseInt(String(req.params["factId"] ?? ""), 10);
@@ -912,6 +933,10 @@ router.delete("/agents/:id/caller-memory/:phone/facts/:factId", requireAuth, cli
     ));
 
   if (target) {
+    if (!isUserVisibleFactKey(target.key)) {
+      res.status(400).json({ error: "Internal system facts cannot be deleted from Memory" });
+      return;
+    }
     // Cascade: delete all versions of this fact key (entire graph chain)
     await db.delete(callerFactsTable)
       .where(and(
@@ -929,7 +954,7 @@ router.delete("/agents/:id/caller-memory/:phone/facts/:factId", requireAuth, cli
  *          caller_sentences, caller_facts, caller_call_archive.
  * Keeps: caller_profiles (identity row preserved; next call starts clean).
  */
-router.delete("/agents/:id/caller-memory/:phone", requireAuth, clientContext, denyManagedClientUnlessAgentEdit, async (req, res): Promise<void> => {
+router.delete("/agents/:id/caller-memory/:phone", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const agentId = parseInt(String(req.params["id"] ?? ""), 10);
   const rawPhone = decodeURIComponent(String(req.params["phone"] ?? ""));
@@ -1085,7 +1110,7 @@ router.get("/agents/:id/snapserve-executions", requireAuth, clientContext, async
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-router.patch("/agents/:id/toggle", requireAuth, clientContext, denyManagedClientUnlessAgentEdit, async (req, res): Promise<void> => {
+router.patch("/agents/:id/toggle", requireAuth, clientContext, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const params = ToggleAgentParams.safeParse(req.params);
   if (!params.success) {

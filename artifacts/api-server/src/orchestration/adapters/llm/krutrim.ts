@@ -12,15 +12,9 @@ import { logger } from "../../../lib/logger.js";
  * Auth: Authorization: Bearer <api_key>
  * Docs: https://cloud.olakrutrim.com/docs
  *
- * Live model catalogue (GET /v1/models — verified 2026-07-09):
- *   - gpt-oss-20b        — Krutrim proprietary 20B, fast, tool-capable (recommended for voice)
- *   - gpt-oss-120b       — Krutrim proprietary 120B, higher quality, tool-capable
- *   - gemma-4-E4B-it     — Gemma 4 4B MoE (ultra-fast)
- *   - gemma-4-31b-it     — Gemma 4 31B
- *   - gemma-4-26B-A4B-it — Gemma 4 26B MoE, 262k context
- *   - Qwen3.5-9B         — Qwen 3.5 (thinking disabled via chat_template_kwargs)
- *   - Qwen3.6-27B        — Qwen 3.6 (thinking disabled via chat_template_kwargs)
- *   - Qwen3.6-35B-A3B    — Qwen 3.6 35B MoE (thinking disabled via chat_template_kwargs)
+ * Dashboard exposes only tool-capable models (agents need end_call / booking / etc.):
+ *   - gpt-oss-20b / gpt-oss-120b
+ * Gemma / Qwen on Krutrim omit tools — keep them out of the product picker.
  */
 
 // Aligned with session.ts's voice default (200) — 120 clipped Indic-script

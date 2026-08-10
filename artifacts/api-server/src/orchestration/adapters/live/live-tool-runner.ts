@@ -19,6 +19,10 @@ import {
 } from "../../../services/meet-booking.js";
 import { executeMeetPresentationTool } from "../../../services/meet-presentation.js";
 import { executeMeetChatTool } from "../../../services/meet-chat.js";
+import {
+  executeLeaveMeetingTool,
+  executeMuteMeetingTool,
+} from "../../../services/meet-control.js";
 import { logger } from "../../../lib/logger.js";
 
 export interface LiveToolRunnerDeps {
@@ -110,14 +114,16 @@ export async function runLiveToolCall(
     toolName === "start_presentation" ||
     toolName === "stop_presentation" ||
     toolName === "next_slide" ||
-    toolName === "previous_slide"
+    toolName === "previous_slide" ||
+    toolName === "goto_slide"
   ) {
     if (!agent.isMeetingSession) {
       return { error: `${toolName} is only available during meeting sessions` };
     }
+    const safeArgs = args && typeof args === "object" ? args : {};
     const output = await executeMeetPresentationTool({
       toolName,
-      args,
+      args: safeArgs,
       meetMid: config.meetMid,
       meetBotToken: config.meetBotToken,
       presentationDefaultUrl: config.presentationDefaultUrl,
@@ -129,10 +135,30 @@ export async function runLiveToolCall(
     if (!agent.isMeetingSession) {
       return { error: "send_meeting_chat is only available during meeting sessions" };
     }
+    const safeArgs = args && typeof args === "object" ? args : {};
     const output = await executeMeetChatTool({
       meetMid: config.meetMid,
-      message: typeof args["message"] === "string" ? args["message"] : "",
-      pin: args["pin"] === true,
+      message: typeof safeArgs["message"] === "string" ? safeArgs["message"] : "",
+      pin: safeArgs["pin"] === true,
+    });
+    return { output };
+  }
+
+  if (toolName === "leave_meeting") {
+    if (!agent.isMeetingSession) {
+      return { error: "leave_meeting is only available during meeting sessions" };
+    }
+    const output = await executeLeaveMeetingTool({ meetMid: config.meetMid });
+    return { output };
+  }
+
+  if (toolName === "mute_meeting" || toolName === "unmute_meeting") {
+    if (!agent.isMeetingSession) {
+      return { error: `${toolName} is only available during meeting sessions` };
+    }
+    const output = executeMuteMeetingTool({
+      meetMid: config.meetMid,
+      muted: toolName === "mute_meeting",
     });
     return { output };
   }

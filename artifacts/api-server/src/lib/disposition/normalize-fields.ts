@@ -1,0 +1,139 @@
+/**
+ * Post-process disposition field values so phone/WhatsApp fields stay as
+ * bare numbers (not "The caller shared WhatsApp as 98…") and free-text
+ * fields stay short scalars instead of summary paragraphs.
+ */
+
+const PHONE_KEY_RE =
+  /whats?\s*app|wa[_\s-]?number|mobile|phone|cell|contact[_\s-]?number|msisdn|^tel$/i;
+
+export function isPhoneLikeDispositionField(
+  key: string,
+  label?: string,
+  type?: string,
+): boolean {
+  if (type === "number" && PHONE_KEY_RE.test(key)) return true;
+  return PHONE_KEY_RE.test(key) || (!!label && PHONE_KEY_RE.test(label));
+}
+
+/**
+ * Pull a phone-like token out of prose. Prefer the longest 10–15 digit run
+ * (Indian mobile / E.164 without +). Returns null when nothing usable.
+ */
+export function extractBarePhone(value: unknown): string | null {
+  if (value == null) return null;
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const digits = String(Math.trunc(value));
+    return digits.length >= 8 && digits.length <= 15 ? digits : null;
+  }
+  const raw = String(value).trim();
+  if (!raw || raw.toLowerCase() === "null" || raw.toLowerCase() === "n/a") return null;
+
+  // Already clean: optional +, digits/spaces/dashes only.
+  const compact = raw.replace(/[\s\-().]/g, "");
+  if (/^\+?\d{8,15}$/.test(compact)) {
+    return compact.startsWith("+") ? compact.slice(1) : compact;
+  }
+
+  // Prose: "WhatsApp number is +91 98765 43210 please send brochure"
+  const matches = [...raw.matchAll(/(?:\+?\d[\d\s\-().]{7,18}\d)/g)].map((m) =>
+    m[0]!.replace(/[\s\-().]/g, "").replace(/^\+/, ""),
+  );
+  const candidates = matches.filter((d) => d.length >= 8 && d.length <= 15);
+  if (!candidates.length) return null;
+  // Prefer 10-digit Indian mobiles, else longest.
+  const ten = candidates.find((d) => d.length === 10 || (d.length === 12 && d.startsWith("91")));
+  return ten ?? candidates.sort((a, b) => b.length - a.length)[0]!;
+}
+
+export type DispositionSchemaField = {
+  key: string;
+  label: string;
+  type: string;
+  required?: boolean;
+  options?: string[];
+};
+
+/** Clamp a free-text disposition value so it cannot become a summary paragraph. */
+export function clampDispositionText(value: unknown, maxChars = 120): string | null {
+  if (value == null) return null;
+  let s = String(value).trim();
+  if (!s || s.toLowerCase() === "null") return null;
+  // Drop obvious multi-sentence dumps into a scalar field.
+  const firstSentence = s.split(/(?<=[.!?])\s+/)[0] ?? s;
+  if (firstSentence.length < s.length && firstSentence.length >= 3) s = firstSentence;
+  if (s.length > maxChars) s = s.slice(0, maxChars).trim();
+  return s || null;
+}
+
+/**
+ * Normalize a flat dispositionSchema extraction result in place.
+ * Phone-like keys → digits only; other text → short scalar / null.
+ */
+export function normalizeDispositionSchemaResult(
+  schema: DispositionSchemaField[],
+  result: Record<string, unknown>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...result };
+  for (const field of schema) {
+    if (!(field.key in out)) continue;
+    const raw = out[field.key];
+    if (raw == null) {
+      out[field.key] = null;
+      continue;
+    }
+    if (field.type === "boolean") {
+      if (typeof raw === "boolean") continue;
+      const s = String(raw).trim().toLowerCase();
+      if (s === "true" || s === "yes" || s === "y") out[field.key] = true;
+      else if (s === "false" || s === "no" || s === "n") out[field.key] = false;
+      else out[field.key] = null;
+      continue;
+    }
+    if (field.type === "number" && !isPhoneLikeDispositionField(field.key, field.label, field.type)) {
+      const n = typeof raw === "number" ? raw : Number(String(raw).replace(/,/g, ""));
+      out[field.key] = Number.isFinite(n) ? n : null;
+      continue;
+    }
+    if (isPhoneLikeDispositionField(field.key, field.label, field.type)) {
+      out[field.key] = extractBarePhone(raw);
+      continue;
+    }
+    if (field.type === "choice" && field.options?.length) {
+      const s = String(raw).trim();
+      const hit = field.options.find((o) => o.toLowerCase() === s.toLowerCase());
+      out[field.key] = hit ?? null;
+      continue;
+    }
+    // text / string — never allow a paragraph dump into a scalar field
+    out[field.key] = clampDispositionText(raw);
+  }
+  return out;
+}
+
+/** Field-list lines for the extraction prompt (type-aware hints). */
+export function formatDispositionFieldList(schema: DispositionSchemaField[]): string {
+  return schema
+    .map((f) => {
+      const phone = isPhoneLikeDispositionField(f.key, f.label, f.type);
+      const typeHint = phone
+        ? "phone — digits only, no words, e.g. 9876543210 or 919876543210; null if not collected"
+        : f.type === "boolean"
+          ? "boolean true/false"
+          : f.type === "number"
+            ? "number"
+            : f.type === "choice" && f.options?.length
+              ? `choice — only one of: [${f.options.join(", ")}]`
+              : "short text — a few words or a single value, NEVER a sentence or paragraph";
+      return `- "${f.key}" (${f.label}): ${typeHint}`;
+    })
+    .join("\n");
+}
+
+export const DISPOSITION_EXTRACT_SYSTEM =
+  "You extract structured disposition fields from call transcripts. " +
+  "Return ONLY a flat JSON object with the specified keys — no markdown, no commentary. " +
+  "CRITICAL: each field value must be a bare scalar (number, boolean, short enum, or short phrase). " +
+  "Never put a summary sentence or paragraph into a field. " +
+  "For phone / WhatsApp / mobile fields: return digits only (optional leading country code), never prose like \"the caller said their WhatsApp is…\". " +
+  "If a field was not clearly collected, use null.";
