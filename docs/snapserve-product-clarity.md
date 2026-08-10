@@ -8,7 +8,7 @@
 |-------|------|------------------|
 | **Agent** (Builder) | Prompt, voice, tools, KB, **outcomes / dispositions**, **after-call WhatsApp & email rules**, meeting prompt & deck | Bulk dial lists, CRM push |
 | **Campaign** | Lead sources, dial queue, retries, **lead transfer** (webhook / Sheets by disposition) | WA/email templates (configure on agent + Connections) |
-| **Connections** | WhatsApp, Email (Brevo), Sheets, Website form, Meta leads, Calendar (booking), Meetings entry | The conversation script |
+| **Connections** | WhatsApp, Email (Brevo), Sheets, Website form, Meta leads, **Bookings calendar**, Meeting bots entry | The conversation script |
 | **Squad** | Mid-call handoff + follow-up tasks between agents | Campaign dialer |
 | **Meetings** (`/app/meet`) | Join Meet/Zoom/Teams with an agent | Phone DID (separate) |
 
@@ -24,9 +24,9 @@ Call ends
 
 | Concept | Where you set it | When it fires |
 |---------|------------------|---------------|
-| **Outcomes** (taxonomy + data fields) | Agent → Disposition | Every completed call (AI extract) |
-| **Funnel meaning** | Agent → Disposition | Maps labels → Interested / Callback / DNC |
-| **After-call messages** | Agent → Disposition | WA/email after disposition (needs Connections) |
+| **Outcomes** (taxonomy + data fields) | Agent → **Outcomes** tab | Every completed call (AI extract) |
+| **Funnel meaning** | Agent → Outcomes | Maps labels → Interested / Callback / DNC |
+| **After-call messages** | Agent → Outcomes | WA/email after disposition (needs Connections) |
 | **Lead transfer** | Campaign → Configuration | Push lead to CRM/Sheets/webhook by disposition |
 | **Sheets writeback** | Sheets Automatic Calls pipeline | Outcome columns on the sheet |
 

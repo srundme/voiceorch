@@ -33,7 +33,7 @@ export default function IntroductionPage() {
         />
         <DocCard
           href="/docs/calendar"
-          title="Calendar & booking"
+          title="Bookings calendar"
           description="Connect Google Calendar and book on calls"
           icon={<Calendar />}
         />

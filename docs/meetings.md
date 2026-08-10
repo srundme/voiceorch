@@ -20,8 +20,8 @@ Send a voice **agent** into **Google Meet / Zoom / Microsoft Teams**. Same agent
 | **Booking auto-dispatch** | Scheduling / bookings with a `meet_link` | Bot joins near the booked slot |
 
 > **Two Google Calendar connects:**  
-> - **Connections → Calendar & booking** = create booking events (write).  
-> - **Meet → Connect Google** = AI meetings (readonly calendar → Recall). They are not the same button.
+> - **Connections → Bookings calendar** = create booking events (write).  
+> - **Meeting bots → Connect Google** = AI meetings (readonly calendar → Recall). They are not the same button.
 
 ## In-meeting capabilities (tools)
 

@@ -2009,7 +2009,7 @@ export default function AgentEdit() {
                         </SelectContent>
                       </Select>
                       {calendarIdForEt && (agentEventTypes ?? []).length === 0 && (
-                        <p className="text-[10px] text-amber-400/80">No event types yet. Create one in Scheduling → Event Types.</p>
+                        <p className="text-[10px] text-amber-400/80">No event types yet. Create one under Connections → Bookings calendar.</p>
                       )}
                     </div>
                   </div>

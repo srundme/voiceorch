@@ -125,7 +125,7 @@ const DASH_API   = `${_DASH_BASE}/api`;
 
 /* ── Types ──────────────────────────────────────────────────────────────────── */
 
-type TabId = "overview" | "prompt" | "voice" | "tools" | "voicemail" | "settings" | "versions";
+type TabId = "overview" | "prompt" | "voice" | "tools" | "outcomes" | "voicemail" | "settings" | "versions";
 
 interface TabDef { id: TabId; label: string; icon: React.ReactNode }
 
@@ -134,6 +134,7 @@ const TABS: TabDef[] = [
   { id: "prompt",    label: "Prompt",    icon: <FileText className="h-3.5 w-3.5" /> },
   { id: "voice",     label: "Voice",     icon: <Mic className="h-3.5 w-3.5" /> },
   { id: "tools",     label: "Tools",     icon: <Wrench className="h-3.5 w-3.5" /> },
+  { id: "outcomes",  label: "Outcomes",  icon: <Tag className="h-3.5 w-3.5" /> },
   { id: "voicemail", label: "Voicemail", icon: <VoicemailIcon className="h-3.5 w-3.5" /> },
   { id: "settings",  label: "Settings",  icon: <Settings className="h-3.5 w-3.5" /> },
   { id: "versions",  label: "Versions",  icon: <History className="h-3.5 w-3.5" /> },
@@ -150,6 +151,10 @@ function sectionFromSearch(search: string): TabId {
   if (requested === "advanced") return "settings";
   // Channels removed — messaging/booking live under Tools.
   if (requested === "channels") return "tools";
+  // Disposition used to nest under Settings → Analytics.
+  if (requested === "disposition" || requested === "dispositions") {
+    return "outcomes";
+  }
   return TABS.some((tab) => tab.id === requested) ? requested as TabId : "overview";
 }
 
@@ -1364,6 +1369,13 @@ function PromptTab({ form, agentId }: { form: any; agentId?: number }) {
             What callers hear at the start of the call.
           </p>
         </div>
+        <div className="rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2.5 text-[11px] text-muted-foreground leading-relaxed">
+          <p className="font-medium text-foreground/90">Display name ≠ spoken brand</p>
+          <p className="mt-0.5">
+            The agent title (e.g. “voiceathon new agent”) is an internal label — callers should not hear it as your company.
+            Put the company name in this greeting or in the prompt IDENTITY / CALL FLOW.
+          </p>
+        </div>
         <div className="space-y-3 overflow-hidden rounded-lg border border-border bg-card p-3.5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <Label className="text-[12px] font-medium text-foreground/90">Who speaks first</Label>
@@ -1467,7 +1479,13 @@ function PromptTab({ form, agentId }: { form: any; agentId?: number }) {
               <ul className="mt-1.5 list-disc space-y-0.5 pl-4">
                 <li>People may ask you to wait 2–3 minutes for others — stay quiet after one acknowledgment.</li>
                 <li>Speaker tags like <span className="font-mono text-[10px]">[Speaker: Name]</span> are for you; never read them aloud.</li>
-                <li>Waiting patience &amp; max length are under <span className="text-foreground/80">Tools → Meetings</span> (not Engine phone silence).</li>
+                <li>
+                  Waiting patience &amp; max length are on{" "}
+                  <Link href={agentId ? `/app/meet?agentId=${agentId}` : "/app/meet"} className="text-foreground/80 underline underline-offset-2">
+                    Meeting bots
+                  </Link>{" "}
+                  (not Engine phone silence).
+                </li>
               </ul>
             </div>
             <FormField control={form.control} name="meetingPrompt" render={({ field }) => (
@@ -1492,7 +1510,11 @@ function PromptTab({ form, agentId }: { form: any; agentId?: number }) {
               </FormItem>
             )} />
             <p className="text-[11px] text-muted-foreground">
-              Phone + meetings agents can join Meet/Zoom/Teams from the Meet page (paste link) or from a booking. Configure wait time, max length, and deck under Tools → Meetings.
+              Phone + meetings agents can join Meet/Zoom/Teams from{" "}
+              <Link href={agentId ? `/app/meet?agentId=${agentId}` : "/app/meet"} className="underline underline-offset-2">
+                Meeting bots
+              </Link>{" "}
+              (paste link) or from a booking. Configure wait time, max length, and deck there — not under Tools.
             </p>
           </TabsContent>
         </Tabs>
@@ -2480,11 +2502,11 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
       if (!agentId) {
         toast({ title: "Save agent first", description: "Save this agent before configuring calendar tools.", variant: "destructive" });
       } else if (!agentCalendar) {
-        toast({ title: "No calendar configured", description: "Finish Calendar & booking under Connections first.", variant: "destructive" });
+        toast({ title: "No calendar configured", description: "Finish Bookings calendar under Connections first.", variant: "destructive" });
       } else if (!(agentCalendar as any).connectedGoogleEmail) {
-        toast({ title: "Google not connected", description: `Connect Google for "${agentCalendar.name}" under Connections → Calendar & booking.`, variant: "destructive" });
+        toast({ title: "Google not connected", description: `Connect Google for "${agentCalendar.name}" under Connections → Bookings calendar.`, variant: "destructive" });
       } else if ((agentEventTypes ?? []).length === 0) {
-        toast({ title: "No meeting set up", description: "Create a meeting under Connections → Calendar & booking before using booking.", variant: "destructive" });
+        toast({ title: "No meeting set up", description: "Create a meeting under Connections → Bookings calendar before using booking.", variant: "destructive" });
       }
     } else {
       replace(current.filter((t: any) => !(BOOKING_TYPES as readonly string[]).includes(t.type)));
@@ -2601,7 +2623,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
       icon: <MessageCircle className="h-4 w-4" />,
       color: "emerald",
       label: "Send WhatsApp",
-      description: "Lets the agent send WhatsApp mid-call. Connect WhatsApp under Connections; pick templates below when ready.",
+      description: "Mid-call WhatsApp only. After-call messages are on the Outcomes tab. Connect WhatsApp under Connections first.",
       needsEventType: false,
     },
   ] as const;
@@ -2751,7 +2773,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                     <p className="text-[10px] text-amber-400/80">
                       {!calendarIdForEt ? "No calendar yet. " : "No meeting yet. "}
                       <Link href="/app/connections?setup=calendar" className="underline underline-offset-2">
-                        Finish Calendar & booking setup
+                        Finish Bookings calendar setup
                       </Link>
                       .
                     </p>
@@ -3440,7 +3462,7 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
       <div className="border-b border-border/40 px-4 pt-5 sm:px-6 lg:px-8">
         <h2 className="text-[15px] font-semibold tracking-[-0.02em]">Settings</h2>
         <p className="mt-0.5 text-[12px] text-muted-foreground">
-          Engine timing, call limits, analytics webhooks, dispositions, and compliance.
+          Engine timing, call limits, CRM webhooks, and compliance. Outcomes &amp; after-call messages are on the Outcomes tab.
         </p>
         {/* ── Sub-nav ── */}
         <div className="mt-3 flex flex-shrink-0 items-center gap-1 pb-3">
@@ -3974,8 +3996,10 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                 </FormItem>
               )} />
             </div>
-
-            <DispositionSettingsPanel agentId={agent?.id ?? 0} />
+            <p className="text-[11px] text-muted-foreground">
+              Disposition taxonomy and after-call WhatsApp / email live on the{" "}
+              <span className="text-foreground/80">Outcomes</span> tab.
+            </p>
           </>
         )}
 
@@ -4386,7 +4410,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
       <div>
         <div className="flex items-center gap-2 mb-1">
           <Tag className="h-4 w-4 text-amber-400" />
-          <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Call Disposition</h3>
+          <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Outcomes</h3>
         </div>
         <p className="text-[11px] text-muted-foreground mt-0.5">
           Save the agent first to define outcomes and data fields.
@@ -4400,7 +4424,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
       <div>
         <div className="flex items-center gap-2 mb-1">
           <Tag className="h-4 w-4 text-amber-400" />
-          <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Call Disposition</h3>
+          <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Outcomes</h3>
         </div>
         <p className="text-[11px] text-muted-foreground">
           After each call, AI picks an outcome and fills the data fields you define (WhatsApp, email, city…). Values show on the call detail page.
@@ -4559,7 +4583,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                   <h4 className="text-xs font-semibold text-foreground">After-call messages</h4>
                 </div>
                 <p className="text-[10px] text-muted-foreground mt-0.5">
-                  Send WhatsApp / email from this agent. Campaigns only push leads to CRM/Sheets.
+                  Post-call WhatsApp / email from this agent. Mid-call send is under Tools. Campaigns only push leads to CRM/Sheets.
                 </p>
               </div>
               <Button
@@ -4938,7 +4962,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
             onClick={() => saveMutation.mutate()}
           >
             <Save className="h-3.5 w-3.5" />
-            {saveMutation.isPending ? "Saving…" : "Save Disposition Config"}
+            {saveMutation.isPending ? "Saving…" : "Save Outcomes"}
           </Button>
         </div>
       )}
@@ -7061,7 +7085,9 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
         <DialogContent className="sm:max-w-[440px]">
           <DialogHeader>
             <DialogTitle>Rename Agent</DialogTitle>
-            <DialogDescription>Update the display name of this agent.</DialogDescription>
+            <DialogDescription>
+              Internal label only — not spoken as your company brand. Put the brand in the greeting or prompt IDENTITY.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
             <Label htmlFor="rename-agent-input" className="text-xs text-muted-foreground">Agent Name</Label>
@@ -7138,6 +7164,11 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
                 {activeTab === "prompt"    && <PromptTab form={form} agentId={agentId} />}
                 {activeTab === "voice"     && <VoiceTab form={form} />}
                 {activeTab === "tools"     && <ToolsTab form={form} agentId={agentId} />}
+                {activeTab === "outcomes"  && (
+                  <div className="px-4 py-5 sm:px-6 lg:px-8">
+                    <DispositionSettingsPanel agentId={agent?.id ?? 0} />
+                  </div>
+                )}
                 {activeTab === "voicemail" && <VoicemailTab form={form} />}
                 {activeTab === "settings"  && <AdvancedTab form={form} agent={agent} />}
                 {activeTab === "versions"  && <VersionsTab agentId={agent.id} />}
@@ -7727,7 +7758,7 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
                 </div>
                 <p className="text-sm font-semibold">Phone + meetings</p>
                 <p className="text-[11px] text-muted-foreground leading-snug">
-                  Voice + joins Meet when Booking is enabled.
+                  Voice calls, plus join Meet/Zoom/Teams from Meeting bots. Booking a slot is separate.
                 </p>
               </button>
             </div>

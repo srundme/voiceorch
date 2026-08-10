@@ -383,9 +383,143 @@ function CreateSquadDialog({
   );
 }
 
+function EditSquadDialog({
+  open,
+  onOpenChange,
+  squad,
+  agents,
+  onSubmit,
+  saving,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  squad: Squad;
+  agents: Array<{ id: number; name: string }>;
+  onSubmit: (body: Record<string, unknown>) => void;
+  saving: boolean;
+}) {
+  const [name, setName] = useState(squad.name);
+  const [description, setDescription] = useState(squad.description ?? "");
+  const [drafts, setDrafts] = useState<MemberDraft[]>([]);
+
+  useEffect(() => {
+    if (!open) return;
+    setName(squad.name);
+    setDescription(squad.description ?? "");
+    setDrafts(
+      squad.members.map((m) => ({
+        agentId: String(m.agentId),
+        roleName: m.roleName,
+        instructions: m.instructions ?? "",
+      })),
+    );
+  }, [open, squad]);
+
+  const usedIds = new Set(drafts.map((d) => d.agentId).filter(Boolean));
+  const filled = drafts.filter((d) => d.agentId && d.roleName.trim());
+  const canSave = name.trim() && filled.length >= 2
+    && new Set(filled.map((d) => d.agentId)).size === filled.length;
+
+  const setDraft = (i: number, patch: Partial<MemberDraft>) => {
+    setDrafts((prev) => prev.map((d, idx) => (idx === i ? { ...d, ...patch } : d)));
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Edit team</DialogTitle>
+          <DialogDescription>
+            Change name, roles, or members. At least two agents required.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+          <div>
+            <Label>Name</Label>
+            <Input value={name} onChange={(e) => setName(e.target.value)} />
+          </div>
+          <div>
+            <Label>Description (optional)</Label>
+            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
+          </div>
+          {drafts.map((d, i) => (
+            <div key={i} className="rounded-lg border border-border/60 p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-medium text-muted-foreground">Agent {i + 1}</p>
+                {drafts.length > 2 && (
+                  <button type="button" onClick={() => setDrafts((prev) => prev.filter((_, idx) => idx !== i))}>
+                    <X className="w-3.5 h-3.5 text-muted-foreground" />
+                  </button>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <Select value={d.agentId} onValueChange={(v) => setDraft(i, { agentId: v })}>
+                  <SelectTrigger><SelectValue placeholder="Select agent" /></SelectTrigger>
+                  <SelectContent>
+                    {agents.map((a) => (
+                      <SelectItem
+                        key={a.id}
+                        value={String(a.id)}
+                        disabled={usedIds.has(String(a.id)) && d.agentId !== String(a.id)}
+                      >
+                        {a.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Input
+                  value={d.roleName}
+                  onChange={(e) => setDraft(i, { roleName: e.target.value })}
+                  placeholder="Role, e.g. Lead Qualifier"
+                />
+              </div>
+              <Input
+                value={d.instructions}
+                onChange={(e) => setDraft(i, { instructions: e.target.value })}
+                placeholder="What they handle"
+              />
+            </div>
+          ))}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setDrafts((prev) => [...prev, { agentId: "", roleName: "", instructions: "" }])}
+          >
+            <Plus className="w-3.5 h-3.5 mr-1" /> Add another agent
+          </Button>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button
+            disabled={!canSave || saving}
+            onClick={() => {
+              onSubmit({
+                name: name.trim(),
+                description: description.trim() || null,
+                members: filled.map((d, i) => ({
+                  agentId: parseInt(d.agentId, 10),
+                  roleName: d.roleName.trim(),
+                  roleType: "specialist",
+                  instructions: d.instructions.trim() || null,
+                  handoffEnabled: true,
+                  sortOrder: i,
+                })),
+              });
+            }}
+          >
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save team"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function SquadDetailPage({ squadId, onBack }: { squadId: number; onBack: () => void }) {
   const { toast } = useToast();
   const qc = useQueryClient();
+  const [editOpen, setEditOpen] = useState(false);
 
   const { data: squad, isLoading } = useQuery({
     queryKey: ["squad", squadId],
@@ -403,10 +537,18 @@ function SquadDetailPage({ squadId, onBack }: { squadId: number; onBack: () => v
     queryFn: () => customFetch<PhoneNumberRow[]>(`${API}/phone-numbers`),
   });
 
+  const { data: agentsData } = useListAgents();
+  const agents = agentsData ?? [];
+
   const updateMut = useMutation({
     mutationFn: (body: Record<string, unknown>) =>
       customFetch<Squad>(`${API}/squads/${squadId}`, { method: "PATCH", body: JSON.stringify(body) }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["squad", squadId] }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["squad", squadId] });
+      void qc.invalidateQueries({ queryKey: ["squads"] });
+      setEditOpen(false);
+      toast({ title: "Team updated" });
+    },
     onError: (err: Error) => toast({ title: "Update failed", description: err.message, variant: "destructive" }),
   });
 
@@ -462,9 +604,22 @@ function SquadDetailPage({ squadId, onBack }: { squadId: number; onBack: () => v
         </div>
       }
     >
+      <div className="rounded-lg border border-amber-500/25 bg-amber-500/5 px-3.5 py-3 mb-6 text-[12px] text-muted-foreground leading-relaxed">
+        <p className="font-medium text-foreground/90">Callback disposition ≠ live handoff</p>
+        <p className="mt-0.5">
+          A <strong className="text-foreground/80">Callback</strong> outcome means “call later” for analytics / follow-up.
+          Live Agent A → Agent B on the open line is a <strong className="text-foreground/80">squad handoff</strong> here.
+        </p>
+      </div>
+
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="space-y-3">
-          <h2 className="text-sm font-semibold">Team</h2>
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold">Team</h2>
+            <Button type="button" variant="outline" size="sm" className="h-7 text-xs" onClick={() => setEditOpen(true)}>
+              Edit members
+            </Button>
+          </div>
           <p className="text-xs text-muted-foreground">
             Each agent keeps its own prompt and phone number. While the squad is active, every member automatically
             gets transfer tools for teammates, sees what teammates know about each caller, and can schedule
@@ -498,8 +653,7 @@ function SquadDetailPage({ squadId, onBack }: { squadId: number; onBack: () => v
             ))}
           </div>
           <p className="text-[11px] text-muted-foreground">
-            To change members or roles, delete and recreate the squad, or use the API. Agents without a phone
-            number can still receive in-call handoffs, but cannot make follow-up calls.
+            Agents without a phone number can still receive in-call handoffs, but cannot make follow-up calls.
           </p>
         </section>
 
@@ -553,6 +707,15 @@ function SquadDetailPage({ squadId, onBack }: { squadId: number; onBack: () => v
           )}
         </section>
       </div>
+
+      <EditSquadDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        squad={squad}
+        agents={agents.map((a) => ({ id: a.id, name: a.name }))}
+        onSubmit={(body) => updateMut.mutate(body)}
+        saving={updateMut.isPending}
+      />
     </StripePage>
   );
 }

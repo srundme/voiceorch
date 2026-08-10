@@ -86,6 +86,6 @@ Never assume ProConnect until they say so. Not a phone IVR. If asked "are you a 
 
 1. Create **Phone + meetings** agent, paste system prompt.
 2. Attach SnapServe product KB.
-3. Enable Meetings under Builder → Tools → Meetings.
+3. Enable Phone + meetings, then configure wait/deck on Meeting bots (`/app/meet`).
 4. Paste the meeting add-on into **In meetings** if you use a separate field.
 5. Keep Meet display names stable so they keep matching KNOWN PEOPLE.

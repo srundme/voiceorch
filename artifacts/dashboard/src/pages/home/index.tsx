@@ -40,6 +40,8 @@ import {
   useListAgents,
   useListCalls,
   useListCampaigns,
+  useListPhoneNumbers,
+  getListPhoneNumbersQueryKey,
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { StripePage } from "@/components/stripe-page";
@@ -127,16 +129,32 @@ export default function HomePage() {
     query: { queryKey: getListCampaignsQueryKey(), staleTime: 30_000 },
   });
   const walletQ = useGetWallet();
+  const phonesQ = useListPhoneNumbers({
+    query: { queryKey: getListPhoneNumbersQueryKey(), staleTime: 60_000 },
+  });
   const pipelinesQ = useQuery({
     queryKey: ["automatic-calls"],
     queryFn: () => customFetch<AutoPipeline[]>("/api/automatic-calls"),
     refetchInterval: 30_000,
+  });
+  const waChannelQ = useQuery({
+    queryKey: ["connections-whatsapp-status"],
+    queryFn: () =>
+      customFetch<{ channel: { active?: boolean } | null }>("/api/whatsapp/channel"),
+    staleTime: 60_000,
+  });
+  const waConnectionsQ = useQuery({
+    queryKey: ["connections-whatsapp-connections"],
+    queryFn: () =>
+      customFetch<{ connections: Array<{ active?: boolean }> }>("/api/whatsapp/connections"),
+    staleTime: 60_000,
   });
 
   const agents = Array.isArray(agentsQ.data) ? agentsQ.data : (agentsQ.data as any)?.agents ?? [];
   const calls = Array.isArray(callsQ.data) ? callsQ.data : (callsQ.data as any)?.calls ?? [];
   const campaigns = Array.isArray(campaignsQ.data) ? campaignsQ.data : [];
   const pipelines: AutoPipeline[] = pipelinesQ.data ?? [];
+  const phoneNumbers = Array.isArray(phonesQ.data) ? phonesQ.data : [];
   const activeCampaigns = campaigns.filter((campaign: any) => campaign.status === "active" || campaign.isActive);
   const activePipelines = pipelines.filter((pipeline) => pipeline.status === "running");
   const failedCalls = calls.filter((call: any) =>
@@ -158,12 +176,16 @@ export default function HomePage() {
   const lowBalance = balanceCents != null && balanceCents < 10_000;
 
   const hasAgent = agents.length > 0;
-  const hasLeads = campaigns.length > 0;
+  const hasLeads = campaigns.length > 0 || pipelines.length > 0;
+  const waReady =
+    !!waChannelQ.data?.channel?.active
+    || (waConnectionsQ.data?.connections ?? []).some((c) => c.active);
+  const hasChannels = phoneNumbers.length > 0 || waReady;
   const firstAgentId = agents[0]?.id as number | undefined;
   const setup = [
     { label: "Create an agent", done: hasAgent, href: "/app/agents?create=1" },
     { label: "Create a campaign", done: hasLeads, href: "/app/campaigns" },
-    { label: "Connect phone / channels", done: true, href: "/app/connections" },
+    { label: "Connect phone / channels", done: hasChannels, href: "/app/connections" },
   ];
   const setupDone = setup.every((item) => item.done);
 

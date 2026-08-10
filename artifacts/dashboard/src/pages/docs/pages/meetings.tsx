@@ -68,9 +68,9 @@ export default function MeetingsPage() {
         </tbody>
       </table>
       <Callout variant="warn">
-        <strong>Two Google Calendar connects.</strong> Connections → Calendar &amp; booking creates
-        booking events (write). Meet → Connect Google is readonly for AI meeting join. Do not treat
-        them as the same button.
+        <strong>Two Google Calendar connects.</strong> Connections → Bookings calendar creates
+        booking events (write). Meeting bots → Connect Google is readonly for AI meeting join. Do
+        not treat them as the same button.
       </Callout>
 
       <h2 id="in-meeting">In-meeting capabilities</h2>
@@ -142,7 +142,7 @@ export default function MeetingsPage() {
           <Link href="/docs/agents">Agents &amp; builder</Link> — Outcomes &amp; prompts
         </li>
         <li>
-          <Link href="/docs/calendar">Calendar &amp; booking</Link> — booking write path
+          <Link href="/docs/calendar">Bookings calendar</Link> — booking write path
         </li>
         <li>
           <Link href="/docs/campaigns">Campaigns</Link> — phone dialing at scale

@@ -33,9 +33,10 @@ export default function AgentsPage() {
           <Link href="/docs/calendar">calendar</Link>), etc.
         </li>
         <li>
-          <strong>Disposition / Outcomes</strong> — taxonomy, funnel meaning (Interested / Callback /
-          DNC), data fields, and <strong>after-call WhatsApp / email</strong> rules. Wire channels
-          under Connections first (or save rules and connect later).
+          <strong>Outcomes</strong> (top-level Builder tab) — taxonomy, funnel meaning (Interested /
+          Callback / DNC), data fields, and <strong>after-call WhatsApp / email</strong> rules. Wire
+          channels under Connections first (or save rules and connect later). Mid-call WhatsApp is
+          under Tools.
         </li>
         <li>
           <strong>Knowledge</strong> — attach a{" "}

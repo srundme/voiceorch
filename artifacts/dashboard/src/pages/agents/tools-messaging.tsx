@@ -89,7 +89,7 @@ export function ToolsWhatsappSetup({ agentId }: { agentId: number }) {
                   || "WhatsApp connected"}
               </p>
               <p className="text-[10px] text-muted-foreground">
-                Credentials live under Connections. Pick mid-call templates here.
+                Mid-call templates only. After-call WhatsApp is on Outcomes. Credentials under Connections.
               </p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
@@ -124,7 +124,8 @@ export function ToolsWhatsappSetup({ agentId }: { agentId: number }) {
         <div className="rounded-lg bg-muted/25 px-3 py-3">
           <p className="text-[12px] font-medium">WhatsApp not connected</p>
           <p className="mt-0.5 text-[10px] text-muted-foreground">
-            Set up Instant WhatsApp under Connections, then return here for templates.
+            Connect Meta WhatsApp under Connections, then return here for mid-call templates.
+            After-call WhatsApp rules live on the Outcomes tab.
           </p>
           <Button
             type="button"
@@ -132,7 +133,7 @@ export function ToolsWhatsappSetup({ agentId }: { agentId: number }) {
             className="mt-2 h-7 text-[10px]"
             onClick={() => navigate(`/app/connections?setup=whatsapp&agentId=${agentId}`)}
           >
-            Set up WhatsApp
+            Connect WhatsApp
           </Button>
         </div>
       )}

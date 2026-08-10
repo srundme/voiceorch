@@ -9,6 +9,19 @@ export default function ChangelogPage() {
         description="Notable documentation and API-consumer changes."
       />
 
+      <h2 id="2026-08-10-outcomes-ux">2026-08-10 — Outcomes tab &amp; naming clarity</h2>
+      <ul>
+        <li>
+          Agent Builder: top-level <strong>Outcomes</strong> tab (taxonomy + after-call messages) — no longer
+          buried under Settings → Analytics.
+        </li>
+        <li>
+          Naming: Bookings calendar vs Meeting bots; mid-call WhatsApp (Tools) vs after-call (Outcomes);
+          display name ≠ spoken brand callout on Prompt.
+        </li>
+        <li>Squads: edit members in-app; Callback disposition ≠ live handoff callout.</li>
+      </ul>
+
       <h2 id="2026-08-10-clarity">2026-08-10 — Product clarity, meetings, playbook</h2>
       <ul>
         <li>

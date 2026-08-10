@@ -35,7 +35,7 @@ export default function CampaignsPage() {
       </ul>
       <p>
         WhatsApp / email after a call are configured on the{" "}
-        <strong>agent</strong> (Builder → Disposition → After-call messages), with channels under{" "}
+        <strong>agent</strong> (Builder → Outcomes → After-call messages), with channels under{" "}
         <a href="https://app.snapserve.ai/app/connections" target="_blank" rel="noreferrer">
           Connections
         </a>

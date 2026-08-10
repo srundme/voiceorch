@@ -176,7 +176,7 @@ Everything that wires the outside world lives here:
 |------|---------|
 | Phone numbers | DID / caller ID (or `/app/phone-numbers`) |
 | Google Sheets | Automatic Calls pipelines |
-| Calendar & booking | Create booking events (write) |
+| Bookings calendar | Create booking events (write) |
 | Meetings | Opens `/app/meet` |
 | WhatsApp | Instant or Meta / BYON |
 | Email (Brevo) | After-call / tool email |
@@ -193,7 +193,7 @@ Everything that wires the outside world lives here:
 2. **Connections → WhatsApp** (or `/app/connections?setup=whatsapp`).  
 3. Choose **Instant** → enable → business name + call-me agent.  
 4. Link templates / post-call slots as shown.  
-5. In **Agent → Disposition → After-call messages**, turn on WhatsApp for “every call” or matching outcomes.  
+5. In **Agent → Outcomes → After-call messages**, turn on WhatsApp for “every call” or matching outcomes.  
 6. Complete a test call → confirm message log.
 
 ### Skip during Voiceathon
@@ -225,7 +225,7 @@ Old BYO webhook connections can override Instant — disconnect if messages neve
 
 ## 11. Outcomes, after-call messages, lead transfer
 
-### Agent → Disposition (Outcomes)
+### Agent → Outcomes
 
 1. Add outcome categories (or use a Sales preset).  
 2. Map **Funnel meaning**: which labels = Interested / Callback / DNC.  
@@ -273,7 +273,7 @@ Full map: [meetings.md](./meetings.md)
 4. Show leave / mute / slides / chat as configured.  
 5. Optional: Connect Google on Meet page → toggle Join on a calendar event.
 
-Do **not** confuse Meet calendar connect with **Connections → Calendar & booking**.
+Do **not** confuse Meeting bots calendar connect with **Connections → Bookings calendar**.
 
 ---
 

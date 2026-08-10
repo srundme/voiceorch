@@ -1364,15 +1364,15 @@ const START_SOURCES: {
   },
   {
     id: "sheets",
-    title: "Google Sheets",
-    description: "Connect a sheet, map columns, and auto-dial new rows.",
-    cta: "Connect sheet",
+    title: "Google Sheets · Automatic Calls",
+    description: "New rows dial automatically (Automatic Calls). Not the same as a one-shot CSV campaign upload.",
+    cta: "Open Automatic Calls",
     icon: <BrandLogoBadge brand="googleSheets" size={22} className="!h-11 !w-11 !rounded-xl" />,
   },
   {
     id: "csv",
     title: "CSV file",
-    description: "Create a campaign, then upload a batch to dial.",
+    description: "Create a campaign, then upload a batch to dial once.",
     cta: "Upload CSV",
     icon: (
       <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-border bg-background">

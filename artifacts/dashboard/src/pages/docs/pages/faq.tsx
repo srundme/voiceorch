@@ -37,8 +37,10 @@ const FAQS: { q: string; a: ReactNode }[] = [
     q: "How do I connect Google Calendar?",
     a: (
       <>
-        Dashboard → Scheduling → connect Google on a calendar → link that calendar on the agent’s
-        booking tools. Full steps: <Link href="/docs/calendar">Calendar &amp; booking</Link>.
+        Dashboard → Connections → Bookings calendar → connect Google → link that calendar on the
+        agent’s booking tools. Full steps: <Link href="/docs/calendar">Bookings calendar</Link>.
+        To <em>join</em> Meet/Zoom/Teams as a bot, use Meeting bots (
+        <Link href="/docs/meetings">Meetings guide</Link>), not Bookings calendar.
       </>
     ),
   },

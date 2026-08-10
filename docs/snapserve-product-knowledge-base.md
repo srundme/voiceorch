@@ -34,7 +34,7 @@ Home · **Campaigns** · Agents · Phone numbers · **Connections** · History
 | **CSV file** | CSV campaign wizard |
 | **Zoho CRM** | CRM campaign wizard |
 
-Campaign Configuration: **lead transfer** by disposition. WhatsApp/email after-call rules live on the **agent** (Disposition → After-call messages).
+Campaign Configuration: **lead transfer** by disposition. WhatsApp/email after-call rules live on the **agent** (Outcomes → After-call messages).
 
 ## Meetings — three join paths
 

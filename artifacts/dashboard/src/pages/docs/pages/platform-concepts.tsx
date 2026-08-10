@@ -51,7 +51,7 @@ export default function PlatformConceptsPage() {
       <p>
         After each call, AI picks an outcome from the agent’s taxonomy and fills data fields you
         define. Map labels to funnel meanings (Interested / Callback / DNC) for analytics. Set under
-        Agent Builder → Disposition.
+        Agent Builder → <strong>Outcomes</strong> (top-level tab).
       </p>
 
       <h2 id="after-call">After-call messages</h2>

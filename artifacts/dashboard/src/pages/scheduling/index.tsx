@@ -120,7 +120,7 @@ export default function SchedulingPage() {
             href={`${BASE}/app/connections?setup=calendar`}
             className="underline underline-offset-2 text-foreground/80 hover:text-foreground"
           >
-            Connections → Calendar &amp; booking
+            Connections → Bookings calendar
           </a>
           .
         </p>
@@ -194,7 +194,7 @@ export default function SchedulingPage() {
                   description={
                     statusFilter !== "all" || sourceFilter !== "all" || syncFilter !== "all" || calendarFilter !== "all"
                       ? "No bookings match these filters. Try clearing them."
-                      : "When agents book appointments mid-call, they'll show up here. Set up under Connections → Calendar & booking."
+                      : "When agents book appointments mid-call, they'll show up here. Set up under Connections → Bookings calendar."
                   }
                   action={{
                     label: "Set up calendar",
@@ -259,7 +259,7 @@ export default function SchedulingPage() {
                         description={
                           statusFilter !== "all" || sourceFilter !== "all" || syncFilter !== "all" || calendarFilter !== "all"
                             ? "No bookings match these filters. Try clearing them."
-                            : "When agents book appointments mid-call, they'll show up here. Set up under Connections → Calendar & booking."
+                            : "When agents book appointments mid-call, they'll show up here. Set up under Connections → Bookings calendar."
                         }
                         action={{
                           label: "Set up calendar",
