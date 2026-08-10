@@ -1389,13 +1389,6 @@ function PromptTab({ form, agentId }: { form: any; agentId?: number }) {
             What callers hear at the start of the call.
           </p>
         </div>
-        <div className="rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2.5 text-[11px] text-muted-foreground leading-relaxed">
-          <p className="font-medium text-foreground/90">Display name ≠ spoken brand</p>
-          <p className="mt-0.5">
-            The agent title (e.g. “voiceathon new agent”) is an internal label — callers should not hear it as your company.
-            Put the company name in this greeting or in the prompt IDENTITY / CALL FLOW.
-          </p>
-        </div>
         <div className="space-y-3 overflow-hidden rounded-lg border border-border bg-card p-3.5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <Label className="text-[12px] font-medium text-foreground/90">Who speaks first</Label>
