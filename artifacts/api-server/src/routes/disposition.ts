@@ -10,6 +10,12 @@ const router = Router();
 
 const TaxonomyMapSchema = z.record(z.string(), z.array(z.string()));
 
+const MeaningMapSchema = z.object({
+  interested: z.array(z.string()).default([]),
+  callback:   z.array(z.string()).default([]),
+  dnc:        z.array(z.string()).default([]),
+}).nullable().optional();
+
 const UpsertConfigBody = z.object({
   taxonomy:     TaxonomyMapSchema,
   domainFields: z.array(z.object({
@@ -25,6 +31,7 @@ const UpsertConfigBody = z.object({
     sub:        z.string(),
     confidence: z.number().min(0).max(1),
   })).optional().default([]),
+  meaningMap: MeaningMapSchema,
 });
 
 /* ── GET /api/disposition/config/:agentId ────────────────────────────────── */
@@ -41,11 +48,20 @@ router.get("/disposition/config/:agentId", requireAuth, clientContext, async (re
     .where(eq(agentDispositionsTable.agentId, agentId));
 
   if (!row) {
-    res.json({ agentId, taxonomy: {}, domainFields: [], rules: [] });
+    res.json({
+      agentId,
+      taxonomy: {},
+      domainFields: [],
+      rules: [],
+      meaningMap: { interested: [], callback: [], dnc: [] },
+    });
     return;
   }
 
-  res.json(row);
+  res.json({
+    ...row,
+    meaningMap: row.meaningMap ?? { interested: [], callback: [], dnc: [] },
+  });
 });
 
 /* ── PUT /api/disposition/config/:agentId ────────────────────────────────── */
@@ -62,7 +78,18 @@ router.put("/disposition/config/:agentId", requireAuth, clientContext, async (re
     return;
   }
 
-  const { taxonomy, domainFields, rules } = parsed.data;
+  const { taxonomy, domainFields, rules, meaningMap } = parsed.data;
+
+  const meaning =
+    meaningMap === undefined
+      ? undefined
+      : meaningMap === null
+        ? null
+        : {
+            interested: meaningMap.interested ?? [],
+            callback: meaningMap.callback ?? [],
+            dnc: meaningMap.dnc ?? [],
+          };
 
   await db
     .insert(agentDispositionsTable)
@@ -71,6 +98,7 @@ router.put("/disposition/config/:agentId", requireAuth, clientContext, async (re
       taxonomy:     taxonomy as Record<string, string[]>,
       domainFields: domainFields as any,
       rules:        rules as any,
+      ...(meaning !== undefined ? { meaningMap: meaning } : {}),
     })
     .onConflictDoUpdate({
       target: agentDispositionsTable.agentId,
@@ -78,6 +106,7 @@ router.put("/disposition/config/:agentId", requireAuth, clientContext, async (re
         taxonomy:     taxonomy as Record<string, string[]>,
         domainFields: domainFields as any,
         rules:        rules as any,
+        ...(meaning !== undefined ? { meaningMap: meaning } : {}),
         updatedAt:    new Date(),
       },
     });

@@ -38,6 +38,7 @@ import {
   PhoneIncoming, ArrowRightLeft, Radio, Ban,
   TrendingUp, DollarSign, Target, MoreVertical, Eye,
   KeyRound, Link2, Link2Off, Loader2, Instagram,
+  Download, GitBranch,
 } from "lucide-react";
 import { CallDetailDrawer } from "@/components/call-detail-drawer";
 import { TablePagination } from "@/components/table-pagination";
@@ -56,6 +57,14 @@ import {
   toLeadTransferPayload,
   type LeadTransferForm,
 } from "./lead-transfer-settings";
+import {
+  AfterCallBranchesSettings,
+  afterCallBranchesReady,
+  readAfterCallBranches,
+  toAfterCallBranchesPayload,
+  type AfterCallBranchForm,
+} from "./after-call-branches-settings";
+import { customFetch } from "@workspace/api-client-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -1332,6 +1341,9 @@ export default function CampaignDetailPage() {
   const [activeTab, setActiveTab] = useState<CampaignTab>("overview");
   const [leadTransferForm, setLeadTransferForm] = useState<LeadTransferForm>(EMPTY_LEAD_TRANSFER);
   const [savingTransfer, setSavingTransfer] = useState(false);
+  const [afterCallBranches, setAfterCallBranches] = useState<AfterCallBranchForm[]>([]);
+  const [savingBranches, setSavingBranches] = useState(false);
+  const [actingDisposition, setActingDisposition] = useState<string | null>(null);
 
   useEffect(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1342,6 +1354,7 @@ export default function CampaignDetailPage() {
     setHoursTz   (d.timezone ?? "Asia/Kolkata");
     setHoursEnabled(d.isCallingHoursEnabled !== false);
     setLeadTransferForm(readLeadTransfer(d.leadTransfer));
+    setAfterCallBranches(readAfterCallBranches(d.afterCallBranches));
   }, [campaign]);
 
   async function handleSaveLeadTransfer() {
@@ -1366,6 +1379,87 @@ export default function CampaignDetailPage() {
       toast({ title: "Failed to save lead transfer", variant: "destructive" });
     } finally {
       setSavingTransfer(false);
+    }
+  }
+
+  async function handleSaveAfterCallBranches() {
+    if (!afterCallBranchesReady(afterCallBranches)) {
+      toast({
+        title: "Incomplete after-call branches",
+        description: "Each branch needs dispositions, actions, and a valid webhook URL when used.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setSavingBranches(true);
+    try {
+      await update.mutateAsync({
+        id: campaignId,
+        data: { afterCallBranches: toAfterCallBranchesPayload(afterCallBranches) } as any,
+      });
+      await qc.invalidateQueries({ queryKey: getGetCampaignQueryKey(campaignId) });
+      toast({ title: "After-call branches saved" });
+    } catch {
+      toast({ title: "Failed to save after-call branches", variant: "destructive" });
+    } finally {
+      setSavingBranches(false);
+    }
+  }
+
+  async function handleActOnDisposition(
+    disposition: string,
+    action: "export" | "transfer" | "create_batch",
+  ) {
+    setActingDisposition(`${disposition}:${action}`);
+    try {
+      if (action === "export") {
+        const csv = await customFetch<string>(
+          `/api/campaigns/${campaignId}/dispositions/act`,
+          {
+            method: "POST",
+            body: JSON.stringify({ disposition, action }),
+            headers: { Accept: "text/csv" },
+            responseType: "text",
+          },
+        );
+        const blob = new Blob([typeof csv === "string" ? csv : String(csv)], {
+          type: "text/csv",
+        });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `disposition-${disposition.replace(/[^a-z0-9_-]+/gi, "_")}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+        toast({ title: "Export ready" });
+      } else {
+        const result = await customFetch<{
+          transferred?: number;
+          inserted?: number;
+          batchId?: number;
+          matched?: number;
+        }>(`/api/campaigns/${campaignId}/dispositions/act`, {
+          method: "POST",
+          body: JSON.stringify({ disposition, action }),
+        });
+        if (action === "transfer") {
+          toast({
+            title: "Transfer complete",
+            description: `${result.transferred ?? 0} of ${result.matched ?? 0} transferred`,
+          });
+        } else {
+          toast({
+            title: "Batch created",
+            description: `Batch #${result.batchId} with ${result.inserted ?? 0} leads`,
+          });
+          await qc.invalidateQueries({ queryKey: getListCampaignBatchesQueryKey(campaignId) });
+        }
+      }
+      await qc.invalidateQueries({ queryKey: ["getCampaignAnalytics", campaignId] });
+    } catch {
+      toast({ title: "Action failed", variant: "destructive" });
+    } finally {
+      setActingDisposition(null);
     }
   }
 
@@ -1651,6 +1745,60 @@ export default function CampaignDetailPage() {
             </Button>
           </div>
 
+          {/* Disposition breakdown — act on slice */}
+          {(analytics?.dispositions?.length ?? 0) > 0 && (
+            <div className="bg-card border border-border rounded-xl p-4 space-y-3">
+              <div>
+                <p className="text-xs font-semibold text-foreground/70 uppercase tracking-wider">Dispositions</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Act on a slice: export, transfer to CRM, or create a redial batch.
+                </p>
+              </div>
+              <div className="space-y-2">
+                {analytics!.dispositions!.map((d) => (
+                  <div
+                    key={d.label}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/50 px-3 py-2"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{d.label}</p>
+                      <p className="text-[11px] text-muted-foreground tabular-nums">{d.count} leads</p>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 text-[11px] gap-1"
+                        disabled={actingDisposition === `${d.label}:export`}
+                        onClick={() => void handleActOnDisposition(d.label, "export")}
+                      >
+                        <Download className="h-3 w-3" /> Export
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 text-[11px] gap-1"
+                        disabled={actingDisposition === `${d.label}:transfer`}
+                        onClick={() => void handleActOnDisposition(d.label, "transfer")}
+                      >
+                        <ArrowRightLeft className="h-3 w-3" /> Transfer
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-[11px] gap-1"
+                        disabled={actingDisposition === `${d.label}:create_batch`}
+                        onClick={() => void handleActOnDisposition(d.label, "create_batch")}
+                      >
+                        <Layers className="h-3 w-3" /> Create batch
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Queued leads banner — fallback: leads without a batch (auto-dial failed or pre-existing) */}
           {(() => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1706,6 +1854,7 @@ export default function CampaignDetailPage() {
           <div className="bg-card border border-border rounded-xl p-4 space-y-4">
             <LeadTransferSettings
               agentId={campaign.agentId ?? null}
+              campaignId={campaignId}
               value={leadTransferForm}
               onChange={setLeadTransferForm}
               compact
@@ -1719,6 +1868,29 @@ export default function CampaignDetailPage() {
               >
                 {savingTransfer ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
                 Save lead transfer
+              </Button>
+            </div>
+          </div>
+
+          <div className="bg-card border border-border rounded-xl p-4 space-y-4">
+            <div className="flex items-center gap-2 mb-1">
+              <GitBranch className="h-4 w-4 text-muted-foreground/50" />
+              <span className="sr-only">After-call</span>
+            </div>
+            <AfterCallBranchesSettings
+              agentId={campaign.agentId ?? null}
+              value={afterCallBranches}
+              onChange={setAfterCallBranches}
+            />
+            <div className="flex justify-end">
+              <Button
+                size="sm"
+                className="h-8 text-xs gap-1.5"
+                disabled={savingBranches || update.isPending}
+                onClick={() => void handleSaveAfterCallBranches()}
+              >
+                {savingBranches ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                Save after-call branches
               </Button>
             </div>
           </div>

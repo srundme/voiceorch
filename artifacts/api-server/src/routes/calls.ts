@@ -1351,10 +1351,19 @@ router.patch("/calls/:id/end", requireAuth, clientContext, async (req, res): Pro
       }).catch(() => {});
     }).catch(() => {});
 
-    import("../services/whatsapp/outbound.js").then(({ dispatchWhatsappCallEnded }) => {
-      dispatchWhatsappCallEnded(call.id, {
-        callSummary: (payload["callSummary"] as string | null) ?? null,
+    import("../services/campaign-after-call.js").then(({ maybeRunAfterCallBranches }) => {
+      maybeRunAfterCallBranches({
+        callId: call.id,
         dispositionResult: (payload["dispositionResult"] as Record<string, unknown> | null) ?? null,
+        callSummary: (payload["callSummary"] as string | null) ?? null,
+      }).then((branchResult) => {
+        if (branchResult.gated) return;
+        import("../services/whatsapp/outbound.js").then(({ dispatchWhatsappCallEnded }) => {
+          dispatchWhatsappCallEnded(call.id, {
+            callSummary: (payload["callSummary"] as string | null) ?? null,
+            dispositionResult: (payload["dispositionResult"] as Record<string, unknown> | null) ?? null,
+          }).catch(() => {});
+        }).catch(() => {});
       }).catch(() => {});
     }).catch(() => {});
 

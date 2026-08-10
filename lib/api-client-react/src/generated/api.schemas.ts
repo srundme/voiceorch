@@ -2256,6 +2256,33 @@ export type CampaignLastValidationError = {
   reason?: string;
 } | null;
 
+export type CampaignLeadTransferRuleDestination = typeof CampaignLeadTransferRuleDestination[keyof typeof CampaignLeadTransferRuleDestination];
+
+
+export const CampaignLeadTransferRuleDestination = {
+  webhook: 'webhook',
+  google_sheets: 'google_sheets',
+} as const;
+
+/**
+ * SnapServe field → destination column/key.
+ */
+export type CampaignLeadTransferRuleFieldMap = {[key: string]: string};
+
+export interface CampaignLeadTransferRule {
+  id: string;
+  name?: string;
+  dispositions: string[];
+  destination: CampaignLeadTransferRuleDestination;
+  webhookUrl?: string;
+  webhookSecret?: string;
+  connectionId?: string;
+  spreadsheetId?: string;
+  sheetName?: string;
+  /** SnapServe field → destination column/key. */
+  fieldMap?: CampaignLeadTransferRuleFieldMap;
+}
+
 export type CampaignLeadTransferDestination = typeof CampaignLeadTransferDestination[keyof typeof CampaignLeadTransferDestination];
 
 
@@ -2264,14 +2291,17 @@ export const CampaignLeadTransferDestination = {
   google_sheets: 'google_sheets',
 } as const;
 
+export type CampaignLeadTransferFieldMap = {[key: string]: string};
+
 /**
- * Disposition-gated lead push for campaign calls only.
+ * Disposition-gated lead push for campaign calls. Prefer rules[]; legacy single-rule fields still accepted.
  */
 export interface CampaignLeadTransfer {
   enabled: boolean;
-  /** Taxonomy primary, primary:sub, or legacy disposition values to transfer. */
-  dispositions: string[];
-  destination: CampaignLeadTransferDestination;
+  rules?: CampaignLeadTransferRule[];
+  /** Legacy single-rule dispositions. Prefer rules[]. */
+  dispositions?: string[];
+  destination?: CampaignLeadTransferDestination;
   /** HTTPS webhook URL (Zapier/Make/n8n/CRM). Required when destination=webhook. */
   webhookUrl?: string;
   /** Optional HMAC secret for X-SnapServe-Signature. */
@@ -2282,6 +2312,24 @@ export interface CampaignLeadTransfer {
   spreadsheetId?: string;
   /** Tab name. Defaults to Sheet1. */
   sheetName?: string;
+  fieldMap?: CampaignLeadTransferFieldMap;
+}
+
+export type AfterCallBranchActionsItem = typeof AfterCallBranchActionsItem[keyof typeof AfterCallBranchActionsItem];
+
+
+export const AfterCallBranchActionsItem = {
+  whatsapp: 'whatsapp',
+  email: 'email',
+  webhook: 'webhook',
+} as const;
+
+export interface AfterCallBranch {
+  id: string;
+  dispositions: string[];
+  actions: AfterCallBranchActionsItem[];
+  /** Required when actions includes webhook. */
+  webhookUrl?: string;
 }
 
 export interface Campaign {
@@ -2328,6 +2376,8 @@ export interface Campaign {
   lastValidationError?: CampaignLastValidationError;
   /** After each campaign call, transfer matching dispositions to a webhook (any CRM) or Google Sheet. */
   leadTransfer?: CampaignLeadTransfer | null;
+  /** Disposition-branched WhatsApp / email / webhook actions after campaign calls. */
+  afterCallBranches?: AfterCallBranch[] | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -2397,6 +2447,8 @@ export interface CampaignCreate {
   consentBasis?: ConsentBasis;
   /** Optional. Auto-transfer leads whose dispositions match after each campaign call. */
   leadTransfer?: CampaignLeadTransfer;
+  /** Optional disposition-branched after-call actions. */
+  afterCallBranches?: AfterCallBranch[];
 }
 
 export type ConsentBasisRecordBasisType = typeof ConsentBasisRecordBasisType[keyof typeof ConsentBasisRecordBasisType];
@@ -2486,6 +2538,8 @@ export interface CampaignUpdate {
   metaPageAccessToken?: string | null;
   /** Update disposition-gated lead transfer. Pass null to clear. */
   leadTransfer?: CampaignLeadTransfer | null;
+  /** Update disposition-branched after-call actions. Pass null to clear. */
+  afterCallBranches?: AfterCallBranch[] | null;
 }
 
 export type CampaignLeadLeadData = {[key: string]: string};
@@ -2745,12 +2799,21 @@ export const CampaignBatchUpdateStatus = {
   stopped: 'stopped',
 } as const;
 
+/**
+ * Agent-variable → CSV-header mapping. When rematerializePending is true, pending leads are remapped.
+ */
+export type CampaignBatchUpdateBatchFieldMapping = {[key: string]: string};
+
 export interface CampaignBatchUpdate {
   status?: CampaignBatchUpdateStatus;
   scheduledStartAt?: string | null;
   maxAttempts?: number;
   retryDelayMinutes?: number;
   timezone?: string | null;
+  /** Agent-variable → CSV-header mapping. When rematerializePending is true, pending leads are remapped. */
+  batchFieldMapping?: CampaignBatchUpdateBatchFieldMapping;
+  /** Re-derive phone/name/email on pending leads from leadData using the new batchFieldMapping. */
+  rematerializePending?: boolean;
 }
 
 export type CampaignLeadProfileLeadLeadData = {[key: string]: string};
@@ -5352,6 +5415,42 @@ export type UpdateLeadCallbackBody = {
   status?: UpdateLeadCallbackBodyStatus;
   callbackAt?: string | null;
 };
+
+export type ReplayCampaignLeadTransferBody = {
+  /** Re-send even if already transferred for this call */
+  force?: boolean;
+  /** Max leads to scan (default 200, max 1000) */
+  limit?: number;
+  /** Optional filter — only these dispositions */
+  dispositions?: string[];
+};
+
+export type ReplayCampaignLeadTransfer200 = {
+  scanned: number;
+  transferred: number;
+  skipped: number;
+  errors: number;
+};
+
+export type ActOnCampaignDispositionSliceBodyAction = typeof ActOnCampaignDispositionSliceBodyAction[keyof typeof ActOnCampaignDispositionSliceBodyAction];
+
+
+export const ActOnCampaignDispositionSliceBodyAction = {
+  export: 'export',
+  transfer: 'transfer',
+  create_batch: 'create_batch',
+} as const;
+
+export type ActOnCampaignDispositionSliceBody = {
+  disposition: string;
+  action: ActOnCampaignDispositionSliceBodyAction;
+  /** For transfer — re-send even if already transferred */
+  force?: boolean;
+  /** Optional name when action=create_batch */
+  batchName?: string;
+};
+
+export type ActOnCampaignDispositionSlice200One = { [key: string]: unknown };
 
 export type GetCampaignActivityParams = {
 limit?: number;

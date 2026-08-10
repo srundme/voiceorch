@@ -8912,7 +8912,14 @@ export class OrchestrationPipeline implements VoiceSession {
       //  - empty-content assistant turns: the placeholder turn recorded when
       //    the LLM's entire reply was a tool call (no text alongside it).
       .filter((t) => t.role !== "tool" && !(t.role === "user" && t.content.startsWith("[Tool result for")) && t.content.trim() !== "")
-      .map((t) => `${t.role === "user" ? "Caller" : "Agent"}: ${t.content}`)
+      .map((t) => {
+        const content =
+          t.role === "assistant" || t.role === "user"
+            ? stripMarkupTags(t.content)
+            : t.content;
+        return `${t.role === "user" ? "Caller" : "Agent"}: ${content}`;
+      })
+      .filter((line) => !/^(Caller|Agent):\s*$/.test(line))
       .join("\n");
   }
 
@@ -10033,8 +10040,8 @@ function detectExplicitLanguageRequest(rawText: string): string | null {
  */
 function stripMarkupTags(text: string): string {
   return text
-    .replace(/<\/?emotion[^>]*>/gi, "")
-    .replace(/<break[^>]*\/?>/gi, "")
+    .replace(/<\/?emotion\b[^>]*>/gi, "")
+    .replace(/<break\b[^>]*\/?>/gi, "")
     .replace(/[^\S\r\n]{2,}/g, " ")
     .trim();
 }
@@ -10046,9 +10053,12 @@ function stripMarkupTags(text: string): string {
  * trimmed. When no tag is present both fields reflect the original text.
  */
 function extractEmotionTag(text: string): { emotion: string | null; text: string } {
-  const match = /^\s*<emotion\s+(?:value|type)="([^"]+)"\s*\/?>/i.exec(text);
+  const match = /^\s*<emotion\s+(?:value|type)=["']([^"']+)["']\s*\/?>/i.exec(text);
   const emotion = match ? match[1]!.toLowerCase() : null;
-  const cleanText = text.replace(/<\/?emotion[^>]*>/gi, "").replace(/<break[^>]*\/?>/gi, "").trim();
+  const cleanText = text
+    .replace(/<\/?emotion\b[^>]*>/gi, "")
+    .replace(/<break\b[^>]*\/?>/gi, "")
+    .trim();
   return { emotion, text: cleanText };
 }
 

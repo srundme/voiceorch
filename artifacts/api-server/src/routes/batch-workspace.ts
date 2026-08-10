@@ -540,6 +540,7 @@ router.get("/campaigns/:id/batches/:batchId/workspace/header", async (req, res):
       timezone:         batch.timezone ?? null,
       maxAttempts:      batch.maxAttempts,
       retryDelayMinutes: batch.retryDelayMinutes,
+      batchFieldMapping: (batch as { batchFieldMapping?: Record<string, string> | null }).batchFieldMapping ?? null,
     },
     campaign: {
       id:         campaignId,

@@ -553,6 +553,8 @@ router.patch("/campaigns/:id/batches/:batchId", async (req, res): Promise<void> 
     maxAttempts?: number;
     retryDelayMinutes?: number;
     timezone?: string | null;
+    batchFieldMapping?: Record<string, string> | null;
+    rematerializePending?: boolean;
   };
 
   if (body.status === "running" && batch.status !== "running") {
@@ -571,11 +573,56 @@ router.patch("/campaigns/:id/batches/:batchId", async (req, res): Promise<void> 
   if (body.maxAttempts != null) updateData.maxAttempts = body.maxAttempts;
   if (body.retryDelayMinutes != null) updateData.retryDelayMinutes = body.retryDelayMinutes;
   if ("timezone" in body) updateData.timezone = body.timezone ?? null;
+  if ("batchFieldMapping" in body) {
+    updateData.batchFieldMapping = body.batchFieldMapping ?? null;
+  }
 
   const [updated] = await db.update(campaignBatchesTable)
     .set(updateData)
     .where(eq(campaignBatchesTable.id, batchId))
     .returning();
+
+  let rematerialized = 0;
+  if (body.rematerializePending === true) {
+    const mapping =
+      (updated?.batchFieldMapping as Record<string, string> | null) ??
+      (body.batchFieldMapping ?? null) ??
+      {};
+    const cfm = (campaign.fieldMappings ?? {}) as CampaignFieldMappings;
+    const phoneField = mapping["phone"] ?? cfm?.phone ?? "phone";
+    const nameField = mapping["name"] ?? cfm?.name ?? "name";
+    const emailField = mapping["email"] ?? cfm?.email ?? "email";
+
+    const pending = await db
+      .select()
+      .from(campaignLeadsTable)
+      .where(
+        and(
+          eq(campaignLeadsTable.campaignId, campaignId),
+          sql`${campaignLeadsTable.batchId} = ${batchId}`,
+          eq(campaignLeadsTable.callStatus, "pending"),
+        ),
+      );
+
+    for (const lead of pending) {
+      const row = (lead.leadData ?? {}) as Record<string, string>;
+      const rawPhone = (row[phoneField] ?? row["phone"] ?? lead.phone ?? "").trim();
+      if (!rawPhone) continue;
+      const normResult = normalizePhoneService(rawPhone, INDIA_PHONE_CONFIG);
+      const name = (row[nameField] ?? row["name"] ?? "").trim() || null;
+      const email = (row[emailField] ?? row["email"] ?? "").trim() || null;
+      await db
+        .update(campaignLeadsTable)
+        .set({
+          phone: rawPhone,
+          normalizedPhone: normResult.normalized ?? lead.normalizedPhone,
+          name,
+          email,
+        })
+        .where(eq(campaignLeadsTable.id, lead.id));
+      rematerialized++;
+    }
+  }
 
   if (body.status === "running" && batch.status !== "running") {
     // Work is re-entering — reopen the campaign if the scheduler auto-completed it.
@@ -583,7 +630,7 @@ router.patch("/campaigns/:id/batches/:batchId", async (req, res): Promise<void> 
     await fireStartBatch(updated!, campaign);
   }
 
-  res.json(toBatch(updated!));
+  res.json({ ...toBatch(updated!), rematerialized });
 });
 
 // ── POST /campaigns/:id/batches/:batchId/start ────────────────────────────────

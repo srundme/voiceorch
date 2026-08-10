@@ -2318,14 +2318,33 @@ export const ListCampaignsResponseItem = zod.object({
 }).nullish().describe('Most recent form_id mismatch audit record. Null when no validation failures have occurred.'),
   "leadTransfer": zod.object({
   "enabled": zod.boolean(),
-  "dispositions": zod.array(zod.string()).describe('Taxonomy primary, primary:sub, or legacy disposition values to transfer.'),
+  "rules": zod.array(zod.object({
+  "id": zod.string(),
+  "name": zod.string().optional(),
+  "dispositions": zod.array(zod.string()),
   "destination": zod.enum(['webhook', 'google_sheets']),
+  "webhookUrl": zod.string().optional(),
+  "webhookSecret": zod.string().optional(),
+  "connectionId": zod.string().uuid().optional(),
+  "spreadsheetId": zod.string().optional(),
+  "sheetName": zod.string().optional(),
+  "fieldMap": zod.record(zod.string(), zod.string()).optional().describe('SnapServe field → destination column\/key.')
+})).optional(),
+  "dispositions": zod.array(zod.string()).optional().describe('Legacy single-rule dispositions. Prefer rules[].'),
+  "destination": zod.enum(['webhook', 'google_sheets']).optional(),
   "webhookUrl": zod.string().optional().describe('HTTPS webhook URL (Zapier\/Make\/n8n\/CRM). Required when destination=webhook.'),
   "webhookSecret": zod.string().optional().describe('Optional HMAC secret for X-SnapServe-Signature.'),
   "connectionId": zod.string().uuid().optional().describe('Google Sheets connection id. Required when destination=google_sheets.'),
   "spreadsheetId": zod.string().optional().describe('Google spreadsheet id. Required when destination=google_sheets.'),
-  "sheetName": zod.string().optional().describe('Tab name. Defaults to Sheet1.')
+  "sheetName": zod.string().optional().describe('Tab name. Defaults to Sheet1.'),
+  "fieldMap": zod.record(zod.string(), zod.string()).optional()
 }).nullish().describe('After each campaign call, transfer matching dispositions to a webhook (any CRM) or Google Sheet.'),
+  "afterCallBranches": zod.array(zod.object({
+  "id": zod.string(),
+  "dispositions": zod.array(zod.string()),
+  "actions": zod.array(zod.enum(['whatsapp', 'email', 'webhook'])),
+  "webhookUrl": zod.string().optional().describe('Required when actions includes webhook.')
+})).nullish().describe('Disposition-branched WhatsApp \/ email \/ webhook actions after campaign calls.'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -2364,14 +2383,33 @@ export const CreateCampaignBody = zod.object({
 }).optional().describe('DPDP consent basis. Required when the assigned agent has DPDP compliance enabled. Record-keeping only — never blocks dialing.'),
   "leadTransfer": zod.object({
   "enabled": zod.boolean(),
-  "dispositions": zod.array(zod.string()).describe('Taxonomy primary, primary:sub, or legacy disposition values to transfer.'),
+  "rules": zod.array(zod.object({
+  "id": zod.string(),
+  "name": zod.string().optional(),
+  "dispositions": zod.array(zod.string()),
   "destination": zod.enum(['webhook', 'google_sheets']),
+  "webhookUrl": zod.string().optional(),
+  "webhookSecret": zod.string().optional(),
+  "connectionId": zod.string().uuid().optional(),
+  "spreadsheetId": zod.string().optional(),
+  "sheetName": zod.string().optional(),
+  "fieldMap": zod.record(zod.string(), zod.string()).optional().describe('SnapServe field → destination column\/key.')
+})).optional(),
+  "dispositions": zod.array(zod.string()).optional().describe('Legacy single-rule dispositions. Prefer rules[].'),
+  "destination": zod.enum(['webhook', 'google_sheets']).optional(),
   "webhookUrl": zod.string().optional().describe('HTTPS webhook URL (Zapier\/Make\/n8n\/CRM). Required when destination=webhook.'),
   "webhookSecret": zod.string().optional().describe('Optional HMAC secret for X-SnapServe-Signature.'),
   "connectionId": zod.string().uuid().optional().describe('Google Sheets connection id. Required when destination=google_sheets.'),
   "spreadsheetId": zod.string().optional().describe('Google spreadsheet id. Required when destination=google_sheets.'),
-  "sheetName": zod.string().optional().describe('Tab name. Defaults to Sheet1.')
-}).optional().describe('Optional. Auto-transfer leads whose dispositions match after each campaign call.')
+  "sheetName": zod.string().optional().describe('Tab name. Defaults to Sheet1.'),
+  "fieldMap": zod.record(zod.string(), zod.string()).optional()
+}).optional().describe('Optional. Auto-transfer leads whose dispositions match after each campaign call.'),
+  "afterCallBranches": zod.array(zod.object({
+  "id": zod.string(),
+  "dispositions": zod.array(zod.string()),
+  "actions": zod.array(zod.enum(['whatsapp', 'email', 'webhook'])),
+  "webhookUrl": zod.string().optional().describe('Required when actions includes webhook.')
+})).optional().describe('Optional disposition-branched after-call actions.')
 })
 
 
@@ -2425,14 +2463,33 @@ export const GetCampaignResponse = zod.object({
 }).nullish().describe('Most recent form_id mismatch audit record. Null when no validation failures have occurred.'),
   "leadTransfer": zod.object({
   "enabled": zod.boolean(),
-  "dispositions": zod.array(zod.string()).describe('Taxonomy primary, primary:sub, or legacy disposition values to transfer.'),
+  "rules": zod.array(zod.object({
+  "id": zod.string(),
+  "name": zod.string().optional(),
+  "dispositions": zod.array(zod.string()),
   "destination": zod.enum(['webhook', 'google_sheets']),
+  "webhookUrl": zod.string().optional(),
+  "webhookSecret": zod.string().optional(),
+  "connectionId": zod.string().uuid().optional(),
+  "spreadsheetId": zod.string().optional(),
+  "sheetName": zod.string().optional(),
+  "fieldMap": zod.record(zod.string(), zod.string()).optional().describe('SnapServe field → destination column\/key.')
+})).optional(),
+  "dispositions": zod.array(zod.string()).optional().describe('Legacy single-rule dispositions. Prefer rules[].'),
+  "destination": zod.enum(['webhook', 'google_sheets']).optional(),
   "webhookUrl": zod.string().optional().describe('HTTPS webhook URL (Zapier\/Make\/n8n\/CRM). Required when destination=webhook.'),
   "webhookSecret": zod.string().optional().describe('Optional HMAC secret for X-SnapServe-Signature.'),
   "connectionId": zod.string().uuid().optional().describe('Google Sheets connection id. Required when destination=google_sheets.'),
   "spreadsheetId": zod.string().optional().describe('Google spreadsheet id. Required when destination=google_sheets.'),
-  "sheetName": zod.string().optional().describe('Tab name. Defaults to Sheet1.')
+  "sheetName": zod.string().optional().describe('Tab name. Defaults to Sheet1.'),
+  "fieldMap": zod.record(zod.string(), zod.string()).optional()
 }).nullish().describe('After each campaign call, transfer matching dispositions to a webhook (any CRM) or Google Sheet.'),
+  "afterCallBranches": zod.array(zod.object({
+  "id": zod.string(),
+  "dispositions": zod.array(zod.string()),
+  "actions": zod.array(zod.enum(['whatsapp', 'email', 'webhook'])),
+  "webhookUrl": zod.string().optional().describe('Required when actions includes webhook.')
+})).nullish().describe('Disposition-branched WhatsApp \/ email \/ webhook actions after campaign calls.'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -2468,14 +2525,33 @@ export const UpdateCampaignBody = zod.object({
   "metaPageAccessToken": zod.string().nullish().describe('Meta Page Access Token used to fetch lead field_data from the Graph API. Stored encrypted at rest; pass null to clear. Never returned in GET responses.'),
   "leadTransfer": zod.object({
   "enabled": zod.boolean(),
-  "dispositions": zod.array(zod.string()).describe('Taxonomy primary, primary:sub, or legacy disposition values to transfer.'),
+  "rules": zod.array(zod.object({
+  "id": zod.string(),
+  "name": zod.string().optional(),
+  "dispositions": zod.array(zod.string()),
   "destination": zod.enum(['webhook', 'google_sheets']),
+  "webhookUrl": zod.string().optional(),
+  "webhookSecret": zod.string().optional(),
+  "connectionId": zod.string().uuid().optional(),
+  "spreadsheetId": zod.string().optional(),
+  "sheetName": zod.string().optional(),
+  "fieldMap": zod.record(zod.string(), zod.string()).optional().describe('SnapServe field → destination column\/key.')
+})).optional(),
+  "dispositions": zod.array(zod.string()).optional().describe('Legacy single-rule dispositions. Prefer rules[].'),
+  "destination": zod.enum(['webhook', 'google_sheets']).optional(),
   "webhookUrl": zod.string().optional().describe('HTTPS webhook URL (Zapier\/Make\/n8n\/CRM). Required when destination=webhook.'),
   "webhookSecret": zod.string().optional().describe('Optional HMAC secret for X-SnapServe-Signature.'),
   "connectionId": zod.string().uuid().optional().describe('Google Sheets connection id. Required when destination=google_sheets.'),
   "spreadsheetId": zod.string().optional().describe('Google spreadsheet id. Required when destination=google_sheets.'),
-  "sheetName": zod.string().optional().describe('Tab name. Defaults to Sheet1.')
-}).nullish().describe('Update disposition-gated lead transfer. Pass null to clear.')
+  "sheetName": zod.string().optional().describe('Tab name. Defaults to Sheet1.'),
+  "fieldMap": zod.record(zod.string(), zod.string()).optional()
+}).nullish().describe('Update disposition-gated lead transfer. Pass null to clear.'),
+  "afterCallBranches": zod.array(zod.object({
+  "id": zod.string(),
+  "dispositions": zod.array(zod.string()),
+  "actions": zod.array(zod.enum(['whatsapp', 'email', 'webhook'])),
+  "webhookUrl": zod.string().optional().describe('Required when actions includes webhook.')
+})).nullish().describe('Update disposition-branched after-call actions. Pass null to clear.')
 })
 
 export const updateCampaignResponseConcurrentCallLimitDefault = 10;
@@ -2521,14 +2597,33 @@ export const UpdateCampaignResponse = zod.object({
 }).nullish().describe('Most recent form_id mismatch audit record. Null when no validation failures have occurred.'),
   "leadTransfer": zod.object({
   "enabled": zod.boolean(),
-  "dispositions": zod.array(zod.string()).describe('Taxonomy primary, primary:sub, or legacy disposition values to transfer.'),
+  "rules": zod.array(zod.object({
+  "id": zod.string(),
+  "name": zod.string().optional(),
+  "dispositions": zod.array(zod.string()),
   "destination": zod.enum(['webhook', 'google_sheets']),
+  "webhookUrl": zod.string().optional(),
+  "webhookSecret": zod.string().optional(),
+  "connectionId": zod.string().uuid().optional(),
+  "spreadsheetId": zod.string().optional(),
+  "sheetName": zod.string().optional(),
+  "fieldMap": zod.record(zod.string(), zod.string()).optional().describe('SnapServe field → destination column\/key.')
+})).optional(),
+  "dispositions": zod.array(zod.string()).optional().describe('Legacy single-rule dispositions. Prefer rules[].'),
+  "destination": zod.enum(['webhook', 'google_sheets']).optional(),
   "webhookUrl": zod.string().optional().describe('HTTPS webhook URL (Zapier\/Make\/n8n\/CRM). Required when destination=webhook.'),
   "webhookSecret": zod.string().optional().describe('Optional HMAC secret for X-SnapServe-Signature.'),
   "connectionId": zod.string().uuid().optional().describe('Google Sheets connection id. Required when destination=google_sheets.'),
   "spreadsheetId": zod.string().optional().describe('Google spreadsheet id. Required when destination=google_sheets.'),
-  "sheetName": zod.string().optional().describe('Tab name. Defaults to Sheet1.')
+  "sheetName": zod.string().optional().describe('Tab name. Defaults to Sheet1.'),
+  "fieldMap": zod.record(zod.string(), zod.string()).optional()
 }).nullish().describe('After each campaign call, transfer matching dispositions to a webhook (any CRM) or Google Sheet.'),
+  "afterCallBranches": zod.array(zod.object({
+  "id": zod.string(),
+  "dispositions": zod.array(zod.string()),
+  "actions": zod.array(zod.enum(['whatsapp', 'email', 'webhook'])),
+  "webhookUrl": zod.string().optional().describe('Required when actions includes webhook.')
+})).nullish().describe('Disposition-branched WhatsApp \/ email \/ webhook actions after campaign calls.'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -2904,7 +2999,9 @@ export const UpdateCampaignBatchBody = zod.object({
   "scheduledStartAt": zod.coerce.date().nullish(),
   "maxAttempts": zod.number().optional(),
   "retryDelayMinutes": zod.number().optional(),
-  "timezone": zod.string().nullish()
+  "timezone": zod.string().nullish(),
+  "batchFieldMapping": zod.record(zod.string(), zod.string()).optional().describe('Agent-variable → CSV-header mapping. When rematerializePending is true, pending leads are remapped.'),
+  "rematerializePending": zod.boolean().optional().describe('Re-derive phone\/name\/email on pending leads from leadData using the new batchFieldMapping.')
 })
 
 export const updateCampaignBatchResponseCallDelaySecondsDefault = 5;
@@ -3278,6 +3375,44 @@ export const GetCampaignAnalyticsResponse = zod.object({
   "totalCostCents": zod.number().optional(),
   "avgCostPerBooking": zod.number().nullish()
 })
+
+
+/**
+ * @summary Sync past matching leads through current lead-transfer rules
+ */
+export const ReplayCampaignLeadTransferParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ReplayCampaignLeadTransferBody = zod.object({
+  "force": zod.boolean().optional().describe('Re-send even if already transferred for this call'),
+  "limit": zod.number().optional().describe('Max leads to scan (default 200, max 1000)'),
+  "dispositions": zod.array(zod.string()).optional().describe('Optional filter — only these dispositions')
+})
+
+export const ReplayCampaignLeadTransferResponse = zod.object({
+  "scanned": zod.number(),
+  "transferred": zod.number(),
+  "skipped": zod.number(),
+  "errors": zod.number()
+})
+
+
+/**
+ * @summary Act on all leads with a disposition label (export, transfer, or create batch)
+ */
+export const ActOnCampaignDispositionSliceParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ActOnCampaignDispositionSliceBody = zod.object({
+  "disposition": zod.string(),
+  "action": zod.enum(['export', 'transfer', 'create_batch']),
+  "force": zod.boolean().optional().describe('For transfer — re-send even if already transferred'),
+  "batchName": zod.string().optional().describe('Optional name when action=create_batch')
+})
+
+export const ActOnCampaignDispositionSliceResponse = zod.record(zod.string(), zod.unknown())
 
 
 /**

@@ -20,11 +20,28 @@ export interface TenantRule {
   confidence: number;
 }
 
+/**
+ * Maps this agent's taxonomy labels → SnapServe funnel meanings.
+ * Keys are disposition tokens (primary, sub, or "primary:sub").
+ */
+export type DispositionMeaningMap = {
+  interested: string[];
+  callback: string[];
+  dnc: string[];
+};
+
+export const EMPTY_MEANING_MAP: DispositionMeaningMap = {
+  interested: [],
+  callback: [],
+  dnc: [],
+};
+
 export const agentDispositionsTable = pgTable("agent_dispositions", {
   agentId: integer("agent_id").primaryKey().references(() => agentsTable.id, { onDelete: "cascade" }),
   taxonomy: jsonb("taxonomy").notNull().$type<TaxonomyMap>(),
   domainFields: jsonb("domain_fields").default([]).$type<DomainFieldCfg[]>(),
   rules: jsonb("rules").default([]).$type<TenantRule[]>(),
+  meaningMap: jsonb("meaning_map").$type<DispositionMeaningMap | null>(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
 

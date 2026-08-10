@@ -448,4 +448,171 @@ router.delete("/dnc/:id", async (req, res): Promise<void> => {
   res.status(204).end();
 });
 
+// ── POST /campaigns/:id/lead-transfer/replay ──────────────────────────────────
+router.post("/campaigns/:id/lead-transfer/replay", async (req, res): Promise<void> => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const campaignId = parseInt(req.params["id"]!, 10);
+  const campaign = await requireCampaign(campaignId, userId);
+  if (!campaign) { res.status(404).json({ error: "Not found" }); return; }
+
+  const body = (req.body ?? {}) as {
+    force?: boolean;
+    limit?: number;
+    dispositions?: string[];
+  };
+
+  const { replayCampaignLeadTransfers } = await import("../services/campaign-lead-transfer.js");
+  const result = await replayCampaignLeadTransfers({
+    campaignId,
+    userId,
+    force: body.force === true,
+    limit: typeof body.limit === "number" ? body.limit : undefined,
+    dispositions: Array.isArray(body.dispositions) ? body.dispositions : undefined,
+  });
+  res.json(result);
+});
+
+// ── POST /campaigns/:id/dispositions/act ──────────────────────────────────────
+router.post("/campaigns/:id/dispositions/act", async (req, res): Promise<void> => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const campaignId = parseInt(req.params["id"]!, 10);
+  const campaign = await requireCampaign(campaignId, userId);
+  if (!campaign) { res.status(404).json({ error: "Not found" }); return; }
+
+  const body = req.body as {
+    disposition?: string;
+    action?: "export" | "transfer" | "create_batch";
+    force?: boolean;
+    batchName?: string;
+  };
+  const disposition = (body.disposition ?? "").trim();
+  const action = body.action;
+  if (!disposition || !action) {
+    res.status(400).json({ error: "disposition and action are required" });
+    return;
+  }
+  if (!["export", "transfer", "create_batch"].includes(action)) {
+    res.status(400).json({ error: "action must be export, transfer, or create_batch" });
+    return;
+  }
+
+  const leads = await db
+    .select()
+    .from(campaignLeadsTable)
+    .where(
+      and(
+        eq(campaignLeadsTable.campaignId, campaignId),
+        eq(campaignLeadsTable.disposition, disposition),
+      ),
+    )
+    .limit(5000);
+
+  if (action === "export") {
+    const header = ["id", "phone", "name", "email", "disposition", "callStatus", "callId"];
+    const rows = leads.map((l) =>
+      [l.id, l.phone, l.name ?? "", l.email ?? "", l.disposition ?? "", l.callStatus, l.callId ?? ""]
+        .map((v) => {
+          const s = String(v);
+          return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+        })
+        .join(","),
+    );
+    const csv = [header.join(","), ...rows].join("\n");
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="campaign-${campaignId}-${disposition.replace(/[^a-z0-9_-]+/gi, "_")}.csv"`,
+    );
+    res.send(csv);
+    return;
+  }
+
+  if (action === "transfer") {
+    const { maybeTransferCampaignLead } = await import("../services/campaign-lead-transfer.js");
+    let transferred = 0;
+    let skipped = 0;
+    for (const lead of leads) {
+      if (!lead.callId) {
+        skipped++;
+        continue;
+      }
+      const [call] = await db
+        .select({
+          dispositionResult: callsTable.dispositionResult,
+          callSummary: callsTable.callSummary,
+        })
+        .from(callsTable)
+        .where(eq(callsTable.id, lead.callId))
+        .limit(1);
+      const result = await maybeTransferCampaignLead({
+        callId: lead.callId,
+        campaignLeadId: lead.id,
+        dispositionResult: (call?.dispositionResult as Record<string, unknown> | null) ?? null,
+        callSummary: call?.callSummary ?? null,
+        force: body.force === true,
+      });
+      if (result.transferred) transferred++;
+      else skipped++;
+    }
+    res.json({ action, disposition, matched: leads.length, transferred, skipped });
+    return;
+  }
+
+  // create_batch — new draft batch with pending clones of this slice
+  const batchName =
+    (typeof body.batchName === "string" && body.batchName.trim()) ||
+    `Redial — ${disposition}`.slice(0, 120);
+
+  const [batch] = await db
+    .insert(campaignBatchesTable)
+    .values({
+      campaignId,
+      name: batchName,
+      description: `Created from disposition slice: ${disposition}`,
+      leadSource: "csv",
+      status: "draft",
+    })
+    .returning();
+
+  let inserted = 0;
+  const toInsert = leads.map((l) => ({
+    campaignId,
+    batchId: batch!.id,
+    phone: l.phone,
+    normalizedPhone: l.normalizedPhone,
+    name: l.name,
+    email: l.email,
+    leadData: l.leadData ?? {},
+    source: "csv",
+    callStatus: "pending",
+  }));
+  for (let i = 0; i < toInsert.length; i += 100) {
+    const chunk = toInsert.slice(i, i + 100);
+    if (!chunk.length) continue;
+    await db.insert(campaignLeadsTable).values(chunk);
+    inserted += chunk.length;
+  }
+  await db
+    .update(campaignBatchesTable)
+    .set({ totalLeads: inserted })
+    .where(eq(campaignBatchesTable.id, batch!.id));
+  await db
+    .update(campaignsTable)
+    .set({ totalLeads: sql`${campaignsTable.totalLeads} + ${inserted}` })
+    .where(eq(campaignsTable.id, campaignId));
+
+  res.json({
+    action,
+    disposition,
+    matched: leads.length,
+    batchId: batch!.id,
+    batchName: batch!.name,
+    inserted,
+  });
+});
+
 export default router;

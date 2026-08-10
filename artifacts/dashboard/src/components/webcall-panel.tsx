@@ -3,6 +3,7 @@ import { Mic, MicOff, PhoneOff, Phone, Loader2, AlertCircle } from "lucide-react
 import { Button } from "@/components/ui/button";
 import { SiriWave } from "@/components/ui/siri-wave";
 import { cn } from "@/lib/utils";
+import { stripTranscriptMarkup } from "@/lib/transcript-display";
 
 /**
  * Webcall 2.0 — browser "Live Test" transport for an agent.
@@ -265,9 +266,12 @@ export function WebcallPanel({
             break;
           }
           case "transcript":
-            if (msg.speaker && msg.text && isSpeakableCaption(msg.text)) {
-              const line: Line = { id: lineIdRef.current++, speaker: msg.speaker, text: msg.text.trim() };
-              setLines((prev) => [...prev.slice(-2), line]);
+            if (msg.speaker && msg.text) {
+              const cleaned = stripTranscriptMarkup(msg.text);
+              if (cleaned && isSpeakableCaption(cleaned)) {
+                const line: Line = { id: lineIdRef.current++, speaker: msg.speaker, text: cleaned };
+                setLines((prev) => [...prev.slice(-2), line]);
+              }
             }
             break;
           case "clear":

@@ -381,7 +381,11 @@ export class GeminiLivePipeline implements VoiceSession {
     this.flushOutputBuf();
     return this.history
       .filter((t) => t.content.trim() !== "")
-      .map((t) => `${t.role === "user" ? "Caller" : "Agent"}: ${t.content}`)
+      .map((t) => {
+        const content = stripLiveMarkup(t.content);
+        return `${t.role === "user" ? "Caller" : "Agent"}: ${content}`;
+      })
+      .filter((line) => !/^(Caller|Agent):\s*$/.test(line))
       .join("\n");
   }
 
@@ -736,12 +740,14 @@ export class GeminiLivePipeline implements VoiceSession {
   }
 
   private appendAgent(text: string): void {
-    this.lastAgentText = text;
+    const clean = stripLiveMarkup(text);
+    if (!clean) return;
+    this.lastAgentText = clean;
     const last = this.history[this.history.length - 1];
     if (last?.role === "assistant") {
-      last.content = `${last.content} ${text}`.trim();
+      last.content = `${last.content} ${clean}`.trim();
     } else {
-      this.history.push({ role: "assistant", content: text });
+      this.history.push({ role: "assistant", content: clean });
     }
   }
 
@@ -750,4 +756,13 @@ export class GeminiLivePipeline implements VoiceSession {
     logger.error({ callId: this.config.callId, reason }, "Gemini Live fatal error");
     this.config.onFatalError?.(reason);
   }
+}
+
+/** Strip TTS prosody markup so Live transcripts stay human-readable. */
+function stripLiveMarkup(text: string): string {
+  return text
+    .replace(/<\/?emotion\b[^>]*>/gi, "")
+    .replace(/<break\b[^>]*\/?>/gi, "")
+    .replace(/[^\S\r\n]{2,}/g, " ")
+    .trim();
 }

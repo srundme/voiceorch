@@ -13,6 +13,7 @@ import { eq, and, count, desc, inArray, isNull, ne } from "drizzle-orm";
 import { scheduleCampaignCall } from "../orchestration/campaignCaller.js";
 import { evaluateIrdaiGate, IRDAI_BLOCKED_MESSAGE, IRDAI_BLOCKED_CODE, type IrdaiGateResult } from "../services/irdai/gate.js";
 import { normalizeLeadTransferInput } from "../services/campaign-lead-transfer.js";
+import { normalizeAfterCallBranchesInput } from "../services/campaign-after-call.js";
 
 const router: IRouter = Router();
 
@@ -120,6 +121,7 @@ function toCampaign(row: typeof campaignsTable.$inferSelect) {
       ? (() => { try { const t = decryptKey(row.metaPageAccessToken!); return `…${t.slice(-6)}`; } catch { return "…(set)"; } })()
       : null,
     leadTransfer:          row.leadTransfer ?? null,
+    afterCallBranches:     row.afterCallBranches ?? null,
     createdAt:             row.createdAt.toISOString(),
     updatedAt:             row.updatedAt.toISOString(),
   };
@@ -311,6 +313,10 @@ router.post("/campaigns", async (req, res): Promise<void> => {
     (parsed.data as Record<string, unknown>)["leadTransfer"] ??
       (req.body as Record<string, unknown> | undefined)?.["leadTransfer"],
   );
+  const afterCallBranches = normalizeAfterCallBranchesInput(
+    (parsed.data as Record<string, unknown>)["afterCallBranches"] ??
+      (req.body as Record<string, unknown> | undefined)?.["afterCallBranches"],
+  );
 
   const [campaign] = await db.insert(campaignsTable).values({
     userId,
@@ -329,6 +335,7 @@ router.post("/campaigns", async (req, res): Promise<void> => {
     status:              isContinuous ? "active" : "draft",
     isActive:            isContinuous,
     leadTransfer,
+    afterCallBranches,
   }).returning();
 
   if (dpdpEnabled && consentBasis) {
@@ -395,9 +402,17 @@ router.patch("/campaigns/:id", async (req, res): Promise<void> => {
   }
 
   // If toggling isActive, also sync status field
-  const { fieldMappings: rawMappings, metaPageAccessToken: rawMetaToken, isCallingHoursEnabled, leadTransfer: rawLeadTransfer, ...rest } = parsed.data as typeof parsed.data & {
+  const {
+    fieldMappings: rawMappings,
+    metaPageAccessToken: rawMetaToken,
+    isCallingHoursEnabled,
+    leadTransfer: rawLeadTransfer,
+    afterCallBranches: rawAfterCallBranches,
+    ...rest
+  } = parsed.data as typeof parsed.data & {
     metaPageAccessToken?: string | null;
     leadTransfer?: unknown;
+    afterCallBranches?: unknown;
   };
   const updateData: Partial<typeof campaignsTable.$inferInsert> = { ...rest };
   // isCallingHoursEnabled is boolean (not nullable in schema); treat null as "leave unchanged"
@@ -406,6 +421,14 @@ router.patch("/campaigns/:id", async (req, res): Promise<void> => {
   if (rawLeadTransfer !== undefined || (req.body as Record<string, unknown> | undefined)?.["leadTransfer"] !== undefined) {
     updateData.leadTransfer = normalizeLeadTransferInput(
       rawLeadTransfer ?? (req.body as Record<string, unknown>)["leadTransfer"],
+    );
+  }
+  if (
+    rawAfterCallBranches !== undefined ||
+    (req.body as Record<string, unknown> | undefined)?.["afterCallBranches"] !== undefined
+  ) {
+    updateData.afterCallBranches = normalizeAfterCallBranchesInput(
+      rawAfterCallBranches ?? (req.body as Record<string, unknown>)["afterCallBranches"],
     );
   }
   // Encrypt the Meta Page Access Token at rest (same pattern as provider API keys).

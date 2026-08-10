@@ -2641,6 +2641,96 @@ paths:
         "401":
           description: Unauthorized
 
+  /campaigns/{id}/lead-transfer/replay:
+    post:
+      operationId: replayCampaignLeadTransfer
+      tags: [campaigns]
+      summary: Sync past matching leads through current lead-transfer rules
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                force:
+                  type: boolean
+                  description: Re-send even if already transferred for this call
+                limit:
+                  type: integer
+                  description: Max leads to scan (default 200, max 1000)
+                dispositions:
+                  type: array
+                  items: { type: string }
+                  description: Optional filter — only these dispositions
+      responses:
+        "200":
+          description: Replay summary
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [scanned, transferred, skipped, errors]
+                properties:
+                  scanned: { type: integer }
+                  transferred: { type: integer }
+                  skipped: { type: integer }
+                  errors: { type: integer }
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
+
+  /campaigns/{id}/dispositions/act:
+    post:
+      operationId: actOnCampaignDispositionSlice
+      tags: [campaigns]
+      summary: Act on all leads with a disposition label (export, transfer, or create batch)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [disposition, action]
+              properties:
+                disposition:
+                  type: string
+                action:
+                  type: string
+                  enum: [export, transfer, create_batch]
+                force:
+                  type: boolean
+                  description: For transfer — re-send even if already transferred
+                batchName:
+                  type: string
+                  description: Optional name when action=create_batch
+      responses:
+        "200":
+          description: Action result (JSON) or CSV when action=export
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+            text/csv:
+              schema:
+                type: string
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
+
   /campaigns/{id}/activity:
     get:
       operationId: getCampaignActivity
@@ -8941,6 +9031,12 @@ components:
           $ref: "#/components/schemas/CampaignLeadTransfer"
           nullable: true
           description: "After each campaign call, transfer matching dispositions to a webhook (any CRM) or Google Sheet."
+        afterCallBranches:
+          type: array
+          nullable: true
+          description: "Disposition-branched WhatsApp / email / webhook actions after campaign calls."
+          items:
+            $ref: "#/components/schemas/AfterCallBranch"
         createdAt:
           type: string
           format: date-time
@@ -8948,18 +9044,73 @@ components:
           type: string
           format: date-time
 
-    CampaignLeadTransfer:
+    CampaignLeadTransferRule:
       type: object
-      required: [enabled, dispositions, destination]
-      description: "Disposition-gated lead push for campaign calls only."
+      required: [id, dispositions, destination]
       properties:
-        enabled:
-          type: boolean
+        id:
+          type: string
+        name:
+          type: string
         dispositions:
           type: array
           items:
             type: string
-          description: "Taxonomy primary, primary:sub, or legacy disposition values to transfer."
+        destination:
+          type: string
+          enum: [webhook, google_sheets]
+        webhookUrl:
+          type: string
+        webhookSecret:
+          type: string
+        connectionId:
+          type: string
+          format: uuid
+        spreadsheetId:
+          type: string
+        sheetName:
+          type: string
+        fieldMap:
+          type: object
+          additionalProperties:
+            type: string
+          description: "SnapServe field → destination column/key."
+
+    AfterCallBranch:
+      type: object
+      required: [id, dispositions, actions]
+      properties:
+        id:
+          type: string
+        dispositions:
+          type: array
+          items:
+            type: string
+        actions:
+          type: array
+          items:
+            type: string
+            enum: [whatsapp, email, webhook]
+        webhookUrl:
+          type: string
+          description: "Required when actions includes webhook."
+
+    CampaignLeadTransfer:
+      type: object
+      required: [enabled]
+      description: "Disposition-gated lead push for campaign calls. Prefer rules[]; legacy single-rule fields still accepted."
+      properties:
+        enabled:
+          type: boolean
+        rules:
+          type: array
+          items:
+            $ref: "#/components/schemas/CampaignLeadTransferRule"
+        dispositions:
+          type: array
+          items:
+            type: string
+          description: "Legacy single-rule dispositions. Prefer rules[]."
         destination:
           type: string
           enum: [webhook, google_sheets]
@@ -8979,6 +9130,10 @@ components:
         sheetName:
           type: string
           description: "Tab name. Defaults to Sheet1."
+        fieldMap:
+          type: object
+          additionalProperties:
+            type: string
 
     CampaignCreate:
       type: object
@@ -9023,6 +9178,11 @@ components:
         leadTransfer:
           $ref: "#/components/schemas/CampaignLeadTransfer"
           description: "Optional. Auto-transfer leads whose dispositions match after each campaign call."
+        afterCallBranches:
+          type: array
+          items:
+            $ref: "#/components/schemas/AfterCallBranch"
+          description: "Optional disposition-branched after-call actions."
 
     ConsentBasis:
       type: object
@@ -9143,6 +9303,12 @@ components:
           $ref: "#/components/schemas/CampaignLeadTransfer"
           nullable: true
           description: "Update disposition-gated lead transfer. Pass null to clear."
+        afterCallBranches:
+          type: array
+          nullable: true
+          items:
+            $ref: "#/components/schemas/AfterCallBranch"
+          description: "Update disposition-branched after-call actions. Pass null to clear."
 
     CampaignLead:
       type: object
@@ -9452,6 +9618,14 @@ components:
         timezone:
           type: string
           nullable: true
+        batchFieldMapping:
+          type: object
+          additionalProperties:
+            type: string
+          description: "Agent-variable → CSV-header mapping. When rematerializePending is true, pending leads are remapped."
+        rematerializePending:
+          type: boolean
+          description: "Re-derive phone/name/email on pending leads from leadData using the new batchFieldMapping."
 
     CampaignLeadProfile:
       type: object

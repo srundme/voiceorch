@@ -38,25 +38,47 @@ export type CampaignValidationError = {
   reason: string;
 };
 
-/**
- * After a campaign call ends, if disposition matches, push lead data to a
- * webhook (any CRM via Zapier/Make) and/or append a Google Sheet row.
- */
-export type CampaignLeadTransferConfig = {
-  enabled: boolean;
-  /**
-   * Disposition keys to transfer. Matches taxonomy primary, "primary:sub",
-   * or legacy disposition string values (case-insensitive).
-   */
+/** One transfer rule (disposition set → destination). */
+export type CampaignLeadTransferRule = {
+  id: string;
+  name?: string;
   dispositions: string[];
   destination: "webhook" | "google_sheets";
   webhookUrl?: string;
-  /** Optional HMAC secret — sent as X-SnapServe-Signature when set. */
   webhookSecret?: string;
-  /** Google Sheets connection uuid. */
   connectionId?: string;
   spreadsheetId?: string;
   sheetName?: string;
+  /** SnapServe field → destination column/key (Phone, Name, …). */
+  fieldMap?: Record<string, string>;
+};
+
+/**
+ * After a campaign call ends, push matching dispositions to webhook / Sheets.
+ * Supports multiple rules. Legacy single-rule shape (dispositions+destination
+ * at top level) is still accepted by the parser.
+ */
+export type CampaignLeadTransferConfig = {
+  enabled: boolean;
+  rules?: CampaignLeadTransferRule[];
+  /** @deprecated Prefer rules[]. Kept for backward-compatible reads/writes. */
+  dispositions?: string[];
+  destination?: "webhook" | "google_sheets";
+  webhookUrl?: string;
+  webhookSecret?: string;
+  connectionId?: string;
+  spreadsheetId?: string;
+  sheetName?: string;
+  fieldMap?: Record<string, string>;
+};
+
+/** Disposition-branched post-call actions on a campaign. */
+export type AfterCallBranch = {
+  id: string;
+  dispositions: string[];
+  /** whatsapp/email use agent channel config; webhook posts a custom URL. */
+  actions: Array<"whatsapp" | "email" | "webhook">;
+  webhookUrl?: string;
 };
 
 export const campaignsTable = pgTable("campaigns", {
@@ -103,6 +125,8 @@ export const campaignsTable = pgTable("campaigns", {
   metaPageAccessToken:  text("meta_page_access_token"),
   /** Disposition-filtered lead push to webhook and/or Google Sheets. */
   leadTransfer:         json("lead_transfer").$type<CampaignLeadTransferConfig | null>(),
+  /** Disposition-branched WhatsApp / email / webhook after campaign calls. */
+  afterCallBranches:    json("after_call_branches").$type<AfterCallBranch[] | null>(),
   createdAt:            timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt:            timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

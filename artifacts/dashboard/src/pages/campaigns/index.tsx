@@ -1043,9 +1043,9 @@ function CampaignWizard({
                   {
                     label: "Lead transfer",
                     value: leadTransfer.enabled
-                      ? `${leadTransfer.dispositions.length} disposition(s) → ${
-                          leadTransfer.destination === "google_sheets" ? "Google Sheets" : "CRM webhook"
-                        }`
+                      ? `${leadTransfer.rules.length} rule(s), ${
+                          leadTransfer.rules.reduce((n, r) => n + r.dispositions.length, 0)
+                        } disposition(s)`
                       : "Off",
                     mono: false,
                   },

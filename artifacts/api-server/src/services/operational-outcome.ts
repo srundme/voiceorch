@@ -53,6 +53,12 @@ export function computeOperationalOutcome(params: {
   maxAttemptsReached: boolean;
   isDncBlocked: boolean;
   positiveDispositions?: Set<string>;
+  /** From agent meaning map — disposition counts as DNC. */
+  dispositionIsDnc?: boolean;
+  /** From agent meaning map — disposition counts as Callback. */
+  dispositionIsCallback?: boolean;
+  /** From agent meaning map — disposition counts as Interested. */
+  dispositionIsInterested?: boolean;
 }): OperationalOutcome {
   const {
     callStatus,
@@ -63,13 +69,19 @@ export function computeOperationalOutcome(params: {
     maxAttemptsReached,
     isDncBlocked,
     positiveDispositions = DEFAULT_POSITIVE_DISPOSITIONS,
+    dispositionIsDnc = false,
+    dispositionIsCallback = false,
+    dispositionIsInterested = false,
   } = params;
 
-  if (isDncBlocked) return "dnc_blocked";
+  if (isDncBlocked || dispositionIsDnc) return "dnc_blocked";
   if (hasBooking) return "booking_created";
   if (hasCompletedTransfer) return "transfer_completed";
-  if (hasPendingCallback) return "callback_requested";
-  if (disposition && positiveDispositions.has(disposition.toLowerCase())) {
+  if (hasPendingCallback || dispositionIsCallback) return "callback_requested";
+  if (
+    dispositionIsInterested ||
+    (disposition && positiveDispositions.has(disposition.toLowerCase()))
+  ) {
     return "interest_confirmed";
   }
   if (maxAttemptsReached && callStatus !== "connected") return "no_contact";

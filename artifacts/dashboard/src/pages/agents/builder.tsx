@@ -4128,10 +4128,17 @@ function AgentListPanel({ selectedId, onSelect, className }: {
 
 /* ── Tab: Analysis (Journey) ────────────────────────────────────────────────── */
 
+type MeaningMapState = {
+  interested: string[];
+  callback: string[];
+  dnc: string[];
+};
+
 type DispConfigRow = {
   taxonomy: Record<string, string[]>;
   domainFields?: StoredDomainField[];
   rules?: unknown[];
+  meaningMap?: MeaningMapState | null;
 };
 
 function DispositionSettingsPanel({ agentId }: { agentId: number }) {
@@ -4139,6 +4146,11 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
   const [categories, setCategories] = useState<DispositionCategory[]>([]);
   const [fields, setFields] = useState<UiDomainField[]>([]);
   const [rules, setRules] = useState<unknown[]>([]);
+  const [meaningMap, setMeaningMap] = useState<MeaningMapState>({
+    interested: [],
+    callback: [],
+    dnc: [],
+  });
   const [dirty, setDirty] = useState(false);
 
   const { data: dispConfig, isLoading: dispLoading } = useQuery<DispConfigRow | null>({
@@ -4159,8 +4171,29 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
     setCategories(taxonomyToCategories(dispConfig.taxonomy ?? {}));
     setFields((dispConfig.domainFields ?? []).map(fromStoredDomainField));
     setRules(Array.isArray(dispConfig.rules) ? dispConfig.rules : []);
+    setMeaningMap({
+      interested: Array.isArray(dispConfig.meaningMap?.interested)
+        ? [...dispConfig.meaningMap!.interested]
+        : [],
+      callback: Array.isArray(dispConfig.meaningMap?.callback)
+        ? [...dispConfig.meaningMap!.callback]
+        : [],
+      dnc: Array.isArray(dispConfig.meaningMap?.dnc) ? [...dispConfig.meaningMap!.dnc] : [],
+    });
     setDirty(false);
   }, [dispConfig]);
+
+  const dispositionKeys = useMemo(() => {
+    const tax = categoriesToTaxonomy(categories);
+    const out: string[] = [];
+    for (const [primary, subs] of Object.entries(tax)) {
+      out.push(primary);
+      for (const sub of subs ?? []) {
+        if (sub && sub !== primary) out.push(`${primary}:${sub}`);
+      }
+    }
+    return out;
+  }, [categories]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -4175,7 +4208,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
         .filter((f): f is StoredDomainField => !!f);
       await customFetch(`${DASH_API}/disposition/config/${agentId}`, {
         method: "PUT",
-        body: JSON.stringify({ taxonomy, domainFields, rules }),
+        body: JSON.stringify({ taxonomy, domainFields, rules, meaningMap }),
       });
     },
     onSuccess: () => {
@@ -4361,6 +4394,61 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
             )}
           </div>
 
+          {/* ── Meaning map ──────────────────────────────────────────── */}
+          {dispositionKeys.length > 0 && (
+            <div>
+              <div className="mb-2">
+                <h4 className="text-xs font-semibold text-foreground">Funnel meaning</h4>
+                <p className="text-[10px] text-muted-foreground mt-0.5">
+                  Map your labels to SnapServe Interested / Callback / DNC so analytics and outcomes follow your taxonomy.
+                </p>
+              </div>
+              <div className="space-y-3">
+                {(
+                  [
+                    { key: "interested" as const, label: "Interested", hint: "Counts toward Interested KPI" },
+                    { key: "callback" as const, label: "Callback", hint: "Marks callback requested" },
+                    { key: "dnc" as const, label: "Do not call", hint: "Blocks as DNC outcome" },
+                  ] as const
+                ).map((row) => (
+                  <div key={row.key} className="rounded-xl border border-border/60 bg-card/20 p-3 space-y-2">
+                    <div>
+                      <p className="text-[12px] font-medium text-foreground">{row.label}</p>
+                      <p className="text-[10px] text-muted-foreground">{row.hint}</p>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {dispositionKeys.map((d) => {
+                        const on = meaningMap[row.key].includes(d);
+                        return (
+                          <button
+                            key={d}
+                            type="button"
+                            onClick={() => {
+                              setMeaningMap((prev) => {
+                                const list = prev[row.key];
+                                const next = on ? list.filter((x) => x !== d) : [...list, d];
+                                return { ...prev, [row.key]: next };
+                              });
+                              setDirty(true);
+                            }}
+                            className={cn(
+                              "rounded-full px-2.5 py-1 text-[11px] font-medium border transition-colors",
+                              on
+                                ? "bg-foreground text-background border-foreground"
+                                : "bg-muted/40 text-muted-foreground border-border hover:border-foreground/30",
+                            )}
+                          >
+                            {d}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* ── Data to collect ──────────────────────────────────────── */}
           <div>
             <div className="flex items-center justify-between mb-2">
@@ -4468,7 +4556,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
         </>
       )}
 
-      {(categories.length > 0 || fields.length > 0 || dirty) && (
+      {(categories.length > 0 || fields.length > 0 || dirty || dispositionKeys.length > 0) && (
         <div className="flex justify-end">
           <Button
             type="button"
