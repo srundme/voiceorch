@@ -9,10 +9,21 @@ export default function ChangelogPage() {
         description="Notable documentation and API-consumer changes."
       />
 
+      <h2 id="2026-08-10-builder-analytics">2026-08-10 — Analytics inside Agent Builder</h2>
+      <ul>
+        <li>
+          Agent Builder top-level <strong>Analytics</strong> tab — call volume, success, spend, latency
+          for that agent (same data as <code>/app/analytics/agents/:id</code>).
+        </li>
+        <li>
+          Settings → former Analytics sub-tab remains <strong>Webhooks</strong> (CRM post-call URL only).
+        </li>
+      </ul>
+
       <h2 id="2026-08-10-analytics-nav">2026-08-10 — Analytics in primary nav</h2>
       <ul>
         <li>
-          <strong>Analytics</strong> moved from sidebar More into the primary nav (with History).
+          Platform <strong>Analytics</strong> moved from sidebar More into the primary nav (with History).
         </li>
         <li>
           Agent Settings sub-tab renamed <strong>Webhooks</strong> (was mislabeled Analytics) so it

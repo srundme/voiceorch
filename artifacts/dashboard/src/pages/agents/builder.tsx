@@ -5,7 +5,7 @@ import {
   Bot, Plus, Search, Phone, Mic, Brain, Webhook, PhoneForwarded,
   Save, MoreHorizontal, Trash2, Settings, FileText, Wrench,
   VoicemailIcon, TestTube2, ChevronRight, ChevronLeft,
-  Volume2, Check, X, Pencil, ChevronDown, List, Globe,
+  Volume2, Check, X, Pencil, ChevronDown, List, Globe, BarChart3,
   User2, Users, Sparkles, BookOpen, ToggleLeft, ToggleRight, Tag, Loader2, Square, AudioLines,
   Play, Pause,
   Timer, ShieldCheck, Layers, Gauge, MicOff, HelpCircle, PhoneOff, Mail, MessageCircle,
@@ -113,6 +113,7 @@ import {
   type AgentTeamMembership,
 } from "./agent-team";
 import { ToolsWhatsappSetup, ToolsEmailSetup } from "./tools-messaging";
+import { AgentAnalyticsPanel } from "./agent-analytics-panel";
 import {
   PropertyRow,
   StatusDot,
@@ -125,7 +126,7 @@ const DASH_API   = `${_DASH_BASE}/api`;
 
 /* ── Types ──────────────────────────────────────────────────────────────────── */
 
-type TabId = "overview" | "prompt" | "voice" | "tools" | "outcomes" | "voicemail" | "settings" | "versions";
+type TabId = "overview" | "prompt" | "voice" | "tools" | "outcomes" | "analytics" | "voicemail" | "settings" | "versions";
 
 interface TabDef { id: TabId; label: string; icon: React.ReactNode }
 
@@ -135,6 +136,7 @@ const TABS: TabDef[] = [
   { id: "voice",     label: "Voice",     icon: <Mic className="h-3.5 w-3.5" /> },
   { id: "tools",     label: "Tools",     icon: <Wrench className="h-3.5 w-3.5" /> },
   { id: "outcomes",  label: "Outcomes",  icon: <Tag className="h-3.5 w-3.5" /> },
+  { id: "analytics", label: "Analytics", icon: <BarChart3 className="h-3.5 w-3.5" /> },
   { id: "voicemail", label: "Voicemail", icon: <VoicemailIcon className="h-3.5 w-3.5" /> },
   { id: "settings",  label: "Settings",  icon: <Settings className="h-3.5 w-3.5" /> },
   { id: "versions",  label: "Versions",  icon: <History className="h-3.5 w-3.5" /> },
@@ -155,6 +157,8 @@ function sectionFromSearch(search: string): TabId {
   if (requested === "disposition" || requested === "dispositions") {
     return "outcomes";
   }
+  // Old Settings → Analytics was webhooks; real agent analytics is its own tab now.
+  if (requested === "integrations") return "settings";
   return TABS.some((tab) => tab.id === requested) ? requested as TabId : "overview";
 }
 
@@ -520,11 +524,13 @@ function OverviewTab({
   form,
   agent,
   onGoToPrompt,
+  onGoToAnalytics,
   rateMap,
 }: {
   form: any;
   agent: any;
   onGoToPrompt?: () => void;
+  onGoToAnalytics?: () => void;
   rateMap: Map<string, number>;
 }) {
   const [openSection, setOpenSection] = useState<CardSection | null>(null);
@@ -797,18 +803,32 @@ function OverviewTab({
               </div>
               <AgentCostSummary form={form} rateMap={rateMap} variant="line" />
             </div>
-            {onGoToPrompt && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-8 gap-1.5 text-xs"
-                onClick={onGoToPrompt}
-              >
-                <FileText className="size-3.5" />
-                Edit prompt
-              </Button>
-            )}
+            <div className="flex flex-wrap items-center gap-2">
+              {onGoToAnalytics && agent?.id ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 gap-1.5 text-xs"
+                  onClick={onGoToAnalytics}
+                >
+                  <BarChart3 className="size-3.5" />
+                  Analytics
+                </Button>
+              ) : null}
+              {onGoToPrompt && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 gap-1.5 text-xs"
+                  onClick={onGoToPrompt}
+                >
+                  <FileText className="size-3.5" />
+                  Edit prompt
+                </Button>
+              )}
+            </div>
           </section>
 
           {/* Pipeline — primary composition */}
@@ -7160,6 +7180,7 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
                     agent={agent}
                     rateMap={rateMap}
                     onGoToPrompt={() => handleTabClick("prompt")}
+                    onGoToAnalytics={() => handleTabClick("analytics")}
                   />
                 )}
                 {activeTab === "prompt"    && <PromptTab form={form} agentId={agentId} />}
@@ -7169,6 +7190,9 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
                   <div className="px-4 py-5 sm:px-6 lg:px-8">
                     <DispositionSettingsPanel agentId={agent?.id ?? 0} />
                   </div>
+                )}
+                {activeTab === "analytics" && (
+                  <AgentAnalyticsPanel agentId={agent?.id ?? 0} embedded />
                 )}
                 {activeTab === "voicemail" && <VoicemailTab form={form} />}
                 {activeTab === "settings"  && <AdvancedTab form={form} agent={agent} />}

@@ -39,6 +39,14 @@ export default function AgentsPage() {
           under Tools.
         </li>
         <li>
+          <strong>Analytics</strong> (top-level Builder tab) — this agent’s call volume, success rate,
+          spend, and latency. Platform-wide funnel view stays at{" "}
+          <a href="https://app.snapserve.ai/app/analytics" target="_blank" rel="noreferrer">
+            /app/analytics
+          </a>
+          .
+        </li>
+        <li>
           <strong>Knowledge</strong> — attach a{" "}
           <Link href="/docs/knowledge-base">knowledge base</Link>.
         </li>
