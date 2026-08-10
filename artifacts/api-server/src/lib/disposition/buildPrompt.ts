@@ -36,19 +36,29 @@ export function buildPrompt(
   const exampleKey = categoryKeys[0] ?? "category";
   const exampleSub = cfg.taxonomy[exampleKey]?.[0] ?? "value";
 
+  const guides = cfg.outcomeGuides ?? {};
+  const guideLines = Object.entries(guides)
+    .map(([k, v]) => [k, (v ?? "").trim()] as const)
+    .filter(([, v]) => v.length > 0)
+    .map(([k, v]) => `- "${k}": ${v}`);
+  const guideBlock =
+    guideLines.length > 0
+      ? `\nHOW TO PICK EACH OUTCOME (business definitions from the account owner — follow these over generic sales intuition):\n${guideLines.join("\n")}\n`
+      : "";
+
   const domainInstructions =
     cfg.domainFields.length > 0
-      ? `\nAlso extract these domain-specific fields (set to null if not determinable):\n${cfg.domainFields
+      ? `\nAlso extract these domain-specific fields as STRUCTURED scalars (set to null if not determinable):\n${cfg.domainFields
           .map((f) => {
             const labelBit = f.label?.trim() ? ` "${f.label.trim()}"` : "";
             const enumStr = f.enum?.length
               ? ` (allowed values: ${f.enum.join(", ")}, or null)`
               : "";
             const phoneLike =
-              /whats?\s*app|wa[_\s-]?number|mobile|phone|cell|contact/i.test(f.key) ||
-              (!!f.label && /whats?\s*app|mobile|phone|cell|contact/i.test(f.label));
+              /whats?\s*app|wa[_\s-]?number|mobile|phone|cell|contact|alternate|alternative/i.test(f.key) ||
+              (!!f.label && /whats?\s*app|mobile|phone|cell|contact|alternate|alternative/i.test(f.label));
             const phoneHint = phoneLike
-              ? " — digits only (e.g. 9876543210), NEVER a sentence"
+              ? " — DIGITS ONLY (e.g. 9876543210). If spoken as words (\"eight nine zero…\" / Tamil digit words), convert to digits. NEVER a sentence."
               : f.type === "string"
                 ? " — short value only, NEVER a paragraph"
                 : "";
@@ -74,11 +84,12 @@ DATE & TIME CONTEXT:
 
 TAXONOMY — the ONLY valid primary → sub combinations:
 ${taxonomyJson}
-
-TASK: Analyse the call transcript and classify the CUSTOMER's intent and outcome.
+${guideBlock}
+TASK: Analyse the call transcript and classify the CUSTOMER's intent and outcome using the definitions above when provided.
 
 RULES:
 - disposition = what the CUSTOMER said/intended, NOT what the agent did
+- When a business definition is given for a sub value, use THAT definition — not a generic dictionary meaning of the word
 - evidence = single verbatim customer line that best supports the classification
 - If no quotable customer line exists → set confidence below 0.5
 - Judge intent equally across Hindi, Hinglish, Kannada, Tamil, Telugu, and English

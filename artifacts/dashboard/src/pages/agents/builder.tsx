@@ -4240,6 +4240,7 @@ type DispConfigRow = {
   rules?: unknown[];
   meaningMap?: MeaningMapState | null;
   afterCallMessages?: unknown;
+  outcomeGuides?: Record<string, string> | null;
 };
 
 function DispositionSettingsPanel({ agentId }: { agentId: number }) {
@@ -4254,8 +4255,15 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
     callback: [],
     dnc: [],
   });
+  const [outcomeGuides, setOutcomeGuides] = useState<Record<string, string>>({});
   const [afterCallMessages, setAfterCallMessages] = useState<AfterCallMessagesState>(EMPTY_AFTER_CALL_MESSAGES);
   const [dirty, setDirty] = useState(false);
+
+  const connectionsReturn = (setup: "whatsapp" | "email") => {
+    const returnTo = encodeURIComponent(`/app/agents/${agentId}?section=outcomes`);
+    const returnLabel = encodeURIComponent("Outcomes");
+    navigate(`/app/connections?setup=${setup}&agentId=${agentId}&returnTo=${returnTo}&returnLabel=${returnLabel}`);
+  };
 
   const { data: dispConfig, isLoading: dispLoading } = useQuery<DispConfigRow | null>({
     queryKey: ["disposition-config", agentId],
@@ -4315,10 +4323,16 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
         : [],
       dnc: Array.isArray(dispConfig.meaningMap?.dnc) ? [...dispConfig.meaningMap!.dnc] : [],
     });
+    setOutcomeGuides(
+      dispConfig.outcomeGuides && typeof dispConfig.outcomeGuides === "object"
+        ? { ...dispConfig.outcomeGuides }
+        : {},
+    );
     setAfterCallMessages(readAfterCallMessages(dispConfig.afterCallMessages));
     setDirty(false);
   }, [dispConfig]);
 
+  /** After-call rules: primary + primary:sub (matches dispositionMatchesAny). */
   const dispositionKeys = useMemo(() => {
     const tax = categoriesToTaxonomy(categories);
     const out: string[] = [];
@@ -4326,6 +4340,22 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
       out.push(primary);
       for (const sub of subs ?? []) {
         if (sub && sub !== primary) out.push(`${primary}:${sub}`);
+      }
+    }
+    return out;
+  }, [categories]);
+
+  /** Business-definition prompts: the labels AI actually picks (taxonomy values). */
+  const outcomeGuideKeys = useMemo(() => {
+    const tax = categoriesToTaxonomy(categories);
+    const out: string[] = [];
+    const seen = new Set<string>();
+    for (const vals of Object.values(tax)) {
+      for (const v of vals ?? []) {
+        const key = v.trim();
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        out.push(key);
       }
     }
     return out;
@@ -4348,6 +4378,21 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
         afterCallMessages.universal.whatsapp ||
         afterCallMessages.universal.email ||
         afterCallMessages.rules.length > 0;
+      const allowed = new Set<string>();
+      for (const [primary, vals] of Object.entries(taxonomy)) {
+        for (const v of vals ?? []) {
+          const t = v.trim();
+          if (!t) continue;
+          allowed.add(t);
+          allowed.add(`${primary}:${t}`);
+        }
+      }
+      const guides: Record<string, string> = {};
+      for (const [k, v] of Object.entries(outcomeGuides)) {
+        const key = k.trim();
+        const text = (v ?? "").trim();
+        if (key && text && allowed.has(key)) guides[key] = text;
+      }
       await customFetch(`${DASH_API}/disposition/config/${agentId}`, {
         method: "PUT",
         body: JSON.stringify({
@@ -4355,12 +4400,13 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
           domainFields,
           rules,
           meaningMap,
+          outcomeGuides: guides,
           ...(persistAfterCall ? { afterCallMessages } : {}),
         }),
       });
     },
     onSuccess: () => {
-      toast({ title: "Disposition config saved" });
+      toast({ title: "Outcomes saved" });
       setDirty(false);
       void qc.invalidateQueries({ queryKey: ["disposition-config", agentId] });
     },
@@ -4451,7 +4497,8 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
           <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Outcomes</h3>
         </div>
         <p className="text-[11px] text-muted-foreground">
-          After each call, AI picks an outcome and fills the data fields you define (WhatsApp, email, city…). Values show on the call detail page.
+          After each call, AI reads the transcript, picks one of <em>your</em> outcome labels
+          (using the business definitions you write), and extracts data fields as structured values.
         </p>
       </div>
 
@@ -4465,8 +4512,10 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
           <div>
             <div className="flex items-center justify-between mb-2">
               <div>
-                <h4 className="text-xs font-semibold text-foreground">Outcomes</h4>
-                <p className="text-[10px] text-muted-foreground mt-0.5">Category → allowed values the AI can pick</p>
+                <h4 className="text-xs font-semibold text-foreground">Outcome labels</h4>
+                <p className="text-[10px] text-muted-foreground mt-0.5">
+                  Add labels, then define what each means for your business — that text is what the AI uses.
+                </p>
               </div>
               <Button type="button" variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={addCategory}>
                 <Plus className="h-3.5 w-3.5" /> Add category
@@ -4508,7 +4557,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                         </div>
                         <div className="space-y-1">
                           <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
-                            Values <span className="normal-case">(comma-separated)</span>
+                            Labels <span className="normal-case">(comma-separated)</span>
                           </label>
                           <Input
                             className="h-8 text-xs"
@@ -4528,70 +4577,41 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     </div>
-                    {cat.values && (
-                      <div className="flex flex-wrap gap-1 mt-3">
-                        {cat.values.split(",").map((v) => v.trim()).filter(Boolean).map((v) => (
-                          <span key={v} className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                            {v}
-                          </span>
-                        ))}
-                      </div>
-                    )}
                   </div>
                 ))}
               </div>
             )}
           </div>
 
-          {/* ── Meaning map ──────────────────────────────────────────── */}
-          {dispositionKeys.length > 0 && (
+          {/* ── Per-outcome business definitions ─────────────────────── */}
+          {outcomeGuideKeys.length > 0 && (
             <div>
               <div className="mb-2">
-                <h4 className="text-xs font-semibold text-foreground">Funnel meaning</h4>
+                <h4 className="text-xs font-semibold text-foreground">What each label means</h4>
                 <p className="text-[10px] text-muted-foreground mt-0.5">
-                  Map your labels to SnapServe Interested / Callback / DNC so analytics and outcomes follow your taxonomy.
+                  Your definitions — not a sales funnel. Example for <span className="font-mono">interested</span>:
+                  “Asked for pricing, budget confirmed, or agreed to a site visit this week.”
                 </p>
               </div>
-              <div className="space-y-3">
-                {(
-                  [
-                    { key: "interested" as const, label: "Interested", hint: "Counts toward Interested KPI" },
-                    { key: "callback" as const, label: "Callback", hint: "Marks callback requested" },
-                    { key: "dnc" as const, label: "Do not call", hint: "Blocks as DNC outcome" },
-                  ] as const
-                ).map((row) => (
-                  <div key={row.key} className="rounded-xl border border-border/60 bg-card/20 p-3 space-y-2">
-                    <div>
-                      <p className="text-[12px] font-medium text-foreground">{row.label}</p>
-                      <p className="text-[10px] text-muted-foreground">{row.hint}</p>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {dispositionKeys.map((d) => {
-                        const on = meaningMap[row.key].includes(d);
-                        return (
-                          <button
-                            key={d}
-                            type="button"
-                            onClick={() => {
-                              setMeaningMap((prev) => {
-                                const list = prev[row.key];
-                                const next = on ? list.filter((x) => x !== d) : [...list, d];
-                                return { ...prev, [row.key]: next };
-                              });
-                              setDirty(true);
-                            }}
-                            className={cn(
-                              "rounded-full px-2.5 py-1 text-[11px] font-medium border transition-colors",
-                              on
-                                ? "bg-foreground text-background border-foreground"
-                                : "bg-muted/40 text-muted-foreground border-border hover:border-foreground/30",
-                            )}
-                          >
-                            {d}
-                          </button>
-                        );
-                      })}
-                    </div>
+              <div className="space-y-2.5">
+                {outcomeGuideKeys.map((key) => (
+                  <div key={key} className="rounded-xl border border-border/60 bg-card/20 p-3 space-y-1.5">
+                    <label className="text-[12px] font-medium text-foreground font-mono">{key}</label>
+                    <Textarea
+                      className="min-h-[72px] resize-y text-[12px] leading-relaxed"
+                      placeholder={`When should AI pick “${key}” for your business? List the call signals…`}
+                      value={outcomeGuides[key] ?? ""}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setOutcomeGuides((prev) => {
+                          const next = { ...prev };
+                          if (!v.trim()) delete next[key];
+                          else next[key] = v;
+                          return next;
+                        });
+                        setDirty(true);
+                      }}
+                    />
                   </div>
                 ))}
               </div>
@@ -4607,7 +4627,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                   <h4 className="text-xs font-semibold text-foreground">After-call messages</h4>
                 </div>
                 <p className="text-[10px] text-muted-foreground mt-0.5">
-                  Post-call WhatsApp / email from this agent. Mid-call send is under Tools. Campaigns only push leads to CRM/Sheets.
+                  WhatsApp / email after the call ends. Connecting channels opens a setup page — use Back to Outcomes when finished.
                 </p>
               </div>
               <Button
@@ -4654,7 +4674,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                       type="button"
                       size="sm"
                       className="h-7 text-[10px]"
-                      onClick={() => navigate(`/app/connections?setup=whatsapp&agentId=${agentId}`)}
+                      onClick={() => connectionsReturn("whatsapp")}
                     >
                       Set up WhatsApp
                     </Button>
@@ -4665,20 +4685,9 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                       size="sm"
                       variant={whatsappReady ? "default" : "outline"}
                       className="h-7 text-[10px]"
-                      onClick={() => navigate(`/app/connections?setup=email&agentId=${agentId}`)}
+                      onClick={() => connectionsReturn("email")}
                     >
                       Set up email
-                    </Button>
-                  )}
-                  {(whatsappReady || emailReady) && (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 text-[10px]"
-                      onClick={() => navigate("/app/connections")}
-                    >
-                      Open Connections
                     </Button>
                   )}
                 </div>
@@ -4709,15 +4718,27 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                   <span className={cn("size-1.5 rounded-full", emailReady ? "bg-emerald-500" : "bg-muted-foreground/50")} />
                   Email {emailReady ? "ready" : "not connected"}
                 </span>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 text-[10px] px-2"
-                  onClick={() => navigate("/app/connections")}
-                >
-                  Connections
-                </Button>
+                {!whatsappReady ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 text-[10px] px-2"
+                    onClick={() => connectionsReturn("whatsapp")}
+                  >
+                    Connect WhatsApp
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 text-[10px] px-2"
+                    onClick={() => connectionsReturn("whatsapp")}
+                  >
+                    Manage WhatsApp
+                  </Button>
+                )}
               </div>
             )}
 
@@ -4875,7 +4896,8 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
               <div>
                 <h4 className="text-xs font-semibold text-foreground">Data to collect</h4>
                 <p className="text-[10px] text-muted-foreground mt-0.5">
-                  Extracted as bare values (WhatsApp → digits only, not a paragraph)
+                  AI pulls these from the transcript after the call as structured fields.
+                  Phone / WhatsApp / alternate number → digits only (spoken “eight nine…” is converted).
                 </p>
               </div>
               <Button type="button" variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => addField()}>

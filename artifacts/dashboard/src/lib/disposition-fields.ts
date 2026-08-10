@@ -34,8 +34,8 @@ export function uiTypeFromStored(field: StoredDomainField): UiDomainFieldType {
   if (field.type === "number") return "number";
   if (field.enum?.length) return "choice";
   if (
-    /whats?\s*app|wa[_\s-]?number|mobile|phone|cell/i.test(field.key) ||
-    (field.label && /whats?\s*app|mobile|phone|cell/i.test(field.label))
+    /whats?\s*app|wa[_\s-]?number|mobile|phone|cell|alternate|alternative/i.test(field.key) ||
+    (field.label && /whats?\s*app|mobile|phone|cell|alternate|alternative/i.test(field.label))
   ) {
     return "phone";
   }
@@ -46,7 +46,10 @@ export function toStoredDomainField(ui: UiDomainField): StoredDomainField | null
   const label = ui.label.trim();
   let key = (ui.key.trim() || slugDispositionKey(label)).replace(/[^a-zA-Z0-9_]/g, "_");
   if (!key) return null;
-  if (ui.uiType === "phone" && !/(whats?app|wa_|mobile|phone|cell|contact_?number|^tel$)/i.test(key)) {
+  if (
+    ui.uiType === "phone" &&
+    !/(whats?app|wa_|mobile|phone|cell|contact_?number|alternate|alternative|^tel$)/i.test(key)
+  ) {
     key = `whatsapp_${key}`;
   }
   if (ui.uiType === "yes_no") return { key, type: "boolean", label: label || key };
@@ -76,6 +79,7 @@ export const DOMAIN_FIELD_QUICK_ADDS: Array<{ label: string; key: string; uiType
   { label: "Email", key: "email", uiType: "text" },
   { label: "City", key: "city", uiType: "text" },
   { label: "Callback time", key: "callback_time", uiType: "text" },
+  { label: "Alternate number", key: "alternate_number", uiType: "phone" },
 ];
 
 export const OUTCOME_PRESETS: Array<{ id: string; name: string; taxonomy: Record<string, string[]> }> = [

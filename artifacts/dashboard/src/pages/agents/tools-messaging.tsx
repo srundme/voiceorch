@@ -99,7 +99,12 @@ export function ToolsWhatsappSetup({ agentId }: { agentId: number }) {
                 variant="ghost"
                 size="sm"
                 className="h-7 text-[10px]"
-                onClick={() => navigate(`/app/connections?setup=whatsapp&agentId=${agentId}`)}
+                onClick={() => {
+                  const returnTo = encodeURIComponent(`/app/agents/${agentId}?section=tools`);
+                  navigate(
+                    `/app/connections?setup=whatsapp&agentId=${agentId}&returnTo=${returnTo}&returnLabel=${encodeURIComponent("Tools")}`,
+                  );
+                }}
               >
                 Connections
               </Button>
@@ -131,7 +136,12 @@ export function ToolsWhatsappSetup({ agentId }: { agentId: number }) {
             type="button"
             size="sm"
             className="mt-2 h-7 text-[10px]"
-            onClick={() => navigate(`/app/connections?setup=whatsapp&agentId=${agentId}`)}
+            onClick={() => {
+              const returnTo = encodeURIComponent(`/app/agents/${agentId}?section=tools`);
+              navigate(
+                `/app/connections?setup=whatsapp&agentId=${agentId}&returnTo=${returnTo}&returnLabel=${encodeURIComponent("Tools")}`,
+              );
+            }}
           >
             Connect WhatsApp
           </Button>

@@ -85,6 +85,7 @@ export const DOMAIN_FIELD_QUICK_ADDS: Array<{ label: string; key: string; uiType
   { label: "Email", key: "email", uiType: "text" },
   { label: "City", key: "city", uiType: "text" },
   { label: "Callback time", key: "callback_time", uiType: "text" },
+  { label: "Alternate number", key: "alternate_number", uiType: "phone" },
 ];
 
 /** Outcome taxonomy presets. */

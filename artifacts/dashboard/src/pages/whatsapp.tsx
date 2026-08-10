@@ -1359,11 +1359,34 @@ export default function WhatsAppPage() {
     },
   });
 
+  const returnParams = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+  let returnToRaw = returnParams.get("returnTo");
+  // Tolerate accidental double-encoding from nested navigations.
+  if (returnToRaw?.includes("%2F") || returnToRaw?.includes("%2f")) {
+    try {
+      returnToRaw = decodeURIComponent(returnToRaw);
+    } catch {
+      /* keep raw */
+    }
+  }
+  const returnLabelRaw = returnParams.get("returnLabel");
+  const backHref =
+    returnToRaw && returnToRaw.startsWith("/app/") && !returnToRaw.startsWith("//")
+      ? returnToRaw
+      : "/app/connections";
+  const backLabel =
+    returnLabelRaw?.trim()
+    || (backHref.includes("/agents/")
+      ? "Back to Outcomes"
+      : backHref.includes("section=tools")
+        ? "Back to Tools"
+        : "Connections");
+
   return (
     <StripePage
       title="WhatsApp"
-      description="Automatic WhatsApp follow-ups after every AI call — booking confirmations, summaries and callback alerts. Customers can reply to get a call back."
-      back={{ href: "/app/connections", label: "Connections" }}
+      description="Connect your WhatsApp Business (Meta API) for mid-call and after-call messages. Use the back link above to return to your agent — this page only sets up the channel."
+      back={{ href: backHref, label: backLabel }}
     >
       <div className="space-y-6">
       <NativeSection agents={agents} onChooseBsp={() => openBspCreate("webhook")} onChooseMeta={() => openBspCreate("meta")} metaConnected={connections.some((c) => c.active && c.metaPhoneNumberId)} />

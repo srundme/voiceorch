@@ -252,11 +252,33 @@ export default function ConnectionsPage() {
     meta: metaReady,
   };
 
+  const searchParams = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+  let returnToRaw = searchParams.get("returnTo");
+  if (returnToRaw?.includes("%2F") || returnToRaw?.includes("%2f")) {
+    try {
+      returnToRaw = decodeURIComponent(returnToRaw);
+    } catch {
+      /* keep raw */
+    }
+  }
+  const returnLabelRaw = searchParams.get("returnLabel");
+  const setupBackFromReturn =
+    returnToRaw && returnToRaw.startsWith("/app/") && !returnToRaw.startsWith("//")
+      ? {
+          href: returnToRaw,
+          label: returnLabelRaw?.trim()
+            || (returnToRaw.includes("/agents/")
+              ? (returnToRaw.includes("section=outcomes") ? "Back to Outcomes" : "Back to agent")
+              : "Back"),
+        }
+      : null;
+
   if (setup === "calendar") {
     return <ConnectionsCalendarSetup />;
   }
 
   // Same pattern as email/meta/sheets — stay under Connections (?setup=whatsapp).
+  // WhatsAppPage reads returnTo/returnLabel from the URL search itself.
   if (setup === "whatsapp") {
     return <WhatsAppPage />;
   }
@@ -265,8 +287,8 @@ export default function ConnectionsPage() {
     return (
       <StripePage
         title="Email (Brevo)"
-        description="Three steps: from address, API key, test. Template is optional."
-        back={{ href: "/app/connections", label: "Connections" }}
+        description="Three steps: from address, API key, test. Template is optional. Use the back link to return where you came from."
+        back={setupBackFromReturn ?? { href: "/app/connections", label: "Connections" }}
       >
         <div className="max-w-lg">
           <EmailChannelCard forceExpanded setupMode />
@@ -275,10 +297,11 @@ export default function ConnectionsPage() {
     );
   }
 
-  const fromCampaigns = new URLSearchParams(search).get("from") === "campaigns";
-  const setupBack = fromCampaigns
-    ? { href: "/app/campaigns", label: "Campaigns" }
-    : { href: "/app/connections", label: "Connections" };
+  const fromCampaigns = searchParams.get("from") === "campaigns";
+  const setupBack = setupBackFromReturn
+    ?? (fromCampaigns
+      ? { href: "/app/campaigns", label: "Campaigns" }
+      : { href: "/app/connections", label: "Connections" });
 
   if (setup === "website") {
     return (

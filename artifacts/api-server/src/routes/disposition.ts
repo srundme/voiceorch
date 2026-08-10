@@ -38,6 +38,8 @@ const AfterCallMessagesSchema = z.object({
   })).optional().default([]),
 }).nullable().optional();
 
+const OutcomeGuidesSchema = z.record(z.string().min(1).max(120), z.string().max(2000)).optional();
+
 const UpsertConfigBody = z.object({
   taxonomy:     TaxonomyMapSchema,
   domainFields: z.array(z.object({
@@ -55,6 +57,8 @@ const UpsertConfigBody = z.object({
   })).optional().default([]),
   meaningMap: MeaningMapSchema,
   afterCallMessages: AfterCallMessagesSchema,
+  /** Business definition per outcome value (e.g. interested → "asked for demo…"). */
+  outcomeGuides: OutcomeGuidesSchema,
 });
 
 /* ── GET /api/disposition/config/:agentId ────────────────────────────────── */
@@ -78,6 +82,7 @@ router.get("/disposition/config/:agentId", requireAuth, clientContext, async (re
       rules: [],
       meaningMap: { interested: [], callback: [], dnc: [] },
       afterCallMessages: null,
+      outcomeGuides: {},
     });
     return;
   }
@@ -86,6 +91,7 @@ router.get("/disposition/config/:agentId", requireAuth, clientContext, async (re
     ...row,
     meaningMap: row.meaningMap ?? { interested: [], callback: [], dnc: [] },
     afterCallMessages: row.afterCallMessages ?? null,
+    outcomeGuides: row.outcomeGuides ?? {},
   });
 });
 
@@ -103,7 +109,7 @@ router.put("/disposition/config/:agentId", requireAuth, clientContext, async (re
     return;
   }
 
-  const { taxonomy, domainFields, rules, meaningMap, afterCallMessages } = parsed.data;
+  const { taxonomy, domainFields, rules, meaningMap, afterCallMessages, outcomeGuides } = parsed.data;
 
   const meaning =
     meaningMap === undefined
@@ -121,6 +127,15 @@ router.put("/disposition/config/:agentId", requireAuth, clientContext, async (re
       ? undefined
       : normalizeAfterCallMessagesInput(afterCallMessages);
 
+  const guides =
+    outcomeGuides === undefined
+      ? undefined
+      : Object.fromEntries(
+          Object.entries(outcomeGuides)
+            .map(([k, v]) => [k.trim(), (v ?? "").trim()] as const)
+            .filter(([k, v]) => k.length > 0 && v.length > 0),
+        );
+
   await db
     .insert(agentDispositionsTable)
     .values({
@@ -130,6 +145,7 @@ router.put("/disposition/config/:agentId", requireAuth, clientContext, async (re
       rules:        rules as any,
       ...(meaning !== undefined ? { meaningMap: meaning } : {}),
       ...(afterMsgs !== undefined ? { afterCallMessages: afterMsgs } : {}),
+      ...(guides !== undefined ? { outcomeGuides: guides } : {}),
     })
     .onConflictDoUpdate({
       target: agentDispositionsTable.agentId,
@@ -139,6 +155,7 @@ router.put("/disposition/config/:agentId", requireAuth, clientContext, async (re
         rules:        rules as any,
         ...(meaning !== undefined ? { meaningMap: meaning } : {}),
         ...(afterMsgs !== undefined ? { afterCallMessages: afterMsgs } : {}),
+        ...(guides !== undefined ? { outcomeGuides: guides } : {}),
         updatedAt:    new Date(),
       },
     });

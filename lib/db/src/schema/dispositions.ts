@@ -80,6 +80,8 @@ export const agentDispositionsTable = pgTable("agent_dispositions", {
   rules: jsonb("rules").default([]).$type<TenantRule[]>(),
   meaningMap: jsonb("meaning_map").$type<DispositionMeaningMap | null>(),
   afterCallMessages: jsonb("after_call_messages").$type<AgentAfterCallMessages | null>(),
+  /** Maps taxonomy value → business definition for the extraction LLM. */
+  outcomeGuides: jsonb("outcome_guides").$type<Record<string, string> | null>(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
 
