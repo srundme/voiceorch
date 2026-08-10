@@ -3686,23 +3686,35 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
             }).catch((err) => logger.warn({ sessionId, err }, "Sheets auto-call writeback failed"));
           }).catch(() => {});
 
-          // ── Disposition-branched after-call (WA / email / webhook) ──────────
-          // When branches are configured, they gate WhatsApp; otherwise legacy always-on.
+          // ── After-call messaging (agent-owned) + legacy campaign webhooks ───
+          // Agent after-call rules own WhatsApp/email. Campaign branches only fire
+          // legacy webhooks. Legacy always-on WhatsApp runs when agent has no rules.
+          import("../services/agent-after-call-messages.js").then(({ maybeRunAgentAfterCallMessages }) => {
+            maybeRunAgentAfterCallMessages({
+              callId: session.callId,
+              agentId: ag.id,
+              campaignLeadId: session.campaignLeadId,
+              dispositionResult,
+              callSummary: callSummary || null,
+            }).then((agentMsg) => {
+              if (!agentMsg.configured) {
+                import("../services/whatsapp/outbound.js").then(({ dispatchWhatsappCallEnded }) => {
+                  dispatchWhatsappCallEnded(session.callId, {
+                    callSummary: callSummary || null,
+                    dispositionResult,
+                  }).catch((err) => logger.warn({ sessionId, err }, "WhatsApp post-call notify failed"));
+                }).catch(() => {});
+              }
+            }).catch((err) => logger.warn({ sessionId, err }, "Agent after-call messages failed"));
+          }).catch(() => {});
+
           import("../services/campaign-after-call.js").then(({ maybeRunAfterCallBranches }) => {
             maybeRunAfterCallBranches({
               callId: session.callId,
               campaignLeadId: session.campaignLeadId,
               dispositionResult,
               callSummary: callSummary || null,
-            }).then((branchResult) => {
-              if (branchResult.gated) return;
-              import("../services/whatsapp/outbound.js").then(({ dispatchWhatsappCallEnded }) => {
-                dispatchWhatsappCallEnded(session.callId, {
-                  callSummary: callSummary || null,
-                  dispositionResult,
-                }).catch((err) => logger.warn({ sessionId, err }, "WhatsApp post-call notify failed"));
-              }).catch(() => {});
-            }).catch((err) => logger.warn({ sessionId, err }, "After-call branches failed"));
+            }).catch((err) => logger.warn({ sessionId, err }, "After-call webhook branches failed"));
           }).catch(() => {});
 
           // ── Zelto call monitoring (fire-and-forget) ─────────────────────────

@@ -4134,15 +4134,67 @@ type MeaningMapState = {
   dnc: string[];
 };
 
+type AfterCallMsgRule = {
+  id: string;
+  dispositions: string[];
+  whatsapp: boolean;
+  email: boolean;
+};
+
+type AfterCallMessagesState = {
+  universal: { whatsapp: boolean; email: boolean };
+  skipUniversalWhenMatched: boolean;
+  rules: AfterCallMsgRule[];
+};
+
+const EMPTY_AFTER_CALL_MESSAGES: AfterCallMessagesState = {
+  universal: { whatsapp: false, email: false },
+  skipUniversalWhenMatched: true,
+  rules: [],
+};
+
+function readAfterCallMessages(raw: unknown): AfterCallMessagesState {
+  if (!raw || typeof raw !== "object") return { ...EMPTY_AFTER_CALL_MESSAGES, rules: [] };
+  const o = raw as Record<string, unknown>;
+  const u = o["universal"] && typeof o["universal"] === "object"
+    ? (o["universal"] as Record<string, unknown>)
+    : {};
+  const rules = Array.isArray(o["rules"])
+    ? o["rules"]
+        .map((item) => {
+          if (!item || typeof item !== "object") return null;
+          const r = item as Record<string, unknown>;
+          const dispositions = Array.isArray(r["dispositions"])
+            ? r["dispositions"].filter((d): d is string => typeof d === "string" && !!d.trim())
+            : [];
+          if (!dispositions.length) return null;
+          return {
+            id: typeof r["id"] === "string" && r["id"] ? r["id"] : crypto.randomUUID(),
+            dispositions,
+            whatsapp: !!r["whatsapp"],
+            email: !!r["email"],
+          };
+        })
+        .filter((r): r is AfterCallMsgRule => !!r)
+    : [];
+  return {
+    universal: { whatsapp: !!u["whatsapp"], email: !!u["email"] },
+    skipUniversalWhenMatched: o["skipUniversalWhenMatched"] !== false,
+    rules,
+  };
+}
+
 type DispConfigRow = {
   taxonomy: Record<string, string[]>;
   domainFields?: StoredDomainField[];
   rules?: unknown[];
   meaningMap?: MeaningMapState | null;
+  afterCallMessages?: unknown;
 };
 
 function DispositionSettingsPanel({ agentId }: { agentId: number }) {
   const { toast } = useToast();
+  const qc = useQueryClient();
   const [categories, setCategories] = useState<DispositionCategory[]>([]);
   const [fields, setFields] = useState<UiDomainField[]>([]);
   const [rules, setRules] = useState<unknown[]>([]);
@@ -4151,6 +4203,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
     callback: [],
     dnc: [],
   });
+  const [afterCallMessages, setAfterCallMessages] = useState<AfterCallMessagesState>(EMPTY_AFTER_CALL_MESSAGES);
   const [dirty, setDirty] = useState(false);
 
   const { data: dispConfig, isLoading: dispLoading } = useQuery<DispConfigRow | null>({
@@ -4180,6 +4233,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
         : [],
       dnc: Array.isArray(dispConfig.meaningMap?.dnc) ? [...dispConfig.meaningMap!.dnc] : [],
     });
+    setAfterCallMessages(readAfterCallMessages(dispConfig.afterCallMessages));
     setDirty(false);
   }, [dispConfig]);
 
@@ -4206,14 +4260,27 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
       const domainFields = fields
         .map(toStoredDomainField)
         .filter((f): f is StoredDomainField => !!f);
+      // Don't persist empty after-call config on first save — that would gate off legacy always-on WhatsApp.
+      const persistAfterCall =
+        dispConfig?.afterCallMessages != null ||
+        afterCallMessages.universal.whatsapp ||
+        afterCallMessages.universal.email ||
+        afterCallMessages.rules.length > 0;
       await customFetch(`${DASH_API}/disposition/config/${agentId}`, {
         method: "PUT",
-        body: JSON.stringify({ taxonomy, domainFields, rules, meaningMap }),
+        body: JSON.stringify({
+          taxonomy,
+          domainFields,
+          rules,
+          meaningMap,
+          ...(persistAfterCall ? { afterCallMessages } : {}),
+        }),
       });
     },
     onSuccess: () => {
       toast({ title: "Disposition config saved" });
       setDirty(false);
+      void qc.invalidateQueries({ queryKey: ["disposition-config", agentId] });
     },
     onError: () => {
       toast({ title: "Failed to save", variant: "destructive" });
@@ -4448,6 +4515,192 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
               </div>
             </div>
           )}
+
+          {/* ── After-call messages (agent-owned) ─────────────────────── */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <MessageCircle className="h-3.5 w-3.5 text-muted-foreground" />
+                  <h4 className="text-xs font-semibold text-foreground">After-call messages</h4>
+                </div>
+                <p className="text-[10px] text-muted-foreground mt-0.5">
+                  Send WhatsApp / email from this agent. Templates live in Connections. Campaigns only push leads to CRM/Sheets.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs gap-1"
+                disabled={dispositionKeys.length === 0}
+                onClick={() => {
+                  setAfterCallMessages((prev) => ({
+                    ...prev,
+                    rules: [
+                      ...prev.rules,
+                      {
+                        id: crypto.randomUUID(),
+                        dispositions: dispositionKeys[0] ? [dispositionKeys[0]] : [],
+                        whatsapp: true,
+                        email: false,
+                      },
+                    ],
+                  }));
+                  setDirty(true);
+                }}
+              >
+                <Plus className="h-3.5 w-3.5" /> Add rule
+              </Button>
+            </div>
+
+            <div className="rounded-xl border border-border/60 bg-card/20 p-3 space-y-3 mb-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[12px] font-medium text-foreground">Every call</p>
+                  <p className="text-[10px] text-muted-foreground">Universal follow-up for all leads</p>
+                </div>
+                <div className="flex items-center gap-4">
+                  <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                    <Switch
+                      checked={afterCallMessages.universal.whatsapp}
+                      onCheckedChange={(v) => {
+                        setAfterCallMessages((prev) => ({
+                          ...prev,
+                          universal: { ...prev.universal, whatsapp: v },
+                        }));
+                        setDirty(true);
+                      }}
+                    />
+                    WhatsApp
+                  </label>
+                  <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                    <Switch
+                      checked={afterCallMessages.universal.email}
+                      onCheckedChange={(v) => {
+                        setAfterCallMessages((prev) => ({
+                          ...prev,
+                          universal: { ...prev.universal, email: v },
+                        }));
+                        setDirty(true);
+                      }}
+                    />
+                    Email
+                  </label>
+                </div>
+              </div>
+              {afterCallMessages.rules.length > 0 && (
+                <label className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                  <Switch
+                    checked={afterCallMessages.skipUniversalWhenMatched}
+                    onCheckedChange={(v) => {
+                      setAfterCallMessages((prev) => ({ ...prev, skipUniversalWhenMatched: v }));
+                      setDirty(true);
+                    }}
+                  />
+                  Skip universal when a disposition rule matches
+                </label>
+              )}
+            </div>
+
+            {afterCallMessages.rules.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-border/50 p-4 text-center">
+                <p className="text-xs text-muted-foreground/60">
+                  {dispositionKeys.length === 0
+                    ? "Add outcomes first, then map WhatsApp / email per disposition."
+                    : "No disposition rules yet — use Add rule, or turn on Every call."}
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {afterCallMessages.rules.map((rule) => (
+                  <div key={rule.id} className="rounded-xl border border-border/60 bg-card/20 p-3 space-y-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex flex-wrap gap-1.5 flex-1">
+                        {dispositionKeys.map((d) => {
+                          const on = rule.dispositions.includes(d);
+                          return (
+                            <button
+                              key={d}
+                              type="button"
+                              onClick={() => {
+                                setAfterCallMessages((prev) => ({
+                                  ...prev,
+                                  rules: prev.rules.map((r) => {
+                                    if (r.id !== rule.id) return r;
+                                    const next = on
+                                      ? r.dispositions.filter((x) => x !== d)
+                                      : [...r.dispositions, d];
+                                    return { ...r, dispositions: next.length ? next : r.dispositions };
+                                  }),
+                                }));
+                                setDirty(true);
+                              }}
+                              className={cn(
+                                "rounded-full px-2.5 py-1 text-[11px] font-medium border transition-colors",
+                                on
+                                  ? "bg-foreground text-background border-foreground"
+                                  : "bg-muted/40 text-muted-foreground border-border hover:border-foreground/30",
+                              )}
+                            >
+                              {d}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
+                        onClick={() => {
+                          setAfterCallMessages((prev) => ({
+                            ...prev,
+                            rules: prev.rules.filter((r) => r.id !== rule.id),
+                          }));
+                          setDirty(true);
+                        }}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                        <Switch
+                          checked={rule.whatsapp}
+                          onCheckedChange={(v) => {
+                            setAfterCallMessages((prev) => ({
+                              ...prev,
+                              rules: prev.rules.map((r) =>
+                                r.id === rule.id ? { ...r, whatsapp: v } : r,
+                              ),
+                            }));
+                            setDirty(true);
+                          }}
+                        />
+                        WhatsApp
+                      </label>
+                      <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                        <Switch
+                          checked={rule.email}
+                          onCheckedChange={(v) => {
+                            setAfterCallMessages((prev) => ({
+                              ...prev,
+                              rules: prev.rules.map((r) =>
+                                r.id === rule.id ? { ...r, email: v } : r,
+                              ),
+                            }));
+                            setDirty(true);
+                          }}
+                        />
+                        Email
+                      </label>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
           {/* ── Data to collect ──────────────────────────────────────── */}
           <div>

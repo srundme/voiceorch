@@ -1,6 +1,6 @@
 /**
- * Disposition-branched after-call actions for campaigns:
- * WhatsApp / email / custom webhook when disposition matches a branch.
+ * Legacy campaign after-call branches — webhook only.
+ * WhatsApp / email are owned by the agent (see agent-after-call-messages).
  */
 import { eq } from "drizzle-orm";
 import {
@@ -8,13 +8,10 @@ import {
   campaignsTable,
   campaignLeadsTable,
   callsTable,
-  agentsTable,
   type AfterCallBranch,
 } from "@workspace/db";
 import { logger } from "../lib/logger.js";
 import { dispositionMatchesAny, formatDispositionLabel } from "../lib/disposition-match.js";
-import { dispatchWhatsappCallEnded } from "./whatsapp/outbound.js";
-import { sendChannelEmail } from "./email-channel.js";
 
 export function parseAfterCallBranches(raw: unknown): AfterCallBranch[] {
   if (!Array.isArray(raw)) return [];
@@ -54,8 +51,8 @@ function cryptoRandomId(): string {
 }
 
 /**
- * Run matching after-call branches. When campaign has no branches configured,
- * returns `{ gated: false }` so the caller can keep legacy WhatsApp always-on.
+ * Run matching after-call webhook branches (legacy). Messaging is never gated here.
+ * Always returns `{ gated: false }` so agent rules / legacy WhatsApp own messaging.
  */
 export async function maybeRunAfterCallBranches(opts: {
   callId: number;
@@ -107,57 +104,11 @@ export async function maybeRunAfterCallBranches(opts: {
     dispositionMatchesAny(dispositionResult, b.dispositions, legacyLabel),
   );
   if (!matching.length) {
-    return { gated: true, ran: [], reason: "no_matching_branch" };
+    return { gated: false, ran: [], reason: "no_matching_branch" };
   }
 
   const ran: string[] = [];
-  const wantWhatsapp = matching.some((b) => b.actions.includes("whatsapp"));
-  const wantEmail = matching.some((b) => b.actions.includes("email"));
   const webhookBranches = matching.filter((b) => b.actions.includes("webhook") && b.webhookUrl);
-
-  if (wantWhatsapp) {
-    try {
-      await dispatchWhatsappCallEnded(opts.callId, {
-        callSummary: opts.callSummary,
-        dispositionResult,
-      });
-      ran.push("whatsapp");
-    } catch (err) {
-      logger.warn({ err, callId: opts.callId }, "After-call WhatsApp branch failed");
-    }
-  }
-
-  if (wantEmail) {
-    try {
-      const [agent] = campaign.agentId
-        ? await db
-            .select({ name: agentsTable.name })
-            .from(agentsTable)
-            .where(eq(agentsTable.id, campaign.agentId))
-            .limit(1)
-        : [null];
-      const to = (lead.email ?? "").trim();
-      if (to) {
-        const result = await sendChannelEmail({
-          userId: campaign.userId,
-          toEmail: to,
-          callId: opts.callId,
-          context: {
-            name: lead.name ?? "",
-            phone: lead.phone,
-            email: to,
-            agent_name: agent?.name ?? "",
-            campaign_name: campaign.name,
-            disposition: formatDispositionLabel(dispositionResult) || legacyLabel || "",
-            summary: opts.callSummary ?? call?.callSummary ?? "",
-          },
-        });
-        if (result.ok) ran.push("email");
-      }
-    } catch (err) {
-      logger.warn({ err, callId: opts.callId }, "After-call email branch failed");
-    }
-  }
 
   for (const br of webhookBranches) {
     try {
@@ -195,7 +146,7 @@ export async function maybeRunAfterCallBranches(opts: {
 
   logger.info(
     { campaignId: campaign.id, leadId: lead.id, callId: opts.callId, ran },
-    "After-call branches executed",
+    "After-call webhook branches executed",
   );
-  return { gated: true, ran };
+  return { gated: false, ran };
 }

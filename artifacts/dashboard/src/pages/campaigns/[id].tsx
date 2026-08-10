@@ -38,7 +38,7 @@ import {
   PhoneIncoming, ArrowRightLeft, Radio, Ban,
   TrendingUp, DollarSign, Target, MoreVertical, Eye,
   KeyRound, Link2, Link2Off, Loader2, Instagram,
-  Download, GitBranch,
+  Download,
 } from "lucide-react";
 import { CallDetailDrawer } from "@/components/call-detail-drawer";
 import { TablePagination } from "@/components/table-pagination";
@@ -58,12 +58,6 @@ import {
   type LeadTransferForm,
 } from "./lead-transfer-settings";
 import {
-  AfterCallBranchesSettings,
-  afterCallBranchesReady,
-  readAfterCallBranches,
-  toAfterCallBranchesPayload,
-  type AfterCallBranchForm,
-} from "./after-call-branches-settings";
 import { customFetch } from "@workspace/api-client-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -1341,8 +1335,6 @@ export default function CampaignDetailPage() {
   const [activeTab, setActiveTab] = useState<CampaignTab>("overview");
   const [leadTransferForm, setLeadTransferForm] = useState<LeadTransferForm>(EMPTY_LEAD_TRANSFER);
   const [savingTransfer, setSavingTransfer] = useState(false);
-  const [afterCallBranches, setAfterCallBranches] = useState<AfterCallBranchForm[]>([]);
-  const [savingBranches, setSavingBranches] = useState(false);
   const [actingDisposition, setActingDisposition] = useState<string | null>(null);
 
   useEffect(() => {
@@ -1354,7 +1346,6 @@ export default function CampaignDetailPage() {
     setHoursTz   (d.timezone ?? "Asia/Kolkata");
     setHoursEnabled(d.isCallingHoursEnabled !== false);
     setLeadTransferForm(readLeadTransfer(d.leadTransfer));
-    setAfterCallBranches(readAfterCallBranches(d.afterCallBranches));
   }, [campaign]);
 
   async function handleSaveLeadTransfer() {
@@ -1379,30 +1370,6 @@ export default function CampaignDetailPage() {
       toast({ title: "Failed to save lead transfer", variant: "destructive" });
     } finally {
       setSavingTransfer(false);
-    }
-  }
-
-  async function handleSaveAfterCallBranches() {
-    if (!afterCallBranchesReady(afterCallBranches)) {
-      toast({
-        title: "Incomplete after-call branches",
-        description: "Each branch needs dispositions, actions, and a valid webhook URL when used.",
-        variant: "destructive",
-      });
-      return;
-    }
-    setSavingBranches(true);
-    try {
-      await update.mutateAsync({
-        id: campaignId,
-        data: { afterCallBranches: toAfterCallBranchesPayload(afterCallBranches) } as any,
-      });
-      await qc.invalidateQueries({ queryKey: getGetCampaignQueryKey(campaignId) });
-      toast({ title: "After-call branches saved" });
-    } catch {
-      toast({ title: "Failed to save after-call branches", variant: "destructive" });
-    } finally {
-      setSavingBranches(false);
     }
   }
 
@@ -1870,29 +1837,9 @@ export default function CampaignDetailPage() {
                 Save lead transfer
               </Button>
             </div>
-          </div>
-
-          <div className="bg-card border border-border rounded-xl p-4 space-y-4">
-            <div className="flex items-center gap-2 mb-1">
-              <GitBranch className="h-4 w-4 text-muted-foreground/50" />
-              <span className="sr-only">After-call</span>
-            </div>
-            <AfterCallBranchesSettings
-              agentId={campaign.agentId ?? null}
-              value={afterCallBranches}
-              onChange={setAfterCallBranches}
-            />
-            <div className="flex justify-end">
-              <Button
-                size="sm"
-                className="h-8 text-xs gap-1.5"
-                disabled={savingBranches || update.isPending}
-                onClick={() => void handleSaveAfterCallBranches()}
-              >
-                {savingBranches ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-                Save after-call branches
-              </Button>
-            </div>
+            <p className="text-[10px] text-muted-foreground">
+              WhatsApp / email after a call are configured on the agent (Builder → Disposition → After-call messages).
+            </p>
           </div>
 
           {/* Calling Hours — instant trigger campaigns only */}
