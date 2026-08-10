@@ -3651,6 +3651,18 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
             });
           }
 
+          // ── Campaign lead transfer (disposition-gated webhook / Sheets) ─────
+          if (session.campaignLeadId) {
+            import("../services/campaign-lead-transfer.js").then(({ maybeTransferCampaignLead }) => {
+              maybeTransferCampaignLead({
+                callId: session.callId,
+                campaignLeadId: session.campaignLeadId,
+                dispositionResult,
+                callSummary: callSummary || null,
+              }).catch((err) => logger.warn({ sessionId, err }, "Campaign lead transfer failed"));
+            }).catch(() => {});
+          }
+
           // ── Google Sheets writeback (after summary/disposition) ─────────────
           // ── Google Sheets Automatic Calls writeback (pipeline only) ─────────
           import("../services/sheets-writeback.js").then(({ writeSheetAutoCallResults }) => {

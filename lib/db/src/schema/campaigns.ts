@@ -38,6 +38,27 @@ export type CampaignValidationError = {
   reason: string;
 };
 
+/**
+ * After a campaign call ends, if disposition matches, push lead data to a
+ * webhook (any CRM via Zapier/Make) and/or append a Google Sheet row.
+ */
+export type CampaignLeadTransferConfig = {
+  enabled: boolean;
+  /**
+   * Disposition keys to transfer. Matches taxonomy primary, "primary:sub",
+   * or legacy disposition string values (case-insensitive).
+   */
+  dispositions: string[];
+  destination: "webhook" | "google_sheets";
+  webhookUrl?: string;
+  /** Optional HMAC secret — sent as X-SnapServe-Signature when set. */
+  webhookSecret?: string;
+  /** Google Sheets connection uuid. */
+  connectionId?: string;
+  spreadsheetId?: string;
+  sheetName?: string;
+};
+
 export const campaignsTable = pgTable("campaigns", {
   id:                   serial("id").primaryKey(),
   userId:               text("user_id").notNull(),
@@ -80,6 +101,8 @@ export const campaignsTable = pgTable("campaigns", {
   // Meta webhooks only carry the leadgen_id — the actual fields (phone, name, email)
   // must be retrieved via GET /{leadgen_id}?fields=field_data&access_token=...
   metaPageAccessToken:  text("meta_page_access_token"),
+  /** Disposition-filtered lead push to webhook and/or Google Sheets. */
+  leadTransfer:         json("lead_transfer").$type<CampaignLeadTransferConfig | null>(),
   createdAt:            timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt:            timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

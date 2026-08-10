@@ -2030,7 +2030,6 @@ export const ListAvailablePhoneNumbersResponse = zod.array(ListAvailablePhoneNum
  * @summary Start a phone-number purchase — creates a Razorpay INR order for ₹800 + 18% GST. The number is NOT provisioned until payment is confirmed via purchase/confirm.
  */
 export const initiatePhoneNumberPurchaseBodyNumberTypeDefault = `local`;
-
 export const initiatePhoneNumberPurchaseBodyRenewalModeDefault = `wallet`;
 
 export const InitiatePhoneNumberPurchaseBody = zod.object({
@@ -2317,6 +2316,16 @@ export const ListCampaignsResponseItem = zod.object({
   "timestamp": zod.coerce.date().optional(),
   "reason": zod.string().optional()
 }).nullish().describe('Most recent form_id mismatch audit record. Null when no validation failures have occurred.'),
+  "leadTransfer": zod.object({
+  "enabled": zod.boolean(),
+  "dispositions": zod.array(zod.string()).describe('Taxonomy primary, primary:sub, or legacy disposition values to transfer.'),
+  "destination": zod.enum(['webhook', 'google_sheets']),
+  "webhookUrl": zod.string().optional().describe('HTTPS webhook URL (Zapier\/Make\/n8n\/CRM). Required when destination=webhook.'),
+  "webhookSecret": zod.string().optional().describe('Optional HMAC secret for X-SnapServe-Signature.'),
+  "connectionId": zod.string().uuid().optional().describe('Google Sheets connection id. Required when destination=google_sheets.'),
+  "spreadsheetId": zod.string().optional().describe('Google spreadsheet id. Required when destination=google_sheets.'),
+  "sheetName": zod.string().optional().describe('Tab name. Defaults to Sheet1.')
+}).nullish().describe('After each campaign call, transfer matching dispositions to a webhook (any CRM) or Google Sheet.'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -2352,7 +2361,17 @@ export const CreateCampaignBody = zod.object({
   "consentDateRange": zod.string().optional().describe('Required when basisType is fresh_marketing_consent.'),
   "proofReference": zod.string().optional(),
   "notes": zod.string().optional().describe('Required when basisType is other.')
-}).optional().describe('DPDP consent basis. Required when the assigned agent has DPDP compliance enabled. Record-keeping only — never blocks dialing.')
+}).optional().describe('DPDP consent basis. Required when the assigned agent has DPDP compliance enabled. Record-keeping only — never blocks dialing.'),
+  "leadTransfer": zod.object({
+  "enabled": zod.boolean(),
+  "dispositions": zod.array(zod.string()).describe('Taxonomy primary, primary:sub, or legacy disposition values to transfer.'),
+  "destination": zod.enum(['webhook', 'google_sheets']),
+  "webhookUrl": zod.string().optional().describe('HTTPS webhook URL (Zapier\/Make\/n8n\/CRM). Required when destination=webhook.'),
+  "webhookSecret": zod.string().optional().describe('Optional HMAC secret for X-SnapServe-Signature.'),
+  "connectionId": zod.string().uuid().optional().describe('Google Sheets connection id. Required when destination=google_sheets.'),
+  "spreadsheetId": zod.string().optional().describe('Google spreadsheet id. Required when destination=google_sheets.'),
+  "sheetName": zod.string().optional().describe('Tab name. Defaults to Sheet1.')
+}).optional().describe('Optional. Auto-transfer leads whose dispositions match after each campaign call.')
 })
 
 
@@ -2404,6 +2423,16 @@ export const GetCampaignResponse = zod.object({
   "timestamp": zod.coerce.date().optional(),
   "reason": zod.string().optional()
 }).nullish().describe('Most recent form_id mismatch audit record. Null when no validation failures have occurred.'),
+  "leadTransfer": zod.object({
+  "enabled": zod.boolean(),
+  "dispositions": zod.array(zod.string()).describe('Taxonomy primary, primary:sub, or legacy disposition values to transfer.'),
+  "destination": zod.enum(['webhook', 'google_sheets']),
+  "webhookUrl": zod.string().optional().describe('HTTPS webhook URL (Zapier\/Make\/n8n\/CRM). Required when destination=webhook.'),
+  "webhookSecret": zod.string().optional().describe('Optional HMAC secret for X-SnapServe-Signature.'),
+  "connectionId": zod.string().uuid().optional().describe('Google Sheets connection id. Required when destination=google_sheets.'),
+  "spreadsheetId": zod.string().optional().describe('Google spreadsheet id. Required when destination=google_sheets.'),
+  "sheetName": zod.string().optional().describe('Tab name. Defaults to Sheet1.')
+}).nullish().describe('After each campaign call, transfer matching dispositions to a webhook (any CRM) or Google Sheet.'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -2436,7 +2465,17 @@ export const UpdateCampaignBody = zod.object({
   "timezone": zod.string().nullish().describe('IANA timezone for businessHoursStart\/End evaluation.'),
   "sourceFormId": zod.string().nullish().describe('Expected lead-form ID from the source platform (e.g. Meta form_id).'),
   "sourcePageId": zod.string().nullish().describe('Expected page\/account ID from the source platform (e.g. Meta page_id).'),
-  "metaPageAccessToken": zod.string().nullish().describe('Meta Page Access Token used to fetch lead field_data from the Graph API. Stored encrypted at rest; pass null to clear. Never returned in GET responses.')
+  "metaPageAccessToken": zod.string().nullish().describe('Meta Page Access Token used to fetch lead field_data from the Graph API. Stored encrypted at rest; pass null to clear. Never returned in GET responses.'),
+  "leadTransfer": zod.object({
+  "enabled": zod.boolean(),
+  "dispositions": zod.array(zod.string()).describe('Taxonomy primary, primary:sub, or legacy disposition values to transfer.'),
+  "destination": zod.enum(['webhook', 'google_sheets']),
+  "webhookUrl": zod.string().optional().describe('HTTPS webhook URL (Zapier\/Make\/n8n\/CRM). Required when destination=webhook.'),
+  "webhookSecret": zod.string().optional().describe('Optional HMAC secret for X-SnapServe-Signature.'),
+  "connectionId": zod.string().uuid().optional().describe('Google Sheets connection id. Required when destination=google_sheets.'),
+  "spreadsheetId": zod.string().optional().describe('Google spreadsheet id. Required when destination=google_sheets.'),
+  "sheetName": zod.string().optional().describe('Tab name. Defaults to Sheet1.')
+}).nullish().describe('Update disposition-gated lead transfer. Pass null to clear.')
 })
 
 export const updateCampaignResponseConcurrentCallLimitDefault = 10;
@@ -2480,6 +2519,16 @@ export const UpdateCampaignResponse = zod.object({
   "timestamp": zod.coerce.date().optional(),
   "reason": zod.string().optional()
 }).nullish().describe('Most recent form_id mismatch audit record. Null when no validation failures have occurred.'),
+  "leadTransfer": zod.object({
+  "enabled": zod.boolean(),
+  "dispositions": zod.array(zod.string()).describe('Taxonomy primary, primary:sub, or legacy disposition values to transfer.'),
+  "destination": zod.enum(['webhook', 'google_sheets']),
+  "webhookUrl": zod.string().optional().describe('HTTPS webhook URL (Zapier\/Make\/n8n\/CRM). Required when destination=webhook.'),
+  "webhookSecret": zod.string().optional().describe('Optional HMAC secret for X-SnapServe-Signature.'),
+  "connectionId": zod.string().uuid().optional().describe('Google Sheets connection id. Required when destination=google_sheets.'),
+  "spreadsheetId": zod.string().optional().describe('Google spreadsheet id. Required when destination=google_sheets.'),
+  "sheetName": zod.string().optional().describe('Tab name. Defaults to Sheet1.')
+}).nullish().describe('After each campaign call, transfer matching dispositions to a webhook (any CRM) or Google Sheet.'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })

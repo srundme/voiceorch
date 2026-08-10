@@ -8937,12 +8937,48 @@ components:
               format: date-time
             reason:
               type: string
+        leadTransfer:
+          $ref: "#/components/schemas/CampaignLeadTransfer"
+          nullable: true
+          description: "After each campaign call, transfer matching dispositions to a webhook (any CRM) or Google Sheet."
         createdAt:
           type: string
           format: date-time
         updatedAt:
           type: string
           format: date-time
+
+    CampaignLeadTransfer:
+      type: object
+      required: [enabled, dispositions, destination]
+      description: "Disposition-gated lead push for campaign calls only."
+      properties:
+        enabled:
+          type: boolean
+        dispositions:
+          type: array
+          items:
+            type: string
+          description: "Taxonomy primary, primary:sub, or legacy disposition values to transfer."
+        destination:
+          type: string
+          enum: [webhook, google_sheets]
+        webhookUrl:
+          type: string
+          description: "HTTPS webhook URL (Zapier/Make/n8n/CRM). Required when destination=webhook."
+        webhookSecret:
+          type: string
+          description: "Optional HMAC secret for X-SnapServe-Signature."
+        connectionId:
+          type: string
+          format: uuid
+          description: "Google Sheets connection id. Required when destination=google_sheets."
+        spreadsheetId:
+          type: string
+          description: "Google spreadsheet id. Required when destination=google_sheets."
+        sheetName:
+          type: string
+          description: "Tab name. Defaults to Sheet1."
 
     CampaignCreate:
       type: object
@@ -8984,6 +9020,9 @@ components:
         consentBasis:
           $ref: "#/components/schemas/ConsentBasis"
           description: "DPDP consent basis. Required when the assigned agent has DPDP compliance enabled. Record-keeping only — never blocks dialing."
+        leadTransfer:
+          $ref: "#/components/schemas/CampaignLeadTransfer"
+          description: "Optional. Auto-transfer leads whose dispositions match after each campaign call."
 
     ConsentBasis:
       type: object
@@ -9100,6 +9139,10 @@ components:
           type: string
           nullable: true
           description: "Meta Page Access Token used to fetch lead field_data from the Graph API. Stored encrypted at rest; pass null to clear. Never returned in GET responses."
+        leadTransfer:
+          $ref: "#/components/schemas/CampaignLeadTransfer"
+          nullable: true
+          description: "Update disposition-gated lead transfer. Pass null to clear."
 
     CampaignLead:
       type: object

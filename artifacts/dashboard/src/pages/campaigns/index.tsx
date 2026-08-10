@@ -48,6 +48,13 @@ import { cn } from "@/lib/utils";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { MetricCard, MetricStrip } from "@/components/metric-strip";
 import { BrandLogo, BrandLogoBadge } from "@/components/brand-logos";
+import {
+  EMPTY_LEAD_TRANSFER,
+  LeadTransferSettings,
+  leadTransferReady,
+  toLeadTransferPayload,
+  type LeadTransferForm,
+} from "./lead-transfer-settings";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -398,11 +405,17 @@ function CampaignRow({
 
 // ── Campaign Creation Wizard ──────────────────────────────────────────────
 
-const WIZARD_STEPS = ["info", "source", "crm_mode", "agent", "settings", "review"] as const;
+const WIZARD_STEPS = ["info", "source", "crm_mode", "agent", "transfer", "settings", "review"] as const;
 type WizardStep = (typeof WIZARD_STEPS)[number];
 
 const STEP_LABELS: Record<WizardStep, string> = {
-  info: "Details", source: "Source", crm_mode: "CRM Mode", agent: "Agent", settings: "Settings", review: "Review",
+  info: "Details",
+  source: "Source",
+  crm_mode: "CRM Mode",
+  agent: "Agent",
+  transfer: "Transfer",
+  settings: "Settings",
+  review: "Review",
 };
 
 type CampaignLeadSource = "csv" | "webhook" | "meta_ads" | "crm";
@@ -519,6 +532,7 @@ function CampaignWizard({
   const [consentDateRange, setConsentDateRange] = useState("");
   const [consentProofRef, setConsentProofRef] = useState("");
   const [consentNotes, setConsentNotes] = useState("");
+  const [leadTransfer, setLeadTransfer] = useState<LeadTransferForm>(EMPTY_LEAD_TRANSFER);
 
   const liveAgentIds = new Set(
     activeCampaigns.filter(c => c.status === "active").map(c => c.agentId).filter(Boolean)
@@ -560,6 +574,7 @@ function CampaignWizard({
     setAgentId(null); setSquadId(null); setConcurrentCallLimit(null);
     setConsentBasisType(""); setConsentSource(""); setConsentDateRange("");
     setConsentProofRef(""); setConsentNotes("");
+    setLeadTransfer(EMPTY_LEAD_TRANSFER);
   }
   function close() { reset(); onClose(); }
 
@@ -591,6 +606,7 @@ function CampaignWizard({
     if (step === "source") return !!leadSource;
     if (step === "crm_mode") return true;
     if (step === "agent") return agentId !== null;
+    if (step === "transfer") return leadTransferReady(leadTransfer);
     return true;
   }
 
@@ -625,6 +641,7 @@ function CampaignWizard({
         };
       };
       const d = cfg.callDefaults ?? {};
+      const transferPayload = toLeadTransferPayload(leadTransfer);
       const created = await create.mutateAsync({
         data: {
           name: name.trim(),
@@ -638,6 +655,7 @@ function CampaignWizard({
           maxAttempts: d.maxAttempts,
           retryDelayMinutes: d.retryDelayMinutes,
           callDelaySeconds: d.callDelaySeconds,
+          ...(transferPayload ? { leadTransfer: transferPayload } : {}),
         } as Parameters<typeof create.mutateAsync>[0]["data"],
       });
       if (squadId) {
@@ -954,6 +972,14 @@ function CampaignWizard({
             </div>
           )}
 
+          {step === "transfer" && (
+            <LeadTransferSettings
+              agentId={agentId}
+              value={leadTransfer}
+              onChange={setLeadTransfer}
+            />
+          )}
+
           {step === "settings" && (
             <div className="space-y-5">
               <div>
@@ -1012,6 +1038,15 @@ function CampaignWizard({
                     value: dispositionLabels.length
                       ? `${dispositionLabels.length} on agent`
                       : "None configured",
+                    mono: false,
+                  },
+                  {
+                    label: "Lead transfer",
+                    value: leadTransfer.enabled
+                      ? `${leadTransfer.dispositions.length} disposition(s) → ${
+                          leadTransfer.destination === "google_sheets" ? "Google Sheets" : "CRM webhook"
+                        }`
+                      : "Off",
                     mono: false,
                   },
                 ].map(r => (

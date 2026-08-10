@@ -1336,6 +1336,14 @@ router.patch("/calls/:id/end", requireAuth, clientContext, async (req, res): Pro
       writeCrmCallOutcome(call.id).catch(() => {});
     }).catch(() => {});
 
+    import("../services/campaign-lead-transfer.js").then(({ maybeTransferCampaignLead }) => {
+      maybeTransferCampaignLead({
+        callId: call.id,
+        dispositionResult: (payload["dispositionResult"] as Record<string, unknown> | null) ?? null,
+        callSummary: (payload["callSummary"] as string | null) ?? null,
+      }).catch(() => {});
+    }).catch(() => {});
+
     import("../services/sheets-writeback.js").then(({ writeSheetAutoCallResults }) => {
       writeSheetAutoCallResults(call.id, {
         callSummary: (payload["callSummary"] as string | null) ?? null,

@@ -48,6 +48,14 @@ import IncomingCallsTab from "./incoming";
 import CallbacksTab from "./callbacks";
 import TransfersTab from "./transfers";
 import BookingsTab from "./bookings";
+import {
+  EMPTY_LEAD_TRANSFER,
+  LeadTransferSettings,
+  leadTransferReady,
+  readLeadTransfer,
+  toLeadTransferPayload,
+  type LeadTransferForm,
+} from "./lead-transfer-settings";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -1322,6 +1330,8 @@ export default function CampaignDetailPage() {
   const [hoursTz,    setHoursTz]    = useState<string>("Asia/Kolkata");
   const [hoursEnabled, setHoursEnabled] = useState<boolean>(true);
   const [activeTab, setActiveTab] = useState<CampaignTab>("overview");
+  const [leadTransferForm, setLeadTransferForm] = useState<LeadTransferForm>(EMPTY_LEAD_TRANSFER);
+  const [savingTransfer, setSavingTransfer] = useState(false);
 
   useEffect(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1331,7 +1341,33 @@ export default function CampaignDetailPage() {
     setHoursEnd  (d.businessHoursEnd   != null ? String(d.businessHoursEnd)   : "");
     setHoursTz   (d.timezone ?? "Asia/Kolkata");
     setHoursEnabled(d.isCallingHoursEnabled !== false);
+    setLeadTransferForm(readLeadTransfer(d.leadTransfer));
   }, [campaign]);
+
+  async function handleSaveLeadTransfer() {
+    if (!leadTransferReady(leadTransferForm)) {
+      toast({
+        title: "Incomplete transfer settings",
+        description: "Pick dispositions and a valid destination, or turn transfer off.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const payload = toLeadTransferPayload(leadTransferForm);
+    setSavingTransfer(true);
+    try {
+      await update.mutateAsync({
+        id: campaignId,
+        data: { leadTransfer: payload } as any,
+      });
+      await qc.invalidateQueries({ queryKey: getGetCampaignQueryKey(campaignId) });
+      toast({ title: "Lead transfer saved" });
+    } catch {
+      toast({ title: "Failed to save lead transfer", variant: "destructive" });
+    } finally {
+      setSavingTransfer(false);
+    }
+  }
 
   const webhookUrl = campaign
     ? `${window.location.origin}${BASE}/api/webhooks/lead/${campaign.webhookToken}`
@@ -1666,6 +1702,26 @@ export default function CampaignDetailPage() {
           {(campaign as any).leadSource === "crm" && (
             <CrmIntegrationCard campaignId={campaignId} triggerMode={(campaign as any).triggerMode} webhookToken={campaign.webhookToken} />
           )}
+
+          <div className="bg-card border border-border rounded-xl p-4 space-y-4">
+            <LeadTransferSettings
+              agentId={campaign.agentId ?? null}
+              value={leadTransferForm}
+              onChange={setLeadTransferForm}
+              compact
+            />
+            <div className="flex justify-end">
+              <Button
+                size="sm"
+                className="h-8 text-xs gap-1.5"
+                disabled={savingTransfer || update.isPending}
+                onClick={() => void handleSaveLeadTransfer()}
+              >
+                {savingTransfer ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                Save lead transfer
+              </Button>
+            </div>
+          </div>
 
           {/* Calling Hours — instant trigger campaigns only */}
           {(campaign as unknown as Record<string, unknown>)["triggerMode"] === "instant" && (

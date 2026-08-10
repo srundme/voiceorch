@@ -12,6 +12,7 @@ import { encryptKey, decryptKey } from "../lib/crypto.js";
 import { eq, and, count, desc, inArray, isNull, ne } from "drizzle-orm";
 import { scheduleCampaignCall } from "../orchestration/campaignCaller.js";
 import { evaluateIrdaiGate, IRDAI_BLOCKED_MESSAGE, IRDAI_BLOCKED_CODE, type IrdaiGateResult } from "../services/irdai/gate.js";
+import { normalizeLeadTransferInput } from "../services/campaign-lead-transfer.js";
 
 const router: IRouter = Router();
 
@@ -118,6 +119,7 @@ function toCampaign(row: typeof campaignsTable.$inferSelect) {
     metaPageAccessTokenHint:   row.metaPageAccessToken
       ? (() => { try { const t = decryptKey(row.metaPageAccessToken!); return `…${t.slice(-6)}`; } catch { return "…(set)"; } })()
       : null,
+    leadTransfer:          row.leadTransfer ?? null,
     createdAt:             row.createdAt.toISOString(),
     updatedAt:             row.updatedAt.toISOString(),
   };
@@ -305,6 +307,10 @@ router.post("/campaigns", async (req, res): Promise<void> => {
 
   const leadSource = (parsed.data as Record<string, unknown>)["leadSource"] as string ?? "csv";
   const isContinuous = ["webhook", "meta_ads", "crm"].includes(leadSource);
+  const leadTransfer = normalizeLeadTransferInput(
+    (parsed.data as Record<string, unknown>)["leadTransfer"] ??
+      (req.body as Record<string, unknown> | undefined)?.["leadTransfer"],
+  );
 
   const [campaign] = await db.insert(campaignsTable).values({
     userId,
@@ -322,6 +328,7 @@ router.post("/campaigns", async (req, res): Promise<void> => {
     webhookToken:        randomUUID(),
     status:              isContinuous ? "active" : "draft",
     isActive:            isContinuous,
+    leadTransfer,
   }).returning();
 
   if (dpdpEnabled && consentBasis) {
@@ -388,11 +395,19 @@ router.patch("/campaigns/:id", async (req, res): Promise<void> => {
   }
 
   // If toggling isActive, also sync status field
-  const { fieldMappings: rawMappings, metaPageAccessToken: rawMetaToken, isCallingHoursEnabled, ...rest } = parsed.data as typeof parsed.data & { metaPageAccessToken?: string | null };
+  const { fieldMappings: rawMappings, metaPageAccessToken: rawMetaToken, isCallingHoursEnabled, leadTransfer: rawLeadTransfer, ...rest } = parsed.data as typeof parsed.data & {
+    metaPageAccessToken?: string | null;
+    leadTransfer?: unknown;
+  };
   const updateData: Partial<typeof campaignsTable.$inferInsert> = { ...rest };
   // isCallingHoursEnabled is boolean (not nullable in schema); treat null as "leave unchanged"
   if (isCallingHoursEnabled != null) updateData.isCallingHoursEnabled = isCallingHoursEnabled;
   if (rawMappings) updateData.fieldMappings = rawMappings as CampaignFieldMappings;
+  if (rawLeadTransfer !== undefined || (req.body as Record<string, unknown> | undefined)?.["leadTransfer"] !== undefined) {
+    updateData.leadTransfer = normalizeLeadTransferInput(
+      rawLeadTransfer ?? (req.body as Record<string, unknown>)["leadTransfer"],
+    );
+  }
   // Encrypt the Meta Page Access Token at rest (same pattern as provider API keys).
   // null clears the stored token; undefined means "not provided — leave unchanged".
   if (rawMetaToken !== undefined) {

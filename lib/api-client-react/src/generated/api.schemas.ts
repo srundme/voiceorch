@@ -1896,7 +1896,11 @@ export const PhoneNumberStatus = {
   released: 'released',
 } as const;
 
+/**
+ * How renewals are funded — autopay uses a Razorpay card mandate to top up the wallet; wallet uses balance only (unpaid past grace → release).
+ */
 export type PhoneNumberRenewalMode = typeof PhoneNumberRenewalMode[keyof typeof PhoneNumberRenewalMode];
+
 
 export const PhoneNumberRenewalMode = {
   autopay: 'autopay',
@@ -1977,7 +1981,11 @@ export const PurchasePhoneNumberInputNumberType = {
   mobile: 'mobile',
 } as const;
 
+/**
+ * Autopay keeps the number via card mandate top-ups; wallet renews from balance only (unpaid → release after grace).
+ */
 export type PurchasePhoneNumberInputRenewalMode = typeof PurchasePhoneNumberInputRenewalMode[keyof typeof PurchasePhoneNumberInputRenewalMode];
+
 
 export const PurchasePhoneNumberInputRenewalMode = {
   autopay: 'autopay',
@@ -2248,6 +2256,34 @@ export type CampaignLastValidationError = {
   reason?: string;
 } | null;
 
+export type CampaignLeadTransferDestination = typeof CampaignLeadTransferDestination[keyof typeof CampaignLeadTransferDestination];
+
+
+export const CampaignLeadTransferDestination = {
+  webhook: 'webhook',
+  google_sheets: 'google_sheets',
+} as const;
+
+/**
+ * Disposition-gated lead push for campaign calls only.
+ */
+export interface CampaignLeadTransfer {
+  enabled: boolean;
+  /** Taxonomy primary, primary:sub, or legacy disposition values to transfer. */
+  dispositions: string[];
+  destination: CampaignLeadTransferDestination;
+  /** HTTPS webhook URL (Zapier/Make/n8n/CRM). Required when destination=webhook. */
+  webhookUrl?: string;
+  /** Optional HMAC secret for X-SnapServe-Signature. */
+  webhookSecret?: string;
+  /** Google Sheets connection id. Required when destination=google_sheets. */
+  connectionId?: string;
+  /** Google spreadsheet id. Required when destination=google_sheets. */
+  spreadsheetId?: string;
+  /** Tab name. Defaults to Sheet1. */
+  sheetName?: string;
+}
+
 export interface Campaign {
   id: number;
   name: string;
@@ -2290,6 +2326,8 @@ export interface Campaign {
   metaPageAccessTokenHint?: string | null;
   /** Most recent form_id mismatch audit record. Null when no validation failures have occurred. */
   lastValidationError?: CampaignLastValidationError;
+  /** After each campaign call, transfer matching dispositions to a webhook (any CRM) or Google Sheet. */
+  leadTransfer?: CampaignLeadTransfer | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -2357,6 +2395,8 @@ export interface CampaignCreate {
   retryDelayMinutes?: number;
   /** DPDP consent basis. Required when the assigned agent has DPDP compliance enabled. Record-keeping only — never blocks dialing. */
   consentBasis?: ConsentBasis;
+  /** Optional. Auto-transfer leads whose dispositions match after each campaign call. */
+  leadTransfer?: CampaignLeadTransfer;
 }
 
 export type ConsentBasisRecordBasisType = typeof ConsentBasisRecordBasisType[keyof typeof ConsentBasisRecordBasisType];
@@ -2444,6 +2484,8 @@ export interface CampaignUpdate {
   sourcePageId?: string | null;
   /** Meta Page Access Token used to fetch lead field_data from the Graph API. Stored encrypted at rest; pass null to clear. Never returned in GET responses. */
   metaPageAccessToken?: string | null;
+  /** Update disposition-gated lead transfer. Pass null to clear. */
+  leadTransfer?: CampaignLeadTransfer | null;
 }
 
 export type CampaignLeadLeadData = {[key: string]: string};
