@@ -80,7 +80,7 @@ const FAQS: { q: string; a: ReactNode }[] = [
     a: (
       <>
         HMAC of <code>{"{timestamp}.{rawBody}"}</code> vs <code>X-SnapServe-Signature</code>.{" "}
-        <Link href="/docs/webhooks">Webhooks</Link>.
+        <Link href="/docs/webhooks">Event subscriptions</Link>.
       </>
     ),
   },

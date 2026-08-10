@@ -26,7 +26,7 @@ curl -X POST https://app.snapserve.ai/api/calls/outbound -H "Authorization: Bear
 
       <Callout variant="tip" title="Tip">
         Prefer webhooks over polling for production — see{" "}
-        <Link href="/docs/webhooks">Webhooks</Link>.
+        <Link href="/docs/webhooks">Event subscriptions</Link>.
       </Callout>
 
       <h2 id="1-list-agents">1. List agents</h2>
