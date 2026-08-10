@@ -3191,19 +3191,21 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
         <div className="flex items-center justify-between mb-3">
           <div>
             <h3 className="text-sm font-semibold mb-0.5">Custom Tools</h3>
-            <p className="text-xs text-muted-foreground">Your own HTTP functions the LLM can invoke mid-conversation</p>
+            <p className="text-xs text-muted-foreground">
+              Mid-call HTTP to your API (while talking). Not the same as post-call notify or Developers event subscriptions.
+            </p>
           </div>
           <Button type="button" variant="outline" size="sm" className="h-7 text-xs"
             onClick={() => append({ type: "webhook", name: "custom_action", description: "Invoke when caller requests a specific action.", url: "", method: "POST", secret: "", preToolMessage: "One moment…", parameters: [] })}>
-            <Webhook className="h-3.5 w-3.5 mr-1" /> Custom Function
+            <Webhook className="h-3.5 w-3.5 mr-1" /> Mid-call HTTP
           </Button>
         </div>
 
         {(form.watch("tools") ?? []).filter((t: { type: string }) => t.type === "webhook").length === 0 ? (
           <div className="rounded-xl border border-dashed border-border/50 p-8 text-center">
             <Wrench className="h-7 w-7 text-muted-foreground/20 mx-auto mb-2" />
-            <p className="text-sm font-medium text-muted-foreground/50">No custom tools</p>
-            <p className="text-xs text-muted-foreground/30 mt-0.5">Add a Custom Function above</p>
+            <p className="text-sm font-medium text-muted-foreground/50">No mid-call HTTP tools</p>
+            <p className="text-xs text-muted-foreground/30 mt-0.5">Add Mid-call HTTP above</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -3214,7 +3216,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                 <div key={field.id} className="rounded-xl border border-border/60 bg-card/30 p-4 space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-                      <Webhook className="h-3 w-3" />Custom Function
+                      <Webhook className="h-3 w-3" />Mid-call HTTP
                     </span>
                     <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => remove(index)}>
                       <Trash2 className="h-3.5 w-3.5" />
@@ -3473,8 +3475,8 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
   const nav: { id: AdvSection; icon: React.ReactNode; label: string }[] = [
     { id: "engine",       icon: <Timer className="h-3.5 w-3.5" />,       label: "Engine"     },
     { id: "limits",       icon: <Gauge className="h-3.5 w-3.5" />,       label: "Limits"     },
-    // Not "Analytics" — platform Analytics lives at /app/analytics. This tab is CRM webhooks only.
-    { id: "integrations", icon: <Webhook className="h-3.5 w-3.5" />,     label: "Webhooks"   },
+    // Post-call notify for this agent — not Developers event subscriptions or campaign form intake.
+    { id: "integrations", icon: <Webhook className="h-3.5 w-3.5" />,     label: "Post-call notify" },
     { id: "compliance",   icon: <ShieldCheck className="h-3.5 w-3.5" />, label: "Compliance" },
   ];
 
@@ -3483,7 +3485,7 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
       <div className="border-b border-border/40 px-4 pt-5 sm:px-6 lg:px-8">
         <h2 className="text-[15px] font-semibold tracking-[-0.02em]">Settings</h2>
         <p className="mt-0.5 text-[12px] text-muted-foreground">
-          Engine timing, call limits, CRM webhooks, and compliance. Outcomes &amp; after-call messages are on the Outcomes tab.
+          Engine timing, call limits, post-call notify URL, and compliance. Outcomes &amp; after-call messages are on the Outcomes tab.
         </p>
         {/* ── Sub-nav ── */}
         <div className="mt-3 flex flex-shrink-0 items-center gap-1 pb-3">
@@ -3959,9 +3961,10 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
         {section === "integrations" && (
           <>
             <div>
-              <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">CRM / post-call webhook</h3>
+              <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Post-call notify</h3>
               <p className="text-[11px] text-muted-foreground mt-0.5">
-                Notify your CRM or Zap after a call ends. Leave blank if unused.
+                After <em>this</em> agent finishes a call, POST JSON to your CRM or Zap. Leave blank if unused.
+                Workspace-wide event subscriptions live under Developers → Event subscriptions.
               </p>
             </div>
             <div className="space-y-3 rounded-xl border border-border/50 bg-card/40 p-4">
@@ -3971,7 +3974,7 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                 const isHttp  = val.length > 0 && val.startsWith("http://");
                 return (
                   <FormItem className="space-y-1">
-                    <FormLabel className="text-[10px] text-muted-foreground uppercase tracking-wider">Webhook URL</FormLabel>
+                    <FormLabel className="text-[10px] text-muted-foreground uppercase tracking-wider">Notify URL</FormLabel>
                     <FormControl>
                       <Input
                         placeholder="https://your-server.com/voiceorch-webhook"
@@ -5203,7 +5206,7 @@ const FIELD_LABELS: Record<string, string> = {
   maxDuration: "Max Duration (s)",
   silenceTimeoutSeconds: "Silence Timeout (s)",
   language: "Language",
-  webhookUrl: "Webhook URL",
+  webhookUrl: "Post-call notify URL",
   noiseCancellationEnabled: "Noise Cancellation",
   backchannelingEnabled: "Backchannel",
   tools: "Tools",

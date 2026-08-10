@@ -47,6 +47,16 @@ If WhatsApp/email Channels are not connected yet, you can still save after-call 
 | Multi-agent handoff | `/app/squads` |
 | Call transcripts & recordings | `/app/history` |
 
+## “Webhook” naming (four jobs)
+
+| Product name | Where | Job |
+|--------------|--------|-----|
+| **Event subscriptions** | Developers → Event subscriptions | SnapServe → your app (workspace-wide call events) |
+| **Post-call notify** | Agent → Settings → Post-call notify | After *this* agent’s call → your CRM URL |
+| **Form intake** | Connections / Campaigns → Website | Your form → SnapServe → dial |
+| **Lead transfer** | Campaign Configuration | Hot dispositions → CRM URL / Sheets |
+| **Mid-call HTTP** | Agent → Tools | LLM calls your API during the conversation |
+
 ## Greeting clarity
 
 - Set an explicit **Greeting message** on the agent for the exact first line.

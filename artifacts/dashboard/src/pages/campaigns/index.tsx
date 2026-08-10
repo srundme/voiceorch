@@ -430,8 +430,8 @@ const SOURCE_OPTIONS: {
 }[] = [
   {
     value: "webhook",
-    label: "Website / Form",
-    description: "Leads from your website enquiry forms. Each submission triggers an immediate call.",
+    label: "Form intake",
+    description: "Website enquiry forms POST into SnapServe; each submission can trigger an immediate call.",
     icon: <Globe className="h-5 w-5" />,
     defaultTrigger: "instant",
   },
@@ -1163,7 +1163,7 @@ type FieldMappings = { phone: string; name: string; email: string };
 const DEFAULT_MAPPINGS: FieldMappings = { phone: "phone", name: "name", email: "email" };
 const MAX_CONCURRENT_CALLS = 10;
 const LEAD_SOURCE_LABELS: Record<string, string> = {
-  csv: "CSV Upload", webhook: "Webhook", meta_ads: "Meta Ads", crm: "CRM",
+  csv: "CSV Upload", webhook: "Form intake", meta_ads: "Meta Ads", crm: "CRM",
 };
 
 function CampaignFormDialog({
@@ -1353,9 +1353,9 @@ const START_SOURCES: {
   },
   {
     id: "webhook",
-    title: "Website",
-    description: "Create a form webhook and embed snippet for your site.",
-    cta: "Connect website",
+    title: "Website · Form intake",
+    description: "Form submissions → dial. Get an intake URL / embed — not the same as Developers event subscriptions.",
+    cta: "Set up form intake",
     icon: (
       <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-border bg-background">
         <Globe className="h-5 w-5 text-muted-foreground" />

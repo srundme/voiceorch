@@ -19,7 +19,7 @@ const SEARCH_DATA = [
   { title: "Phone numbers", section: "Product", slug: "phone-numbers", content: "KYC purchase assign INR GST" },
   { title: "Calls & history", section: "Product", slug: "outbound-calls", content: "transcript summary disposition recording outbound" },
   { title: "Campaigns", section: "Product", slug: "campaigns", content: "batch dial CSV leads dashboard" },
-  { title: "Webhooks", section: "Product", slug: "webhooks", content: "HMAC signature call.completed" },
+  { title: "Event subscriptions", section: "Product", slug: "webhooks", content: "HMAC signature call.completed event subscriptions post-call notify form intake lead transfer" },
   { title: "Wallet", section: "Product", slug: "wallet", content: "balance paise INR top-up card" },
   { title: "API Reference", section: "Reference", slug: "api-reference", content: "OpenAPI agents calls webhooks scheduling" },
   { title: "API Wrappers & SDKs", section: "Reference", slug: "sdks", content: "TypeScript Node Python Go client REST wrapper fetch urllib" },

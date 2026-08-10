@@ -75,7 +75,7 @@ export default function IntroductionPage() {
           <Link href="/docs/outbound-calls">Calls &amp; history</Link> — transcript &amp; summary
         </li>
         <li>
-          <Link href="/docs/webhooks">Webhooks</Link> — push results to your backend
+          <Link href="/docs/webhooks">Event subscriptions</Link> — push call results to your backend
         </li>
         <li>
           <Link href="/docs/claude-skill">Claude skill &amp; MCP</Link> — agents &amp; campaigns from

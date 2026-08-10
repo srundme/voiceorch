@@ -82,7 +82,7 @@ export const TAG_LABELS: Record<string, string> = {
   calls: "Calls",
   meetings: "Meetings",
   "agent-variables": "Variables",
-  "webhook-endpoints": "Webhooks",
+  "webhook-endpoints": "Event subscriptions",
   "phone-numbers": "Phone Numbers",
   wallet: "Wallet",
   knowledge: "Knowledge Base",

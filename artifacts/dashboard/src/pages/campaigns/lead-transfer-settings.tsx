@@ -323,7 +323,7 @@ function RuleEditor({
           )}
         >
           <Webhook className="h-4 w-4 mt-0.5 shrink-0" />
-          <span className="block text-[12px] font-medium">CRM webhook</span>
+          <span className="block text-[12px] font-medium">CRM URL</span>
         </button>
         <button
           type="button"
@@ -514,9 +514,10 @@ export function LeadTransferSettings({
   return (
     <div className={cn("space-y-4", compact && "space-y-3")}>
       <div>
-        <h3 className="text-sm font-semibold mb-0.5">Transfer leads</h3>
+        <h3 className="text-sm font-semibold mb-0.5">Lead transfer</h3>
         <p className="text-xs text-muted-foreground/60 leading-relaxed">
-          After each campaign call, send matching dispositions to one or more CRM webhooks or Sheets.
+          After each campaign call, push matching dispositions to a CRM URL or Google Sheet.
+          Not form intake, not Developers event subscriptions, not agent post-call notify.
         </p>
       </div>
 

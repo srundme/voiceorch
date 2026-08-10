@@ -9,6 +9,25 @@ export default function ChangelogPage() {
         description="Notable documentation and API-consumer changes."
       />
 
+      <h2 id="2026-08-10-webhook-names">2026-08-10 — Rename the four “webhook” surfaces</h2>
+      <ul>
+        <li>
+          <strong>Event subscriptions</strong> — Developers (was “Webhooks”)
+        </li>
+        <li>
+          <strong>Post-call notify</strong> — Agent Settings (was “Webhooks” / CRM webhook)
+        </li>
+        <li>
+          <strong>Form intake</strong> — Campaigns / Connections website (was “form webhook”)
+        </li>
+        <li>
+          <strong>Lead transfer</strong> — Campaign push to CRM URL / Sheets (label clarified)
+        </li>
+        <li>
+          <strong>Mid-call HTTP</strong> — Agent Tools custom function
+        </li>
+      </ul>
+
       <h2 id="2026-08-10-builder-analytics">2026-08-10 — Analytics inside Agent Builder</h2>
       <ul>
         <li>
@@ -16,7 +35,7 @@ export default function ChangelogPage() {
           for that agent (same data as <code>/app/analytics/agents/:id</code>).
         </li>
         <li>
-          Settings → former Analytics sub-tab remains <strong>Webhooks</strong> (CRM post-call URL only).
+          Settings → former Analytics sub-tab is <strong>Post-call notify</strong> (CRM URL for that agent).
         </li>
       </ul>
 
@@ -24,10 +43,6 @@ export default function ChangelogPage() {
       <ul>
         <li>
           Platform <strong>Analytics</strong> moved from sidebar More into the primary nav (with History).
-        </li>
-        <li>
-          Agent Settings sub-tab renamed <strong>Webhooks</strong> (was mislabeled Analytics) so it
-          does not collide with platform Analytics.
         </li>
       </ul>
 

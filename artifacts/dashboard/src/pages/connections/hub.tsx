@@ -77,8 +77,8 @@ const BASE_CARDS: ConnCard[] = [
     id: "website",
     setupId: "website",
     icon: "globe",
-    title: "Website form",
-    blurb: "Form submit → person lands in your workspace.",
+    title: "Form intake",
+    blurb: "Form submit → intake URL → dial. Not Developers event subscriptions.",
   },
   {
     id: "meta",
@@ -283,8 +283,8 @@ export default function ConnectionsPage() {
   if (setup === "website") {
     return (
       <StripePage
-        title="Website form"
-        description="Create a webhook and embed snippet. New form leads can trigger your agent."
+        title="Form intake"
+        description="Create an intake URL and embed snippet. New form leads can trigger your agent."
         back={setupBack}
         fullBleed
         contentClassName="!px-0 !py-0 max-w-none"

@@ -117,11 +117,25 @@ export default function PlatformConceptsPage() {
         <Link href="/docs/knowledge-base">Knowledge base</Link>.
       </p>
 
-      <h2 id="webhooks">Webhooks</h2>
+      <h2 id="webhooks">Event subscriptions &amp; related URLs</h2>
       <p>
-        HTTPS callbacks when calls start, complete, or fail.{" "}
-        <Link href="/docs/webhooks">Webhooks</Link>.
+        Do not confuse these four jobs that all used to say “webhook”:
       </p>
+      <ul>
+        <li>
+          <strong>Event subscriptions</strong> — Developers → workspace-wide call events.{" "}
+          <Link href="/docs/webhooks">Guide</Link>.
+        </li>
+        <li>
+          <strong>Post-call notify</strong> — Agent Builder → Settings → notify URL for that agent only.
+        </li>
+        <li>
+          <strong>Form intake</strong> — Connections / Campaigns → website form POSTs leads into SnapServe.
+        </li>
+        <li>
+          <strong>Lead transfer</strong> — Campaign Configuration → push matching dispositions to CRM / Sheets.
+        </li>
+      </ul>
 
       <h2 id="api-key">API key</h2>
       <p>

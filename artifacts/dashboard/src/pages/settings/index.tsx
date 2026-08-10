@@ -463,7 +463,7 @@ function QuickOverview() {
         />
         <StatCard
           icon={Webhook}
-          label="Webhooks"
+          label="Event subscriptions"
           value={`${configuredWebhooks} Configured`}
           href="/app/webhooks"
           iconClassName="bg-muted text-muted-foreground"
@@ -563,7 +563,7 @@ function CategoryGrid({ onOpenGeneral }: { onOpenGeneral: () => void }) {
         iconClassName="bg-muted text-muted-foreground"
         links={[
           { icon: KeyRound, label: "API Keys", href: "/app/api-keys" },
-          { icon: Webhook, label: "Webhooks", href: "/app/webhooks" },
+          { icon: Webhook, label: "Event subscriptions", href: "/app/webhooks" },
         ]}
       />
       <CategoryCard

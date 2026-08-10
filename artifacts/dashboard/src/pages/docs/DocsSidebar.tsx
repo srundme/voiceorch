@@ -60,7 +60,7 @@ const NAV_GROUPS: NavGroup[] = [
       { title: "Phone numbers", slug: "phone-numbers", icon: Phone },
       { title: "Calls & history", slug: "outbound-calls", icon: PhoneCall },
       { title: "Campaigns", slug: "campaigns", icon: PhoneCall },
-      { title: "Webhooks", slug: "webhooks", icon: Webhook },
+      { title: "Event subscriptions", slug: "webhooks", icon: Webhook },
       { title: "Wallet & pricing", slug: "wallet", icon: Wallet },
     ],
   },

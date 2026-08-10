@@ -220,8 +220,8 @@ function CampaignCard({ c, agentsMap }: { c: WCampaign; agentsMap: Map<number, s
           </button>
         </div>
 
-        {/* Webhook URL */}
-        <div className="flex items-center gap-2 mt-3">
+        <p className="text-[10px] text-muted-foreground mt-3 mb-1">Form intake URL</p>
+        <div className="flex items-center gap-2">
           <code className="flex-1 text-[11px] bg-elevated border border-border/50 rounded-lg px-2.5 py-1.5 font-mono truncate text-muted-foreground/70">
             {webhookUrl}
           </code>
@@ -537,12 +537,12 @@ export default function FromWebsitePage({ hideMeta = false }: { hideMeta?: boole
       <div className="mx-auto w-full max-w-3xl px-4 sm:px-6 py-6 space-y-5">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/40 mb-1">Website form</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/40 mb-1">Form intake</p>
             <h2 className="text-xl font-semibold text-foreground leading-tight">
               Connect your website form
             </h2>
             <p className="text-sm text-muted-foreground mt-1 max-w-lg">
-              Paste the webhook into your form. New leads land in your workspace.
+              Paste the form intake URL into your site. New leads land in your workspace and can dial.
             </p>
           </div>
           <Button size="sm" className="shrink-0 gap-1.5 mt-1" onClick={() => setWizardOpen(true)}>
@@ -556,7 +556,7 @@ export default function FromWebsitePage({ hideMeta = false }: { hideMeta?: boole
             <div>
               <p className="text-sm font-medium text-foreground/60">No website form yet</p>
               <p className="text-[12px] text-muted-foreground/40 mt-0.5">
-                Create one to get a webhook URL and embed snippet for your site.
+                Create one to get a form intake URL and embed snippet for your site.
               </p>
             </div>
             <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setWizardOpen(true)}>

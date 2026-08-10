@@ -7,23 +7,32 @@ export default function WebhooksPage() {
     <div>
       <PageHeader
         breadcrumb="Product guides"
-        title="Webhooks"
-        description="Receive call results on your HTTPS URL when a conversation finishes — transcript, summary, cost, and more."
+        title="Event subscriptions"
+        description="Workspace-wide: SnapServe POSTs call results to your HTTPS URL when a conversation finishes — transcript, summary, cost, and more."
         copyText={`X-SnapServe-Signature: sha256=<hmac-hex>
 X-SnapServe-Timestamp: <unix-seconds>
 Signed payload: "{timestamp}.{rawBody}"
 Events: call.completed, call.failed`}
       />
 
-      <Callout variant="info" title="Not the same as Connections">
-        <strong>This page / API</strong> = SnapServe → your app (call finished).{" "}
-        <strong>Connections</strong> = forms/CRM → SnapServe (inbound leads). Dashboard:{" "}
-        <a href="https://app.snapserve.ai/app/webhooks" target="_blank" rel="noreferrer">
-          Call webhooks
-        </a>{" "}
-        vs{" "}
-        <a href="https://app.snapserve.ai/app/connections" target="_blank" rel="noreferrer">
-          Connections
+      <Callout variant="info" title="Four different “webhook” jobs">
+        <ul className="mt-1 list-disc pl-4 space-y-1">
+          <li>
+            <strong>Event subscriptions</strong> (this page / Developers) — SnapServe → your app for every call
+          </li>
+          <li>
+            <strong>Post-call notify</strong> — Agent Builder → Settings → one agent’s CRM URL after its calls
+          </li>
+          <li>
+            <strong>Form intake</strong> — Connections / Campaigns → website form → SnapServe → dial
+          </li>
+          <li>
+            <strong>Lead transfer</strong> — Campaign Configuration → push hot leads to CRM URL / Sheets
+          </li>
+        </ul>
+        Dashboard:{" "}
+        <a href="https://app.snapserve.ai/app/api-keys?tab=webhooks" target="_blank" rel="noreferrer">
+          Developers → Event subscriptions
         </a>
         .
       </Callout>
