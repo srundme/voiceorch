@@ -9,6 +9,17 @@ export default function ChangelogPage() {
         description="Notable documentation and API-consumer changes."
       />
 
+      <h2 id="2026-08-10-analytics-nav">2026-08-10 — Analytics in primary nav</h2>
+      <ul>
+        <li>
+          <strong>Analytics</strong> moved from sidebar More into the primary nav (with History).
+        </li>
+        <li>
+          Agent Settings sub-tab renamed <strong>Webhooks</strong> (was mislabeled Analytics) so it
+          does not collide with platform Analytics.
+        </li>
+      </ul>
+
       <h2 id="2026-08-10-outcomes-ux">2026-08-10 — Outcomes tab &amp; naming clarity</h2>
       <ul>
         <li>

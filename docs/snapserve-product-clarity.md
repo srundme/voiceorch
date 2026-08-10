@@ -34,17 +34,18 @@ If WhatsApp/email Channels are not connected yet, you can still save after-call 
 
 ## Navigation (live product)
 
-**Home · Campaigns · Agents · Phone numbers · Connections · History**  
-(+ Knowledge, Memory, Squads, Analytics, Bookings as needed)
+**Home · Campaigns · Agents · Phone numbers · Connections · History · Analytics**  
+(+ Knowledge, Memory, Squads, Bookings under More)
 
 | Go here for… | Path |
 |--------------|------|
 | Build / test agent | `/app/agents` |
 | Start dialing leads | `/app/campaigns` |
 | Wire WA / email / Sheets / website / Meta | `/app/connections` |
+| Outcomes & funnel rates | `/app/analytics` |
 | Send agent into a video meeting | `/app/meet` |
 | Multi-agent handoff | `/app/squads` |
-| Call transcripts & recordings | `/app/history` (or History) |
+| Call transcripts & recordings | `/app/history` |
 
 ## Greeting clarity
 

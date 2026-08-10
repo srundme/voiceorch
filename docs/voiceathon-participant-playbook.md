@@ -330,7 +330,7 @@ Do **not** confuse Meeting bots calendar connect with **Connections → Bookings
 
 ### Live nav
 
-**Home · Campaigns · Agents · Phone numbers · Connections · History**
+**Home · Campaigns · Agents · Phone numbers · Connections · History · Analytics**
 
 Legacy names (**People**, **Call plans**) redirect into Campaigns / Home — ignore old slides that still say them.
 
