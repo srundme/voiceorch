@@ -37,7 +37,7 @@ export function ApiOverview() {
           phone numbers, wallet, and knowledge base. {opCount} endpoints — campaigns, onboarding,
           CRM, providers, and other dashboard-internal APIs are not listed here.
         </p>
-        <div className="rounded-lg border border-white/10 bg-white/[0.03] px-4 py-3">
+        <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
           <span className="text-xs uppercase tracking-wider text-muted-foreground/60">Base URL</span>
           <code className="block mt-1 text-sm font-mono text-foreground/90">{baseUrl}</code>
         </div>
@@ -55,14 +55,14 @@ export function ApiOverview() {
         <p>
           Use a developer API key from{" "}
           <Link href="/docs/authentication">Authentication</Link> in the{" "}
-          <code className="text-sky-300">Authorization</code> header:
+          <code className="text-sky-700">Authorization</code> header:
         </p>
-        <pre className="rounded-lg border border-white/10 bg-[#0c0c0f] p-3 text-[13px] font-mono text-foreground/90 overflow-x-auto">
+        <pre className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-[13px] font-mono text-slate-800 overflow-x-auto">
           <code>Authorization: Bearer sk_live_…</code>
         </pre>
         <p>
           Dashboard session JWTs work for the browser app only. Prefer{" "}
-          <code className="text-sky-300">sk_live_</code> keys from your backend.
+          <code className="text-sky-700">sk_live_</code> keys from your backend.
         </p>
       </Section>
 
@@ -102,7 +102,7 @@ export function ApiOverview() {
               <Link
                 key={g.tag}
                 href={first ? `/docs/api-reference/${first.id}` : "/docs/api-reference"}
-                className="group rounded-lg border border-white/10 bg-white/[0.02] p-4 hover:border-primary/30 hover:bg-white/[0.04] transition-colors"
+                className="group rounded-lg border border-slate-200 bg-slate-50 p-4 hover:border-primary/30 hover:bg-slate-100 transition-colors"
               >
                 <div className="flex items-center justify-between">
                   <span className="font-medium text-foreground">{tagLabel(g.tag)}</span>

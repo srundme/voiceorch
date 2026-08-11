@@ -38,9 +38,9 @@ Events: call.completed, call.failed`}
       </Callout>
 
       <h2 id="events">Events</h2>
-      <div className="not-prose my-4 overflow-x-auto rounded-xl border border-white/10">
+      <div className="not-prose my-4 overflow-x-auto rounded-xl border border-slate-200">
         <table className="w-full text-sm text-left">
-          <thead className="text-[11px] uppercase tracking-wider bg-white/[0.03] text-muted-foreground border-b border-white/10">
+          <thead className="text-[11px] uppercase tracking-wider bg-slate-50 text-muted-foreground border-b border-slate-200">
             <tr>
               <th className="px-4 py-2.5 font-semibold">Event</th>
               <th className="px-4 py-2.5 font-semibold">When</th>
@@ -52,8 +52,8 @@ Events: call.completed, call.failed`}
               ["call.failed", "Call ended with a failed status"],
               ["call.ended", "Legacy alias — still matched when we send call.completed"],
             ].map(([e, w]) => (
-              <tr key={e} className="border-b border-white/5 last:border-0">
-                <td className="px-4 py-3 font-mono text-xs text-sky-300">{e}</td>
+              <tr key={e} className="border-b border-slate-100 last:border-0">
+                <td className="px-4 py-3 font-mono text-xs text-sky-700">{e}</td>
                 <td className="px-4 py-3 text-muted-foreground">{w}</td>
               </tr>
             ))}

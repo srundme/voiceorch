@@ -11,7 +11,7 @@ export default function IntroductionPage() {
         title="SnapServe Documentation"
         description={
           <>
-            SnapServe is an <strong className="text-zinc-200">AI voice agent platform</strong> —
+            SnapServe is an <strong className="text-slate-800">AI voice agent platform</strong> —
             build agents in the dashboard, connect calendars and tools, then call the REST API from
             your own app.
           </>
@@ -87,13 +87,13 @@ export default function IntroductionPage() {
       </ul>
 
       <div className="not-prose mt-8 flex flex-wrap gap-4 text-sm">
-        <Link href="/docs/platform-concepts" className="text-sky-300 hover:text-sky-200">
+        <Link href="/docs/platform-concepts" className="text-sky-700 hover:text-sky-800">
           Platform concepts →
         </Link>
-        <Link href="/docs/variables" className="inline-flex items-center gap-1 text-sky-300 hover:text-sky-200">
+        <Link href="/docs/variables" className="inline-flex items-center gap-1 text-sky-700 hover:text-sky-800">
           <Variable className="h-4 w-4" /> Variables
         </Link>
-        <Link href="/docs/outbound-calls" className="inline-flex items-center gap-1 text-sky-300 hover:text-sky-200">
+        <Link href="/docs/outbound-calls" className="inline-flex items-center gap-1 text-sky-700 hover:text-sky-800">
           <PhoneCall className="h-4 w-4" /> Calls
         </Link>
       </div>

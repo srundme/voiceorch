@@ -15,9 +15,9 @@ Min top-up credit: ₹100`}
       />
 
       <h2 id="rates">Platform rates</h2>
-      <div className="not-prose my-4 overflow-x-auto rounded-xl border border-white/10">
+      <div className="not-prose my-4 overflow-x-auto rounded-xl border border-slate-200">
         <table className="w-full text-sm text-left">
-          <thead className="text-[11px] uppercase tracking-wider bg-white/[0.03] text-muted-foreground border-b border-white/10">
+          <thead className="text-[11px] uppercase tracking-wider bg-slate-50 text-muted-foreground border-b border-slate-200">
             <tr>
               <th className="px-4 py-2.5 font-semibold">Item</th>
               <th className="px-4 py-2.5 font-semibold">Price</th>
@@ -33,7 +33,7 @@ Min top-up credit: ₹100`}
               ["Phone number renewal (30 days)", "Same price as purchase, from wallet"],
               ["Minimum top-up credit", "₹100"],
             ].map(([a, b]) => (
-              <tr key={a} className="border-b border-white/5 last:border-0">
+              <tr key={a} className="border-b border-slate-100 last:border-0">
                 <td className="px-4 py-3">{a}</td>
                 <td className="px-4 py-3 text-muted-foreground">{b}</td>
               </tr>

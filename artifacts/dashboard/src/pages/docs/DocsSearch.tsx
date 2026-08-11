@@ -63,17 +63,17 @@ export function DocsSearch() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <button className="flex items-center w-full gap-2 px-3 py-2 text-sm text-zinc-400 bg-[#111114] hover:bg-[#16161a] border border-white/10 rounded-xl transition-colors group">
+        <button className="flex items-center w-full gap-2 px-3 py-2 text-sm text-slate-500 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors group">
           <Search className="h-4 w-4" />
           <span className="flex-1 text-left">Search...</span>
-          <kbd className="hidden sm:inline-flex items-center gap-1 rounded-md border border-white/10 bg-black/40 px-1.5 font-mono text-[10px] font-medium text-zinc-500 group-hover:text-zinc-300">
+          <kbd className="hidden sm:inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-1.5 font-mono text-[10px] font-medium text-slate-500 group-hover:text-slate-700">
             ⌘K
           </kbd>
         </button>
       </DialogTrigger>
-      <DialogContent className="p-0 overflow-hidden max-w-xl border-border bg-[#12161F] shadow-2xl">
+      <DialogContent className="p-0 overflow-hidden max-w-xl border-slate-200 bg-white shadow-2xl">
         <DialogTitle className="sr-only">Search Documentation</DialogTitle>
-        <div className="flex items-center px-4 border-b border-white/5">
+        <div className="flex items-center px-4 border-b border-slate-200">
           <Search className="h-5 w-5 text-muted-foreground" />
           <input
             autoFocus
@@ -93,7 +93,7 @@ export function DocsSearch() {
               {results.map((item) => (
                 <button
                   key={item.slug}
-                  className="flex flex-col items-start gap-0.5 rounded-lg px-3 py-2.5 text-left hover:bg-white/5 transition-colors"
+                  className="flex flex-col items-start gap-0.5 rounded-lg px-3 py-2.5 text-left hover:bg-slate-100 transition-colors"
                   onClick={() => {
                     setOpen(false);
                     setQuery("");

@@ -17,7 +17,7 @@ const TOP_TABS = [
 function TopTabs() {
   const [location] = useLocation();
   return (
-    <div className="hidden md:flex items-center gap-1 border-b border-white/10">
+    <div className="hidden md:flex items-center gap-1 border-b border-slate-200">
       {TOP_TABS.map((tab) => {
         const active = tab.match(location);
         return (
@@ -25,12 +25,12 @@ function TopTabs() {
             key={tab.href}
             href={tab.href}
             className={`relative px-3 py-2.5 text-sm transition-colors ${
-              active ? "text-white" : "text-zinc-400 hover:text-zinc-200"
+              active ? "text-slate-900" : "text-slate-500 hover:text-slate-700"
             }`}
           >
             {tab.label}
             {active ? (
-              <span className="absolute inset-x-2 -bottom-px h-[2px] rounded-full bg-sky-400" />
+              <span className="absolute inset-x-2 -bottom-px h-[2px] rounded-full bg-sky-500" />
             ) : null}
           </Link>
         );
@@ -44,10 +44,21 @@ export function DocsLayout({ children, section }: { children: React.ReactNode; s
     document.title = "Documentation · SnapServe";
   }, []);
 
+  useEffect(() => {
+    const root = document.documentElement;
+    const hadDark = root.classList.contains("dark");
+    root.classList.remove("dark");
+    root.classList.add("light");
+    return () => {
+      root.classList.remove("light");
+      if (hadDark) root.classList.add("dark");
+    };
+  }, []);
+
   return (
-    <div className="min-h-screen bg-[#050506] text-foreground font-sans selection:bg-sky-400/25">
+    <div className="min-h-screen bg-white text-foreground font-sans selection:bg-sky-400/25">
       {/* Desktop top bar */}
-      <header className="sticky top-0 z-40 hidden lg:block border-b border-white/10 bg-[#050506]/90 backdrop-blur-xl">
+      <header className="sticky top-0 z-40 hidden lg:block border-b border-slate-200 bg-white/90 backdrop-blur-xl">
         <div className="max-w-[1600px] mx-auto px-6 flex items-center h-14 gap-8">
           <Link href="/docs" className="flex items-center gap-2 shrink-0 hover:opacity-90 transition-opacity">
             <BrandMark iconSize={24} wordmarkHeight={18} />
@@ -56,13 +67,13 @@ export function DocsLayout({ children, section }: { children: React.ReactNode; s
           <div className="ml-auto flex items-center gap-3">
             <a
               href="https://app.snapserve.ai/app"
-              className="text-sm text-zinc-400 hover:text-white transition-colors"
+              className="text-sm text-slate-500 hover:text-slate-900 transition-colors"
             >
               Dashboard
             </a>
             <a
               href="https://app.snapserve.ai/app/api-keys"
-              className="rounded-lg bg-sky-500/15 border border-sky-400/30 px-3 py-1.5 text-sm text-sky-200 hover:bg-sky-500/25 transition-colors"
+              className="rounded-lg bg-sky-50 border border-sky-200 px-3 py-1.5 text-sm text-sky-800 hover:bg-sky-100 transition-colors"
             >
               Get API key
             </a>
@@ -71,7 +82,7 @@ export function DocsLayout({ children, section }: { children: React.ReactNode; s
       </header>
 
       {/* Mobile Header */}
-      <header className="sticky top-0 z-40 w-full border-b border-white/10 bg-[#050506]/90 backdrop-blur-xl lg:hidden">
+      <header className="sticky top-0 z-40 w-full border-b border-slate-200 bg-white/90 backdrop-blur-xl lg:hidden">
         <div className="flex items-center h-14 px-4 gap-4">
           <Sheet>
             <SheetTrigger asChild>
@@ -80,9 +91,9 @@ export function DocsLayout({ children, section }: { children: React.ReactNode; s
                 <span className="sr-only">Toggle Menu</span>
               </Button>
             </SheetTrigger>
-            <SheetContent side="left" className="w-80 bg-[#050506] border-white/10 p-0">
+            <SheetContent side="left" className="w-80 bg-white border-slate-200 p-0">
               <div className="flex flex-col h-full">
-                <div className="p-4 border-b border-white/10">
+                <div className="p-4 border-b border-slate-200">
                   <Link href="/docs" className="flex items-center gap-2">
                     <BrandMark iconSize={24} wordmarkHeight={18} />
                   </Link>
@@ -103,7 +114,7 @@ export function DocsLayout({ children, section }: { children: React.ReactNode; s
       </header>
 
       <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-6 flex">
-        <aside className="hidden lg:block w-[280px] shrink-0 pt-6 pb-16 pr-5 sticky top-14 h-[calc(100vh-3.5rem)] overflow-y-auto border-r border-white/10">
+        <aside className="hidden lg:block w-[280px] shrink-0 pt-6 pb-16 pr-5 sticky top-14 h-[calc(100vh-3.5rem)] overflow-y-auto border-r border-slate-200">
           <div className="mb-5">
             <DocsSearch />
           </div>
@@ -116,14 +127,14 @@ export function DocsLayout({ children, section }: { children: React.ReactNode; s
             className="pointer-events-none absolute inset-0 opacity-[0.35]"
             style={{
               backgroundImage:
-                "linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)",
+                "linear-gradient(rgba(15,23,42,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(15,23,42,0.04) 1px, transparent 1px)",
               backgroundSize: "48px 48px",
               maskImage: "linear-gradient(to bottom, black 0%, black 35%, transparent 75%)",
             }}
           />
           <div
             key={section}
-            className="relative w-full max-w-[760px] prose prose-invert prose-headings:font-semibold prose-headings:tracking-tight prose-headings:text-white prose-p:text-zinc-400 prose-li:text-zinc-400 prose-strong:text-zinc-100 prose-a:text-sky-300 hover:prose-a:text-sky-200 prose-code:text-sky-300 prose-code:before:content-none prose-code:after:content-none prose-pre:bg-[#0c0c0f] prose-pre:border prose-pre:border-white/10"
+            className="relative w-full max-w-[760px] prose prose-slate prose-headings:font-semibold prose-headings:tracking-tight prose-headings:text-slate-900 prose-p:text-slate-600 prose-li:text-slate-600 prose-strong:text-slate-900 prose-a:text-sky-700 hover:prose-a:text-sky-800 prose-code:text-sky-700 prose-code:before:content-none prose-code:after:content-none prose-pre:bg-slate-50 prose-pre:border prose-pre:border-slate-200"
           >
             {children}
           </div>
@@ -134,7 +145,7 @@ export function DocsLayout({ children, section }: { children: React.ReactNode; s
         </aside>
       </div>
 
-      <footer className="border-t border-white/10 py-6 px-6">
+      <footer className="border-t border-slate-200 py-6 px-6">
         <div className="max-w-[1600px] mx-auto flex justify-center">
           <PoweredBySarvam className="opacity-80" />
         </div>

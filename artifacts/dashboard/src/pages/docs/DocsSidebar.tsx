@@ -92,10 +92,10 @@ export function DocsSidebar({ activeSection }: { activeSection: string }) {
         return (
           <div key={group.title} className="flex flex-col">
             <div className="flex items-center gap-2 px-2 mb-2">
-              <GroupIcon className="h-3.5 w-3.5 text-zinc-400" />
-              <h4 className="text-[13px] font-semibold text-zinc-200">{group.title}</h4>
+              <GroupIcon className="h-3.5 w-3.5 text-slate-500" />
+              <h4 className="text-[13px] font-semibold text-slate-800">{group.title}</h4>
             </div>
-            <div className="relative ml-3.5 flex flex-col gap-0.5 border-l border-white/10 pl-3">
+            <div className="relative ml-3.5 flex flex-col gap-0.5 border-l border-slate-200 pl-3">
               {group.items.map((item) => {
                 const isActive =
                   activeSection === item.slug ||
@@ -107,12 +107,12 @@ export function DocsSidebar({ activeSection }: { activeSection: string }) {
                     href={hrefForSlug(item.slug)}
                     className={`relative flex items-center gap-2 rounded-md px-2 py-1.5 text-[13px] transition-colors ${
                       isActive
-                        ? "text-sky-300 bg-sky-400/10"
-                        : "text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.04]"
+                        ? "text-sky-700 bg-sky-50"
+                        : "text-slate-500 hover:text-slate-800 hover:bg-slate-100"
                     }`}
                   >
                     {isActive ? (
-                      <span className="absolute -left-[13px] top-1/2 h-5 w-[2px] -translate-y-1/2 rounded-full bg-sky-400" />
+                      <span className="absolute -left-[13px] top-1/2 h-5 w-[2px] -translate-y-1/2 rounded-full bg-sky-500" />
                     ) : null}
                     {ItemIcon ? <ItemIcon className="h-3.5 w-3.5 shrink-0 opacity-70" /> : null}
                     <span className="truncate">{item.title}</span>
@@ -124,7 +124,7 @@ export function DocsSidebar({ activeSection }: { activeSection: string }) {
         );
       })}
 
-      <div className="mt-2 border-t border-white/10 pt-4 px-1 flex flex-col gap-0.5">
+      <div className="mt-2 border-t border-slate-200 pt-4 px-1 flex flex-col gap-0.5">
         <ExternalFooterLink href="https://app.snapserve.ai/app" icon={<LayoutDashboard className="h-3.5 w-3.5" />}>
           Open dashboard
         </ExternalFooterLink>

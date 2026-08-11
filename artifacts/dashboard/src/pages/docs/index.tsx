@@ -27,7 +27,7 @@ const ApiReference = lazy(() => import("./api/ApiReference"));
 
 function ApiReferenceFallback() {
   return (
-    <div className="min-h-screen bg-[#050506] flex items-center justify-center text-muted-foreground text-sm">
+    <div className="min-h-screen bg-white flex items-center justify-center text-muted-foreground text-sm">
       Loading API reference…
     </div>
   );
