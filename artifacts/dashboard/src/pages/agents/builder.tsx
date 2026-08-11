@@ -95,7 +95,7 @@ import { SnapServeAgentIcon } from "@/components/logo";
 import {
   ASR_PROVIDERS, LLM_PROVIDERS, TTS_PROVIDERS,
   LANGUAGES, SARVAM_PERSONALISATION_LANGUAGES, ASR_MODELS, LLM_MODELS, TTS_MODELS, TTS_VOICES, AGENT_TIMEZONES,
-  filterVoicesForLanguage, isVoiceCompatibleWithLanguage,
+  filterVoicesForLanguage, isVoiceCompatibleWithLanguage, shouldClearVoiceForLanguage,
   getSarvamTtsVoices, isSarvamVoiceCompatible,
   GEMINI_LIVE_LLM_MODEL, GEMINI_LIVE_THINKING_LEVELS,
   geminiLiveModelLabel, isGeminiLiveAgent, isGeminiLiveLlmModel, voiceStackForLlmModel,
@@ -611,18 +611,14 @@ function OverviewTab({
   }, [whitelistedData, language, ttsVoice, agent, myCartesiaClones]);
 
   // When the language changes (or the whitelist finishes loading), clear a
-  // selected curated voice that no longer supports the language — using the
-  // SAME shared compatibility rule as the list filter, so a voice visible in
-  // either section is never wiped by this effect. User-pasted custom IDs
-  // (not present in the whitelist) are left untouched.
+  // selected curated voice the language no longer offers. Membership of the
+  // OFFERED list is the test — testing the language tag directly would wipe
+  // picks the list legitimately shows for languages no vendor tags (Marathi),
+  // leaving the agent with no voice at all. User-pasted custom IDs (not present
+  // in the whitelist) are left untouched.
   useEffect(() => {
     if (ttsProvider !== "cartesia") return;
-    const all = whitelistedData?.voices ?? [];
-    if (all.length === 0) return;
-    if (!ttsVoice || ttsVoice === "__custom__") return;
-    const known = all.find(v => v.id === ttsVoice);
-    if (!known) return; // user-pasted custom ID — leave it alone
-    if (!isVoiceCompatibleWithLanguage(known.language, language)) {
+    if (shouldClearVoiceForLanguage(whitelistedData?.voices ?? [], ttsVoice, language)) {
       form.setValue("ttsVoice", "", { shouldDirty: true });
     }
   }, [language, whitelistedData, ttsProvider, ttsVoice, form]);
@@ -1720,19 +1716,12 @@ function VoiceTab({ form }: { form: any }) {
     return opts;
   }, [whitelistedData, agentLanguage, ttsVoice, myCartesiaClonesV]);
 
-  // When the language changes (or the whitelist finishes loading), clear a
-  // selected curated voice that no longer supports the language — using the
-  // SAME shared compatibility rule as the Overview section, so mounting either
-  // section never wipes a compatible voice. User-pasted custom IDs (not
-  // present in the whitelist) are left untouched.
+  // Same rule as the Overview section: membership of the offered list, not the
+  // raw language tag, so mounting either section never wipes a voice the other
+  // one showed. User-pasted custom IDs are left untouched.
   useEffect(() => {
     if (ttsProvider !== "cartesia") return;
-    const all = whitelistedData?.voices ?? [];
-    if (all.length === 0) return;
-    if (!ttsVoice || ttsVoice === "__custom__") return;
-    const known = all.find(v => v.id === ttsVoice);
-    if (!known) return; // user-pasted custom ID — leave it alone
-    if (!isVoiceCompatibleWithLanguage(known.language, agentLanguage)) {
+    if (shouldClearVoiceForLanguage(whitelistedData?.voices ?? [], ttsVoice, agentLanguage)) {
       form.setValue("ttsVoice", "", { shouldDirty: true });
     }
   }, [agentLanguage, whitelistedData, ttsProvider, ttsVoice, form]);
