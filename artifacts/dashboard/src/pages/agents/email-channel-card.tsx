@@ -277,16 +277,25 @@ export function EmailChannelCard({
 
   const testSend = useMutation({
     mutationFn: async () =>
-      customFetch(`${DASH_API}/email/channel/test`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          toEmail: testTo.trim(),
-          templateId: selectedTemplateId,
-          fromIdentityId: tplFromId,
-        }),
+      customFetch<{ fromEmail?: string; providerMessageId?: string | null; mode?: string }>(
+        `${DASH_API}/email/channel/test`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            toEmail: testTo.trim(),
+            templateId: selectedTemplateId,
+            fromIdentityId: tplFromId,
+          }),
+        },
+      ),
+    onSuccess: (res) =>
+      toast({
+        title: `Test sent from ${res.fromEmail ?? "channel default"}`,
+        description: res.providerMessageId
+          ? `Brevo id ${res.providerMessageId} — check spam, then Brevo → Transactional → Logs`
+          : "If it does not arrive, check spam and Brevo → Transactional → Logs",
       }),
-    onSuccess: () => toast({ title: "Test email sent" }),
     onError: (err) => toast({ title: "Test failed", description: formatApiError(err), variant: "destructive" }),
   });
 

@@ -490,6 +490,7 @@ async function resolveFrom(
   throw new Error("BYO Brevo is missing from email — add a From identity");
 }
 
+/** Returns Brevo's messageId so a send can be traced in Brevo's transactional logs. */
 async function sendViaBrevo(opts: {
   apiKey: string;
   fromName: string;
@@ -497,7 +498,7 @@ async function sendViaBrevo(opts: {
   to: string;
   subject: string;
   html: string;
-}): Promise<void> {
+}): Promise<string | null> {
   const resp = await fetch("https://api.brevo.com/v3/smtp/email", {
     method: "POST",
     headers: {
@@ -514,6 +515,12 @@ async function sendViaBrevo(opts: {
   if (!resp.ok) {
     const text = await resp.text();
     throw new Error(`Brevo email error ${resp.status}: ${text}`);
+  }
+  try {
+    const body = (await resp.json()) as { messageId?: string };
+    return body?.messageId ?? null;
+  } catch {
+    return null;
   }
 }
 
@@ -536,6 +543,11 @@ export interface SendChannelEmailResult {
   skipped?: "inactive" | "no_email" | "missing_config";
   error?: string;
   messageId?: number;
+  /** Brevo's own messageId — search this in Brevo → Transactional → Logs. */
+  providerMessageId?: string | null;
+  /** Address the message was actually sent from. */
+  fromEmail?: string;
+  mode?: EmailChannelMode;
 }
 
 export async function sendChannelEmail(opts: SendChannelEmailOpts): Promise<SendChannelEmailResult> {
@@ -597,45 +609,59 @@ export async function sendChannelEmail(opts: SendChannelEmailOpts): Promise<Send
       template: stored,
     });
 
+    let apiKey: string;
     if (channel.mode === "managed") {
-      const apiKey = process.env["BREVO_API_KEY"];
-      if (!apiKey) throw new Error("SnapServe managed email is not configured (BREVO_API_KEY)");
-      await sendViaBrevo({
-        apiKey,
-        fromName: from.fromName,
-        fromEmail: from.fromEmail,
-        to,
-        subject,
-        html,
-      });
+      const managedKey = process.env["BREVO_API_KEY"];
+      if (!managedKey) throw new Error("SnapServe managed email is not configured (BREVO_API_KEY)");
+      apiKey = managedKey;
     } else {
       if (!channel.brevoApiKeyEncrypted) {
         throw new Error("BYO Brevo is missing API key");
       }
-      const apiKey = decryptKey(channel.brevoApiKeyEncrypted);
-      await sendViaBrevo({
-        apiKey,
-        fromName: from.fromName,
-        fromEmail: from.fromEmail,
-        to,
-        subject,
-        html,
-      });
+      apiKey = decryptKey(channel.brevoApiKeyEncrypted);
     }
 
-    await db.update(emailMessagesTable).set({ status: "sent" }).where(eq(emailMessagesTable.id, msg!.id));
+    const providerMessageId = await sendViaBrevo({
+      apiKey,
+      fromName: from.fromName,
+      fromEmail: from.fromEmail,
+      to,
+      subject,
+      html,
+    });
+
+    await db.update(emailMessagesTable).set({
+      status: "sent",
+      providerMessageId,
+    }).where(eq(emailMessagesTable.id, msg!.id));
     await db.update(emailChannelsTable).set({
       lastSentAt: new Date(),
       lastError: null,
     }).where(eq(emailChannelsTable.id, channel.id));
 
-    logger.info({ userId: opts.userId, to, mode: channel.mode, templateId: stored?.id }, "email-channel: sent");
-    return { ok: true, messageId: msg!.id };
+    logger.info(
+      {
+        userId: opts.userId,
+        to,
+        mode: channel.mode,
+        templateId: stored?.id,
+        fromEmail: from.fromEmail,
+        providerMessageId,
+      },
+      "email-channel: sent",
+    );
+    return {
+      ok: true,
+      messageId: msg!.id,
+      providerMessageId,
+      fromEmail: from.fromEmail,
+      mode: channel.mode,
+    };
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
     await db.update(emailMessagesTable).set({ status: "failed", error }).where(eq(emailMessagesTable.id, msg!.id));
     await db.update(emailChannelsTable).set({ lastError: error }).where(eq(emailChannelsTable.id, channel.id));
     logger.warn({ userId: opts.userId, to, error }, "email-channel: send failed");
-    return { ok: false, error, messageId: msg!.id };
+    return { ok: false, error, messageId: msg!.id, mode: channel.mode };
   }
 }

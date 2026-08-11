@@ -139,6 +139,8 @@ export const emailMessagesTable = pgTable("email_messages", {
   bodyPreview: text("body_preview"),
   status: text("status").notNull().default("pending"), // pending | sent | failed | skipped
   error: text("error"),
+  /** Brevo messageId — used to trace the send in Brevo's transactional logs. */
+  providerMessageId: text("provider_message_id"),
   mode: text("mode").$type<EmailChannelMode>(),
   callId: integer("call_id"),
   journeyRunHint: text("journey_run_hint"),

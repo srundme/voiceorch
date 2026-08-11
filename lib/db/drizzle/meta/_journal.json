@@ -729,6 +729,13 @@
       "when": 1791600003000,
       "tag": "0103_email_templates_multi",
       "breakpoints": true
+    },
+    {
+      "idx": 104,
+      "version": "7",
+      "when": 1791600004000,
+      "tag": "0104_email_provider_message_id",
+      "breakpoints": true
     }
   ]
 }
