@@ -353,10 +353,14 @@ export function buildMeetPresentationPageHtml(): string {
   var lastUpdated = 0;
   var lastSlide = 0;
   var lastUrl = "";
-  // A single failed poll must not blank the deck in front of the room — the
-  // server may be mid-restart. Only surface an error once it persists.
-  var FAILURES_BEFORE_ERROR = 4;
-  var failures = 0;
+  // Poll cadence: snappy enough for slide changes, gentle enough to stay well
+  // under any IP rate limit. Transient failures (429 / network / 5xx) back off
+  // so a busy server is never hammered into blanking the shared deck.
+  var BASE_MS = 500;
+  var backoffMs = 0;
+  var softFails = 0;   // transient: rate-limited / offline / server restarting
+  var hardFails = 0;   // definitive: expired / invalid / unconfigured
+  var hadContent = false;
   var shownErr = "";
 
   function showErr(msg){
@@ -385,6 +389,24 @@ export function buildMeetPresentationPageHtml(): string {
     return "No presentation is set for this meeting. Add a deck URL in the agent's Meeting settings.";
   }
 
+  // Definitive server answer — surface after a few in a row so a redeploy blip
+  // does not flash an error.
+  function hardFail(reason){
+    softFails = 0;
+    backoffMs = 0;
+    if (++hardFails >= 4) showErr(reasonText(reason));
+  }
+
+  // Transient outage — keep a deck that already loaded on screen, and only show
+  // a gentle notice when nothing ever loaded or the outage drags on.
+  function softFail(){
+    hardFails = 0;
+    softFails++;
+    backoffMs = Math.min(8000, backoffMs ? backoffMs * 2 : 1500);
+    if (!hadContent && softFails >= 4) showErr("Connecting to SnapServe…");
+    else if (softFails >= 12) showErr("Reconnecting…");
+  }
+
   function frameSrc(state){
     var url = state.sourceUrl || "";
     var slide = state.slideIndex || 1;
@@ -405,7 +427,10 @@ export function buildMeetPresentationPageHtml(): string {
   }
 
   function apply(state){
-    failures = 0;
+    hadContent = true;
+    softFails = 0;
+    hardFails = 0;
+    backoffMs = 0;
     clearErr();
     badgeN.textContent = String(state.slideIndex || 1);
     var next = frameSrc(state);
@@ -416,32 +441,33 @@ export function buildMeetPresentationPageHtml(): string {
     }
   }
 
-  function fail(reason){
-    failures++;
-    if (failures < FAILURES_BEFORE_ERROR) return;
-    showErr(reasonText(reason));
-  }
+  function scheduleNext(){ setTimeout(poll, BASE_MS + backoffMs); }
 
   async function poll(){
-    if (!token) { showErr("Missing meeting token."); return; }
     try {
       var res = await fetch("/api/meet-bots/present-state?mb=" + encodeURIComponent(token), { cache: "no-store" });
-      var state = await res.json();
-      if (!state || !state.ok) { fail(state && state.reason); return; }
+      // 429 (rate limited) and 5xx (restarting) are transient — never a reason
+      // to blank the deck. Back off and keep whatever is on screen.
+      if (res.status === 429 || res.status >= 500) { softFail(); return; }
+      var state = await res.json().catch(function(){ return null; });
+      if (!state || !state.ok) { hardFail(state && state.reason); return; }
       // Skip redundant repaints, but never while an error is on screen — that
       // would strand the message after the state came back.
       if (!shownErr && state.updatedAt && state.updatedAt === lastUpdated) {
-        failures = 0;
+        softFails = 0; hardFails = 0; backoffMs = 0;
         return;
       }
       lastUpdated = state.updatedAt || 0;
       apply(state);
     } catch (e) {
-      fail(null);
+      softFail();
+    } finally {
+      scheduleNext();
     }
   }
-  poll();
-  setInterval(poll, 250);
+
+  if (!token) { showErr("Missing meeting token."); }
+  else { poll(); }
 })();
 </script></body></html>`;
 }
