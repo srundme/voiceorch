@@ -167,6 +167,15 @@ router.use(workflowsPublicRouter);
 // reach /kyc/callback. Authed /kyc/status + /kyc/start keep their own requireAuth.
 router.use(kycRouter);
 
+// Google Sheets + Scheduling both receive unauthenticated browser hits (Google's
+// OAuth redirect back to /sheets/google/callback and /scheduling/google/callback,
+// plus the public booking pages). Same constraint as kycRouter above: they must
+// be mounted before the campaign routers, whose blanket `router.use(requireAuth)`
+// answers 401 for every request that reaches them. Their authenticated routes
+// carry their own per-route requireAuth and read identity from attachSession.
+router.use(sheetsRouter);
+router.use(schedulingRouter);
+
 router.use(storageRouter);
 router.use(provisionUser);
 router.use(ambientSoundsUserRouter);
@@ -208,7 +217,6 @@ router.use(platformAnalyticsRouter);
 router.use(searchRouter);
 router.use(agentVariablesRouter);
 router.use(batchImportRunsRouter);
-router.use(schedulingRouter);
 router.use(assistantRouter);
 router.use(usageMeRouter);
 router.use(userApiKeysRouter);
@@ -224,7 +232,6 @@ router.use(crmRouter);
 router.use(workflowsRouter);
 router.use(journeysRouter);
 router.use(emailChannelsRouter);
-router.use(sheetsRouter);
 router.use(sheetAutoCallsRouter);
 router.use(squadsRouter);
 router.use(voiceathonEventsRouter);
