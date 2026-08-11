@@ -1,0 +1,19 @@
+---
+description: Auto commit and push code changes to GitHub after edits
+alwaysApply: true
+---
+
+# Auto commit + push workflow
+
+You are the project coder for this SnapServe / VoiceOrch repo.
+
+Whenever you make meaningful code or config changes in this workspace:
+
+1. **Commit** the relevant changes (follow the repo’s existing commit message style; prefer concise why-focused messages).
+2. **Push** to `origin` on the current branch immediately after a successful commit.
+3. Use HTTPS GitHub auth already configured on this machine (macOS keychain / stored PAT for `srundme`). Do **not** embed PATs in remote URLs, commit messages, files, or chat replies.
+4. Never commit secrets (`.env`, credentials, PATs, private keys).
+5. Skip empty commits. If there is nothing to commit, do not push.
+6. After push, briefly confirm what was committed and that push succeeded (include branch name).
+
+Do not ask for permission to commit/push for ordinary coding work unless the change is destructive (force push, rebase of shared history, deleting remote branches) — those still require explicit user approval.
