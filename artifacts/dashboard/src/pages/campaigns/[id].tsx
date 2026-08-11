@@ -43,6 +43,7 @@ import {
 } from "lucide-react";
 import { CallDetailDrawer } from "@/components/call-detail-drawer";
 import { TablePagination } from "@/components/table-pagination";
+import { RecampaignDialog } from "./recampaign-dialog";
 import { format, formatDistanceToNow } from "date-fns";
 import { BATCH_STATUS_MAP, CAMPAIGN_STATUS_MAP } from "@/lib/campaign-status";
 import LiveQueueTab from "./live-queue";
@@ -1335,6 +1336,7 @@ export default function CampaignDetailPage() {
   const [leadTransferForm, setLeadTransferForm] = useState<LeadTransferForm>(EMPTY_LEAD_TRANSFER);
   const [savingTransfer, setSavingTransfer] = useState(false);
   const [actingDisposition, setActingDisposition] = useState<string | null>(null);
+  const [recampaignOpen, setRecampaignOpen] = useState(false);
 
   useEffect(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1635,9 +1637,29 @@ export default function CampaignDetailPage() {
             </Button>
             {/* Continuous campaigns never show "finished" badge — they are always-on pipelines */}
             {!isContinuous && campaignFinished && (
-              <span className="inline-flex items-center gap-1.5 h-8 px-3 text-xs font-semibold rounded-md border bg-emerald-500/10 text-emerald-600 border-emerald-500/30 select-none">
-                <CheckCircle2 className="h-3.5 w-3.5" /> Campaign Completed
-              </span>
+              <>
+                <span className="inline-flex items-center gap-1.5 h-8 px-3 text-xs font-semibold rounded-md border bg-emerald-500/10 text-emerald-600 border-emerald-500/30 select-none">
+                  <CheckCircle2 className="h-3.5 w-3.5" /> Campaign Completed
+                </span>
+                <Button
+                  size="sm"
+                  className="h-8 text-xs gap-1.5"
+                  onClick={() => setRecampaignOpen(true)}
+                >
+                  <Layers className="h-3.5 w-3.5" /> Re-campaign
+                </Button>
+              </>
+            )}
+            {/* Also offer re-campaign whenever there is outcome data to dial again */}
+            {!isContinuous && !campaignFinished && ((analytics?.dispositions?.length ?? 0) > 0 || failed > 0) && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 text-xs gap-1.5"
+                onClick={() => setRecampaignOpen(true)}
+              >
+                <Layers className="h-3.5 w-3.5" /> Re-campaign
+              </Button>
             )}
             {/* CSV campaigns: Create Batch button + dropdown controls */}
             {(!isContinuous || campaign.status === "draft") && (
@@ -1717,7 +1739,7 @@ export default function CampaignDetailPage() {
               <div>
                 <p className="text-xs font-semibold text-foreground/70 uppercase tracking-wider">Dispositions</p>
                 <p className="text-[11px] text-muted-foreground mt-0.5">
-                  Act on a slice: export, transfer to CRM, or create a redial batch.
+                  Act on a slice: export, transfer to CRM, create a redial batch, or use Re-campaign for multi-slice dials.
                 </p>
               </div>
               <div className="space-y-2">
@@ -2108,6 +2130,15 @@ export default function CampaignDetailPage() {
         open={selectedCallId !== null}
         callId={selectedCallId}
         onClose={() => setSelectedCallId(null)}
+      />
+
+      <RecampaignDialog
+        open={recampaignOpen}
+        onOpenChange={setRecampaignOpen}
+        campaignId={campaignId}
+        campaignName={campaign?.name}
+        dispositions={analytics?.dispositions ?? []}
+        statusBreakdown={(analytics as { statusBreakdown?: Record<string, number> } | undefined)?.statusBreakdown}
       />
 
       <AlertDialog open={!!deletingBatch} onOpenChange={v => { if (!v) setDeletingBatch(null); }}>

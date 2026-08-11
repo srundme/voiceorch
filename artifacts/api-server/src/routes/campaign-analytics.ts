@@ -14,7 +14,7 @@ import {
   callCallbacksTable, callRetriesTable, workspaceDncTable,
   leadTimelineTable, callsTable,
 } from "@workspace/db";
-import { eq, and, count, sql, desc, isNotNull, inArray, ne } from "drizzle-orm";
+import { eq, and, count, sql, desc, isNotNull, inArray, ne, or } from "drizzle-orm";
 import { normalizePhone } from "../lib/phone-normalize.js";
 
 const router: IRouter = Router();
@@ -612,6 +612,160 @@ router.post("/campaigns/:id/dispositions/act", async (req, res): Promise<void> =
     batchId: batch!.id,
     batchName: batch!.name,
     inserted,
+  });
+});
+
+// ── POST /campaigns/:id/recampaign ────────────────────────────────────────────
+// Clone selected lead slices into a new draft batch so users can redial
+// dispositions (e.g. not interested) and/or no-pickup / failed statuses.
+router.post("/campaigns/:id/recampaign", async (req, res): Promise<void> => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const campaignId = parseInt(req.params["id"]!, 10);
+  const campaign = await requireCampaign(campaignId, userId);
+  if (!campaign) { res.status(404).json({ error: "Not found" }); return; }
+
+  const body = req.body as {
+    batchName?: string;
+    dispositions?: string[];
+    callStatuses?: string[];
+    sourceBatchId?: number;
+  };
+
+  const dispositions = Array.isArray(body.dispositions)
+    ? [...new Set(body.dispositions.map((d) => String(d).trim()).filter(Boolean))]
+    : [];
+  const callStatuses = Array.isArray(body.callStatuses)
+    ? [...new Set(body.callStatuses.map((s) => String(s).trim()).filter(Boolean))]
+    : [];
+  const sourceBatchId =
+    typeof body.sourceBatchId === "number" && Number.isFinite(body.sourceBatchId)
+      ? body.sourceBatchId
+      : undefined;
+
+  if (dispositions.length === 0 && callStatuses.length === 0) {
+    res.status(400).json({ error: "Select at least one disposition or call status" });
+    return;
+  }
+
+  if (sourceBatchId != null) {
+    const [batch] = await db
+      .select({ id: campaignBatchesTable.id })
+      .from(campaignBatchesTable)
+      .where(and(
+        eq(campaignBatchesTable.id, sourceBatchId),
+        eq(campaignBatchesTable.campaignId, campaignId),
+      ))
+      .limit(1);
+    if (!batch) {
+      res.status(404).json({ error: "Source batch not found" });
+      return;
+    }
+  }
+
+  const filters = [];
+  if (dispositions.length > 0) {
+    filters.push(inArray(campaignLeadsTable.disposition, dispositions));
+  }
+  if (callStatuses.length > 0) {
+    filters.push(inArray(campaignLeadsTable.callStatus, callStatuses));
+  }
+
+  const whereParts = [
+    eq(campaignLeadsTable.campaignId, campaignId),
+    filters.length === 1 ? filters[0]! : or(...filters)!,
+  ];
+  if (sourceBatchId != null) {
+    whereParts.push(eq(campaignLeadsTable.batchId, sourceBatchId));
+  }
+
+  const leads = await db
+    .select()
+    .from(campaignLeadsTable)
+    .where(and(...whereParts))
+    .limit(5000);
+
+  if (leads.length === 0) {
+    res.status(400).json({ error: "No leads matched the selected filters" });
+    return;
+  }
+
+  // Deduplicate by normalized phone (or raw phone) so the same person isn't dialed twice.
+  const seen = new Set<string>();
+  const uniqueLeads = leads.filter((l) => {
+    const key = (l.normalizedPhone || l.phone || "").trim().toLowerCase();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  const filterSummary = [
+    dispositions.length ? `dispositions=${dispositions.join("|")}` : null,
+    callStatuses.length ? `statuses=${callStatuses.join("|")}` : null,
+  ].filter(Boolean).join(", ");
+
+  const batchName =
+    (typeof body.batchName === "string" && body.batchName.trim()) ||
+    `Re-campaign ${new Date().toISOString().slice(0, 10)}`.slice(0, 120);
+
+  const [batch] = await db
+    .insert(campaignBatchesTable)
+    .values({
+      campaignId,
+      name: batchName,
+      description: `Re-campaign from filters: ${filterSummary}`,
+      leadSource: "csv",
+      status: "draft",
+    })
+    .returning();
+
+  let inserted = 0;
+  const toInsert = uniqueLeads.map((l) => ({
+    campaignId,
+    batchId: batch!.id,
+    phone: l.phone,
+    normalizedPhone: l.normalizedPhone,
+    name: l.name,
+    email: l.email,
+    leadData: {
+      ...(typeof l.leadData === "object" && l.leadData !== null ? l.leadData as Record<string, unknown> : {}),
+      recampaignedFromLeadId: l.id,
+      previousDisposition: l.disposition,
+      previousCallStatus: l.callStatus,
+    },
+    source: "csv",
+    callStatus: "pending",
+  }));
+
+  for (let i = 0; i < toInsert.length; i += 100) {
+    const chunk = toInsert.slice(i, i + 100);
+    if (!chunk.length) continue;
+    await db.insert(campaignLeadsTable).values(chunk);
+    inserted += chunk.length;
+  }
+
+  await db
+    .update(campaignBatchesTable)
+    .set({ totalLeads: inserted })
+    .where(eq(campaignBatchesTable.id, batch!.id));
+  await db
+    .update(campaignsTable)
+    .set({
+      totalLeads: sql`${campaignsTable.totalLeads} + ${inserted}`,
+      status: campaign.status === "completed" || campaign.status === "stopped" ? "active" : campaign.status,
+      isActive: true,
+    })
+    .where(eq(campaignsTable.id, campaignId));
+
+  res.json({
+    matched: leads.length,
+    inserted,
+    deduped: leads.length - uniqueLeads.length,
+    batchId: batch!.id,
+    batchName: batch!.name,
+    dispositions,
+    callStatuses,
   });
 });
 
