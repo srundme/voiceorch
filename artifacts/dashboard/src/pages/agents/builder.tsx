@@ -2316,26 +2316,44 @@ function VoiceTab({ form }: { form: any }) {
   );
 }
 
-/** Voice-tab Call Engine presets — writes the same form keys as Advanced → Engine. */
-function VoiceCallFeelPresets({ form }: { form: any }) {
+/**
+ * Call Engine preset state shared by the Voice tab and Settings → Engine.
+ *
+ * A preset (Fast / Balanced / Patient) is a STARTING POINT, not a lock: the
+ * chosen preset stays selected while the user fine-tunes the individual knobs,
+ * and the edited values save exactly as set. There is no "Custom" mode — a
+ * `tweaked` flag just signals the values now differ from the named preset.
+ */
+function useCallEnginePreset(form: any): {
+  preset: CallEnginePreset;
+  tweaked: boolean;
+  applyPreset: (key: CallEnginePreset) => void;
+} {
   const asrProviderVal = form.watch("asrProvider") as string | undefined;
   const endpointMs = form.watch("asrEndpointingSilenceMs") ?? 250;
   const linearMs = form.watch("linearDelayMs") ?? 0;
   const interruptWords = form.watch("stopSpeakingNumWords") ?? 3;
+  const vad = form.watch("sarvamHighVadSensitivity") ?? false;
 
-  const activePreset: CallEnginePreset | "custom" = (() => {
-    for (const key of Object.keys(CALL_ENGINE_PRESETS) as CallEnginePreset[]) {
-      const p = CALL_ENGINE_PRESETS[key];
-      if (
-        endpointMs === p.asrEndpointingSilenceMs
-        && linearMs === p.linearDelayMs
-        && interruptWords === p.stopSpeakingNumWords
-        && (asrProviderVal !== "sarvam"
-          || (form.watch("sarvamHighVadSensitivity") ?? false) === p.sarvamHighVadSensitivity)
-      ) return key;
-    }
-    return "custom";
-  })();
+  const matches = (key: CallEnginePreset): boolean => {
+    const p = CALL_ENGINE_PRESETS[key];
+    return (
+      endpointMs === p.asrEndpointingSilenceMs
+      && linearMs === p.linearDelayMs
+      && interruptWords === p.stopSpeakingNumWords
+      && (asrProviderVal !== "sarvam" || vad === p.sarvamHighVadSensitivity)
+    );
+  };
+  const derived = (Object.keys(CALL_ENGINE_PRESETS) as CallEnginePreset[]).find(matches) ?? null;
+
+  // The selected chip. Seeded from the saved values; falls back to Balanced for
+  // legacy agents whose values match no preset (never shown as "Custom").
+  const [pinned, setPinned] = useState<CallEnginePreset>(derived ?? "balanced");
+  // Follow the values when they land exactly on a (possibly different) preset —
+  // e.g. the user drags the knobs until they match Fast.
+  useEffect(() => {
+    if (derived && derived !== pinned) setPinned(derived);
+  }, [derived]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const applyPreset = (key: CallEnginePreset) => {
     const p = CALL_ENGINE_PRESETS[key];
@@ -2345,7 +2363,16 @@ function VoiceCallFeelPresets({ form }: { form: any }) {
     form.setValue("stopSpeakingVoiceSecs", voiceSecondsFromInterruptWords(p.stopSpeakingNumWords), { shouldDirty: true });
     // Sarvam pause-detection is part of the preset — Fast without it leaves a ~2s turn tax.
     form.setValue("sarvamHighVadSensitivity", p.sarvamHighVadSensitivity, { shouldDirty: true });
+    setPinned(key);
   };
+
+  return { preset: pinned, tweaked: !matches(pinned), applyPreset };
+}
+
+/** Voice-tab Call Engine presets — writes the same form keys as Advanced → Engine. */
+function VoiceCallFeelPresets({ form }: { form: any }) {
+  const asrProviderVal = form.watch("asrProvider") as string | undefined;
+  const { preset: activePreset, tweaked, applyPreset } = useCallEnginePreset(form);
 
   return (
     <section className="space-y-3">
@@ -2383,9 +2410,9 @@ function VoiceCallFeelPresets({ form }: { form: any }) {
               {p.label}
             </button>
           ))}
-          {activePreset === "custom" && (
-            <span className="px-2.5 py-1.5 rounded-lg text-[11px] text-muted-foreground/80 border border-dashed border-border/50">
-              Custom
+          {tweaked && (
+            <span className="px-2 py-1.5 text-[11px] text-muted-foreground/70 self-center">
+              edited — saves as set
             </span>
           )}
         </div>
@@ -3435,33 +3462,7 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
 
   const bargeIn = form.watch("bargeInEnabled");
   const asrProviderVal = form.watch("asrProvider") as string | undefined;
-  const endpointMs = form.watch("asrEndpointingSilenceMs") ?? 250;
-  const linearMs = form.watch("linearDelayMs") ?? 0;
-  const interruptWords = form.watch("stopSpeakingNumWords") ?? 3;
-
-  const activePreset: CallEnginePreset | "custom" = (() => {
-    for (const key of Object.keys(CALL_ENGINE_PRESETS) as CallEnginePreset[]) {
-      const p = CALL_ENGINE_PRESETS[key];
-      if (
-        endpointMs === p.asrEndpointingSilenceMs
-        && linearMs === p.linearDelayMs
-        && interruptWords === p.stopSpeakingNumWords
-        && (asrProviderVal !== "sarvam"
-          || (form.watch("sarvamHighVadSensitivity") ?? false) === p.sarvamHighVadSensitivity)
-      ) return key;
-    }
-    return "custom";
-  })();
-
-  const applyPreset = (key: CallEnginePreset) => {
-    const p = CALL_ENGINE_PRESETS[key];
-    form.setValue("asrEndpointingSilenceMs", p.asrEndpointingSilenceMs, { shouldDirty: true });
-    form.setValue("linearDelayMs", p.linearDelayMs, { shouldDirty: true });
-    form.setValue("stopSpeakingNumWords", p.stopSpeakingNumWords, { shouldDirty: true });
-    form.setValue("stopSpeakingVoiceSecs", voiceSecondsFromInterruptWords(p.stopSpeakingNumWords), { shouldDirty: true });
-    // Sarvam pause-detection is part of the preset — Fast without it leaves a ~2s turn tax.
-    form.setValue("sarvamHighVadSensitivity", p.sarvamHighVadSensitivity, { shouldDirty: true });
-  };
+  const { preset: activePreset, tweaked, applyPreset } = useCallEnginePreset(form);
 
   const nav: { id: AdvSection; icon: React.ReactNode; label: string }[] = [
     { id: "engine",       icon: <Timer className="h-3.5 w-3.5" />,       label: "Engine"     },
@@ -3532,8 +3533,8 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                   {p.label}
                 </button>
               ))}
-              {activePreset === "custom" && (
-                <span className="px-2 py-1.5 text-[11px] text-muted-foreground/70">Custom</span>
+              {tweaked && (
+                <span className="px-2 py-1.5 text-[11px] text-muted-foreground/70 self-center">edited — saves as set</span>
               )}
             </div>
 
