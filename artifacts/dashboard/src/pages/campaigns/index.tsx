@@ -49,6 +49,13 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { MetricCard, MetricStrip } from "@/components/metric-strip";
 import { BrandLogo, BrandLogoBadge } from "@/components/brand-logos";
 import {
+  canActivateCampaign,
+  canPauseCampaign,
+  canResumeCampaign,
+  canStopCampaign,
+  type CampaignLifecycleStatus,
+} from "@/lib/campaign-lifecycle";
+import {
   EMPTY_LEAD_TRANSFER,
   LeadTransferSettings,
   leadTransferReady,
@@ -181,10 +188,12 @@ function CampaignMobileCard({
   campaign,
   onEdit,
   onDelete,
+  onStatusChange,
 }: {
   campaign: DashboardCampaign;
   onEdit: (c: Campaign) => void;
   onDelete: (c: Campaign) => void;
+  onStatusChange: (c: DashboardCampaign, status: CampaignLifecycleStatus) => void;
 }) {
   const [, navigate] = useLocation();
   const totalCallable = campaign.totalLeads;
@@ -239,10 +248,31 @@ function CampaignMobileCard({
               <MoreHorizontal className="h-3.5 w-3.5 text-muted-foreground/50" />
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="min-w-[130px]">
+          <DropdownMenuContent align="end" className="min-w-[150px]">
             <DropdownMenuItem className="text-xs" onClick={e => { e.stopPropagation(); onEdit(campaign as unknown as Campaign); }}>
               <Pencil className="h-3.5 w-3.5 text-muted-foreground/60" /> Edit
             </DropdownMenuItem>
+            {canPauseCampaign(campaign.status) && (
+              <DropdownMenuItem className="text-xs" onClick={e => { e.stopPropagation(); onStatusChange(campaign, "paused"); }}>
+                <PauseCircle className="h-3.5 w-3.5 text-amber-600" /> Pause
+              </DropdownMenuItem>
+            )}
+            {canResumeCampaign(campaign.status) && (
+              <DropdownMenuItem className="text-xs" onClick={e => { e.stopPropagation(); onStatusChange(campaign, "active"); }}>
+                <PlayCircle className="h-3.5 w-3.5 text-emerald-600" /> Resume
+              </DropdownMenuItem>
+            )}
+            {canActivateCampaign(campaign.status) && (
+              <DropdownMenuItem className="text-xs" onClick={e => { e.stopPropagation(); onStatusChange(campaign, "active"); }}>
+                <PlayCircle className="h-3.5 w-3.5 text-emerald-600" /> Activate
+              </DropdownMenuItem>
+            )}
+            {canStopCampaign(campaign.status) && (
+              <DropdownMenuItem className="text-xs text-red-500 focus:text-red-500 focus:bg-red-500/5"
+                onClick={e => { e.stopPropagation(); onStatusChange(campaign, "stopped"); }}>
+                <XCircle className="h-3.5 w-3.5" /> Stop
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem className="text-xs text-red-500 focus:text-red-500 focus:bg-red-500/5"
               onClick={e => { e.stopPropagation(); onDelete(campaign as unknown as Campaign); }}>
               <Trash2 className="h-3.5 w-3.5" /> Delete
@@ -258,10 +288,12 @@ function CampaignRow({
   campaign,
   onEdit,
   onDelete,
+  onStatusChange,
 }: {
   campaign: DashboardCampaign;
   onEdit: (c: Campaign) => void;
   onDelete: (c: Campaign) => void;
+  onStatusChange: (c: DashboardCampaign, status: CampaignLifecycleStatus) => void;
 }) {
   const [, navigate] = useLocation();
   const totalCallable = campaign.totalLeads;
@@ -388,10 +420,31 @@ function CampaignRow({
               <MoreHorizontal className="h-3.5 w-3.5 text-muted-foreground/50" />
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="min-w-[130px]">
+          <DropdownMenuContent align="end" className="min-w-[150px]">
             <DropdownMenuItem className="text-xs" onClick={e => { e.stopPropagation(); onEdit(campaign as unknown as Campaign); }}>
               <Pencil className="h-3.5 w-3.5 text-muted-foreground/60" /> Edit
             </DropdownMenuItem>
+            {canPauseCampaign(campaign.status) && (
+              <DropdownMenuItem className="text-xs" onClick={e => { e.stopPropagation(); onStatusChange(campaign, "paused"); }}>
+                <PauseCircle className="h-3.5 w-3.5 text-amber-600" /> Pause
+              </DropdownMenuItem>
+            )}
+            {canResumeCampaign(campaign.status) && (
+              <DropdownMenuItem className="text-xs" onClick={e => { e.stopPropagation(); onStatusChange(campaign, "active"); }}>
+                <PlayCircle className="h-3.5 w-3.5 text-emerald-600" /> Resume
+              </DropdownMenuItem>
+            )}
+            {canActivateCampaign(campaign.status) && (
+              <DropdownMenuItem className="text-xs" onClick={e => { e.stopPropagation(); onStatusChange(campaign, "active"); }}>
+                <PlayCircle className="h-3.5 w-3.5 text-emerald-600" /> Activate
+              </DropdownMenuItem>
+            )}
+            {canStopCampaign(campaign.status) && (
+              <DropdownMenuItem className="text-xs text-red-500 focus:text-red-500 focus:bg-red-500/5"
+                onClick={e => { e.stopPropagation(); onStatusChange(campaign, "stopped"); }}>
+                <XCircle className="h-3.5 w-3.5" /> Stop
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem className="text-xs text-red-500 focus:text-red-500 focus:bg-red-500/5"
               onClick={e => { e.stopPropagation(); onDelete(campaign as unknown as Campaign); }}>
               <Trash2 className="h-3.5 w-3.5" /> Delete
@@ -1405,6 +1458,7 @@ export default function CampaignsPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const deleteMutation = useDeleteCampaign();
+  const updateMutation = useUpdateCampaign();
   const { data: crmConnections = [] } = useListCrmConnections({
     query: { queryKey: getListCrmConnectionsQueryKey(), staleTime: 30_000 },
   });
@@ -1488,6 +1542,27 @@ export default function CampaignsPage() {
       setDeletingCamp(false);
       setDeleting(null);
       setDeleteNameInput("");
+    }
+  }
+
+  async function handleStatusChange(campaign: DashboardCampaign, status: CampaignLifecycleStatus) {
+    try {
+      await updateMutation.mutateAsync({ id: campaign.id, data: { status } });
+      await qc.invalidateQueries({ queryKey: ["campaigns-dashboard"] });
+      await qc.invalidateQueries({ queryKey: getListCampaignsQueryKey() });
+      toast({
+        title:
+          status === "paused" ? "Campaign paused" :
+          status === "stopped" ? "Campaign stopped" :
+          campaign.status === "stopped" ? "Campaign activated" :
+          "Campaign resumed",
+      });
+    } catch (err) {
+      toast({
+        title: "Could not update campaign",
+        description: err instanceof Error ? err.message : "Please try again",
+        variant: "destructive",
+      });
     }
   }
 
@@ -1679,6 +1754,7 @@ export default function CampaignsPage() {
                         campaign={c}
                         onEdit={row => setEditing(row)}
                         onDelete={row => { setDeleteNameInput(""); setDeleting(row); }}
+                        onStatusChange={(row, status) => void handleStatusChange(row, status)}
                       />
                     ))}
                     {filtered.map(c => (
@@ -1687,6 +1763,7 @@ export default function CampaignsPage() {
                         campaign={c}
                         onEdit={row => setEditing(row)}
                         onDelete={row => { setDeleteNameInput(""); setDeleting(row); }}
+                        onStatusChange={(row, status) => void handleStatusChange(row, status)}
                       />
                     ))}
                   </>
