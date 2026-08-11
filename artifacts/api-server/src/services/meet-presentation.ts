@@ -350,7 +350,7 @@ export function buildMeetPresentationPageHtml(): string {
     }
   }
   poll();
-  setInterval(poll, 800);
+  setInterval(poll, 250);
 })();
 </script></body></html>`;
 }

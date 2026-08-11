@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { makeGeminiPreambleGuard, stripGeminiThinkingPreamble, GoogleLLM } from "./google.js";
+import {
+  makeGeminiPreambleGuard,
+  parseGeminiBracketToolCall,
+  stripGeminiThinkingPreamble,
+  GoogleLLM,
+} from "./google.js";
 
 // Stream a reply through the guard in arbitrary chunks, collect the spoken output.
 function runStream(chunks: string[]): string {
@@ -44,6 +49,63 @@ describe("stripGeminiThinkingPreamble (final reply)", () => {
     expect(stripGeminiThinkingPreamble(input)).toBe(
       "Your code is [12345] and it expires soon.",
     );
+  });
+});
+
+describe("parseGeminiBracketToolCall", () => {
+  it("parses the positional goto_slide form observed in meeting call logs", () => {
+    expect(parseGeminiBracketToolCall("[called goto_slide(4)]")).toEqual({
+      name: "goto_slide",
+      args: { slide: 4 },
+    });
+  });
+
+  it("parses an argument-free slide action", () => {
+    expect(parseGeminiBracketToolCall("[called next_slide]")).toEqual({
+      name: "next_slide",
+      args: {},
+    });
+  });
+
+  it("parses JSON and named arguments", () => {
+    expect(parseGeminiBracketToolCall('[called goto_slide({"slide":10})]')).toEqual({
+      name: "goto_slide",
+      args: { slide: 10 },
+    });
+    expect(parseGeminiBracketToolCall("[called goto_slide(slide=7)]")).toEqual({
+      name: "goto_slide",
+      args: { slide: 7 },
+    });
+  });
+
+  it("does not mistake normal bracketed speech for a tool call", () => {
+    expect(parseGeminiBracketToolCall("Your code is [12345].")).toBeNull();
+  });
+});
+
+describe("GoogleLLM.buildContents (tool history)", () => {
+  it("uses a native model functionCall instead of a text placeholder", () => {
+    const llm = new GoogleLLM("test-key", "gemini-3.5-flash-lite");
+    const { history } = (llm as unknown as {
+      buildContents(messages: Array<{
+        role: "user" | "assistant" | "tool";
+        content: string;
+        toolCalls?: Array<{ id: string; name: string; args: string }>;
+      }>): { history: Array<{ role?: string; parts?: Array<Record<string, unknown>> }> };
+    }).buildContents([
+      { role: "user", content: "Go to slide 10" },
+      {
+        role: "assistant",
+        content: "",
+        toolCalls: [{ id: "call-1", name: "goto_slide", args: '{"slide":10}' }],
+      },
+      { role: "tool", content: "slide=10" },
+    ]);
+
+    expect(history[1]?.parts).toEqual([
+      { functionCall: { name: "goto_slide", args: { slide: 10 } } },
+    ]);
+    expect(JSON.stringify(history)).not.toContain("[called");
   });
 });
 

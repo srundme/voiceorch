@@ -38,6 +38,55 @@ export function parseGeminiTagToolCall(raw: string): { name: string; args: Recor
 }
 
 /**
+ * Parses Gemini's occasional plain-text imitation of a tool call, for example
+ * "[called goto_slide(4)]" or "[called next_slide]".
+ */
+export function parseGeminiBracketToolCall(raw: string): { name: string; args: Record<string, unknown> } | null {
+  if (!raw) return null;
+  const match = /\[called\s+([a-zA-Z0-9_-]+)(?:\(([\s\S]*?)\))?\]/i.exec(raw);
+  if (!match) return null;
+
+  const name = match[1]!;
+  const body = match[2]?.trim() ?? "";
+  if (!body) return { name, args: {} };
+
+  try {
+    const parsed = JSON.parse(body);
+    if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+      return { name, args: parsed as Record<string, unknown> };
+    }
+    if (name === "goto_slide" && (typeof parsed === "number" || typeof parsed === "string")) {
+      return { name, args: { slide: parsed } };
+    }
+  } catch {
+    // Accept the compact positional form observed in call logs.
+    if (name === "goto_slide" && /^\d+(?:\.\d+)?$/.test(body)) {
+      return { name, args: { slide: Number(body) } };
+    }
+  }
+
+  const args: Record<string, unknown> = {};
+  const kvRegex = /([a-zA-Z0-9_-]+)\s*[:=]\s*(?:"([^"]*)"|'([^']*)'|([^,\s]+))/g;
+  let kv: RegExpExecArray | null;
+  while ((kv = kvRegex.exec(body)) !== null) {
+    const value = kv[2] ?? kv[3] ?? kv[4]!;
+    args[kv[1]!] = /^-?\d+(?:\.\d+)?$/.test(value) ? Number(value) : value;
+  }
+  return Object.keys(args).length > 0 ? { name, args } : null;
+}
+
+function parseStoredToolArgs(raw: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(raw);
+    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
  * Whole-string strip of Gemini thinking/planning preamble before it reaches TTS.
  */
 export function stripGeminiThinkingPreamble(text: string): string {
@@ -188,14 +237,26 @@ export class GoogleLLM implements LLMAdapter {
     currentContent: string;
   } {
     // Build history from all turns except the last.
-    // Tool turns flattened to plain text (functionResponse in user role causes API errors).
+    // Tool results remain plain user text because Gemini rejects functionResponse in
+    // user-role messages. Model tool calls can still use native functionCall parts,
+    // which avoids teaching Gemini to imitate a "[called ...]" text placeholder.
     const rawHistory = messages.slice(0, -1).map((m): Content => {
       if (m.role === "tool") {
         return { role: "user", parts: [{ text: `[Tool "${m.toolName ?? "tool"}" result: ${m.content}]` }] };
       }
       if (m.role === "assistant" && m.toolCalls?.length) {
-        const spokenText = m.content?.trim() || `[called ${m.toolCalls.map((tc) => tc.name).join(", ")}]`;
-        return { role: "model", parts: [{ text: spokenText }] };
+        return {
+          role: "model",
+          parts: [
+            ...(m.content?.trim() ? [{ text: m.content.trim() }] : []),
+            ...m.toolCalls.map((tc) => ({
+              functionCall: {
+                name: tc.name,
+                args: parseStoredToolArgs(tc.args),
+              },
+            })),
+          ],
+        };
       }
       return { role: m.role === "user" ? "user" : "model", parts: [{ text: m.content }] };
     });
@@ -280,10 +341,10 @@ export class GoogleLLM implements LLMAdapter {
       return;
     }
 
-    // Fallback: <tool_call> text tag (e.g. gemini-3.5-flash-lite serializes instead of native calls).
-    const tagParsed = parseGeminiTagToolCall(full);
-    if (tagParsed && options?.onToolCall) {
-      options.onToolCall(tagParsed.name, tagParsed.args);
+    // Fallbacks for models that serialize tool calls instead of returning native parts.
+    const serializedCall = parseGeminiTagToolCall(full) ?? parseGeminiBracketToolCall(full);
+    if (serializedCall && options?.onToolCall) {
+      options.onToolCall(serializedCall.name, serializedCall.args);
       return;
     }
 
