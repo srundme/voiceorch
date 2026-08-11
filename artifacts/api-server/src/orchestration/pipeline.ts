@@ -674,6 +674,18 @@ function buildCompactGreetingPrompt(
   return parts.join("\n\n");
 }
 
+/** Languages that share the Devanagari block (U+0900–U+097F) — script alone cannot separate them. */
+const DEVANAGARI_LANGUAGES = new Set(["hi-IN", "mr-IN", "ne-NP", "sa-IN", "kok-IN", "mai-IN"]);
+
+/** True when the text contains at least one Devanagari character. */
+function hasDevanagari(text: string): boolean {
+  for (const ch of text) {
+    const cp = ch.codePointAt(0) ?? 0;
+    if (cp >= 0x0900 && cp <= 0x097F) return true;
+  }
+  return false;
+}
+
 /**
  * Detect the dominant BCP-47 language from the Unicode script of a transcript.
  * Used as a fallback when the STT provider does not return a language code.
@@ -682,15 +694,19 @@ function buildCompactGreetingPrompt(
  * the provider returns no LID (older models, non-Sarvam providers).
  * This drives per-turn language injection when `languageAutoDetect` is ON.
  *
- * Priority: Tamil > Devanagari (Hindi) > Malayalam > Telugu > Kannada > Bengali >
+ * Priority: Tamil > Devanagari > Malayalam > Telugu > Kannada > Bengali >
  *           Gujarati > Gurmukhi (Punjabi) > Odia > Latin-only (English) > null.
+ *
+ * `devanagariLang` resolves the Hindi/Marathi/Nepali ambiguity — they share one
+ * Unicode block, so the caller passes the agent's configured Devanagari language
+ * (Hindi only as the default).
  *
  * Mixed scripts: the Indic script with the most characters wins among Indic scripts.
  * Latin (English) only wins when the transcript contains zero Indic characters — any
  * presence of Tamil/Devanagari/etc. script outweighs any amount of Latin text, because
  * callers frequently mix romanized words ("Anna", "insurance") into Indic-script speech.
  */
-function detectScriptLanguage(text: string): string | null {
+export function detectScriptLanguage(text: string, devanagariLang = "hi-IN"): string | null {
   let tamil = 0, devanagari = 0, malayalam = 0, telugu = 0, kannada = 0;
   let bengali = 0, gujarati = 0, gurmukhi = 0, odia = 0, sinhala = 0, latin = 0;
   for (const ch of text) {
@@ -717,7 +733,7 @@ function detectScriptLanguage(text: string): string | null {
   const effectiveLatin = indicTotal > 0 ? 0 : latin;
   const scores: Array<[number, string]> = [
     [tamil,         "ta-IN"],
-    [devanagari,    "hi-IN"],
+    [devanagari,    devanagariLang],
     [malayalam,     "ml-IN"],
     [sinhala,       "si-LK"],
     [telugu,        "te-IN"],
@@ -1241,6 +1257,18 @@ export class OrchestrationPipeline implements VoiceSession {
   // Seeded from the agent's primary language at construction so turn 1 already
   // has a baseline. Updated each turn via script detection when languageAutoDetect=true.
   private currentLang: string = "";
+  /** Which Devanagari language this agent means when it sees Devanagari script.
+   *  Hindi unless the agent is explicitly configured for another one (Marathi …). */
+  private get devanagariLang(): string {
+    const configured = this.agent.language ?? "";
+    if (DEVANAGARI_LANGUAGES.has(configured)) return configured;
+    // Accept bare base codes ("mr") as well as full tags ("mr-IN").
+    const base = configured.split("-")[0]!.toLowerCase();
+    for (const lang of DEVANAGARI_LANGUAGES) {
+      if (lang.split("-")[0] === base) return lang;
+    }
+    return "hi-IN";
+  }
   // When the caller switches language mid-call, capture {from, to} here so
   // processTurn() can annotate the user's history entry with a note that the
   // transcript was captured while ASR was still locked to the old language.
@@ -2958,7 +2986,15 @@ export class OrchestrationPipeline implements VoiceSession {
       if (sttLang && !LANG_DISPLAY_NAMES[sttLang]) sttLang = null; // unknown code — fall through to script detection
 
       if (this.agent.languageAutoDetect) {
-        let detected = sttLang ?? detectScriptLanguage(transcript);
+        // Hindi, Marathi and Nepali share the Devanagari block, and Sarvam/Google
+        // LID collapses them all to Hindi. A Marathi agent would therefore flip to
+        // Hindi on its first Devanagari transcript, so the agent's own configured
+        // Devanagari language wins whenever the transcript is in that script.
+        const devLang = this.devanagariLang;
+        let detected = sttLang ?? detectScriptLanguage(transcript, devLang);
+        if (devLang !== "hi-IN" && detected === "hi-IN" && hasDevanagari(transcript)) {
+          detected = devLang;
+        }
         // Explicit language request (e.g. "speak in English", "Hindi me baat
         // karo") LATCHES the caller's chosen output language so it STICKS for
         // the rest of the call. Without the latch, the very next Indic-script

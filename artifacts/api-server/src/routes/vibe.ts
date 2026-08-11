@@ -46,6 +46,13 @@ const LANG_MAP: Record<string, { code: string; label: string; gemini: boolean }>
   "te-IN": { code: "te-IN", label: "Telugu",          gemini: false },
   "kn-IN": { code: "kn-IN", label: "Kannada",         gemini: false },
   "ml-IN": { code: "ml-IN", label: "Malayalam",       gemini: false },
+  "mr-IN": { code: "mr-IN", label: "Marathi",         gemini: false },
+  "bn-IN": { code: "bn-IN", label: "Bengali",         gemini: false },
+  "gu-IN": { code: "gu-IN", label: "Gujarati",        gemini: false },
+  "pa-IN": { code: "pa-IN", label: "Punjabi",         gemini: false },
+  "or-IN": { code: "or-IN", label: "Odia",            gemini: false },
+  "as-IN": { code: "as-IN", label: "Assamese",        gemini: false },
+  "ur-IN": { code: "ur-IN", label: "Urdu",            gemini: false },
   "en-IN": { code: "en-IN", label: "English (India)", gemini: false },
   "en-US": { code: "en-US", label: "English (US)",    gemini: false },
 };

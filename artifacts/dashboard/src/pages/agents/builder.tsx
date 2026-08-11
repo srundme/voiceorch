@@ -91,6 +91,7 @@ import {
   type UiDomainFieldType,
   type StoredDomainField,
 } from "@/lib/disposition-fields";
+import { SnapServeAgentIcon } from "@/components/logo";
 import {
   ASR_PROVIDERS, LLM_PROVIDERS, TTS_PROVIDERS,
   LANGUAGES, SARVAM_PERSONALISATION_LANGUAGES, ASR_MODELS, LLM_MODELS, TTS_MODELS, TTS_VOICES, AGENT_TIMEZONES,
@@ -692,6 +693,11 @@ function OverviewTab({
   const llmModelLabel  = llmOptions.find((m: any) => m.value === llmModel)?.label ?? llmModel;
   const curatedVoiceOpts = ttsVoiceOpts.filter(v => v.value !== "__custom__");
   const inCuratedList    = curatedVoiceOpts.some(v => v.value === ttsVoice);
+  // Languages like Marathi have no vendor-tagged voices, so the picker falls back
+  // to the full catalog instead of going empty — tell the user that's what happened.
+  const showingAllVoicesForLanguage =
+    (whitelistedData?.voices ?? []).length > 0 &&
+    (whitelistedData?.voices ?? []).every(v => !isVoiceCompatibleWithLanguage(v.language, language));
   // Only show custom paste when user explicitly chose it, provider is free-form,
   // OR current voice ID is set but not in the curated list (edit existing custom).
   // Empty voice must NOT force custom mode — that hid the "Choose voice" dropdown.
@@ -1249,9 +1255,9 @@ function OverviewTab({
                       </FormItem>
                     )} />
                   )}
-                  {ttsProvider === "cartesia" && (whitelistedData?.voices ?? []).length > 0 && curatedVoiceOpts.length === 0 && myCartesiaClones.length === 0 && (
-                    <p className="text-[10px] text-amber-400/80 leading-relaxed rounded-md border border-amber-500/20 bg-amber-500/5 px-2.5 py-2">
-                      No voices available for the selected language.
+                  {ttsProvider === "cartesia" && showingAllVoicesForLanguage && (
+                    <p className="text-[10px] text-muted-foreground leading-relaxed rounded-md border border-border bg-muted/40 px-2.5 py-2">
+                      No voices are tagged for {langLabel} — showing every available voice. Most multilingual voices speak it well; preview a few to pick one.
                     </p>
                   )}
                   {showCustomVoiceInput && (
@@ -1783,6 +1789,9 @@ function VoiceTab({ form }: { form: any }) {
   const ttsModelOptsV = TTS_MODELS[ttsProvider] ?? [];
   const curatedVoiceOptsV = ttsVoiceOptsV.filter(v => v.value !== "__custom__");
   const inCuratedV        = curatedVoiceOptsV.some(v => v.value === ttsVoice);
+  const showingAllVoicesForLanguageV =
+    (whitelistedData?.voices ?? []).length > 0 &&
+    (whitelistedData?.voices ?? []).every(v => !isVoiceCompatibleWithLanguage(v.language, agentLanguage));
   // Don't force custom mode when voice is empty — that hid the Choose Voice dropdown.
   const showCustomV =
     ttsVoiceRawV === null
@@ -2076,9 +2085,9 @@ function VoiceTab({ form }: { form: any }) {
               )} />
             )}
 
-            {ttsProvider === "cartesia" && (whitelistedData?.voices ?? []).length > 0 && curatedVoiceOptsV.length === 0 && myCartesiaClonesV.length === 0 && (
-              <p className="text-xs text-amber-400/80 leading-relaxed rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2.5 col-span-2">
-                No voices available for the selected language.
+            {ttsProvider === "cartesia" && showingAllVoicesForLanguageV && (
+              <p className="text-xs text-muted-foreground leading-relaxed rounded-md border border-border bg-muted/40 px-3 py-2.5 col-span-2">
+                No voices are tagged for this language — showing every available voice. Most multilingual voices speak it well; preview a few to pick one.
               </p>
             )}
 
@@ -7921,7 +7930,7 @@ function StudioEmptyCanvas({ onCreate }: { onCreate: () => void }) {
     <div className="flex-1 flex items-center justify-center p-8 bg-background">
       <div className="text-center max-w-sm space-y-4">
         <div className="mx-auto h-12 w-12 rounded-2xl border border-border/50 bg-muted/30 flex items-center justify-center">
-          <Bot className="h-5 w-5 text-muted-foreground" />
+          <SnapServeAgentIcon size={20} className="text-muted-foreground" />
         </div>
         <div className="space-y-1.5">
           <h2 className="text-lg font-semibold tracking-tight">Select an agent</h2>
