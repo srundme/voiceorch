@@ -155,6 +155,71 @@ describe("GoogleLLM.cacheEligible (context-cache gating)", () => {
   });
 });
 
+describe("GoogleLLM context cache is keyed by base (language code-switching)", () => {
+  // A caller who switches language produces a different cache base per language
+  // guard. Each base must get its own CachedContent instead of evicting the
+  // previous one and burning the warm budget until caching shuts off.
+  type CacheInternals = {
+    ensureCache(base: string, tools: undefined): void;
+    caches: Map<string, { name: string }>;
+    warmPromises: Map<string, Promise<void>>;
+    cacheDisabled: boolean;
+    warmCount: number;
+    ai: { caches: { create: (cfg: unknown) => Promise<{ name: string }> } };
+  };
+
+  const englishBase = "EN-GUARD " + "X".repeat(5000);
+  const tamilBase = "TA-GUARD " + "X".repeat(5000);
+
+  function stubbed(): { llm: GoogleLLM; internals: CacheInternals; created: string[] } {
+    const llm = new GoogleLLM("test-key", "gemini-2.5-flash");
+    const internals = llm as unknown as CacheInternals;
+    const created: string[] = [];
+    internals.ai = {
+      caches: {
+        create: async (cfg: unknown) => {
+          const instruction = (cfg as { config: { systemInstruction: string } }).config.systemInstruction;
+          created.push(instruction);
+          return { name: `cache-${created.length}` };
+        },
+      },
+    };
+    return { llm, internals, created };
+  }
+
+  it("keeps a separate cache per base so a language flip still hits cache", async () => {
+    const { internals, created } = stubbed();
+
+    internals.ensureCache(englishBase, undefined);
+    await internals.warmPromises.get(englishBase);
+    internals.ensureCache(tamilBase, undefined);
+    await internals.warmPromises.get(tamilBase);
+
+    expect(created).toEqual([englishBase, tamilBase]);
+    expect(internals.caches.get(englishBase)?.name).toBe("cache-1");
+    expect(internals.caches.get(tamilBase)?.name).toBe("cache-2");
+
+    // Switching back must reuse the existing cache, not create a third.
+    internals.ensureCache(englishBase, undefined);
+    expect(created).toHaveLength(2);
+  });
+
+  it("stops warming new bases past the budget but keeps serving existing ones", async () => {
+    const { internals, created } = stubbed();
+
+    internals.ensureCache(englishBase, undefined);
+    await internals.warmPromises.get(englishBase);
+    internals.warmCount = 999; // budget exhausted
+
+    internals.ensureCache(tamilBase, undefined);
+    expect(created).toEqual([englishBase]);
+    // The already-warmed base must still be usable — this is the regression that
+    // made long multilingual calls run entirely uncached.
+    expect(internals.cacheDisabled).toBe(false);
+    expect(internals.caches.get(englishBase)?.name).toBe("cache-1");
+  });
+});
+
 describe("makeGeminiPreambleGuard (streaming)", () => {
   it("passes a normal reply through unchanged", () => {
     expect(runStream(["Hello ", "there!"])).toBe("Hello there!");

@@ -148,7 +148,9 @@ export function makeGeminiPreambleGuard(): (token: string) => string {
 const CACHE_ENABLED = process.env.GEMINI_CACHE_ENABLED !== "false" && process.env.GEMINI_CACHE_ENABLED !== "0";
 const CACHE_MIN_CHARS = Number(process.env.GEMINI_CACHE_MIN_CHARS) || 1024;
 const CACHE_TTL_SECONDS = Number(process.env.GEMINI_CACHE_TTL_SECONDS) || 900;
-const CACHE_MAX_WARMS = Number(process.env.GEMINI_CACHE_MAX_WARMS) || 3;
+// Distinct cache bases warmed per call. A code-switching caller needs one per
+// language guard variant, so 3 was too tight for bilingual Indic presentations.
+const CACHE_MAX_WARMS = Number(process.env.GEMINI_CACHE_MAX_WARMS) || 6;
 const CACHE_WARM_WAIT_MS = 3000;
 const REQUEST_TIMEOUT_MS = Math.max(10000, Number(process.env.GEMINI_REQUEST_TIMEOUT_MS) || 12000);
 const GEMINI3_THINKING_HEADROOM = Number(process.env.GEMINI3_THINKING_HEADROOM) || 256;
@@ -176,9 +178,14 @@ export class GoogleLLM implements LLMAdapter {
   private maxTokens: number | undefined;
 
   // ── Per-call context-cache state ─────────────────────────────────────────
-  private cachedContent: CachedContent | null = null;
-  private cachedBase: string | null = null;
-  private warmPromise: Promise<void> | null = null;
+  // Keyed by cache base rather than a single slot: the pipeline bakes the
+  // language guard into the base, so a caller who code-switches (very common on
+  // Indic calls) produces two or three distinct bases. A single slot made those
+  // bases evict each other and, once the warm budget ran out, disabled caching
+  // for the rest of the call — every later turn then paid the full uncached
+  // prompt. Keeping one CachedContent per base lets language flips hit cache.
+  private caches = new Map<string, CachedContent>();
+  private warmPromises = new Map<string, Promise<void>>();
   private cacheDisabled = false;
   private warmCount = 0;
   private cacheErrLogged = false;
@@ -351,10 +358,18 @@ export class GoogleLLM implements LLMAdapter {
     onDone(stripGeminiThinkingPreamble(full), usage);
   }
 
-  private cacheEligible(cacheBase: string | undefined, systemPrompt: string): boolean {
+  /**
+   * `lastIsTool` turns the cache off for tool-result turns. The cached path
+   * relocates the volatile tail into a synthetic `Caller: <content>` message,
+   * which on a tool-result turn would attribute the tool's own output to the
+   * caller. On presentation calls (a slide tool then a spoken follow-up) that
+   * misattribution lands on every single slide change.
+   */
+  private cacheEligible(cacheBase: string | undefined, systemPrompt: string, lastIsTool: boolean): boolean {
     return (
       CACHE_ENABLED &&
       !this.cacheDisabled &&
+      !lastIsTool &&
       this.model.startsWith("gemini") &&
       !!cacheBase &&
       cacheBase.length >= CACHE_MIN_CHARS &&
@@ -364,11 +379,13 @@ export class GoogleLLM implements LLMAdapter {
 
   private ensureCache(base: string, tools: Tool[] | undefined): void {
     if (this.cacheDisabled) return;
-    if (this.cachedContent && this.cachedBase === base) return;
-    if (this.warmPromise) return;
-    if (this.warmCount >= CACHE_MAX_WARMS) { this.cacheDisabled = true; return; }
+    if (this.caches.has(base) || this.warmPromises.has(base)) return;
+    // Budget exhausted: stop warming NEW bases but keep serving the ones already
+    // created. Disabling caching outright here is what made long multilingual
+    // calls run fully uncached after the first few language switches.
+    if (this.warmCount >= CACHE_MAX_WARMS) return;
     this.warmCount++;
-    this.warmPromise = (async () => {
+    const warm = (async () => {
       try {
         const cc = await this.ai.caches.create({
           model: this.model,
@@ -380,8 +397,7 @@ export class GoogleLLM implements LLMAdapter {
             displayName: `voiceorch-${Date.now()}`,
           },
         });
-        this.cachedContent = cc;
-        this.cachedBase = base;
+        this.caches.set(base, cc);
         if (!this.cacheCreatedLogged) {
           this.cacheCreatedLogged = true;
           logger.info(
@@ -392,15 +408,16 @@ export class GoogleLLM implements LLMAdapter {
       } catch (e) {
         this.handleCacheError(e);
       } finally {
-        this.warmPromise = null;
+        this.warmPromises.delete(base);
       }
     })();
+    this.warmPromises.set(base, warm);
   }
 
   private handleCacheError(e: unknown): void {
     this.cacheDisabled = true;
-    this.cachedContent = null;
-    this.cachedBase = null;
+    this.caches.clear();
+    this.warmPromises.clear();
     if (!this.cacheErrLogged) {
       this.cacheErrLogged = true;
       logger.warn(
@@ -438,20 +455,23 @@ export class GoogleLLM implements LLMAdapter {
       : {};
 
     // ── Cached path ──────────────────────────────────────────────────────────
-    if (this.cacheEligible(options?.cacheBase, systemPrompt)) {
+    const lastIsTool = messages[messages.length - 1]?.role === "tool";
+    if (this.cacheEligible(options?.cacheBase, systemPrompt, lastIsTool)) {
       const base = options!.cacheBase!;
       this.ensureCache(base, geminiTools);
 
-      if (this.warmPromise) {
+      const warm = this.warmPromises.get(base);
+      if (warm) {
         try {
           await Promise.race([
-            this.warmPromise,
+            warm,
             new Promise<void>((r) => setTimeout(r, CACHE_WARM_WAIT_MS)),
           ]);
         } catch { /* handled inside ensureCache */ }
       }
 
-      if (this.cachedContent?.name && this.cachedBase === base) {
+      const cached = this.caches.get(base);
+      if (cached?.name) {
         // Move volatile tail (per-turn KB, date/time, tool guides) to current message
         // so it has maximum recency; model sees identical text in a different position.
         const tail = systemPrompt.slice(base.length).replace(/^\s+/, "");
@@ -470,7 +490,7 @@ export class GoogleLLM implements LLMAdapter {
             contents: cachedContents,
             config: {
               ...this.buildGenerationConfig(),
-              cachedContent: this.cachedContent.name,
+              cachedContent: cached.name,
               ...(geminiTools ? { tools: geminiTools } : {}),
               ...toolConfig,
             },

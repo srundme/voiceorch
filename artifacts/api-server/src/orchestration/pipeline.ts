@@ -206,6 +206,17 @@ const GOTO_SLIDE_TOOL_DEF: ToolDefinition = {
   },
 };
 
+/**
+ * Tools that complete locally in ~1 ms and therefore must not be preceded by a
+ * "One moment…" filler: the filler's audio duration is pure added latency
+ * between the caller's request and the visible slide change.
+ */
+const INSTANT_TOOLS = new Set<string>([
+  "next_slide",
+  "previous_slide",
+  "goto_slide",
+]);
+
 const SEND_MEETING_CHAT_TOOL_DEF: ToolDefinition = {
   name: "send_meeting_chat",
   description:
@@ -8458,7 +8469,10 @@ export class OrchestrationPipeline implements VoiceSession {
       const canonicalName = toolAliasMap[triggeredToolName] ?? triggeredToolName;
       const langPrefix = ((this.currentLang || this.agent.language) ?? "en").split("-")[0] ?? "en";
       const toolSpecific = TOOL_FILLERS_BY_NAME[triggeredToolName] ?? TOOL_FILLERS_BY_NAME[canonicalName];
-      const filler = triggeredToolName === "end_call"
+      // Slide navigation is a local in-memory state flip (~1 ms) that the viewer
+      // polls for, so "One moment…" only delays the visible slide change by the
+      // length of the filler audio. Fillers exist to cover slow network tools.
+      const filler = (triggeredToolName === "end_call" || INSTANT_TOOLS.has(canonicalName))
         ? undefined
         : (toolSpecific?.[langPrefix] ?? TOOL_FILLERS[langPrefix]);
       if (filler && !this.closed && !this.bargeInRequested) {
@@ -8484,8 +8498,17 @@ export class OrchestrationPipeline implements VoiceSession {
       const finalWake = wakePlayer as (() => void) | null;
       wakePlayer = null;
       if (finalWake) finalWake();
-      await playPromise; // plays filler (and any earlier backchannel) before continuing
-      const toolResult = await this.handleToolCall(triggeredToolName, triggeredToolArgs);
+      // Start the tool immediately instead of after the filler finishes speaking.
+      // Awaiting playback first added the filler's full audio duration (~1.5 s
+      // measured on slide changes) to every tool, which is exactly the lag users
+      // report when asking the agent to move to the next slide. The tool itself
+      // emits no audio, so only the spoken follow-up needs the playback barrier.
+      const toolPromise = this.handleToolCall(triggeredToolName, triggeredToolArgs);
+      // Never let a tool rejection escape as an unhandled rejection while the
+      // filler is still playing — the await below re-throws it in order.
+      toolPromise.catch(() => { /* surfaced by the await below */ });
+      await playPromise; // plays filler (and any earlier backchannel) before speaking
+      const toolResult = await toolPromise;
       if (toolResult !== undefined) {
         await this.continueWithToolResult(triggeredToolName, toolResult, 0, _toolCallId);
       }
