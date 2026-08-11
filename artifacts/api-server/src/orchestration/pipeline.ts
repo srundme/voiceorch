@@ -1208,6 +1208,13 @@ export class OrchestrationPipeline implements VoiceSession {
   private dtmfResolver: ((digit: string | null) => void) | null = null;
   private dtmfTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
+  /** Last KB context that actually resolved this call, reused when a later turn's
+   *  retrieval races past its budget. Without it a timed-out lookup left the model
+   *  with NO knowledge mid-conversation (measured on ~35% of turns in a long
+   *  presentation call) and made the prompt prefix churn between sizes, which also
+   *  defeats provider prompt caching. Stale reference material beats none. */
+  private lastKbContext: { text: string; source: string; turnNumber: number } | null = null;
+
   // Gender detection — fires once per call using early caller speech
   private genderDetector: GenderDetector | GenderDetectorML | GenderDetectorMLv2 | GenderDetectorChained;
   /** Explicit mid-call caller correction ("call me sir, not ma'am"). When set it
@@ -7397,21 +7404,47 @@ export class OrchestrationPipeline implements VoiceSession {
       kbResult = await Promise.race([safeKb, kbTimeout]);
       if (kbRaceTimer) clearTimeout(kbRaceTimer);
       else kbRaceTimedOut = kbResult === null;
-      // Drain any late-resolving prefetch so it can't surface as an unhandled rejection;
-      // its value is intentionally discarded (the turn already proceeded without it).
-      void safeKb.catch(() => null);
+      // This turn already moved on, but a late prefetch is still worth keeping:
+      // park it as the stale fallback so the NEXT turn can use it instead of
+      // discarding work we already paid for.
+      const raceTurn = this._activeTurnIndex;
+      void safeKb
+        .then((late) => {
+          if (late?.text) {
+            this.lastKbContext = { text: late.text, source: late.source, turnNumber: raceTurn };
+          }
+        })
+        .catch(() => null);
       if (kbResult === null) {
         logger.debug({ callId: this.config.callId, raceMs: kbOuterRaceMs }, "KB context: race timed out or empty — proceeding without context");
       }
     }
-    const kbContext = kbResult?.text || null;
+
+    // Stale-while-revalidate: a timed-out or empty lookup falls back to the last
+    // context that did resolve this call rather than sending the model nothing.
+    let kbContext = kbResult?.text || null;
+    let kbStaleFromTurn: number | null = null;
+    if (kbContext) {
+      this.lastKbContext = {
+        text: kbContext,
+        source: kbResult?.source ?? "unknown",
+        turnNumber: this._activeTurnIndex,
+      };
+    } else if (this.lastKbContext && this.agent.knowledgeSourceIds.length > 0 && !this.agent.kbBakedOnly) {
+      kbContext = this.lastKbContext.text;
+      kbStaleFromTurn = this.lastKbContext.turnNumber;
+    }
     // Per-turn Knowledge execution-log event: whether KB context was injected,
     // where it came from, how long retrieval took, and how much text landed in
     // the prompt. Logged for every turn of a KB-attached agent (including
     // kbBakedOnly agents, where the KB lives in the baked system prompt).
     if (this.agent.knowledgeSourceIds.length > 0 || this.agent.kbBakedOnly) {
       const hit = this.agent.kbBakedOnly ? true : !!kbContext;
-      const source = this.agent.kbBakedOnly ? "baked" : (kbResult?.source ?? "none");
+      const source = this.agent.kbBakedOnly
+        ? "baked"
+        : kbStaleFromTurn !== null
+          ? "stale"
+          : (kbResult?.source ?? "none");
       this.logExec(EXEC_COMPONENTS.Knowledge, "response", {
         status: "info",
         turnNumber: this._activeTurnIndex,
@@ -7427,6 +7460,7 @@ export class OrchestrationPipeline implements VoiceSession {
           ...(kbResult?.contributingSourceIds ? { contributingSourceIds: kbResult.contributingSourceIds } : {}),
           ...(kbResult?.truncated !== undefined ? { truncated: kbResult.truncated } : {}),
           ...(kbResult?.cached ? { cached: true } : {}),
+          ...(kbStaleFromTurn !== null ? { staleReuse: true, staleFromTurn: kbStaleFromTurn } : {}),
           ...(kbRaceTimedOut ? { raceTimedOut: true, raceMs: kbOuterRaceMs } : {}),
         },
       });
