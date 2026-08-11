@@ -2710,15 +2710,15 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                   <p className="text-[11px] leading-relaxed text-muted-foreground">
                     {canAttendMeetings
                       ? "Booking creates calendar invites with a Meet link. To send this agent into the room, use Meeting bots (/app/meet) — separate from booking."
-                      : "Phone-only agent — can book the calendar with a Meet link, but will not join the room."}
+                      : "Phone-only is supported: Booking still creates calendar invites with a Meet link for humans to attend. The AI will not join the room."}
                   </p>
                   {!canAttendMeetings && (
                     <button
                       type="button"
-                      className="text-[11px] font-medium text-foreground underline underline-offset-2"
+                      className="text-[11px] font-medium text-muted-foreground underline underline-offset-2 hover:text-foreground"
                       onClick={() => form.setValue("agentSurfaces", "phone_and_meet", { shouldDirty: true })}
                     >
-                      Upgrade to phone + meetings (joins Meet) — then Save
+                      Optional: upgrade to phone + meetings if you want the AI to join Meet — then Save
                     </button>
                   )}
                 </div>
@@ -7704,7 +7704,7 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
           : "Name your agent";
   const stepDesc =
     step === "compose" ? "Start with one agent, or create two that hand off mid-call."
-      : step === "surfaces" ? "Phone only (book but never join Meet), or phone + meetings (paste-link Meet bots + optional booking join)."
+      : step === "surfaces" ? "Phone only (calendar bookings + Meet links for humans; AI never joins), or phone + meetings (AI can join Meet)."
         : composition === "team"
           ? "We’ll create both agents and wire handoffs automatically."
           : "You can edit prompts, tools, and settings anytime.";

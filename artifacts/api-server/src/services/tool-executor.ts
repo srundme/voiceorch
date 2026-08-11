@@ -493,6 +493,42 @@ async function resolveCalendarContext(agentId: number): Promise<{
   };
 }
 
+/**
+ * True only when the agent was created/saved as phone + meetings
+ * (`agentConfig.meetings.enabled === true`). Phone-only agents still book
+ * calendars and can attach Meet links for humans — they must not claim AI join.
+ */
+async function agentMeetingsChannelEnabled(agentId: number): Promise<boolean> {
+  const [row] = await db
+    .select({ agentConfig: agentsTable.agentConfig })
+    .from(agentsTable)
+    .where(eq(agentsTable.id, agentId))
+    .limit(1);
+  const raw =
+    row?.agentConfig && typeof row.agentConfig === "object"
+      ? (row.agentConfig as Record<string, unknown>)["meetings"]
+      : undefined;
+  if (!raw || typeof raw !== "object") return false;
+  return (raw as Record<string, unknown>)["enabled"] === true;
+}
+
+/** Tool-result note so the LLM tells the caller the truth about who joins Meet. */
+function formatMeetLinkToolNote(
+  meetLink: string | null,
+  meetingsEnabled: boolean,
+  timing: "this time" | "the new time" = "this time",
+): string {
+  if (!meetLink) {
+    return meetingsEnabled
+      ? ", auto_join=no (no Meet link on this booking — enable Google Meet on the event type)"
+      : "";
+  }
+  if (meetingsEnabled) {
+    return `, meet_link="${meetLink}", auto_join=yes (SnapServe meeting agent will join near ${timing})`;
+  }
+  return `, meet_link="${meetLink}", auto_join=no (share this Meet link with human attendees — this phone-only agent will not join the room)`;
+}
+
 export async function executeNativeBooking(
   callId: number,
   agentId: number,
@@ -1008,10 +1044,9 @@ export async function executeNativeBooking(
       googleEventId: googleEventId ?? null,
     }, "success");
 
-    const autoJoin = meetLink
-      ? `, meet_link="${meetLink}", auto_join=yes (SnapServe meeting agent will join near this time)`
-      : "";
-    return `booking_confirmed: event="${eventType.name}", slot="${dateStr}", booking_id=${confirmedBooking.id}, attendee="${attendeeName}", email="${attendeeEmail}", status="${confirmedBooking.status}"${autoJoin}`;
+    const meetingsEnabled = await agentMeetingsChannelEnabled(agentId);
+    const meetNote = formatMeetLinkToolNote(meetLink, meetingsEnabled);
+    return `booking_confirmed: event="${eventType.name}", slot="${dateStr}", booking_id=${confirmedBooking.id}, attendee="${attendeeName}", email="${attendeeEmail}", status="${confirmedBooking.status}"${meetNote}`;
   } catch (err) {
     logger.error({ callId, err }, "Native booking tool execution failed");
     return "error: booking failed due to a technical issue";
@@ -1559,9 +1594,8 @@ export async function executeNativeReschedule(
       },
     }).catch((err) => logger.warn({ callId, bookingId: confirmedNewBooking.id, err }, "Native reschedule: webhook dispatch failed"));
 
-    const meetNote = meetLink
-      ? `, meet_url=${meetLink}, auto_join=yes (SnapServe meeting agent will join near the new time)`
-      : ", auto_join=no (no Meet link on this booking — enable Google Meet on the event type)";
+    const meetingsEnabled = await agentMeetingsChannelEnabled(agentId);
+    const meetNote = formatMeetLinkToolNote(meetLink, meetingsEnabled, "the new time");
     return `reschedule_confirmed: old_booking_id=${bookingId}, new_booking_id=${confirmedNewBooking.id}, new_slot="${dateStr}", status="${confirmedNewBooking.status}"${meetNote}`;
   } catch (err) {
     logger.error({ callId, err }, "Native reschedule tool execution failed");

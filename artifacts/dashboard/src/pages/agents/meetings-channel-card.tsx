@@ -205,8 +205,8 @@ export function MeetingsChannelCard({
   if (!canAttend) {
     return (
       <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-3 text-[12px] text-muted-foreground leading-relaxed">
-        Phone-only agent — can book calendar from calls, but will not join Google Meet.
-        Create a <span className="text-foreground">Phone + meetings</span> agent if you need the bot in the room.
+        Phone-only agent — Booking can still send calendar invites with a Meet link for humans.
+        The AI will not join the room. Use a <span className="text-foreground">Phone + meetings</span> agent only if you need the bot in Meet.
       </div>
     );
   }
