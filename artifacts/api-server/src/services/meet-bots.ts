@@ -134,20 +134,54 @@ export function signMeetBotToken(payload: MeetBotTokenPayload): string {
   return `mbv1.${body}.${sig}`;
 }
 
-export function verifyMeetBotToken(token: string): MeetBotTokenPayload | null {
+/**
+ * How long a meeting token stays valid, measured from when the bot is due to
+ * JOIN — not from when we minted it. Calendar bots are scheduled days ahead, so
+ * anchoring to mint time handed the bot a token that was already dead on
+ * arrival. The window has to cover a long meeting plus an overrun.
+ */
+export const MEET_BOT_TOKEN_TTL_MS = 8 * 60 * 60 * 1000;
+
+/** Token expiry for a bot joining at `joinAt` (now, when omitted or in the past). */
+export function meetBotTokenExp(joinAt?: Date | string | null): number {
+  const start = joinAt ? new Date(joinAt).getTime() : Number.NaN;
+  const anchor = Number.isFinite(start) ? Math.max(Date.now(), start) : Date.now();
+  return anchor + MEET_BOT_TOKEN_TTL_MS;
+}
+
+export type MeetBotTokenCheck =
+  | { ok: true; payload: MeetBotTokenPayload }
+  | { ok: false; reason: "invalid" | "expired" };
+
+/**
+ * Verify a meeting token, separating "expired" from "forged/corrupt" so callers
+ * can tell the operator which one happened. An expired token during a live
+ * meeting is a SnapServe problem; an invalid one is not.
+ */
+export function checkMeetBotToken(token: string): MeetBotTokenCheck {
   try {
     const parts = token.split(".");
-    if (parts.length !== 3 || parts[0] !== "mbv1") return null;
+    if (parts.length !== 3 || parts[0] !== "mbv1") return { ok: false, reason: "invalid" };
     const expected = createHmac("sha256", tokenSecret()).update(`mbv1.${parts[1]}`).digest();
     const given = Buffer.from(parts[2]!, "base64url");
-    if (given.length !== expected.length || !timingSafeEqual(given, expected)) return null;
+    if (given.length !== expected.length || !timingSafeEqual(given, expected)) {
+      return { ok: false, reason: "invalid" };
+    }
     const payload = JSON.parse(Buffer.from(parts[1]!, "base64url").toString("utf8")) as MeetBotTokenPayload;
-    if (typeof payload.agentId !== "number" || typeof payload.userId !== "string") return null;
-    if (typeof payload.exp !== "number" || Date.now() > payload.exp) return null;
-    return payload;
+    if (typeof payload.agentId !== "number" || typeof payload.userId !== "string") {
+      return { ok: false, reason: "invalid" };
+    }
+    if (typeof payload.exp !== "number") return { ok: false, reason: "invalid" };
+    if (Date.now() > payload.exp) return { ok: false, reason: "expired" };
+    return { ok: true, payload };
   } catch {
-    return null;
+    return { ok: false, reason: "invalid" };
   }
+}
+
+export function verifyMeetBotToken(token: string): MeetBotTokenPayload | null {
+  const checked = checkMeetBotToken(token);
+  return checked.ok ? checked.payload : null;
 }
 
 // ── Recall REST client (minimal) ─────────────────────────────────────────────

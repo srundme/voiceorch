@@ -71,6 +71,64 @@ export function getMeetPresentation(mid: string): PresentationState | null {
   return byMid.get(mid) ?? null;
 }
 
+// Presentation state is in-memory, so an API restart mid-meeting leaves the
+// screenshare page polling a meeting the server no longer knows about — the
+// deck vanishes and is replaced by "not configured" for the rest of the call.
+// The viewer polls several times a second, so re-seeding is cooldown-guarded.
+const reseedCooldownUntil = new Map<string, number>();
+const RESEED_COOLDOWN_MS = 15_000;
+
+function pruneReseedCooldowns(now: number): void {
+  if (reseedCooldownUntil.size < 500) return;
+  for (const [mid, until] of reseedCooldownUntil) {
+    if (until <= now) reseedCooldownUntil.delete(mid);
+  }
+}
+
+/**
+ * Recover presentation state for a live meeting from the agent's Meeting
+ * settings. Returns null when the agent genuinely has no deck configured.
+ */
+export async function ensureMeetPresentation(
+  mid: string,
+  agentId: number,
+): Promise<PresentationState | null> {
+  const existing = byMid.get(mid);
+  if (existing) return existing;
+
+  const now = Date.now();
+  if (now < (reseedCooldownUntil.get(mid) ?? 0)) return null;
+  pruneReseedCooldowns(now);
+  reseedCooldownUntil.set(mid, now + RESEED_COOLDOWN_MS);
+
+  try {
+    const [{ db, agentsTable }, { eq }, { parseMeetingsConfig }] = await Promise.all([
+      import("@workspace/db"),
+      import("drizzle-orm"),
+      import("./meeting-runtime.js"),
+    ]);
+    const [agent] = await db
+      .select({ agentConfig: agentsTable.agentConfig })
+      .from(agentsTable)
+      .where(eq(agentsTable.id, agentId))
+      .limit(1);
+    if (!agent) return null;
+    const url = parseMeetingsConfig(agent.agentConfig).presentationUrl.trim();
+    if (!url || !isAllowedPresentationUrl(url)) return null;
+
+    const state = configureMeetPresentation(mid, url);
+    // Only the Recall screenshare browser polls this, so reaching here means the
+    // share is already on-screen — the slide tools must not think otherwise.
+    state.presenting = true;
+    reseedCooldownUntil.delete(mid);
+    logger.info({ mid, agentId }, "Meet presentation state re-seeded after state loss");
+    return state;
+  } catch (err) {
+    logger.warn({ err, mid, agentId }, "Meet presentation re-seed failed");
+    return null;
+  }
+}
+
 export function setMeetPresentationSlide(mid: string, slideIndex: number): PresentationState | null {
   const s = byMid.get(mid);
   if (!s) return null;
@@ -295,11 +353,36 @@ export function buildMeetPresentationPageHtml(): string {
   var lastUpdated = 0;
   var lastSlide = 0;
   var lastUrl = "";
+  // A single failed poll must not blank the deck in front of the room — the
+  // server may be mid-restart. Only surface an error once it persists.
+  var FAILURES_BEFORE_ERROR = 4;
+  var failures = 0;
+  var shownErr = "";
 
   function showErr(msg){
+    if (msg === shownErr) return;
+    shownErr = msg;
     err.style.display = "block";
     err.textContent = msg;
     frame.style.display = "none";
+  }
+
+  function clearErr(){
+    if (!shownErr) return;
+    shownErr = "";
+    err.style.display = "none";
+    frame.style.display = "block";
+  }
+
+  function reasonText(reason){
+    if (reason === "expired") {
+      return "This meeting session has expired, so the deck can no longer be loaded. " +
+             "Ask the agent to start the presentation again, or relaunch the meeting bot.";
+    }
+    if (reason === "invalid") {
+      return "This presentation link is not valid for the current meeting.";
+    }
+    return "No presentation is set for this meeting. Add a deck URL in the agent's Meeting settings.";
   }
 
   function frameSrc(state){
@@ -322,12 +405,8 @@ export function buildMeetPresentationPageHtml(): string {
   }
 
   function apply(state){
-    if (!state || !state.ok) {
-      showErr("Presentation not configured for this meeting.");
-      return;
-    }
-    err.style.display = "none";
-    frame.style.display = "block";
+    failures = 0;
+    clearErr();
     badgeN.textContent = String(state.slideIndex || 1);
     var next = frameSrc(state);
     if (next !== lastUrl || state.slideIndex !== lastSlide) {
@@ -337,16 +416,28 @@ export function buildMeetPresentationPageHtml(): string {
     }
   }
 
+  function fail(reason){
+    failures++;
+    if (failures < FAILURES_BEFORE_ERROR) return;
+    showErr(reasonText(reason));
+  }
+
   async function poll(){
     if (!token) { showErr("Missing meeting token."); return; }
     try {
       var res = await fetch("/api/meet-bots/present-state?mb=" + encodeURIComponent(token), { cache: "no-store" });
       var state = await res.json();
-      if (state.updatedAt && state.updatedAt === lastUpdated) return;
+      if (!state || !state.ok) { fail(state && state.reason); return; }
+      // Skip redundant repaints, but never while an error is on screen — that
+      // would strand the message after the state came back.
+      if (!shownErr && state.updatedAt && state.updatedAt === lastUpdated) {
+        failures = 0;
+        return;
+      }
       lastUpdated = state.updatedAt || 0;
       apply(state);
     } catch (e) {
-      /* retry */
+      fail(null);
     }
   }
   poll();

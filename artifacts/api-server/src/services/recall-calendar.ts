@@ -17,6 +17,7 @@ import {
   buildRecallBotConfig,
   recallFetchV2,
   signMeetBotToken,
+  meetBotTokenExp,
   detectMeetingPlatform,
 } from "./meet-bots.js";
 import {
@@ -30,7 +31,6 @@ import { signOAuthState, verifyOAuthState } from "./scheduling/google-calendar.j
 
 const MEET_URL_RE =
   /^https:\/\/(meet\.google\.com|[a-z0-9.-]*zoom\.us|teams\.microsoft\.com|teams\.live\.com)\//i;
-const PAGE_TOKEN_TTL_MS = 4 * 60 * 60 * 1000;
 
 /**
  * Same scopes as booking Google Calendar OAuth (already Google-verified for SnapServe).
@@ -437,6 +437,8 @@ async function prepareBotConfigForEvent(opts: {
   userId: string;
   agentId: number;
   meetingUrl: string;
+  /** Event start — the token must outlive the meeting, not the opt-in click. */
+  startsAt?: Date | null;
 }): Promise<{ botConfig: Record<string, unknown>; runtimeAgentId: number; botName: string }> {
   const [agent] = await db
     .select({
@@ -457,7 +459,7 @@ async function prepareBotConfigForEvent(opts: {
   const token = signMeetBotToken({
     agentId: runtimeAgentId,
     userId: opts.userId,
-    exp: Date.now() + PAGE_TOKEN_TTL_MS,
+    exp: meetBotTokenExp(opts.startsAt),
     mid,
     meetUrl: opts.meetingUrl,
     passMemory: meetings.passMemory,
@@ -530,6 +532,7 @@ export async function scheduleBotForCalendarEvent(opts: {
     userId: opts.userId,
     agentId: opts.agentId,
     meetingUrl: opts.meetingUrl,
+    startsAt: opts.startsAt ?? null,
   });
   const dedupeKey = `snapserve:${opts.userId}:${opts.eventId}`;
   const res = await recallFetchV2(

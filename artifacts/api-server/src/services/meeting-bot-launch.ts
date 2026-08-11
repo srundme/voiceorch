@@ -8,6 +8,7 @@ import { db, agentsTable } from "@workspace/db";
 import { getSelfBaseUrl } from "../lib/app-domain.js";
 import {
   signMeetBotToken,
+  meetBotTokenExp,
   createRecallBot,
 } from "./meet-bots.js";
 import {
@@ -22,7 +23,6 @@ import {
 } from "./meeting-runtime.js";
 import { prepareMeetPresentationAtLaunch } from "./meet-presentation.js";
 
-const PAGE_TOKEN_TTL_MS = 4 * 60 * 60 * 1000;
 const MEET_URL_RE = /^https:\/\/(meet\.google\.com|[a-z0-9.-]*zoom\.us|teams\.microsoft\.com|teams\.live\.com)\//i;
 
 export async function launchMeetingBotForAgent(opts: {
@@ -77,7 +77,7 @@ export async function launchMeetingBotForAgent(opts: {
   const token = signMeetBotToken({
     agentId: runtimeAgentId,
     userId: opts.userId,
-    exp: Date.now() + PAGE_TOKEN_TTL_MS,
+    exp: meetBotTokenExp(),
     mid,
     meetUrl: meetingUrl,
     passMemory: meetings.passMemory,
