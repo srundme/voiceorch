@@ -433,10 +433,10 @@ export function EmailChannelCard({
                     type="button"
                     onClick={() => setSelectedTemplateId(t.id)}
                     className={cn(
-                      "rounded-md border px-2.5 py-1 text-[11px]",
+                      "rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors",
                       selectedTemplateId === t.id
-                        ? "border-sky-500/50 bg-sky-500/10 text-sky-200"
-                        : "border-border/50 text-muted-foreground hover:text-foreground",
+                        ? "border-sky-500 bg-sky-500 text-white shadow-sm"
+                        : "border-border/60 text-foreground/70 hover:border-border hover:text-foreground",
                     )}
                   >
                     {t.name}{t.isDefault ? " · default" : ""}
