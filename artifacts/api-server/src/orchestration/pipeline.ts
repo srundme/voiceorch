@@ -503,16 +503,21 @@ const GREETING_ECHO_HOLD_CAP_MS = 3000;  // Hard cap on greetingEchoHoldUntil so
                                           // never lock the caller out of interrupting.
 
 /**
- * One-shot note marking the opening-only caller-memory / resume directives as
- * already satisfied. Appended to the volatile per-turn tail of the system prompt
- * once the opener (greeting) exists in conversation history, so the LLM does not
- * re-deliver the recognition/drop-acknowledgment the greeting already spoke.
+ * One-shot note marking the opening as already spoken. Appended to the volatile
+ * per-turn tail once ANY assistant opener exists in conversation history, so the
+ * LLM does not re-deliver the intro the greeting path already spoke.
+ *
+ * Applies to ALL agents (not only returning-caller / resume prompts): wizard and
+ * vibe templates put "Greet the caller / Always introduce yourself" in CALL FLOW,
+ * and without this note the first real reply re-greets after greet() already did.
  * Deliberately preserves the persistent rules (NAME PRIORITY, DO NOT RE-ASK).
  */
 const OPENING_ALREADY_DELIVERED_NOTE =
-  "[OPENING ALREADY DELIVERED — OVERRIDES RESUME/DROP ACK] The opening line of this call has ALREADY been spoken " +
-  "(it is the first assistant message in the conversation). This OVERRIDES any RESUME / LAST CALL DROPPED / " +
-  "\"acknowledge the interruption\" instruction above. Do NOT greet again, do NOT re-introduce yourself, do NOT " +
+  "[OPENING ALREADY DELIVERED] The opening line of this call has ALREADY been spoken " +
+  "(it is the first assistant message in the conversation). This OVERRIDES any GREETING / " +
+  "CALL FLOW step 1 / \"introduce yourself\" / \"greet the caller\" / RESUME / LAST CALL DROPPED / " +
+  "\"acknowledge the interruption\" instruction above. Do NOT greet again, do NOT re-introduce " +
+  "yourself or your company, do NOT restart the scripted pitch from the top, do NOT " +
   "re-state that you remember them or summarize the previous call unprompted, and do NOT apologize for or " +
   "mention a dropped/cut/lost call. Forbidden unless the caller just said it RIGHT NOW: கால் கட், कॉल कट, " +
   "\"call cut\", \"call dropped\", \"got cut off\", \"ஆயிடுச்சு\" about the call. Simply respond to the " +
@@ -7767,22 +7772,16 @@ export class OrchestrationPipeline implements VoiceSession {
       }
     }
 
-    // ── Opening-only directive neutralizer ────────────────────────────────────
-    // The caller-memory returning-caller directive ("Open by greeting them by
-    // name and naturally reference what you already know…"), the resume-from-drop
-    // directive ("Briefly acknowledge the interruption…") and the network-drop
-    // RESUME DIRECTIVE ("Open warmly and acknowledge the drop…") are phrased as
-    // OPENING instructions but live in the system prompt for the whole call. The
-    // greeting path (compact greeting LLM or static opener) already delivered
-    // that opening, so without this note the first real reply re-greets /
-    // re-references prior context / re-acknowledges the drop a second time.
+    // ── Opening-already-delivered note ────────────────────────────────────────
+    // greet() (static greetingMessage or greeting LLM) already spoke the opener.
+    // Wizard / vibe templates still put "Greet the caller / Always introduce
+    // yourself" in CALL FLOW, so without this note the first real reply re-greets.
+    // Also covers returning-caller / resume-from-drop recognition lines.
     //
     // Once ANY assistant turn exists in the conversation history the opening has
     // been spoken (covers the LLM greeting, static greeting, and the
-    // firstSpeaker=user case where the LLM's own first reply IS the opener), so
-    // append a one-shot note marking those opening-only directives as satisfied.
-    // The persistent rules (NAME PRIORITY, DO NOT RE-ASK KNOWN INFORMATION,
-    // memory FACTS) explicitly stay in force.
+    // firstSpeaker=user case where the LLM's own first reply IS the opener).
+    // Skip when a screening-bot handoff just asked for a FRESH greeting.
     //
     // Placement: AFTER the staged-prompt rebuild (so it survives the prompt
     // replacement) and AFTER cacheBaseForTurn was captured (so the Gemini cached
@@ -7790,12 +7789,8 @@ export class OrchestrationPipeline implements VoiceSession {
     // It is appended BEFORE the per-minute [CURRENT DATE & TIME] block and its
     // text is constant, so once it first appears the prefix stays stable for
     // OpenAI-style prompt caching (at most one cache-miss turn when it appears).
-    const hasOpeningOnlyDirective =
-      this.agent.systemPrompt.includes("THIS IS A RETURNING CALLER") ||
-      this.agent.systemPrompt.includes("RESUME, DO NOT RESTART") ||
-      this.agent.systemPrompt.includes("=== RESUME DIRECTIVE ===");
     const openerAlreadySpoken = this.conversationHistory.messages.some((t) => t.role === "assistant");
-    if (hasOpeningOnlyDirective && openerAlreadySpoken) {
+    if (openerAlreadySpoken && !this.pendingScreeningPickupNote) {
       systemPromptForTurn += `\n\n${OPENING_ALREADY_DELIVERED_NOTE}`;
     }
 

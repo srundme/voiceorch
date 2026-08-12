@@ -1383,7 +1383,7 @@ router.post("/agents/vibe-chat", requireAuth, clientContext, async (req, res): P
     const resolvedVoiceName = cfg.voiceName || (cfg.gender === "female" ? DEFAULT_FEMALE_VOICE_NAME  : DEFAULT_MALE_VOICE_NAME);
     const defaultTtsStack = resolveTtsStackForVoice(resolvedVoiceId);
 
-    const fallback = `You are ${cfg.agentName}, a voice AI agent for ${cfg.companyName}. Your role is to ${cfg.description}. Be concise, friendly, and professional.${cfg.callTransferEnabled ? ` When the caller needs human help, transfer them to ${cfg.transferName || "our support team"} at ${cfg.transferPhoneNumber}.` : ""} Always introduce yourself at the start of each call.`;
+    const fallback = `You are ${cfg.agentName}, a voice AI agent for ${cfg.companyName}. Your role is to ${cfg.description}. Be concise, friendly, and professional.${cfg.callTransferEnabled ? ` When the caller needs human help, transfer them to ${cfg.transferName || "our support team"} at ${cfg.transferPhoneNumber}.` : ""} The platform already speaks your opening greeting when the call connects — do not re-introduce yourself after that.`;
     let systemPrompt = fallback;
 
     // Refine-mode short-circuit: if Gemini returned an edited system prompt, use it
