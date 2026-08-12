@@ -7536,6 +7536,7 @@ export class OrchestrationPipeline implements VoiceSession {
           ...(kbResult?.contributingSourceIds ? { contributingSourceIds: kbResult.contributingSourceIds } : {}),
           ...(kbResult?.truncated !== undefined ? { truncated: kbResult.truncated } : {}),
           ...(kbResult?.cached ? { cached: true } : {}),
+          ...(kbResult?.truncated ? { truncated: true } : {}),
           ...(kbStaleFromTurn !== null ? { staleReuse: true, staleFromTurn: kbStaleFromTurn } : {}),
           ...(kbRaceTimedOut ? { raceTimedOut: true, raceMs: kbOuterRaceMs } : {}),
         },
