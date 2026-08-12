@@ -3,7 +3,7 @@ import { Link, useLocation } from "wouter";
 import { useTheme } from "@/components/theme-provider";
 import { GlobalSearch, useGlobalSearchTrigger } from "@/components/GlobalSearch";
 import {
-  Home, Bot, Phone, Hash, Workflow, Radio, History as HistoryIcon,
+  Home, Phone, Hash, Workflow, Radio, History as HistoryIcon,
   Settings, Wallet, Mic2, Key,
   Menu, ChevronDown, ChevronLeft, ChevronRight,
   LogOut, Bell, Search, SlidersHorizontal, BookOpen, PlugZap, Sun, Moon, Sparkles,
@@ -16,7 +16,7 @@ import { useAuth } from "@/lib/auth";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useGetWallet, customFetch } from "@workspace/api-client-react";
 import { useMinuteRatesMap, useUserProviderNames } from "@/hooks/use-minute-rates";
-import { SnapServeIcon, PoweredBySarvam } from "@/components/logo";
+import { SnapServeAgentIcon, SnapServeIcon, PoweredBySarvam } from "@/components/logo";
 import { Handshake } from "lucide-react";
 import { usePartnerContext } from "@/hooks/use-partner";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -105,7 +105,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { name: "Home",          href: "/app/home",           icon: Home },
       { name: "Campaigns",     href: "/app/campaigns",      icon: Megaphone },
-      { name: "Agents",        href: "/app/agents",         icon: Bot },
+      { name: "Agents",        href: "/app/agents",         icon: SnapServeAgentIcon },
       { name: "Phone numbers", href: "/app/phone-numbers",  icon: Phone },
       { name: "Connections",   href: "/app/connections",    icon: PlugZap },
       { name: "History",       href: "/app/history",        icon: HistoryIcon, callbackBadge: true },
@@ -624,7 +624,7 @@ const MOBILE_BOTTOM_NAV_ITEMS = [
   { name: "Home",      href: "/app/home",       icon: Home },
   { name: "Campaigns", href: "/app/campaigns",  icon: Megaphone },
   { name: "Create",    href: null,              icon: Sparkles }, // opens modal
-  { name: "Agents",    href: "/app/agents",     icon: Bot },
+  { name: "Agents",    href: "/app/agents",     icon: SnapServeAgentIcon },
   { name: "History",   href: "/app/history",    icon: HistoryIcon },
 ] as const;
 

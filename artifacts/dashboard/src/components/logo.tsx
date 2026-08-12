@@ -1,13 +1,11 @@
 /* ── SnapServe brand components ────────────────────────────────────────────
    SnapServeIcon   — the three-bar mark (SVG, inline, scalable)
-   SnapServeAgentIcon — the agent/bot mark: the three bars folded into an "S"
+   SnapServeAgentIcon — the Stackhead agent mark built from three brand bars
    SnapServeLogo   — icon + wordmark  ("Snap" Bold / "Serve" Regular)
    SnapServeLoader — full-screen splash with animated bars
    SnapServeSarvamLockup — official “SnapServe powered by sarvam” image
    PoweredBySarvam — family co-brand (SnapServe stays primary)
    ─────────────────────────────────────────────────────────────────────────*/
-
-import { useId } from "react";
 
 const FONT = "'Tex Gyre Heros', Helvetica, Arial, sans-serif";
 const LOCKUP_SRC = "snapserve-powered-by-sarvam.png";
@@ -80,39 +78,31 @@ export function SnapServeIcon({ size = 24, className = "" }: IconProps) {
 /* ── Agent bot mark -------------------------------------------------------- */
 
 /**
- * SnapServeAgentIcon — the agent/bot mark.
+ * SnapServeAgentIcon — the Stackhead agent mark.
  *
- * The three brand bars are joined into an "S": the top bar becomes the bot's
- * head (eye slots punched out, antenna above), and the two connectors carry the
- * eye down through the middle and bottom bars. Single-colour via `currentColor`
- * so it inherits text colour anywhere it is placed.
+ * A friendly AI face assembled from SnapServe's three descending brand bars:
+ * the widest layer carries two eyes, while the shorter layers form its tapered
+ * digital chin. Single-colour via `currentColor` so it remains crisp in sidebar
+ * active/inactive states and at the 16–20 px navigation sizes.
  */
 export function SnapServeAgentIcon({ size = 24, className = "" }: IconProps) {
-  const maskId = useId();
   return (
     <svg
       width={size}
       height={size}
-      viewBox="0 0 100 100"
+      viewBox="0 0 24 24"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       className={className}
       role="img"
       aria-label="SnapServe agent"
     >
-      <mask id={maskId} maskUnits="userSpaceOnUse" x="0" y="0" width="100" height="100">
-        <rect width="100" height="100" fill="black" />
-        <g stroke="white" fill="none" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M50 30V16" strokeWidth="5" />
-          {/* the S — three brand bars joined by two connectors, drawn in one stroke */}
-          <path d="M76 30H24V56H76V82H24" strokeWidth="17" />
-        </g>
-        <circle cx="50" cy="13" r="6" fill="white" />
-        {/* eye slots punched back out of the head bar */}
-        <rect x="37" y="26.5" width="10" height="7" rx="3.5" fill="black" />
-        <rect x="53" y="26.5" width="10" height="7" rx="3.5" fill="black" />
-      </mask>
-      <rect width="100" height="100" fill="currentColor" mask={`url(#${maskId})`} />
+      <path
+        fill="currentColor"
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M6.5 3h11a4.5 4.5 0 0 1 0 9h-11a4.5 4.5 0 0 1 0-9ZM8 6a1.2 1.2 0 1 0 0 2.4A1.2 1.2 0 0 0 8 6Zm8 0a1.2 1.2 0 1 0 0 2.4A1.2 1.2 0 0 0 16 6ZM7 13.5h10a2.25 2.25 0 0 1 0 4.5H7a2.25 2.25 0 0 1 0-4.5Zm3 5.8h4a1.35 1.35 0 0 1 0 2.7h-4a1.35 1.35 0 0 1 0-2.7Z"
+      />
     </svg>
   );
 }
