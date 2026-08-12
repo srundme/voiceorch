@@ -19,7 +19,7 @@ import { toReadableError, envInt, parseJsonObject } from "./utils.js";
 import { createLLMAdapter } from "./adapters/llm/index.js";
 import { createTTSAdapter } from "./adapters/tts/index.js";
 import { CartesiaTTS } from "./adapters/tts/cartesia.js";
-import { encodeMulaw, upsample8to16, downsample16to8, decodeMulaw, hasSpeechEnergy, frameRms } from "./audio.js";
+import { encodeMulaw, upsample8to16, downsample16to8, createDownsampler16to8, decodeMulaw, hasSpeechEnergy, frameRms } from "./audio.js";
 import { resolveMicSensitivity, getMicSensitivityThresholds, type MicSensitivityThresholds } from "./mic-sensitivity.js";
 import { AmbientNoiseStream, FileAmbientNoiseStream, TRACK_PARAMS, loadPcmLoop, peekCachedPcmLoop, AMBIENT_LEVELS } from "./ambient.js";
 import { DtmfDetector } from "./dtmf.js";
@@ -991,6 +991,10 @@ export class OrchestrationPipeline implements VoiceSession {
   // once this reaches BARGE_IN_ECHO_FLOOR_MIN_SAMPLES; before that the conservative
   // cold-start fallback bar is used so returning echo can't self-trigger on frame 1.
   private playbackEchoFloorSamples = 0;
+  // Loudest inbound frame RMS seen since the current agent sentence started. If this
+  // never clears the echo bar, nothing but our own audio reached the mic during the
+  // sentence — used to veto word_count barge-ins fired by garbled echo transcripts.
+  private bargeInPeakRmsSinceSentence = 0;
   // Throttle for the periodic "energy barge-in monitor" diagnostic log line.
   private lastEnergyMonitorLogAt = 0;
   // Rolling record of text the agent recently synthesized (oldest first), with the
@@ -2191,9 +2195,11 @@ export class OrchestrationPipeline implements VoiceSession {
     guard:
       | "tail_echo_guard"
       | "self_echo_content_guard"
+      | "self_echo_energy_guard"
       | "ultra_short_fragment"
       | "false_interruption_scrap"
       | "transfer_in_progress"
+      | "end_call_in_progress"
       | "fragment_coalesce_hold"
       | "backchannel_during_playback",
   ): void {
@@ -2201,9 +2207,11 @@ export class OrchestrationPipeline implements VoiceSession {
     const reasonByGuard: Record<typeof guard, string> = {
       tail_echo_guard: "post-playback tail-echo window (content matched agent speech)",
       self_echo_content_guard: "content matched agent's own recent speech (self-echo)",
+      self_echo_energy_guard: "no caller energy above the echo bar while agent was speaking (self-echo)",
       ultra_short_fragment: "ultra-short STT noise stub — waiting for more speech",
       false_interruption_scrap: "post-barge scrap under interrupt-word threshold",
       transfer_in_progress: "transfer already in progress",
+      end_call_in_progress: "hangup already in progress",
       fragment_coalesce_hold: "short fragment held briefly for coalesce (not a drop)",
       backchannel_during_playback: "held ack fragment dropped — agent speaking at coalesce-timer fire (true backchannel)",
     };
@@ -2902,6 +2910,33 @@ export class OrchestrationPipeline implements VoiceSession {
       // is still speaking the safety net is dormant — leave it untouched.
       if (!this.isPlaying) this.safetyNet.beginListening();
       return;
+    }
+
+    // Energy corroboration (additive to both guards above). The content guard only
+    // catches echo that STT transcribed faithfully. On a carrier leg the ASR routinely
+    // returns *garbled* text for our own audio — call 8538 turned "Am I speaking with
+    // the owner…" into a caller turn reading "speaking in English." — which no textual
+    // comparison can match, so it fired word_count barge-in and the agent cut itself off
+    // five times in 31 seconds. Energy is the tiebreaker: if the inbound signal never
+    // rose above the measured echo bar for this entire sentence, the only thing that
+    // reached the mic was our own audio coming back.
+    if (!isSemanticInterrupt(transcript) && this.isPlaying && !this.bargeInRequested) {
+      const echoBar = this.echoBarRms();
+      if (echoBar !== null && this.bargeInPeakRmsSinceSentence <= echoBar) {
+        this.streamingBargeInWordCount = 0;
+        logger.info(
+          {
+            callId: this.config.callId,
+            transcript: transcript.slice(0, 80),
+            peakRms: Math.round(this.bargeInPeakRmsSinceSentence),
+            echoBar: Math.round(echoBar),
+            echoFloor: Math.round(this.playbackEchoFloor),
+          },
+          "Streaming STT: discarding self-echo transcript (no caller energy above echo bar)",
+        );
+        this.logDiscardedTranscript(transcript, "self_echo_energy_guard");
+        return;
+      }
     }
 
     if (this.bargeInEnabled && this.isPlaying && !this.bargeInRequested) {
@@ -3678,6 +3713,12 @@ export class OrchestrationPipeline implements VoiceSession {
     // Used to apply a lower threshold and enable the streaming frame-count cap.
     const isWebcallStreaming = !respectHoldUntil && this.config.telephonyProvider === "webcall";
 
+    // Track the sentence's loudest inbound frame even during the echo grace — the
+    // word_count path uses it to tell a real caller from a garbled echo transcript.
+    if (streamingCarrier && currentRms > this.bargeInPeakRmsSinceSentence) {
+      this.bargeInPeakRmsSinceSentence = currentRms;
+    }
+
     const now = Date.now();
     // 600ms per-sentence start grace protects initial spoken words from self-echo false cuts.
     const startGraceMs = Math.max(600, this.bargeInEchoGraceMs);
@@ -3793,6 +3834,24 @@ export class OrchestrationPipeline implements VoiceSession {
    * genuine drop in echo level recovers quickly. Seeds on the first sample and counts
    * samples so the derived bar isn't trusted until the estimate is warm.
    */
+  /**
+   * Inbound RMS a real caller must exceed for us to believe them over returning
+   * carrier echo, or `null` when echo is not a concern / not yet measurable and the
+   * caller must therefore be given the benefit of the doubt:
+   *   - webcall legs, where the browser's AEC already removes our audio;
+   *   - while no TTS is on the wire, so there is nothing to echo;
+   *   - before the floor estimate is warm, when the bar would be a guess.
+   */
+  private echoBarRms(): number | null {
+    if (this.config.telephonyProvider === "webcall") return null;
+    if (!this.isSendingTtsAudio) return null;
+    if (this.playbackEchoFloorSamples < BARGE_IN_ECHO_FLOOR_MIN_SAMPLES) return null;
+    return Math.min(
+      this.playbackEchoFloor * BARGE_IN_ADAPTIVE_ECHO_MARGIN,
+      BARGE_IN_ADAPTIVE_MAX_THRESHOLD,
+    );
+  }
+
   private updateEchoFloor(rms: number): void {
     if (rms <= 0) return;
     this.playbackEchoFloorSamples++;
@@ -5817,6 +5876,7 @@ export class OrchestrationPipeline implements VoiceSession {
     // per-sentence 600 ms echo grace (bargeInSentenceStartAt + bargeInEchoGraceMs)
     // instead of the extended `bargeInHoldUntil` that protects the batch STT path.
     this.bargeInSentenceStartAt = Date.now();
+    this.bargeInPeakRmsSinceSentence = 0;
 
     /** Wire bytes actually sent (mulaw or PCM8k) — source of truth for pacedMs. */
     let bytesSent = 0;
@@ -5829,6 +5889,16 @@ export class OrchestrationPipeline implements VoiceSession {
       // Twilio with a burst of messages that overwhelms their playback buffer.
       const wireQueue: Buffer[] = [];
       let pcmIdx = 0;
+      // Block-continuous decimators. The stateless downsample16to8 renormalizes
+      // its kernel wherever taps fall outside the buffer, so calling it per 20 ms
+      // block corrupts the first ~7 and last ~3 output samples of EVERY block —
+      // a defect repeating at 50 Hz that is audible as buzzy/gritty voice on
+      // every 8 kHz leg (carrier and webcall alike). Carrying the tail across
+      // blocks makes the filter identical to one run over the whole sentence.
+      // Speech and the ambient-mixed copy are separate signals, so each needs
+      // its own filter state.
+      const speechDecim = createDownsampler16to8();
+      const mixedDecim = this.ambientStream ? createDownsampler16to8() : null;
 
       // Converts the next buffered pcm16k block into wire-ready chunks. This is
       // where recording + ambient mixing happen — at real "now", right before
@@ -5836,7 +5906,7 @@ export class OrchestrationPipeline implements VoiceSession {
       const processNextBlock = (): boolean => {
         if (pcmIdx >= job.pcmQueue.length) return false;
         const pcm16k = job.pcmQueue[pcmIdx++];
-        const pcm8k = downsample16to8(pcm16k);
+        const pcm8k = speechDecim.process(pcm16k);
         // Record agent audio (downsampled to match recording sample rate).
         // Recording stays clean — ambient is mixed only into the outbound copy.
         this.recording.addAgentChunk(pcm8k);
@@ -5849,7 +5919,7 @@ export class OrchestrationPipeline implements VoiceSession {
           const mixed16k = this.ambientStream ? this.ambientStream.mixIntoPcm16k(pcm16k) : pcm16k;
           const out = rate === 16000
             ? mixed16k
-            : (this.ambientStream ? downsample16to8(mixed16k) : pcm8k);
+            : (mixedDecim ? mixedDecim.process(mixed16k) : pcm8k);
           const PCM_CHUNK = CHUNK_SIZE_MULAW * 2 * (rate / 8000); // 20ms: 320B @8k, 640B @16k
           for (let i = 0; i < out.length; i += PCM_CHUNK) {
             wireQueue.push(out.slice(i, i + PCM_CHUNK));
@@ -5895,6 +5965,7 @@ export class OrchestrationPipeline implements VoiceSession {
       // otherwise consume the grace period before any audio is audible, and
       // caller audio during the wait could be sampled as "echo".
       this.bargeInSentenceStartAt = Date.now();
+      this.bargeInPeakRmsSinceSentence = 0;
 
       // Drift-compensated pacing: track the "ideal" next send time and adjust
       // each sleep so that accumulated setTimeout jitter is self-corrected.

@@ -10,8 +10,8 @@ import type { AgentConfig, ConversationTurn, SessionConfig } from "../../types.j
 import type { VoiceSession } from "../../voice-session.js";
 import { RecordingBuffer, WEBCALL_GAP_RESYNC_MS } from "../../recorder.js";
 import {
+  createDownsampler24to8,
   decodeMulaw,
-  downsample24to8,
   encodeMulaw,
   upsample8to16,
 } from "../../audio.js";
@@ -178,6 +178,10 @@ export class GeminiLivePipeline implements VoiceSession {
   private closed = false;
   private greetingSent = false;
   private pendingOut24k = Buffer.alloc(0);
+  // Frames are decimated one 20 ms slice at a time, so the filter must carry its
+  // tail across slices — a stateless per-frame call renormalizes the kernel at
+  // both block edges and bakes a 50 Hz buzz into the voice (see audio.ts).
+  private readonly outDecim24to8 = createDownsampler24to8();
   private isPlayingOut = false;
 
   // ── Paced outbound pump ──────────────────────────────────────────────────
@@ -649,7 +653,7 @@ export class GeminiLivePipeline implements VoiceSession {
     while (this.pendingOut24k.length >= FRAME_BYTES_24K) {
       const frame24k = this.pendingOut24k.subarray(0, FRAME_BYTES_24K);
       this.pendingOut24k = this.pendingOut24k.subarray(FRAME_BYTES_24K);
-      this.outFrames8k.push(downsample24to8(frame24k));
+      this.outFrames8k.push(this.outDecim24to8.process(frame24k));
     }
     if (this.outFrames8k.length) this.ensurePump();
   }
