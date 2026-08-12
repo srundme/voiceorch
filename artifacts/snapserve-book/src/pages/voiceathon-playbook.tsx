@@ -7,6 +7,25 @@ export default function VoiceathonPlaybook() {
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-gray-100 font-sans">
+      <div className="sticky top-0 z-50 border-b border-amber-500/30 bg-amber-500/10 px-4 py-3 text-center text-sm text-amber-50">
+        This HTML page may lag the source playbook. Use the current guide:{" "}
+        <a
+          className="underline font-medium text-white"
+          href="https://github.com/srundme/voiceorch/blob/main/docs/voiceathon-participant-playbook.md"
+          target="_blank"
+          rel="noreferrer"
+        >
+          docs/voiceathon-participant-playbook.md
+        </a>
+        {" · "}
+        <a className="underline font-medium text-white" href="https://app.snapserve.ai/docs/platform-concepts">
+          Platform concepts
+        </a>
+        {" · "}
+        <a className="underline font-medium text-white" href="https://app.snapserve.ai/docs/meetings">
+          Meetings
+        </a>
+      </div>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap');
         * { box-sizing: border-box; }

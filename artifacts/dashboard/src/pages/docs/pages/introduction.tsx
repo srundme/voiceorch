@@ -11,7 +11,7 @@ export default function IntroductionPage() {
         title="SnapServe Documentation"
         description={
           <>
-            SnapServe is an <strong className="text-zinc-200">AI voice agent platform</strong> —
+            SnapServe is an <strong className="text-slate-800">AI voice agent platform</strong> —
             build agents in the dashboard, connect calendars and tools, then call the REST API from
             your own app.
           </>
@@ -33,7 +33,7 @@ export default function IntroductionPage() {
         />
         <DocCard
           href="/docs/calendar"
-          title="Calendar & booking"
+          title="Bookings calendar"
           description="Connect Google Calendar and book on calls"
           icon={<Calendar />}
         />
@@ -75,7 +75,7 @@ export default function IntroductionPage() {
           <Link href="/docs/outbound-calls">Calls &amp; history</Link> — transcript &amp; summary
         </li>
         <li>
-          <Link href="/docs/webhooks">Webhooks</Link> — push results to your backend
+          <Link href="/docs/webhooks">Event subscriptions</Link> — push call results to your backend
         </li>
         <li>
           <Link href="/docs/claude-skill">Claude skill &amp; MCP</Link> — agents &amp; campaigns from
@@ -87,13 +87,13 @@ export default function IntroductionPage() {
       </ul>
 
       <div className="not-prose mt-8 flex flex-wrap gap-4 text-sm">
-        <Link href="/docs/platform-concepts" className="text-sky-300 hover:text-sky-200">
+        <Link href="/docs/platform-concepts" className="text-sky-700 hover:text-sky-800">
           Platform concepts →
         </Link>
-        <Link href="/docs/variables" className="inline-flex items-center gap-1 text-sky-300 hover:text-sky-200">
+        <Link href="/docs/variables" className="inline-flex items-center gap-1 text-sky-700 hover:text-sky-800">
           <Variable className="h-4 w-4" /> Variables
         </Link>
-        <Link href="/docs/outbound-calls" className="inline-flex items-center gap-1 text-sky-300 hover:text-sky-200">
+        <Link href="/docs/outbound-calls" className="inline-flex items-center gap-1 text-sky-700 hover:text-sky-800">
           <PhoneCall className="h-4 w-4" /> Calls
         </Link>
       </div>

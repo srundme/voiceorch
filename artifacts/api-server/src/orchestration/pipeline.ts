@@ -206,6 +206,17 @@ const GOTO_SLIDE_TOOL_DEF: ToolDefinition = {
   },
 };
 
+/**
+ * Tools that complete locally in ~1 ms and therefore must not be preceded by a
+ * "One moment…" filler: the filler's audio duration is pure added latency
+ * between the caller's request and the visible slide change.
+ */
+const INSTANT_TOOLS = new Set<string>([
+  "next_slide",
+  "previous_slide",
+  "goto_slide",
+]);
+
 const SEND_MEETING_CHAT_TOOL_DEF: ToolDefinition = {
   name: "send_meeting_chat",
   description:
@@ -492,16 +503,21 @@ const GREETING_ECHO_HOLD_CAP_MS = 3000;  // Hard cap on greetingEchoHoldUntil so
                                           // never lock the caller out of interrupting.
 
 /**
- * One-shot note marking the opening-only caller-memory / resume directives as
- * already satisfied. Appended to the volatile per-turn tail of the system prompt
- * once the opener (greeting) exists in conversation history, so the LLM does not
- * re-deliver the recognition/drop-acknowledgment the greeting already spoke.
+ * One-shot note marking the opening as already spoken. Appended to the volatile
+ * per-turn tail once ANY assistant opener exists in conversation history, so the
+ * LLM does not re-deliver the intro the greeting path already spoke.
+ *
+ * Applies to ALL agents (not only returning-caller / resume prompts): wizard and
+ * vibe templates put "Greet the caller / Always introduce yourself" in CALL FLOW,
+ * and without this note the first real reply re-greets after greet() already did.
  * Deliberately preserves the persistent rules (NAME PRIORITY, DO NOT RE-ASK).
  */
 const OPENING_ALREADY_DELIVERED_NOTE =
-  "[OPENING ALREADY DELIVERED — OVERRIDES RESUME/DROP ACK] The opening line of this call has ALREADY been spoken " +
-  "(it is the first assistant message in the conversation). This OVERRIDES any RESUME / LAST CALL DROPPED / " +
-  "\"acknowledge the interruption\" instruction above. Do NOT greet again, do NOT re-introduce yourself, do NOT " +
+  "[OPENING ALREADY DELIVERED] The opening line of this call has ALREADY been spoken " +
+  "(it is the first assistant message in the conversation). This OVERRIDES any GREETING / " +
+  "CALL FLOW step 1 / \"introduce yourself\" / \"greet the caller\" / RESUME / LAST CALL DROPPED / " +
+  "\"acknowledge the interruption\" instruction above. Do NOT greet again, do NOT re-introduce " +
+  "yourself or your company, do NOT restart the scripted pitch from the top, do NOT " +
   "re-state that you remember them or summarize the previous call unprompted, and do NOT apologize for or " +
   "mention a dropped/cut/lost call. Forbidden unless the caller just said it RIGHT NOW: கால் கட், कॉल कट, " +
   "\"call cut\", \"call dropped\", \"got cut off\", \"ஆயிடுச்சு\" about the call. Simply respond to the " +
@@ -568,7 +584,12 @@ function isStubGreeting(text: string): boolean {
  */
 const GREETING_FULL_PROMPT_MAX_CHARS = 12_000;
 
-function buildCompactGreetingPrompt(fullSystemPrompt: string, language: string, resumeDropped = false): string {
+function buildCompactGreetingPrompt(
+  fullSystemPrompt: string,
+  language: string,
+  resumeDropped = false,
+  opts?: { callDirection?: "inbound" | "outbound" | string | null; agentName?: string | null },
+): string {
   const memoryMatch = fullSystemPrompt.match(
     /=== CALLER MEMORY[\s\S]*?={20,}/,
   );
@@ -621,9 +642,21 @@ function buildCompactGreetingPrompt(fullSystemPrompt: string, language: string, 
       ? "[OPENING] Speak the GREETING / opening from CALL FLOW above as a single uninterrupted turn. " +
         "Use the caller's company/contact name when present. Do not replace the scripted pitch with a one-word Hello."
       : "[OPENING LENGTH] Your opening line must be ONE short, natural sentence — a brief greeting only. Do not list services, ask multiple questions, or explain anything yet; wait for the caller to respond.";
+  // Call 7943: agent display name "voiceathon new agent" leaked into spoken opener
+  // as "Thanks for calling voiceathon" even though the prompt never named that brand.
+  const agentLabel = (opts?.agentName ?? "").trim();
   const antiInventionRule =
-    "[NEVER INVENT] Use ONLY the company name, brand names, and facts written in the instructions above. " +
-    "If no company name is given above, greet WITHOUT naming any company — NEVER make up a company, product, or service.";
+    "[NEVER INVENT] Use ONLY the company name, brand names, and facts written in the scripted instructions above " +
+    "(IDENTITY / CALL FLOW / GREETING). " +
+    "If no company name is given there, greet WITHOUT naming any company — NEVER make up a company, product, or service. " +
+    "The agent/workspace display name is an internal label, NOT a company brand — never say " +
+    `"thanks for calling <agent name>"` +
+    (agentLabel ? ` (do not say "${agentLabel}" or a shortened form of it as the company).` : ".");
+  const directionRule =
+    opts?.callDirection === "outbound"
+      ? "[OUTBOUND] You placed this call. Do NOT say \"thanks for calling\" / \"thank you for calling\". " +
+        "Open as the caller (introduce yourself / your company from the script), not as an inbound receptionist."
+      : "";
   const returningCallerRule = memoryBlock && !resumeDropped
     ? "[RETURNING CALLER] If the CALLER MEMORY above contains actual facts about this caller (not just an empty template), " +
       "this is a repeat conversation: briefly acknowledge it naturally in ONE short clause and skip the first-time welcome. " +
@@ -640,6 +673,7 @@ function buildCompactGreetingPrompt(fullSystemPrompt: string, language: string, 
       fullSystemPrompt,
       languageInstruction,
       fullOpeningRule,
+      directionRule,
       returningCallerRule,
       antiInventionRule,
     ].filter(Boolean).join("\n\n");
@@ -649,10 +683,23 @@ function buildCompactGreetingPrompt(fullSystemPrompt: string, language: string, 
     scriptBlock,
     languageInstruction,
     openingLengthRule,
+    directionRule,
     returningCallerRule,
     antiInventionRule,
   ].filter(Boolean);
   return parts.join("\n\n");
+}
+
+/** Languages that share the Devanagari block (U+0900–U+097F) — script alone cannot separate them. */
+const DEVANAGARI_LANGUAGES = new Set(["hi-IN", "mr-IN", "ne-NP", "sa-IN", "kok-IN", "mai-IN"]);
+
+/** True when the text contains at least one Devanagari character. */
+function hasDevanagari(text: string): boolean {
+  for (const ch of text) {
+    const cp = ch.codePointAt(0) ?? 0;
+    if (cp >= 0x0900 && cp <= 0x097F) return true;
+  }
+  return false;
 }
 
 /**
@@ -663,15 +710,19 @@ function buildCompactGreetingPrompt(fullSystemPrompt: string, language: string, 
  * the provider returns no LID (older models, non-Sarvam providers).
  * This drives per-turn language injection when `languageAutoDetect` is ON.
  *
- * Priority: Tamil > Devanagari (Hindi) > Malayalam > Telugu > Kannada > Bengali >
+ * Priority: Tamil > Devanagari > Malayalam > Telugu > Kannada > Bengali >
  *           Gujarati > Gurmukhi (Punjabi) > Odia > Latin-only (English) > null.
+ *
+ * `devanagariLang` resolves the Hindi/Marathi/Nepali ambiguity — they share one
+ * Unicode block, so the caller passes the agent's configured Devanagari language
+ * (Hindi only as the default).
  *
  * Mixed scripts: the Indic script with the most characters wins among Indic scripts.
  * Latin (English) only wins when the transcript contains zero Indic characters — any
  * presence of Tamil/Devanagari/etc. script outweighs any amount of Latin text, because
  * callers frequently mix romanized words ("Anna", "insurance") into Indic-script speech.
  */
-function detectScriptLanguage(text: string): string | null {
+export function detectScriptLanguage(text: string, devanagariLang = "hi-IN"): string | null {
   let tamil = 0, devanagari = 0, malayalam = 0, telugu = 0, kannada = 0;
   let bengali = 0, gujarati = 0, gurmukhi = 0, odia = 0, sinhala = 0, latin = 0;
   for (const ch of text) {
@@ -698,7 +749,7 @@ function detectScriptLanguage(text: string): string | null {
   const effectiveLatin = indicTotal > 0 ? 0 : latin;
   const scores: Array<[number, string]> = [
     [tamil,         "ta-IN"],
-    [devanagari,    "hi-IN"],
+    [devanagari,    devanagariLang],
     [malayalam,     "ml-IN"],
     [sinhala,       "si-LK"],
     [telugu,        "te-IN"],
@@ -1162,6 +1213,13 @@ export class OrchestrationPipeline implements VoiceSession {
   private dtmfResolver: ((digit: string | null) => void) | null = null;
   private dtmfTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
+  /** Last KB context that actually resolved this call, reused when a later turn's
+   *  retrieval races past its budget. Without it a timed-out lookup left the model
+   *  with NO knowledge mid-conversation (measured on ~35% of turns in a long
+   *  presentation call) and made the prompt prefix churn between sizes, which also
+   *  defeats provider prompt caching. Stale reference material beats none. */
+  private lastKbContext: { text: string; source: string; turnNumber: number } | null = null;
+
   // Gender detection — fires once per call using early caller speech
   private genderDetector: GenderDetector | GenderDetectorML | GenderDetectorMLv2 | GenderDetectorChained;
   /** Explicit mid-call caller correction ("call me sir, not ma'am"). When set it
@@ -1222,6 +1280,18 @@ export class OrchestrationPipeline implements VoiceSession {
   // Seeded from the agent's primary language at construction so turn 1 already
   // has a baseline. Updated each turn via script detection when languageAutoDetect=true.
   private currentLang: string = "";
+  /** Which Devanagari language this agent means when it sees Devanagari script.
+   *  Hindi unless the agent is explicitly configured for another one (Marathi …). */
+  private get devanagariLang(): string {
+    const configured = this.agent.language ?? "";
+    if (DEVANAGARI_LANGUAGES.has(configured)) return configured;
+    // Accept bare base codes ("mr") as well as full tags ("mr-IN").
+    const base = configured.split("-")[0]!.toLowerCase();
+    for (const lang of DEVANAGARI_LANGUAGES) {
+      if (lang.split("-")[0] === base) return lang;
+    }
+    return "hi-IN";
+  }
   // When the caller switches language mid-call, capture {from, to} here so
   // processTurn() can annotate the user's history entry with a note that the
   // transcript was captured while ASR was still locked to the old language.
@@ -2939,7 +3009,15 @@ export class OrchestrationPipeline implements VoiceSession {
       if (sttLang && !LANG_DISPLAY_NAMES[sttLang]) sttLang = null; // unknown code — fall through to script detection
 
       if (this.agent.languageAutoDetect) {
-        let detected = sttLang ?? detectScriptLanguage(transcript);
+        // Hindi, Marathi and Nepali share the Devanagari block, and Sarvam/Google
+        // LID collapses them all to Hindi. A Marathi agent would therefore flip to
+        // Hindi on its first Devanagari transcript, so the agent's own configured
+        // Devanagari language wins whenever the transcript is in that script.
+        const devLang = this.devanagariLang;
+        let detected = sttLang ?? detectScriptLanguage(transcript, devLang);
+        if (devLang !== "hi-IN" && detected === "hi-IN" && hasDevanagari(transcript)) {
+          detected = devLang;
+        }
         // Explicit language request (e.g. "speak in English", "Hindi me baat
         // karo") LATCHES the caller's chosen output language so it STICKS for
         // the rest of the call. Without the latch, the very next Indic-script
@@ -4464,6 +4542,10 @@ export class OrchestrationPipeline implements VoiceSession {
               this.agent.systemPrompt,
               greetLang,
               resumeDropped,
+              {
+                callDirection: this.callDirection,
+                agentName: this.agent.name,
+              },
             ),
             this.salutationFor(null),
           );
@@ -7327,21 +7409,47 @@ export class OrchestrationPipeline implements VoiceSession {
       kbResult = await Promise.race([safeKb, kbTimeout]);
       if (kbRaceTimer) clearTimeout(kbRaceTimer);
       else kbRaceTimedOut = kbResult === null;
-      // Drain any late-resolving prefetch so it can't surface as an unhandled rejection;
-      // its value is intentionally discarded (the turn already proceeded without it).
-      void safeKb.catch(() => null);
+      // This turn already moved on, but a late prefetch is still worth keeping:
+      // park it as the stale fallback so the NEXT turn can use it instead of
+      // discarding work we already paid for.
+      const raceTurn = this._activeTurnIndex;
+      void safeKb
+        .then((late) => {
+          if (late?.text) {
+            this.lastKbContext = { text: late.text, source: late.source, turnNumber: raceTurn };
+          }
+        })
+        .catch(() => null);
       if (kbResult === null) {
         logger.debug({ callId: this.config.callId, raceMs: kbOuterRaceMs }, "KB context: race timed out or empty — proceeding without context");
       }
     }
-    const kbContext = kbResult?.text || null;
+
+    // Stale-while-revalidate: a timed-out or empty lookup falls back to the last
+    // context that did resolve this call rather than sending the model nothing.
+    let kbContext = kbResult?.text || null;
+    let kbStaleFromTurn: number | null = null;
+    if (kbContext) {
+      this.lastKbContext = {
+        text: kbContext,
+        source: kbResult?.source ?? "unknown",
+        turnNumber: this._activeTurnIndex,
+      };
+    } else if (this.lastKbContext && this.agent.knowledgeSourceIds.length > 0 && !this.agent.kbBakedOnly) {
+      kbContext = this.lastKbContext.text;
+      kbStaleFromTurn = this.lastKbContext.turnNumber;
+    }
     // Per-turn Knowledge execution-log event: whether KB context was injected,
     // where it came from, how long retrieval took, and how much text landed in
     // the prompt. Logged for every turn of a KB-attached agent (including
     // kbBakedOnly agents, where the KB lives in the baked system prompt).
     if (this.agent.knowledgeSourceIds.length > 0 || this.agent.kbBakedOnly) {
       const hit = this.agent.kbBakedOnly ? true : !!kbContext;
-      const source = this.agent.kbBakedOnly ? "baked" : (kbResult?.source ?? "none");
+      const source = this.agent.kbBakedOnly
+        ? "baked"
+        : kbStaleFromTurn !== null
+          ? "stale"
+          : (kbResult?.source ?? "none");
       this.logExec(EXEC_COMPONENTS.Knowledge, "response", {
         status: "info",
         turnNumber: this._activeTurnIndex,
@@ -7357,6 +7465,7 @@ export class OrchestrationPipeline implements VoiceSession {
           ...(kbResult?.contributingSourceIds ? { contributingSourceIds: kbResult.contributingSourceIds } : {}),
           ...(kbResult?.truncated !== undefined ? { truncated: kbResult.truncated } : {}),
           ...(kbResult?.cached ? { cached: true } : {}),
+          ...(kbStaleFromTurn !== null ? { staleReuse: true, staleFromTurn: kbStaleFromTurn } : {}),
           ...(kbRaceTimedOut ? { raceTimedOut: true, raceMs: kbOuterRaceMs } : {}),
         },
       });
@@ -7663,22 +7772,16 @@ export class OrchestrationPipeline implements VoiceSession {
       }
     }
 
-    // ── Opening-only directive neutralizer ────────────────────────────────────
-    // The caller-memory returning-caller directive ("Open by greeting them by
-    // name and naturally reference what you already know…"), the resume-from-drop
-    // directive ("Briefly acknowledge the interruption…") and the network-drop
-    // RESUME DIRECTIVE ("Open warmly and acknowledge the drop…") are phrased as
-    // OPENING instructions but live in the system prompt for the whole call. The
-    // greeting path (compact greeting LLM or static opener) already delivered
-    // that opening, so without this note the first real reply re-greets /
-    // re-references prior context / re-acknowledges the drop a second time.
+    // ── Opening-already-delivered note ────────────────────────────────────────
+    // greet() (static greetingMessage or greeting LLM) already spoke the opener.
+    // Wizard / vibe templates still put "Greet the caller / Always introduce
+    // yourself" in CALL FLOW, so without this note the first real reply re-greets.
+    // Also covers returning-caller / resume-from-drop recognition lines.
     //
     // Once ANY assistant turn exists in the conversation history the opening has
     // been spoken (covers the LLM greeting, static greeting, and the
-    // firstSpeaker=user case where the LLM's own first reply IS the opener), so
-    // append a one-shot note marking those opening-only directives as satisfied.
-    // The persistent rules (NAME PRIORITY, DO NOT RE-ASK KNOWN INFORMATION,
-    // memory FACTS) explicitly stay in force.
+    // firstSpeaker=user case where the LLM's own first reply IS the opener).
+    // Skip when a screening-bot handoff just asked for a FRESH greeting.
     //
     // Placement: AFTER the staged-prompt rebuild (so it survives the prompt
     // replacement) and AFTER cacheBaseForTurn was captured (so the Gemini cached
@@ -7686,12 +7789,8 @@ export class OrchestrationPipeline implements VoiceSession {
     // It is appended BEFORE the per-minute [CURRENT DATE & TIME] block and its
     // text is constant, so once it first appears the prefix stays stable for
     // OpenAI-style prompt caching (at most one cache-miss turn when it appears).
-    const hasOpeningOnlyDirective =
-      this.agent.systemPrompt.includes("THIS IS A RETURNING CALLER") ||
-      this.agent.systemPrompt.includes("RESUME, DO NOT RESTART") ||
-      this.agent.systemPrompt.includes("=== RESUME DIRECTIVE ===");
     const openerAlreadySpoken = this.conversationHistory.messages.some((t) => t.role === "assistant");
-    if (hasOpeningOnlyDirective && openerAlreadySpoken) {
+    if (openerAlreadySpoken && !this.pendingScreeningPickupNote) {
       systemPromptForTurn += `\n\n${OPENING_ALREADY_DELIVERED_NOTE}`;
     }
 
@@ -8399,7 +8498,10 @@ export class OrchestrationPipeline implements VoiceSession {
       const canonicalName = toolAliasMap[triggeredToolName] ?? triggeredToolName;
       const langPrefix = ((this.currentLang || this.agent.language) ?? "en").split("-")[0] ?? "en";
       const toolSpecific = TOOL_FILLERS_BY_NAME[triggeredToolName] ?? TOOL_FILLERS_BY_NAME[canonicalName];
-      const filler = triggeredToolName === "end_call"
+      // Slide navigation is a local in-memory state flip (~1 ms) that the viewer
+      // polls for, so "One moment…" only delays the visible slide change by the
+      // length of the filler audio. Fillers exist to cover slow network tools.
+      const filler = (triggeredToolName === "end_call" || INSTANT_TOOLS.has(canonicalName))
         ? undefined
         : (toolSpecific?.[langPrefix] ?? TOOL_FILLERS[langPrefix]);
       if (filler && !this.closed && !this.bargeInRequested) {
@@ -8425,8 +8527,17 @@ export class OrchestrationPipeline implements VoiceSession {
       const finalWake = wakePlayer as (() => void) | null;
       wakePlayer = null;
       if (finalWake) finalWake();
-      await playPromise; // plays filler (and any earlier backchannel) before continuing
-      const toolResult = await this.handleToolCall(triggeredToolName, triggeredToolArgs);
+      // Start the tool immediately instead of after the filler finishes speaking.
+      // Awaiting playback first added the filler's full audio duration (~1.5 s
+      // measured on slide changes) to every tool, which is exactly the lag users
+      // report when asking the agent to move to the next slide. The tool itself
+      // emits no audio, so only the spoken follow-up needs the playback barrier.
+      const toolPromise = this.handleToolCall(triggeredToolName, triggeredToolArgs);
+      // Never let a tool rejection escape as an unhandled rejection while the
+      // filler is still playing — the await below re-throws it in order.
+      toolPromise.catch(() => { /* surfaced by the await below */ });
+      await playPromise; // plays filler (and any earlier backchannel) before speaking
+      const toolResult = await toolPromise;
       if (toolResult !== undefined) {
         await this.continueWithToolResult(triggeredToolName, toolResult, 0, _toolCallId);
       }
@@ -8912,7 +9023,14 @@ export class OrchestrationPipeline implements VoiceSession {
       //  - empty-content assistant turns: the placeholder turn recorded when
       //    the LLM's entire reply was a tool call (no text alongside it).
       .filter((t) => t.role !== "tool" && !(t.role === "user" && t.content.startsWith("[Tool result for")) && t.content.trim() !== "")
-      .map((t) => `${t.role === "user" ? "Caller" : "Agent"}: ${t.content}`)
+      .map((t) => {
+        const content =
+          t.role === "assistant" || t.role === "user"
+            ? stripMarkupTags(t.content)
+            : t.content;
+        return `${t.role === "user" ? "Caller" : "Agent"}: ${content}`;
+      })
+      .filter((line) => !/^(Caller|Agent):\s*$/.test(line))
       .join("\n");
   }
 
@@ -10033,8 +10151,8 @@ function detectExplicitLanguageRequest(rawText: string): string | null {
  */
 function stripMarkupTags(text: string): string {
   return text
-    .replace(/<\/?emotion[^>]*>/gi, "")
-    .replace(/<break[^>]*\/?>/gi, "")
+    .replace(/<\/?emotion\b[^>]*>/gi, "")
+    .replace(/<break\b[^>]*\/?>/gi, "")
     .replace(/[^\S\r\n]{2,}/g, " ")
     .trim();
 }
@@ -10046,9 +10164,12 @@ function stripMarkupTags(text: string): string {
  * trimmed. When no tag is present both fields reflect the original text.
  */
 function extractEmotionTag(text: string): { emotion: string | null; text: string } {
-  const match = /^\s*<emotion\s+(?:value|type)="([^"]+)"\s*\/?>/i.exec(text);
+  const match = /^\s*<emotion\s+(?:value|type)=["']([^"']+)["']\s*\/?>/i.exec(text);
   const emotion = match ? match[1]!.toLowerCase() : null;
-  const cleanText = text.replace(/<\/?emotion[^>]*>/gi, "").replace(/<break[^>]*\/?>/gi, "").trim();
+  const cleanText = text
+    .replace(/<\/?emotion\b[^>]*>/gi, "")
+    .replace(/<break\b[^>]*\/?>/gi, "")
+    .trim();
   return { emotion, text: cleanText };
 }
 

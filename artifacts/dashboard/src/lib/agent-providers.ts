@@ -468,12 +468,53 @@ export function isVoiceCompatibleWithLanguage(
  * Single source of truth for filtering the admin-whitelisted voice list by
  * agent language. English agents see ALL whitelisted voices (every language);
  * non-English agents see only their language's voices.
+ *
+ * Languages with no dedicated voices in the catalog (Marathi, Odia, Assamese …
+ * are rarely tagged by TTS vendors) would otherwise leave the picker empty, so
+ * the full list is returned instead of nothing — matching voices first.
  */
 export function filterVoicesForLanguage<T extends { language?: string | null }>(
   voices: readonly T[],
   agentLanguage: string | null | undefined,
 ): T[] {
-  return voices.filter(v => isVoiceCompatibleWithLanguage(v.language, agentLanguage));
+  const matching = voices.filter(v => isVoiceCompatibleWithLanguage(v.language, agentLanguage));
+  if (matching.length > 0) return matching;
+  return [...voices];
+}
+
+/**
+ * Should a saved curated voice be cleared because the agent language changed?
+ *
+ * Membership of the OFFERED list is the test, never the raw language tag: for a
+ * language no vendor tags (Marathi) the picker legitimately offers every voice,
+ * and testing the tag would wipe the user's pick the instant they saved it.
+ * Voices absent from the whitelist are user-pasted IDs and are never cleared.
+ */
+export function shouldClearVoiceForLanguage<T extends { id: string; language?: string | null }>(
+  voices: readonly T[],
+  ttsVoice: string | null | undefined,
+  agentLanguage: string | null | undefined,
+): boolean {
+  if (!ttsVoice || ttsVoice === "__custom__") return false;
+  if (voices.length === 0) return false;
+  if (!voices.some(v => v.id === ttsVoice)) return false;
+  return !filterVoicesForLanguage(voices, agentLanguage).some(v => v.id === ttsVoice);
+}
+
+/**
+ * Order voices so the agent language's own voices come first, without hiding
+ * the rest. Used where the picker should still surface every option.
+ */
+export function orderVoicesByLanguage<T extends { language?: string | null }>(
+  voices: readonly T[],
+  agentLanguage: string | null | undefined,
+): T[] {
+  const matching: T[] = [];
+  const rest: T[] = [];
+  for (const v of voices) {
+    (isVoiceCompatibleWithLanguage(v.language, agentLanguage) ? matching : rest).push(v);
+  }
+  return [...matching, ...rest];
 }
 
 /** True for any Tamil language variant (base language `ta`, e.g. ta-IN, ta-SG). */

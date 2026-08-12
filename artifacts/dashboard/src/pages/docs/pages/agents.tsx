@@ -20,8 +20,10 @@ export default function AgentsPage() {
           → create or open an agent.
         </li>
         <li>
-          <strong>Prompt</strong> — instructions, language, greeting. Use{" "}
-          <Link href="/docs/variables">variables</Link> like <code>{"{{name}}"}</code>.
+          <strong>Prompt</strong> — instructions, language, and an explicit{" "}
+          <strong>Greeting message</strong> (exact first line). Use{" "}
+          <Link href="/docs/variables">variables</Link> like <code>{"{{name}}"}</code>. The agent
+          display name is an internal label — not automatically your company brand on the call.
         </li>
         <li>
           <strong>Voice</strong> — speak / listen providers (or BYOP keys under Providers).
@@ -31,11 +33,29 @@ export default function AgentsPage() {
           <Link href="/docs/calendar">calendar</Link>), etc.
         </li>
         <li>
+          <strong>Outcomes</strong> (top-level Builder tab) — taxonomy, funnel meaning (Interested /
+          Callback / DNC), data fields, and <strong>after-call WhatsApp / email</strong> rules. Wire
+          channels under Connections first (or save rules and connect later). Mid-call WhatsApp is
+          under Tools.
+        </li>
+        <li>
+          <strong>Analytics</strong> (top-level Builder tab) — this agent’s call volume, success rate,
+          spend, and latency. Platform-wide funnel view stays at{" "}
+          <a href="https://app.snapserve.ai/app/analytics" target="_blank" rel="noreferrer">
+            /app/analytics
+          </a>
+          .
+        </li>
+        <li>
           <strong>Knowledge</strong> — attach a{" "}
           <Link href="/docs/knowledge-base">knowledge base</Link>.
         </li>
         <li>
           <strong>Phone</strong> — assign a number for caller ID / inbound.
+        </li>
+        <li>
+          <strong>Meetings</strong> (optional) — meeting prompt + deck for Meet/Zoom/Teams.{" "}
+          <Link href="/docs/meetings">Meetings guide</Link>.
         </li>
         <li>
           <strong>Save</strong>, then toggle <strong>Active</strong> when ready.

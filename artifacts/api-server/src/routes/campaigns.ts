@@ -7,11 +7,13 @@ import {
   CreateCampaignBody,
   UpdateCampaignBody,
 } from "@workspace/api-zod";
-import { db, campaignsTable, campaignBatchesTable, campaignLeadsTable, callsTable, agentsTable, providersTable, platformSettingsTable, campaignConsentBasisTable, phoneNumbersTable, type CampaignFieldMappings } from "@workspace/db";
+import { db, campaignsTable, campaignLeadsTable, callsTable, agentsTable, providersTable, platformSettingsTable, campaignConsentBasisTable, phoneNumbersTable, type CampaignFieldMappings } from "@workspace/db";
 import { encryptKey, decryptKey } from "../lib/crypto.js";
 import { eq, and, count, desc, inArray, isNull, ne } from "drizzle-orm";
 import { scheduleCampaignCall } from "../orchestration/campaignCaller.js";
 import { evaluateIrdaiGate, IRDAI_BLOCKED_MESSAGE, IRDAI_BLOCKED_CODE, type IrdaiGateResult } from "../services/irdai/gate.js";
+import { normalizeLeadTransferInput } from "../services/campaign-lead-transfer.js";
+import { normalizeAfterCallBranchesInput } from "../services/campaign-after-call.js";
 
 const router: IRouter = Router();
 
@@ -118,6 +120,8 @@ function toCampaign(row: typeof campaignsTable.$inferSelect) {
     metaPageAccessTokenHint:   row.metaPageAccessToken
       ? (() => { try { const t = decryptKey(row.metaPageAccessToken!); return `…${t.slice(-6)}`; } catch { return "…(set)"; } })()
       : null,
+    leadTransfer:          row.leadTransfer ?? null,
+    afterCallBranches:     row.afterCallBranches ?? null,
     createdAt:             row.createdAt.toISOString(),
     updatedAt:             row.updatedAt.toISOString(),
   };
@@ -241,178 +245,116 @@ router.get("/campaigns/export.csv", async (req, res): Promise<void> => {
 
 // ── POST /campaigns ────────────────────────────────────────────────────────
 router.post("/campaigns", async (req, res): Promise<void> => {
-  try {
-    const { userId } = getAuth(req);
-    if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
 
-    const parsed = CreateCampaignBody.safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ error: "Validation failed", issues: parsed.error.issues }); return; }
+  const parsed = CreateCampaignBody.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "Validation failed", issues: parsed.error.issues }); return; }
 
-    const fieldMappings: CampaignFieldMappings = parsed.data.fieldMappings
-      ? (parsed.data.fieldMappings as CampaignFieldMappings)
-      : { phone: "phone" };
+  const fieldMappings: CampaignFieldMappings = parsed.data.fieldMappings
+    ? (parsed.data.fieldMappings as CampaignFieldMappings)
+    : { phone: "phone" };
 
-    // ── Block platform-managed numbers from being used in campaigns ──
-    // A number is "managed" only if it lives in the platform's managed_phone_numbers
-    // pool (platform_settings). Numbers the user purchased themselves are in
-    // phoneNumbersTable and are always allowed — they are the user's own numbers.
-    if (parsed.data.fromNumber) {
-      const selectedNumber = parsed.data.fromNumber;
+  // ── Block platform-managed numbers from being used in campaigns ──
+  // A number is "managed" only if it lives in the platform's managed_phone_numbers
+  // pool (platform_settings). Numbers the user purchased themselves are in
+  // phoneNumbersTable and are always allowed — they are the user's own numbers.
+  if (parsed.data.fromNumber) {
+    const selectedNumber = parsed.data.fromNumber;
 
-      // Check if this number is one of the user's own purchased numbers first.
-      // If it is, it is never a managed-platform number, regardless of VoBiz creds.
-      const [ownedRow] = await db
-        .select({ id: phoneNumbersTable.id })
-        .from(phoneNumbersTable)
-        .where(and(eq(phoneNumbersTable.userId, userId), eq(phoneNumbersTable.number, selectedNumber)));
+    // Check if this number is one of the user's own purchased numbers first.
+    // If it is, it is never a managed-platform number, regardless of VoBiz creds.
+    const [ownedRow] = await db
+      .select({ id: phoneNumbersTable.id })
+      .from(phoneNumbersTable)
+      .where(and(eq(phoneNumbersTable.userId, userId), eq(phoneNumbersTable.number, selectedNumber)));
 
-      if (!ownedRow) {
-        // Not in the user's own inventory — check if it's a platform-managed number safely.
-        let managedPool: string[] = [];
-        try {
-          const [numbersRow] = await db
-            .select({ value: platformSettingsTable.value })
-            .from(platformSettingsTable)
-            .where(eq(platformSettingsTable.key, "managed_phone_numbers"));
+    if (!ownedRow) {
+      // Not in the user's own inventory — check if it's a platform-managed number.
+      const [numbersRow] = await db
+        .select({ value: platformSettingsTable.value })
+        .from(platformSettingsTable)
+        .where(eq(platformSettingsTable.key, "managed_phone_numbers"));
+      const managedPool: string[] = numbersRow?.value ? (JSON.parse(numbersRow.value) as string[]) : [];
 
-          if (typeof numbersRow?.value === "string") {
-            managedPool = JSON.parse(numbersRow.value);
-          } else if (Array.isArray(numbersRow?.value)) {
-            managedPool = numbersRow.value as string[];
-          }
-        } catch {
-          managedPool = [];
-        }
-
-        if (managedPool.includes(selectedNumber)) {
-          res.status(403).json({
-            error: "Platform managed numbers cannot be used for campaigns. Purchase your own number from Phone Numbers and use it here.",
-            code: "MANAGED_NUMBER_CAMPAIGN_BLOCKED",
-          });
-          return;
-        }
-      }
-    }
-
-    // ── DPDP consent basis (record-keeping only — NEVER blocks dialing) ──
-    // If the assigned agent has DPDP enabled, a documented consent basis must
-    // accompany the campaign. This validates the audit record up front; it does
-    // not gate or delay any outbound call.
-    const consentBasis = parsed.data.consentBasis as ConsentBasisInput | undefined;
-    const dpdpEnabled = await isAgentDpdpEnabled(parsed.data.agentId);
-    if (dpdpEnabled) {
-      const err = validateConsentBasis(consentBasis);
-      if (err) { res.status(400).json({ error: err, code: "DPDP_CONSENT_BASIS_REQUIRED" }); return; }
-    }
-
-    // ── Hard platform ceiling on concurrent calls (max 10) ──
-    // ── Verify selected agent exists ──
-    let validAgentId: number | null = null;
-    if (parsed.data.agentId) {
-      const [agentExists] = await db
-        .select({ id: agentsTable.id })
-        .from(agentsTable)
-        .where(eq(agentsTable.id, parsed.data.agentId));
-
-      if (agentExists) {
-        validAgentId = agentExists.id;
-      } else {
-        res.status(400).json({
-          error: "The selected agent was not found. Please pick an active agent from the list.",
-          code: "INVALID_AGENT",
+      if (managedPool.includes(selectedNumber)) {
+        res.status(403).json({
+          error: "Platform managed numbers cannot be used for campaigns. Purchase your own number from Phone Numbers and use it here.",
+          code: "MANAGED_NUMBER_CAMPAIGN_BLOCKED",
         });
         return;
       }
     }
-
-    const leadSource = (parsed.data as Record<string, unknown>)["leadSource"] as string ?? "csv";
-    const rawLeads = Array.isArray((req.body as any)?.leads) ? ((req.body as any).leads as Record<string, string>[]) : [];
-
-    const [campaign] = await db.insert(campaignsTable).values({
-      userId,
-      name:                parsed.data.name,
-      description:         parsed.data.description,
-      agentId:             validAgentId,
-      fieldMappings,
-      fromNumber:          parsed.data.fromNumber,
-      concurrentCallLimit: parsed.data.concurrentCallLimit ?? MAX_CONCURRENT_CALLS,
-      callDelaySeconds:    parsed.data.callDelaySeconds ?? 5,
-      maxAttempts:         parsed.data.maxAttempts ?? 2,
-      retryDelayMinutes:   parsed.data.retryDelayMinutes ?? 15,
-      leadSource,
-      triggerMode:         "instant",
-      webhookToken:        randomUUID(),
-      status:              "active",
-      isActive:            true,
-    }).returning();
-
-    // ── Automatically Create Initial Lead Run & Insert Leads ──
-    try {
-      const [batch] = await db.insert(campaignBatchesTable).values({
-        campaignId: campaign!.id,
-        name: rawLeads.length > 0 ? `Batch #1 (${rawLeads.length} Leads)` : `Live Lead Pipeline (${leadSource})`,
-        leadSource,
-        status: "running",
-        callDelaySeconds: campaign!.callDelaySeconds ?? 5,
-        maxAttempts: campaign!.maxAttempts ?? 2,
-        retryDelayMinutes: campaign!.retryDelayMinutes ?? 15,
-        totalLeads: rawLeads.length,
-      }).returning();
-
-      if (rawLeads.length > 0 && batch) {
-        const leadValues = rawLeads.map((row) => {
-          const phone = row["phone"] || row["mobile"] || row["number"] || Object.values(row)[0] || "";
-          const nameVal = row["name"] || row["full_name"] || row["customer_name"] || null;
-          const emailVal = row["email"] || null;
-          return {
-            campaignId: campaign!.id,
-            batchId: batch.id,
-            phone: String(phone).trim(),
-            name: nameVal ? String(nameVal).trim() : null,
-            email: emailVal ? String(emailVal).trim() : null,
-            leadData: row,
-            callStatus: "pending",
-            source: leadSource,
-          };
-        }).filter(l => l.phone.length > 0);
-
-        if (leadValues.length > 0) {
-          await db.insert(campaignLeadsTable).values(leadValues);
-          await db.update(campaignsTable)
-            .set({ totalLeads: leadValues.length })
-            .where(eq(campaignsTable.id, campaign!.id));
-        }
-      }
-    } catch (batchErr) {
-      req.log.warn({ batchErr, campaignId: campaign!.id }, "Failed to auto-create initial batch");
-    }
-
-    if (dpdpEnabled && consentBasis) {
-      try {
-        await db.insert(campaignConsentBasisTable).values({
-          campaignId:       campaign!.id,
-          basisType:        consentBasis.basisType,
-          attestedBy:       consentBasis.attestedBy ?? userId,
-          consentSource:    consentBasis.consentSource ?? null,
-          consentDateRange: consentBasis.consentDateRange ?? null,
-          proofReference:   consentBasis.proofReference ?? null,
-          notes:            consentBasis.notes ?? null,
-        });
-      } catch (err) {
-        req.log.warn({ err, campaignId: campaign!.id }, "DPDP: failed to record campaign consent basis");
-      }
-    }
-
-    res.status(201).json(toCampaign(campaign!));
-  } catch (err: any) {
-    req.log.error({ err }, "POST /campaigns failed");
-    const isFkError = String(err?.message || "").includes("foreign key") || String(err?.message || "").includes("campaigns_agent_id_fkey");
-    if (isFkError) {
-      res.status(400).json({ error: "The selected agent or phone number is invalid. Please select an active agent." });
-      return;
-    }
-    res.status(500).json({ error: err.message || "Failed to create campaign" });
   }
+
+  // ── DPDP consent basis (record-keeping only — NEVER blocks dialing) ──
+  // If the assigned agent has DPDP enabled, a documented consent basis must
+  // accompany the campaign. This validates the audit record up front; it does
+  // not gate or delay any outbound call.
+  const consentBasis = parsed.data.consentBasis as ConsentBasisInput | undefined;
+  const dpdpEnabled = await isAgentDpdpEnabled(parsed.data.agentId);
+  if (dpdpEnabled) {
+    const err = validateConsentBasis(consentBasis);
+    if (err) { res.status(400).json({ error: err, code: "DPDP_CONSENT_BASIS_REQUIRED" }); return; }
+  }
+
+  // ── Hard platform ceiling on concurrent calls (max 10) ──
+  if (parsed.data.concurrentCallLimit != null && parsed.data.concurrentCallLimit > MAX_CONCURRENT_CALLS) {
+    res.status(400).json({
+      error: `Max Concurrent Calls cannot exceed ${MAX_CONCURRENT_CALLS}.`,
+      code: "CONCURRENT_LIMIT_EXCEEDED",
+    });
+    return;
+  }
+
+  const leadSource = (parsed.data as Record<string, unknown>)["leadSource"] as string ?? "csv";
+  const isContinuous = ["webhook", "meta_ads", "crm"].includes(leadSource);
+  const leadTransfer = normalizeLeadTransferInput(
+    (parsed.data as Record<string, unknown>)["leadTransfer"] ??
+      (req.body as Record<string, unknown> | undefined)?.["leadTransfer"],
+  );
+  const afterCallBranches = normalizeAfterCallBranchesInput(
+    (parsed.data as Record<string, unknown>)["afterCallBranches"] ??
+      (req.body as Record<string, unknown> | undefined)?.["afterCallBranches"],
+  );
+
+  const [campaign] = await db.insert(campaignsTable).values({
+    userId,
+    name:                parsed.data.name,
+    description:         parsed.data.description,
+    agentId:             parsed.data.agentId,
+    fieldMappings,
+    fromNumber:          parsed.data.fromNumber,
+    concurrentCallLimit: parsed.data.concurrentCallLimit ?? MAX_CONCURRENT_CALLS,
+    callDelaySeconds:    parsed.data.callDelaySeconds,
+    maxAttempts:         parsed.data.maxAttempts,
+    retryDelayMinutes:   parsed.data.retryDelayMinutes,
+    leadSource,
+    triggerMode:         isContinuous ? "instant" : ((parsed.data as Record<string, unknown>)["triggerMode"] as string ?? "batch"),
+    webhookToken:        randomUUID(),
+    status:              isContinuous ? "active" : "draft",
+    isActive:            isContinuous,
+    leadTransfer,
+    afterCallBranches,
+  }).returning();
+
+  if (dpdpEnabled && consentBasis) {
+    try {
+      await db.insert(campaignConsentBasisTable).values({
+        campaignId:       campaign!.id,
+        basisType:        consentBasis.basisType,
+        attestedBy:       consentBasis.attestedBy ?? userId,
+        consentSource:    consentBasis.consentSource ?? null,
+        consentDateRange: consentBasis.consentDateRange ?? null,
+        proofReference:   consentBasis.proofReference ?? null,
+        notes:            consentBasis.notes ?? null,
+      });
+    } catch (err) {
+      req.log.warn({ err, campaignId: campaign!.id }, "DPDP: failed to record campaign consent basis");
+    }
+  }
+
+  res.status(201).json(toCampaign(campaign!));
 });
 
 // ── GET /campaigns/:id ─────────────────────────────────────────────────────
@@ -460,11 +402,35 @@ router.patch("/campaigns/:id", async (req, res): Promise<void> => {
   }
 
   // If toggling isActive, also sync status field
-  const { fieldMappings: rawMappings, metaPageAccessToken: rawMetaToken, isCallingHoursEnabled, ...rest } = parsed.data as typeof parsed.data & { metaPageAccessToken?: string | null };
+  const {
+    fieldMappings: rawMappings,
+    metaPageAccessToken: rawMetaToken,
+    isCallingHoursEnabled,
+    leadTransfer: rawLeadTransfer,
+    afterCallBranches: rawAfterCallBranches,
+    ...rest
+  } = parsed.data as typeof parsed.data & {
+    metaPageAccessToken?: string | null;
+    leadTransfer?: unknown;
+    afterCallBranches?: unknown;
+  };
   const updateData: Partial<typeof campaignsTable.$inferInsert> = { ...rest };
   // isCallingHoursEnabled is boolean (not nullable in schema); treat null as "leave unchanged"
   if (isCallingHoursEnabled != null) updateData.isCallingHoursEnabled = isCallingHoursEnabled;
   if (rawMappings) updateData.fieldMappings = rawMappings as CampaignFieldMappings;
+  if (rawLeadTransfer !== undefined || (req.body as Record<string, unknown> | undefined)?.["leadTransfer"] !== undefined) {
+    updateData.leadTransfer = normalizeLeadTransferInput(
+      rawLeadTransfer ?? (req.body as Record<string, unknown>)["leadTransfer"],
+    );
+  }
+  if (
+    rawAfterCallBranches !== undefined ||
+    (req.body as Record<string, unknown> | undefined)?.["afterCallBranches"] !== undefined
+  ) {
+    updateData.afterCallBranches = normalizeAfterCallBranchesInput(
+      rawAfterCallBranches ?? (req.body as Record<string, unknown>)["afterCallBranches"],
+    );
+  }
   // Encrypt the Meta Page Access Token at rest (same pattern as provider API keys).
   // null clears the stored token; undefined means "not provided — leave unchanged".
   if (rawMetaToken !== undefined) {

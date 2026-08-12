@@ -1,36 +1,54 @@
 # SnapServe — product knowledge base
 
-**Purpose:** Feature map for the **Campaigns** core system (outbound dialing at scale).
+**Purpose:** Short feature map for the live product. For the ownership model see [snapserve-product-clarity.md](./snapserve-product-clarity.md).
 
 ## Primary navigation
 
-Home · **Campaigns** · Agents · Connections · History
+Home · **Campaigns** · Agents · Phone numbers · **Connections** · History · **Analytics**  
+(+ Knowledge, Memory, Squads, Bookings under More)
 
-## Default path
+## Default path (phone)
 
-1. Create an **agent**
-2. Open **Campaigns** → **Start a campaign** from a source
-3. Attach agent + phone → activate → dial → track in History
+1. Create an **agent** (prompt + greeting + Outcomes)
+2. Wire **Connections** (WhatsApp / Sheets / Website as needed)
+3. **Campaigns** → start from a source → attach agent + phone → activate
+4. Track in History; after-call messages fire from the **agent**
+
+## Who owns what (summary)
+
+| Layer | Owns |
+|-------|------|
+| **Agent** | Prompt, voice, tools, KB, Outcomes, after-call WA/email, meeting settings |
+| **Campaign** | Leads, dial queue, **lead transfer** (webhook / Sheets) |
+| **Connections** | WhatsApp, Email, Sheets, Website, Meta, Calendar, Meetings entry |
+| **Squads** | Live handoff + follow-up tasks |
+| **Meetings** | Join Meet / Zoom / Teams |
 
 ## Campaigns (`/app/campaigns`)
 
-Single page. Top section is source-specific setup (not one universal wizard):
-
 | Start with | Opens |
 |------------|--------|
-| **Meta** | Connections → Meta Lead Ads setup |
-| **Website** | Connections → Website form / webhook setup |
-| **Google Sheets** | `/app/automatic-calls/new` sheet pipeline |
-| **CSV file** | CSV campaign wizard → then batch upload |
-| **Zoho CRM** | Connect Zoho OAuth (if needed) → CRM campaign wizard → detail |
+| **Meta** | Connections → Meta Lead Ads |
+| **Website** | Connections → Website form |
+| **Google Sheets** | Automatic Calls / sheet pipeline |
+| **CSV file** | CSV campaign wizard |
+| **Zoho CRM** | CRM campaign wizard |
 
-Below: **Your campaigns** list, metrics, search/filter (when any exist).
+Campaign Configuration: **lead transfer** by disposition. WhatsApp/email after-call rules live on the **agent** (Outcomes → After-call messages).
 
-Deep links:
+## Meetings — three join paths
 
-- `/app/campaigns/:id` — detail, Activate / Pause / Resume / Stop, batches
-- `/app/campaigns/:id/batches/new` — batch wizard
-- `/app/automatic-calls` — sheet pipeline list
+| Path | Where | Use when |
+|------|--------|----------|
+| **Paste link** | `/app/meet` | Ad-hoc join now |
+| **Google Calendar (AI meetings)** | `/app/meet` → Connect Google → Join toggles | Auto-join calendar events |
+| **Booking auto-dispatch** | Bookings with `meet_link` | Bot near slot time |
+
+Capabilities: leave, mute/unmute, chat, slides (`start/stop/next/previous/goto`), schedule rejoin. Full map: [meetings.md](./meetings.md).
+
+Booking “Connect Google Calendar” under Connections is for **creating** booking events. AI meetings connect is **readonly** for Recall — different button.
+
+Ops: [recall-calendar-v2-ops.md](./recall-calendar-v2-ops.md)
 
 ## Legacy redirects
 
@@ -39,16 +57,11 @@ Deep links:
 | `/app/people` | `/app/campaigns` |
 | `/app/call-plans` | `/app/home` |
 
-## Meetings — three join paths
+## See also
 
-| Path | Where | Use when |
-|------|--------|----------|
-| **Paste link** | `/app/meet` → paste Meet/Zoom/Teams URL | Ad-hoc join now |
-| **Google Calendar (AI meetings)** | `/app/meet` → Connect Google → toggle Join per event | Self-serve: user connects their calendar; SnapServe schedules bots via Recall Calendar V2 |
-| **Booking auto-dispatch** | Scheduling / bookings with `meet_link` | SnapServe booking creates Meet link; worker launches bot near slot time |
-
-Booking “Connect Google Calendar” under Connections is for **creating** booking events (write). AI meetings connect uses **readonly** calendar scopes and hands the refresh token to Recall — do not treat them as the same connect button.
-
-Ops: [recall-calendar-v2-ops.md](./recall-calendar-v2-ops.md)
-
-See also: [SnapServe-Campaign-Book.md](./SnapServe-Campaign-Book.md) · [Brand kit](./brand/BRAND.md) (logo, colors, assets).
+- [Product clarity](./snapserve-product-clarity.md)  
+- [Voiceathon playbook](./voiceathon-participant-playbook.md)  
+- [Meetings](./meetings.md)  
+- [Brand kit](./brand/BRAND.md)  
+- In-app docs: https://app.snapserve.ai/docs  
+- API Reference: https://app.snapserve.ai/docs/api-reference  

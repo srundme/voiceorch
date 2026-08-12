@@ -43,7 +43,7 @@ function SectionHeading({ id, children }: { id: string; children: React.ReactNod
   return (
     <h2
       id={id}
-      className="scroll-mt-24 text-sm font-semibold uppercase tracking-wider text-foreground/90 mb-4 pb-2 border-b border-white/10"
+      className="scroll-mt-24 text-sm font-semibold uppercase tracking-wider text-foreground/90 mb-4 pb-2 border-b border-slate-200"
     >
       {children}
     </h2>
@@ -75,7 +75,7 @@ function ParamRow({ param }: { param: ParameterObject }) {
 
 function ParamList({ params }: { params: ParameterObject[] }) {
   return (
-    <div className="divide-y divide-white/5">
+    <div className="divide-y divide-slate-100">
       {params.map((p) => (
         <ParamRow key={`${p.in}:${p.name}`} param={p} />
       ))}
@@ -85,7 +85,7 @@ function ParamList({ params }: { params: ParameterObject[] }) {
 
 function Authorizations({ admin }: { admin: boolean }) {
   return (
-    <div className="divide-y divide-white/5">
+    <div className="divide-y divide-slate-100">
       <div className="py-3">
         <div className="flex items-baseline gap-2 flex-wrap">
           <code className="text-sm font-mono text-foreground font-medium">
@@ -111,7 +111,7 @@ function statusTone(status: string): string {
   if (status.startsWith("3")) return "text-sky-400 border-sky-400/40 bg-sky-400/5";
   if (status.startsWith("4")) return "text-amber-400 border-amber-400/40 bg-amber-400/5";
   if (status.startsWith("5")) return "text-rose-400 border-rose-400/40 bg-rose-400/5";
-  return "text-muted-foreground border-white/20";
+  return "text-muted-foreground border-slate-300";
 }
 
 function ResponsesSection({ responses }: { responses: ResolvedResponse[] }) {
@@ -131,7 +131,7 @@ function ResponsesSection({ responses }: { responses: ResolvedResponse[] }) {
             className={`rounded-md border px-2.5 py-1 text-xs font-mono font-semibold transition-colors ${
               r.status === active?.status
                 ? statusTone(r.status)
-                : "text-muted-foreground/60 border-white/10 hover:text-foreground"
+                : "text-muted-foreground/60 border-slate-200 hover:text-foreground"
             }`}
           >
             {r.status}
@@ -144,7 +144,7 @@ function ResponsesSection({ responses }: { responses: ResolvedResponse[] }) {
             <p className="text-sm text-muted-foreground mb-3">{active.description}</p>
           ) : null}
           {active.schema ? (
-            <div className="rounded-lg border border-white/5 bg-white/[0.02] p-4">
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
               <SchemaView node={active.schema} />
             </div>
           ) : (
@@ -164,7 +164,7 @@ export function EndpointAside({ op, baseUrl }: { op: IndexedOperation; baseUrl: 
         <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70 mb-3">
           On this page
         </h4>
-        <ul className="flex flex-col gap-1.5 border-l border-white/5 pl-3">
+        <ul className="flex flex-col gap-1.5 border-l border-slate-200 pl-3">
           {sections.map((s) => (
             <li key={s.id}>
               <a
@@ -214,7 +214,7 @@ export function EndpointPage({ op, baseUrl }: { op: IndexedOperation; baseUrl: s
         </div>
 
         <div className="flex items-stretch gap-3 flex-wrap">
-          <div className="flex items-center gap-2.5 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 min-w-0 flex-1">
+          <div className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 min-w-0 flex-1">
             <MethodBadge method={op.method} size="md" />
             <code className="text-sm font-mono text-foreground/90 truncate">
               <span className="text-muted-foreground/60">{baseUrl}</span>
@@ -272,7 +272,7 @@ export function EndpointPage({ op, baseUrl }: { op: IndexedOperation; baseUrl: s
 
       {responses.length ? <ResponsesSection responses={responses} /> : null}
 
-      <div className="xl:hidden pt-4 border-t border-white/10">
+      <div className="xl:hidden pt-4 border-t border-slate-200">
         <EndpointAside op={op} baseUrl={baseUrl} />
       </div>
     </article>

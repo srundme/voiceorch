@@ -98,27 +98,27 @@ interface NavGroup {
 }
 
 /**
- * Primary: Home · Campaigns · Agents · Phone numbers · Connections · History
+ * Primary: Home · Campaigns · Agents · Phone numbers · Connections · History · Analytics
  */
 const NAV_GROUPS: NavGroup[] = [
   {
     items: [
       { name: "Home",          href: "/app/home",           icon: Home },
-      { name: "Campaigns",    href: "/app/campaigns",     icon: Megaphone },
+      { name: "Campaigns",     href: "/app/campaigns",      icon: Megaphone },
       { name: "Agents",        href: "/app/agents",         icon: Bot },
       { name: "Phone numbers", href: "/app/phone-numbers",  icon: Phone },
       { name: "Connections",   href: "/app/connections",    icon: PlugZap },
       { name: "History",       href: "/app/history",        icon: HistoryIcon, callbackBadge: true },
+      { name: "Analytics",     href: "/app/analytics",      icon: BarChart3 },
     ],
   },
   {
     group: "MORE",
     items: [
-      { name: "Knowledge",  href: "/app/knowledge-bases", icon: BookOpen },
-      { name: "Memory",     href: "/app/memory",          icon: Brain },
-      { name: "Squads",     href: "/app/squads",          icon: GitBranch },
-      { name: "Analytics",  href: "/app/analytics",       icon: BarChart3 },
-      { name: "Bookings", href: "/app/scheduling",      icon: Calendar },
+      { name: "Knowledge", href: "/app/knowledge-bases", icon: BookOpen },
+      { name: "Memory",    href: "/app/memory",          icon: Brain },
+      { name: "Squads",    href: "/app/squads",          icon: GitBranch },
+      { name: "Bookings",  href: "/app/scheduling",      icon: Calendar },
     ],
   },
 ];

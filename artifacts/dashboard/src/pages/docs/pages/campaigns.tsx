@@ -17,11 +17,30 @@ export default function CampaignsPage() {
 
       <h2 id="flow">Typical flow</h2>
       <ol>
-        <li>Create a campaign and pick an active agent + phone number.</li>
-        <li>Upload leads (CSV) and map columns to variables.</li>
-        <li>Start a batch; SnapServe paces concurrent dials from your wallet.</li>
+        <li>Create a campaign from a source (CSV, Sheets, Website, Meta, CRM) and pick an active agent + phone number.</li>
+        <li>Map columns / fields to variables when uploading.</li>
+        <li>Start / activate; SnapServe paces concurrent dials from your wallet.</li>
         <li>Review live queue, dispositions, callbacks, and recordings in the workspace.</li>
       </ol>
+
+      <h2 id="ownership">What campaigns own</h2>
+      <ul>
+        <li>
+          <strong>Lead transfer</strong> — Configuration tab: when disposition matches, push the lead
+          to a webhook and/or Google Sheet.
+        </li>
+        <li>
+          Dial queue, retries, calling hours, analytics slices (export / transfer / create batch).
+        </li>
+      </ul>
+      <p>
+        WhatsApp / email after a call are configured on the{" "}
+        <strong>agent</strong> (Builder → Outcomes → After-call messages), with channels under{" "}
+        <a href="https://app.snapserve.ai/app/connections" target="_blank" rel="noreferrer">
+          Connections
+        </a>
+        . See <Link href="/docs/platform-concepts">Platform concepts</Link>.
+      </p>
 
       <h2 id="compliance">Compliance</h2>
       <p>

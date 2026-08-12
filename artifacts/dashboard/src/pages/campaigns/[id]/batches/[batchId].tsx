@@ -259,6 +259,7 @@ type BatchHeader = {
     scheduledStartAt: string | null;
     timezone: string | null;
     maxAttempts: number; retryDelayMinutes: number;
+    batchFieldMapping?: Record<string, string> | null;
   };
   campaign: { id: number; name: string; agentId: number | null; agentName: string | null; fromNumber: string | null };
   source: { name: string; type: string } | null;
@@ -702,6 +703,11 @@ export default function BatchWorkspacePage() {
   const [isStarting, setIsStarting] = useState(false);
   const [editScheduleOpen, setEditScheduleOpen] = useState(false);
   const [isSavingSchedule, setIsSavingSchedule] = useState(false);
+  const [remapOpen, setRemapOpen] = useState(false);
+  const [remapPhone, setRemapPhone] = useState("phone");
+  const [remapName, setRemapName] = useState("name");
+  const [remapEmail, setRemapEmail] = useState("email");
+  const [remapSaving, setRemapSaving] = useState(false);
 
   // Header data (light, kept in sync with polling)
   const { data: header } = useQuery<BatchHeader>({
@@ -709,6 +715,14 @@ export default function BatchWorkspacePage() {
     queryFn: () => apiFetch(`${BASE}/api/campaigns/${campaignId}/batches/${batchId}/workspace/header`),
     refetchInterval: 10000,
   });
+
+  useEffect(() => {
+    const m = header?.batch.batchFieldMapping;
+    if (!m) return;
+    if (m["phone"]) setRemapPhone(m["phone"]);
+    if (m["name"]) setRemapName(m["name"]);
+    if (m["email"]) setRemapEmail(m["email"]);
+  }, [header?.batch.batchFieldMapping]);
 
   // KPIs
   const { data: kpis } = useQuery<BatchWorkspaceKpis>({
@@ -936,7 +950,75 @@ export default function BatchWorkspacePage() {
           <KpiCard icon={<XCircle className="h-3 w-3" />}      label="Failed"    value={kpis?.failed       ?? "—"} color="text-red-500"     />
           <KpiCard icon={<TrendingUp className="h-3 w-3" />}   label="Success"   value={kpis ? `${kpis.successRate}%` : "—"} color="text-emerald-500" />
         </div>
+        <div className="mt-2 flex justify-end">
+          <Button size="sm" variant="ghost" className="h-7 text-[11px] gap-1.5 text-muted-foreground"
+            onClick={() => setRemapOpen(true)}>
+            <Pencil className="h-3 w-3" /> Remap pending fields
+          </Button>
+        </div>
       </div>
+
+      <Dialog open={remapOpen} onOpenChange={setRemapOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Remap pending leads</DialogTitle>
+          </DialogHeader>
+          <p className="text-xs text-muted-foreground">
+            Point phone / name / email at the correct CSV columns, then re-apply to all pending leads in this batch.
+          </p>
+          <div className="space-y-3 py-1">
+            <div className="space-y-1">
+              <Label className="text-xs">Phone column</Label>
+              <Input className="h-9 text-xs" value={remapPhone} onChange={(e) => setRemapPhone(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Name column</Label>
+              <Input className="h-9 text-xs" value={remapName} onChange={(e) => setRemapName(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Email column</Label>
+              <Input className="h-9 text-xs" value={remapEmail} onChange={(e) => setRemapEmail(e.target.value)} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setRemapOpen(false)}>Cancel</Button>
+            <Button
+              size="sm"
+              disabled={remapSaving || !remapPhone.trim()}
+              onClick={() => {
+                void (async () => {
+                  setRemapSaving(true);
+                  try {
+                    const mapping = {
+                      phone: remapPhone.trim(),
+                      ...(remapName.trim() ? { name: remapName.trim() } : {}),
+                      ...(remapEmail.trim() ? { email: remapEmail.trim() } : {}),
+                    };
+                    await update.mutateAsync({
+                      id: campaignId,
+                      batchId,
+                      data: {
+                        batchFieldMapping: mapping,
+                        rematerializePending: true,
+                      },
+                    });
+                    await qc.invalidateQueries({ queryKey: ["batch-ws-header", campaignId, batchId] });
+                    await qc.invalidateQueries({ queryKey: ["batch-ws-leads", campaignId, batchId] });
+                    toast({ title: "Pending leads remapped" });
+                    setRemapOpen(false);
+                  } catch {
+                    toast({ title: "Remap failed", variant: "destructive" });
+                  } finally {
+                    setRemapSaving(false);
+                  }
+                })();
+              }}
+            >
+              {remapSaving ? "Applying…" : "Apply to pending"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Leads ───────────────────────────────────────────────────────────── */}
       <div className="flex-1 overflow-auto min-h-0">

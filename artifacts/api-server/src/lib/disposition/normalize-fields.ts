@@ -4,8 +4,10 @@
  * fields stay short scalars instead of summary paragraphs.
  */
 
+import { expandSpokenDigits } from "./spoken-digits.js";
+
 const PHONE_KEY_RE =
-  /whats?\s*app|wa[_\s-]?number|mobile|phone|cell|contact[_\s-]?number|msisdn|^tel$/i;
+  /whats?\s*app|wa[_\s-]?number|mobile|phone|cell|contact[_\s-]?number|alternate|alternative|msisdn|^tel$/i;
 
 export function isPhoneLikeDispositionField(
   key: string,
@@ -20,6 +22,20 @@ export function isPhoneLikeDispositionField(
  * Pull a phone-like token out of prose. Prefer the longest 10–15 digit run
  * (Indian mobile / E.164 without +). Returns null when nothing usable.
  */
+function pickPhoneCandidate(raw: string): string | null {
+  const compact = raw.replace(/[\s\-().]/g, "");
+  if (/^\+?\d{8,15}$/.test(compact)) {
+    return compact.startsWith("+") ? compact.slice(1) : compact;
+  }
+  const matches = [...raw.matchAll(/(?:\+?\d[\d\s\-().]{7,18}\d)/g)].map((m) =>
+    m[0]!.replace(/[\s\-().]/g, "").replace(/^\+/, ""),
+  );
+  const candidates = matches.filter((d) => d.length >= 8 && d.length <= 15);
+  if (!candidates.length) return null;
+  const ten = candidates.find((d) => d.length === 10 || (d.length === 12 && d.startsWith("91")));
+  return ten ?? candidates.sort((a, b) => b.length - a.length)[0]!;
+}
+
 export function extractBarePhone(value: unknown): string | null {
   if (value == null) return null;
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -29,21 +45,17 @@ export function extractBarePhone(value: unknown): string | null {
   const raw = String(value).trim();
   if (!raw || raw.toLowerCase() === "null" || raw.toLowerCase() === "n/a") return null;
 
-  // Already clean: optional +, digits/spaces/dashes only.
-  const compact = raw.replace(/[\s\-().]/g, "");
-  if (/^\+?\d{8,15}$/.test(compact)) {
-    return compact.startsWith("+") ? compact.slice(1) : compact;
-  }
+  // Already digits, or prose with digit runs.
+  const direct = pickPhoneCandidate(raw);
+  if (direct) return direct;
 
-  // Prose: "WhatsApp number is +91 98765 43210 please send brochure"
-  const matches = [...raw.matchAll(/(?:\+?\d[\d\s\-().]{7,18}\d)/g)].map((m) =>
-    m[0]!.replace(/[\s\-().]/g, "").replace(/^\+/, ""),
-  );
-  const candidates = matches.filter((d) => d.length >= 8 && d.length <= 15);
-  if (!candidates.length) return null;
-  // Prefer 10-digit Indian mobiles, else longest.
-  const ten = candidates.find((d) => d.length === 10 || (d.length === 12 && d.startsWith("91")));
-  return ten ?? candidates.sort((a, b) => b.length - a.length)[0]!;
+  // Spoken / STT: "eight nine zero four…" / Tamil digit words → ASCII, then re-scan.
+  const expanded = expandSpokenDigits(raw);
+  if (expanded !== raw) {
+    const fromSpoken = pickPhoneCandidate(expanded);
+    if (fromSpoken) return fromSpoken;
+  }
+  return null;
 }
 
 export type DispositionSchemaField = {

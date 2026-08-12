@@ -48,16 +48,16 @@ const BASE_CARDS: ConnCard[] = [
     id: "calendar",
     setupId: "calendar",
     icon: "calendar",
-    title: "Calendar & booking",
-    blurb: "Google Calendar setup for mid-call appointments.",
+    title: "Bookings calendar",
+    blurb: "Google Calendar for appointments — invites include a Meet link.",
   },
   {
     id: "meetings",
     icon: "video",
-    title: "Meetings",
-    blurb: "Paste a Meet / Zoom / Teams link and send an agent into the call.",
+    title: "Meeting bots",
+    blurb: "Send an agent into Meet / Zoom / Teams (paste link or calendar Join).",
     href: "/app/meet",
-    cta: "Join with link",
+    cta: "Open meeting bots",
   },
   {
     id: "whatsapp",
@@ -71,14 +71,14 @@ const BASE_CARDS: ConnCard[] = [
     setupId: "email",
     brand: "brevo",
     title: "Email (Brevo)",
-    blurb: "Bring your Brevo key to email people from the agent.",
+    blurb: "From address + API key. Agents use this for email.",
   },
   {
     id: "website",
     setupId: "website",
     icon: "globe",
-    title: "Website form",
-    blurb: "Form submit → person lands in your workspace.",
+    title: "Form intake",
+    blurb: "Form submit → intake URL → dial. Not Developers event subscriptions.",
   },
   {
     id: "meta",
@@ -252,11 +252,33 @@ export default function ConnectionsPage() {
     meta: metaReady,
   };
 
+  const searchParams = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+  let returnToRaw = searchParams.get("returnTo");
+  if (returnToRaw?.includes("%2F") || returnToRaw?.includes("%2f")) {
+    try {
+      returnToRaw = decodeURIComponent(returnToRaw);
+    } catch {
+      /* keep raw */
+    }
+  }
+  const returnLabelRaw = searchParams.get("returnLabel");
+  const setupBackFromReturn =
+    returnToRaw && returnToRaw.startsWith("/app/") && !returnToRaw.startsWith("//")
+      ? {
+          href: returnToRaw,
+          label: returnLabelRaw?.trim()
+            || (returnToRaw.includes("/agents/")
+              ? (returnToRaw.includes("section=outcomes") ? "Back to Outcomes" : "Back to agent")
+              : "Back"),
+        }
+      : null;
+
   if (setup === "calendar") {
     return <ConnectionsCalendarSetup />;
   }
 
   // Same pattern as email/meta/sheets — stay under Connections (?setup=whatsapp).
+  // WhatsAppPage reads returnTo/returnLabel from the URL search itself.
   if (setup === "whatsapp") {
     return <WhatsAppPage />;
   }
@@ -265,26 +287,27 @@ export default function ConnectionsPage() {
     return (
       <StripePage
         title="Email (Brevo)"
-        description="Bring your own Brevo API key. Agents use this for Send email."
-        back={{ href: "/app/connections", label: "Connections" }}
+        description="Three steps: from address, API key, test. Template is optional. Use the back link to return where you came from."
+        back={setupBackFromReturn ?? { href: "/app/connections", label: "Connections" }}
       >
-        <div className="max-w-xl">
-          <EmailChannelCard forceExpanded />
+        <div className="max-w-lg">
+          <EmailChannelCard forceExpanded setupMode />
         </div>
       </StripePage>
     );
   }
 
-  const fromCampaigns = new URLSearchParams(search).get("from") === "campaigns";
-  const setupBack = fromCampaigns
-    ? { href: "/app/campaigns", label: "Campaigns" }
-    : { href: "/app/connections", label: "Connections" };
+  const fromCampaigns = searchParams.get("from") === "campaigns";
+  const setupBack = setupBackFromReturn
+    ?? (fromCampaigns
+      ? { href: "/app/campaigns", label: "Campaigns" }
+      : { href: "/app/connections", label: "Connections" });
 
   if (setup === "website") {
     return (
       <StripePage
-        title="Website form"
-        description="Create a webhook and embed snippet. New form leads can trigger your agent."
+        title="Form intake"
+        description="Create an intake URL and embed snippet. New form leads can trigger your agent."
         back={setupBack}
         fullBleed
         contentClassName="!px-0 !py-0 max-w-none"

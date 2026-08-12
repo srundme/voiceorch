@@ -37,6 +37,7 @@ import {
   getDispositionSummary,
   getDispositionValues,
 } from "@/lib/disposition-display";
+import { stripTranscriptMarkup } from "@/lib/transcript-display";
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from "@/components/ui/tooltip";
@@ -91,6 +92,8 @@ function PlainTranscriptLine({ line, index }: { line: string; index: number }) {
   const callerMatch = line.match(/^Caller:\s*([\s\S]*)/);
 
   if (agentMatch) {
+    const content = stripTranscriptMarkup(agentMatch[1] ?? "");
+    if (!content) return null;
     return (
       <div className="flex gap-2.5 items-start">
         <div className="w-6 h-6 rounded-full bg-primary/15 flex items-center justify-center shrink-0 mt-0.5">
@@ -99,7 +102,7 @@ function PlainTranscriptLine({ line, index }: { line: string; index: number }) {
         <div className="flex-1 max-w-[78%]">
           <span className="text-[10px] font-semibold text-primary/70 uppercase tracking-wide mb-1 block">Agent</span>
           <div className="bg-primary/8 border border-primary/15 rounded-xl rounded-tl-sm px-3 py-2">
-            <p className="text-xs leading-relaxed text-foreground whitespace-pre-wrap">{agentMatch[1]}</p>
+            <p className="text-xs leading-relaxed text-foreground whitespace-pre-wrap">{content}</p>
           </div>
         </div>
       </div>
@@ -107,6 +110,8 @@ function PlainTranscriptLine({ line, index }: { line: string; index: number }) {
   }
 
   if (callerMatch) {
+    const content = stripTranscriptMarkup(callerMatch[1] ?? "");
+    if (!content) return null;
     return (
       <div className="flex gap-2.5 items-start flex-row-reverse">
         <div className="w-6 h-6 rounded-full bg-secondary flex items-center justify-center shrink-0 mt-0.5">
@@ -115,7 +120,7 @@ function PlainTranscriptLine({ line, index }: { line: string; index: number }) {
         <div className="flex-1 max-w-[78%] flex flex-col items-end">
           <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1 block">Caller</span>
           <div className="bg-secondary border border-border rounded-xl rounded-tr-sm px-3 py-2">
-            <p className="text-xs leading-relaxed text-secondary-foreground whitespace-pre-wrap">{callerMatch[1]}</p>
+            <p className="text-xs leading-relaxed text-secondary-foreground whitespace-pre-wrap">{content}</p>
           </div>
         </div>
       </div>
@@ -1593,13 +1598,16 @@ export function CallDetailContent({
                         </div>
                       ) : isJsonTranscript ? (
                         <div className="space-y-5">
-                          {transcriptLines.map((line, i) => (
+                          {transcriptLines.map((line, i) => {
+                            const content = stripTranscriptMarkup(String(line.content ?? ""));
+                            if (!content) return null;
+                            return (
                             <div key={i} className={`flex gap-3 ${line.role === 'user' ? 'flex-row-reverse' : ''}`}>
                               <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${line.role === 'user' ? 'bg-secondary' : 'bg-primary/15 text-primary'}`}>
                                 {line.role === 'user' ? <User className="h-3 w-3" /> : <Bot className="h-3 w-3" />}
                               </div>
                               <div className={`max-w-[80%] rounded-xl p-3 text-xs ${line.role === 'user' ? 'bg-secondary text-secondary-foreground rounded-tr-sm' : 'bg-card border border-border shadow-sm rounded-tl-sm'}`}>
-                                <p className="leading-relaxed">{line.content}</p>
+                                <p className="leading-relaxed">{content}</p>
                                 {line.timestamp && (
                                   <span className="text-[10px] text-muted-foreground mt-1.5 block opacity-60">
                                     {line.timestamp}
@@ -1607,7 +1615,8 @@ export function CallDetailContent({
                                 )}
                               </div>
                             </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       ) : (
                         <div className="p-4 space-y-4">

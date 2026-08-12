@@ -277,7 +277,7 @@ export default function WebhooksPage() {
       {/* Toolbar — parent StripeTabPage owns the Developers title */}
       <div className="shrink-0 border-b border-border px-5 py-4 sm:px-6 flex items-start justify-between gap-3">
         <p className="text-sm text-muted-foreground">
-          Push call results (transcript, summary, cost) to your app when a call finishes. This is not for receiving CRM leads.
+          Event subscriptions: SnapServe POSTs call results to your app. Not form intake, lead transfer, or agent post-call notify.
         </p>
         <Button size="sm" className="h-8 text-xs gap-1.5 shrink-0" onClick={() => setCreateOpen(true)}>
           <Plus className="w-3.5 h-3.5" />
@@ -287,32 +287,29 @@ export default function WebhooksPage() {
 
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-3xl px-6 py-6 space-y-6">
-          {/* Clarity: two different “webhook” concepts */}
           <div className="rounded-xl border border-border bg-muted/20 p-4 space-y-3">
-            <p className="text-sm font-medium text-foreground">Which webhooks do you need?</p>
+            <p className="text-sm font-medium text-foreground">Not the same as…</p>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
                 <p className="text-xs font-semibold text-foreground flex items-center gap-1.5">
                   <Webhook className="h-3.5 w-3.5" />
-                  This page — outbound call events
+                  This page — Event subscriptions
                 </p>
                 <p className="text-[11px] text-muted-foreground mt-1.5 leading-relaxed">
-                  You give SnapServe a URL. After each call we POST{" "}
-                  <code className="text-[10px]">call.completed</code> with transcript &amp; summary
-                  so your product can update the CRM.
+                  Workspace-wide: you give SnapServe a URL. We POST{" "}
+                  <code className="text-[10px]">call.completed</code> (transcript, summary, cost) for every call.
                 </p>
               </div>
               <Link
-                href="/app/connections"
+                href="/app/connections?setup=website"
                 className="rounded-lg border border-border bg-card p-3 hover:border-muted-foreground/40 transition-colors group"
               >
                 <p className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                  Inbound leads — Connections
+                  Form intake — Connections / Campaigns
                   <ArrowRight className="h-3 w-3 opacity-50 group-hover:opacity-100" />
                 </p>
                 <p className="text-[11px] text-muted-foreground mt-1.5 leading-relaxed">
-                  Campaign / form lead webhooks go the other way: other tools POST into SnapServe.
-                  Manage those under Connections, not here.
+                  The other direction: your website form POSTs leads into SnapServe to dial. Agent post-call notify is per-agent under Builder → Settings.
                 </p>
               </Link>
             </div>
@@ -339,7 +336,7 @@ export default function WebhooksPage() {
               <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-4">
                 <Webhook className="h-6 w-6 text-muted-foreground" />
               </div>
-              <p className="text-sm font-medium">No call webhooks yet</p>
+              <p className="text-sm font-medium">No event subscriptions yet</p>
               <p className="text-xs text-muted-foreground mt-1 max-w-sm">
                 Add your app&apos;s HTTPS URL to receive call results after each conversation.
               </p>

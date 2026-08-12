@@ -93,7 +93,7 @@ function PropertyRow({
         <p className="mt-1 text-[11px] font-mono text-muted-foreground/50">↻ circular reference</p>
       ) : null}
       {canExpand && open && childSchema ? (
-        <div className="mt-3 ml-3 pl-4 border-l border-white/10">
+        <div className="mt-3 ml-3 pl-4 border-l border-slate-200">
           <SchemaProperties schema={childSchema} seenRefs={childSeen} depth={depth + 1} />
         </div>
       ) : null}
@@ -113,7 +113,7 @@ export function SchemaProperties({
   const entries = getProperties(schema);
   if (!entries.length) return null;
   return (
-    <div className="divide-y divide-white/5">
+    <div className="divide-y divide-slate-100">
       {entries.map((entry) => (
         <PropertyRow key={entry.name} entry={entry} seenRefs={seenRefs} depth={depth} />
       ))}

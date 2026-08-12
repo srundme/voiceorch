@@ -23,6 +23,7 @@ import { logger } from "../lib/logger.js";
 import { getSelfBaseUrl } from "../lib/app-domain.js";
 import {
   signMeetBotToken,
+  meetBotTokenExp,
   createRecallBot,
   deleteRecallBot,
 } from "./meet-bots.js";
@@ -204,12 +205,12 @@ export async function dispatchUpcomingMeetingBots(): Promise<void> {
           typeof b.attendeeEmail === "string" ? b.attendeeEmail.trim().toLowerCase() : "";
         const attendeeName =
           typeof b.attendeeName === "string" ? b.attendeeName.trim() : "";
-        // Token must outlive a bot scheduled up to 24h ahead.
-        const tokenExp = Math.max(Date.now(), b.slotStart.getTime()) + 2 * 60 * 60 * 1000;
         const token = signMeetBotToken({
           agentId: runtimeAgentId,
           userId: b.userId,
-          exp: tokenExp,
+          // Anchored to the slot, so a late start or an overrun cannot expire
+          // the token while the bot is still in the room.
+          exp: meetBotTokenExp(b.slotStart),
           mid,
           meetUrl: b.meetLink,
           ...(sourceCallId && meetings.passCallContext ? { sourceCallId } : {}),

@@ -7,6 +7,7 @@ import {
   getListCampaignBatchesQueryKey, getGetCampaignQueryKey,
   getGetBatchAnalyticsQueryOptions,
   useListCrmConnections, useUpdateCrmConnection, getListCrmConnectionsQueryKey,
+  customFetch,
 } from "@workspace/api-client-react";
 import type { CampaignBatch, CrmConnection } from "@workspace/api-client-react";
 import { CrmImportDialog } from "../connections";
@@ -38,9 +39,11 @@ import {
   PhoneIncoming, ArrowRightLeft, Radio, Ban,
   TrendingUp, DollarSign, Target, MoreVertical, Eye,
   KeyRound, Link2, Link2Off, Loader2, Instagram,
+  Download,
 } from "lucide-react";
 import { CallDetailDrawer } from "@/components/call-detail-drawer";
 import { TablePagination } from "@/components/table-pagination";
+import { RecampaignDialog } from "./recampaign-dialog";
 import { format, formatDistanceToNow } from "date-fns";
 import { BATCH_STATUS_MAP, CAMPAIGN_STATUS_MAP } from "@/lib/campaign-status";
 import LiveQueueTab from "./live-queue";
@@ -48,6 +51,14 @@ import IncomingCallsTab from "./incoming";
 import CallbacksTab from "./callbacks";
 import TransfersTab from "./transfers";
 import BookingsTab from "./bookings";
+import {
+  EMPTY_LEAD_TRANSFER,
+  LeadTransferSettings,
+  leadTransferReady,
+  readLeadTransfer,
+  toLeadTransferPayload,
+  type LeadTransferForm,
+} from "./lead-transfer-settings";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -1322,6 +1333,10 @@ export default function CampaignDetailPage() {
   const [hoursTz,    setHoursTz]    = useState<string>("Asia/Kolkata");
   const [hoursEnabled, setHoursEnabled] = useState<boolean>(true);
   const [activeTab, setActiveTab] = useState<CampaignTab>("overview");
+  const [leadTransferForm, setLeadTransferForm] = useState<LeadTransferForm>(EMPTY_LEAD_TRANSFER);
+  const [savingTransfer, setSavingTransfer] = useState(false);
+  const [actingDisposition, setActingDisposition] = useState<string | null>(null);
+  const [recampaignOpen, setRecampaignOpen] = useState(false);
 
   useEffect(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1331,7 +1346,90 @@ export default function CampaignDetailPage() {
     setHoursEnd  (d.businessHoursEnd   != null ? String(d.businessHoursEnd)   : "");
     setHoursTz   (d.timezone ?? "Asia/Kolkata");
     setHoursEnabled(d.isCallingHoursEnabled !== false);
+    setLeadTransferForm(readLeadTransfer(d.leadTransfer));
   }, [campaign]);
+
+  async function handleSaveLeadTransfer() {
+    if (!leadTransferReady(leadTransferForm)) {
+      toast({
+        title: "Incomplete transfer settings",
+        description: "Pick dispositions and a valid destination, or turn transfer off.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const payload = toLeadTransferPayload(leadTransferForm);
+    setSavingTransfer(true);
+    try {
+      await update.mutateAsync({
+        id: campaignId,
+        data: { leadTransfer: payload } as any,
+      });
+      await qc.invalidateQueries({ queryKey: getGetCampaignQueryKey(campaignId) });
+      toast({ title: "Lead transfer saved" });
+    } catch {
+      toast({ title: "Failed to save lead transfer", variant: "destructive" });
+    } finally {
+      setSavingTransfer(false);
+    }
+  }
+
+  async function handleActOnDisposition(
+    disposition: string,
+    action: "export" | "transfer" | "create_batch",
+  ) {
+    setActingDisposition(`${disposition}:${action}`);
+    try {
+      if (action === "export") {
+        const csv = await customFetch<string>(
+          `/api/campaigns/${campaignId}/dispositions/act`,
+          {
+            method: "POST",
+            body: JSON.stringify({ disposition, action }),
+            headers: { Accept: "text/csv" },
+            responseType: "text",
+          },
+        );
+        const blob = new Blob([typeof csv === "string" ? csv : String(csv)], {
+          type: "text/csv",
+        });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `disposition-${disposition.replace(/[^a-z0-9_-]+/gi, "_")}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+        toast({ title: "Export ready" });
+      } else {
+        const result = await customFetch<{
+          transferred?: number;
+          inserted?: number;
+          batchId?: number;
+          matched?: number;
+        }>(`/api/campaigns/${campaignId}/dispositions/act`, {
+          method: "POST",
+          body: JSON.stringify({ disposition, action }),
+        });
+        if (action === "transfer") {
+          toast({
+            title: "Transfer complete",
+            description: `${result.transferred ?? 0} of ${result.matched ?? 0} transferred`,
+          });
+        } else {
+          toast({
+            title: "Batch created",
+            description: `Batch #${result.batchId} with ${result.inserted ?? 0} leads`,
+          });
+          await qc.invalidateQueries({ queryKey: getListCampaignBatchesQueryKey(campaignId) });
+        }
+      }
+      await qc.invalidateQueries({ queryKey: ["getCampaignAnalytics", campaignId] });
+    } catch {
+      toast({ title: "Action failed", variant: "destructive" });
+    } finally {
+      setActingDisposition(null);
+    }
+  }
 
   const webhookUrl = campaign
     ? `${window.location.origin}${BASE}/api/webhooks/lead/${campaign.webhookToken}`
@@ -1539,9 +1637,29 @@ export default function CampaignDetailPage() {
             </Button>
             {/* Continuous campaigns never show "finished" badge — they are always-on pipelines */}
             {!isContinuous && campaignFinished && (
-              <span className="inline-flex items-center gap-1.5 h-8 px-3 text-xs font-semibold rounded-md border bg-emerald-500/10 text-emerald-600 border-emerald-500/30 select-none">
-                <CheckCircle2 className="h-3.5 w-3.5" /> Campaign Completed
-              </span>
+              <>
+                <span className="inline-flex items-center gap-1.5 h-8 px-3 text-xs font-semibold rounded-md border bg-emerald-500/10 text-emerald-600 border-emerald-500/30 select-none">
+                  <CheckCircle2 className="h-3.5 w-3.5" /> Campaign Completed
+                </span>
+                <Button
+                  size="sm"
+                  className="h-8 text-xs gap-1.5"
+                  onClick={() => setRecampaignOpen(true)}
+                >
+                  <Layers className="h-3.5 w-3.5" /> Re-campaign
+                </Button>
+              </>
+            )}
+            {/* Also offer re-campaign whenever there is outcome data to dial again */}
+            {!isContinuous && !campaignFinished && ((analytics?.dispositions?.length ?? 0) > 0 || failed > 0) && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 text-xs gap-1.5"
+                onClick={() => setRecampaignOpen(true)}
+              >
+                <Layers className="h-3.5 w-3.5" /> Re-campaign
+              </Button>
             )}
             {/* CSV campaigns: Create Batch button + dropdown controls */}
             {(!isContinuous || campaign.status === "draft") && (
@@ -1615,6 +1733,60 @@ export default function CampaignDetailPage() {
             </Button>
           </div>
 
+          {/* Disposition breakdown — act on slice */}
+          {(analytics?.dispositions?.length ?? 0) > 0 && (
+            <div className="bg-card border border-border rounded-xl p-4 space-y-3">
+              <div>
+                <p className="text-xs font-semibold text-foreground/70 uppercase tracking-wider">Dispositions</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Act on a slice: export, transfer to CRM, create a redial batch, or use Re-campaign for multi-slice dials.
+                </p>
+              </div>
+              <div className="space-y-2">
+                {analytics!.dispositions!.map((d) => (
+                  <div
+                    key={d.label}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/50 px-3 py-2"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{d.label}</p>
+                      <p className="text-[11px] text-muted-foreground tabular-nums">{d.count} leads</p>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 text-[11px] gap-1"
+                        disabled={actingDisposition === `${d.label}:export`}
+                        onClick={() => void handleActOnDisposition(d.label, "export")}
+                      >
+                        <Download className="h-3 w-3" /> Export
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 text-[11px] gap-1"
+                        disabled={actingDisposition === `${d.label}:transfer`}
+                        onClick={() => void handleActOnDisposition(d.label, "transfer")}
+                      >
+                        <ArrowRightLeft className="h-3 w-3" /> Transfer
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-[11px] gap-1"
+                        disabled={actingDisposition === `${d.label}:create_batch`}
+                        onClick={() => void handleActOnDisposition(d.label, "create_batch")}
+                      >
+                        <Layers className="h-3 w-3" /> Create batch
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Queued leads banner — fallback: leads without a batch (auto-dial failed or pre-existing) */}
           {(() => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1666,6 +1838,30 @@ export default function CampaignDetailPage() {
           {(campaign as any).leadSource === "crm" && (
             <CrmIntegrationCard campaignId={campaignId} triggerMode={(campaign as any).triggerMode} webhookToken={campaign.webhookToken} />
           )}
+
+          <div className="bg-card border border-border rounded-xl p-4 space-y-4">
+            <LeadTransferSettings
+              agentId={campaign.agentId ?? null}
+              campaignId={campaignId}
+              value={leadTransferForm}
+              onChange={setLeadTransferForm}
+              compact
+            />
+            <div className="flex justify-end">
+              <Button
+                size="sm"
+                className="h-8 text-xs gap-1.5"
+                disabled={savingTransfer || update.isPending}
+                onClick={() => void handleSaveLeadTransfer()}
+              >
+                {savingTransfer ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                Save lead transfer
+              </Button>
+            </div>
+            <p className="text-[10px] text-muted-foreground">
+              WhatsApp / email after a call are configured on the agent (Builder → Disposition → After-call messages).
+            </p>
+          </div>
 
           {/* Calling Hours — instant trigger campaigns only */}
           {(campaign as unknown as Record<string, unknown>)["triggerMode"] === "instant" && (
@@ -1934,6 +2130,15 @@ export default function CampaignDetailPage() {
         open={selectedCallId !== null}
         callId={selectedCallId}
         onClose={() => setSelectedCallId(null)}
+      />
+
+      <RecampaignDialog
+        open={recampaignOpen}
+        onOpenChange={setRecampaignOpen}
+        campaignId={campaignId}
+        campaignName={campaign?.name}
+        dispositions={analytics?.dispositions ?? []}
+        statusBreakdown={(analytics as { statusBreakdown?: Record<string, number> } | undefined)?.statusBreakdown}
       />
 
       <AlertDialog open={!!deletingBatch} onOpenChange={v => { if (!v) setDeletingBatch(null); }}>

@@ -95,7 +95,7 @@ describe("buildPrompt labels", () => {
     };
     const prompt = buildPrompt(cfg, new Date("2026-08-06T10:00:00Z"));
     expect(prompt).toContain('whatsapp_number "WhatsApp number"');
-    expect(prompt).toContain("digits only");
+    expect(prompt).toMatch(/digits only/i);
     expect(prompt).toContain('city "City"');
     expect(prompt).toContain("NEVER a paragraph");
   });

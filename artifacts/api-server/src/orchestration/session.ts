@@ -3651,6 +3651,32 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
             });
           }
 
+          // ── Stamp lead disposition + meaning-map operational outcome ────────
+          if (session.campaignLeadId && dispositionResult) {
+            import("../services/campaign-disposition-outcome.js").then(({ applyCampaignDispositionOutcome }) => {
+              applyCampaignDispositionOutcome({
+                campaignLeadId: session.campaignLeadId!,
+                agentId: call.agentId,
+                callId: session.callId,
+                dispositionResult,
+                callStatus,
+                wasTransferred: session.wasTransferred,
+              }).catch((err) => logger.warn({ sessionId, err }, "Campaign disposition outcome failed"));
+            }).catch(() => {});
+          }
+
+          // ── Campaign lead transfer (disposition-gated webhook / Sheets) ─────
+          if (session.campaignLeadId) {
+            import("../services/campaign-lead-transfer.js").then(({ maybeTransferCampaignLead }) => {
+              maybeTransferCampaignLead({
+                callId: session.callId,
+                campaignLeadId: session.campaignLeadId,
+                dispositionResult,
+                callSummary: callSummary || null,
+              }).catch((err) => logger.warn({ sessionId, err }, "Campaign lead transfer failed"));
+            }).catch(() => {});
+          }
+
           // ── Google Sheets writeback (after summary/disposition) ─────────────
           // ── Google Sheets Automatic Calls writeback (pipeline only) ─────────
           import("../services/sheets-writeback.js").then(({ writeSheetAutoCallResults }) => {
@@ -3660,12 +3686,35 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
             }).catch((err) => logger.warn({ sessionId, err }, "Sheets auto-call writeback failed"));
           }).catch(() => {});
 
-          // ── WhatsApp post-call notify (custom outbound webhook → BSP template) ─
-          import("../services/whatsapp/outbound.js").then(({ dispatchWhatsappCallEnded }) => {
-            dispatchWhatsappCallEnded(session.callId, {
-              callSummary: callSummary || null,
+          // ── After-call messaging (agent-owned) + legacy campaign webhooks ───
+          // Agent after-call rules own WhatsApp/email. Campaign branches only fire
+          // legacy webhooks. Legacy always-on WhatsApp runs when agent has no rules.
+          import("../services/agent-after-call-messages.js").then(({ maybeRunAgentAfterCallMessages }) => {
+            maybeRunAgentAfterCallMessages({
+              callId: session.callId,
+              agentId: ag.id,
+              campaignLeadId: session.campaignLeadId,
               dispositionResult,
-            }).catch((err) => logger.warn({ sessionId, err }, "WhatsApp post-call notify failed"));
+              callSummary: callSummary || null,
+            }).then((agentMsg) => {
+              if (!agentMsg.configured) {
+                import("../services/whatsapp/outbound.js").then(({ dispatchWhatsappCallEnded }) => {
+                  dispatchWhatsappCallEnded(session.callId, {
+                    callSummary: callSummary || null,
+                    dispositionResult,
+                  }).catch((err) => logger.warn({ sessionId, err }, "WhatsApp post-call notify failed"));
+                }).catch(() => {});
+              }
+            }).catch((err) => logger.warn({ sessionId, err }, "Agent after-call messages failed"));
+          }).catch(() => {});
+
+          import("../services/campaign-after-call.js").then(({ maybeRunAfterCallBranches }) => {
+            maybeRunAfterCallBranches({
+              callId: session.callId,
+              campaignLeadId: session.campaignLeadId,
+              dispositionResult,
+              callSummary: callSummary || null,
+            }).catch((err) => logger.warn({ sessionId, err }, "After-call webhook branches failed"));
           }).catch(() => {});
 
           // ── Zelto call monitoring (fire-and-forget) ─────────────────────────

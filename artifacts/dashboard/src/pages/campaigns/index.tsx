@@ -48,6 +48,20 @@ import { cn } from "@/lib/utils";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { MetricCard, MetricStrip } from "@/components/metric-strip";
 import { BrandLogo, BrandLogoBadge } from "@/components/brand-logos";
+import {
+  canActivateCampaign,
+  canPauseCampaign,
+  canResumeCampaign,
+  canStopCampaign,
+  type CampaignLifecycleStatus,
+} from "@/lib/campaign-lifecycle";
+import {
+  EMPTY_LEAD_TRANSFER,
+  LeadTransferSettings,
+  leadTransferReady,
+  toLeadTransferPayload,
+  type LeadTransferForm,
+} from "./lead-transfer-settings";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -174,10 +188,12 @@ function CampaignMobileCard({
   campaign,
   onEdit,
   onDelete,
+  onStatusChange,
 }: {
   campaign: DashboardCampaign;
   onEdit: (c: Campaign) => void;
   onDelete: (c: Campaign) => void;
+  onStatusChange: (c: DashboardCampaign, status: CampaignLifecycleStatus) => void;
 }) {
   const [, navigate] = useLocation();
   const totalCallable = campaign.totalLeads;
@@ -232,10 +248,31 @@ function CampaignMobileCard({
               <MoreHorizontal className="h-3.5 w-3.5 text-muted-foreground/50" />
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="min-w-[130px]">
+          <DropdownMenuContent align="end" className="min-w-[150px]">
             <DropdownMenuItem className="text-xs" onClick={e => { e.stopPropagation(); onEdit(campaign as unknown as Campaign); }}>
               <Pencil className="h-3.5 w-3.5 text-muted-foreground/60" /> Edit
             </DropdownMenuItem>
+            {canPauseCampaign(campaign.status) && (
+              <DropdownMenuItem className="text-xs" onClick={e => { e.stopPropagation(); onStatusChange(campaign, "paused"); }}>
+                <PauseCircle className="h-3.5 w-3.5 text-amber-600" /> Pause
+              </DropdownMenuItem>
+            )}
+            {canResumeCampaign(campaign.status) && (
+              <DropdownMenuItem className="text-xs" onClick={e => { e.stopPropagation(); onStatusChange(campaign, "active"); }}>
+                <PlayCircle className="h-3.5 w-3.5 text-emerald-600" /> Resume
+              </DropdownMenuItem>
+            )}
+            {canActivateCampaign(campaign.status) && (
+              <DropdownMenuItem className="text-xs" onClick={e => { e.stopPropagation(); onStatusChange(campaign, "active"); }}>
+                <PlayCircle className="h-3.5 w-3.5 text-emerald-600" /> Activate
+              </DropdownMenuItem>
+            )}
+            {canStopCampaign(campaign.status) && (
+              <DropdownMenuItem className="text-xs text-red-500 focus:text-red-500 focus:bg-red-500/5"
+                onClick={e => { e.stopPropagation(); onStatusChange(campaign, "stopped"); }}>
+                <XCircle className="h-3.5 w-3.5" /> Stop
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem className="text-xs text-red-500 focus:text-red-500 focus:bg-red-500/5"
               onClick={e => { e.stopPropagation(); onDelete(campaign as unknown as Campaign); }}>
               <Trash2 className="h-3.5 w-3.5" /> Delete
@@ -251,10 +288,12 @@ function CampaignRow({
   campaign,
   onEdit,
   onDelete,
+  onStatusChange,
 }: {
   campaign: DashboardCampaign;
   onEdit: (c: Campaign) => void;
   onDelete: (c: Campaign) => void;
+  onStatusChange: (c: DashboardCampaign, status: CampaignLifecycleStatus) => void;
 }) {
   const [, navigate] = useLocation();
   const totalCallable = campaign.totalLeads;
@@ -381,10 +420,31 @@ function CampaignRow({
               <MoreHorizontal className="h-3.5 w-3.5 text-muted-foreground/50" />
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="min-w-[130px]">
+          <DropdownMenuContent align="end" className="min-w-[150px]">
             <DropdownMenuItem className="text-xs" onClick={e => { e.stopPropagation(); onEdit(campaign as unknown as Campaign); }}>
               <Pencil className="h-3.5 w-3.5 text-muted-foreground/60" /> Edit
             </DropdownMenuItem>
+            {canPauseCampaign(campaign.status) && (
+              <DropdownMenuItem className="text-xs" onClick={e => { e.stopPropagation(); onStatusChange(campaign, "paused"); }}>
+                <PauseCircle className="h-3.5 w-3.5 text-amber-600" /> Pause
+              </DropdownMenuItem>
+            )}
+            {canResumeCampaign(campaign.status) && (
+              <DropdownMenuItem className="text-xs" onClick={e => { e.stopPropagation(); onStatusChange(campaign, "active"); }}>
+                <PlayCircle className="h-3.5 w-3.5 text-emerald-600" /> Resume
+              </DropdownMenuItem>
+            )}
+            {canActivateCampaign(campaign.status) && (
+              <DropdownMenuItem className="text-xs" onClick={e => { e.stopPropagation(); onStatusChange(campaign, "active"); }}>
+                <PlayCircle className="h-3.5 w-3.5 text-emerald-600" /> Activate
+              </DropdownMenuItem>
+            )}
+            {canStopCampaign(campaign.status) && (
+              <DropdownMenuItem className="text-xs text-red-500 focus:text-red-500 focus:bg-red-500/5"
+                onClick={e => { e.stopPropagation(); onStatusChange(campaign, "stopped"); }}>
+                <XCircle className="h-3.5 w-3.5" /> Stop
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem className="text-xs text-red-500 focus:text-red-500 focus:bg-red-500/5"
               onClick={e => { e.stopPropagation(); onDelete(campaign as unknown as Campaign); }}>
               <Trash2 className="h-3.5 w-3.5" /> Delete
@@ -398,11 +458,17 @@ function CampaignRow({
 
 // ── Campaign Creation Wizard ──────────────────────────────────────────────
 
-const WIZARD_STEPS = ["info", "source", "crm_mode", "agent", "settings", "review"] as const;
+const WIZARD_STEPS = ["info", "source", "crm_mode", "agent", "transfer", "settings", "review"] as const;
 type WizardStep = (typeof WIZARD_STEPS)[number];
 
 const STEP_LABELS: Record<WizardStep, string> = {
-  info: "Details", source: "Source", crm_mode: "CRM Mode", agent: "Agent", settings: "Settings", review: "Review",
+  info: "Details",
+  source: "Source",
+  crm_mode: "CRM Mode",
+  agent: "Agent",
+  transfer: "Transfer",
+  settings: "Settings",
+  review: "Review",
 };
 
 type CampaignLeadSource = "csv" | "webhook" | "meta_ads" | "crm";
@@ -417,8 +483,8 @@ const SOURCE_OPTIONS: {
 }[] = [
   {
     value: "webhook",
-    label: "Website / Form",
-    description: "Leads from your website enquiry forms. Each submission triggers an immediate call.",
+    label: "Form intake",
+    description: "Website enquiry forms POST into SnapServe; each submission can trigger an immediate call.",
     icon: <Globe className="h-5 w-5" />,
     defaultTrigger: "instant",
   },
@@ -519,6 +585,7 @@ function CampaignWizard({
   const [consentDateRange, setConsentDateRange] = useState("");
   const [consentProofRef, setConsentProofRef] = useState("");
   const [consentNotes, setConsentNotes] = useState("");
+  const [leadTransfer, setLeadTransfer] = useState<LeadTransferForm>(EMPTY_LEAD_TRANSFER);
 
   const liveAgentIds = new Set(
     activeCampaigns.filter(c => c.status === "active").map(c => c.agentId).filter(Boolean)
@@ -560,6 +627,7 @@ function CampaignWizard({
     setAgentId(null); setSquadId(null); setConcurrentCallLimit(null);
     setConsentBasisType(""); setConsentSource(""); setConsentDateRange("");
     setConsentProofRef(""); setConsentNotes("");
+    setLeadTransfer(EMPTY_LEAD_TRANSFER);
   }
   function close() { reset(); onClose(); }
 
@@ -591,6 +659,7 @@ function CampaignWizard({
     if (step === "source") return !!leadSource;
     if (step === "crm_mode") return true;
     if (step === "agent") return agentId !== null;
+    if (step === "transfer") return leadTransferReady(leadTransfer);
     return true;
   }
 
@@ -625,6 +694,7 @@ function CampaignWizard({
         };
       };
       const d = cfg.callDefaults ?? {};
+      const transferPayload = toLeadTransferPayload(leadTransfer);
       const created = await create.mutateAsync({
         data: {
           name: name.trim(),
@@ -638,6 +708,7 @@ function CampaignWizard({
           maxAttempts: d.maxAttempts,
           retryDelayMinutes: d.retryDelayMinutes,
           callDelaySeconds: d.callDelaySeconds,
+          ...(transferPayload ? { leadTransfer: transferPayload } : {}),
         } as Parameters<typeof create.mutateAsync>[0]["data"],
       });
       if (squadId) {
@@ -954,6 +1025,14 @@ function CampaignWizard({
             </div>
           )}
 
+          {step === "transfer" && (
+            <LeadTransferSettings
+              agentId={agentId}
+              value={leadTransfer}
+              onChange={setLeadTransfer}
+            />
+          )}
+
           {step === "settings" && (
             <div className="space-y-5">
               <div>
@@ -1012,6 +1091,15 @@ function CampaignWizard({
                     value: dispositionLabels.length
                       ? `${dispositionLabels.length} on agent`
                       : "None configured",
+                    mono: false,
+                  },
+                  {
+                    label: "Lead transfer",
+                    value: leadTransfer.enabled
+                      ? `${leadTransfer.rules.length} rule(s), ${
+                          leadTransfer.rules.reduce((n, r) => n + r.dispositions.length, 0)
+                        } disposition(s)`
+                      : "Off",
                     mono: false,
                   },
                 ].map(r => (
@@ -1128,7 +1216,7 @@ type FieldMappings = { phone: string; name: string; email: string };
 const DEFAULT_MAPPINGS: FieldMappings = { phone: "phone", name: "name", email: "email" };
 const MAX_CONCURRENT_CALLS = 10;
 const LEAD_SOURCE_LABELS: Record<string, string> = {
-  csv: "CSV Upload", webhook: "Webhook", meta_ads: "Meta Ads", crm: "CRM",
+  csv: "CSV Upload", webhook: "Form intake", meta_ads: "Meta Ads", crm: "CRM",
 };
 
 function CampaignFormDialog({
@@ -1318,9 +1406,9 @@ const START_SOURCES: {
   },
   {
     id: "webhook",
-    title: "Website",
-    description: "Create a form webhook and embed snippet for your site.",
-    cta: "Connect website",
+    title: "Website · Form intake",
+    description: "Form submissions → dial. Get an intake URL / embed — not the same as Developers event subscriptions.",
+    cta: "Set up form intake",
     icon: (
       <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-border bg-background">
         <Globe className="h-5 w-5 text-muted-foreground" />
@@ -1329,15 +1417,15 @@ const START_SOURCES: {
   },
   {
     id: "sheets",
-    title: "Google Sheets",
-    description: "Connect a sheet, map columns, and auto-dial new rows.",
-    cta: "Connect sheet",
+    title: "Google Sheets · Automatic Calls",
+    description: "New rows dial automatically (Automatic Calls). Not the same as a one-shot CSV campaign upload.",
+    cta: "Open Automatic Calls",
     icon: <BrandLogoBadge brand="googleSheets" size={22} className="!h-11 !w-11 !rounded-xl" />,
   },
   {
     id: "csv",
     title: "CSV file",
-    description: "Create a campaign, then upload a batch to dial.",
+    description: "Create a campaign, then upload a batch to dial once.",
     cta: "Upload CSV",
     icon: (
       <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-border bg-background">
@@ -1370,6 +1458,7 @@ export default function CampaignsPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const deleteMutation = useDeleteCampaign();
+  const updateMutation = useUpdateCampaign();
   const { data: crmConnections = [] } = useListCrmConnections({
     query: { queryKey: getListCrmConnectionsQueryKey(), staleTime: 30_000 },
   });
@@ -1453,6 +1542,27 @@ export default function CampaignsPage() {
       setDeletingCamp(false);
       setDeleting(null);
       setDeleteNameInput("");
+    }
+  }
+
+  async function handleStatusChange(campaign: DashboardCampaign, status: CampaignLifecycleStatus) {
+    try {
+      await updateMutation.mutateAsync({ id: campaign.id, data: { status } });
+      await qc.invalidateQueries({ queryKey: ["campaigns-dashboard"] });
+      await qc.invalidateQueries({ queryKey: getListCampaignsQueryKey() });
+      toast({
+        title:
+          status === "paused" ? "Campaign paused" :
+          status === "stopped" ? "Campaign stopped" :
+          campaign.status === "stopped" ? "Campaign activated" :
+          "Campaign resumed",
+      });
+    } catch (err) {
+      toast({
+        title: "Could not update campaign",
+        description: err instanceof Error ? err.message : "Please try again",
+        variant: "destructive",
+      });
     }
   }
 
@@ -1644,6 +1754,7 @@ export default function CampaignsPage() {
                         campaign={c}
                         onEdit={row => setEditing(row)}
                         onDelete={row => { setDeleteNameInput(""); setDeleting(row); }}
+                        onStatusChange={(row, status) => void handleStatusChange(row, status)}
                       />
                     ))}
                     {filtered.map(c => (
@@ -1652,6 +1763,7 @@ export default function CampaignsPage() {
                         campaign={c}
                         onEdit={row => setEditing(row)}
                         onDelete={row => { setDeleteNameInput(""); setDeleting(row); }}
+                        onStatusChange={(row, status) => void handleStatusChange(row, status)}
                       />
                     ))}
                   </>

@@ -46,6 +46,13 @@ const LANG_MAP: Record<string, { code: string; label: string; gemini: boolean }>
   "te-IN": { code: "te-IN", label: "Telugu",          gemini: false },
   "kn-IN": { code: "kn-IN", label: "Kannada",         gemini: false },
   "ml-IN": { code: "ml-IN", label: "Malayalam",       gemini: false },
+  "mr-IN": { code: "mr-IN", label: "Marathi",         gemini: false },
+  "bn-IN": { code: "bn-IN", label: "Bengali",         gemini: false },
+  "gu-IN": { code: "gu-IN", label: "Gujarati",        gemini: false },
+  "pa-IN": { code: "pa-IN", label: "Punjabi",         gemini: false },
+  "or-IN": { code: "or-IN", label: "Odia",            gemini: false },
+  "as-IN": { code: "as-IN", label: "Assamese",        gemini: false },
+  "ur-IN": { code: "ur-IN", label: "Urdu",            gemini: false },
   "en-IN": { code: "en-IN", label: "English (India)", gemini: false },
   "en-US": { code: "en-US", label: "English (US)",    gemini: false },
 };
@@ -1376,7 +1383,7 @@ router.post("/agents/vibe-chat", requireAuth, clientContext, async (req, res): P
     const resolvedVoiceName = cfg.voiceName || (cfg.gender === "female" ? DEFAULT_FEMALE_VOICE_NAME  : DEFAULT_MALE_VOICE_NAME);
     const defaultTtsStack = resolveTtsStackForVoice(resolvedVoiceId);
 
-    const fallback = `You are ${cfg.agentName}, a voice AI agent for ${cfg.companyName}. Your role is to ${cfg.description}. Be concise, friendly, and professional.${cfg.callTransferEnabled ? ` When the caller needs human help, transfer them to ${cfg.transferName || "our support team"} at ${cfg.transferPhoneNumber}.` : ""} Always introduce yourself at the start of each call.`;
+    const fallback = `You are ${cfg.agentName}, a voice AI agent for ${cfg.companyName}. Your role is to ${cfg.description}. Be concise, friendly, and professional.${cfg.callTransferEnabled ? ` When the caller needs human help, transfer them to ${cfg.transferName || "our support team"} at ${cfg.transferPhoneNumber}.` : ""} The platform already speaks your opening greeting when the call connects — do not re-introduce yourself after that.`;
     let systemPrompt = fallback;
 
     // Refine-mode short-circuit: if Gemini returned an edited system prompt, use it

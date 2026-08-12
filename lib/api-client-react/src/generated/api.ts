@@ -21,6 +21,8 @@ import type {
 
 import type {
   AccountInfo,
+  ActOnCampaignDispositionSlice200One,
+  ActOnCampaignDispositionSliceBody,
   ActivityLog,
   AddLeadTagBody,
   AddToDncBody,
@@ -277,6 +279,8 @@ import type {
   PurchasePhoneNumberInput,
   RedialBatchNoPickup200,
   RedialCampaignNoPickup200,
+  ReplayCampaignLeadTransfer200,
+  ReplayCampaignLeadTransferBody,
   RescheduleCallback200,
   RescheduleCallbackBody,
   RescheduleCampaignBooking200,
@@ -8217,6 +8221,150 @@ export function useGetCampaignAnalytics<TData = Awaited<ReturnType<typeof getCam
 
 
 
+
+export const getReplayCampaignLeadTransferUrl = (id: number,) => {
+
+
+
+
+  return `/api/campaigns/${id}/lead-transfer/replay`
+}
+
+/**
+ * @summary Sync past matching leads through current lead-transfer rules
+ */
+export const replayCampaignLeadTransfer = async (id: number,
+    replayCampaignLeadTransferBody?: ReplayCampaignLeadTransferBody, options?: RequestInit): Promise<ReplayCampaignLeadTransfer200> => {
+
+  return customFetch<ReplayCampaignLeadTransfer200>(getReplayCampaignLeadTransferUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      replayCampaignLeadTransferBody,)
+  }
+);}
+
+
+
+
+export const getReplayCampaignLeadTransferMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof replayCampaignLeadTransfer>>, TError,{id: number;data?: BodyType<ReplayCampaignLeadTransferBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof replayCampaignLeadTransfer>>, TError,{id: number;data?: BodyType<ReplayCampaignLeadTransferBody>}, TContext> => {
+
+const mutationKey = ['replayCampaignLeadTransfer'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof replayCampaignLeadTransfer>>, {id: number;data?: BodyType<ReplayCampaignLeadTransferBody>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  replayCampaignLeadTransfer(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReplayCampaignLeadTransferMutationResult = NonNullable<Awaited<ReturnType<typeof replayCampaignLeadTransfer>>>
+    export type ReplayCampaignLeadTransferMutationBody = BodyType<ReplayCampaignLeadTransferBody> | undefined
+    export type ReplayCampaignLeadTransferMutationError = ErrorType<void>
+
+    /**
+ * @summary Sync past matching leads through current lead-transfer rules
+ */
+export const useReplayCampaignLeadTransfer = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof replayCampaignLeadTransfer>>, TError,{id: number;data?: BodyType<ReplayCampaignLeadTransferBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof replayCampaignLeadTransfer>>,
+        TError,
+        {id: number;data?: BodyType<ReplayCampaignLeadTransferBody>},
+        TContext
+      > => {
+      return useMutation(getReplayCampaignLeadTransferMutationOptions(options));
+    }
+
+export const getActOnCampaignDispositionSliceUrl = (id: number,) => {
+
+
+
+
+  return `/api/campaigns/${id}/dispositions/act`
+}
+
+/**
+ * @summary Act on all leads with a disposition label (export, transfer, or create batch)
+ */
+export const actOnCampaignDispositionSlice = async (id: number,
+    actOnCampaignDispositionSliceBody: ActOnCampaignDispositionSliceBody, options?: RequestInit): Promise<ActOnCampaignDispositionSlice200One | string> => {
+
+  return customFetch<ActOnCampaignDispositionSlice200One | string>(getActOnCampaignDispositionSliceUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      actOnCampaignDispositionSliceBody,)
+  }
+);}
+
+
+
+
+export const getActOnCampaignDispositionSliceMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof actOnCampaignDispositionSlice>>, TError,{id: number;data: BodyType<ActOnCampaignDispositionSliceBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof actOnCampaignDispositionSlice>>, TError,{id: number;data: BodyType<ActOnCampaignDispositionSliceBody>}, TContext> => {
+
+const mutationKey = ['actOnCampaignDispositionSlice'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof actOnCampaignDispositionSlice>>, {id: number;data: BodyType<ActOnCampaignDispositionSliceBody>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  actOnCampaignDispositionSlice(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ActOnCampaignDispositionSliceMutationResult = NonNullable<Awaited<ReturnType<typeof actOnCampaignDispositionSlice>>>
+    export type ActOnCampaignDispositionSliceMutationBody = BodyType<ActOnCampaignDispositionSliceBody>
+    export type ActOnCampaignDispositionSliceMutationError = ErrorType<void>
+
+    /**
+ * @summary Act on all leads with a disposition label (export, transfer, or create batch)
+ */
+export const useActOnCampaignDispositionSlice = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof actOnCampaignDispositionSlice>>, TError,{id: number;data: BodyType<ActOnCampaignDispositionSliceBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof actOnCampaignDispositionSlice>>,
+        TError,
+        {id: number;data: BodyType<ActOnCampaignDispositionSliceBody>},
+        TContext
+      > => {
+      return useMutation(getActOnCampaignDispositionSliceMutationOptions(options));
+    }
 
 export const getGetCampaignActivityUrl = (id: number,
     params?: GetCampaignActivityParams,) => {

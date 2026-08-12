@@ -38,6 +38,49 @@ export type CampaignValidationError = {
   reason: string;
 };
 
+/** One transfer rule (disposition set → destination). */
+export type CampaignLeadTransferRule = {
+  id: string;
+  name?: string;
+  dispositions: string[];
+  destination: "webhook" | "google_sheets";
+  webhookUrl?: string;
+  webhookSecret?: string;
+  connectionId?: string;
+  spreadsheetId?: string;
+  sheetName?: string;
+  /** SnapServe field → destination column/key (Phone, Name, …). */
+  fieldMap?: Record<string, string>;
+};
+
+/**
+ * After a campaign call ends, push matching dispositions to webhook / Sheets.
+ * Supports multiple rules. Legacy single-rule shape (dispositions+destination
+ * at top level) is still accepted by the parser.
+ */
+export type CampaignLeadTransferConfig = {
+  enabled: boolean;
+  rules?: CampaignLeadTransferRule[];
+  /** @deprecated Prefer rules[]. Kept for backward-compatible reads/writes. */
+  dispositions?: string[];
+  destination?: "webhook" | "google_sheets";
+  webhookUrl?: string;
+  webhookSecret?: string;
+  connectionId?: string;
+  spreadsheetId?: string;
+  sheetName?: string;
+  fieldMap?: Record<string, string>;
+};
+
+/** Disposition-branched post-call actions on a campaign. */
+export type AfterCallBranch = {
+  id: string;
+  dispositions: string[];
+  /** whatsapp/email use agent channel config; webhook posts a custom URL. */
+  actions: Array<"whatsapp" | "email" | "webhook">;
+  webhookUrl?: string;
+};
+
 export const campaignsTable = pgTable("campaigns", {
   id:                   serial("id").primaryKey(),
   userId:               text("user_id").notNull(),
@@ -80,6 +123,10 @@ export const campaignsTable = pgTable("campaigns", {
   // Meta webhooks only carry the leadgen_id — the actual fields (phone, name, email)
   // must be retrieved via GET /{leadgen_id}?fields=field_data&access_token=...
   metaPageAccessToken:  text("meta_page_access_token"),
+  /** Disposition-filtered lead push to webhook and/or Google Sheets. */
+  leadTransfer:         json("lead_transfer").$type<CampaignLeadTransferConfig | null>(),
+  /** Disposition-branched WhatsApp / email / webhook after campaign calls. */
+  afterCallBranches:    json("after_call_branches").$type<AfterCallBranch[] | null>(),
   createdAt:            timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt:            timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

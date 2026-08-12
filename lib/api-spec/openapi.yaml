@@ -64,6 +64,8 @@ tags:
     description: The SnapServe Book — anonymous per-device reading progress
   - name: wizard
     description: Agent-builder wizard helpers (voices, layered system-prompt generation)
+  - name: meetings
+    description: Meeting bots — join Google Meet / Zoom / Teams, calendar join toggles
 
 paths:
   /healthz:
@@ -2640,6 +2642,96 @@ paths:
                 $ref: "#/components/schemas/CampaignAnalytics"
         "401":
           description: Unauthorized
+
+  /campaigns/{id}/lead-transfer/replay:
+    post:
+      operationId: replayCampaignLeadTransfer
+      tags: [campaigns]
+      summary: Sync past matching leads through current lead-transfer rules
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                force:
+                  type: boolean
+                  description: Re-send even if already transferred for this call
+                limit:
+                  type: integer
+                  description: Max leads to scan (default 200, max 1000)
+                dispositions:
+                  type: array
+                  items: { type: string }
+                  description: Optional filter — only these dispositions
+      responses:
+        "200":
+          description: Replay summary
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [scanned, transferred, skipped, errors]
+                properties:
+                  scanned: { type: integer }
+                  transferred: { type: integer }
+                  skipped: { type: integer }
+                  errors: { type: integer }
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
+
+  /campaigns/{id}/dispositions/act:
+    post:
+      operationId: actOnCampaignDispositionSlice
+      tags: [campaigns]
+      summary: Act on all leads with a disposition label (export, transfer, or create batch)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [disposition, action]
+              properties:
+                disposition:
+                  type: string
+                action:
+                  type: string
+                  enum: [export, transfer, create_batch]
+                force:
+                  type: boolean
+                  description: For transfer — re-send even if already transferred
+                batchName:
+                  type: string
+                  description: Optional name when action=create_batch
+      responses:
+        "200":
+          description: Action result (JSON) or CSV when action=export
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+            text/csv:
+              schema:
+                type: string
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
 
   /campaigns/{id}/activity:
     get:
@@ -6527,6 +6619,204 @@ paths:
         "400":
           description: Invalid deviceId
 
+  # ── Meetings (Meet / Zoom / Teams bots + calendar join) ─────────────────────
+  /meet-bots:
+    post:
+      operationId: createMeetBot
+      tags: [meetings]
+      summary: Launch a meeting bot into Meet / Zoom / Teams
+      description: |
+        Sends the selected agent into a video meeting. Requires a logged-in session
+        (dashboard). Enable Meetings on the agent and set a meeting prompt first.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [agentId, meetingUrl]
+              properties:
+                agentId:
+                  type: integer
+                  description: Agent configured for meetings
+                meetingUrl:
+                  type: string
+                  format: uri
+                  description: Google Meet, Zoom, or Teams URL
+                joinAsSelected:
+                  type: boolean
+                  description: When true, skip booking delegate swap and join as agentId
+      responses:
+        "200":
+          description: Bot created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [botId, status, agentId]
+                properties:
+                  botId: { type: string }
+                  status: { type: string }
+                  agentId: { type: integer }
+                  configuredAgentId: { type: integer }
+        "400":
+          description: Invalid agentId or meetingUrl
+        "404":
+          description: Agent not found
+        "503":
+          description: Meeting bots not configured
+
+  /meet-bots/identity:
+    get:
+      operationId: getMeetBotIdentity
+      tags: [meetings]
+      summary: Bot email / Meet identity for invites and admit
+      responses:
+        "200":
+          description: Identity payload
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /meet-bots/{botId}:
+    get:
+      operationId: getMeetBot
+      tags: [meetings]
+      summary: Get meeting bot status
+      parameters:
+        - name: botId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Bot status
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [botId, status]
+                properties:
+                  botId: { type: string }
+                  status: { type: string }
+        "404":
+          description: Bot not found
+    delete:
+      operationId: leaveMeetBot
+      tags: [meetings]
+      summary: Make the meeting bot leave
+      parameters:
+        - name: botId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Left
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok: { type: boolean }
+        "404":
+          description: Bot not found
+
+  /meet-calendar/connection:
+    get:
+      operationId: getMeetCalendarConnection
+      tags: [meetings]
+      summary: AI meetings Google Calendar connection status
+      description: Readonly calendar connect used for Join toggles on /app/meet (not booking write calendar).
+      responses:
+        "200":
+          description: Connection status
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+    delete:
+      operationId: disconnectMeetCalendar
+      tags: [meetings]
+      summary: Disconnect AI meetings Google Calendar
+      responses:
+        "200":
+          description: Disconnected
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /meet-calendar/events:
+    get:
+      operationId: listMeetCalendarEvents
+      tags: [meetings]
+      summary: List upcoming calendar events with Join flags
+      responses:
+        "200":
+          description: Events
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /meet-calendar/events/{eventId}/bot:
+    post:
+      operationId: enableMeetCalendarEventBot
+      tags: [meetings]
+      summary: Enable agent auto-join for a calendar event
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [agentId]
+              properties:
+                agentId: { type: integer }
+      responses:
+        "200":
+          description: Join enabled
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          description: Invalid request
+    delete:
+      operationId: disableMeetCalendarEventBot
+      tags: [meetings]
+      summary: Disable agent auto-join for a calendar event
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Join disabled
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
 components:
   securitySchemes:
     SessionAuth:
@@ -8937,12 +9227,113 @@ components:
               format: date-time
             reason:
               type: string
+        leadTransfer:
+          $ref: "#/components/schemas/CampaignLeadTransfer"
+          nullable: true
+          description: "After each campaign call, transfer matching dispositions to a webhook (any CRM) or Google Sheet."
+        afterCallBranches:
+          type: array
+          nullable: true
+          description: "Disposition-branched WhatsApp / email / webhook actions after campaign calls."
+          items:
+            $ref: "#/components/schemas/AfterCallBranch"
         createdAt:
           type: string
           format: date-time
         updatedAt:
           type: string
           format: date-time
+
+    CampaignLeadTransferRule:
+      type: object
+      required: [id, dispositions, destination]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        dispositions:
+          type: array
+          items:
+            type: string
+        destination:
+          type: string
+          enum: [webhook, google_sheets]
+        webhookUrl:
+          type: string
+        webhookSecret:
+          type: string
+        connectionId:
+          type: string
+          format: uuid
+        spreadsheetId:
+          type: string
+        sheetName:
+          type: string
+        fieldMap:
+          type: object
+          additionalProperties:
+            type: string
+          description: "SnapServe field → destination column/key."
+
+    AfterCallBranch:
+      type: object
+      required: [id, dispositions, actions]
+      properties:
+        id:
+          type: string
+        dispositions:
+          type: array
+          items:
+            type: string
+        actions:
+          type: array
+          items:
+            type: string
+            enum: [whatsapp, email, webhook]
+        webhookUrl:
+          type: string
+          description: "Required when actions includes webhook."
+
+    CampaignLeadTransfer:
+      type: object
+      required: [enabled]
+      description: "Disposition-gated lead push for campaign calls. Prefer rules[]; legacy single-rule fields still accepted."
+      properties:
+        enabled:
+          type: boolean
+        rules:
+          type: array
+          items:
+            $ref: "#/components/schemas/CampaignLeadTransferRule"
+        dispositions:
+          type: array
+          items:
+            type: string
+          description: "Legacy single-rule dispositions. Prefer rules[]."
+        destination:
+          type: string
+          enum: [webhook, google_sheets]
+        webhookUrl:
+          type: string
+          description: "HTTPS webhook URL (Zapier/Make/n8n/CRM). Required when destination=webhook."
+        webhookSecret:
+          type: string
+          description: "Optional HMAC secret for X-SnapServe-Signature."
+        connectionId:
+          type: string
+          format: uuid
+          description: "Google Sheets connection id. Required when destination=google_sheets."
+        spreadsheetId:
+          type: string
+          description: "Google spreadsheet id. Required when destination=google_sheets."
+        sheetName:
+          type: string
+          description: "Tab name. Defaults to Sheet1."
+        fieldMap:
+          type: object
+          additionalProperties:
+            type: string
 
     CampaignCreate:
       type: object
@@ -8984,6 +9375,14 @@ components:
         consentBasis:
           $ref: "#/components/schemas/ConsentBasis"
           description: "DPDP consent basis. Required when the assigned agent has DPDP compliance enabled. Record-keeping only — never blocks dialing."
+        leadTransfer:
+          $ref: "#/components/schemas/CampaignLeadTransfer"
+          description: "Optional. Auto-transfer leads whose dispositions match after each campaign call."
+        afterCallBranches:
+          type: array
+          items:
+            $ref: "#/components/schemas/AfterCallBranch"
+          description: "Optional disposition-branched after-call actions."
 
     ConsentBasis:
       type: object
@@ -9100,6 +9499,16 @@ components:
           type: string
           nullable: true
           description: "Meta Page Access Token used to fetch lead field_data from the Graph API. Stored encrypted at rest; pass null to clear. Never returned in GET responses."
+        leadTransfer:
+          $ref: "#/components/schemas/CampaignLeadTransfer"
+          nullable: true
+          description: "Update disposition-gated lead transfer. Pass null to clear."
+        afterCallBranches:
+          type: array
+          nullable: true
+          items:
+            $ref: "#/components/schemas/AfterCallBranch"
+          description: "Update disposition-branched after-call actions. Pass null to clear."
 
     CampaignLead:
       type: object
@@ -9409,6 +9818,14 @@ components:
         timezone:
           type: string
           nullable: true
+        batchFieldMapping:
+          type: object
+          additionalProperties:
+            type: string
+          description: "Agent-variable → CSV-header mapping. When rematerializePending is true, pending leads are remapped."
+        rematerializePending:
+          type: boolean
+          description: "Re-derive phone/name/email on pending leads from leadData using the new batchFieldMapping."
 
     CampaignLeadProfile:
       type: object
@@ -9882,7 +10299,8 @@ components:
           default: 1
         enableGoogleMeet:
           type: boolean
-          default: false
+          default: true
+          description: When true, Google Calendar invites include a Meet link
         isActive:
           type: boolean
           default: true

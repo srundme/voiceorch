@@ -9,6 +9,76 @@ export default function ChangelogPage() {
         description="Notable documentation and API-consumer changes."
       />
 
+      <h2 id="2026-08-10-webhook-names">2026-08-10 — Rename the four “webhook” surfaces</h2>
+      <ul>
+        <li>
+          <strong>Event subscriptions</strong> — Developers (was “Webhooks”)
+        </li>
+        <li>
+          <strong>Post-call notify</strong> — Agent Settings (was “Webhooks” / CRM webhook)
+        </li>
+        <li>
+          <strong>Form intake</strong> — Campaigns / Connections website (was “form webhook”)
+        </li>
+        <li>
+          <strong>Lead transfer</strong> — Campaign push to CRM URL / Sheets (label clarified)
+        </li>
+        <li>
+          <strong>Mid-call HTTP</strong> — Agent Tools custom function
+        </li>
+      </ul>
+
+      <h2 id="2026-08-10-builder-analytics">2026-08-10 — Analytics inside Agent Builder</h2>
+      <ul>
+        <li>
+          Agent Builder top-level <strong>Analytics</strong> tab — call volume, success, spend, latency
+          for that agent (same data as <code>/app/analytics/agents/:id</code>).
+        </li>
+        <li>
+          Settings → former Analytics sub-tab is <strong>Post-call notify</strong> (CRM URL for that agent).
+        </li>
+      </ul>
+
+      <h2 id="2026-08-10-analytics-nav">2026-08-10 — Analytics in primary nav</h2>
+      <ul>
+        <li>
+          Platform <strong>Analytics</strong> moved from sidebar More into the primary nav (with History).
+        </li>
+      </ul>
+
+      <h2 id="2026-08-10-outcomes-ux">2026-08-10 — Outcomes tab &amp; naming clarity</h2>
+      <ul>
+        <li>
+          Agent Builder: top-level <strong>Outcomes</strong> tab (taxonomy + after-call messages) — no longer
+          buried under Settings → Analytics.
+        </li>
+        <li>
+          Naming: Bookings calendar vs Meeting bots; mid-call WhatsApp (Tools) vs after-call (Outcomes);
+          display name ≠ spoken brand callout on Prompt.
+        </li>
+        <li>Squads: edit members in-app; Callback disposition ≠ live handoff callout.</li>
+      </ul>
+
+      <h2 id="2026-08-10-clarity">2026-08-10 — Product clarity, meetings, playbook</h2>
+      <ul>
+        <li>
+          <strong>Platform concepts</strong> — agent vs campaign vs Connections vs Outcomes /
+          after-call messages vs lead transfer vs squads vs meetings.
+        </li>
+        <li>
+          <strong>Meetings guide</strong> — paste link, calendar Join, booking dispatch, in-meeting
+          tools; API Reference tag <strong>Meetings</strong>.
+        </li>
+        <li>
+          <strong>Agents / Campaigns guides</strong> — Outcomes + after-call on agent; lead transfer
+          on campaign.
+        </li>
+        <li>
+          <strong>Voiceathon playbook</strong> — rewritten for Connections hub, disposition dynamics,
+          meetings, and current nav (see repo <code>docs/voiceathon-participant-playbook.md</code>).
+        </li>
+      </ul>
+
       <h2 id="2026-07-30-claude">2026-07-30 — Claude skill &amp; MCP</h2>
       <ul>
         <li>

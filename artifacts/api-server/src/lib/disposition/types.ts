@@ -21,6 +21,8 @@ export interface DispositionConfig {
   taxonomy: TaxonomyMap;
   domainFields: DomainField[];
   rules: TenantRule[];
+  /** Value label → when to pick it (business criteria in the customer's words). */
+  outcomeGuides?: Record<string, string>;
   dispositionLlm?: string;
 }
 

@@ -47,10 +47,10 @@ export function TableOfContents() {
 
   return (
     <div className="flex flex-col gap-3">
-      <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+      <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
         On this page
       </span>
-      <div className="flex flex-col gap-1.5 border-l border-white/10 pl-3">
+      <div className="flex flex-col gap-1.5 border-l border-slate-200 pl-3">
         {headings.map((heading) => (
           <a
             key={heading.id}
@@ -59,8 +59,8 @@ export function TableOfContents() {
               heading.level === 3 ? "pl-3" : ""
             } ${
               activeId === heading.id
-                ? "text-sky-300 font-medium"
-                : "text-zinc-500 hover:text-zinc-200"
+                ? "text-sky-700 font-medium"
+                : "text-slate-500 hover:text-slate-800"
             }`}
           >
             {heading.text}

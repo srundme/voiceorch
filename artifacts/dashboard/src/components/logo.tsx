@@ -1,10 +1,13 @@
 /* ── SnapServe brand components ────────────────────────────────────────────
    SnapServeIcon   — the three-bar mark (SVG, inline, scalable)
+   SnapServeAgentIcon — the agent/bot mark: the three bars folded into an "S"
    SnapServeLogo   — icon + wordmark  ("Snap" Bold / "Serve" Regular)
    SnapServeLoader — full-screen splash with animated bars
    SnapServeSarvamLockup — official “SnapServe powered by sarvam” image
    PoweredBySarvam — family co-brand (SnapServe stays primary)
    ─────────────────────────────────────────────────────────────────────────*/
+
+import { useId } from "react";
 
 const FONT = "'Tex Gyre Heros', Helvetica, Arial, sans-serif";
 const LOCKUP_SRC = "snapserve-powered-by-sarvam.png";
@@ -70,6 +73,46 @@ export function SnapServeIcon({ size = 24, className = "" }: IconProps) {
       <rect x="6"  y="14" width="88" height="20" rx="10" fill="currentColor" opacity="1"   />
       <rect x="14" y="42" width="72" height="20" rx="10" fill="currentColor" opacity="0.60"/>
       <rect x="22" y="70" width="56" height="20" rx="10" fill="currentColor" opacity="0.36"/>
+    </svg>
+  );
+}
+
+/* ── Agent bot mark -------------------------------------------------------- */
+
+/**
+ * SnapServeAgentIcon — the agent/bot mark.
+ *
+ * The three brand bars are joined into an "S": the top bar becomes the bot's
+ * head (eye slots punched out, antenna above), and the two connectors carry the
+ * eye down through the middle and bottom bars. Single-colour via `currentColor`
+ * so it inherits text colour anywhere it is placed.
+ */
+export function SnapServeAgentIcon({ size = 24, className = "" }: IconProps) {
+  const maskId = useId();
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 100 100"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+      role="img"
+      aria-label="SnapServe agent"
+    >
+      <mask id={maskId} maskUnits="userSpaceOnUse" x="0" y="0" width="100" height="100">
+        <rect width="100" height="100" fill="black" />
+        <g stroke="white" fill="none" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M50 30V16" strokeWidth="5" />
+          {/* the S — three brand bars joined by two connectors, drawn in one stroke */}
+          <path d="M76 30H24V56H76V82H24" strokeWidth="17" />
+        </g>
+        <circle cx="50" cy="13" r="6" fill="white" />
+        {/* eye slots punched back out of the head bar */}
+        <rect x="37" y="26.5" width="10" height="7" rx="3.5" fill="black" />
+        <rect x="53" y="26.5" width="10" height="7" rx="3.5" fill="black" />
+      </mask>
+      <rect width="100" height="100" fill="currentColor" mask={`url(#${maskId})`} />
     </svg>
   );
 }

@@ -6,16 +6,22 @@ export default function CalendarPage() {
     <div>
       <PageHeader
         breadcrumb="Product guides"
-        title="Calendar & booking"
-        description="Let agents check availability and book appointments on Google Calendar (or SnapServe scheduling)."
+        title="Bookings calendar"
+        description="Let agents check availability and book appointments on Google Calendar. Separate from Meeting bots that join video rooms."
       />
+
+      <Callout variant="warn" title="Booking ≠ join">
+        <strong>Connections → Bookings calendar</strong> creates invites (often with a Meet link).{" "}
+        <strong>Meeting bots</strong> (<code>/app/meet</code>) join a room that already exists. See the{" "}
+        <Link href="/docs/meetings">Meetings guide</Link>.
+      </Callout>
 
       <h2 id="connect-google">1. Connect Google</h2>
       <ol>
         <li>
           Go to{" "}
-          <a href="https://app.snapserve.ai/app/scheduling" target="_blank" rel="noreferrer">
-            Scheduling
+          <a href="https://app.snapserve.ai/app/connections?setup=calendar" target="_blank" rel="noreferrer">
+            Connections → Bookings calendar
           </a>{" "}
           in the dashboard.
         </li>
@@ -31,7 +37,7 @@ export default function CalendarPage() {
 
       <h2 id="agent-tools">3. Link the agent</h2>
       <ol>
-        <li>Open the agent builder → Tools / scheduling section.</li>
+        <li>Open the agent builder → Tools → Booking.</li>
         <li>Select the calendar (and event type) for booking tools.</li>
         <li>
           <strong>Save the agent first</strong> before enabling calendar tools if the UI prompts
@@ -42,19 +48,20 @@ export default function CalendarPage() {
 
       <Callout variant="warn" title="Common mistakes">
         No Google account on the calendar, wrong calendar linked to the agent, or agent not saved
-        after tool changes. Confirm Scheduling → calendar shows a connected account.
+        after tool changes. Confirm Connections → Bookings calendar shows a connected account.
       </Callout>
 
       <h2 id="api">API note</h2>
       <p>
-        Calendar connect and booking tools are configured in the dashboard (this page). The public
-        API Reference focuses on agents, calls, and webhooks — use the Scheduling UI for Google
-        Calendar setup rather than low-level calendar REST.
+        Calendar connect and booking tools are configured in the dashboard. The public API Reference
+        focuses on agents, calls, and webhooks — use Connections → Bookings calendar for Google setup
+        rather than low-level calendar REST.
       </p>
 
       <h2 id="next">Next</h2>
       <p>
         <Link href="/docs/agents">Agents &amp; builder</Link> ·{" "}
+        <Link href="/docs/meetings">Meeting agents</Link> ·{" "}
         <Link href="/docs/variables">Variables</Link> for guest name/email in prompts
       </p>
     </div>

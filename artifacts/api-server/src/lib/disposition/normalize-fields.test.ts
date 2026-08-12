@@ -28,6 +28,10 @@ describe("extractBarePhone", () => {
     expect(extractBarePhone("+91 98765 43210")).toBe("919876543210");
   });
 
+  it("converts spoken English digit words to a phone", () => {
+    expect(extractBarePhone("eight nine eight seven six five four three two one")).toBe("8987654321");
+  });
+
   it("returns null when no phone present", () => {
     expect(extractBarePhone("Interested in Fortune Towers expo")).toBeNull();
   });

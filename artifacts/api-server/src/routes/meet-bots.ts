@@ -13,6 +13,8 @@ import { getSelfBaseUrl } from "../lib/app-domain.js";
 import {
   signMeetBotToken,
   verifyMeetBotToken,
+  checkMeetBotToken,
+  meetBotTokenExp,
   buildMeetBotPageHtml,
   createRecallBot,
   getRecallBot,
@@ -33,6 +35,7 @@ import {
 } from "../services/meeting-runtime.js";
 import {
   buildMeetPresentationPageHtml,
+  ensureMeetPresentation,
   prepareMeetPresentationAtLaunch,
   presentationPublicState,
 } from "../services/meet-presentation.js";
@@ -40,9 +43,6 @@ import {
 const router: IRouter = Router();
 
 const MEET_URL_RE = /^https:\/\/(meet\.google\.com|[a-z0-9.-]*zoom\.us|teams\.microsoft\.com|teams\.live\.com)\//i;
-// The bot loads the page within a minute of launch, but may reconnect mid-
-// meeting — keep the token valid for a long meeting, no longer.
-const PAGE_TOKEN_TTL_MS = 4 * 60 * 60 * 1000;
 
 // ── Public: bot page ─────────────────────────────────────────────────────────
 router.get("/meet-bots/page", async (req, res) => {
@@ -84,14 +84,25 @@ router.get("/meet-bots/present", (req, res) => {
     .send(buildMeetPresentationPageHtml());
 });
 
-router.get("/meet-bots/present-state", (req, res) => {
+router.get("/meet-bots/present-state", async (req, res) => {
   const token = typeof req.query["mb"] === "string" ? req.query["mb"] : "";
-  const payload = token ? verifyMeetBotToken(token) : null;
-  if (!payload?.mid) {
-    res.status(401).json({ ok: false });
+  const checked = token ? checkMeetBotToken(token) : ({ ok: false, reason: "invalid" } as const);
+  if (!checked.ok || !checked.payload.mid) {
+    const reason = checked.ok ? "invalid" : checked.reason;
+    res.status(401).json({ ok: false, reason });
     return;
   }
-  res.set("Cache-Control", "no-store").json(presentationPublicState(payload.mid));
+  const { mid, agentId } = checked.payload;
+  let state = presentationPublicState(mid);
+  if (!state.ok) {
+    // A restart wipes the in-memory deck state mid-meeting. Recover it from the
+    // agent's Meeting settings rather than stranding the share on an error.
+    await ensureMeetPresentation(mid, agentId);
+    state = presentationPublicState(mid);
+  }
+  res
+    .set("Cache-Control", "no-store")
+    .json(state.ok ? state : { ...state, reason: "unconfigured" });
 });
 
 // ── Public: Recall realtime events (participants + diarized transcript) ──────
@@ -178,7 +189,7 @@ router.post("/meet-bots", requireAuth, async (req, res) => {
     const token = signMeetBotToken({
       agentId: runtimeAgentId,
       userId,
-      exp: Date.now() + PAGE_TOKEN_TTL_MS,
+      exp: meetBotTokenExp(),
       mid,
       meetUrl: meetingUrl,
       passMemory: meetings.passMemory,

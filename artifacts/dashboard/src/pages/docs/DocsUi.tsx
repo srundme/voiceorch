@@ -33,14 +33,14 @@ export function PageHeader({
         </p>
       ) : null}
       <div className="flex items-start justify-between gap-4">
-        <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight text-white m-0">
+        <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight text-slate-900 m-0">
           {title}
         </h1>
         {copyText ? (
           <button
             type="button"
             onClick={onCopy}
-            className="shrink-0 inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-white/[0.06] transition-colors"
+            className="shrink-0 inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-slate-100 transition-colors"
           >
             {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
             {copied ? "Copied" : "Copy page"}
@@ -66,15 +66,15 @@ export function Callout({
   children: ReactNode;
 }) {
   const styles = {
-    info: "border-sky-500/30 bg-sky-500/5 text-sky-100/90",
-    warn: "border-amber-500/35 bg-amber-500/10 text-amber-50/90",
-    tip: "border-emerald-500/30 bg-emerald-500/5 text-emerald-50/90",
+    info: "border-sky-200 bg-sky-50 text-sky-900",
+    warn: "border-amber-200 bg-amber-50 text-amber-900",
+    tip: "border-emerald-200 bg-emerald-50 text-emerald-900",
   }[variant];
 
   return (
     <div className={`not-prose my-6 rounded-xl border px-4 py-3.5 text-sm leading-relaxed ${styles}`}>
-      {title ? <p className="font-semibold text-foreground mb-1.5">{title}</p> : null}
-      <div className="[&_a]:underline [&_a]:underline-offset-2 [&_code]:rounded [&_code]:bg-black/30 [&_code]:px-1 [&_code]:py-0.5">
+      {title ? <p className="font-semibold text-slate-900 mb-1.5">{title}</p> : null}
+      <div className="[&_a]:underline [&_a]:underline-offset-2 [&_code]:rounded [&_code]:bg-slate-100 [&_code]:px-1 [&_code]:py-0.5">
         {children}
       </div>
     </div>
@@ -95,12 +95,12 @@ export function DocCard({
   return (
     <Link
       href={href}
-      className="group relative flex flex-col items-center text-center gap-3 rounded-xl border border-white/10 bg-[#111114]/80 p-6 hover:border-sky-400/40 hover:bg-[#16161a] transition-all overflow-hidden"
+      className="group relative flex flex-col items-center text-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-6 hover:border-sky-300 hover:bg-white transition-all overflow-hidden"
     >
-      <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity bg-[radial-gradient(circle_at_50%_0%,rgba(56,189,248,0.12),transparent_60%)]" />
-      <div className="relative text-sky-300/90 [&_svg]:h-6 [&_svg]:w-6">{icon}</div>
+      <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity bg-[radial-gradient(circle_at_50%_0%,rgba(56,189,248,0.08),transparent_60%)]" />
+      <div className="relative text-sky-700 [&_svg]:h-6 [&_svg]:w-6">{icon}</div>
       <div className="relative">
-        <p className="font-semibold text-white group-hover:text-sky-200 transition-colors">{title}</p>
+        <p className="font-semibold text-slate-900 group-hover:text-sky-800 transition-colors">{title}</p>
         <p className="mt-1.5 text-sm text-muted-foreground leading-snug">{description}</p>
       </div>
     </Link>
@@ -113,9 +113,9 @@ export function ParamsTable({
   rows: { name: string; type: string; required?: boolean; description: string }[];
 }) {
   return (
-    <div className="not-prose my-5 overflow-x-auto rounded-xl border border-white/10">
+    <div className="not-prose my-5 overflow-x-auto rounded-xl border border-slate-200">
       <table className="w-full text-sm text-left">
-        <thead className="text-[11px] uppercase tracking-wider bg-white/[0.03] text-muted-foreground border-b border-white/10">
+        <thead className="text-[11px] uppercase tracking-wider bg-slate-50 text-muted-foreground border-b border-slate-200">
           <tr>
             <th className="px-4 py-2.5 font-semibold">Parameter</th>
             <th className="px-4 py-2.5 font-semibold">Type</th>
@@ -124,11 +124,11 @@ export function ParamsTable({
         </thead>
         <tbody>
           {rows.map((row) => (
-            <tr key={row.name} className="border-b border-white/5 last:border-0">
+            <tr key={row.name} className="border-b border-slate-100 last:border-0">
               <td className="px-4 py-3 align-top">
-                <code className="text-xs text-sky-300">{row.name}</code>
+                <code className="text-xs text-sky-700">{row.name}</code>
                 {row.required ? (
-                  <span className="ml-2 text-[10px] uppercase text-rose-400/90">required</span>
+                  <span className="ml-2 text-[10px] uppercase text-rose-600">required</span>
                 ) : null}
               </td>
               <td className="px-4 py-3 align-top font-mono text-xs text-muted-foreground">
@@ -171,13 +171,13 @@ export function Endpoint({
     <section className="not-prose my-10 scroll-mt-24">
       <div className="flex flex-wrap items-center gap-3 mb-2">
         <MethodBadge method={method} size="md" />
-        <h2 id={id} className="text-xl font-semibold text-white m-0">
+        <h2 id={id} className="text-xl font-semibold text-slate-900 m-0">
           {title}
         </h2>
         {opId ? (
           <Link
             href={`/docs/api-reference/${opId}`}
-            className="ml-auto inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-sky-300 transition-colors"
+            className="ml-auto inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-sky-700 transition-colors"
           >
             Full schema <ChevronRight className="h-3 w-3" />
           </Link>
@@ -186,10 +186,10 @@ export function Endpoint({
       <button
         type="button"
         onClick={onCopy}
-        className="group flex w-full items-center gap-2 rounded-lg border border-white/10 bg-[#0c0c0f] px-3 py-2.5 text-left hover:border-white/20 transition-colors"
+        className="group flex w-full items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-left hover:border-slate-300 transition-colors"
         title="Copy method + URL"
       >
-        <code className="text-[13px] font-mono text-zinc-200 truncate">
+        <code className="text-[13px] font-mono text-slate-800 truncate">
           <span className="text-muted-foreground">{method.toUpperCase()}</span>{" "}
           {full}
         </code>
@@ -198,7 +198,7 @@ export function Endpoint({
         </span>
       </button>
       {children ? (
-        <div className="mt-4 space-y-1 [&_p]:text-sm [&_p]:text-zinc-400 [&_p]:leading-relaxed [&_ul]:text-sm [&_ul]:text-zinc-400">
+        <div className="mt-4 space-y-1 [&_p]:text-sm [&_p]:text-slate-600 [&_p]:leading-relaxed [&_ul]:text-sm [&_ul]:text-slate-600">
           {children}
         </div>
       ) : null}
@@ -214,7 +214,7 @@ export function LanguageTabs({
   const [active, setActive] = useState(0);
   return (
     <div className="not-prose my-6">
-      <div className="flex gap-1 rounded-t-xl border border-b-0 border-white/10 bg-white/[0.03] px-2 pt-2">
+      <div className="flex gap-1 rounded-t-xl border border-b-0 border-slate-200 bg-slate-50 px-2 pt-2">
         {tabs.map((tab, i) => (
           <button
             key={tab.label}
@@ -222,7 +222,7 @@ export function LanguageTabs({
             onClick={() => setActive(i)}
             className={`rounded-t-md px-3 py-1.5 text-xs font-medium transition-colors ${
               active === i
-                ? "bg-[#0c0c0f] text-white border border-white/10 border-b-transparent -mb-px"
+                ? "bg-white text-slate-900 border border-slate-200 border-b-transparent -mb-px"
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
@@ -251,7 +251,7 @@ export function ExternalFooterLink({
       href={href}
       target="_blank"
       rel="noreferrer"
-      className="flex items-center gap-2.5 rounded-md px-2 py-1.5 text-[13px] text-muted-foreground hover:text-foreground hover:bg-white/[0.04] transition-colors"
+      className="flex items-center gap-2.5 rounded-md px-2 py-1.5 text-[13px] text-muted-foreground hover:text-foreground hover:bg-slate-100 transition-colors"
     >
       {icon}
       <span className="flex-1">{children}</span>

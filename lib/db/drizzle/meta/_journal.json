@@ -680,6 +680,62 @@
       "when": 1791200000000,
       "tag": "0096_mcp_oauth",
       "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "7",
+      "when": 1791300000000,
+      "tag": "0097_campaign_lead_transfer",
+      "breakpoints": true
+    },
+    {
+      "idx": 98,
+      "version": "7",
+      "when": 1791400000000,
+      "tag": "0098_disposition_dynamics",
+      "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": "7",
+      "when": 1791500000000,
+      "tag": "0099_agent_after_call_messages",
+      "breakpoints": true
+    },
+    {
+      "idx": 100,
+      "version": "7",
+      "when": 1791600000000,
+      "tag": "0100_enable_google_meet_default",
+      "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "7",
+      "when": 1791600001000,
+      "tag": "0101_enable_google_meet_existing",
+      "breakpoints": true
+    },
+    {
+      "idx": 102,
+      "version": "7",
+      "when": 1791600002000,
+      "tag": "0102_outcome_guides",
+      "breakpoints": true
+    },
+    {
+      "idx": 103,
+      "version": "7",
+      "when": 1791600003000,
+      "tag": "0103_email_templates_multi",
+      "breakpoints": true
+    },
+    {
+      "idx": 104,
+      "version": "7",
+      "when": 1791600004000,
+      "tag": "0104_email_provider_message_id",
+      "breakpoints": true
     }
   ]
 }

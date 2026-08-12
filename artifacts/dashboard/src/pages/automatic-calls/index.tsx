@@ -2,12 +2,13 @@
  * Automatic Calls — list pipelines that watch Google Sheets and dial leads.
  */
 
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { customFetch } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { StripePage } from "@/components/stripe-page";
-import { Plus, Sheet, Loader2, Play, Pause, ExternalLink } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { Plus, Sheet, Loader2, Play, Pause, ExternalLink, Square } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const API = "/api";
@@ -37,13 +38,36 @@ const STATUS_STYLE: Record<string, string> = {
   stopped: "bg-rose-500/10 text-rose-600",
 };
 
+type PipelineAction = "start" | "pause" | "resume" | "stop";
+
 export default function AutomaticCallsPage() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
   const q = useQuery({
     queryKey: ["automatic-calls"],
     queryFn: () => customFetch<Pipeline[]>(`${API}/automatic-calls`),
   });
 
+  const action = useMutation({
+    mutationFn: ({ id, op }: { id: string; op: PipelineAction }) =>
+      customFetch(`${API}/automatic-calls/${id}/${op}`, { method: "POST" }),
+    onSuccess: (_data, vars) => {
+      void qc.invalidateQueries({ queryKey: ["automatic-calls"] });
+      toast({
+        title:
+          vars.op === "pause" ? "Pipeline paused" :
+          vars.op === "stop" ? "Pipeline stopped" :
+          vars.op === "resume" ? "Pipeline resumed" :
+          "Pipeline started",
+      });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Action failed", description: err.message, variant: "destructive" });
+    },
+  });
+
   const rows = q.data ?? [];
+  const busyId = action.isPending ? action.variables?.id : null;
 
   return (
     <StripePage
@@ -82,13 +106,15 @@ export default function AutomaticCallsPage() {
 
       <div className="space-y-2">
         {rows.map((p) => (
-          <Link
+          <div
             key={p.id}
-            href={`/app/automatic-calls/${p.id}`}
-            className="block rounded-xl border border-border/60 bg-card/40 px-4 py-3 hover:border-border transition-colors"
+            className="rounded-xl border border-border/60 bg-card/40 px-4 py-3 hover:border-border transition-colors"
           >
             <div className="flex items-center gap-3">
-              <div className="h-9 w-9 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
+              <Link
+                href={`/app/automatic-calls/${p.id}`}
+                className="h-9 w-9 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0"
+              >
                 {p.status === "running" ? (
                   <Play className="h-4 w-4 text-emerald-600" />
                 ) : p.status === "paused" ? (
@@ -96,8 +122,8 @@ export default function AutomaticCallsPage() {
                 ) : (
                   <Sheet className="h-4 w-4 text-muted-foreground" />
                 )}
-              </div>
-              <div className="flex-1 min-w-0">
+              </Link>
+              <Link href={`/app/automatic-calls/${p.id}`} className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <p className="text-sm font-medium truncate">{p.name}</p>
                   <span className={cn("text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded font-medium", STATUS_STYLE[p.status] ?? STATUS_STYLE.draft)}>
@@ -107,7 +133,7 @@ export default function AutomaticCallsPage() {
                 <p className="text-[11px] text-muted-foreground truncate mt-0.5">
                   {p.spreadsheetTitle || "Sheet"} · {p.sheetName} · {p.startMode.replace(/_/g, " ")} · writeback {p.writebackMode.replace(/_/g, " ")}
                 </p>
-              </div>
+              </Link>
               <div className="text-right shrink-0 hidden sm:block">
                 <p className="text-xs text-muted-foreground">
                   {p.enqueuedCount} queued · {p.dialedCount} dialed
@@ -120,9 +146,7 @@ export default function AutomaticCallsPage() {
                   <button
                     type="button"
                     className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-foreground mt-0.5"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
+                    onClick={() => {
                       window.open(`https://docs.google.com/spreadsheets/d/${p.spreadsheetId}/edit`, "_blank", "noopener");
                     }}
                   >
@@ -131,7 +155,59 @@ export default function AutomaticCallsPage() {
                 )}
               </div>
             </div>
-          </Link>
+
+            <div className="mt-3 flex flex-wrap items-center gap-1.5">
+              {(p.status === "draft" || p.status === "stopped") && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs gap-1 text-emerald-600 border-emerald-500/40 hover:bg-emerald-500/10"
+                  disabled={busyId === p.id}
+                  onClick={() => action.mutate({ id: p.id, op: "start" })}
+                >
+                  <Play className="h-3 w-3" /> Start
+                </Button>
+              )}
+              {p.status === "running" && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs gap-1 text-amber-600 border-amber-500/40 hover:bg-amber-500/10"
+                  disabled={busyId === p.id}
+                  onClick={() => action.mutate({ id: p.id, op: "pause" })}
+                >
+                  <Pause className="h-3 w-3" /> Pause
+                </Button>
+              )}
+              {p.status === "paused" && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs gap-1 text-emerald-600 border-emerald-500/40 hover:bg-emerald-500/10"
+                  disabled={busyId === p.id}
+                  onClick={() => action.mutate({ id: p.id, op: "resume" })}
+                >
+                  <Play className="h-3 w-3" /> Resume
+                </Button>
+              )}
+              {p.status !== "stopped" && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs gap-1 text-red-500 border-red-500/40 hover:bg-red-500/10"
+                  disabled={busyId === p.id}
+                  onClick={() => action.mutate({ id: p.id, op: "stop" })}
+                >
+                  <Square className="h-3 w-3" /> Stop
+                </Button>
+              )}
+              <Button asChild size="sm" variant="outline" className="h-7 text-xs gap-1 ml-auto">
+                <Link href={`/app/automatic-calls/${p.id}`}>
+                  Edit / Open <ExternalLink className="h-3 w-3" />
+                </Link>
+              </Button>
+            </div>
+          </div>
         ))}
       </div>
     </div>

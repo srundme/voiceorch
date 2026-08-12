@@ -4,7 +4,7 @@
  * Section 1: Website-webhook campaigns (wizard to create, list to manage)
  * Section 2: Instagram / Meta Lead Ads (existing MetaLeadsPage)
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import {
@@ -14,6 +14,10 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button }   from "@/components/ui/button";
 import { Input }    from "@/components/ui/input";
 import { Label }    from "@/components/ui/label";
@@ -24,8 +28,13 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import {
   Copy, Globe, Clock, Bot, Plus, ChevronRight, Check,
+  Pencil, PauseCircle, PlayCircle, XCircle, ExternalLink,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  canActivateCampaign, canPauseCampaign, canResumeCampaign, canStopCampaign,
+  type CampaignLifecycleStatus,
+} from "@/lib/campaign-lifecycle";
 import MetaLeadsPage from "@/pages/meta-leads";
 
 const ORIGIN = window.location.origin;
@@ -167,9 +176,20 @@ interface WCampaign {
   leadSource: string;
 }
 
-function CampaignCard({ c, agentsMap }: { c: WCampaign; agentsMap: Map<number, string> }) {
+function CampaignCard({
+  c,
+  agentsMap,
+  onEdit,
+}: {
+  c: WCampaign;
+  agentsMap: Map<number, string>;
+  onEdit: (c: WCampaign) => void;
+}) {
   const { toast } = useToast();
+  const qc = useQueryClient();
+  const updateMut = useUpdateCampaign();
   const [expanded, setExpanded] = useState(false);
+  const [confirmStop, setConfirmStop] = useState(false);
 
   const webhookUrl = `${ORIGIN}/api/webhooks/lead/${c.webhookToken}`;
   const phoneField  = c.fieldMappings["phone"] ?? "phone";
@@ -188,9 +208,37 @@ function CampaignCard({ c, agentsMap }: { c: WCampaign; agentsMap: Map<number, s
   const agentName = c.agentId ? (agentsMap.get(c.agentId) ?? `Agent #${c.agentId}`) : "No agent";
 
   const statusCls =
-    c.status === "active"  ? "text-emerald-500 bg-emerald-500/10 border-emerald-500/20" :
+    c.status === "active" || c.status === "listening" ? "text-emerald-500 bg-emerald-500/10 border-emerald-500/20" :
     c.status === "paused"  ? "text-amber-500 bg-amber-500/10 border-amber-500/20" :
+    c.status === "stopped" ? "text-red-500 bg-red-500/10 border-red-500/20" :
     "text-muted-foreground bg-muted/20 border-border";
+
+  const busy = updateMut.isPending;
+
+  const setStatus = async (status: CampaignLifecycleStatus) => {
+    try {
+      await updateMut.mutateAsync({ id: c.id, data: { status } });
+      await qc.invalidateQueries({ queryKey: getListCampaignsQueryKey() });
+      await qc.invalidateQueries({ queryKey: ["campaigns-dashboard"] });
+      toast({
+        title:
+          status === "paused" ? "Campaign paused" :
+          status === "active" ? (c.status === "stopped" ? "Campaign activated" : "Campaign resumed") :
+          status === "stopped" ? "Campaign stopped" :
+          "Campaign updated",
+        description:
+          status === "paused" ? "New leads are still accepted and queued. Dialing is paused." :
+          status === "stopped" ? "New form leads will be rejected until you activate again." :
+          undefined,
+      });
+    } catch (err) {
+      toast({
+        title: "Could not update campaign",
+        description: err instanceof Error ? err.message : "Please try again",
+        variant: "destructive",
+      });
+    }
+  };
 
   return (
     <div className="bg-card border border-border rounded-2xl overflow-hidden">
@@ -220,8 +268,8 @@ function CampaignCard({ c, agentsMap }: { c: WCampaign; agentsMap: Map<number, s
           </button>
         </div>
 
-        {/* Webhook URL */}
-        <div className="flex items-center gap-2 mt-3">
+        <p className="text-[10px] text-muted-foreground mt-3 mb-1">Form intake URL</p>
+        <div className="flex items-center gap-2">
           <code className="flex-1 text-[11px] bg-elevated border border-border/50 rounded-lg px-2.5 py-1.5 font-mono truncate text-muted-foreground/70">
             {webhookUrl}
           </code>
@@ -232,6 +280,62 @@ function CampaignCard({ c, agentsMap }: { c: WCampaign; agentsMap: Map<number, s
             <Copy className="w-3.5 h-3.5" />
           </button>
         </div>
+
+        <div className="mt-3 flex flex-wrap items-center gap-1.5">
+          <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => onEdit(c)} disabled={busy}>
+            <Pencil className="w-3 h-3" /> Edit
+          </Button>
+          {canPauseCampaign(c.status) && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs gap-1 text-amber-600 border-amber-500/40 hover:bg-amber-500/10"
+              onClick={() => void setStatus("paused")}
+              disabled={busy}
+            >
+              <PauseCircle className="w-3 h-3" /> Pause
+            </Button>
+          )}
+          {canResumeCampaign(c.status) && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs gap-1 text-emerald-600 border-emerald-500/40 hover:bg-emerald-500/10"
+              onClick={() => void setStatus("active")}
+              disabled={busy}
+            >
+              <PlayCircle className="w-3 h-3" /> Resume
+            </Button>
+          )}
+          {canActivateCampaign(c.status) && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs gap-1 text-emerald-600 border-emerald-500/40 hover:bg-emerald-500/10"
+              onClick={() => void setStatus("active")}
+              disabled={busy}
+            >
+              <PlayCircle className="w-3 h-3" /> Activate
+            </Button>
+          )}
+          {canStopCampaign(c.status) && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs gap-1 text-red-500 border-red-500/40 hover:bg-red-500/10"
+              onClick={() => setConfirmStop(true)}
+              disabled={busy}
+            >
+              <XCircle className="w-3 h-3" /> Stop
+            </Button>
+          )}
+          <Link
+            href={`/app/campaigns/${c.id}`}
+            className="inline-flex h-7 items-center gap-1 rounded-md border border-border px-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors ml-auto"
+          >
+            Open <ExternalLink className="w-3 h-3" />
+          </Link>
+        </div>
       </div>
 
       {expanded && (
@@ -239,6 +343,26 @@ function CampaignCard({ c, agentsMap }: { c: WCampaign; agentsMap: Map<number, s
           <EmbedSnippet token={c.webhookToken} phoneField={phoneField} nameField={nameField} emailField={emailField} />
         </div>
       )}
+
+      <AlertDialog open={confirmStop} onOpenChange={setConfirmStop}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Stop “{c.name}”?</AlertDialogTitle>
+            <AlertDialogDescription>
+              New website form leads will be rejected until you activate this campaign again. Leads already queued stay in the campaign.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              onClick={() => { setConfirmStop(false); void setStatus("stopped"); }}
+            >
+              Stop campaign
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -268,15 +392,37 @@ const DEFAULTS: WizForm = {
   emailField:   "email",
 };
 
+function hoursToMinutes(raw: number | null | undefined, fallback: number): number {
+  if (raw == null) return fallback;
+  return raw < 24 ? raw * 60 : raw;
+}
+
+function formFromCampaign(c: WCampaign): WizForm {
+  return {
+    name:         c.name || DEFAULTS.name,
+    agentId:      c.agentId ? String(c.agentId) : "",
+    hoursEnabled: c.isCallingHoursEnabled !== false,
+    startMin:     hoursToMinutes(c.businessHoursStart ?? null, DEFAULTS.startMin),
+    endMin:       hoursToMinutes(c.businessHoursEnd ?? null, DEFAULTS.endMin),
+    timezone:     c.timezone || DEFAULTS.timezone,
+    phoneField:   c.fieldMappings["phone"] ?? "phone",
+    nameField:    c.fieldMappings["name"] ?? "",
+    emailField:   c.fieldMappings["email"] ?? "",
+  };
+}
+
 function Wizard({
   open,
   onClose,
   initialAgentId,
+  editing,
 }: {
   open: boolean;
   onClose: () => void;
   initialAgentId?: string;
+  editing?: WCampaign | null;
 }) {
+  const isEdit = Boolean(editing);
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [f, setF] = useState<WizForm>(() => ({
     ...DEFAULTS,
@@ -289,21 +435,65 @@ function Wizard({
   const createMut = useCreateCampaign();
   const updateMut = useUpdateCampaign();
 
+  useEffect(() => {
+    if (!open) return;
+    if (editing) {
+      setStep(1);
+      setF(formFromCampaign(editing));
+      return;
+    }
+    setStep(1);
+    setF({
+      ...DEFAULTS,
+      agentId: initialAgentId && /^\d+$/.test(initialAgentId) ? initialAgentId : "",
+    });
+  }, [open, editing, initialAgentId]);
+
   const upd = (p: Partial<WizForm>) => setF(prev => ({ ...prev, ...p }));
 
-  const reset = () => { setStep(1); setF(DEFAULTS); };
+  const reset = () => {
+    setStep(1);
+    setF({
+      ...DEFAULTS,
+      agentId: initialAgentId && /^\d+$/.test(initialAgentId) ? initialAgentId : "",
+    });
+  };
   const close = () => { reset(); onClose(); };
 
   const ok1 = f.name.trim().length > 0 && f.agentId !== "";
   const ok2 = !f.hoursEnabled || f.startMin < f.endMin;
 
-  const create = async () => {
+  const save = async () => {
     if (!f.agentId) return;
     const fm: Record<string, string> = { phone: f.phoneField.trim() || "phone" };
     if (f.nameField.trim())  fm["name"]  = f.nameField.trim();
     if (f.emailField.trim()) fm["email"] = f.emailField.trim();
 
+    const hoursPatch = {
+      isCallingHoursEnabled: f.hoursEnabled,
+      businessHoursStart:    f.hoursEnabled ? Math.floor(f.startMin / 60) : null,
+      businessHoursEnd:      f.hoursEnabled ? Math.floor(f.endMin / 60)   : null,
+      timezone:              f.hoursEnabled ? f.timezone  : null,
+    };
+
     try {
+      if (editing) {
+        await updateMut.mutateAsync({
+          id: editing.id,
+          data: {
+            name: f.name.trim(),
+            agentId: Number(f.agentId),
+            fieldMappings: fm,
+            ...hoursPatch,
+          },
+        });
+        await qc.invalidateQueries({ queryKey: getListCampaignsQueryKey() });
+        await qc.invalidateQueries({ queryKey: ["campaigns-dashboard"] });
+        toast({ title: "Campaign updated", description: "Your website form settings were saved." });
+        close();
+        return;
+      }
+
       const agent = (agents ?? []).find(a => String(a.id) === f.agentId) as
         | { id: number; agentConfig?: { callDefaults?: Record<string, number | boolean | string | null> } }
         | undefined;
@@ -324,19 +514,19 @@ function Wizard({
 
       await updateMut.mutateAsync({
         id:   campaign.id,
-        data: {
-          isCallingHoursEnabled: f.hoursEnabled,
-          businessHoursStart:    f.hoursEnabled ? Math.floor(f.startMin / 60) : null,
-          businessHoursEnd:      f.hoursEnabled ? Math.floor(f.endMin / 60)   : null,
-          timezone:              f.hoursEnabled ? f.timezone  : null,
-        },
+        data: hoursPatch,
       });
 
       await qc.invalidateQueries({ queryKey: getListCampaignsQueryKey() });
+      await qc.invalidateQueries({ queryKey: ["campaigns-dashboard"] });
       toast({ title: "Campaign created!", description: "Your website campaign is ready — copy the snippet and paste it on your site." });
       close();
     } catch (err) {
-      toast({ title: "Error", description: err instanceof Error ? err.message : "Failed to create campaign", variant: "destructive" });
+      toast({
+        title: "Error",
+        description: err instanceof Error ? err.message : (isEdit ? "Failed to update campaign" : "Failed to create campaign"),
+        variant: "destructive",
+      });
     }
   };
 
@@ -363,12 +553,14 @@ function Wizard({
               {s < 3 && <div className={cn("h-px w-6 transition-colors", step > s ? "bg-primary" : "bg-border")} />}
             </div>
           ))}
-          <span className="ml-auto text-[11px] text-muted-foreground/50">Step {step} of 3</span>
+          <span className="ml-auto text-[11px] text-muted-foreground/50">
+            {isEdit ? "Edit · " : ""}Step {step} of 3
+          </span>
         </div>
 
         <DialogHeader>
           <DialogTitle className="text-base">
-            {step === 1 && "Name & agent"}
+            {step === 1 && (isEdit ? "Edit name & agent" : "Name & agent")}
             {step === 2 && "Calling hours"}
             {step === 3 && "Form field names"}
           </DialogTitle>
@@ -485,7 +677,12 @@ function Wizard({
 
             <div className="border-t border-border pt-3">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/50 mb-2.5">Preview — your embed snippet</p>
-              <EmbedSnippet phoneField={f.phoneField || "phone"} nameField={f.nameField} emailField={f.emailField} />
+              <EmbedSnippet
+                token={editing?.webhookToken}
+                phoneField={f.phoneField || "phone"}
+                nameField={f.nameField}
+                emailField={f.emailField}
+              />
             </div>
           </div>
         )}
@@ -502,8 +699,8 @@ function Wizard({
               Continue
             </Button>
           ) : (
-            <Button size="sm" onClick={create} disabled={!f.phoneField.trim() || busy}>
-              {busy ? "Creating…" : "Create campaign"}
+            <Button size="sm" onClick={() => void save()} disabled={!f.phoneField.trim() || busy}>
+              {busy ? (isEdit ? "Saving…" : "Creating…") : (isEdit ? "Save changes" : "Create campaign")}
             </Button>
           )}
         </DialogFooter>
@@ -522,6 +719,7 @@ export default function FromWebsitePage({ hideMeta = false }: { hideMeta?: boole
     }
   })();
   const [wizardOpen, setWizardOpen] = useState(() => Boolean(initialAgentId));
+  const [editing, setEditing] = useState<WCampaign | null>(null);
 
   const { data: campaignsRaw } = useListCampaigns();
   const { data: agentsRaw }    = useListAgents();
@@ -531,21 +729,36 @@ export default function FromWebsitePage({ hideMeta = false }: { hideMeta?: boole
     ((agentsRaw ?? []) as { id: number; name: string }[]).map(a => [a.id, a.name]),
   );
 
+  const openCreate = () => {
+    setEditing(null);
+    setWizardOpen(true);
+  };
+
+  const openEdit = (c: WCampaign) => {
+    setEditing(c);
+    setWizardOpen(true);
+  };
+
+  const closeWizard = () => {
+    setWizardOpen(false);
+    setEditing(null);
+  };
+
   return (
     <div className="flex flex-col">
       {/* ── Website form ── */}
       <div className="mx-auto w-full max-w-3xl px-4 sm:px-6 py-6 space-y-5">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/40 mb-1">Website form</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/40 mb-1">Form intake</p>
             <h2 className="text-xl font-semibold text-foreground leading-tight">
               Connect your website form
             </h2>
             <p className="text-sm text-muted-foreground mt-1 max-w-lg">
-              Paste the webhook into your form. New leads land in your workspace.
+              Paste the form intake URL into your site. New leads land in your workspace and can dial.
             </p>
           </div>
-          <Button size="sm" className="shrink-0 gap-1.5 mt-1" onClick={() => setWizardOpen(true)}>
+          <Button size="sm" className="shrink-0 gap-1.5 mt-1" onClick={openCreate}>
             <Plus className="w-3.5 h-3.5" />Connect
           </Button>
         </div>
@@ -556,17 +769,17 @@ export default function FromWebsitePage({ hideMeta = false }: { hideMeta?: boole
             <div>
               <p className="text-sm font-medium text-foreground/60">No website form yet</p>
               <p className="text-[12px] text-muted-foreground/40 mt-0.5">
-                Create one to get a webhook URL and embed snippet for your site.
+                Create one to get a form intake URL and embed snippet for your site.
               </p>
             </div>
-            <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setWizardOpen(true)}>
+            <Button size="sm" variant="outline" className="gap-1.5" onClick={openCreate}>
               <Plus className="w-3.5 h-3.5" />Connect form
             </Button>
           </div>
         ) : (
           <div className="space-y-3">
             {webhookCampaigns.map(c => (
-              <CampaignCard key={c.id} c={c} agentsMap={agentsMap} />
+              <CampaignCard key={c.id} c={c} agentsMap={agentsMap} onEdit={openEdit} />
             ))}
           </div>
         )}
@@ -582,8 +795,9 @@ export default function FromWebsitePage({ hideMeta = false }: { hideMeta?: boole
 
       <Wizard
         open={wizardOpen}
-        onClose={() => setWizardOpen(false)}
+        onClose={closeWizard}
         initialAgentId={initialAgentId || undefined}
+        editing={editing}
       />
     </div>
   );

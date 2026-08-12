@@ -195,6 +195,10 @@ export const exemptPaths = [
   "/api/admin",
   "/api/meet-calendar/recall-webhooks",
   "/api/meet-bots/recall-events",
+  // Screenshare viewer: the Recall bot browser polls present-state several times
+  // a second for the whole meeting. HMAC-token-gated in the handler, so the IP
+  // cap only produced 429s that blanked the shared deck. Covers /present too.
+  "/api/meet-bots/present",
   "/api/mcp",
   "/.well-known/oauth-authorization-server",
   "/.well-known/oauth-protected-resource",

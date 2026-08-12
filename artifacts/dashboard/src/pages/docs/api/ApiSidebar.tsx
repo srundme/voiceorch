@@ -49,7 +49,7 @@ function TagSection({
         </span>
       </button>
       {isOpen ? (
-        <div className="flex flex-col gap-0.5 border-l border-white/5 ml-1.5 pl-2 mb-2">
+        <div className="flex flex-col gap-0.5 border-l border-slate-200 ml-1.5 pl-2 mb-2">
           {operations.map((op) => {
             const isActive = op.id === activeId;
             return (
@@ -58,8 +58,8 @@ function TagSection({
                 href={`/docs/api-reference/${op.id}`}
                 className={`group flex items-center gap-2 rounded-md px-2 py-1.5 text-[13px] transition-colors ${
                   isActive
-                    ? "bg-sky-400/10 text-sky-200"
-                    : "text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.04]"
+                    ? "bg-sky-50 text-sky-700"
+                    : "text-slate-500 hover:text-slate-800 hover:bg-slate-100"
                 }`}
               >
                 <MethodBadge method={op.method} />
@@ -105,7 +105,7 @@ export function ApiSidebar() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search endpoints"
-          className="w-full rounded-lg border border-white/10 bg-white/[0.03] pl-8 pr-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary/40"
+          className="w-full rounded-lg border border-slate-200 bg-slate-50 pl-8 pr-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary/40"
         />
       </div>
 
@@ -114,12 +114,12 @@ export function ApiSidebar() {
           <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">
             Get Started
           </h4>
-          <div className="flex flex-col gap-0.5 border-l border-white/5 ml-1.5 pl-2">
+          <div className="flex flex-col gap-0.5 border-l border-slate-200 ml-1.5 pl-2">
             {INTRO_LINKS.map((l) => (
               <a
                 key={l.hash}
                 href={`/docs/api-reference#${l.hash}`}
-                className="rounded-md px-2 py-1.5 text-[13px] text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors"
+                className="rounded-md px-2 py-1.5 text-[13px] text-muted-foreground hover:text-foreground hover:bg-slate-100 transition-colors"
               >
                 {l.label}
               </a>
@@ -132,7 +132,7 @@ export function ApiSidebar() {
         <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70 mb-1">
           Public endpoints
         </h4>
-        <p className="text-[11px] text-zinc-500 px-2 mb-2 leading-snug">
+        <p className="text-[11px] text-slate-500 px-2 mb-2 leading-snug">
           Builder APIs only — campaigns &amp; admin hidden.
         </p>
         {filtered.map((g) => (

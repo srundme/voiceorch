@@ -20,7 +20,7 @@ function statusTone(status: string): string {
   if (status.startsWith("3")) return "text-sky-400 border-sky-400/40";
   if (status.startsWith("4")) return "text-amber-400 border-amber-400/40";
   if (status.startsWith("5")) return "text-rose-400 border-rose-400/40";
-  return "text-muted-foreground border-white/20";
+  return "text-muted-foreground border-slate-300";
 }
 
 export function CodePanel({
@@ -53,8 +53,8 @@ export function CodePanel({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border border-white/10 bg-[#0B0D12] overflow-hidden">
-        <div className="flex items-center justify-between px-3 py-2 border-b border-white/10 bg-white/[0.03]">
+      <div className="rounded-xl border border-slate-200 bg-slate-50 overflow-hidden">
+        <div className="flex items-center justify-between px-3 py-2 border-b border-slate-200 bg-slate-100">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Terminal className="h-3.5 w-3.5" />
             <span className="font-medium text-foreground/80">Request</span>
@@ -68,14 +68,14 @@ export function CodePanel({
             {req.copied ? "Copied" : "Copy"}
           </button>
         </div>
-        <pre className="p-3 text-[12px] leading-relaxed font-mono text-foreground/90 overflow-x-auto">
+        <pre className="p-3 text-[12px] leading-relaxed font-mono text-slate-800 overflow-x-auto">
           <code>{curl}</code>
         </pre>
       </div>
 
       {responses.length ? (
-        <div className="rounded-xl border border-white/10 bg-[#0B0D12] overflow-hidden">
-          <div className="flex items-center justify-between px-3 py-2 border-b border-white/10 bg-white/[0.03]">
+        <div className="rounded-xl border border-slate-200 bg-slate-50 overflow-hidden">
+          <div className="flex items-center justify-between px-3 py-2 border-b border-slate-200 bg-slate-100">
             <div className="flex items-center gap-1.5 overflow-x-auto">
               {responses.map((r) => (
                 <button
@@ -102,7 +102,7 @@ export function CodePanel({
             ) : null}
           </div>
           {active?.body ? (
-            <pre className="p-3 text-[12px] leading-relaxed font-mono text-foreground/90 overflow-x-auto max-h-[420px]">
+            <pre className="p-3 text-[12px] leading-relaxed font-mono text-slate-800 overflow-x-auto max-h-[420px]">
               <code>{active.body}</code>
             </pre>
           ) : (

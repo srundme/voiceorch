@@ -6,6 +6,7 @@
 export const PUBLIC_TAG_ORDER = [
   "agents",
   "calls",
+  "meetings",
   "agent-variables",
   "webhook-endpoints",
   "phone-numbers",
@@ -63,13 +64,25 @@ export const PUBLIC_OPERATION_IDS = new Set<string>([
   "listKnowledgeSources",
   "attachKnowledgeSourceToAgent",
   "searchKnowledge",
+
+  // Meetings (session auth — dashboard / cookie; documented for integrators)
+  "createMeetBot",
+  "getMeetBot",
+  "leaveMeetBot",
+  "getMeetBotIdentity",
+  "getMeetCalendarConnection",
+  "disconnectMeetCalendar",
+  "listMeetCalendarEvents",
+  "enableMeetCalendarEventBot",
+  "disableMeetCalendarEventBot",
 ]);
 
 export const TAG_LABELS: Record<string, string> = {
   agents: "Agents",
   calls: "Calls",
+  meetings: "Meetings",
   "agent-variables": "Variables",
-  "webhook-endpoints": "Webhooks",
+  "webhook-endpoints": "Event subscriptions",
   "phone-numbers": "Phone Numbers",
   wallet: "Wallet",
   knowledge: "Knowledge Base",

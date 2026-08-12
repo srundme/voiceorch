@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { PageHeader } from "../DocsUi";
+import { Callout, PageHeader } from "../DocsUi";
 
 export default function PlatformConceptsPage() {
   return (
@@ -7,48 +7,108 @@ export default function PlatformConceptsPage() {
       <PageHeader
         breadcrumb="Get started"
         title="Platform concepts"
-        description="The vocabulary you need before building agents or calling the API."
+        description="Who owns what — agents, campaigns, connections, dispositions, squads, and meetings."
       />
+
+      <Callout variant="tip">
+        Short rule: the <strong>agent</strong> owns the conversation and messages; the{" "}
+        <strong>campaign</strong> owns the lead list and dial; <strong>Connections</strong> wires
+        the outside world.
+      </Callout>
 
       <h2 id="agent">Agent</h2>
       <p>
-        A voice persona: system prompt, language, ASR/LLM/TTS (or BYOP), tools, optional knowledge
-        base, phone number, and variables. Configure in{" "}
+        A voice persona: system prompt, greeting, language, ASR/LLM/TTS (or BYOP), tools, knowledge
+        base, phone number, variables, <strong>Outcomes / dispositions</strong>,{" "}
+        <strong>after-call WhatsApp &amp; email rules</strong>, and optional{" "}
+        <Link href="/docs/meetings">meeting</Link> settings. Configure in{" "}
         <a href="https://app.snapserve.ai/app/agents" target="_blank" rel="noreferrer">
           Agents
         </a>
         . Toggle <strong>active</strong> before production calls.
       </p>
 
+      <h2 id="campaign">Campaign</h2>
+      <p>
+        Outbound dialing at scale: lead sources (CSV, Sheets, Website, Meta, CRM), queue, retries,
+        calling hours, and <strong>lead transfer</strong> (push matching dispositions to a webhook
+        or Google Sheet). Messaging after the call is configured on the{" "}
+        <strong>agent</strong>, not the campaign.{" "}
+        <Link href="/docs/campaigns">Campaigns guide</Link>.
+      </p>
+
+      <h2 id="connections">Connections</h2>
+      <p>
+        Hub for wires used by agents and campaigns: WhatsApp, Email (Brevo), Google Sheets, Website
+        form, Meta Lead Ads, Calendar &amp; booking, and Meetings entry. Open{" "}
+        <a href="https://app.snapserve.ai/app/connections" target="_blank" rel="noreferrer">
+          Connections
+        </a>
+        .
+      </p>
+
+      <h2 id="disposition">Disposition / Outcomes</h2>
+      <p>
+        After each call, AI picks an outcome from the agent’s taxonomy and fills data fields you
+        define. Map labels to funnel meanings (Interested / Callback / DNC) for analytics. Set under
+        Agent Builder → <strong>Outcomes</strong> (top-level tab).
+      </p>
+
+      <h2 id="after-call">After-call messages</h2>
+      <p>
+        Agent-owned WhatsApp / email rules: every call, or only for matching dispositions. Requires
+        live channels under Connections. Campaigns no longer map WA/email branches — they only{" "}
+        <strong>transfer leads</strong>.
+      </p>
+
+      <h2 id="lead-transfer">Lead transfer</h2>
+      <p>
+        Campaign Configuration → when disposition matches, POST the lead to a webhook and/or append
+        to a Google Sheet. Use this for CRM / ops handoff — not for customer messaging.
+      </p>
+
+      <h2 id="squad">Squad</h2>
+      <p>
+        Multi-agent team: mid-call live handoff (<code>transfer_to_*</code>) and follow-up tasks for
+        a later outbound. Callback <em>disposition</em> means “call later”; it is not automatically
+        a live handoff.
+      </p>
+
+      <h2 id="meeting">Meeting</h2>
+      <p>
+        Same agent inside Google Meet / Zoom / Teams. Join via paste link, calendar Join toggles, or
+        booking auto-dispatch. <Link href="/docs/meetings">Meetings guide</Link>.
+      </p>
+
       <h2 id="call">Call</h2>
       <p>
-        One phone conversation. SnapServe stores status, duration, cost (paise), transcript,
+        One phone (or meeting) conversation. SnapServe stores status, duration, cost, transcript,
         summary, evaluation, and disposition. Retrieve with{" "}
         <Link href="/docs/api-reference/getCall">GET /calls/{"{id}"}</Link> or listen on webhooks.
       </p>
 
       <h2 id="phone">Phone number</h2>
       <p>
-        Caller ID outbound and DID inbound. India numbers need KYC. Purchase is card checkout
-        (₹599–₹699/mo by series + ₹100 setup + GST). <Link href="/docs/phone-numbers">Phone numbers guide</Link>.
+        Caller ID outbound and DID inbound. India numbers need KYC.{" "}
+        <Link href="/docs/phone-numbers">Phone numbers guide</Link>.
       </p>
 
       <h2 id="wallet">Wallet</h2>
       <p>
-        Prepaid INR balance. Usage deducts at <strong>₹5 / minute</strong>. Top up by card in the
-        dashboard. <Link href="/docs/wallet">Wallet</Link>.
+        Prepaid INR balance. Usage deducts per minute.{" "}
+        <Link href="/docs/wallet">Wallet</Link>.
       </p>
 
       <h2 id="variables">Variables</h2>
       <p>
-        Placeholders like <code>{"{{customer_name}}"}</code> in the prompt, filled per call from
-        your API or campaign lead data. <Link href="/docs/variables">Variables</Link>.
+        Placeholders like <code>{"{{customer_name}}"}</code> in the prompt, filled per call.{" "}
+        <Link href="/docs/variables">Variables</Link>.
       </p>
 
       <h2 id="tools">Tools</h2>
       <p>
-        Functions the agent can call mid-conversation (book slot, transfer, HTTP webhook).
-        Configured in the agent builder Tools tab.
+        Functions mid-conversation (book slot, transfer, HTTP webhook, meeting controls). Configured
+        in the agent builder Tools tab.
       </p>
 
       <h2 id="knowledge">Knowledge base</h2>
@@ -57,11 +117,25 @@ export default function PlatformConceptsPage() {
         <Link href="/docs/knowledge-base">Knowledge base</Link>.
       </p>
 
-      <h2 id="webhooks">Webhooks</h2>
+      <h2 id="webhooks">Event subscriptions &amp; related URLs</h2>
       <p>
-        HTTPS callbacks to your app when calls start, complete, or fail.{" "}
-        <Link href="/docs/webhooks">Webhooks</Link>.
+        Do not confuse these four jobs that all used to say “webhook”:
       </p>
+      <ul>
+        <li>
+          <strong>Event subscriptions</strong> — Developers → workspace-wide call events.{" "}
+          <Link href="/docs/webhooks">Guide</Link>.
+        </li>
+        <li>
+          <strong>Post-call notify</strong> — Agent Builder → Settings → notify URL for that agent only.
+        </li>
+        <li>
+          <strong>Form intake</strong> — Connections / Campaigns → website form POSTs leads into SnapServe.
+        </li>
+        <li>
+          <strong>Lead transfer</strong> — Campaign Configuration → push matching dispositions to CRM / Sheets.
+        </li>
+      </ul>
 
       <h2 id="api-key">API key</h2>
       <p>
@@ -69,7 +143,9 @@ export default function PlatformConceptsPage() {
         <a href="https://app.snapserve.ai/app/api-keys" target="_blank" rel="noreferrer">
           API Keys
         </a>
-        . <Link href="/docs/authentication">Authentication</Link>.
+        . <Link href="/docs/authentication">Authentication</Link>. Meeting bot launch typically uses
+        a logged-in session (dashboard) — see{" "}
+        <Link href="/docs/api-reference">API Reference → Meetings</Link>.
       </p>
     </div>
   );

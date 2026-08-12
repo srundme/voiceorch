@@ -29,6 +29,7 @@ import {
   type AgentFormValues,
 } from "./edit.schema";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { SnapServeAgentIcon } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -920,7 +921,7 @@ export default function AgentEdit() {
         </Link>
         <div>
           <h2 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-            <Bot className="h-6 w-6 text-primary" />
+            <SnapServeAgentIcon size={24} className="text-primary" />
             Edit Agent
           </h2>
           <p className="text-muted-foreground">Update the configuration for <strong>{agent.name}</strong>.</p>
@@ -2009,7 +2010,7 @@ export default function AgentEdit() {
                         </SelectContent>
                       </Select>
                       {calendarIdForEt && (agentEventTypes ?? []).length === 0 && (
-                        <p className="text-[10px] text-amber-400/80">No event types yet. Create one in Scheduling → Event Types.</p>
+                        <p className="text-[10px] text-amber-400/80">No event types yet. Create one under Connections → Bookings calendar.</p>
                       )}
                     </div>
                   </div>

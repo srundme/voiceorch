@@ -39,6 +39,7 @@ async function loadConfig(agentId: number): Promise<DispositionConfig | null> {
     taxonomy:     (row.taxonomy as Record<string, string[]>),
     domainFields: (row.domainFields as DispositionConfig["domainFields"]) ?? [],
     rules:        (row.rules as DispositionConfig["rules"]) ?? [],
+    outcomeGuides: (row.outcomeGuides as Record<string, string> | null) ?? {},
   };
 
   // Empty taxonomy + no domain fields ⇒ treat as unconfigured

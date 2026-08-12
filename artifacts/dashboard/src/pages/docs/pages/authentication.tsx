@@ -13,7 +13,7 @@ export default function AuthenticationPage() {
         title="Authentication"
         description={
           <>
-            Server-to-server requests use a developer API key (<code className="text-sky-300">sk_live_…</code>
+            Server-to-server requests use a developer API key (<code className="text-sky-700">sk_live_…</code>
             ). Keys are shown once when created — store them in a secret manager.
           </>
         }

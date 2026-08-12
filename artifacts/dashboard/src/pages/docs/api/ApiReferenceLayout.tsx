@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { Menu } from "lucide-react";
 import { BrandMark } from "@/components/logo";
@@ -27,7 +28,7 @@ const TOP_TABS = [
 function TopTabs() {
   const [location] = useLocation();
   return (
-    <div className="hidden md:flex items-center gap-1 border-b border-white/10">
+    <div className="hidden md:flex items-center gap-1 border-b border-slate-200">
       {TOP_TABS.map((tab) => {
         const active = tab.match(location);
         return (
@@ -35,12 +36,12 @@ function TopTabs() {
             key={tab.href}
             href={tab.href}
             className={`relative px-3 py-2.5 text-sm transition-colors ${
-              active ? "text-white" : "text-zinc-400 hover:text-zinc-200"
+              active ? "text-slate-900" : "text-slate-500 hover:text-slate-700"
             }`}
           >
             {tab.label}
             {active ? (
-              <span className="absolute inset-x-2 -bottom-px h-[2px] rounded-full bg-sky-400" />
+              <span className="absolute inset-x-2 -bottom-px h-[2px] rounded-full bg-sky-500" />
             ) : null}
           </Link>
         );
@@ -56,9 +57,20 @@ export function ApiReferenceLayout({
   children: React.ReactNode;
   rightRail?: React.ReactNode;
 }) {
+  useEffect(() => {
+    const root = document.documentElement;
+    const hadDark = root.classList.contains("dark");
+    root.classList.remove("dark");
+    root.classList.add("light");
+    return () => {
+      root.classList.remove("light");
+      if (hadDark) root.classList.add("dark");
+    };
+  }, []);
+
   return (
-    <div className="min-h-screen bg-[#050506] text-foreground font-sans selection:bg-sky-400/25">
-      <header className="sticky top-0 z-40 hidden lg:block border-b border-white/10 bg-[#050506]/90 backdrop-blur-xl">
+    <div className="min-h-screen bg-white text-foreground font-sans selection:bg-sky-400/25">
+      <header className="sticky top-0 z-40 hidden lg:block border-b border-slate-200 bg-white/90 backdrop-blur-xl">
         <div className="max-w-[1600px] mx-auto px-6 flex items-center h-14 gap-8">
           <Link href="/docs" className="flex items-center gap-2 shrink-0 hover:opacity-90 transition-opacity">
             <BrandMark iconSize={24} wordmarkHeight={18} />
@@ -67,13 +79,13 @@ export function ApiReferenceLayout({
           <div className="ml-auto flex items-center gap-3">
             <a
               href="https://app.snapserve.ai/app"
-              className="text-sm text-zinc-400 hover:text-white transition-colors"
+              className="text-sm text-slate-500 hover:text-slate-900 transition-colors"
             >
               Dashboard
             </a>
             <a
               href="https://app.snapserve.ai/app/api-keys"
-              className="rounded-lg bg-sky-500/15 border border-sky-400/30 px-3 py-1.5 text-sm text-sky-200 hover:bg-sky-500/25 transition-colors"
+              className="rounded-lg bg-sky-50 border border-sky-200 px-3 py-1.5 text-sm text-sky-800 hover:bg-sky-100 transition-colors"
             >
               Get API key
             </a>
@@ -81,7 +93,7 @@ export function ApiReferenceLayout({
         </div>
       </header>
 
-      <header className="sticky top-0 z-40 w-full border-b border-white/10 bg-[#050506]/90 backdrop-blur-xl lg:hidden">
+      <header className="sticky top-0 z-40 w-full border-b border-slate-200 bg-white/90 backdrop-blur-xl lg:hidden">
         <div className="flex items-center h-14 px-4 gap-4">
           <Sheet>
             <SheetTrigger asChild>
@@ -90,9 +102,9 @@ export function ApiReferenceLayout({
                 <span className="sr-only">Toggle Menu</span>
               </Button>
             </SheetTrigger>
-            <SheetContent side="left" className="w-80 bg-[#050506] border-white/10 p-0">
+            <SheetContent side="left" className="w-80 bg-white border-slate-200 p-0">
               <div className="flex flex-col h-full">
-                <div className="p-4 border-b border-white/10">
+                <div className="p-4 border-b border-slate-200">
                   <Link href="/docs" className="flex items-center gap-2">
                     <BrandMark iconSize={24} wordmarkHeight={18} />
                   </Link>
@@ -110,7 +122,7 @@ export function ApiReferenceLayout({
       </header>
 
       <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-6 flex">
-        <aside className="hidden lg:block w-[300px] shrink-0 pt-6 pb-16 pr-5 sticky top-14 h-[calc(100vh-3.5rem)] overflow-y-auto border-r border-white/10">
+        <aside className="hidden lg:block w-[300px] shrink-0 pt-6 pb-16 pr-5 sticky top-14 h-[calc(100vh-3.5rem)] overflow-y-auto border-r border-slate-200">
           <ApiSidebar />
         </aside>
 
@@ -119,7 +131,7 @@ export function ApiReferenceLayout({
         </main>
 
         {rightRail ? (
-          <aside className="hidden xl:block w-[440px] shrink-0 pt-12 pb-16 pl-6 sticky top-14 h-[calc(100vh-3.5rem)] overflow-y-auto border-l border-white/10">
+          <aside className="hidden xl:block w-[440px] shrink-0 pt-12 pb-16 pl-6 sticky top-14 h-[calc(100vh-3.5rem)] overflow-y-auto border-l border-slate-200">
             {rightRail}
           </aside>
         ) : null}

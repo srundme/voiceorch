@@ -46,7 +46,12 @@ router.post("/scheduling/event-types", requireAuth, clientContext, async (req, r
   if (existing) { res.status(400).json({ error: "Slug already taken" }); return; }
 
   const [row] = await db.insert(eventTypesTable)
-    .values({ ...parsed.data, userId: clerkId })
+    .values({
+      ...parsed.data,
+      userId: clerkId,
+      // Default Meet on invites when client omits the flag (OpenAPI/zod still default false historically).
+      enableGoogleMeet: parsed.data.enableGoogleMeet ?? true,
+    })
     .returning();
   res.status(201).json(GetEventTypeResponse.parse(row));
 });

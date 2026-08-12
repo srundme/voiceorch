@@ -5,10 +5,40 @@ import { db, agentDispositionsTable, callDispositionsTable } from "@workspace/db
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { clientContext } from "../middlewares/clientContext.js";
 import { evictDispositionCache } from "../services/disposition.js";
+import { normalizeAfterCallMessagesInput } from "../services/agent-after-call-messages.js";
 
 const router = Router();
 
 const TaxonomyMapSchema = z.record(z.string(), z.array(z.string()));
+
+const MeaningMapSchema = z.object({
+  interested: z.array(z.string()).default([]),
+  callback:   z.array(z.string()).default([]),
+  dnc:        z.array(z.string()).default([]),
+}).nullable().optional();
+
+const WhatsappTemplateSchema = z.object({
+  name: z.string().min(1).max(256),
+  language: z.string().min(1).max(32).default("en"),
+}).nullable().optional();
+
+const AfterCallMessagesSchema = z.object({
+  universal: z.object({
+    whatsapp: z.boolean().optional().default(false),
+    email: z.boolean().optional().default(false),
+    whatsappTemplate: WhatsappTemplateSchema,
+  }).optional(),
+  skipUniversalWhenMatched: z.boolean().optional().default(true),
+  rules: z.array(z.object({
+    id: z.string().min(1).max(64),
+    dispositions: z.array(z.string().min(1)).min(1),
+    whatsapp: z.boolean().optional().default(false),
+    email: z.boolean().optional().default(false),
+    whatsappTemplate: WhatsappTemplateSchema,
+  })).optional().default([]),
+}).nullable().optional();
+
+const OutcomeGuidesSchema = z.record(z.string().min(1).max(120), z.string().max(2000)).optional();
 
 const UpsertConfigBody = z.object({
   taxonomy:     TaxonomyMapSchema,
@@ -25,6 +55,10 @@ const UpsertConfigBody = z.object({
     sub:        z.string(),
     confidence: z.number().min(0).max(1),
   })).optional().default([]),
+  meaningMap: MeaningMapSchema,
+  afterCallMessages: AfterCallMessagesSchema,
+  /** Business definition per outcome value (e.g. interested → "asked for demo…"). */
+  outcomeGuides: OutcomeGuidesSchema,
 });
 
 /* ── GET /api/disposition/config/:agentId ────────────────────────────────── */
@@ -41,11 +75,24 @@ router.get("/disposition/config/:agentId", requireAuth, clientContext, async (re
     .where(eq(agentDispositionsTable.agentId, agentId));
 
   if (!row) {
-    res.json({ agentId, taxonomy: {}, domainFields: [], rules: [] });
+    res.json({
+      agentId,
+      taxonomy: {},
+      domainFields: [],
+      rules: [],
+      meaningMap: { interested: [], callback: [], dnc: [] },
+      afterCallMessages: null,
+      outcomeGuides: {},
+    });
     return;
   }
 
-  res.json(row);
+  res.json({
+    ...row,
+    meaningMap: row.meaningMap ?? { interested: [], callback: [], dnc: [] },
+    afterCallMessages: row.afterCallMessages ?? null,
+    outcomeGuides: row.outcomeGuides ?? {},
+  });
 });
 
 /* ── PUT /api/disposition/config/:agentId ────────────────────────────────── */
@@ -62,7 +109,32 @@ router.put("/disposition/config/:agentId", requireAuth, clientContext, async (re
     return;
   }
 
-  const { taxonomy, domainFields, rules } = parsed.data;
+  const { taxonomy, domainFields, rules, meaningMap, afterCallMessages, outcomeGuides } = parsed.data;
+
+  const meaning =
+    meaningMap === undefined
+      ? undefined
+      : meaningMap === null
+        ? null
+        : {
+            interested: meaningMap.interested ?? [],
+            callback: meaningMap.callback ?? [],
+            dnc: meaningMap.dnc ?? [],
+          };
+
+  const afterMsgs =
+    afterCallMessages === undefined
+      ? undefined
+      : normalizeAfterCallMessagesInput(afterCallMessages);
+
+  const guides =
+    outcomeGuides === undefined
+      ? undefined
+      : Object.fromEntries(
+          Object.entries(outcomeGuides)
+            .map(([k, v]) => [k.trim(), (v ?? "").trim()] as const)
+            .filter(([k, v]) => k.length > 0 && v.length > 0),
+        );
 
   await db
     .insert(agentDispositionsTable)
@@ -71,6 +143,9 @@ router.put("/disposition/config/:agentId", requireAuth, clientContext, async (re
       taxonomy:     taxonomy as Record<string, string[]>,
       domainFields: domainFields as any,
       rules:        rules as any,
+      ...(meaning !== undefined ? { meaningMap: meaning } : {}),
+      ...(afterMsgs !== undefined ? { afterCallMessages: afterMsgs } : {}),
+      ...(guides !== undefined ? { outcomeGuides: guides } : {}),
     })
     .onConflictDoUpdate({
       target: agentDispositionsTable.agentId,
@@ -78,6 +153,9 @@ router.put("/disposition/config/:agentId", requireAuth, clientContext, async (re
         taxonomy:     taxonomy as Record<string, string[]>,
         domainFields: domainFields as any,
         rules:        rules as any,
+        ...(meaning !== undefined ? { meaningMap: meaning } : {}),
+        ...(afterMsgs !== undefined ? { afterCallMessages: afterMsgs } : {}),
+        ...(guides !== undefined ? { outcomeGuides: guides } : {}),
         updatedAt:    new Date(),
       },
     });

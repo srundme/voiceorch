@@ -91,10 +91,11 @@ import {
   type UiDomainFieldType,
   type StoredDomainField,
 } from "@/lib/disposition-fields";
+import { SnapServeAgentIcon } from "@/components/logo";
 import {
   ASR_PROVIDERS, LLM_PROVIDERS, TTS_PROVIDERS,
   LANGUAGES, SARVAM_PERSONALISATION_LANGUAGES, ASR_MODELS, LLM_MODELS, TTS_MODELS, TTS_VOICES, AGENT_TIMEZONES,
-  filterVoicesForLanguage, isVoiceCompatibleWithLanguage,
+  filterVoicesForLanguage, isVoiceCompatibleWithLanguage, shouldClearVoiceForLanguage,
   getSarvamTtsVoices, isSarvamVoiceCompatible,
   GEMINI_LIVE_LLM_MODEL, GEMINI_LIVE_THINKING_LEVELS,
   geminiLiveModelLabel, isGeminiLiveAgent, isGeminiLiveLlmModel, voiceStackForLlmModel,
@@ -113,7 +114,7 @@ import {
   type AgentTeamMembership,
 } from "./agent-team";
 import { ToolsWhatsappSetup, ToolsEmailSetup } from "./tools-messaging";
-import { MeetingsChannelCard } from "./meetings-channel-card";
+import { AgentAnalyticsPanel } from "./agent-analytics-panel";
 import {
   PropertyRow,
   StatusDot,
@@ -126,7 +127,7 @@ const DASH_API   = `${_DASH_BASE}/api`;
 
 /* ── Types ──────────────────────────────────────────────────────────────────── */
 
-type TabId = "overview" | "prompt" | "voice" | "tools" | "voicemail" | "settings" | "versions";
+type TabId = "overview" | "prompt" | "voice" | "tools" | "outcomes" | "analytics" | "voicemail" | "settings" | "versions";
 
 interface TabDef { id: TabId; label: string; icon: React.ReactNode }
 
@@ -135,6 +136,8 @@ const TABS: TabDef[] = [
   { id: "prompt",    label: "Prompt",    icon: <FileText className="h-3.5 w-3.5" /> },
   { id: "voice",     label: "Voice",     icon: <Mic className="h-3.5 w-3.5" /> },
   { id: "tools",     label: "Tools",     icon: <Wrench className="h-3.5 w-3.5" /> },
+  { id: "outcomes",  label: "Outcomes",  icon: <Tag className="h-3.5 w-3.5" /> },
+  { id: "analytics", label: "Analytics", icon: <BarChart3 className="h-3.5 w-3.5" /> },
   { id: "voicemail", label: "Voicemail", icon: <VoicemailIcon className="h-3.5 w-3.5" /> },
   { id: "settings",  label: "Settings",  icon: <Settings className="h-3.5 w-3.5" /> },
   { id: "versions",  label: "Versions",  icon: <History className="h-3.5 w-3.5" /> },
@@ -151,6 +154,12 @@ function sectionFromSearch(search: string): TabId {
   if (requested === "advanced") return "settings";
   // Channels removed — messaging/booking live under Tools.
   if (requested === "channels") return "tools";
+  // Disposition used to nest under Settings → Analytics.
+  if (requested === "disposition" || requested === "dispositions") {
+    return "outcomes";
+  }
+  // Old Settings → Analytics was webhooks; real agent analytics is its own tab now.
+  if (requested === "integrations") return "settings";
   return TABS.some((tab) => tab.id === requested) ? requested as TabId : "overview";
 }
 
@@ -516,11 +525,13 @@ function OverviewTab({
   form,
   agent,
   onGoToPrompt,
+  onGoToAnalytics,
   rateMap,
 }: {
   form: any;
   agent: any;
   onGoToPrompt?: () => void;
+  onGoToAnalytics?: () => void;
   rateMap: Map<string, number>;
 }) {
   const [openSection, setOpenSection] = useState<CardSection | null>(null);
@@ -600,18 +611,14 @@ function OverviewTab({
   }, [whitelistedData, language, ttsVoice, agent, myCartesiaClones]);
 
   // When the language changes (or the whitelist finishes loading), clear a
-  // selected curated voice that no longer supports the language — using the
-  // SAME shared compatibility rule as the list filter, so a voice visible in
-  // either section is never wiped by this effect. User-pasted custom IDs
-  // (not present in the whitelist) are left untouched.
+  // selected curated voice the language no longer offers. Membership of the
+  // OFFERED list is the test — testing the language tag directly would wipe
+  // picks the list legitimately shows for languages no vendor tags (Marathi),
+  // leaving the agent with no voice at all. User-pasted custom IDs (not present
+  // in the whitelist) are left untouched.
   useEffect(() => {
     if (ttsProvider !== "cartesia") return;
-    const all = whitelistedData?.voices ?? [];
-    if (all.length === 0) return;
-    if (!ttsVoice || ttsVoice === "__custom__") return;
-    const known = all.find(v => v.id === ttsVoice);
-    if (!known) return; // user-pasted custom ID — leave it alone
-    if (!isVoiceCompatibleWithLanguage(known.language, language)) {
+    if (shouldClearVoiceForLanguage(whitelistedData?.voices ?? [], ttsVoice, language)) {
       form.setValue("ttsVoice", "", { shouldDirty: true });
     }
   }, [language, whitelistedData, ttsProvider, ttsVoice, form]);
@@ -682,6 +689,11 @@ function OverviewTab({
   const llmModelLabel  = llmOptions.find((m: any) => m.value === llmModel)?.label ?? llmModel;
   const curatedVoiceOpts = ttsVoiceOpts.filter(v => v.value !== "__custom__");
   const inCuratedList    = curatedVoiceOpts.some(v => v.value === ttsVoice);
+  // Languages like Marathi have no vendor-tagged voices, so the picker falls back
+  // to the full catalog instead of going empty — tell the user that's what happened.
+  const showingAllVoicesForLanguage =
+    (whitelistedData?.voices ?? []).length > 0 &&
+    (whitelistedData?.voices ?? []).every(v => !isVoiceCompatibleWithLanguage(v.language, language));
   // Only show custom paste when user explicitly chose it, provider is free-form,
   // OR current voice ID is set but not in the curated list (edit existing custom).
   // Empty voice must NOT force custom mode — that hid the "Choose voice" dropdown.
@@ -793,18 +805,32 @@ function OverviewTab({
               </div>
               <AgentCostSummary form={form} rateMap={rateMap} variant="line" />
             </div>
-            {onGoToPrompt && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-8 gap-1.5 text-xs"
-                onClick={onGoToPrompt}
-              >
-                <FileText className="size-3.5" />
-                Edit prompt
-              </Button>
-            )}
+            <div className="flex flex-wrap items-center gap-2">
+              {onGoToAnalytics && agent?.id ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 gap-1.5 text-xs"
+                  onClick={onGoToAnalytics}
+                >
+                  <BarChart3 className="size-3.5" />
+                  Analytics
+                </Button>
+              ) : null}
+              {onGoToPrompt && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 gap-1.5 text-xs"
+                  onClick={onGoToPrompt}
+                >
+                  <FileText className="size-3.5" />
+                  Edit prompt
+                </Button>
+              )}
+            </div>
           </section>
 
           {/* Pipeline — primary composition */}
@@ -1225,9 +1251,9 @@ function OverviewTab({
                       </FormItem>
                     )} />
                   )}
-                  {ttsProvider === "cartesia" && (whitelistedData?.voices ?? []).length > 0 && curatedVoiceOpts.length === 0 && myCartesiaClones.length === 0 && (
-                    <p className="text-[10px] text-amber-400/80 leading-relaxed rounded-md border border-amber-500/20 bg-amber-500/5 px-2.5 py-2">
-                      No voices available for the selected language.
+                  {ttsProvider === "cartesia" && showingAllVoicesForLanguage && (
+                    <p className="text-[10px] text-muted-foreground leading-relaxed rounded-md border border-border bg-muted/40 px-2.5 py-2">
+                      No voices are tagged for {langLabel} — showing every available voice. Most multilingual voices speak it well; preview a few to pick one.
                     </p>
                   )}
                   {showCustomVoiceInput && (
@@ -1468,7 +1494,13 @@ function PromptTab({ form, agentId }: { form: any; agentId?: number }) {
               <ul className="mt-1.5 list-disc space-y-0.5 pl-4">
                 <li>People may ask you to wait 2–3 minutes for others — stay quiet after one acknowledgment.</li>
                 <li>Speaker tags like <span className="font-mono text-[10px]">[Speaker: Name]</span> are for you; never read them aloud.</li>
-                <li>Waiting patience &amp; max length are under <span className="text-foreground/80">Tools → Meetings</span> (not Engine phone silence).</li>
+                <li>
+                  Waiting patience &amp; max length are on{" "}
+                  <Link href={agentId ? `/app/meet?agentId=${agentId}` : "/app/meet"} className="text-foreground/80 underline underline-offset-2">
+                    Meeting bots
+                  </Link>{" "}
+                  (not Engine phone silence).
+                </li>
               </ul>
             </div>
             <FormField control={form.control} name="meetingPrompt" render={({ field }) => (
@@ -1493,7 +1525,11 @@ function PromptTab({ form, agentId }: { form: any; agentId?: number }) {
               </FormItem>
             )} />
             <p className="text-[11px] text-muted-foreground">
-              Phone + meetings agents can join Meet/Zoom/Teams from the Meet page (paste link) or from a booking. Configure wait time, max length, and deck under Tools → Meetings.
+              Phone + meetings agents can join Meet/Zoom/Teams from{" "}
+              <Link href={agentId ? `/app/meet?agentId=${agentId}` : "/app/meet"} className="underline underline-offset-2">
+                Meeting bots
+              </Link>{" "}
+              (paste link) or from a booking. Configure wait time, max length, and deck there — not under Tools.
             </p>
           </TabsContent>
         </Tabs>
@@ -1680,19 +1716,12 @@ function VoiceTab({ form }: { form: any }) {
     return opts;
   }, [whitelistedData, agentLanguage, ttsVoice, myCartesiaClonesV]);
 
-  // When the language changes (or the whitelist finishes loading), clear a
-  // selected curated voice that no longer supports the language — using the
-  // SAME shared compatibility rule as the Overview section, so mounting either
-  // section never wipes a compatible voice. User-pasted custom IDs (not
-  // present in the whitelist) are left untouched.
+  // Same rule as the Overview section: membership of the offered list, not the
+  // raw language tag, so mounting either section never wipes a voice the other
+  // one showed. User-pasted custom IDs are left untouched.
   useEffect(() => {
     if (ttsProvider !== "cartesia") return;
-    const all = whitelistedData?.voices ?? [];
-    if (all.length === 0) return;
-    if (!ttsVoice || ttsVoice === "__custom__") return;
-    const known = all.find(v => v.id === ttsVoice);
-    if (!known) return; // user-pasted custom ID — leave it alone
-    if (!isVoiceCompatibleWithLanguage(known.language, agentLanguage)) {
+    if (shouldClearVoiceForLanguage(whitelistedData?.voices ?? [], ttsVoice, agentLanguage)) {
       form.setValue("ttsVoice", "", { shouldDirty: true });
     }
   }, [agentLanguage, whitelistedData, ttsProvider, ttsVoice, form]);
@@ -1749,6 +1778,9 @@ function VoiceTab({ form }: { form: any }) {
   const ttsModelOptsV = TTS_MODELS[ttsProvider] ?? [];
   const curatedVoiceOptsV = ttsVoiceOptsV.filter(v => v.value !== "__custom__");
   const inCuratedV        = curatedVoiceOptsV.some(v => v.value === ttsVoice);
+  const showingAllVoicesForLanguageV =
+    (whitelistedData?.voices ?? []).length > 0 &&
+    (whitelistedData?.voices ?? []).every(v => !isVoiceCompatibleWithLanguage(v.language, agentLanguage));
   // Don't force custom mode when voice is empty — that hid the Choose Voice dropdown.
   const showCustomV =
     ttsVoiceRawV === null
@@ -2042,9 +2074,9 @@ function VoiceTab({ form }: { form: any }) {
               )} />
             )}
 
-            {ttsProvider === "cartesia" && (whitelistedData?.voices ?? []).length > 0 && curatedVoiceOptsV.length === 0 && myCartesiaClonesV.length === 0 && (
-              <p className="text-xs text-amber-400/80 leading-relaxed rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2.5 col-span-2">
-                No voices available for the selected language.
+            {ttsProvider === "cartesia" && showingAllVoicesForLanguageV && (
+              <p className="text-xs text-muted-foreground leading-relaxed rounded-md border border-border bg-muted/40 px-3 py-2.5 col-span-2">
+                No voices are tagged for this language — showing every available voice. Most multilingual voices speak it well; preview a few to pick one.
               </p>
             )}
 
@@ -2284,26 +2316,44 @@ function VoiceTab({ form }: { form: any }) {
   );
 }
 
-/** Voice-tab Call Engine presets — writes the same form keys as Advanced → Engine. */
-function VoiceCallFeelPresets({ form }: { form: any }) {
+/**
+ * Call Engine preset state shared by the Voice tab and Settings → Engine.
+ *
+ * A preset (Fast / Balanced / Patient) is a STARTING POINT, not a lock: the
+ * chosen preset stays selected while the user fine-tunes the individual knobs,
+ * and the edited values save exactly as set. There is no "Custom" mode — a
+ * `tweaked` flag just signals the values now differ from the named preset.
+ */
+function useCallEnginePreset(form: any): {
+  preset: CallEnginePreset;
+  tweaked: boolean;
+  applyPreset: (key: CallEnginePreset) => void;
+} {
   const asrProviderVal = form.watch("asrProvider") as string | undefined;
   const endpointMs = form.watch("asrEndpointingSilenceMs") ?? 250;
   const linearMs = form.watch("linearDelayMs") ?? 0;
   const interruptWords = form.watch("stopSpeakingNumWords") ?? 3;
+  const vad = form.watch("sarvamHighVadSensitivity") ?? false;
 
-  const activePreset: CallEnginePreset | "custom" = (() => {
-    for (const key of Object.keys(CALL_ENGINE_PRESETS) as CallEnginePreset[]) {
-      const p = CALL_ENGINE_PRESETS[key];
-      if (
-        endpointMs === p.asrEndpointingSilenceMs
-        && linearMs === p.linearDelayMs
-        && interruptWords === p.stopSpeakingNumWords
-        && (asrProviderVal !== "sarvam"
-          || (form.watch("sarvamHighVadSensitivity") ?? false) === p.sarvamHighVadSensitivity)
-      ) return key;
-    }
-    return "custom";
-  })();
+  const matches = (key: CallEnginePreset): boolean => {
+    const p = CALL_ENGINE_PRESETS[key];
+    return (
+      endpointMs === p.asrEndpointingSilenceMs
+      && linearMs === p.linearDelayMs
+      && interruptWords === p.stopSpeakingNumWords
+      && (asrProviderVal !== "sarvam" || vad === p.sarvamHighVadSensitivity)
+    );
+  };
+  const derived = (Object.keys(CALL_ENGINE_PRESETS) as CallEnginePreset[]).find(matches) ?? null;
+
+  // The selected chip. Seeded from the saved values; falls back to Balanced for
+  // legacy agents whose values match no preset (never shown as "Custom").
+  const [pinned, setPinned] = useState<CallEnginePreset>(derived ?? "balanced");
+  // Follow the values when they land exactly on a (possibly different) preset —
+  // e.g. the user drags the knobs until they match Fast.
+  useEffect(() => {
+    if (derived && derived !== pinned) setPinned(derived);
+  }, [derived]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const applyPreset = (key: CallEnginePreset) => {
     const p = CALL_ENGINE_PRESETS[key];
@@ -2313,7 +2363,16 @@ function VoiceCallFeelPresets({ form }: { form: any }) {
     form.setValue("stopSpeakingVoiceSecs", voiceSecondsFromInterruptWords(p.stopSpeakingNumWords), { shouldDirty: true });
     // Sarvam pause-detection is part of the preset — Fast without it leaves a ~2s turn tax.
     form.setValue("sarvamHighVadSensitivity", p.sarvamHighVadSensitivity, { shouldDirty: true });
+    setPinned(key);
   };
+
+  return { preset: pinned, tweaked: !matches(pinned), applyPreset };
+}
+
+/** Voice-tab Call Engine presets — writes the same form keys as Advanced → Engine. */
+function VoiceCallFeelPresets({ form }: { form: any }) {
+  const asrProviderVal = form.watch("asrProvider") as string | undefined;
+  const { preset: activePreset, tweaked, applyPreset } = useCallEnginePreset(form);
 
   return (
     <section className="space-y-3">
@@ -2351,9 +2410,9 @@ function VoiceCallFeelPresets({ form }: { form: any }) {
               {p.label}
             </button>
           ))}
-          {activePreset === "custom" && (
-            <span className="px-2.5 py-1.5 rounded-lg text-[11px] text-muted-foreground/80 border border-dashed border-border/50">
-              Custom
+          {tweaked && (
+            <span className="px-2 py-1.5 text-[11px] text-muted-foreground/70 self-center">
+              edited — saves as set
             </span>
           )}
         </div>
@@ -2481,11 +2540,11 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
       if (!agentId) {
         toast({ title: "Save agent first", description: "Save this agent before configuring calendar tools.", variant: "destructive" });
       } else if (!agentCalendar) {
-        toast({ title: "No calendar configured", description: "Finish Calendar & booking under Connections first.", variant: "destructive" });
+        toast({ title: "No calendar configured", description: "Finish Bookings calendar under Connections first.", variant: "destructive" });
       } else if (!(agentCalendar as any).connectedGoogleEmail) {
-        toast({ title: "Google not connected", description: `Connect Google for "${agentCalendar.name}" under Connections → Calendar & booking.`, variant: "destructive" });
+        toast({ title: "Google not connected", description: `Connect Google for "${agentCalendar.name}" under Connections → Bookings calendar.`, variant: "destructive" });
       } else if ((agentEventTypes ?? []).length === 0) {
-        toast({ title: "No meeting set up", description: "Create a meeting under Connections → Calendar & booking before using booking.", variant: "destructive" });
+        toast({ title: "No meeting set up", description: "Create a meeting under Connections → Bookings calendar before using booking.", variant: "destructive" });
       }
     } else {
       replace(current.filter((t: any) => !(BOOKING_TYPES as readonly string[]).includes(t.type)));
@@ -2594,7 +2653,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
       icon: <Mail className="h-4 w-4" />,
       color: "sky",
       label: "Send Email",
-      description: "Lets the agent email the caller mid-call using your Brevo sender (configure below). Asks for their address, then sends the email template.",
+      description: "Lets the agent email mid-call. Connect Brevo under Connections first; pick templates there.",
       needsEventType: false,
     },
     {
@@ -2602,7 +2661,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
       icon: <MessageCircle className="h-4 w-4" />,
       color: "emerald",
       label: "Send WhatsApp",
-      description: "Lets the agent send a WhatsApp template mid-call. Pick connection + templates below when enabled.",
+      description: "Mid-call WhatsApp only. After-call messages are on the Outcomes tab. Connect WhatsApp under Connections first.",
       needsEventType: false,
     },
   ] as const;
@@ -2675,16 +2734,16 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                 <div className="mt-1.5 space-y-1">
                   <p className="text-[11px] leading-relaxed text-muted-foreground">
                     {canAttendMeetings
-                      ? "This is a phone + meetings agent — Booking can create Meet links; join settings are under Meetings below (works for paste-link too)."
-                      : "Phone-only agent — can book the calendar, but will not join the Meet."}
+                      ? "Booking creates calendar invites with a Meet link. To send this agent into the room, use Meeting bots (/app/meet) — separate from booking."
+                      : "Phone-only is supported: Booking still creates calendar invites with a Meet link for humans to attend. The AI will not join the room."}
                   </p>
                   {!canAttendMeetings && (
                     <button
                       type="button"
-                      className="text-[11px] font-medium text-foreground underline underline-offset-2"
+                      className="text-[11px] font-medium text-muted-foreground underline underline-offset-2 hover:text-foreground"
                       onClick={() => form.setValue("agentSurfaces", "phone_and_meet", { shouldDirty: true })}
                     >
-                      Upgrade to phone + meetings (joins Meet) — then Save
+                      Optional: upgrade to phone + meetings if you want the AI to join Meet — then Save
                     </button>
                   )}
                 </div>
@@ -2752,7 +2811,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                     <p className="text-[10px] text-amber-400/80">
                       {!calendarIdForEt ? "No calendar yet. " : "No meeting yet. "}
                       <Link href="/app/connections?setup=calendar" className="underline underline-offset-2">
-                        Finish Calendar & booking setup
+                        Finish Bookings calendar setup
                       </Link>
                       .
                     </p>
@@ -2888,35 +2947,38 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
           )}
         </div>
 
-        {/* Meeting join settings — independent of Booking (paste-link Meet bots need this too). */}
+        {/* Meeting bots — join actions live on /app/meet; Tools only explains capability. */}
         {canAttendMeetings && (
           <>
             <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-1 mt-4">
-              Meetings
+              Meeting bots
             </p>
             <div className="rounded-xl border border-border/70 bg-card/40 p-4">
-              <div className="mb-3 flex items-start gap-3">
+              <div className="flex items-start gap-3">
                 <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted/30">
                   <Video className="h-4 w-4 text-foreground/70" />
                 </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-semibold text-foreground/80">Meeting settings</p>
-                  <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground/60">
-                    Applies whenever this agent joins Meet/Zoom/Teams — paste-link from the Meet page or auto-join from a booking. Booking tools are optional.
+                <div className="min-w-0 flex-1 space-y-2">
+                  <p className="text-xs font-semibold text-foreground/80">Can join Meet / Zoom / Teams</p>
+                  <p className="text-[11px] leading-relaxed text-muted-foreground/60">
+                    Join now, calendar Join toggles, and bot settings (waiting room, slides) live on the Meeting bots page — not here.
+                    Booking a calendar slot is separate (switch above).
                   </p>
+                  {agentId ? (
+                    <Button asChild type="button" variant="outline" size="sm" className="h-7 text-[11px]">
+                      <Link href={`/app/meet?agentId=${agentId}`}>Open Meeting bots</Link>
+                    </Button>
+                  ) : (
+                    <p className="text-[11px] text-amber-400/80">Save the agent first, then open Meeting bots.</p>
+                  )}
                 </div>
               </div>
-              {agentId ? (
-                <MeetingsChannelCard agentId={agentId} showJoinLink={false} />
-              ) : (
-                <p className="text-[11px] text-amber-400/80">Save the agent first to edit meeting settings.</p>
-              )}
             </div>
           </>
         )}
 
         <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-1 mt-4">Messaging</p>
-        {CALL_CONTROL_TOOLS.filter((t) => t.type === "send_email" || t.type === "send_whatsapp").map(({ type, icon, color, label, description }) => {
+        {CALL_CONTROL_TOOLS.filter((t) => t.type === "send_email" || t.type === "send_whatsapp").map(({ type, icon, label, description }) => {
           const isOn = hasNativeTool(type);
           return (
             <div key={type} className={cn("rounded-xl border transition-all duration-150", isOn ? "border-border/70 bg-card/40" : "border-border/40 bg-card/20")}>
@@ -3147,19 +3209,21 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
         <div className="flex items-center justify-between mb-3">
           <div>
             <h3 className="text-sm font-semibold mb-0.5">Custom Tools</h3>
-            <p className="text-xs text-muted-foreground">Your own HTTP functions the LLM can invoke mid-conversation</p>
+            <p className="text-xs text-muted-foreground">
+              Mid-call HTTP to your API (while talking). Not the same as post-call notify or Developers event subscriptions.
+            </p>
           </div>
           <Button type="button" variant="outline" size="sm" className="h-7 text-xs"
             onClick={() => append({ type: "webhook", name: "custom_action", description: "Invoke when caller requests a specific action.", url: "", method: "POST", secret: "", preToolMessage: "One moment…", parameters: [] })}>
-            <Webhook className="h-3.5 w-3.5 mr-1" /> Custom Function
+            <Webhook className="h-3.5 w-3.5 mr-1" /> Mid-call HTTP
           </Button>
         </div>
 
         {(form.watch("tools") ?? []).filter((t: { type: string }) => t.type === "webhook").length === 0 ? (
           <div className="rounded-xl border border-dashed border-border/50 p-8 text-center">
             <Wrench className="h-7 w-7 text-muted-foreground/20 mx-auto mb-2" />
-            <p className="text-sm font-medium text-muted-foreground/50">No custom tools</p>
-            <p className="text-xs text-muted-foreground/30 mt-0.5">Add a Custom Function above</p>
+            <p className="text-sm font-medium text-muted-foreground/50">No mid-call HTTP tools</p>
+            <p className="text-xs text-muted-foreground/30 mt-0.5">Add Mid-call HTTP above</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -3170,7 +3234,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                 <div key={field.id} className="rounded-xl border border-border/60 bg-card/30 p-4 space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-                      <Webhook className="h-3 w-3" />Custom Function
+                      <Webhook className="h-3 w-3" />Mid-call HTTP
                     </span>
                     <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => remove(index)}>
                       <Trash2 className="h-3.5 w-3.5" />
@@ -3398,39 +3462,14 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
 
   const bargeIn = form.watch("bargeInEnabled");
   const asrProviderVal = form.watch("asrProvider") as string | undefined;
-  const endpointMs = form.watch("asrEndpointingSilenceMs") ?? 250;
-  const linearMs = form.watch("linearDelayMs") ?? 0;
-  const interruptWords = form.watch("stopSpeakingNumWords") ?? 3;
-
-  const activePreset: CallEnginePreset | "custom" = (() => {
-    for (const key of Object.keys(CALL_ENGINE_PRESETS) as CallEnginePreset[]) {
-      const p = CALL_ENGINE_PRESETS[key];
-      if (
-        endpointMs === p.asrEndpointingSilenceMs
-        && linearMs === p.linearDelayMs
-        && interruptWords === p.stopSpeakingNumWords
-        && (asrProviderVal !== "sarvam"
-          || (form.watch("sarvamHighVadSensitivity") ?? false) === p.sarvamHighVadSensitivity)
-      ) return key;
-    }
-    return "custom";
-  })();
-
-  const applyPreset = (key: CallEnginePreset) => {
-    const p = CALL_ENGINE_PRESETS[key];
-    form.setValue("asrEndpointingSilenceMs", p.asrEndpointingSilenceMs, { shouldDirty: true });
-    form.setValue("linearDelayMs", p.linearDelayMs, { shouldDirty: true });
-    form.setValue("stopSpeakingNumWords", p.stopSpeakingNumWords, { shouldDirty: true });
-    form.setValue("stopSpeakingVoiceSecs", voiceSecondsFromInterruptWords(p.stopSpeakingNumWords), { shouldDirty: true });
-    // Sarvam pause-detection is part of the preset — Fast without it leaves a ~2s turn tax.
-    form.setValue("sarvamHighVadSensitivity", p.sarvamHighVadSensitivity, { shouldDirty: true });
-  };
+  const { preset: activePreset, tweaked, applyPreset } = useCallEnginePreset(form);
 
   const nav: { id: AdvSection; icon: React.ReactNode; label: string }[] = [
-    { id: "engine",       icon: <Timer className="h-3.5 w-3.5" />,       label: "Engine"       },
-    { id: "limits",       icon: <Gauge className="h-3.5 w-3.5" />,       label: "Limits"       },
-    { id: "integrations", icon: <BarChart3 className="h-3.5 w-3.5" />,   label: "Analytics" },
-    { id: "compliance",   icon: <ShieldCheck className="h-3.5 w-3.5" />, label: "Compliance"   },
+    { id: "engine",       icon: <Timer className="h-3.5 w-3.5" />,       label: "Engine"     },
+    { id: "limits",       icon: <Gauge className="h-3.5 w-3.5" />,       label: "Limits"     },
+    // Post-call notify for this agent — not Developers event subscriptions or campaign form intake.
+    { id: "integrations", icon: <Webhook className="h-3.5 w-3.5" />,     label: "Post-call notify" },
+    { id: "compliance",   icon: <ShieldCheck className="h-3.5 w-3.5" />, label: "Compliance" },
   ];
 
   return (
@@ -3438,7 +3477,7 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
       <div className="border-b border-border/40 px-4 pt-5 sm:px-6 lg:px-8">
         <h2 className="text-[15px] font-semibold tracking-[-0.02em]">Settings</h2>
         <p className="mt-0.5 text-[12px] text-muted-foreground">
-          Engine timing, call limits, analytics webhooks, dispositions, and compliance.
+          Engine timing, call limits, post-call notify URL, and compliance. Outcomes &amp; after-call messages are on the Outcomes tab.
         </p>
         {/* ── Sub-nav ── */}
         <div className="mt-3 flex flex-shrink-0 items-center gap-1 pb-3">
@@ -3494,8 +3533,8 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                   {p.label}
                 </button>
               ))}
-              {activePreset === "custom" && (
-                <span className="px-2 py-1.5 text-[11px] text-muted-foreground/70">Custom</span>
+              {tweaked && (
+                <span className="px-2 py-1.5 text-[11px] text-muted-foreground/70 self-center">edited — saves as set</span>
               )}
             </div>
 
@@ -3914,9 +3953,10 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
         {section === "integrations" && (
           <>
             <div>
-              <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">CRM / post-call webhook</h3>
+              <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Post-call notify</h3>
               <p className="text-[11px] text-muted-foreground mt-0.5">
-                Notify your CRM or Zap after a call ends. Leave blank if unused.
+                After <em>this</em> agent finishes a call, POST JSON to your CRM or Zap. Leave blank if unused.
+                Workspace-wide event subscriptions live under Developers → Event subscriptions.
               </p>
             </div>
             <div className="space-y-3 rounded-xl border border-border/50 bg-card/40 p-4">
@@ -3926,7 +3966,7 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                 const isHttp  = val.length > 0 && val.startsWith("http://");
                 return (
                   <FormItem className="space-y-1">
-                    <FormLabel className="text-[10px] text-muted-foreground uppercase tracking-wider">Webhook URL</FormLabel>
+                    <FormLabel className="text-[10px] text-muted-foreground uppercase tracking-wider">Notify URL</FormLabel>
                     <FormControl>
                       <Input
                         placeholder="https://your-server.com/voiceorch-webhook"
@@ -3972,8 +4012,10 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                 </FormItem>
               )} />
             </div>
-
-            <DispositionSettingsPanel agentId={agent?.id ?? 0} />
+            <p className="text-[11px] text-muted-foreground">
+              Disposition taxonomy and after-call WhatsApp / email live on the{" "}
+              <span className="text-foreground/80">Outcomes</span> tab.
+            </p>
           </>
         )}
 
@@ -4128,18 +4170,92 @@ function AgentListPanel({ selectedId, onSelect, className }: {
 
 /* ── Tab: Analysis (Journey) ────────────────────────────────────────────────── */
 
+type MeaningMapState = {
+  interested: string[];
+  callback: string[];
+  dnc: string[];
+};
+
+type AfterCallMsgRule = {
+  id: string;
+  dispositions: string[];
+  whatsapp: boolean;
+  email: boolean;
+};
+
+type AfterCallMessagesState = {
+  universal: { whatsapp: boolean; email: boolean };
+  skipUniversalWhenMatched: boolean;
+  rules: AfterCallMsgRule[];
+};
+
+const EMPTY_AFTER_CALL_MESSAGES: AfterCallMessagesState = {
+  universal: { whatsapp: false, email: false },
+  skipUniversalWhenMatched: true,
+  rules: [],
+};
+
+function readAfterCallMessages(raw: unknown): AfterCallMessagesState {
+  if (!raw || typeof raw !== "object") return { ...EMPTY_AFTER_CALL_MESSAGES, rules: [] };
+  const o = raw as Record<string, unknown>;
+  const u = o["universal"] && typeof o["universal"] === "object"
+    ? (o["universal"] as Record<string, unknown>)
+    : {};
+  const rules = Array.isArray(o["rules"])
+    ? o["rules"]
+        .map((item) => {
+          if (!item || typeof item !== "object") return null;
+          const r = item as Record<string, unknown>;
+          const dispositions = Array.isArray(r["dispositions"])
+            ? r["dispositions"].filter((d): d is string => typeof d === "string" && !!d.trim())
+            : [];
+          if (!dispositions.length) return null;
+          return {
+            id: typeof r["id"] === "string" && r["id"] ? r["id"] : crypto.randomUUID(),
+            dispositions,
+            whatsapp: !!r["whatsapp"],
+            email: !!r["email"],
+          };
+        })
+        .filter((r): r is AfterCallMsgRule => !!r)
+    : [];
+  return {
+    universal: { whatsapp: !!u["whatsapp"], email: !!u["email"] },
+    skipUniversalWhenMatched: o["skipUniversalWhenMatched"] !== false,
+    rules,
+  };
+}
+
 type DispConfigRow = {
   taxonomy: Record<string, string[]>;
   domainFields?: StoredDomainField[];
   rules?: unknown[];
+  meaningMap?: MeaningMapState | null;
+  afterCallMessages?: unknown;
+  outcomeGuides?: Record<string, string> | null;
 };
 
 function DispositionSettingsPanel({ agentId }: { agentId: number }) {
   const { toast } = useToast();
+  const qc = useQueryClient();
+  const [, navigate] = useLocation();
   const [categories, setCategories] = useState<DispositionCategory[]>([]);
   const [fields, setFields] = useState<UiDomainField[]>([]);
   const [rules, setRules] = useState<unknown[]>([]);
+  const [meaningMap, setMeaningMap] = useState<MeaningMapState>({
+    interested: [],
+    callback: [],
+    dnc: [],
+  });
+  const [outcomeGuides, setOutcomeGuides] = useState<Record<string, string>>({});
+  const [afterCallMessages, setAfterCallMessages] = useState<AfterCallMessagesState>(EMPTY_AFTER_CALL_MESSAGES);
   const [dirty, setDirty] = useState(false);
+
+  const connectionsReturn = (setup: "whatsapp" | "email") => {
+    const returnTo = encodeURIComponent(`/app/agents/${agentId}?section=outcomes`);
+    const returnLabel = encodeURIComponent("Outcomes");
+    navigate(`/app/connections?setup=${setup}&agentId=${agentId}&returnTo=${returnTo}&returnLabel=${returnLabel}`);
+  };
 
   const { data: dispConfig, isLoading: dispLoading } = useQuery<DispConfigRow | null>({
     queryKey: ["disposition-config", agentId],
@@ -4154,13 +4270,88 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
     enabled: agentId > 0,
   });
 
+  const { data: waConnections } = useQuery({
+    queryKey: ["builder-whatsapp-connections", agentId],
+    queryFn: () =>
+      customFetch<{
+        connections: Array<{ id: string; active: boolean; agentId: number | null }>;
+      }>(`${DASH_API}/whatsapp/connections`),
+    staleTime: 60_000,
+    enabled: agentId > 0,
+  });
+  const { data: waChannel } = useQuery({
+    queryKey: ["builder-whatsapp-channel", agentId],
+    queryFn: () =>
+      customFetch<{ channel: { active?: boolean } | null }>(`${DASH_API}/whatsapp/channel`),
+    staleTime: 60_000,
+    enabled: agentId > 0,
+  });
+  const { data: emailChannel } = useQuery({
+    queryKey: ["email-channel"],
+    queryFn: () =>
+      customFetch<{ channel: { active?: boolean } | null }>(`${DASH_API}/email/channel`),
+    staleTime: 60_000,
+    enabled: agentId > 0,
+  });
+
+  const waConnList = Array.isArray(waConnections?.connections) ? waConnections.connections : [];
+  const whatsappReady = !!(
+    waConnList.some((c) => c.active && (c.agentId === agentId || c.agentId == null)) ||
+    waChannel?.channel?.active
+  );
+  const emailReady = !!emailChannel?.channel?.active;
+
   useEffect(() => {
     if (!dispConfig) return;
     setCategories(taxonomyToCategories(dispConfig.taxonomy ?? {}));
     setFields((dispConfig.domainFields ?? []).map(fromStoredDomainField));
     setRules(Array.isArray(dispConfig.rules) ? dispConfig.rules : []);
+    setMeaningMap({
+      interested: Array.isArray(dispConfig.meaningMap?.interested)
+        ? [...dispConfig.meaningMap!.interested]
+        : [],
+      callback: Array.isArray(dispConfig.meaningMap?.callback)
+        ? [...dispConfig.meaningMap!.callback]
+        : [],
+      dnc: Array.isArray(dispConfig.meaningMap?.dnc) ? [...dispConfig.meaningMap!.dnc] : [],
+    });
+    setOutcomeGuides(
+      dispConfig.outcomeGuides && typeof dispConfig.outcomeGuides === "object"
+        ? { ...dispConfig.outcomeGuides }
+        : {},
+    );
+    setAfterCallMessages(readAfterCallMessages(dispConfig.afterCallMessages));
     setDirty(false);
   }, [dispConfig]);
+
+  /** After-call rules: primary + primary:sub (matches dispositionMatchesAny). */
+  const dispositionKeys = useMemo(() => {
+    const tax = categoriesToTaxonomy(categories);
+    const out: string[] = [];
+    for (const [primary, subs] of Object.entries(tax)) {
+      out.push(primary);
+      for (const sub of subs ?? []) {
+        if (sub && sub !== primary) out.push(`${primary}:${sub}`);
+      }
+    }
+    return out;
+  }, [categories]);
+
+  /** Business-definition prompts: the labels AI actually picks (taxonomy values). */
+  const outcomeGuideKeys = useMemo(() => {
+    const tax = categoriesToTaxonomy(categories);
+    const out: string[] = [];
+    const seen = new Set<string>();
+    for (const vals of Object.values(tax)) {
+      for (const v of vals ?? []) {
+        const key = v.trim();
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        out.push(key);
+      }
+    }
+    return out;
+  }, [categories]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -4173,14 +4364,43 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
       const domainFields = fields
         .map(toStoredDomainField)
         .filter((f): f is StoredDomainField => !!f);
+      // Don't persist empty after-call config on first save — that would gate off legacy always-on WhatsApp.
+      const persistAfterCall =
+        dispConfig?.afterCallMessages != null ||
+        afterCallMessages.universal.whatsapp ||
+        afterCallMessages.universal.email ||
+        afterCallMessages.rules.length > 0;
+      const allowed = new Set<string>();
+      for (const [primary, vals] of Object.entries(taxonomy)) {
+        for (const v of vals ?? []) {
+          const t = v.trim();
+          if (!t) continue;
+          allowed.add(t);
+          allowed.add(`${primary}:${t}`);
+        }
+      }
+      const guides: Record<string, string> = {};
+      for (const [k, v] of Object.entries(outcomeGuides)) {
+        const key = k.trim();
+        const text = (v ?? "").trim();
+        if (key && text && allowed.has(key)) guides[key] = text;
+      }
       await customFetch(`${DASH_API}/disposition/config/${agentId}`, {
         method: "PUT",
-        body: JSON.stringify({ taxonomy, domainFields, rules }),
+        body: JSON.stringify({
+          taxonomy,
+          domainFields,
+          rules,
+          meaningMap,
+          outcomeGuides: guides,
+          ...(persistAfterCall ? { afterCallMessages } : {}),
+        }),
       });
     },
     onSuccess: () => {
-      toast({ title: "Disposition config saved" });
+      toast({ title: "Outcomes saved" });
       setDirty(false);
+      void qc.invalidateQueries({ queryKey: ["disposition-config", agentId] });
     },
     onError: () => {
       toast({ title: "Failed to save", variant: "destructive" });
@@ -4252,7 +4472,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
       <div>
         <div className="flex items-center gap-2 mb-1">
           <Tag className="h-4 w-4 text-amber-400" />
-          <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Call Disposition</h3>
+          <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Outcomes</h3>
         </div>
         <p className="text-[11px] text-muted-foreground mt-0.5">
           Save the agent first to define outcomes and data fields.
@@ -4266,10 +4486,11 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
       <div>
         <div className="flex items-center gap-2 mb-1">
           <Tag className="h-4 w-4 text-amber-400" />
-          <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Call Disposition</h3>
+          <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Outcomes</h3>
         </div>
         <p className="text-[11px] text-muted-foreground">
-          After each call, AI picks an outcome and fills the data fields you define (WhatsApp, email, city…). Values show on the call detail page.
+          After each call, AI reads the transcript, picks one of <em>your</em> outcome labels
+          (using the business definitions you write), and extracts data fields as structured values.
         </p>
       </div>
 
@@ -4283,8 +4504,10 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
           <div>
             <div className="flex items-center justify-between mb-2">
               <div>
-                <h4 className="text-xs font-semibold text-foreground">Outcomes</h4>
-                <p className="text-[10px] text-muted-foreground mt-0.5">Category → allowed values the AI can pick</p>
+                <h4 className="text-xs font-semibold text-foreground">Outcome labels</h4>
+                <p className="text-[10px] text-muted-foreground mt-0.5">
+                  Add labels, then define what each means for your business — that text is what the AI uses.
+                </p>
               </div>
               <Button type="button" variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={addCategory}>
                 <Plus className="h-3.5 w-3.5" /> Add category
@@ -4326,7 +4549,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                         </div>
                         <div className="space-y-1">
                           <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
-                            Values <span className="normal-case">(comma-separated)</span>
+                            Labels <span className="normal-case">(comma-separated)</span>
                           </label>
                           <Input
                             className="h-8 text-xs"
@@ -4346,15 +4569,313 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     </div>
-                    {cat.values && (
-                      <div className="flex flex-wrap gap-1 mt-3">
-                        {cat.values.split(",").map((v) => v.trim()).filter(Boolean).map((v) => (
-                          <span key={v} className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                            {v}
-                          </span>
-                        ))}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* ── Per-outcome business definitions ─────────────────────── */}
+          {outcomeGuideKeys.length > 0 && (
+            <div>
+              <div className="mb-2">
+                <h4 className="text-xs font-semibold text-foreground">What each label means</h4>
+                <p className="text-[10px] text-muted-foreground mt-0.5">
+                  Your definitions — not a sales funnel. Example for <span className="font-mono">interested</span>:
+                  “Asked for pricing, budget confirmed, or agreed to a site visit this week.”
+                </p>
+              </div>
+              <div className="space-y-2.5">
+                {outcomeGuideKeys.map((key) => (
+                  <div key={key} className="rounded-xl border border-border/60 bg-card/20 p-3 space-y-1.5">
+                    <label className="text-[12px] font-medium text-foreground font-mono">{key}</label>
+                    <Textarea
+                      className="min-h-[72px] resize-y text-[12px] leading-relaxed"
+                      placeholder={`When should AI pick “${key}” for your business? List the call signals…`}
+                      value={outcomeGuides[key] ?? ""}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setOutcomeGuides((prev) => {
+                          const next = { ...prev };
+                          if (!v.trim()) delete next[key];
+                          else next[key] = v;
+                          return next;
+                        });
+                        setDirty(true);
+                      }}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── After-call messages (agent-owned) ─────────────────────── */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <MessageCircle className="h-3.5 w-3.5 text-muted-foreground" />
+                  <h4 className="text-xs font-semibold text-foreground">After-call messages</h4>
+                </div>
+                <p className="text-[10px] text-muted-foreground mt-0.5">
+                  WhatsApp / email after the call ends. Connecting channels opens a setup page — use Back to Outcomes when finished.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs gap-1"
+                disabled={dispositionKeys.length === 0}
+                onClick={() => {
+                  setAfterCallMessages((prev) => ({
+                    ...prev,
+                    rules: [
+                      ...prev.rules,
+                      {
+                        id: crypto.randomUUID(),
+                        dispositions: dispositionKeys[0] ? [dispositionKeys[0]] : [],
+                        whatsapp: true,
+                        email: false,
+                      },
+                    ],
+                  }));
+                  setDirty(true);
+                }}
+              >
+                <Plus className="h-3.5 w-3.5" /> Add rule
+              </Button>
+            </div>
+
+            {(!whatsappReady || !emailReady) && (
+              <div className="rounded-xl border border-amber-500/25 bg-amber-500/5 p-3 mb-3 space-y-2">
+                <p className="text-[12px] font-medium text-foreground">
+                  {!whatsappReady && !emailReady
+                    ? "Connect WhatsApp or email first"
+                    : !whatsappReady
+                      ? "WhatsApp not connected yet"
+                      : "Email not connected yet"}
+                </p>
+                <p className="text-[10px] text-muted-foreground">
+                  You can still save rules now — messages only send after the channel is live under Connections.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {!whatsappReady && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="h-7 text-[10px]"
+                      onClick={() => connectionsReturn("whatsapp")}
+                    >
+                      Set up WhatsApp
+                    </Button>
+                  )}
+                  {!emailReady && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={whatsappReady ? "default" : "outline"}
+                      className="h-7 text-[10px]"
+                      onClick={() => connectionsReturn("email")}
+                    >
+                      Set up email
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {(whatsappReady || emailReady) && (
+              <div className="flex flex-wrap items-center gap-2 mb-3">
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium",
+                    whatsappReady
+                      ? "bg-emerald-500/12 text-emerald-600 dark:text-emerald-400"
+                      : "bg-muted text-muted-foreground",
+                  )}
+                >
+                  <span className={cn("size-1.5 rounded-full", whatsappReady ? "bg-emerald-500" : "bg-muted-foreground/50")} />
+                  WhatsApp {whatsappReady ? "ready" : "not connected"}
+                </span>
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium",
+                    emailReady
+                      ? "bg-emerald-500/12 text-emerald-600 dark:text-emerald-400"
+                      : "bg-muted text-muted-foreground",
+                  )}
+                >
+                  <span className={cn("size-1.5 rounded-full", emailReady ? "bg-emerald-500" : "bg-muted-foreground/50")} />
+                  Email {emailReady ? "ready" : "not connected"}
+                </span>
+                {!whatsappReady ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 text-[10px] px-2"
+                    onClick={() => connectionsReturn("whatsapp")}
+                  >
+                    Connect WhatsApp
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 text-[10px] px-2"
+                    onClick={() => connectionsReturn("whatsapp")}
+                  >
+                    Manage WhatsApp
+                  </Button>
+                )}
+              </div>
+            )}
+
+            <div className="rounded-xl border border-border/60 bg-card/20 p-3 space-y-3 mb-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[12px] font-medium text-foreground">Every call</p>
+                  <p className="text-[10px] text-muted-foreground">Universal follow-up for all leads</p>
+                </div>
+                <div className="flex items-center gap-4">
+                  <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                    <Switch
+                      checked={afterCallMessages.universal.whatsapp}
+                      onCheckedChange={(v) => {
+                        setAfterCallMessages((prev) => ({
+                          ...prev,
+                          universal: { ...prev.universal, whatsapp: v },
+                        }));
+                        setDirty(true);
+                      }}
+                    />
+                    WhatsApp
+                  </label>
+                  <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                    <Switch
+                      checked={afterCallMessages.universal.email}
+                      onCheckedChange={(v) => {
+                        setAfterCallMessages((prev) => ({
+                          ...prev,
+                          universal: { ...prev.universal, email: v },
+                        }));
+                        setDirty(true);
+                      }}
+                    />
+                    Email
+                  </label>
+                </div>
+              </div>
+              {afterCallMessages.rules.length > 0 && (
+                <label className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                  <Switch
+                    checked={afterCallMessages.skipUniversalWhenMatched}
+                    onCheckedChange={(v) => {
+                      setAfterCallMessages((prev) => ({ ...prev, skipUniversalWhenMatched: v }));
+                      setDirty(true);
+                    }}
+                  />
+                  Skip universal when a disposition rule matches
+                </label>
+              )}
+            </div>
+
+            {afterCallMessages.rules.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-border/50 p-4 text-center">
+                <p className="text-xs text-muted-foreground/60">
+                  {dispositionKeys.length === 0
+                    ? "Add outcomes first, then map WhatsApp / email per disposition."
+                    : "No disposition rules yet — use Add rule, or turn on Every call."}
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {afterCallMessages.rules.map((rule) => (
+                  <div key={rule.id} className="rounded-xl border border-border/60 bg-card/20 p-3 space-y-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex flex-wrap gap-1.5 flex-1">
+                        {dispositionKeys.map((d) => {
+                          const on = rule.dispositions.includes(d);
+                          return (
+                            <button
+                              key={d}
+                              type="button"
+                              onClick={() => {
+                                setAfterCallMessages((prev) => ({
+                                  ...prev,
+                                  rules: prev.rules.map((r) => {
+                                    if (r.id !== rule.id) return r;
+                                    const next = on
+                                      ? r.dispositions.filter((x) => x !== d)
+                                      : [...r.dispositions, d];
+                                    return { ...r, dispositions: next.length ? next : r.dispositions };
+                                  }),
+                                }));
+                                setDirty(true);
+                              }}
+                              className={cn(
+                                "rounded-full px-2.5 py-1 text-[11px] font-medium border transition-colors",
+                                on
+                                  ? "bg-foreground text-background border-foreground"
+                                  : "bg-muted/40 text-muted-foreground border-border hover:border-foreground/30",
+                              )}
+                            >
+                              {d}
+                            </button>
+                          );
+                        })}
                       </div>
-                    )}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
+                        onClick={() => {
+                          setAfterCallMessages((prev) => ({
+                            ...prev,
+                            rules: prev.rules.filter((r) => r.id !== rule.id),
+                          }));
+                          setDirty(true);
+                        }}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                        <Switch
+                          checked={rule.whatsapp}
+                          onCheckedChange={(v) => {
+                            setAfterCallMessages((prev) => ({
+                              ...prev,
+                              rules: prev.rules.map((r) =>
+                                r.id === rule.id ? { ...r, whatsapp: v } : r,
+                              ),
+                            }));
+                            setDirty(true);
+                          }}
+                        />
+                        WhatsApp
+                      </label>
+                      <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                        <Switch
+                          checked={rule.email}
+                          onCheckedChange={(v) => {
+                            setAfterCallMessages((prev) => ({
+                              ...prev,
+                              rules: prev.rules.map((r) =>
+                                r.id === rule.id ? { ...r, email: v } : r,
+                              ),
+                            }));
+                            setDirty(true);
+                          }}
+                        />
+                        Email
+                      </label>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -4367,7 +4888,8 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
               <div>
                 <h4 className="text-xs font-semibold text-foreground">Data to collect</h4>
                 <p className="text-[10px] text-muted-foreground mt-0.5">
-                  Extracted as bare values (WhatsApp → digits only, not a paragraph)
+                  AI pulls these from the transcript after the call as structured fields.
+                  Phone / WhatsApp / alternate number → digits only (spoken “eight nine…” is converted).
                 </p>
               </div>
               <Button type="button" variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => addField()}>
@@ -4468,7 +4990,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
         </>
       )}
 
-      {(categories.length > 0 || fields.length > 0 || dirty) && (
+      {(categories.length > 0 || fields.length > 0 || dirty || dispositionKeys.length > 0) && (
         <div className="flex justify-end">
           <Button
             type="button"
@@ -4478,7 +5000,7 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
             onClick={() => saveMutation.mutate()}
           >
             <Save className="h-3.5 w-3.5" />
-            {saveMutation.isPending ? "Saving…" : "Save Disposition Config"}
+            {saveMutation.isPending ? "Saving…" : "Save Outcomes"}
           </Button>
         </div>
       )}
@@ -4698,7 +5220,7 @@ const FIELD_LABELS: Record<string, string> = {
   maxDuration: "Max Duration (s)",
   silenceTimeoutSeconds: "Silence Timeout (s)",
   language: "Language",
-  webhookUrl: "Webhook URL",
+  webhookUrl: "Post-call notify URL",
   noiseCancellationEnabled: "Noise Cancellation",
   backchannelingEnabled: "Backchannel",
   tools: "Tools",
@@ -6068,8 +6590,8 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
     resolver: zodResolver(agentFormSchema),
     defaultValues: {
       name: "", description: "", asrProvider: "sarvam", asrModel: "saaras:v3",
-      llmProvider: "sarvam", llmModel: "sarvam-105b", ttsProvider: "sarvam",
-      ttsVoice: "priya", ttsModel: "bulbul:v3", telephonyProvider: "vobiz",
+      llmProvider: "sarvam", llmModel: "sarvam-105b", ttsProvider: "cartesia",
+      ttsVoice: "c45bc5ec-dc68-4feb-8829-6ac1e9f4f478", ttsModel: "sonic-3.5", telephonyProvider: "vobiz",
       systemPrompt: "", temperature: 0.40, maxDuration: 480,
       greetingMessage: "Hello", firstSpeaker: "assistant", endCallPhrases: "", silenceTimeoutSeconds: 30,
       language: "en-US", asrLanguage: "", backchannelingEnabled: true,
@@ -6601,7 +7123,9 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
         <DialogContent className="sm:max-w-[440px]">
           <DialogHeader>
             <DialogTitle>Rename Agent</DialogTitle>
-            <DialogDescription>Update the display name of this agent.</DialogDescription>
+            <DialogDescription>
+              Internal label only — not spoken as your company brand. Put the brand in the greeting or prompt IDENTITY.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
             <Label htmlFor="rename-agent-input" className="text-xs text-muted-foreground">Agent Name</Label>
@@ -6673,11 +7197,20 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
                     agent={agent}
                     rateMap={rateMap}
                     onGoToPrompt={() => handleTabClick("prompt")}
+                    onGoToAnalytics={() => handleTabClick("analytics")}
                   />
                 )}
                 {activeTab === "prompt"    && <PromptTab form={form} agentId={agentId} />}
                 {activeTab === "voice"     && <VoiceTab form={form} />}
                 {activeTab === "tools"     && <ToolsTab form={form} agentId={agentId} />}
+                {activeTab === "outcomes"  && (
+                  <div className="px-4 py-5 sm:px-6 lg:px-8">
+                    <DispositionSettingsPanel agentId={agent?.id ?? 0} />
+                  </div>
+                )}
+                {activeTab === "analytics" && (
+                  <AgentAnalyticsPanel agentId={agent?.id ?? 0} embedded />
+                )}
                 {activeTab === "voicemail" && <VoicemailTab form={form} />}
                 {activeTab === "settings"  && <AdvancedTab form={form} agent={agent} />}
                 {activeTab === "versions"  && <VersionsTab agentId={agent.id} />}
@@ -7028,9 +7561,9 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
     ],
     llmProvider: "google",
     llmModel: "gemini-3.6-flash",
-    ttsProvider: "sarvam",
-    ttsModel: "bulbul:v3",
-    ttsVoice: "priya",
+    ttsProvider: "cartesia",
+    ttsModel: "sonic-3.5",
+    ttsVoice: "c45bc5ec-dc68-4feb-8829-6ac1e9f4f478",
     // Attendance capacity is fixed by agent type:
     // phone+meet → can join Meet (paste-link or booking); phone-only → book only, never join.
     agentConfig: {
@@ -7170,7 +7703,7 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
           : "Name your agent";
   const stepDesc =
     step === "compose" ? "Start with one agent, or create two that hand off mid-call."
-      : step === "surfaces" ? "Phone only (book but never join Meet), or phone + meetings (paste-link Meet bots + optional booking join)."
+      : step === "surfaces" ? "Phone only (calendar bookings + Meet links for humans; AI never joins), or phone + meetings (AI can join Meet)."
         : composition === "team"
           ? "We’ll create both agents and wire handoffs automatically."
           : "You can edit prompts, tools, and settings anytime.";
@@ -7267,7 +7800,7 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
                 </div>
                 <p className="text-sm font-semibold">Phone + meetings</p>
                 <p className="text-[11px] text-muted-foreground leading-snug">
-                  Voice + joins Meet when Booking is enabled.
+                  Voice calls, plus join Meet/Zoom/Teams from Meeting bots. Booking a slot is separate.
                 </p>
               </button>
             </div>
@@ -7387,7 +7920,7 @@ function StudioEmptyCanvas({ onCreate }: { onCreate: () => void }) {
     <div className="flex-1 flex items-center justify-center p-8 bg-background">
       <div className="text-center max-w-sm space-y-4">
         <div className="mx-auto h-12 w-12 rounded-2xl border border-border/50 bg-muted/30 flex items-center justify-center">
-          <Bot className="h-5 w-5 text-muted-foreground" />
+          <SnapServeAgentIcon size={20} className="text-muted-foreground" />
         </div>
         <div className="space-y-1.5">
           <h2 className="text-lg font-semibold tracking-tight">Select an agent</h2>

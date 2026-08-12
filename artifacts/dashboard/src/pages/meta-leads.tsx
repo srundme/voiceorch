@@ -2,13 +2,12 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Facebook, Plus, Trash2, Copy, ChevronDown, ChevronUp,
-  CheckCircle2, XCircle, Clock,
+  CheckCircle2, XCircle, Clock, PauseCircle, PlayCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
@@ -142,11 +141,45 @@ function IntegrationCard({
             </button>
           </div>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <Switch checked={integration.active} onCheckedChange={v => toggleMutation.mutate(v)} />
-          <button onClick={() => onDelete(integration.id)} className="h-7 w-7 flex items-center justify-center rounded-lg border border-border bg-elevated hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
+        <div className="flex flex-col items-end gap-2 shrink-0">
+          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+            integration.active
+              ? "text-emerald-500 bg-emerald-500/10 border-emerald-500/20"
+              : "text-amber-600 bg-amber-500/10 border-amber-500/20"
+          }`}>
+            {integration.active ? "active" : "paused"}
+          </span>
+          <div className="flex items-center gap-1.5">
+            {integration.active ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs gap-1 text-amber-600 border-amber-500/40 hover:bg-amber-500/10"
+                onClick={() => toggleMutation.mutate(false)}
+                disabled={toggleMutation.isPending}
+              >
+                <PauseCircle className="w-3 h-3" /> Pause
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs gap-1 text-emerald-600 border-emerald-500/40 hover:bg-emerald-500/10"
+                onClick={() => toggleMutation.mutate(true)}
+                disabled={toggleMutation.isPending}
+              >
+                <PlayCircle className="w-3 h-3" /> Resume
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs gap-1 text-red-500 border-red-500/40 hover:bg-red-500/10"
+              onClick={() => onDelete(integration.id)}
+            >
+              <Trash2 className="w-3 h-3" /> Delete
+            </Button>
+          </div>
         </div>
       </div>
 

@@ -1,5 +1,5 @@
 /**
- * Connections → Calendar & booking — plain-language setup wizard.
+ * Connections → Bookings calendar — plain-language setup wizard.
  * Creates calendar + Google link + bookable meeting without "event type" jargon.
  */
 
@@ -58,13 +58,13 @@ const STEPS: { id: WizardStepId; title: string; blurb: string }[] = [
   },
   {
     id: "google",
-    title: "Connect Google",
-    blurb: "So meetings show on your Google Calendar and callers get a Meet link.",
+    title: "Connect Google (bookings)",
+    blurb: "Bookings appear on Google Calendar with a Meet link on the invite.",
   },
   {
     id: "meeting",
     title: "What can callers book?",
-    blurb: "A simple meeting name and how long it lasts.",
+    blurb: "Name and length. Meet link is included on every invite by default.",
   },
 ];
 
@@ -154,7 +154,7 @@ export function ConnectionsCalendarSetup() {
   if (loading) {
     return (
       <StripePage
-        title="Calendar & booking"
+        title="Bookings calendar"
         description="Set up booking in a few simple steps. Day-to-day appointments live under Bookings."
         back={{ href: "/app/connections", label: "Connections" }}
       >
@@ -168,7 +168,7 @@ export function ConnectionsCalendarSetup() {
   if (ready && !editingReady) {
     return (
       <StripePage
-        title="Calendar & booking"
+        title="Bookings calendar"
         description="Set up booking in a few simple steps. Day-to-day appointments live under Bookings."
         back={{ href: "/app/connections", label: "Connections" }}
       >
@@ -227,7 +227,7 @@ export function ConnectionsCalendarSetup() {
 
   return (
     <StripePage
-      title="Calendar & booking"
+      title="Bookings calendar"
       description="Set up booking in a few simple steps. Day-to-day appointments live under Bookings."
       back={{ href: "/app/connections", label: "Connections" }}
     >
