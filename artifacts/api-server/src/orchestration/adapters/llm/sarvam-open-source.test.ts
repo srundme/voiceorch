@@ -3,6 +3,7 @@ import {
   isSarvamOpenSourceModel,
   normalizeSarvamLlmModel,
   sarvamChatCompletionsUrl,
+  SarvamLLM,
 } from "./sarvam.js";
 
 describe("Sarvam open-source model routing", () => {
@@ -30,5 +31,30 @@ describe("Sarvam open-source model routing", () => {
     expect(sarvamChatCompletionsUrl("sarvam-105b")).toBe(
       "https://api.sarvam.ai/v1/chat/completions",
     );
+  });
+});
+
+describe("SarvamLLM gemma4 voice latency knobs", () => {
+  type Internals = {
+    buildGenerationBody(): Record<string, unknown>;
+    cancelInFlight(): void;
+    abortController: AbortController | null;
+  };
+
+  it("caps gemma4 max_tokens for voice and never sends reasoning_effort", () => {
+    const llm = new SarvamLLM("test-key", "gemma4", { maxTokens: 2000, reasoningEffort: "high" });
+    const body = (llm as unknown as Internals).buildGenerationBody();
+    expect(body["max_tokens"]).toBeLessThanOrEqual(400);
+    expect(body["reasoning_effort"]).toBeUndefined();
+  });
+
+  it("exposes cancelInFlight so barge-in can abort the SSE stream", () => {
+    const llm = new SarvamLLM("test-key", "gemma4");
+    const internals = llm as unknown as Internals;
+    const ac = new AbortController();
+    internals.abortController = ac;
+    llm.cancelInFlight();
+    expect(ac.signal.aborted).toBe(true);
+    expect(internals.abortController).toBeNull();
   });
 });
