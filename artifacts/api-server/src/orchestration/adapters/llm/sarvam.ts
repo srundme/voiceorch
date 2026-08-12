@@ -18,7 +18,49 @@ function rawSseDebugEnabled(): boolean {
 const RAW_SSE_DIAG_MAX_BUFFER = 2000;
 
 /** Models that support Sarvam's function-calling interface */
-const TOOL_CAPABLE_MODELS = new Set(["sarvam-30b", "sarvam-105b"]);
+const TOOL_CAPABLE_MODELS = new Set([
+  "sarvam-30b",
+  "sarvam-105b",
+  // Sarvam-hosted open-source models on /v2 (beta; key must be whitelisted).
+  "gemma4",
+  "glm5.2",
+]);
+
+/** Open-source models served on POST /v2/chat/completions (not /v1). */
+const OPEN_SOURCE_MODELS = new Set(["gemma4", "glm5.2"]);
+
+export function isSarvamOpenSourceModel(model: string): boolean {
+  return OPEN_SOURCE_MODELS.has(model);
+}
+
+export function sarvamChatCompletionsUrl(model: string): string {
+  return isSarvamOpenSourceModel(model)
+    ? "https://api.sarvam.ai/v2/chat/completions"
+    : "https://api.sarvam.ai/v1/chat/completions";
+}
+
+/** Normalize playground / docs aliases to the wire model ids. */
+export function normalizeSarvamLlmModel(model: string | null | undefined): string {
+  const ALIASES: Record<string, string> = {
+    "sarvam-m": "sarvam-105b",
+    "sarvam-2b": "sarvam-105b",
+    "sarvam-2b-v0.5": "sarvam-105b",
+    "sarvam-m1": "sarvam-105b",
+    "sarvam-30b-16k": "sarvam-105b",
+    "sarvam-105b-32k": "sarvam-105b",
+    "sarvam-30b": "sarvam-105b",
+    // Open-source beta ids (playground label "Gemma 4" → gemma4).
+    "gemma-4": "gemma4",
+    "gemma-4-31b": "gemma4",
+    "gemma4-31b": "gemma4",
+    "glm-5.2": "glm5.2",
+    "glm5-2": "glm5.2",
+    "glm-5-2": "glm5.2",
+  };
+  const raw = (model ?? "sarvam-105b").trim();
+  const key = raw.toLowerCase();
+  return ALIASES[key] ?? ALIASES[raw] ?? raw;
+}
 
 /**
  * Sarvam requires strictly-alternating user/assistant turns starting with a user message.
@@ -227,34 +269,29 @@ export class SarvamLLM implements LLMAdapter {
     this.key = apiKey;
     this.genParams = genParams ?? {};
     this.callId = callId;
-    const ALIASES: Record<string, string> = {
-      "sarvam-m": "sarvam-105b",
-      "sarvam-2b": "sarvam-105b",
-      "sarvam-2b-v0.5": "sarvam-105b",
-      "sarvam-m1": "sarvam-105b",
-      "sarvam-30b-16k": "sarvam-105b",
-      "sarvam-105b-32k": "sarvam-105b",
-      "sarvam-30b": "sarvam-105b",
-    };
-    const raw = model ?? "sarvam-105b";
-    this.model = ALIASES[raw] ?? raw;
+    this.model = normalizeSarvamLlmModel(model);
   }
 
   private buildGenerationBody(): Record<string, unknown> {
     const p = this.genParams;
     const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+    const openSource = isSarvamOpenSourceModel(this.model);
 
     // Voice calls: thinking OFF by default. Sarvam's API defaults to "low", which
     // streams English chain-of-thought into `content` and gets spoken by TTS
     // (call 5646: "The user wants me to act as… Let me analyze the constraints").
     // Explicit null disables. medium/high remain available for agents that opt in.
+    // Open-source note: gemma4 never reasons; glm5.2 always reasons unless
+    // extra_body.chat_template_kwargs.enable_thinking=false (set below).
     const body: Record<string, unknown> = {};
-    if (p.reasoningEffort === null) {
-      body["reasoning_effort"] = null;
-    } else if (p.reasoningEffort === "low" || p.reasoningEffort === "medium" || p.reasoningEffort === "high") {
-      body["reasoning_effort"] = p.reasoningEffort;
-    } else {
-      body["reasoning_effort"] = null;
+    if (!openSource || this.model === "glm5.2") {
+      if (p.reasoningEffort === null) {
+        body["reasoning_effort"] = null;
+      } else if (p.reasoningEffort === "low" || p.reasoningEffort === "medium" || p.reasoningEffort === "high") {
+        body["reasoning_effort"] = p.reasoningEffort;
+      } else if (!openSource) {
+        body["reasoning_effort"] = null;
+      }
     }
 
     if (typeof p.temperature === "number" && Number.isFinite(p.temperature))
@@ -269,7 +306,8 @@ export class SarvamLLM implements LLMAdapter {
       body["frequency_penalty"] = clamp(p.frequencyPenalty, -2, 2);
     if (typeof p.seed === "number" && Number.isFinite(p.seed))
       body["seed"] = Math.trunc(p.seed);
-    if (typeof p.wikiGrounding === "boolean")
+    // wiki_grounding is Sarvam-native /v1 only — /v2 rejects it.
+    if (!openSource && typeof p.wikiGrounding === "boolean")
       body["wiki_grounding"] = p.wikiGrounding;
 
     if (typeof p.stop === "string" && p.stop.length > 0) {
@@ -297,6 +335,7 @@ export class SarvamLLM implements LLMAdapter {
   ): Promise<void> {
     const supportsTools = TOOL_CAPABLE_MODELS.has(this.model);
     const hasTools = supportsTools && (options?.tools?.length ?? 0) > 0;
+    const openSource = isSarvamOpenSourceModel(this.model);
     const validToolNames = new Set<string>((options?.tools ?? []).map((t) => t.name));
     const sanitized = sanitizeForAlternation(messages);
 
@@ -304,16 +343,31 @@ export class SarvamLLM implements LLMAdapter {
 
     // Reasoning tokens count toward max_tokens. Floor the budget whenever
     // thinking is on so content is not empty after the hidden trace (Sarvam gotcha).
-    if (genBody["reasoning_effort"] != null) {
+    // Skip for gemma4 (never reasons) and for glm5.2 when we disable thinking below.
+    if (genBody["reasoning_effort"] != null && !openSource) {
       const mt = genBody["max_tokens"];
       if (typeof mt !== "number" || mt < 500) genBody["max_tokens"] = 500;
     }
 
-    if (hasTools) {
+    if (hasTools && !openSource) {
       if (genBody["reasoning_effort"] == null) {
         genBody["reasoning_effort"] = "low";
         const mt = genBody["max_tokens"];
         if (typeof mt !== "number" || mt < 500) genBody["max_tokens"] = 500;
+      }
+    }
+
+    // glm5.2 reasons before every answer by default; that burns max_tokens and
+    // adds seconds of silence on voice. Turn thinking off for live calls unless
+    // the agent explicitly opted into medium/high reasoning_effort.
+    if (this.model === "glm5.2") {
+      const effort = genBody["reasoning_effort"];
+      const keepThinking = effort === "medium" || effort === "high";
+      if (!keepThinking) {
+        delete genBody["reasoning_effort"];
+        genBody["extra_body"] = {
+          chat_template_kwargs: { enable_thinking: false },
+        };
       }
     }
 
@@ -344,6 +398,8 @@ ${systemPrompt}`
       body["tool_choice"] = "auto";
     }
 
+    const endpoint = sarvamChatCompletionsUrl(this.model);
+
     // Fetch with up to 2 retries for transient 429 rate limit or 5xx server errors
     let resp: Response | null = null;
     let attempts = 0;
@@ -353,7 +409,7 @@ ${systemPrompt}`
     while (attempts < maxAttempts) {
       attempts++;
       try {
-        resp = await fetch("https://api.sarvam.ai/v1/chat/completions", {
+        resp = await fetch(endpoint, {
           method: "POST",
           headers: {
             "api-subscription-key": this.key,
@@ -368,7 +424,7 @@ ${systemPrompt}`
         if ((resp.status === 429 || resp.status >= 500) && attempts < maxAttempts) {
           const delay = attempts * 300;
           logger.warn(
-            { status: resp.status, attempt: attempts, delay, evt: "sarvam_llm_retry" },
+            { status: resp.status, attempt: attempts, delay, model: this.model, endpoint, evt: "sarvam_llm_retry" },
             `Sarvam LLM returned ${resp.status}, retrying in ${delay}ms...`
           );
           await new Promise((r) => setTimeout(r, delay));

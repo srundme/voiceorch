@@ -49,7 +49,11 @@ export const LLM_MODELS: Record<string, { value: string; label: string }[]> = {
   ],
   qwen:      [{ value: "qwen/qwen3-32b", label: "Qwen 3 32B (recommended)" }, { value: "qwen/qwen3-235b-a22b", label: "Qwen 3 235B" }],
   groq:      [{ value: "llama-3.3-70b-versatile", label: "Llama 3.3 70B (recommended)" }, { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B (fast)" }, { value: "gemma2-9b-it", label: "Gemma 2 9B" }],
-  sarvam:    [{ value: "sarvam-105b", label: "Sarvam 105B (recommended)" }],
+  sarvam: [
+    { value: "sarvam-105b", label: "Sarvam 105B (recommended — Indian languages)" },
+    { value: "gemma4", label: "Gemma 4 31B (Sarvam open-source beta — tools + images)" },
+    { value: "glm5.2", label: "GLM-5.2 (Sarvam open-source beta — 512K context)" },
+  ],
   together: [
     { value: "Qwen/Qwen3.6-35B-A3B",   label: "Qwen3.6 35B-A3B — fast, low cost (recommended)" },
     { value: "Qwen/Qwen3.5-397B-A17B", label: "Qwen3.5 397B-A17B — best quality, agentic use" },

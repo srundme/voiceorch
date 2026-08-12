@@ -87,7 +87,12 @@ const LLM_MODELS: Record<string, { value: string; label: string }[]> = {
   cohere:    [{ value: "command-r-plus-08-2024", label: "Command R+" }, { value: "command-r-08-2024", label: "Command R" }],
   qwen:      [{ value: "qwen/qwen3-32b", label: "Qwen 3 32B (recommended)" }, { value: "qwen/qwen3-235b-a22b", label: "Qwen 3 235B" }],
   groq:      [{ value: "llama-3.3-70b-versatile", label: "Llama 3.3 70B" }, { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B" }],
-  sarvam:    [{ value: "sarvam-105b", label: "Sarvam 105B (recommended)" }, { value: "sarvam-30b", label: "Sarvam 30B (legacy)" }],
+  sarvam: [
+    { value: "sarvam-105b", label: "Sarvam 105B (recommended — Indian languages)" },
+    { value: "gemma4", label: "Gemma 4 31B (Sarvam open-source beta)" },
+    { value: "glm5.2", label: "GLM-5.2 (Sarvam open-source beta)" },
+    { value: "sarvam-30b", label: "Sarvam 30B (legacy)" },
+  ],
 };
 const TTS_MODELS: Record<string, { value: string; label: string }[]> = {
   cartesia: [
