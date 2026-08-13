@@ -134,6 +134,8 @@ import type {
   CreateAmbientSoundBody,
   CreateCallbackFromIncoming200,
   CreateCallbackFromIncomingBody,
+  CreateMeetBot200,
+  CreateMeetBotBody,
   CrmConnection,
   CrmConnectionUpdate,
   CrmContactsPage,
@@ -145,7 +147,11 @@ import type {
   CsvImportResult,
   DailyCallVolume,
   DashboardStats,
+  DisableMeetCalendarEventBot200,
+  DisconnectMeetCalendar200,
   DncEntry,
+  EnableMeetCalendarEventBot200,
+  EnableMeetCalendarEventBotBody,
   EventType,
   EventTypeInput,
   EventTypeUpdate,
@@ -166,6 +172,9 @@ import type {
   GetCommandCenterActivityStreamParams,
   GetCommandCenterLiveOps200,
   GetCommandCenterLiveOpsParams,
+  GetMeetBot200,
+  GetMeetBotIdentity200,
+  GetMeetCalendarConnection200,
   GetPendriveContextParams,
   GetPlatformAnalyticsAgentsParams,
   GetPlatformAnalyticsBatchParams,
@@ -204,6 +213,7 @@ import type {
   LeadTransferCreate,
   LeadTransferUpdate,
   LeadWorkspace,
+  LeaveMeetBot200,
   ListActivityLogsParams,
   ListAvailabilityOverridesParams,
   ListAvailabilityParams,
@@ -224,6 +234,7 @@ import type {
   ListCrmContactsParams,
   ListCrmListsParams,
   ListEventTypesParams,
+  ListMeetCalendarEvents200,
   ListMetaCampaignLeads200,
   ListMetaCampaignLeadsParams,
   ListPendriveCallersParams,
@@ -255,6 +266,8 @@ import type {
   PendriveStats,
   PhoneNormalizeResult,
   PhoneNumber,
+  PhonePromoQuote,
+  PhonePromoQuoteInput,
   PlatformAnalyticsAgentRow,
   PlatformAnalyticsBatch,
   PlatformAnalyticsCampaignRow,
@@ -5272,6 +5285,77 @@ export const useInitiatePhoneNumberPurchase = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getInitiatePhoneNumberPurchaseMutationOptions(options));
+    }
+
+export const getQuotePhoneNumberPromoUrl = () => {
+
+
+
+
+  return `/api/phone-numbers/promo/quote`
+}
+
+/**
+ * @summary Price a phone number with a promo code applied, without creating an order. Used by the checkout UI to validate a code before payment.
+ */
+export const quotePhoneNumberPromo = async (phonePromoQuoteInput: PhonePromoQuoteInput, options?: RequestInit): Promise<PhonePromoQuote> => {
+
+  return customFetch<PhonePromoQuote>(getQuotePhoneNumberPromoUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      phonePromoQuoteInput,)
+  }
+);}
+
+
+
+
+export const getQuotePhoneNumberPromoMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof quotePhoneNumberPromo>>, TError,{data: BodyType<PhonePromoQuoteInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof quotePhoneNumberPromo>>, TError,{data: BodyType<PhonePromoQuoteInput>}, TContext> => {
+
+const mutationKey = ['quotePhoneNumberPromo'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof quotePhoneNumberPromo>>, {data: BodyType<PhonePromoQuoteInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  quotePhoneNumberPromo(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type QuotePhoneNumberPromoMutationResult = NonNullable<Awaited<ReturnType<typeof quotePhoneNumberPromo>>>
+    export type QuotePhoneNumberPromoMutationBody = BodyType<PhonePromoQuoteInput>
+    export type QuotePhoneNumberPromoMutationError = ErrorType<void>
+
+    /**
+ * @summary Price a phone number with a promo code applied, without creating an order. Used by the checkout UI to validate a code before payment.
+ */
+export const useQuotePhoneNumberPromo = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof quotePhoneNumberPromo>>, TError,{data: BodyType<PhonePromoQuoteInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof quotePhoneNumberPromo>>,
+        TError,
+        {data: BodyType<PhonePromoQuoteInput>},
+        TContext
+      > => {
+      return useMutation(getQuotePhoneNumberPromoMutationOptions(options));
     }
 
 export const getConfirmPhoneNumberPurchaseUrl = () => {
@@ -21592,4 +21676,669 @@ export function useGetBookExamAttempts<TData = Awaited<ReturnType<typeof getBook
 
 
 
+
+export const getCreateMeetBotUrl = () => {
+
+
+
+
+  return `/api/meet-bots`
+}
+
+/**
+ * Sends the selected agent into a video meeting. Requires a logged-in session
+(dashboard). Enable Meetings on the agent and set a meeting prompt first.
+
+ * @summary Launch a meeting bot into Meet / Zoom / Teams
+ */
+export const createMeetBot = async (createMeetBotBody: CreateMeetBotBody, options?: RequestInit): Promise<CreateMeetBot200> => {
+
+  return customFetch<CreateMeetBot200>(getCreateMeetBotUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      createMeetBotBody,)
+  }
+);}
+
+
+
+
+export const getCreateMeetBotMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createMeetBot>>, TError,{data: BodyType<CreateMeetBotBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createMeetBot>>, TError,{data: BodyType<CreateMeetBotBody>}, TContext> => {
+
+const mutationKey = ['createMeetBot'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createMeetBot>>, {data: BodyType<CreateMeetBotBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createMeetBot(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateMeetBotMutationResult = NonNullable<Awaited<ReturnType<typeof createMeetBot>>>
+    export type CreateMeetBotMutationBody = BodyType<CreateMeetBotBody>
+    export type CreateMeetBotMutationError = ErrorType<void>
+
+    /**
+ * @summary Launch a meeting bot into Meet / Zoom / Teams
+ */
+export const useCreateMeetBot = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createMeetBot>>, TError,{data: BodyType<CreateMeetBotBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createMeetBot>>,
+        TError,
+        {data: BodyType<CreateMeetBotBody>},
+        TContext
+      > => {
+      return useMutation(getCreateMeetBotMutationOptions(options));
+    }
+
+export const getGetMeetBotIdentityUrl = () => {
+
+
+
+
+  return `/api/meet-bots/identity`
+}
+
+/**
+ * @summary Bot email / Meet identity for invites and admit
+ */
+export const getMeetBotIdentity = async ( options?: RequestInit): Promise<GetMeetBotIdentity200> => {
+
+  return customFetch<GetMeetBotIdentity200>(getGetMeetBotIdentityUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetMeetBotIdentityQueryKey = () => {
+    return [
+    `/api/meet-bots/identity`
+    ] as const;
+    }
+
+
+export const getGetMeetBotIdentityQueryOptions = <TData = Awaited<ReturnType<typeof getMeetBotIdentity>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMeetBotIdentity>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMeetBotIdentityQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMeetBotIdentity>>> = ({ signal }) => getMeetBotIdentity({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMeetBotIdentity>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetMeetBotIdentityQueryResult = NonNullable<Awaited<ReturnType<typeof getMeetBotIdentity>>>
+export type GetMeetBotIdentityQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Bot email / Meet identity for invites and admit
+ */
+
+export function useGetMeetBotIdentity<TData = Awaited<ReturnType<typeof getMeetBotIdentity>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMeetBotIdentity>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetMeetBotIdentityQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetMeetBotUrl = (botId: string,) => {
+
+
+
+
+  return `/api/meet-bots/${botId}`
+}
+
+/**
+ * @summary Get meeting bot status
+ */
+export const getMeetBot = async (botId: string, options?: RequestInit): Promise<GetMeetBot200> => {
+
+  return customFetch<GetMeetBot200>(getGetMeetBotUrl(botId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetMeetBotQueryKey = (botId: string,) => {
+    return [
+    `/api/meet-bots/${botId}`
+    ] as const;
+    }
+
+
+export const getGetMeetBotQueryOptions = <TData = Awaited<ReturnType<typeof getMeetBot>>, TError = ErrorType<void>>(botId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMeetBot>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMeetBotQueryKey(botId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMeetBot>>> = ({ signal }) => getMeetBot(botId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(botId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMeetBot>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetMeetBotQueryResult = NonNullable<Awaited<ReturnType<typeof getMeetBot>>>
+export type GetMeetBotQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get meeting bot status
+ */
+
+export function useGetMeetBot<TData = Awaited<ReturnType<typeof getMeetBot>>, TError = ErrorType<void>>(
+ botId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMeetBot>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetMeetBotQueryOptions(botId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getLeaveMeetBotUrl = (botId: string,) => {
+
+
+
+
+  return `/api/meet-bots/${botId}`
+}
+
+/**
+ * @summary Make the meeting bot leave
+ */
+export const leaveMeetBot = async (botId: string, options?: RequestInit): Promise<LeaveMeetBot200> => {
+
+  return customFetch<LeaveMeetBot200>(getLeaveMeetBotUrl(botId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getLeaveMeetBotMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof leaveMeetBot>>, TError,{botId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof leaveMeetBot>>, TError,{botId: string}, TContext> => {
+
+const mutationKey = ['leaveMeetBot'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof leaveMeetBot>>, {botId: string}> = (props) => {
+          const {botId} = props ?? {};
+
+          return  leaveMeetBot(botId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type LeaveMeetBotMutationResult = NonNullable<Awaited<ReturnType<typeof leaveMeetBot>>>
+
+    export type LeaveMeetBotMutationError = ErrorType<void>
+
+    /**
+ * @summary Make the meeting bot leave
+ */
+export const useLeaveMeetBot = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof leaveMeetBot>>, TError,{botId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof leaveMeetBot>>,
+        TError,
+        {botId: string},
+        TContext
+      > => {
+      return useMutation(getLeaveMeetBotMutationOptions(options));
+    }
+
+export const getGetMeetCalendarConnectionUrl = () => {
+
+
+
+
+  return `/api/meet-calendar/connection`
+}
+
+/**
+ * Readonly calendar connect used for Join toggles on /app/meet (not booking write calendar).
+ * @summary AI meetings Google Calendar connection status
+ */
+export const getMeetCalendarConnection = async ( options?: RequestInit): Promise<GetMeetCalendarConnection200> => {
+
+  return customFetch<GetMeetCalendarConnection200>(getGetMeetCalendarConnectionUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetMeetCalendarConnectionQueryKey = () => {
+    return [
+    `/api/meet-calendar/connection`
+    ] as const;
+    }
+
+
+export const getGetMeetCalendarConnectionQueryOptions = <TData = Awaited<ReturnType<typeof getMeetCalendarConnection>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMeetCalendarConnection>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMeetCalendarConnectionQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMeetCalendarConnection>>> = ({ signal }) => getMeetCalendarConnection({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMeetCalendarConnection>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetMeetCalendarConnectionQueryResult = NonNullable<Awaited<ReturnType<typeof getMeetCalendarConnection>>>
+export type GetMeetCalendarConnectionQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary AI meetings Google Calendar connection status
+ */
+
+export function useGetMeetCalendarConnection<TData = Awaited<ReturnType<typeof getMeetCalendarConnection>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMeetCalendarConnection>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetMeetCalendarConnectionQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getDisconnectMeetCalendarUrl = () => {
+
+
+
+
+  return `/api/meet-calendar/connection`
+}
+
+/**
+ * @summary Disconnect AI meetings Google Calendar
+ */
+export const disconnectMeetCalendar = async ( options?: RequestInit): Promise<DisconnectMeetCalendar200> => {
+
+  return customFetch<DisconnectMeetCalendar200>(getDisconnectMeetCalendarUrl(),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDisconnectMeetCalendarMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof disconnectMeetCalendar>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof disconnectMeetCalendar>>, TError,void, TContext> => {
+
+const mutationKey = ['disconnectMeetCalendar'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof disconnectMeetCalendar>>, void> = () => {
+
+
+          return  disconnectMeetCalendar(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DisconnectMeetCalendarMutationResult = NonNullable<Awaited<ReturnType<typeof disconnectMeetCalendar>>>
+
+    export type DisconnectMeetCalendarMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Disconnect AI meetings Google Calendar
+ */
+export const useDisconnectMeetCalendar = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof disconnectMeetCalendar>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof disconnectMeetCalendar>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getDisconnectMeetCalendarMutationOptions(options));
+    }
+
+export const getListMeetCalendarEventsUrl = () => {
+
+
+
+
+  return `/api/meet-calendar/events`
+}
+
+/**
+ * @summary List upcoming calendar events with Join flags
+ */
+export const listMeetCalendarEvents = async ( options?: RequestInit): Promise<ListMeetCalendarEvents200> => {
+
+  return customFetch<ListMeetCalendarEvents200>(getListMeetCalendarEventsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListMeetCalendarEventsQueryKey = () => {
+    return [
+    `/api/meet-calendar/events`
+    ] as const;
+    }
+
+
+export const getListMeetCalendarEventsQueryOptions = <TData = Awaited<ReturnType<typeof listMeetCalendarEvents>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listMeetCalendarEvents>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListMeetCalendarEventsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listMeetCalendarEvents>>> = ({ signal }) => listMeetCalendarEvents({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listMeetCalendarEvents>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListMeetCalendarEventsQueryResult = NonNullable<Awaited<ReturnType<typeof listMeetCalendarEvents>>>
+export type ListMeetCalendarEventsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List upcoming calendar events with Join flags
+ */
+
+export function useListMeetCalendarEvents<TData = Awaited<ReturnType<typeof listMeetCalendarEvents>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listMeetCalendarEvents>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListMeetCalendarEventsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getEnableMeetCalendarEventBotUrl = (eventId: string,) => {
+
+
+
+
+  return `/api/meet-calendar/events/${eventId}/bot`
+}
+
+/**
+ * @summary Enable agent auto-join for a calendar event
+ */
+export const enableMeetCalendarEventBot = async (eventId: string,
+    enableMeetCalendarEventBotBody: EnableMeetCalendarEventBotBody, options?: RequestInit): Promise<EnableMeetCalendarEventBot200> => {
+
+  return customFetch<EnableMeetCalendarEventBot200>(getEnableMeetCalendarEventBotUrl(eventId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      enableMeetCalendarEventBotBody,)
+  }
+);}
+
+
+
+
+export const getEnableMeetCalendarEventBotMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof enableMeetCalendarEventBot>>, TError,{eventId: string;data: BodyType<EnableMeetCalendarEventBotBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof enableMeetCalendarEventBot>>, TError,{eventId: string;data: BodyType<EnableMeetCalendarEventBotBody>}, TContext> => {
+
+const mutationKey = ['enableMeetCalendarEventBot'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof enableMeetCalendarEventBot>>, {eventId: string;data: BodyType<EnableMeetCalendarEventBotBody>}> = (props) => {
+          const {eventId,data} = props ?? {};
+
+          return  enableMeetCalendarEventBot(eventId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type EnableMeetCalendarEventBotMutationResult = NonNullable<Awaited<ReturnType<typeof enableMeetCalendarEventBot>>>
+    export type EnableMeetCalendarEventBotMutationBody = BodyType<EnableMeetCalendarEventBotBody>
+    export type EnableMeetCalendarEventBotMutationError = ErrorType<void>
+
+    /**
+ * @summary Enable agent auto-join for a calendar event
+ */
+export const useEnableMeetCalendarEventBot = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof enableMeetCalendarEventBot>>, TError,{eventId: string;data: BodyType<EnableMeetCalendarEventBotBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof enableMeetCalendarEventBot>>,
+        TError,
+        {eventId: string;data: BodyType<EnableMeetCalendarEventBotBody>},
+        TContext
+      > => {
+      return useMutation(getEnableMeetCalendarEventBotMutationOptions(options));
+    }
+
+export const getDisableMeetCalendarEventBotUrl = (eventId: string,) => {
+
+
+
+
+  return `/api/meet-calendar/events/${eventId}/bot`
+}
+
+/**
+ * @summary Disable agent auto-join for a calendar event
+ */
+export const disableMeetCalendarEventBot = async (eventId: string, options?: RequestInit): Promise<DisableMeetCalendarEventBot200> => {
+
+  return customFetch<DisableMeetCalendarEventBot200>(getDisableMeetCalendarEventBotUrl(eventId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDisableMeetCalendarEventBotMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof disableMeetCalendarEventBot>>, TError,{eventId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof disableMeetCalendarEventBot>>, TError,{eventId: string}, TContext> => {
+
+const mutationKey = ['disableMeetCalendarEventBot'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof disableMeetCalendarEventBot>>, {eventId: string}> = (props) => {
+          const {eventId} = props ?? {};
+
+          return  disableMeetCalendarEventBot(eventId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DisableMeetCalendarEventBotMutationResult = NonNullable<Awaited<ReturnType<typeof disableMeetCalendarEventBot>>>
+
+    export type DisableMeetCalendarEventBotMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Disable agent auto-join for a calendar event
+ */
+export const useDisableMeetCalendarEventBot = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof disableMeetCalendarEventBot>>, TError,{eventId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof disableMeetCalendarEventBot>>,
+        TError,
+        {eventId: string},
+        TContext
+      > => {
+      return useMutation(getDisableMeetCalendarEventBotMutationOptions(options));
+    }
 

@@ -17,11 +17,13 @@ import {
   formatInr,
   gstPortionPaise,
 } from "../lib/money-inr.js";
+import { pricePhonePurchase, resolvePhonePromo } from "../lib/phone-promo.js";
 import {
   ListPhoneNumbersResponse,
   ListAvailablePhoneNumbersQueryParams,
   ListAvailablePhoneNumbersResponse,
   InitiatePhoneNumberPurchaseBody,
+  QuotePhoneNumberPromoBody,
   ConfirmPhoneNumberPurchaseBody,
   AssignPhoneNumberParams,
   AssignPhoneNumberBody,
@@ -665,6 +667,38 @@ router.get("/phone-numbers/available", requireAuth, async (req, res): Promise<vo
   }
 });
 
+// ── POST /phone-numbers/promo/quote ───────────────────────────────────────────
+// Prices a number with a promo applied so checkout can show the breakdown
+// before payment. Creates nothing; /purchase/initiate re-prices independently,
+// so this endpoint is display-only and never authorises a discount by itself.
+
+router.post("/phone-numbers/promo/quote", requireAuth, async (req, res): Promise<void> => {
+  const parsed = QuotePhoneNumberPromoBody.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "Validation failed", issues: parsed.error.issues }); return; }
+  const { code, number } = parsed.data;
+
+  const resolved = resolvePhonePromo(code);
+  const pricing = pricePhonePurchase(number, resolved.ok ? code : null);
+
+  res.json({
+    valid:   pricing.promoCode !== null,
+    code:    pricing.promoCode,
+    label:   pricing.promoLabel,
+    message: resolved.ok
+      ? null
+      : resolved.reason === "expired"
+        ? "This promo code has expired."
+        : "That promo code isn't valid.",
+    basePaise:            pricing.basePaise,
+    gstPaise:             pricing.gstPaise,
+    payablePaise:         pricing.payablePaise,
+    standardBasePaise:    pricing.standardBasePaise,
+    standardPayablePaise: withGstPaise(pricing.standardBasePaise),
+    discountPaise:        pricing.discountPaise,
+    gstRate:              GST_RATE,
+  });
+});
+
 // ── POST /phone-numbers/purchase/initiate ─────────────────────────────────────
 // Creates a real Razorpay INR order for ₹800 + GST. The number is
 // NOT touched (not purchased from Vobiz, not inserted into phone_numbers)
@@ -681,7 +715,14 @@ router.post("/phone-numbers/purchase/initiate", requireAuth, clientContext, deny
   const parsed = InitiatePhoneNumberPurchaseBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Validation failed", issues: parsed.error.issues }); return; }
 
-  const { number, countryCode, region, numberType, renewalMode } = parsed.data;
+  const { number, countryCode, region, numberType, renewalMode, promoCode } = parsed.data;
+
+  // Reject a bad code loudly. Falling through at full price would charge the
+  // buyer several hundred rupees more than the total they were just shown.
+  if (promoCode && promoCode.trim() && !resolvePhonePromo(promoCode).ok) {
+    res.status(400).json({ error: "That promo code isn't valid.", code: "PROMO_INVALID" });
+    return;
+  }
 
   const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, clerkId));
   if (!user) { res.status(404).json({ error: "User not found" }); return; }
@@ -726,9 +767,10 @@ router.post("/phone-numbers/purchase/initiate", requireAuth, clientContext, deny
     return;
   }
 
-  const basePaise = phonePurchaseBasePaise(number);
-  const gstPaise = gstPortionPaise(basePaise);
-  const payablePaise = withGstPaise(basePaise);
+  // Server-side pricing is authoritative: the client sends only the code, and
+  // the amount charged is derived here, never taken from the request.
+  const pricing = pricePhonePurchase(number, promoCode);
+  const { basePaise, gstPaise, payablePaise, discountPaise } = pricing;
   const razorpay = getRazorpay();
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -745,6 +787,7 @@ router.post("/phone-numbers/purchase/initiate", requireAuth, clientContext, deny
         basePaise: String(basePaise),
         gstPaise: String(gstPaise),
         gstRate: String(GST_RATE),
+        ...(pricing.promoCode ? { promoCode: pricing.promoCode, discountPaise: String(discountPaise) } : {}),
       },
       payment_capture: 1,
     } as any);
@@ -761,12 +804,17 @@ router.post("/phone-numbers/purchase/initiate", requireAuth, clientContext, deny
     region:          region ?? null,
     numberType:      numberType ?? "local",
     amountCents:     payablePaise, // Razorpay charge incl. GST (for refunds)
+    promoCode:       pricing.promoCode,
+    discountPaise,
     renewalMode,
     status:          "pending",
     razorpayOrderId: order.id,
   }).returning();
 
-  req.log.info({ userId: clerkId, number, orderId: order.id, payablePaise, renewalMode }, "Phone number purchase order initiated");
+  req.log.info(
+    { userId: clerkId, number, orderId: order.id, payablePaise, renewalMode, promoCode: pricing.promoCode, discountPaise },
+    "Phone number purchase order initiated",
+  );
 
   res.json({
     purchaseOrderId: orderRow!.id,
@@ -777,6 +825,8 @@ router.post("/phone-numbers/purchase/initiate", requireAuth, clientContext, deny
     gstPaise,
     payablePaise,
     gstRate:         GST_RATE,
+    promoCode:       pricing.promoCode,
+    discountPaise,
     currency:        CURRENCY_INR,
     keyId:           process.env["RAZORPAY_KEY_ID"],
     preferCard:      true,
@@ -830,8 +880,9 @@ router.post("/phone-numbers/purchase/confirm", requireAuth, clientContext, denyM
     return;
   }
 
-  const { number, countryCode, region, numberType, amountCents, renewalMode } = claimed;
+  const { number, countryCode, region, numberType, amountCents, renewalMode, promoCode } = claimed;
   const resolvedRenewalMode = renewalMode === "autopay" ? "autopay" : "wallet";
+  const promoNote = promoCode ? ` [promo ${promoCode}]` : "";
 
   // Always buy from the platform VoBiz master wallet. Per-user sub-accounts
   // are not funded for DID cost and caused "balance debit failed" after the
@@ -915,7 +966,7 @@ router.post("/phone-numbers/purchase/confirm", requireAuth, clientContext, denyM
     userId:            user.id,
     type:              "debit",
     amountCents:       -amountCents,
-    description:       `Phone number ${number} purchased (${formatInr(paidBasePaise)} + GST ${formatInr(amountCents - paidBasePaise)} = ${formatInr(amountCents)}, paid by card)`,
+    description:       `Phone number ${number} purchased (${formatInr(paidBasePaise)} + GST ${formatInr(amountCents - paidBasePaise)} = ${formatInr(amountCents)}, paid by card)${promoNote}`,
     status:            "completed",
     razorpayOrderId,
     razorpayPaymentId,
@@ -933,13 +984,13 @@ router.post("/phone-numbers/purchase/confirm", requireAuth, clientContext, denyM
   void issueInvoice({
     user: { id: user.id, name: user.name, email: user.email },
     type: "phone_number",
-    description: `Phone number ${number} — provisioning & 1 month rental`,
+    description: `Phone number ${number} — provisioning & 1 month rental${promoNote}`,
     hsnSac: "998411",
     amountCents: paidBasePaise,
     gstInclusive: false,
     razorpayOrderId,
     razorpayPaymentId,
-    metadata: { number, phoneNumberId: row!.id },
+    metadata: { number, phoneNumberId: row!.id, ...(promoCode ? { promoCode } : {}) },
   });
 
   req.log.info({ number, userId: clerkId, vobizId: vobizNumber.id, nextRenewalAt }, "Phone number purchased and provisioned after confirmed payment");

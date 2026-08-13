@@ -2000,6 +2000,8 @@ export interface PurchasePhoneNumberInput {
   numberType?: PurchasePhoneNumberInputNumberType;
   /** Autopay keeps the number via card mandate top-ups; wallet renews from balance only (unpaid → release after grace). */
   renewalMode?: PurchasePhoneNumberInputRenewalMode;
+  /** Optional promo code. The server re-prices the order; an unknown or expired code is rejected with 400 rather than silently charging full price. */
+  promoCode?: string;
 }
 
 export interface InitiatePhoneNumberPurchaseResponse {
@@ -2007,13 +2009,61 @@ export interface InitiatePhoneNumberPurchaseResponse {
   purchaseOrderId: number;
   /** Razorpay order id */
   orderId: string;
-  /** Payable amount in INR paise (₹800 + 18% GST = 94400) */
+  /** Payable amount in INR paise, including GST */
   amountCents: number;
   /** Amount in the smallest currency unit, as required by the Razorpay checkout widget */
   amount: number;
   currency: string;
   /** Razorpay publishable key id for the checkout widget */
   keyId: string;
+  /** Taxable base actually charged, after any promo */
+  basePaise?: number;
+  gstPaise?: number;
+  payablePaise?: number;
+  gstRate?: number;
+  /**
+     * Promo applied to this order, or null at full price
+     * @nullable
+     */
+  promoCode?: string | null;
+  /** Paise taken off the standard base by the promo */
+  discountPaise?: number;
+  preferCard?: boolean;
+}
+
+export interface PhonePromoQuoteInput {
+  /** Promo code as typed by the buyer (case-insensitive) */
+  code: string;
+  /** E.164 number being priced — the standard base is tier-dependent */
+  number: string;
+}
+
+export interface PhonePromoQuote {
+  /** False when the code is unknown or expired; the quote then shows full price */
+  valid: boolean;
+  /**
+     * Canonical uppercase code when valid
+     * @nullable
+     */
+  code?: string | null;
+  /**
+     * Human name for the offer, e.g. "Voiceathon 2026"
+     * @nullable
+     */
+  label?: string | null;
+  /**
+     * Why an invalid code was rejected
+     * @nullable
+     */
+  message?: string | null;
+  basePaise: number;
+  gstPaise: number;
+  payablePaise: number;
+  standardBasePaise: number;
+  /** What the buyer would pay without the promo — also the recurring renewal amount */
+  standardPayablePaise: number;
+  discountPaise: number;
+  gstRate: number;
 }
 
 export interface ConfirmPhoneNumberPurchaseInput {
@@ -3262,6 +3312,7 @@ export interface EventTypeInput {
   bufferAfterMins?: number;
   confirmationMode?: EventTypeInputConfirmationMode;
   maxBookingsPerSlot?: number;
+  /** When true, Google Calendar invites include a Meet link */
   enableGoogleMeet?: boolean;
   isActive?: boolean;
 }
@@ -6010,4 +6061,45 @@ deviceId: string;
 export type GetBookExamAttemptsParams = {
 deviceId: string;
 };
+
+export type CreateMeetBotBody = {
+  /** Agent configured for meetings */
+  agentId: number;
+  /** Google Meet, Zoom, or Teams URL */
+  meetingUrl: string;
+  /** When true, skip booking delegate swap and join as agentId */
+  joinAsSelected?: boolean;
+};
+
+export type CreateMeetBot200 = {
+  botId: string;
+  status: string;
+  agentId: number;
+  configuredAgentId?: number;
+};
+
+export type GetMeetBotIdentity200 = { [key: string]: unknown };
+
+export type GetMeetBot200 = {
+  botId: string;
+  status: string;
+};
+
+export type LeaveMeetBot200 = {
+  ok: boolean;
+};
+
+export type GetMeetCalendarConnection200 = { [key: string]: unknown };
+
+export type DisconnectMeetCalendar200 = { [key: string]: unknown };
+
+export type ListMeetCalendarEvents200 = { [key: string]: unknown };
+
+export type EnableMeetCalendarEventBotBody = {
+  agentId: number;
+};
+
+export type EnableMeetCalendarEventBot200 = { [key: string]: unknown };
+
+export type DisableMeetCalendarEventBot200 = { [key: string]: unknown };
 

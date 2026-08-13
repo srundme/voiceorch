@@ -6,6 +6,8 @@ import {
   useListAvailablePhoneNumbers,
   useInitiatePhoneNumberPurchase,
   useConfirmPhoneNumberPurchase,
+  useQuotePhoneNumberPromo,
+  type PhonePromoQuote,
   useAssignPhoneNumber,
   useReleasePhoneNumber,
   useListAgents,
@@ -341,6 +343,14 @@ function AssignDialog({
   );
 }
 
+/** Format paise as ₹1,234.56. Promo prices are not whole rupees once GST lands. */
+function inr(paise: number): string {
+  return `₹${(paise / 100).toLocaleString("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
 // ── Buy Number Dialog ─────────────────────────────────────────────────────────
 
 function BuyNumberDialog({ onClose }: { onClose: () => void }) {
@@ -353,6 +363,9 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
   const [selected, setSelected] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [renewalMode, setRenewalMode] = useState<"autopay" | "wallet">("wallet");
+  const [promoInput, setPromoInput] = useState("");
+  const [promo, setPromo] = useState<PhonePromoQuote | null>(null);
+  const [promoError, setPromoError] = useState<string | null>(null);
 
   const { data: available, isFetching, error: searchError, refetch } = useListAvailablePhoneNumbers(
     { countryCode: country, pattern: pattern || undefined },
@@ -369,16 +382,54 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
   const confirm  = useConfirmPhoneNumberPurchase();
   const [payingViaCheckout, setPayingViaCheckout] = useState(false);
 
+  const quotePromo = useQuotePhoneNumberPromo();
+
   const selectedNum = available?.find(n => n.number === selected);
   // Prefix-tiered pricing from the API: monthlyRateCents = monthly rental + ₹100 one-time setup (before GST).
-  // +9180… = ₹599/mo, +9179… = ₹699/mo, others ₹659/mo.
-  const SETUP_INR = 100;
-  const PHONE_BASE_INR = Math.round((selectedNum?.monthlyRateCents ?? 0) / 100); // rental + setup
-  const MONTHLY_INR = Math.max(PHONE_BASE_INR - SETUP_INR, 0);
-  const PHONE_GST_INR = Math.round(PHONE_BASE_INR * 0.18);
-  const PHONE_TOTAL_INR = PHONE_BASE_INR + PHONE_GST_INR;
-  const RENEWAL_TOTAL_INR = PHONE_TOTAL_INR; // renewal = same price as purchase
+  // +9180… = ₹599/mo, +9179… = ₹699/mo, others ₹659/mo. All maths is in paise
+  // so a promo like ₹199 (GST ₹35.82) shows exact paise instead of rounding.
+  const SETUP_PAISE = 10_000;
+  const STANDARD_BASE_PAISE = selectedNum?.monthlyRateCents ?? 0; // rental + setup, pre-GST
+  const MONTHLY_PAISE = Math.max(STANDARD_BASE_PAISE - SETUP_PAISE, 0);
+  const promoActive = promo?.valid === true;
+  const BASE_PAISE = promoActive ? promo.basePaise : STANDARD_BASE_PAISE;
+  const GST_PAISE = promoActive ? promo.gstPaise : Math.round(STANDARD_BASE_PAISE * 0.18);
+  const TOTAL_PAISE = promoActive ? promo.payablePaise : STANDARD_BASE_PAISE + GST_PAISE;
+  // Renewals are never discounted — the number renews at its normal tier price.
+  const RENEWAL_TOTAL_PAISE = promo?.standardPayablePaise
+    ?? STANDARD_BASE_PAISE + Math.round(STANDARD_BASE_PAISE * 0.18);
   const isPaidNumber = (selectedNum?.monthlyRateCents ?? 0) > 0;
+
+  async function handleApplyPromo() {
+    const code = promoInput.trim();
+    if (!code || !selected) return;
+    setPromoError(null);
+    try {
+      const quote = await quotePromo.mutateAsync({ data: { code, number: selected } });
+      if (quote.valid) {
+        setPromo(quote);
+      } else {
+        setPromo(null);
+        setPromoError(quote.message ?? "That promo code isn't valid.");
+      }
+    } catch (err) {
+      setPromo(null);
+      setPromoError(formatApiError(err));
+    }
+  }
+
+  function handleRemovePromo() {
+    setPromo(null);
+    setPromoInput("");
+    setPromoError(null);
+  }
+
+  // A quote is priced against one number (the renewal tier differs per series),
+  // so discard it if the buyer goes back and picks a different number.
+  useEffect(() => {
+    setPromo(null);
+    setPromoError(null);
+  }, [selected]);
 
   function handleSearch() {
     setSearched(true);
@@ -405,6 +456,7 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
           region: selectedNum?.region ?? undefined,
           numberType: selectedNum?.numberType ?? "local",
           renewalMode,
+          ...(promoActive ? { promoCode: promo.code ?? undefined } : {}),
         },
       });
 
@@ -420,7 +472,7 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
           currency: order.currency,
           order_id: order.orderId,
           name:     "SnapServe",
-          description: `Phone number — ₹${PHONE_BASE_INR} + GST ₹${PHONE_GST_INR}`,
+          description: `Phone number — ${inr(BASE_PAISE)} + GST ${inr(GST_PAISE)}`,
           theme: { color: "#ededed" },
           config: {
             display: {
@@ -527,24 +579,94 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
             </div>
             <div className="flex justify-between px-4 py-2.5">
               <span className="text-muted-foreground">Telephony rental</span>
-              <span className="text-foreground">₹{MONTHLY_INR}.00</span>
+              <span className={promoActive ? "text-muted-foreground line-through" : "text-foreground"}>
+                {inr(MONTHLY_PAISE)}
+              </span>
             </div>
             <div className="flex justify-between px-4 py-2.5">
               <span className="text-muted-foreground">Setup cost</span>
-              <span className="text-foreground">₹100.00</span>
+              <span className={promoActive ? "text-muted-foreground line-through" : "text-foreground"}>
+                {inr(SETUP_PAISE)}
+              </span>
             </div>
+            {promoActive && (
+              <div className="flex justify-between px-4 py-2.5">
+                <span className="text-emerald-600 dark:text-emerald-500">
+                  {promo.label ?? promo.code} offer price
+                </span>
+                <span className="font-medium text-emerald-600 dark:text-emerald-500">
+                  {inr(BASE_PAISE)}
+                </span>
+              </div>
+            )}
             <div className="flex justify-between px-4 py-2.5">
               <span className="text-muted-foreground">GST (18%)</span>
-              <span className="text-foreground">₹{PHONE_GST_INR}.00</span>
+              <span className="text-foreground">{inr(GST_PAISE)}</span>
             </div>
             <div className="flex justify-between px-4 py-2.5 border-t border-border mt-1 pt-2.5">
               <span className="text-muted-foreground font-medium">Pay now (card)</span>
-              <span className="font-semibold text-foreground">₹{PHONE_TOTAL_INR}.00</span>
+              <span className="font-semibold text-foreground">
+                {promoActive && (
+                  <span className="mr-2 font-normal text-muted-foreground line-through">
+                    {inr(RENEWAL_TOTAL_PAISE)}
+                  </span>
+                )}
+                {inr(TOTAL_PAISE)}
+              </span>
             </div>
             <div className="flex justify-between px-4 py-2.5">
               <span className="text-muted-foreground">Renews every 30 days</span>
-              <span className="text-foreground">₹{PHONE_BASE_INR} + GST (₹{RENEWAL_TOTAL_INR})</span>
+              <span className="text-foreground">{inr(RENEWAL_TOTAL_PAISE)}</span>
             </div>
+          </div>
+
+          {/* Promo code */}
+          <div className="space-y-2">
+            <Label className="text-xs">Promo code</Label>
+            {promoActive ? (
+              <div className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2.5 text-sm">
+                <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-500" />
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-foreground">
+                    {promo.code} applied
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {inr(promo.discountPaise)} off — you pay {inr(TOTAL_PAISE)} today instead of{" "}
+                    {inr(RENEWAL_TOTAL_PAISE)}.
+                  </p>
+                </div>
+                <Button variant="ghost" size="sm" className="h-8 shrink-0 text-xs" onClick={handleRemovePromo}>
+                  Remove
+                </Button>
+              </div>
+            ) : (
+              <>
+                <div className="flex gap-2">
+                  <Input
+                    value={promoInput}
+                    onChange={e => { setPromoInput(e.target.value.toUpperCase()); setPromoError(null); }}
+                    onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); void handleApplyPromo(); } }}
+                    placeholder="Enter code"
+                    className="h-9 font-mono uppercase"
+                    autoCapitalize="characters"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    disabled={quotePromo.isPending || payingViaCheckout}
+                  />
+                  <Button
+                    variant="outline"
+                    className="h-9 shrink-0"
+                    onClick={() => void handleApplyPromo()}
+                    disabled={!promoInput.trim() || quotePromo.isPending || payingViaCheckout}
+                  >
+                    {quotePromo.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Apply"}
+                  </Button>
+                </div>
+                {promoError && (
+                  <p className="text-xs text-destructive">{promoError}</p>
+                )}
+              </>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -561,7 +683,7 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
               >
                 <div className="font-medium text-foreground">Autopay — keep number safe</div>
                 <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-                  On renewal day we top up your wallet via your card mandate, then charge ₹{RENEWAL_TOTAL_INR}. Requires a card mandate in Wallet.
+                  On renewal day we top up your wallet via your card mandate, then charge {inr(RENEWAL_TOTAL_PAISE)}. Requires a card mandate in Wallet.
                 </p>
               </button>
               <button
@@ -600,7 +722,10 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
           <div className="flex items-start gap-3 p-3 rounded-lg border border-zinc-500/20 bg-zinc-500/5 text-foreground text-xs">
             <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
             <span>
-              You&apos;ll pay ₹{PHONE_TOTAL_INR} now by card (₹{PHONE_BASE_INR} + 18% GST). Every 30 days the same amount (₹{RENEWAL_TOTAL_INR}) is charged
+              You&apos;ll pay {inr(TOTAL_PAISE)} now by card ({inr(BASE_PAISE)} + 18% GST).
+              {promoActive
+                ? ` The ${promo.code} price covers this purchase only — from day 30 the number renews at ${inr(RENEWAL_TOTAL_PAISE)} every 30 days`
+                : ` Every 30 days the same amount (${inr(RENEWAL_TOTAL_PAISE)}) is charged`}
               {renewalMode === "autopay"
                 ? " via Autopay (mandate → wallet → debit)."
                 : " from your wallet; unpaid past 7 days releases the number."}
@@ -614,7 +739,7 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
               disabled={payingViaCheckout || (renewalMode === "autopay" && !mandateActive)}
             >
               {payingViaCheckout ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
-              Pay ₹{PHONE_TOTAL_INR} & Get Number
+              Pay {inr(TOTAL_PAISE)} & Get Number
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -725,7 +850,7 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
           >
             <Plus className="h-3.5 w-3.5" />
             {selected && isPaidNumber
-              ? `Purchase — ₹${PHONE_TOTAL_INR}`
+              ? `Purchase — ${inr(TOTAL_PAISE)}`
               : "Purchase Number"}
           </Button>
         </DialogFooter>
