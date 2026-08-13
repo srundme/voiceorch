@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, text, timestamp, json, boolean, uniqueIndex, index } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, text, timestamp, json, jsonb, boolean, uniqueIndex, index } from "drizzle-orm/pg-core";
 import { agentsTable } from "./agents";
 
 export type CampaignFieldMappings = {
@@ -81,6 +81,17 @@ export type AfterCallBranch = {
   webhookUrl?: string;
 };
 
+/** Custom research question answered from call transcripts (campaign analytics). */
+export type CampaignAnalyticsQuestion = {
+  id: string;
+  label: string;
+  type: "boolean" | "enum" | "text";
+  /** For type=enum — allowed answer values. */
+  options?: string[];
+  /** Extra LLM hint, e.g. "Count any brand other than us as a competitor." */
+  description?: string;
+};
+
 export const campaignsTable = pgTable("campaigns", {
   id:                   serial("id").primaryKey(),
   userId:               text("user_id").notNull(),
@@ -127,6 +138,12 @@ export const campaignsTable = pgTable("campaigns", {
   leadTransfer:         json("lead_transfer").$type<CampaignLeadTransferConfig | null>(),
   /** Disposition-branched WhatsApp / email / webhook after campaign calls. */
   afterCallBranches:    json("after_call_branches").$type<AfterCallBranch[] | null>(),
+  /**
+   * Custom analytics questions answered from each call transcript
+   * (e.g. "Did they mention a competitor?"). Use-case dynamic research layer —
+   * separate from disposition (workflow outcomes).
+   */
+  analyticsQuestions:   jsonb("analytics_questions").$type<CampaignAnalyticsQuestion[]>().notNull().default([]),
   createdAt:            timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt:            timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

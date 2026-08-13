@@ -52,6 +52,7 @@ import IncomingCallsTab from "./incoming";
 import CallbacksTab from "./callbacks";
 import TransfersTab from "./transfers";
 import BookingsTab from "./bookings";
+import CampaignAnalyticsTab from "./campaign-analytics-tab";
 import {
   EMPTY_LEAD_TRANSFER,
   LeadTransferSettings,
@@ -65,10 +66,11 @@ const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 // ── Tabs ───────────────────────────────────────────────────────────────────────
 
-type CampaignTab = "overview" | "live-queue" | "incoming" | "callbacks" | "transfers" | "bookings" | "config";
+type CampaignTab = "overview" | "analytics" | "live-queue" | "incoming" | "callbacks" | "transfers" | "bookings" | "config";
 
 const CAMPAIGN_TABS: { id: CampaignTab; label: string; icon: React.ReactNode }[] = [
   { id: "overview",   label: "Overview",      icon: null },
+  { id: "analytics",  label: "Analytics",     icon: <BarChart3 className="h-3 w-3" /> },
   { id: "live-queue", label: "Live Queue",    icon: <Radio className="h-3 w-3" /> },
   { id: "incoming",   label: "Incoming",      icon: <PhoneIncoming className="h-3 w-3" /> },
   { id: "callbacks",  label: "Callbacks",     icon: <PhoneCall className="h-3 w-3" /> },
@@ -2169,6 +2171,15 @@ export default function CampaignDetailPage() {
           )}
 
           </>)}
+
+          {activeTab === "analytics" && (
+            <CampaignAnalyticsTab
+              campaignId={campaignId}
+              onAnalysed={() => {
+                void qc.invalidateQueries({ queryKey: ["getCampaignAnalytics", campaignId] });
+              }}
+            />
+          )}
 
           {/* ── Live Queue / Incoming / Callbacks / Transfers / Bookings ── */}
           {activeTab === "live-queue" && <LiveQueueTab campaignId={campaignId} />}

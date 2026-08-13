@@ -78,6 +78,8 @@ export const callExecutionsTable = pgTable("call_executions", {
   sentiment:       text("sentiment"),
   detectedIntent:  text("detected_intent"),
   keyTopics:       jsonb("key_topics").$type<string[]>().default([]),
+  /** Answers to campaign.analytics_questions — keyed by question id. */
+  analyticsAnswers: jsonb("analytics_answers").$type<Record<string, string | boolean | null>>().default({}),
   createdAt:       timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, t => [
   index("call_executions_lead_id_idx").on(t.leadId),

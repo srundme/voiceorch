@@ -743,6 +743,13 @@
       "when": 1791600005000,
       "tag": "0105_phone_order_promo",
       "breakpoints": true
+    },
+    {
+      "idx": 106,
+      "version": "7",
+      "when": 1791600006000,
+      "tag": "0106_campaign_analytics_questions",
+      "breakpoints": true
     }
   ]
 }

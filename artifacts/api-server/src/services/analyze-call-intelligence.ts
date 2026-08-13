@@ -22,6 +22,7 @@ import {
   leadTimelineTable,
   campaignLeadsTable,
   callsTable,
+  campaignsTable,
 } from "@workspace/db";
 import { and, eq, isNotNull, isNull, sql, inArray } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
@@ -34,6 +35,11 @@ import {
   type Sentiment,
   type DetectedIntent,
 } from "./call-intelligence-normalize.js";
+import {
+  buildAnswersSchema,
+  normalizeAnalyticsAnswers,
+  type CampaignAnalyticsQuestion,
+} from "./call-intelligence-answers.js";
 
 export {
   normalizeIntelligence,
@@ -74,6 +80,7 @@ const INTELLIGENCE_SCHEMA: Record<string, unknown> = {
 function buildIntelligencePrompt(opts: {
   callSummary?: string | null;
   dispositionResult?: Record<string, unknown> | null;
+  questions?: CampaignAnalyticsQuestion[];
 }): string {
   const disp = opts.dispositionResult;
   const dispHint =
@@ -84,6 +91,22 @@ function buildIntelligencePrompt(opts: {
     ? `\nExisting call summary (reuse or refine, do not invent facts):\n${opts.callSummary.trim().slice(0, 1200)}\n`
     : "";
 
+  const questions = opts.questions ?? [];
+  let answersHint = "";
+  if (questions.length > 0) {
+    const lines = questions.map((q) => {
+      const optsHint =
+        q.type === "enum" && q.options?.length
+          ? ` (one of: ${q.options.join(" | ")})`
+          : q.type === "boolean"
+            ? " (true/false/null)"
+            : " (short text or null)";
+      const desc = q.description ? ` — ${q.description}` : "";
+      return `- answers.${q.id}: ${q.label}${optsHint}${desc}`;
+    });
+    answersHint = `\nAlso fill "answers" for these campaign research questions (null if unknown / not discussed):\n${lines.join("\n")}\n`;
+  }
+
   return `You analyse completed voice-agent call transcripts for campaign analytics.
 
 Return JSON only with:
@@ -93,13 +116,14 @@ Return JSON only with:
   needs_info, complaint, dnc, wrong_person, no_decision, voicemail_or_no_talk
 - keyTopics: 0–6 short noun phrases (pricing, demo, competitor, payment, etc.)
 - summary: optional 1–2 sentence factual summary if none was provided
-
+${questions.length ? '- answers: object keyed by question id\n' : ""}
 Rules:
 - Judge from the CUSTOMER's words and behaviour, not the agent's script.
 - If the call never connected meaningfully / voicemail / hangup with no talk → sentiment=neutral, intent=voicemail_or_no_talk, topics=[].
 - Do not invent topics that were not discussed.
 - Prefer specific intents (booked, callback_requested) over vague ones when clear.
-${summaryHint}${dispHint}`;
+- For research questions: answer only from evidence in the transcript; use null when unclear.
+${summaryHint}${dispHint}${answersHint}`;
 }
 
 async function resolveLeadContext(
@@ -198,14 +222,35 @@ export async function analyzeCallIntelligence(
 
   if (!input.force) {
     const [row] = await db
-      .select({ sentiment: callExecutionsTable.sentiment })
+      .select({
+        sentiment: callExecutionsTable.sentiment,
+        analyticsAnswers: callExecutionsTable.analyticsAnswers,
+      })
       .from(callExecutionsTable)
       .where(eq(callExecutionsTable.id, executionId))
       .limit(1);
+    // Skip only when sentiment already set AND (no campaign questions OR answers already filled).
     if (row?.sentiment) {
-      return null;
+      const [camp] = await db
+        .select({ analyticsQuestions: campaignsTable.analyticsQuestions })
+        .from(campaignsTable)
+        .where(eq(campaignsTable.id, leadCtx.campaignId))
+        .limit(1);
+      const qs = (camp?.analyticsQuestions ?? []) as CampaignAnalyticsQuestion[];
+      const answers = (row.analyticsAnswers ?? {}) as Record<string, unknown>;
+      const answersMissing = qs.some((q) => answers[q.id] === undefined);
+      if (qs.length === 0 || !answersMissing) {
+        return null;
+      }
     }
   }
+
+  const [camp] = await db
+    .select({ analyticsQuestions: campaignsTable.analyticsQuestions })
+    .from(campaignsTable)
+    .where(eq(campaignsTable.id, leadCtx.campaignId))
+    .limit(1);
+  const questions = (camp?.analyticsQuestions ?? []) as CampaignAnalyticsQuestion[];
 
   const llm = await getDispositionLLM();
   if (!llm) {
@@ -216,17 +261,30 @@ export async function analyzeCallIntelligence(
   const systemPrompt = buildIntelligencePrompt({
     callSummary: input.callSummary,
     dispositionResult: input.dispositionResult,
+    questions,
   });
+
+  const schema: Record<string, unknown> = {
+    ...INTELLIGENCE_SCHEMA,
+    properties: {
+      ...(INTELLIGENCE_SCHEMA.properties as Record<string, unknown>),
+    },
+  };
+  const answersSchema = buildAnswersSchema(questions);
+  if (answersSchema) {
+    (schema.properties as Record<string, unknown>)["answers"] = answersSchema;
+  }
 
   let raw: Record<string, unknown>;
   try {
-    raw = await llm.extract(systemPrompt, INTELLIGENCE_SCHEMA, transcript.slice(0, 12_000));
+    raw = await llm.extract(systemPrompt, schema, transcript.slice(0, 12_000));
   } catch (err) {
     logger.warn({ callId: input.callId, err }, "call-intelligence: LLM extract failed");
     return null;
   }
 
   const intel = normalizeIntelligence(raw, input.callSummary);
+  const analyticsAnswers = normalizeAnalyticsAnswers(raw["answers"], questions);
 
   await db
     .update(callExecutionsTable)
@@ -235,6 +293,7 @@ export async function analyzeCallIntelligence(
       sentiment: intel.sentiment,
       detectedIntent: intel.detectedIntent,
       keyTopics: intel.keyTopics,
+      analyticsAnswers,
     })
     .where(eq(callExecutionsTable.id, executionId));
 

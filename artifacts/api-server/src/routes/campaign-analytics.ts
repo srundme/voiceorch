@@ -852,4 +852,105 @@ router.post("/campaigns/:id/intelligence/backfill", async (req, res): Promise<vo
   res.json(result);
 });
 
+// ── GET /campaigns/:id/analytics/insights ────────────────────────────────────
+// Trends (sentiment over time), custom-question scorecard, hot leads.
+router.get("/campaigns/:id/analytics/insights", async (req, res): Promise<void> => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const campaignId = parseInt(req.params["id"]!, 10);
+  const campaign = await requireCampaign(campaignId, userId);
+  if (!campaign) { res.status(404).json({ error: "Not found" }); return; }
+
+  const days = Math.min(Math.max(parseInt(String(req.query["days"] ?? "14"), 10) || 14, 1), 90);
+  const { getCampaignAnalyticsInsights } = await import("../services/campaign-analytics-insights.js");
+  const insights = await getCampaignAnalyticsInsights(campaignId, { days });
+  res.json(insights);
+});
+
+// ── GET/PUT /campaigns/:id/analytics-questions ───────────────────────────────
+router.get("/campaigns/:id/analytics-questions", async (req, res): Promise<void> => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const campaignId = parseInt(req.params["id"]!, 10);
+  const campaign = await requireCampaign(campaignId, userId);
+  if (!campaign) { res.status(404).json({ error: "Not found" }); return; }
+
+  res.json({ questions: (campaign as { analyticsQuestions?: unknown }).analyticsQuestions ?? [] });
+});
+
+router.put("/campaigns/:id/analytics-questions", async (req, res): Promise<void> => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const campaignId = parseInt(req.params["id"]!, 10);
+  const campaign = await requireCampaign(campaignId, userId);
+  if (!campaign) { res.status(404).json({ error: "Not found" }); return; }
+
+  const body = req.body as { questions?: unknown };
+  const raw = Array.isArray(body.questions) ? body.questions : [];
+  if (raw.length > 20) {
+    res.status(400).json({ error: "Maximum 20 analytics questions per campaign" });
+    return;
+  }
+
+  const questions: Array<{
+    id: string;
+    label: string;
+    type: "boolean" | "enum" | "text";
+    options?: string[];
+    description?: string;
+  }> = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const q = item as Record<string, unknown>;
+    const label = String(q["label"] ?? "").trim();
+    if (!label) continue;
+    const type: "boolean" | "enum" | "text" =
+      q["type"] === "enum" || q["type"] === "text" ? q["type"] : "boolean";
+    const idRaw = String(q["id"] ?? "").trim();
+    const slug =
+      label
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(/^_|_$/g, "")
+        .slice(0, 40);
+    const id = idRaw || slug || `q_${questions.length + 1}`;
+    const options = Array.isArray(q["options"])
+      ? q["options"].map((o: unknown) => String(o).trim()).filter(Boolean).slice(0, 12)
+      : undefined;
+    if (type === "enum" && (!options || options.length < 2)) {
+      res.status(400).json({ error: `Enum question "${label}" needs at least 2 options` });
+      return;
+    }
+    questions.push({
+      id,
+      label: label.slice(0, 160),
+      type,
+      options: type === "enum" ? options : undefined,
+      description: q["description"] ? String(q["description"]).trim().slice(0, 400) : undefined,
+    });
+  }
+
+  // Deduplicate ids
+  const seen = new Set<string>();
+  for (const q of questions) {
+    let id = q.id;
+    let n = 2;
+    while (seen.has(id)) {
+      id = `${q.id}_${n++}`;
+    }
+    q.id = id;
+    seen.add(id);
+  }
+
+  await db
+    .update(campaignsTable)
+    .set({ analyticsQuestions: questions })
+    .where(eq(campaignsTable.id, campaignId));
+
+  res.json({ questions });
+});
+
 export default router;
