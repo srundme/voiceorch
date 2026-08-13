@@ -555,13 +555,14 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
   if (confirming && selected) {
     return (
       <Dialog open onOpenChange={onClose}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
+        <DialogContent className="sm:max-w-md max-h-[90dvh] flex flex-col gap-0 p-0 overflow-hidden">
+          <DialogHeader className="shrink-0 px-6 pt-6 pb-4">
             <DialogTitle>Confirm Purchase</DialogTitle>
             <DialogDescription>
               You are about to purchase <span className="font-mono text-foreground font-semibold">{selected}</span>.
             </DialogDescription>
           </DialogHeader>
+          <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-4 space-y-4">
           <div className="rounded-lg border border-border bg-muted divide-y divide-border text-sm">
             <div className="flex justify-between px-4 py-2.5">
               <span className="text-muted-foreground">Number</span>
@@ -731,7 +732,8 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
                 : " from your wallet; unpaid past 7 days releases the number."}
             </span>
           </div>
-          <DialogFooter>
+          </div>
+          <DialogFooter className="shrink-0 border-t border-border bg-background px-6 py-4">
             <Button variant="outline" onClick={() => setConfirming(false)} disabled={payingViaCheckout}>Back</Button>
             <Button
               className="bg-primary text-primary-foreground hover:bg-primary/90"
@@ -749,7 +751,7 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Get a Phone Number</DialogTitle>
           <DialogDescription>
@@ -913,7 +915,7 @@ function RoutingRulesDialog({ number, onClose }: { number: PhoneNumber; onClose:
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-xl">
+      <DialogContent className="sm:max-w-xl max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Routing Rules — <span className="font-mono">{number.number}</span></DialogTitle>
           <DialogDescription>
