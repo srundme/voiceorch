@@ -1,6 +1,8 @@
+import { useId } from "react";
+
 /* ── SnapServe brand components ────────────────────────────────────────────
    SnapServeIcon   — the three-bar mark (SVG, inline, scalable)
-   SnapServeAgentIcon — the Stackhead agent mark built from three brand bars
+   SnapServeAgentIcon — the Headset agent mark (friendly face + brand bar)
    SnapServeLogo   — icon + wordmark  ("Snap" Bold / "Serve" Regular)
    SnapServeLoader — full-screen splash with animated bars
    SnapServeSarvamLockup — official “SnapServe powered by sarvam” image
@@ -78,14 +80,17 @@ export function SnapServeIcon({ size = 24, className = "" }: IconProps) {
 /* ── Agent bot mark -------------------------------------------------------- */
 
 /**
- * SnapServeAgentIcon — the Stackhead agent mark.
+ * SnapServeAgentIcon — the Headset agent mark.
  *
- * A friendly AI face assembled from SnapServe's three descending brand bars:
- * the widest layer carries two eyes, while the shorter layers form its tapered
- * digital chin. Single-colour via `currentColor` so it remains crisp in sidebar
- * active/inactive states and at the 16–20 px navigation sizes.
+ * A friendly voice-agent face: a tall rounded head with wide-set eyes and a
+ * smile, flanked by headset ear pads and resting on a single SnapServe brand
+ * bar. The face is knocked out through a mask so the whole mark stays a single
+ * `currentColor` shape, keeping it crisp in sidebar active/inactive states and
+ * at the 16–20 px navigation sizes.
  */
 export function SnapServeAgentIcon({ size = 24, className = "" }: IconProps) {
+  // useId can emit colons, which break `url(#…)` references in some browsers.
+  const maskId = `ss-agent-${useId().replace(/:/g, "")}`;
   return (
     <svg
       width={size}
@@ -97,12 +102,29 @@ export function SnapServeAgentIcon({ size = 24, className = "" }: IconProps) {
       role="img"
       aria-label="SnapServe agent"
     >
-      <path
-        fill="currentColor"
-        fillRule="evenodd"
-        clipRule="evenodd"
-        d="M6.5 3h11a4.5 4.5 0 0 1 0 9h-11a4.5 4.5 0 0 1 0-9ZM8 6a1.2 1.2 0 1 0 0 2.4A1.2 1.2 0 0 0 8 6Zm8 0a1.2 1.2 0 1 0 0 2.4A1.2 1.2 0 0 0 16 6ZM7 13.5h10a2.25 2.25 0 0 1 0 4.5H7a2.25 2.25 0 0 1 0-4.5Zm3 5.8h4a1.35 1.35 0 0 1 0 2.7h-4a1.35 1.35 0 0 1 0-2.7Z"
-      />
+      <mask id={maskId} maskUnits="userSpaceOnUse" x="0" y="0" width="24" height="24">
+        <rect width="24" height="24" fill="black" />
+        <rect x="4.3" y="3.2" width="15.4" height="14" rx="6" fill="white" />
+        <circle cx="9.3" cy="9" r="1.9" fill="black" />
+        <circle cx="14.7" cy="9" r="1.9" fill="black" />
+        <path
+          d="M9.9 12.8c.945 1.68 3.255 1.68 4.2 0"
+          stroke="black"
+          strokeWidth="1.35"
+          strokeLinecap="round"
+          fill="none"
+        />
+      </mask>
+
+      {/* headset ear pads */}
+      <rect x="1.1" y="7.9" width="3" height="6.4" rx="1.5" fill="currentColor" opacity="0.55" />
+      <rect x="19.9" y="7.9" width="3" height="6.4" rx="1.5" fill="currentColor" opacity="0.55" />
+
+      {/* head with the face punched out */}
+      <rect width="24" height="24" fill="currentColor" mask={`url(#${maskId})`} />
+
+      {/* SnapServe brand bar as shoulders */}
+      <rect x="5.4" y="19.2" width="13.2" height="3" rx="1.5" fill="currentColor" opacity="0.55" />
     </svg>
   );
 }

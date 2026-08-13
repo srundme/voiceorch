@@ -1,3 +1,21 @@
-<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="SnapServe agent">
-  <path fill="currentColor" fill-rule="evenodd" clip-rule="evenodd" d="M6.5 3h11a4.5 4.5 0 0 1 0 9h-11a4.5 4.5 0 0 1 0-9ZM8 6a1.2 1.2 0 1 0 0 2.4A1.2 1.2 0 0 0 8 6Zm8 0a1.2 1.2 0 1 0 0 2.4A1.2 1.2 0 0 0 16 6ZM7 13.5h10a2.25 2.25 0 0 1 0 4.5H7a2.25 2.25 0 0 1 0-4.5Zm3 5.8h4a1.35 1.35 0 0 1 0 2.7h-4a1.35 1.35 0 0 1 0-2.7Z"/>
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" role="img" aria-label="SnapServe agent">
+  <title>SnapServe agent</title>
+  <mask id="ss-agent-face" maskUnits="userSpaceOnUse" x="0" y="0" width="24" height="24">
+    <rect width="24" height="24" fill="black"/>
+    <rect x="4.3" y="3.2" width="15.4" height="14" rx="6" fill="white"/>
+    <circle cx="9.3" cy="9" r="1.9" fill="black"/>
+    <circle cx="14.7" cy="9" r="1.9" fill="black"/>
+    <path d="M9.9 12.8c.945 1.68 3.255 1.68 4.2 0" stroke="black" stroke-width="1.35" stroke-linecap="round" fill="none"/>
+  </mask>
+
+  <!-- headset ear pads -->
+  <rect x="1.1" y="7.9" width="3" height="6.4" rx="1.5" fill="currentColor" opacity="0.55"/>
+  <rect x="19.9" y="7.9" width="3" height="6.4" rx="1.5" fill="currentColor" opacity="0.55"/>
+
+  <!-- head with the face punched out -->
+  <rect width="24" height="24" fill="currentColor" mask="url(#ss-agent-face)"/>
+
+  <!-- SnapServe brand bar as shoulders -->
+  <rect x="5.4" y="19.2" width="13.2" height="3" rx="1.5" fill="currentColor" opacity="0.55"/>
 </svg>
