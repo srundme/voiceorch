@@ -71,11 +71,20 @@ const NON_TERMINAL_STATUSES = new Set(["validating", "processing", "crawling"]);
 /** List/detail rows may include enrichments from the API (optional for older clients). */
 type KnowledgeSourceView = KnowledgeSource & {
   indexing?: boolean;
+  indexingBlocked?: boolean;
+  indexingError?: string | null;
   needsAttention?: boolean;
   failedPageCount?: number;
   attachedAgentCount?: number;
   embeddedCount?: number;
 };
+
+function sourceStatusMeta(source: KnowledgeSourceView) {
+  if (source.indexing) return { label: "Indexing…", color: "text-muted-foreground", spin: true as const };
+  if (source.indexingBlocked) return { label: "Keyword search only", color: "text-amber-600 dark:text-amber-500", spin: false as const };
+  if (source.needsAttention) return { label: "Needs attention", color: "text-muted-foreground", spin: false as const };
+  return STATUS_META[source.status] ?? STATUS_META["ready"]!;
+}
 
 /* ── Source Card ─────────────────────────────────────────────────────────── */
 
@@ -89,11 +98,7 @@ function SourceCard({
   onDelete: () => void;
 }) {
   const meta = TYPE_META[source.type] ?? TYPE_META["text"]!;
-  const st = source.indexing
-    ? { label: "Indexing…", color: "text-muted-foreground", spin: true as const }
-    : source.needsAttention
-      ? { label: "Needs attention", color: "text-muted-foreground", spin: false as const }
-      : (STATUS_META[source.status] ?? STATUS_META["ready"]!);
+  const st = sourceStatusMeta(source);
 
   return (
     <div
@@ -816,11 +821,7 @@ function DetailView({ sourceId, onBack }: { sourceId: number; onBack: () => void
 
   const source = data as KnowledgeSourceDetail & KnowledgeSourceView;
   const meta = TYPE_META[source.type] ?? TYPE_META["text"]!;
-  const st = source.indexing
-    ? { label: "Indexing…", color: "text-muted-foreground", spin: true as const }
-    : source.needsAttention
-      ? { label: "Needs attention", color: "text-muted-foreground", spin: false as const }
-      : (STATUS_META[source.status] ?? STATUS_META["ready"]!);
+  const st = sourceStatusMeta(source);
 
   return (
     <div className="space-y-6">
@@ -911,6 +912,19 @@ function DetailView({ sourceId, onBack }: { sourceId: number; onBack: () => void
         <div className="flex items-center gap-3 bg-muted/50 border border-border rounded-lg px-4 py-3 text-sm text-foreground">
           <Loader2 className="w-4 h-4 animate-spin shrink-0 text-muted-foreground" />
           Importing website pages. This updates automatically.
+        </div>
+      )}
+      {source.indexingBlocked && (
+        <div className="flex items-start gap-3 bg-amber-500/10 border border-amber-500/20 rounded-lg px-4 py-3 text-sm text-foreground">
+          <XCircle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-500" />
+          <div>
+            <p className="font-medium">Smart matching paused — using keyword search</p>
+            <p className="text-muted-foreground text-xs mt-0.5">
+              {source.indexingError ?? "The embedding provider is unavailable."} Your agents still
+              answer from this pack using keyword search. Indexing resumes automatically once the
+              provider works again.
+            </p>
+          </div>
         </div>
       )}
       {(source.needsAttention || source.status === "partial") && source.status !== "crawling" && (

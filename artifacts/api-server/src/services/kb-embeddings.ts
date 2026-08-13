@@ -16,6 +16,12 @@
  * - The worker's UPDATE is guarded on `embedding IS NULL AND content = <embedded
  *   content>` so a concurrent content edit can never be overwritten by a stale
  *   vector.
+ * - `embedBlock` circuit breaker: a provider failure that cannot resolve itself
+ *   (missing key, revoked key, disabled billing, exhausted quota) would
+ *   otherwise leave entries unembedded forever while the UI spins on
+ *   "Indexing…". When one is detected the worker stops, the KB serves FTS-only,
+ *   and the reason is exposed to the dashboard. The breaker half-opens after
+ *   EMBED_BLOCK_RETRY_MS so a fixed key/billing issue self-heals.
  */
 import { db, knowledgeEntriesTable, platformSettingsTable } from "@workspace/db";
 import { and, eq, isNull, sql } from "drizzle-orm";
@@ -56,6 +62,70 @@ export async function probeKbVectorSupport(): Promise<boolean> {
   }
   logger.info({ vectorReady }, "KB vector capability probe complete");
   return vectorReady;
+}
+
+/* ── Embed circuit breaker ───────────────────────────────────────────────── */
+
+/** How long the breaker stays open before one retry is allowed through. */
+const EMBED_BLOCK_RETRY_MS = Number(process.env["KB_EMBED_BLOCK_RETRY_MS"] ?? 30 * 60_000);
+/** Consecutive non-fatal worker failures before the breaker opens. */
+const EMBED_BLOCK_FAILURE_THRESHOLD = 3;
+
+export interface KbEmbedBlock {
+  /** Short, user-facing reason shown in the dashboard. */
+  reason: string;
+  /** Provider detail for operators (truncated). */
+  detail: string | null;
+  at: number;
+}
+
+let embedBlock: KbEmbedBlock | null = null;
+let consecutiveFailures = 0;
+
+class KbEmbedHttpError extends Error {
+  constructor(readonly status: number, readonly detail: string) {
+    super(`Gemini embed HTTP ${status}: ${detail}`);
+    this.name = "KbEmbedHttpError";
+  }
+}
+
+/** 401/403 = key revoked or billing disabled, 429 = quota exhausted. None of
+ * these clear on their own, so retrying every 10 min just burns the API. */
+function fatalReason(err: unknown): string | null {
+  if (!(err instanceof KbEmbedHttpError)) return null;
+  if (err.status === 401 || err.status === 403) return "Embedding API key rejected (check key and Google Cloud billing)";
+  if (err.status === 429) return "Embedding API quota exhausted";
+  return null;
+}
+
+function openEmbedBlock(reason: string, detail?: string): void {
+  const already = embedBlock?.reason === reason;
+  embedBlock = { reason, detail: detail?.slice(0, 300) ?? null, at: Date.now() };
+  consecutiveFailures = 0;
+  if (!already) logger.error({ reason, detail }, "KB embedding paused — knowledge base is serving keyword search only");
+}
+
+function clearEmbedBlock(): void {
+  if (embedBlock) logger.info({ prevReason: embedBlock.reason }, "KB embedding recovered");
+  embedBlock = null;
+  consecutiveFailures = 0;
+}
+
+/** Null when embedding is healthy. Non-null means the KB is FTS-only. */
+export function getKbEmbedBlock(): KbEmbedBlock | null {
+  return embedBlock;
+}
+
+/** True while the breaker is open and the retry window has not elapsed. */
+function embedBlocked(): boolean {
+  if (!embedBlock) return false;
+  if (Date.now() - embedBlock.at >= EMBED_BLOCK_RETRY_MS) {
+    logger.info({ reason: embedBlock.reason }, "KB embedding breaker half-open — retrying provider");
+    embedBlock = null;
+    cachedKey = null; // pick up a freshly configured key on the retry
+    return false;
+  }
+  return true;
 }
 
 /* ── Gemini key resolution (managed key → env fallback) ─────────────────── */
@@ -117,7 +187,7 @@ async function callBatchEmbed(
   });
   if (!resp.ok) {
     const detail = (await resp.text().catch(() => "")).slice(0, 300);
-    throw new Error(`Gemini embed HTTP ${resp.status}: ${detail}`);
+    throw new KbEmbedHttpError(resp.status, detail);
   }
   const json = (await resp.json()) as { embeddings?: Array<{ values?: number[] }> };
   const embs = json.embeddings;
@@ -167,6 +237,9 @@ function recordEmbedLatency(ms: number, ok: boolean): void {
  */
 export async function embedKbQuery(query: string): Promise<number[] | null> {
   if (!vectorReady) return null;
+  // Skip the call entirely while the breaker is open: a dead provider would
+  // otherwise add the full query timeout to every conversational turn.
+  if (embedBlocked()) return null;
   const text = query.trim().slice(0, 2000);
   if (!text) return null;
   const cacheKey = text.toLowerCase();
@@ -191,6 +264,8 @@ export async function embedKbQuery(query: string): Promise<number[] | null> {
     return vec;
   } catch (err) {
     recordEmbedLatency(Date.now() - t0, false);
+    const fatal = fatalReason(err);
+    if (fatal) openEmbedBlock(fatal, err instanceof KbEmbedHttpError ? err.detail : undefined);
     logger.warn({ err: String(err) }, "KB query embedding failed — falling back to FTS");
     return null;
   }
@@ -217,6 +292,7 @@ let workerRerun = false;
  */
 export function kickKbEmbedWorker(): void {
   if (!vectorReady) return;
+  if (embedBlocked()) return;
   if (workerRunning) {
     workerRerun = true;
     return;
@@ -229,7 +305,14 @@ export function kickKbEmbedWorker(): void {
         await embedMissingEntries();
       } while (workerRerun);
     } catch (err) {
-      logger.warn({ err: String(err) }, "KB embed worker run failed — will retry on next kick");
+      const fatal = fatalReason(err);
+      if (fatal) {
+        openEmbedBlock(fatal, err instanceof KbEmbedHttpError ? err.detail : undefined);
+      } else if (++consecutiveFailures >= EMBED_BLOCK_FAILURE_THRESHOLD) {
+        openEmbedBlock("Embedding provider unreachable", String(err));
+      } else {
+        logger.warn({ err: String(err), consecutiveFailures }, "KB embed worker run failed — will retry on next kick");
+      }
     } finally {
       workerRunning = false;
     }
@@ -294,9 +377,10 @@ async function embedMissingEntries(): Promise<void> {
     const texts = rows.map((r) => buildEmbedText(r));
     const vecs = await callBatchEmbed(texts, "RETRIEVAL_DOCUMENT", EMBED_BATCH_TIMEOUT_MS);
     if (!vecs) {
-      logger.warn("KB embed worker: no Gemini key configured — entries stay unembedded (FTS-only)");
+      openEmbedBlock("No embedding API key configured");
       return;
     }
+    clearEmbedBlock();
 
     const now = new Date();
     let updated = 0;

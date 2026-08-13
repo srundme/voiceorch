@@ -5,7 +5,7 @@ import { requireAuth } from "../middlewares/requireAuth.js";
 import { clientContext } from "../middlewares/clientContext.js";
 import { logger } from "../lib/logger.js";
 import { ingestKbTextEntries, type KbEntryInput } from "../services/kb-ingest.js";
-import { isKbVectorReady, kickKbEmbedWorker } from "../services/kb-embeddings.js";
+import { getKbEmbedBlock, isKbVectorReady, kickKbEmbedWorker } from "../services/kb-embeddings.js";
 import { kickKrutrimSummaryWorker } from "../services/kb-source-summary.js";
 import { extractPdfChunksWithGemini } from "../services/kb-pdf-extract.js";
 import {
@@ -120,6 +120,8 @@ async function enrichKnowledgeSources<T extends { id: number; status: string; en
 ): Promise<Array<T & {
   embeddedCount: number;
   indexing: boolean;
+  indexingBlocked: boolean;
+  indexingError: string | null;
   needsAttention: boolean;
   failedPageCount: number;
   attachedAgentCount: number;
@@ -127,6 +129,7 @@ async function enrichKnowledgeSources<T extends { id: number; status: string; en
   if (!sources.length) return [];
   const ids = sources.map((s) => s.id);
   const vectorReady = isKbVectorReady();
+  const embedBlock = getKbEmbedBlock();
 
   const embedCounts = new Map<number, number>();
   if (vectorReady) {
@@ -160,15 +163,20 @@ async function enrichKnowledgeSources<T extends { id: number; status: string; en
   return sources.map((s) => {
     const failed = parseFailedUrls(s.crawlFailedUrls);
     const embeddedCount = vectorReady ? (embedCounts.get(s.id) ?? 0) : s.entryCount;
-    const indexing =
+    const pending =
       terminalOk.has(s.status)
       && s.entryCount > 0
       && vectorReady
       && embeddedCount < s.entryCount;
+    // With the embed breaker open the remaining entries will never finish;
+    // the source is usable via keyword search, so say that instead of spinning.
+    const indexingBlocked = pending && !!embedBlock;
     return {
       ...s,
       embeddedCount,
-      indexing,
+      indexing: pending && !indexingBlocked,
+      indexingBlocked,
+      indexingError: indexingBlocked ? embedBlock!.reason : null,
       needsAttention: s.status === "partial" || failed.length > 0,
       failedPageCount: failed.length,
       attachedAgentCount: attachCounts.get(s.id) ?? 0,
