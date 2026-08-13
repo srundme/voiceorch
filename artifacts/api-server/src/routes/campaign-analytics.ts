@@ -12,7 +12,7 @@ import { clientContext } from "../middlewares/clientContext.js";
 import {
   db, campaignsTable, campaignLeadsTable, campaignBatchesTable,
   callCallbacksTable, callRetriesTable, workspaceDncTable,
-  leadTimelineTable, callsTable,
+  leadTimelineTable, callsTable, callExecutionsTable,
 } from "@workspace/db";
 import { eq, and, count, sql, desc, isNotNull, inArray, ne, or } from "drizzle-orm";
 import { normalizePhone } from "../lib/phone-normalize.js";
@@ -208,6 +208,11 @@ router.get("/campaigns/:id/analytics", async (req, res): Promise<void> => {
   const totalCostCents = costDuration?.totalCostCents ?? 0;
   const avgCostPerBooking = booked > 0 ? Math.round(totalCostCents / booked) : null;
 
+  // Conversation intelligence (sentiment / intent / topics) — may be empty until
+  // backfill runs for older campaigns.
+  const { getCampaignIntelligenceStats } = await import("../services/analyze-call-intelligence.js");
+  const intelligence = await getCampaignIntelligenceStats(campaignId);
+
   res.json({
     campaignId,
     campaignName: campaign.name,
@@ -231,6 +236,7 @@ router.get("/campaigns/:id/analytics", async (req, res): Promise<void> => {
     avgCallDurationS: costDuration?.avgDurationS ?? null,
     totalCostCents,
     avgCostPerBooking,
+    intelligence,
   });
 });
 
@@ -522,6 +528,7 @@ router.post("/campaigns/:id/dispositions/act", async (req, res): Promise<void> =
       ),
     );
     const callById = new Map<number, { durationSeconds: number | null; summary: string | null; transcript: string | null }>();
+    const intelByCallId = new Map<number, { sentiment: string | null; intent: string | null; topics: string[] }>();
     if (callIds.length > 0) {
       const calls = await db
         .select({
@@ -535,6 +542,24 @@ router.post("/campaigns/:id/dispositions/act", async (req, res): Promise<void> =
       for (const c of calls) {
         callById.set(c.id, { durationSeconds: c.durationSeconds, summary: c.summary, transcript: c.transcript });
       }
+      const execs = await db
+        .select({
+          callId: callExecutionsTable.callId,
+          sentiment: callExecutionsTable.sentiment,
+          intent: callExecutionsTable.detectedIntent,
+          topics: callExecutionsTable.keyTopics,
+        })
+        .from(callExecutionsTable)
+        .where(inArray(callExecutionsTable.callId, callIds));
+      for (const e of execs) {
+        if (e.callId != null) {
+          intelByCallId.set(e.callId, {
+            sentiment: e.sentiment,
+            intent: e.intent,
+            topics: Array.isArray(e.topics) ? e.topics : [],
+          });
+        }
+      }
     }
 
     const csvCell = (v: unknown): string => {
@@ -544,13 +569,15 @@ router.post("/campaigns/:id/dispositions/act", async (req, res): Promise<void> =
 
     const header = [
       "id", "phone", "name", "email", "disposition", "callStatus", "callId",
-      "durationSec", "summary", "transcript",
+      "durationSec", "summary", "transcript", "sentiment", "intent", "topics",
     ];
     const rows = leads.map((l) => {
       const call = l.callId != null ? callById.get(Number(l.callId)) : undefined;
+      const intel = l.callId != null ? intelByCallId.get(Number(l.callId)) : undefined;
       return [
         l.id, l.phone, l.name ?? "", l.email ?? "", l.disposition ?? "", l.callStatus, l.callId ?? "",
         call?.durationSeconds ?? "", call?.summary ?? "", call?.transcript ?? "",
+        intel?.sentiment ?? "", intel?.intent ?? "", (intel?.topics ?? []).join("; "),
       ]
         .map(csvCell)
         .join(",");
@@ -803,6 +830,26 @@ router.post("/campaigns/:id/recampaign", async (req, res): Promise<void> => {
     dispositions,
     callStatuses,
   });
+});
+
+// ── POST /campaigns/:id/intelligence/backfill ────────────────────────────────
+// Re-analyse completed campaign calls that are missing sentiment/intent/topics.
+// Safe to re-run; skips rows that already have sentiment unless force=true.
+router.post("/campaigns/:id/intelligence/backfill", async (req, res): Promise<void> => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const campaignId = parseInt(req.params["id"]!, 10);
+  const campaign = await requireCampaign(campaignId, userId);
+  if (!campaign) { res.status(404).json({ error: "Not found" }); return; }
+
+  const body = (req.body ?? {}) as { force?: boolean; limit?: number };
+  const force = body.force === true;
+  const limit = typeof body.limit === "number" ? body.limit : 500;
+
+  const { backfillCampaignIntelligence } = await import("../services/analyze-call-intelligence.js");
+  const result = await backfillCampaignIntelligence(campaignId, { force, limit, concurrency: 2 });
+  res.json(result);
 });
 
 export default router;

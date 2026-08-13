@@ -3548,6 +3548,25 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
             }
           }
 
+          // 2b. Campaign conversation intelligence (sentiment / intent / topics).
+          // Universal signals for the campaign analytics board — runs after
+          // disposition so we can pass dispositionResult as a hint. Non-campaign
+          // calls are skipped inside analyzeCallIntelligence.
+          if (session.campaignLeadId && transcript && transcript.trim().length >= 20) {
+            try {
+              const { analyzeCallIntelligence } = await import("../services/analyze-call-intelligence.js");
+              await analyzeCallIntelligence({
+                callId: session.callId,
+                leadId: session.campaignLeadId,
+                transcript,
+                callSummary: callSummary || null,
+                dispositionResult,
+              });
+            } catch (intelErr) {
+              logger.warn({ sessionId, intelErr }, "Post-call intelligence analysis failed");
+            }
+          }
+
           // 3. Evaluate call success against agent's success criteria (if configured)
           const agentCfgForEval = (ag.agentConfig ?? {}) as Record<string, unknown>;
           const successCriteria = agentCfgForEval["successCriteria"] as string | undefined;

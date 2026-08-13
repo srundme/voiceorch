@@ -9,6 +9,7 @@
     "start": "node -e \"const {execSync}=require('child_process');try{execSync('fuser -k '+process.env.PORT+'/tcp 2>/dev/null')}catch{};setTimeout(()=>{},500)\" && node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "backfill-dispositions": "tsx ./src/scripts/backfill-dispositions.ts",
+    "backfill-call-intelligence": "tsx ./src/scripts/backfill-call-intelligence.ts",
     "test": "vitest run"
   },
   "dependencies": {
