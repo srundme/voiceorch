@@ -261,10 +261,14 @@ export function shouldHoldFragmentForCoalesce(
 
   if (isBackchannelOnlyUtterance(t)) return true;
 
-  if (isEnglishExpectedLang(opts?.expectedLang) || isLikelyIncompleteEnglishFragment(t)) {
-    return isLikelyIncompleteEnglishFragment(t);
-  }
+  if (isLikelyIncompleteEnglishFragment(t)) return true;
 
+  // Hold clearly-truncated fragments that end on a dangling preposition/
+  // conjunction ("Why don't we plan for", "concerned about") so a follow-up
+  // STT final can merge, instead of firing a false "I didn't catch that".
+  // Applies to English too: Sarvam commonly splits one English thought across
+  // two finals. If no follow-up arrives, the coalesce timer re-emits the
+  // fragment and the garbled-transcript path still clarifies as a fallback.
   const q = checkTranscriptQuality(t, opts);
   return q.reason === "truncated-dangling";
 }

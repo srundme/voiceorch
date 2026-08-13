@@ -7669,6 +7669,21 @@ export class OrchestrationPipeline implements VoiceSession {
         );
       }
       systemPromptForTurn += lines.join("\n");
+    } else {
+      // No booking/availability tool is configured for this agent. Without this
+      // guard the LLM cheerfully "confirms" a meeting and promises a calendar
+      // link that will never be sent (call 5578: agent said "I've locked in your
+      // demo for today at 4 PM. Our team will send over the meeting link" with
+      // only end_call + schedule_callback available). Forbid fabricated bookings.
+      const noBook = [
+        "",
+        "",
+        "[NO BOOKING CAPABILITY]",
+        "You CANNOT book meetings, create calendar events, or send calendar/meeting links — no booking tool is connected.",
+        "NEVER tell the caller a meeting, demo, or appointment is booked, scheduled, locked in, or confirmed, and NEVER promise that a meeting link or calendar invite will be sent.",
+        "If the caller wants to set something up, tell them a team member will follow up to arrange it (or arrange a callback only if they explicitly ask to be called back) — do not claim it is already scheduled.",
+      ];
+      systemPromptForTurn += noBook.join("\n");
     }
 
     // ── Tool-call preamble suppression ────────────────────────────────────────

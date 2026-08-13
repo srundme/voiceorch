@@ -77,6 +77,16 @@ describe("checkTranscriptQuality", () => {
     expect(isBackchannelOnlyUtterance("hello")).toBe(false);
   });
 
+  it("holds dangling English fragments so the follow-up final can merge (call 5578)", () => {
+    // "Why don't we plan for" + "for today." was split into two finals; the
+    // first must be held for coalesce, not answered with a false clarification.
+    expect(checkTranscriptQuality("Why don't we plan for", { expectedLang: "en-IN" }).reason).toBe("truncated-dangling");
+    expect(shouldHoldFragmentForCoalesce("Why don't we plan for", { expectedLang: "en-IN" })).toBe(true);
+    // A complete short English answer must NOT be held.
+    expect(shouldHoldFragmentForCoalesce("Yes, that works for me.", { expectedLang: "en-IN" })).toBe(false);
+    expect(shouldHoldFragmentForCoalesce("No, not yet.", { expectedLang: "en-IN" })).toBe(false);
+  });
+
   it("holds Yes Ma'am so How are you can merge (call 4856 zigzag)", () => {
     expect(isBackchannelOnlyUtterance("Yes Ma'am")).toBe(true);
     expect(shouldHoldFragmentForCoalesce("Yes Ma'am", { expectedLang: "en-IN" })).toBe(true);
