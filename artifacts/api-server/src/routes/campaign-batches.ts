@@ -828,7 +828,7 @@ router.get("/campaigns/:id/batches/:batchId/export.csv", async (req, res): Promi
   const headers = [
     "Lead Name", "Phone Number", "Email", "Date & Time", "Call ID",
     "Status", "Outcome", "Attempts", "Duration (s)", "Cost ($)",
-    "Disposition", "Notes",
+    "Disposition", "Notes", "Summary", "Transcript",
   ];
 
   const rows = leads.map(lead => {
@@ -847,10 +847,13 @@ router.get("/campaigns/:id/batches/:batchId/export.csv", async (req, res): Promi
       csvCell(call?.costCents != null ? (call.costCents / 100).toFixed(3) : ""),
       csvCell(lead.disposition ?? ""),
       csvCell(lead.notes ?? ""),
+      csvCell(call?.callSummary ?? ""),
+      csvCell(call?.transcript ?? ""),
     ].join(",");
   });
 
-  const csv = [headers.map(csvCell).join(","), ...rows].join("\r\n");
+  // UTF-8 BOM so Excel opens Devanagari/other non-ASCII transcripts correctly.
+  const csv = "\uFEFF" + [headers.map(csvCell).join(","), ...rows].join("\r\n");
 
   res.setHeader("Content-Type", "text/csv; charset=utf-8");
   res.setHeader("Content-Disposition", `attachment; filename="batch-${batchId}-report.csv"`);

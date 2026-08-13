@@ -512,16 +512,52 @@ router.post("/campaigns/:id/dispositions/act", async (req, res): Promise<void> =
     .limit(5000);
 
   if (action === "export") {
-    const header = ["id", "phone", "name", "email", "disposition", "callStatus", "callId"];
-    const rows = leads.map((l) =>
-      [l.id, l.phone, l.name ?? "", l.email ?? "", l.disposition ?? "", l.callStatus, l.callId ?? ""]
-        .map((v) => {
-          const s = String(v);
-          return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-        })
-        .join(","),
+    // Enrich each lead with its call summary + transcript so the exported report
+    // is self-contained (users asked for these instead of re-opening every call).
+    const callIds = Array.from(
+      new Set(
+        leads
+          .map((l) => (l.callId != null ? Number(l.callId) : null))
+          .filter((id): id is number => id != null && Number.isFinite(id)),
+      ),
     );
-    const csv = [header.join(","), ...rows].join("\n");
+    const callById = new Map<number, { durationSeconds: number | null; summary: string | null; transcript: string | null }>();
+    if (callIds.length > 0) {
+      const calls = await db
+        .select({
+          id: callsTable.id,
+          durationSeconds: callsTable.durationSeconds,
+          summary: callsTable.callSummary,
+          transcript: callsTable.transcript,
+        })
+        .from(callsTable)
+        .where(inArray(callsTable.id, callIds));
+      for (const c of calls) {
+        callById.set(c.id, { durationSeconds: c.durationSeconds, summary: c.summary, transcript: c.transcript });
+      }
+    }
+
+    const csvCell = (v: unknown): string => {
+      const s = v == null ? "" : String(v);
+      return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+
+    const header = [
+      "id", "phone", "name", "email", "disposition", "callStatus", "callId",
+      "durationSec", "summary", "transcript",
+    ];
+    const rows = leads.map((l) => {
+      const call = l.callId != null ? callById.get(Number(l.callId)) : undefined;
+      return [
+        l.id, l.phone, l.name ?? "", l.email ?? "", l.disposition ?? "", l.callStatus, l.callId ?? "",
+        call?.durationSeconds ?? "", call?.summary ?? "", call?.transcript ?? "",
+      ]
+        .map(csvCell)
+        .join(",");
+    });
+    // Prepend a UTF-8 BOM so Excel renders transcripts (which may contain
+    // non-ASCII / Devanagari) correctly on open.
+    const csv = "\uFEFF" + [header.join(","), ...rows].join("\n");
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader(
       "Content-Disposition",
