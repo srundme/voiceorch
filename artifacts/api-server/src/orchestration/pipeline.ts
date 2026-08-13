@@ -8667,6 +8667,37 @@ export class OrchestrationPipeline implements VoiceSession {
     const cleanResponse = stripJsonMessageWrapper(stripToolArtifacts(stripBracketedInstructions(stripMarkupTags(stripFunctionTags(stripReasoningBlocks(llmResponse))))).trim());
     const baseSpokenResponse = stepGuard.truncated() ? truncateToSingleStep(cleanResponse).text : cleanResponse;
 
+    // Silent-turn recovery: the LLM produced no speakable text and no tool call
+    // even after the retry loop above (Sarvam/Gemma sometimes returns empty
+    // content — e.g. on "are you AI?" — and the last retry still comes back
+    // blank). Without this the turn ends with zero audio; a run of these reads
+    // as the agent going dead mid-call (call 8745: 6 empty turns in a row, the
+    // caller kept saying "Hello" and then hung up). Speak a short clarification
+    // in the caller's language so the line never goes silent. Safe because
+    // nothing streamed this turn (llmFirstTokenAt === null), so we can't
+    // double-speak.
+    if (
+      !cleanResponse.trim()
+      && !triggeredToolName
+      && !this.bargeInRequested
+      && llmFirstTokenAt === null
+      && !this.closed
+    ) {
+      const recoveryLang = this.currentLang || this.agent.sttConfig.language;
+      const recovery = pickClarificationPhrase(recoveryLang, String(this.config.callId));
+      logger.warn(
+        { callId: this.config.callId, recoveryLang, turnNumber: _currentTurnIndex },
+        "LLM returned empty response — speaking clarification recovery instead of dead air",
+      );
+      this.logExec("LLM", "system", {
+        status: "info",
+        turnNumber: _currentTurnIndex,
+        warningFlags: ["empty_llm_recovery"],
+        metadata: { event: "Empty LLM Recovery", spoken: recovery },
+      });
+      enqueue(recovery);
+    }
+
     // Final flush: the LLM token stream occasionally ends a few words early while
     // llmResponse (set by the onComplete callback) holds the complete text. Re-run
     // extractSentences on the full clean reply and prefer its remainder over the
