@@ -2718,10 +2718,24 @@ export class OrchestrationPipeline implements VoiceSession {
                 const langPrefix = (this.currentLang || this.agent.language || "en").split(/[-_]/)[0]?.toLowerCase();
                 const isIndic = ["ta", "hi", "te", "kn", "ml", "mr", "bn", "gu"].includes(langPrefix ?? "");
                 const minChars = 4;
+                // Energy corroboration (mirrors the final-transcript guard): on
+                // carrier legs our own TTS echoes back as a *garbled* interim that
+                // can carry enough words to trip word_count before any final lands
+                // (call 5578: "How does today at 4" came back as "Why don't we
+                // panic?" and the agent cut itself off). If the inbound signal
+                // never rose above the measured echo bar this sentence, it is our
+                // own audio returning — suppress the self-barge. echoBarRms() is
+                // null on webcall / before the floor is warm, so a real caller is
+                // always given the benefit of the doubt there.
+                const interimEchoBar = this.echoBarRms();
+                const interimIsSelfEcho =
+                  interimEchoBar !== null
+                  && this.bargeInPeakRmsSinceSentence <= interimEchoBar;
                 if (
                   threshold > 0
                   && this.streamingBargeInWordCount >= threshold
                   && charCount >= minChars
+                  && !interimIsSelfEcho
                 ) {
                   // Path A: launch speculative LLM from substantive barge partial
                   // (energy-only barge stays non-speculative — see energy path).
@@ -2735,6 +2749,21 @@ export class OrchestrationPipeline implements VoiceSession {
                       text: text.slice(0, 80),
                     },
                     "Barge-in detected (streaming STT interim word-count — Bolna parity)",
+                  );
+                } else if (
+                  threshold > 0
+                  && this.streamingBargeInWordCount >= threshold
+                  && charCount >= minChars
+                  && interimIsSelfEcho
+                ) {
+                  logger.info(
+                    {
+                      callId: this.config.callId,
+                      text: text.slice(0, 80),
+                      peakRms: Math.round(this.bargeInPeakRmsSinceSentence),
+                      echoBar: Math.round(interimEchoBar ?? 0),
+                    },
+                    "Streaming STT interim: barge-in suppressed (no caller energy above echo bar — self-echo)",
                   );
                 }
               }
