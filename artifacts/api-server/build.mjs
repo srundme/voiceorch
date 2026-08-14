@@ -36,6 +36,13 @@ async function buildAll() {
       // (e.g. data/Helvetica.afm). Bundling it breaks those paths (ENOENT), so
       // it must run from node_modules like the other unbundleable packages.
       "pdfkit",
+      // WhatsApp calling loads a WebRTC native addon at runtime via optional
+      // dynamic import, resolving prebuilt .node binaries from sibling platform
+      // packages. Bundling breaks that lookup, and bare "wrtc" is only a
+      // fallback that is never installed — both must stay external so the
+      // import can fail gracefully into signaling-only mode.
+      "@roamhq/wrtc",
+      "wrtc",
       "ffmpeg-static",
       "sharp",
       "better-sqlite3",
