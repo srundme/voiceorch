@@ -20,6 +20,7 @@ import {
   getListAvailablePhoneNumbersQueryKey,
   getListAgentsQueryKey,
   getGetKycStatusQueryKey,
+  getGetWalletQueryKey,
   customFetch,
 } from "@workspace/api-client-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -381,6 +382,7 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
   const initiate = useInitiatePhoneNumberPurchase();
   const confirm  = useConfirmPhoneNumberPurchase();
   const [payingViaCheckout, setPayingViaCheckout] = useState(false);
+  const [payingFromWallet, setPayingFromWallet] = useState(false);
 
   const quotePromo = useQuotePhoneNumberPromo();
 
@@ -389,6 +391,8 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
   // +9180… = ₹599/mo, +9179… = ₹699/mo, others ₹659/mo. All maths is in paise
   // so a promo like ₹199 (GST ₹35.82) shows exact paise instead of rounding.
   const SETUP_PAISE = 10_000;
+  /** Wallet-funded first purchase requires balance strictly above ₹20,000. */
+  const WALLET_PURCHASE_MIN_PAISE = 2_000_000;
   const STANDARD_BASE_PAISE = selectedNum?.monthlyRateCents ?? 0; // rental + setup, pre-GST
   const MONTHLY_PAISE = Math.max(STANDARD_BASE_PAISE - SETUP_PAISE, 0);
   const promoActive = promo?.valid === true;
@@ -399,6 +403,10 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
   const RENEWAL_TOTAL_PAISE = promo?.standardPayablePaise
     ?? STANDARD_BASE_PAISE + Math.round(STANDARD_BASE_PAISE * 0.18);
   const isPaidNumber = (selectedNum?.monthlyRateCents ?? 0) > 0;
+  const walletBalancePaise = wallet?.balanceCents ?? 0;
+  const canPayFromWallet =
+    walletBalancePaise > WALLET_PURCHASE_MIN_PAISE && walletBalancePaise >= TOTAL_PAISE;
+  const purchaseBusy = payingViaCheckout || payingFromWallet;
 
   async function handleApplyPromo() {
     const code = promoInput.trim();
@@ -435,6 +443,66 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
     setSearched(true);
     setSelected(null);
     void refetch();
+  }
+
+  async function handlePurchaseFromWallet() {
+    if (!selected || !canPayFromWallet) return;
+    if (renewalMode === "autopay" && !mandateActive) {
+      toast({
+        title: "Card auto-pay required",
+        description: "Set up a card mandate in Wallet first, then buy with Autopay renewal.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setPayingFromWallet(true);
+    try {
+      await customFetch("/api/phone-numbers/purchase/wallet", {
+        method: "POST",
+        body: JSON.stringify({
+          number: selected,
+          countryCode: country,
+          region: selectedNum?.region ?? undefined,
+          numberType: selectedNum?.numberType ?? "local",
+          renewalMode,
+          ...(promoActive ? { promoCode: promo.code ?? undefined } : {}),
+        }),
+      });
+      queryClient.invalidateQueries({ queryKey: getListPhoneNumbersQueryKey() });
+      queryClient.invalidateQueries({ queryKey: getGetWalletQueryKey() });
+      toast({
+        title: "Phone number purchased!",
+        description: `${selected} was paid from your wallet and is now in your account.`,
+      });
+      onClose();
+    } catch (err: unknown) {
+      const code = (err as { data?: { code?: string } })?.data?.code;
+      if (code === "KYC_REQUIRED") {
+        toast({
+          title: "Identity verification required",
+          description: "Complete KYC verification first using the banner on the Phone Numbers page.",
+          variant: "destructive",
+        });
+        onClose();
+      } else if (code === "NEED_AUTOPAY_SETUP") {
+        toast({
+          title: "Card auto-pay required",
+          description: "Open Wallet to set up a card mandate, then choose Autopay renewal.",
+          variant: "destructive",
+        });
+      } else if (code === "WALLET_PURCHASE_NOT_ELIGIBLE" || code === "INSUFFICIENT_BALANCE") {
+        toast({
+          title: "Can't pay from wallet",
+          description: formatApiError(err),
+          variant: "destructive",
+        });
+      } else {
+        toast({ title: "Purchase failed", description: formatApiError(err), variant: "destructive" });
+        setConfirming(false);
+      }
+    } finally {
+      setPayingFromWallet(false);
+    }
   }
 
   async function handlePurchase() {
@@ -605,7 +673,7 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
               <span className="text-foreground">{inr(GST_PAISE)}</span>
             </div>
             <div className="flex justify-between px-4 py-2.5 border-t border-border mt-1 pt-2.5">
-              <span className="text-muted-foreground font-medium">Pay now (card)</span>
+              <span className="text-muted-foreground font-medium">Pay now</span>
               <span className="font-semibold text-foreground">
                 {promoActive && (
                   <span className="mr-2 font-normal text-muted-foreground line-through">
@@ -619,6 +687,12 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
               <span className="text-muted-foreground">Renews every 30 days</span>
               <span className="text-foreground">{inr(RENEWAL_TOTAL_PAISE)}</span>
             </div>
+            {canPayFromWallet && (
+              <div className="flex justify-between px-4 py-2.5">
+                <span className="text-muted-foreground">Wallet balance</span>
+                <span className="text-foreground">{inr(walletBalancePaise)}</span>
+              </div>
+            )}
           </div>
 
           {/* Promo code */}
@@ -652,13 +726,13 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
                     autoCapitalize="characters"
                     autoCorrect="off"
                     spellCheck={false}
-                    disabled={quotePromo.isPending || payingViaCheckout}
+                    disabled={quotePromo.isPending || purchaseBusy}
                   />
                   <Button
                     variant="outline"
                     className="h-9 shrink-0"
                     onClick={() => void handleApplyPromo()}
-                    disabled={!promoInput.trim() || quotePromo.isPending || payingViaCheckout}
+                    disabled={!promoInput.trim() || quotePromo.isPending || purchaseBusy}
                   >
                     {quotePromo.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Apply"}
                   </Button>
@@ -723,26 +797,44 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
           <div className="flex items-start gap-3 p-3 rounded-lg border border-zinc-500/20 bg-zinc-500/5 text-foreground text-xs">
             <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
             <span>
-              You&apos;ll pay {inr(TOTAL_PAISE)} now by card ({inr(BASE_PAISE)} + 18% GST).
+              {canPayFromWallet
+                ? <>You can pay {inr(TOTAL_PAISE)} from your wallet ({inr(BASE_PAISE)} + 18% GST), or pay by card / UPI.</>
+                : <>You&apos;ll pay {inr(TOTAL_PAISE)} now by card ({inr(BASE_PAISE)} + 18% GST).</>}
               {promoActive
                 ? ` The ${promo.code} price covers this purchase only — from day 30 the number renews at ${inr(RENEWAL_TOTAL_PAISE)} every 30 days`
                 : ` Every 30 days the same amount (${inr(RENEWAL_TOTAL_PAISE)}) is charged`}
               {renewalMode === "autopay"
                 ? " via Autopay (mandate → wallet → debit)."
                 : " from your wallet; unpaid past 7 days releases the number."}
+              {!canPayFromWallet && walletBalancePaise > 0 && (
+                <> Wallet pay unlocks above {inr(WALLET_PURCHASE_MIN_PAISE)} balance.</>
+              )}
             </span>
           </div>
           </div>
-          <DialogFooter className="shrink-0 border-t border-border bg-background px-6 py-4">
-            <Button variant="outline" onClick={() => setConfirming(false)} disabled={payingViaCheckout}>Back</Button>
-            <Button
-              className="bg-primary text-primary-foreground hover:bg-primary/90"
-              onClick={handlePurchase}
-              disabled={payingViaCheckout || (renewalMode === "autopay" && !mandateActive)}
-            >
-              {payingViaCheckout ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
-              Pay {inr(TOTAL_PAISE)} & Get Number
-            </Button>
+          <DialogFooter className="shrink-0 border-t border-border bg-background px-6 py-4 flex-col sm:flex-row gap-2">
+            <Button variant="outline" onClick={() => setConfirming(false)} disabled={purchaseBusy}>Back</Button>
+            <div className="flex flex-col sm:flex-row gap-2 sm:ml-auto w-full sm:w-auto">
+              {canPayFromWallet && (
+                <Button
+                  variant="outline"
+                  className="w-full sm:w-auto"
+                  onClick={() => void handlePurchaseFromWallet()}
+                  disabled={purchaseBusy || (renewalMode === "autopay" && !mandateActive)}
+                >
+                  {payingFromWallet ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
+                  Pay from wallet
+                </Button>
+              )}
+              <Button
+                className="bg-primary text-primary-foreground hover:bg-primary/90 w-full sm:w-auto"
+                onClick={handlePurchase}
+                disabled={purchaseBusy || (renewalMode === "autopay" && !mandateActive)}
+              >
+                {payingViaCheckout ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
+                {canPayFromWallet ? `Pay ${inr(TOTAL_PAISE)} by card` : `Pay ${inr(TOTAL_PAISE)} & Get Number`}
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -1603,6 +1603,35 @@ paths:
         "503":
           description: Payment platform not configured
 
+  /phone-numbers/purchase/wallet:
+    post:
+      operationId: purchasePhoneNumberFromWallet
+      tags: [phone-numbers]
+      summary: Buy a phone number by debiting wallet when balance is above ₹20,000. Provisions immediately; refunds wallet if carrier purchase fails.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PurchasePhoneNumberInput"
+      responses:
+        "201":
+          description: Number purchased and provisioned from wallet
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PhoneNumber"
+        "401":
+          description: Unauthorized
+        "402":
+          description: Insufficient wallet balance
+        "403":
+          description: Wallet balance at or below ₹20,000 threshold, or KYC required
+        "409":
+          description: Number already taken or pending order exists
+        "503":
+          description: Platform carrier not configured
+
   /phone-numbers/promo/quote:
     post:
       operationId: quotePhoneNumberPromo
