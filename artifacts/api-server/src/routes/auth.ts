@@ -30,7 +30,7 @@ import {
 import { registerTransientKey } from "../services/rate-limit-cleanup.js";
 import { getLoginAuthUrl, exchangeLoginCode } from "../services/auth/google-login.js";
 import { trackEvent } from "../services/track-event.js";
-import { deriveRedirectUri, dashboardBase } from "../lib/oauth-redirect.js";
+import { deriveRedirectUri, dashboardBase, isTrustedOrigin } from "../lib/oauth-redirect.js";
 import { SIGNUP_CREDIT_PAISE, formatInr } from "../lib/money-inr.js";
 
 const OTP_RATE_LIMIT_MAX = parseInt(process.env.OTP_RATE_LIMIT_MAX ?? "3", 10);
@@ -586,6 +586,24 @@ router.get("/auth/google/connect", (req, res): void => {
     maxAge: 10 * 60 * 1000, // 10 minutes
   });
 
+  // Partner white-label: after OAuth (which always callbacks on the primary
+  // app host), send the user back to the brand domain they started on.
+  const returnToRaw = typeof req.query["return_to"] === "string" ? req.query["return_to"].trim() : "";
+  if (returnToRaw) {
+    try {
+      const u = new URL(returnToRaw);
+      const origin = u.origin;
+      if (isTrustedOrigin(origin)) {
+        res.cookie("google_login_return", origin, {
+          httpOnly: true,
+          secure: process.env["NODE_ENV"] !== "development",
+          sameSite: "lax",
+          maxAge: 10 * 60 * 1000,
+        });
+      }
+    } catch { /* ignore bad return_to */ }
+  }
+
   const url = getLoginAuthUrl(state, redirectUri);
   logger.info({ redirectUri }, "Google Sign-In: redirecting to consent screen");
   res.redirect(url);
@@ -593,11 +611,15 @@ router.get("/auth/google/connect", (req, res): void => {
 
 router.get("/auth/google/callback", async (req, res): Promise<void> => {
   const { code, error, state } = req.query as { code?: string; error?: string; state?: string };
-  const base = dashboardBase(req);
+  const returnCookie = (req as any).cookies?.["google_login_return"] as string | undefined;
+  const returnBase =
+    returnCookie && isTrustedOrigin(returnCookie) ? returnCookie.replace(/\/$/, "") : null;
+  const base = returnBase ?? dashboardBase(req);
   const errorRedirect = `${base}/?google_error=true`;
 
   if (error || !code || !state) {
     logger.warn({ error }, "Google Sign-In callback: missing params or user denied access");
+    res.clearCookie("google_login_return");
     res.redirect(errorRedirect);
     return;
   }
@@ -607,12 +629,14 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
   const cookieState = (req as any).cookies?.["google_login_state"] as string | undefined;
   if (!cookieState || cookieState !== state) {
     logger.warn({ hasCookie: !!cookieState }, "Google Sign-In callback: CSRF state mismatch or missing cookie");
+    res.clearCookie("google_login_return");
     res.redirect(errorRedirect);
     return;
   }
 
   // Clear the one-time state cookie immediately
   res.clearCookie("google_login_state");
+  res.clearCookie("google_login_return");
 
   try {
     const redirectUri = deriveRedirectUri(req, LOGIN_CALLBACK_PATH);

@@ -750,6 +750,13 @@
       "when": 1791600006000,
       "tag": "0106_campaign_analytics_questions",
       "breakpoints": true
+    },
+    {
+      "idx": 107,
+      "version": "7",
+      "when": 1791600007000,
+      "tag": "0107_partner_domains",
+      "breakpoints": true
     }
   ]
 }

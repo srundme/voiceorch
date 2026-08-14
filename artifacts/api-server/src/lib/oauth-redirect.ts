@@ -8,23 +8,21 @@
  */
 import type { Request } from "express";
 import { getAppDomain, getAppOrigins } from "./app-domain.js";
+import { isCachedPartnerHost } from "../services/partner-domains.js";
 
 /**
  * Origin the dashboard is served from (used as a fallback redirect target).
- * When a request is provided, the externally-visible host from
- * x-forwarded-host / x-forwarded-proto is preferred so that the redirect
- * lands on the correct Replit dev-preview domain instead of localhost.
+ * Prefer the request's externally-visible host when it is trusted (including
+ * partner white-label hosts), so OAuth / session redirects land on the same
+ * brand domain the user started from.
  *
  * Derivation order:
- *   1. APP_BASE_URL env var — explicit production override (e.g. https://app.snapserve.ai)
- *   2. Request's forwarded host (validated against trusted-origin rules)
- *   3. First domain in REPLIT_DOMAINS
+ *   1. Request forwarded host (if trusted — includes partner domains)
+ *   2. APP_BASE_URL env var — primary SnapServe production origin
+ *   3. First domain in REPLIT_DOMAINS / APP_DOMAIN
  *   4. localhost:80 (last resort)
  */
 export function dashboardBase(req?: Request): string {
-  if (process.env["APP_BASE_URL"]) {
-    return process.env["APP_BASE_URL"].replace(/\/$/, "");
-  }
   if (req) {
     const forwardedHost = (req.headers["x-forwarded-host"] as string | undefined)?.split(",")[0]?.trim();
     const forwardedProto = (req.headers["x-forwarded-proto"] as string | undefined)?.split(",")[0]?.trim() ?? "https";
@@ -32,6 +30,9 @@ export function dashboardBase(req?: Request): string {
     if (host && isTrustedOrigin(`${forwardedProto}://${host}`)) {
       return `${forwardedProto}://${host}`;
     }
+  }
+  if (process.env["APP_BASE_URL"]) {
+    return process.env["APP_BASE_URL"].replace(/\/$/, "");
   }
   const domain = getAppDomain();
   if (!domain) return "http://localhost:80";
@@ -43,13 +44,16 @@ export function dashboardBase(req?: Request): string {
  * Allow redirecting back only to origins we trust:
  *   - The explicit APP_BASE_URL origin (e.g. https://app.snapserve.ai)
  *   - Any origin listed in REPLIT_DOMAINS (production + registered dev previews)
+ *   - Active partner white-label hosts (subdomain + verified custom domains)
  *   - Any *.sisko.replit.dev or *.replit.dev Replit workspace domain (dev previews)
  * Rejects anything else to prevent open-redirect abuse.
  */
 export function isTrustedOrigin(origin: string): boolean {
   try {
     const url = new URL(origin);
-    if (url.protocol !== "https:") return false;
+    if (url.protocol !== "https:" && !(url.hostname === "localhost" || url.hostname === "127.0.0.1")) {
+      return false;
+    }
     const host = url.hostname;
     if (process.env["APP_BASE_URL"]) {
       try {
@@ -63,6 +67,7 @@ export function isTrustedOrigin(origin: string): boolean {
       try { return new URL(o).hostname; } catch { return ""; }
     }).filter(Boolean);
     if (trustedHosts.includes(host)) return true;
+    if (isCachedPartnerHost(host)) return true;
     if (/^[a-z0-9-]+-\d{2}-[a-z0-9]+\.sisko\.replit\.dev$/.test(host)) return true;
     if (/^[a-z0-9-]+\.replit\.dev$/.test(host)) return true;
     return false;

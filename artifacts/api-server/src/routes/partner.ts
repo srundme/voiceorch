@@ -11,6 +11,10 @@
  *  - GET  /partner/context                    → isPartner + client branding (all users)
  *  - GET/PATCH /partner/me                    → partner profile + settings
  *  - POST/DELETE /partner/logo                → white-label logo (bytea, capability token)
+ *  - PUT/DELETE  /partner/domain/slug         → subdomain {slug}.snapserve.ai
+ *  - PUT/DELETE  /partner/domain/custom       → custom domain + DNS verify
+ *  - POST        /partner/domain/custom/verify
+ *  - GET  /public/partner-branding?host=      → public branding by Host (pre-login)
  *  - GET  /partner/clients                    → clients with balance/rate/month usage
  *  - PATCH /partner/clients/:clerkId          → set per-client rate and/or allowAgentEdit
  *  - POST /partner/clients/:clerkId/transfer  → move balance partner → client
@@ -38,10 +42,23 @@ import {
   phoneNumbersTable,
   userApiKeysTable,
 } from "@workspace/db";
-import { and, desc, eq, gte, inArray, isNull, sql, count } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, ne, sql, count } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { sendBrevoEmail } from "../services/brevo.js";
 import { getSelfBaseUrl } from "../lib/app-domain.js";
+import {
+  getPartnerCnameTarget,
+  getPartnerSubdomainRoot,
+  invalidatePartnerHostCache,
+  newDomainVerifyToken,
+  normalizeDomain,
+  normalizeSlug,
+  resolvePartnerByHost,
+  subdomainHostForSlug,
+  validateDomain,
+  validateSlug,
+  verifyCustomDomainDns,
+} from "../services/partner-domains.js";
 
 function generateClientApiKey(): { key: string; prefix: string; hash: string } {
   const secret = randomBytes(32).toString("hex");
@@ -247,6 +264,13 @@ router.get("/partner/me", requireAuth, async (req, res): Promise<void> => {
       baseRateCentsPerMin: partner.baseRateCentsPerMin,
       defaultClientRateCentsPerMin: partner.defaultClientRateCentsPerMin,
       logoUrl: logoPathFor(partner),
+      slug: partner.slug ?? null,
+      subdomainHost: partner.slug ? subdomainHostForSlug(partner.slug) : null,
+      subdomainRoot: getPartnerSubdomainRoot(),
+      customDomain: partner.customDomain ?? null,
+      customDomainStatus: partner.customDomainStatus ?? "none",
+      domainVerifyToken: partner.domainVerifyToken ?? null,
+      cnameTarget: getPartnerCnameTarget(),
       walletBalanceCents: partnerUser?.walletBalanceCents ?? 0,
       clientCount: Number(clientCountRow?.n ?? 0),
       pendingInvites: Number(pendingInvitesRow?.n ?? 0),
@@ -385,6 +409,197 @@ router.get("/public/partner-logos/:token", async (req, res): Promise<void> => {
     res.send(partner.logoData);
   } catch (err) {
     req.log.error({ err }, "public partner logo failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+/** Public: resolve partner branding from the browser Host (login / pre-auth). */
+router.get("/public/partner-branding", async (req, res): Promise<void> => {
+  try {
+    const hostRaw =
+      (typeof req.query["host"] === "string" && req.query["host"]) ||
+      (req.headers["x-forwarded-host"] as string | undefined)?.split(",")[0]?.trim() ||
+      req.hostname;
+    const brand = await resolvePartnerByHost(String(hostRaw ?? ""));
+    if (!brand) {
+      res.json({ branding: null, subdomainRoot: getPartnerSubdomainRoot(), cnameTarget: getPartnerCnameTarget() });
+      return;
+    }
+    res.setHeader("Cache-Control", "public, max-age=60");
+    res.json({
+      branding: brand,
+      subdomainRoot: getPartnerSubdomainRoot(),
+      cnameTarget: getPartnerCnameTarget(),
+    });
+  } catch (err) {
+    req.log.error({ err }, "public partner branding failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+/* ─── Domains (subdomain + custom) ─────────────────────────────────────────── */
+
+router.put("/partner/domain/slug", requireAuth, async (req, res): Promise<void> => {
+  try {
+    const partner = await requireActivePartner(req, res);
+    if (!partner) return;
+
+    const slug = normalizeSlug(String((req.body as { slug?: string })?.slug ?? ""));
+    const err = validateSlug(slug);
+    if (err) { res.status(400).json({ error: err }); return; }
+
+    const [taken] = await db
+      .select({ id: partnersTable.id })
+      .from(partnersTable)
+      .where(and(eq(partnersTable.slug, slug), ne(partnersTable.id, partner.id)))
+      .limit(1);
+    if (taken) { res.status(409).json({ error: "That subdomain is already taken" }); return; }
+
+    const [updated] = await db
+      .update(partnersTable)
+      .set({ slug })
+      .where(eq(partnersTable.id, partner.id))
+      .returning({ slug: partnersTable.slug });
+
+    invalidatePartnerHostCache();
+    res.json({
+      slug: updated!.slug,
+      subdomainHost: subdomainHostForSlug(updated!.slug!),
+      subdomainRoot: getPartnerSubdomainRoot(),
+      url: `https://${subdomainHostForSlug(updated!.slug!)}`,
+    });
+  } catch (err) {
+    req.log.error({ err }, "partner/domain/slug PUT failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.delete("/partner/domain/slug", requireAuth, async (req, res): Promise<void> => {
+  try {
+    const partner = await requireActivePartner(req, res);
+    if (!partner) return;
+    await db.update(partnersTable).set({ slug: null }).where(eq(partnersTable.id, partner.id));
+    invalidatePartnerHostCache();
+    res.sendStatus(204);
+  } catch (err) {
+    req.log.error({ err }, "partner/domain/slug DELETE failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.put("/partner/domain/custom", requireAuth, async (req, res): Promise<void> => {
+  try {
+    const partner = await requireActivePartner(req, res);
+    if (!partner) return;
+
+    const domain = normalizeDomain(String((req.body as { domain?: string })?.domain ?? ""));
+    const err = validateDomain(domain);
+    if (err) { res.status(400).json({ error: err }); return; }
+
+    const [taken] = await db
+      .select({ id: partnersTable.id })
+      .from(partnersTable)
+      .where(and(eq(partnersTable.customDomain, domain), ne(partnersTable.id, partner.id)))
+      .limit(1);
+    if (taken) { res.status(409).json({ error: "That domain is already linked to another partner" }); return; }
+
+    const token = partner.domainVerifyToken || newDomainVerifyToken();
+    const [updated] = await db
+      .update(partnersTable)
+      .set({
+        customDomain: domain,
+        customDomainStatus: "pending",
+        domainVerifyToken: token,
+        customDomainVerifiedAt: null,
+      })
+      .where(eq(partnersTable.id, partner.id))
+      .returning();
+
+    invalidatePartnerHostCache();
+    res.json({
+      customDomain: updated!.customDomain,
+      customDomainStatus: updated!.customDomainStatus,
+      domainVerifyToken: updated!.domainVerifyToken,
+      cnameTarget: getPartnerCnameTarget(),
+      txtHost: `_snapserve-verify.${domain}`,
+      txtValue: `snapserve-verify=${token}`,
+      instructions: {
+        cname: `Point a CNAME from ${domain} to ${getPartnerCnameTarget()}`,
+        txt: `Or add TXT at _snapserve-verify.${domain} = snapserve-verify=${token}`,
+      },
+    });
+  } catch (err) {
+    req.log.error({ err }, "partner/domain/custom PUT failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/partner/domain/custom/verify", requireAuth, async (req, res): Promise<void> => {
+  try {
+    const partner = await requireActivePartner(req, res);
+    if (!partner) return;
+    if (!partner.customDomain || !partner.domainVerifyToken) {
+      res.status(400).json({ error: "Set a custom domain first" });
+      return;
+    }
+
+    const result = await verifyCustomDomainDns({
+      domain: partner.customDomain,
+      verifyToken: partner.domainVerifyToken,
+    });
+
+    if (!result.ok) {
+      await db
+        .update(partnersTable)
+        .set({ customDomainStatus: "failed" })
+        .where(eq(partnersTable.id, partner.id));
+      res.status(400).json({
+        ok: false,
+        customDomainStatus: "failed",
+        error: result.reason,
+        cname: result.cname,
+        txt: result.txt,
+      });
+      return;
+    }
+
+    await db
+      .update(partnersTable)
+      .set({
+        customDomainStatus: "active",
+        customDomainVerifiedAt: new Date(),
+      })
+      .where(eq(partnersTable.id, partner.id));
+    invalidatePartnerHostCache();
+    res.json({
+      ok: true,
+      customDomain: partner.customDomain,
+      customDomainStatus: "active",
+      url: `https://${partner.customDomain}`,
+    });
+  } catch (err) {
+    req.log.error({ err }, "partner/domain/custom/verify failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.delete("/partner/domain/custom", requireAuth, async (req, res): Promise<void> => {
+  try {
+    const partner = await requireActivePartner(req, res);
+    if (!partner) return;
+    await db
+      .update(partnersTable)
+      .set({
+        customDomain: null,
+        customDomainStatus: "none",
+        domainVerifyToken: null,
+        customDomainVerifiedAt: null,
+      })
+      .where(eq(partnersTable.id, partner.id));
+    invalidatePartnerHostCache();
+    res.sendStatus(204);
+  } catch (err) {
+    req.log.error({ err }, "partner/domain/custom DELETE failed");
     res.status(500).json({ error: "Internal server error" });
   }
 });

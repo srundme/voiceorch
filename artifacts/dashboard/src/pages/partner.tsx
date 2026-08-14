@@ -13,7 +13,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import {
   Handshake, Users, UserPlus, Wallet, TrendingUp, Clock, Mail,
-  Trash2, IndianRupee, ArrowRightLeft, Upload, X, Settings2,
+  Trash2, IndianRupee, ArrowRightLeft, Upload, X, Settings2, Globe, Link2, CheckCircle2,
 } from "lucide-react";
 import { useLocation } from "wouter";
 
@@ -25,6 +25,13 @@ interface PartnerMe {
   baseRateCentsPerMin: number;
   defaultClientRateCentsPerMin: number;
   logoUrl: string | null;
+  slug: string | null;
+  subdomainHost: string | null;
+  subdomainRoot: string;
+  customDomain: string | null;
+  customDomainStatus: "none" | "pending" | "active" | "failed";
+  domainVerifyToken: string | null;
+  cnameTarget: string;
   walletBalanceCents: number;
   clientCount: number;
   pendingInvites: number;
@@ -549,6 +556,8 @@ function SettingsTab({ me }: { me: PartnerMe }) {
   const [companyName, setCompanyName] = useState(me.companyName);
   const [defaultRateText, setDefaultRateText] = useState((me.defaultClientRateCentsPerMin / 100).toFixed(2));
   const [uploading, setUploading] = useState(false);
+  const [slugDraft, setSlugDraft] = useState(me.slug ?? "");
+  const [customDraft, setCustomDraft] = useState(me.customDomain ?? "");
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["partner-me"] });
@@ -568,6 +577,59 @@ function SettingsTab({ me }: { me: PartnerMe }) {
     },
     onSuccess: () => { toast({ title: "Settings saved" }); invalidate(); },
     onError: (err: Error) => toast({ title: "Could not save", description: err.message, variant: "destructive" }),
+  });
+
+  const slugMutation = useMutation({
+    mutationFn: () =>
+      partnerFetch<{ url: string }>(getToken, "/api/partner/domain/slug", {
+        method: "PUT",
+        body: JSON.stringify({ slug: slugDraft.trim() }),
+      }),
+    onSuccess: (data) => {
+      toast({ title: "Subdomain saved", description: data.url });
+      invalidate();
+    },
+    onError: (err: Error) => toast({ title: "Could not save subdomain", description: err.message, variant: "destructive" }),
+  });
+
+  const clearSlugMutation = useMutation({
+    mutationFn: () => partnerFetch(getToken, "/api/partner/domain/slug", { method: "DELETE" }),
+    onSuccess: () => { toast({ title: "Subdomain removed" }); setSlugDraft(""); invalidate(); },
+    onError: (err: Error) => toast({ title: "Could not remove subdomain", description: err.message, variant: "destructive" }),
+  });
+
+  const customMutation = useMutation({
+    mutationFn: () =>
+      partnerFetch<{
+        customDomain: string;
+        txtHost: string;
+        txtValue: string;
+        cnameTarget: string;
+      }>(getToken, "/api/partner/domain/custom", {
+        method: "PUT",
+        body: JSON.stringify({ domain: customDraft.trim() }),
+      }),
+    onSuccess: () => {
+      toast({ title: "Custom domain saved", description: "Add the DNS records below, then click Verify." });
+      invalidate();
+    },
+    onError: (err: Error) => toast({ title: "Could not save domain", description: err.message, variant: "destructive" }),
+  });
+
+  const verifyMutation = useMutation({
+    mutationFn: () =>
+      partnerFetch<{ url: string }>(getToken, "/api/partner/domain/custom/verify", { method: "POST" }),
+    onSuccess: (data) => {
+      toast({ title: "Domain verified", description: data.url });
+      invalidate();
+    },
+    onError: (err: Error) => toast({ title: "Verification failed", description: err.message, variant: "destructive" }),
+  });
+
+  const clearCustomMutation = useMutation({
+    mutationFn: () => partnerFetch(getToken, "/api/partner/domain/custom", { method: "DELETE" }),
+    onSuccess: () => { toast({ title: "Custom domain removed" }); setCustomDraft(""); invalidate(); },
+    onError: (err: Error) => toast({ title: "Could not remove domain", description: err.message, variant: "destructive" }),
   });
 
   async function onLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -610,6 +672,17 @@ function SettingsTab({ me }: { me: PartnerMe }) {
   });
 
   const ratePaise = parseRupees(defaultRateText);
+  const subdomainPreview = slugDraft.trim()
+    ? `${slugDraft.trim().toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-|-$/g, "")}.${me.subdomainRoot}`
+    : null;
+  const statusBadge =
+    me.customDomainStatus === "active"
+      ? { label: "Active", cls: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" }
+      : me.customDomainStatus === "pending"
+        ? { label: "Pending DNS", cls: "bg-amber-500/10 text-amber-600 border-amber-500/20" }
+        : me.customDomainStatus === "failed"
+          ? { label: "Failed", cls: "bg-red-500/10 text-red-600 border-red-500/20" }
+          : null;
 
   return (
     <div className="space-y-4 max-w-lg">
@@ -644,6 +717,114 @@ function SettingsTab({ me }: { me: PartnerMe }) {
             )}
           </div>
           <p className="text-[11px] text-muted-foreground">PNG, JPEG or WebP, up to 512KB.</p>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-border bg-card p-4 space-y-4">
+        <div className="flex items-center gap-2">
+          <Globe className="h-4 w-4 text-muted-foreground" />
+          <h2 className="text-sm font-medium">Your domain</h2>
+        </div>
+        <p className="text-[11px] text-muted-foreground -mt-2">
+          Give clients a branded login URL. Start with a SnapServe subdomain; add your own domain when DNS is ready.
+        </p>
+
+        <div className="space-y-2">
+          <Label htmlFor="slug">SnapServe subdomain</Label>
+          <div className="flex gap-2">
+            <Input
+              id="slug"
+              placeholder="acme"
+              value={slugDraft}
+              onChange={e => setSlugDraft(e.target.value.toLowerCase())}
+              className="font-mono text-sm"
+            />
+            <Button
+              size="sm"
+              className="shrink-0"
+              disabled={slugMutation.isPending || slugDraft.trim().length < 2}
+              onClick={() => slugMutation.mutate()}
+            >
+              {slugMutation.isPending ? "Saving…" : "Save"}
+            </Button>
+          </div>
+          {subdomainPreview && (
+            <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+              <Link2 className="h-3 w-3" />
+              <a className="underline underline-offset-2" href={`https://${subdomainPreview}`} target="_blank" rel="noreferrer">
+                https://{subdomainPreview}
+              </a>
+            </p>
+          )}
+          {me.slug && (
+            <Button size="sm" variant="ghost" className="h-7 text-xs text-muted-foreground px-0"
+              disabled={clearSlugMutation.isPending}
+              onClick={() => clearSlugMutation.mutate()}>
+              Remove subdomain
+            </Button>
+          )}
+        </div>
+
+        <div className="border-t border-border/60 pt-3 space-y-2">
+          <div className="flex items-center gap-2">
+            <Label htmlFor="custom-domain">Custom domain</Label>
+            {statusBadge && (
+              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${statusBadge.cls}`}>
+                {statusBadge.label}
+              </span>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <Input
+              id="custom-domain"
+              placeholder="app.yourbrand.com"
+              value={customDraft}
+              onChange={e => setCustomDraft(e.target.value)}
+              className="font-mono text-sm"
+            />
+            <Button
+              size="sm"
+              className="shrink-0"
+              disabled={customMutation.isPending || customDraft.trim().length < 4}
+              onClick={() => customMutation.mutate()}
+            >
+              {customMutation.isPending ? "Saving…" : "Save"}
+            </Button>
+          </div>
+          {(me.customDomainStatus === "pending" || me.customDomainStatus === "failed" || me.customDomainStatus === "active") && me.customDomain && (
+            <div className="rounded-lg border border-border/60 bg-muted/20 p-3 space-y-2 text-[11px] text-muted-foreground">
+              <p className="font-medium text-foreground/80">DNS setup</p>
+              <p>1. CNAME <code className="text-foreground">{me.customDomain}</code> → <code className="text-foreground">{me.cnameTarget}</code></p>
+              {me.domainVerifyToken && (
+                <p>
+                  2. Or TXT <code className="text-foreground">_snapserve-verify.{me.customDomain}</code> ={" "}
+                  <code className="text-foreground">snapserve-verify={me.domainVerifyToken}</code>
+                </p>
+              )}
+              <div className="flex flex-wrap gap-2 pt-1">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs gap-1"
+                  disabled={verifyMutation.isPending || me.customDomainStatus === "active"}
+                  onClick={() => verifyMutation.mutate()}
+                >
+                  {me.customDomainStatus === "active"
+                    ? <><CheckCircle2 className="h-3 w-3" /> Verified</>
+                    : verifyMutation.isPending ? "Checking DNS…" : "Verify DNS"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 text-xs text-muted-foreground"
+                  disabled={clearCustomMutation.isPending}
+                  onClick={() => clearCustomMutation.mutate()}
+                >
+                  Remove
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

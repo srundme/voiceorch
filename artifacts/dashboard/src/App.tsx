@@ -207,7 +207,7 @@ function SignInPage() {
         )}
 
         <a
-          href="/api/auth/google/connect"
+          href={`/api/auth/google/connect?return_to=${encodeURIComponent(window.location.origin)}`}
           className="w-full flex items-center justify-center gap-2.5 rounded-lg bg-white text-black font-semibold text-sm py-3 transition-colors hover:bg-white/90"
         >
           <svg width="18" height="18" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">

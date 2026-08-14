@@ -50,6 +50,10 @@ app.use(
 );
 
 import { getAppOrigins } from "./lib/app-domain.js";
+import { isCachedPartnerHost, refreshPartnerHostCache } from "./services/partner-domains.js";
+
+// Warm partner white-label host cache for CORS / OAuth trust.
+void refreshPartnerHostCache();
 
 // Public paths that must accept browser requests from any origin (embed widget).
 // Mount BEFORE the restrictive global cors so OPTIONS preflights reach this
@@ -77,11 +81,19 @@ app.use(
   }),
 );
 
-// In production restrict CORS to known dashboard origins; in dev allow all.
-const corsOrigin: string | string[] | boolean = (() => {
+// In production restrict CORS to known dashboard origins + partner white-label hosts.
+const corsOrigin: boolean | string[] | ((origin: string | undefined, cb: (err: Error | null, allow?: boolean) => void) => void) = (() => {
   if (process.env["NODE_ENV"] !== "production") return true;
-  const allowed: string[] = ["https://app.snapserve.ai", ...getAppOrigins()];
-  return [...new Set(allowed)];
+  const allowed = new Set<string>(["https://app.snapserve.ai", ...getAppOrigins()]);
+  return (origin, cb) => {
+    if (!origin) { cb(null, true); return; }
+    if (allowed.has(origin)) { cb(null, true); return; }
+    try {
+      const host = new URL(origin).hostname;
+      if (isCachedPartnerHost(host)) { cb(null, true); return; }
+    } catch { /* ignore */ }
+    cb(null, false);
+  };
 })();
 app.use(cors({ credentials: true, origin: corsOrigin }));
 app.use(cookieParser());
