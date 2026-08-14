@@ -14,7 +14,6 @@ import {
   campaignsTable,
   campaignLeadsTable,
   phoneNumbersTable,
-  platformSettingsTable,
   usersTable,
   DEFAULT_SQUAD_LIMITS,
   type Squad,
@@ -27,7 +26,6 @@ import {
 } from "@workspace/db";
 import { eq, and, asc, desc, inArray } from "drizzle-orm";
 import { randomBytes } from "node:crypto";
-import { geminiThinkingConfig } from "../orchestration/adapters/llm/google.js";
 import { logger } from "../lib/logger.js";
 import { normalizePhone } from "../lib/phone-normalize.js";
 import { fireCampaignCall } from "../orchestration/campaignCaller.js";
@@ -38,6 +36,7 @@ import {
   ALLOWED_STEP_TYPES,
   type PlannedStep,
 } from "./squad-plan.js";
+import { platformChatText } from "./platform-chat-llm.js";
 
 export {
   validatePlannedSteps,
@@ -46,8 +45,6 @@ export {
   ALLOWED_STEP_TYPES,
   type PlannedStep,
 } from "./squad-plan.js";
-
-const PLANNER_MODEL = "gemini-3.5-flash-lite";
 
 type Ctx = Record<string, unknown>;
 
@@ -65,25 +62,12 @@ export async function appendSquadEvent(opts: {
   });
 }
 
-async function getGeminiKey(): Promise<string | null> {
-  try {
-    const [row] = await db.select().from(platformSettingsTable)
-      .where(eq(platformSettingsTable.key, "managed_gemini_key"));
-    return row?.value ?? process.env["GEMINI_API_KEY"] ?? null;
-  } catch {
-    return process.env["GEMINI_API_KEY"] ?? null;
-  }
-}
-
 async function planWithLlm(opts: {
   goal: string;
   context: Ctx;
   members: SquadMember[];
   agentsById: Map<number, { name: string }>;
 }): Promise<PlannedStep[] | null> {
-  const key = await getGeminiKey();
-  if (!key) return null;
-
   const roster = opts.members.map((m) => ({
     memberId: m.id,
     roleName: m.roleName,
@@ -104,23 +88,14 @@ Context: ${JSON.stringify(opts.context).slice(0, 4000)}
 Roster: ${JSON.stringify(roster)}`;
 
   try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${PLANNER_MODEL}:generateContent?key=${key}`;
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: { responseMimeType: "application/json", temperature: 0.2, thinkingConfig: geminiThinkingConfig(PLANNER_MODEL) },
-      }),
+    const text = await platformChatText({
+      system: "Return only valid JSON. No markdown.",
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.2,
+      maxTokens: 2048,
+      timeoutMs: 30_000,
+      json: true,
     });
-    if (!res.ok) {
-      logger.warn({ status: res.status }, "Squad planner Gemini error");
-      return null;
-    }
-    const data = await res.json() as {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-    };
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
     const parsed = JSON.parse(text) as { steps?: unknown };
     return Array.isArray(parsed.steps) ? (parsed.steps as PlannedStep[]) : null;
   } catch (err) {
@@ -500,13 +475,6 @@ async function runAgentReason(opts: {
   objective: string;
   context: Ctx;
 }): Promise<Record<string, unknown>> {
-  const key = await getGeminiKey();
-  if (!key) {
-    return {
-      summary: `Heuristic result for ${opts.agentName}: ${opts.objective}`,
-      notes: "No LLM key — placeholder specialist output",
-    };
-  }
   const prompt = `You are squad member "${opts.member.roleName}" (${opts.agentName}).
 Role instructions: ${opts.member.instructions ?? "(none)"}
 Squad goal: ${opts.goal}
@@ -515,25 +483,21 @@ Shared context (JSON): ${JSON.stringify(opts.context).slice(0, 6000)}
 Return ONLY JSON with keys: summary (string), data (object), nextHint (string).`;
 
   try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${PLANNER_MODEL}:generateContent?key=${key}`;
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: { responseMimeType: "application/json", temperature: 0.3, thinkingConfig: geminiThinkingConfig(PLANNER_MODEL) },
-      }),
+    const text = await platformChatText({
+      system: "Return only valid JSON. No markdown.",
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.3,
+      maxTokens: 2048,
+      timeoutMs: 30_000,
+      json: true,
     });
-    if (!res.ok) {
-      return { summary: `LLM error ${res.status}`, error: true };
-    }
-    const data = await res.json() as {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-    };
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
     return JSON.parse(text) as Record<string, unknown>;
   } catch (err) {
-    return { summary: "Specialist reasoning failed", error: String(err) };
+    logger.warn({ err }, "Squad agent_reason LLM failed — heuristic");
+    return {
+      summary: `Heuristic result for ${opts.agentName}: ${opts.objective}`,
+      notes: "LLM unavailable — placeholder specialist output",
+    };
   }
 }
 

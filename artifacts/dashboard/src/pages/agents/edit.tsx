@@ -85,7 +85,6 @@ import {
   getModelError,
   isGeminiLiveAgent,
   isGeminiLiveLlmModel,
-  voiceStackForLlmModel,
   languagesForAgent,
   isGeminiLiveLanguage,
 } from "@/lib/agent-providers";
@@ -439,7 +438,7 @@ export default function AgentEdit() {
     resolver: zodResolver(agentFormSchema) as any,
     defaultValues: {
       name: "", description: "", asrProvider: "sarvam", asrModel: "saaras:v3",
-      llmProvider: "openai", llmModel: "", ttsProvider: "sarvam",
+      llmProvider: "sarvam", llmModel: "gemma4", ttsProvider: "sarvam",
       ttsVoice: "priya", ttsModel: "bulbul:v3", telephonyProvider: "vobiz",
       systemPrompt: "", temperature: 0.10, maxDuration: 300,
       firstSpeaker: "assistant", endCallPhrases: "", silenceTimeoutSeconds: 30,
@@ -683,13 +682,22 @@ export default function AgentEdit() {
     // form, or the user would lose any unsaved changes mid-edit.
     if (!agent || formInitialized.current) return;
     formInitialized.current = true;
+    const liveOnLoad =
+      (agent as any).agentConfig?.voiceStack === "gemini_live"
+      || agent.llmModel === GEMINI_LIVE_LLM_MODEL;
+    // Classic Google Gemini text models are retired — remap to Sarvam Gemma 4 on load.
+    // Gemini Live keeps provider=google internally (voice stack path).
+    const migratedLlm =
+      !liveOnLoad && (agent.llmProvider === "google" || agent.llmProvider === "gemini")
+        ? { llmProvider: "sarvam", llmModel: "gemma4" }
+        : { llmProvider: agent.llmProvider, llmModel: agent.llmModel ?? "" };
     form.reset({
       name:              agent.name,
       description:       agent.description ?? "",
       asrProvider:       agent.asrProvider,
       asrModel:          agent.asrModel || ASR_MODELS[agent.asrProvider]?.[0]?.value || "",
-      llmProvider:       agent.llmProvider,
-      llmModel:          agent.llmModel ?? "",
+      llmProvider:       migratedLlm.llmProvider,
+      llmModel:          migratedLlm.llmModel,
       ttsProvider:       agent.ttsProvider,
       ttsVoice:          agent.ttsVoice ?? "",
       ttsModel:          agent.ttsModel || TTS_MODELS[agent.ttsProvider]?.[0]?.value || "",
@@ -1426,6 +1434,9 @@ export default function AgentEdit() {
             <FormField control={form.control} name="llmProvider" render={({ field }) => (
               <FormItem>
                 <FormLabel className="text-xs">Provider</FormLabel>
+                {isGeminiLive ? (
+                  <p className="text-sm font-medium pt-2">Gemini Live (native audio)</p>
+                ) : (
                 <Select onValueChange={(v) => {
                   field.onChange(v);
                   form.setValue("llmModel", "");
@@ -1436,6 +1447,7 @@ export default function AgentEdit() {
                     {LLM_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
                   </SelectContent>
                 </Select>
+                )}
                 <FormMessage />
               </FormItem>
             )} />
@@ -1443,16 +1455,15 @@ export default function AgentEdit() {
               <FormItem>
                 <FormLabel className="text-xs">Model</FormLabel>
                 <FormControl>
-                  {LLM_MODELS[llmProvider] ? (
+                  {isGeminiLive ? (
+                    <p className="text-sm font-medium pt-2">{geminiLiveModelLabel()}</p>
+                  ) : LLM_MODELS[llmProvider] ? (
                     <ModelSelect
-                      options={LLM_MODELS[llmProvider]!}
+                      options={LLM_MODELS[llmProvider]!.filter((m) => !isGeminiLiveLlmModel(m.value))}
                       value={field.value}
                       onChange={(v) => {
                         field.onChange(v);
-                        form.setValue("voiceStack", voiceStackForLlmModel(v));
-                        if (isGeminiLiveLlmModel(v)) {
-                          form.setValue("llmProvider", "google");
-                        }
+                        form.setValue("voiceStack", "classic");
                       }}
                       placeholder="Select model"
                     />

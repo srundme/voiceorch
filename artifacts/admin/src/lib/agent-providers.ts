@@ -8,8 +8,9 @@ export const ASR_PROVIDERS = [
 ];
 
 export const LLM_PROVIDERS = [
-  { value: "google",    label: "Google Gemini" },
+  { value: "sarvam",    label: "Sarvam AI (India-hosted)" },
   { value: "groq",      label: "Groq" },
+  { value: "openai",    label: "OpenAI" },
 ];
 
 export const TTS_PROVIDERS = [
@@ -41,13 +42,13 @@ export const ASR_MODELS: Record<string, { value: string; label: string }[]> = {
 export const LLM_MODELS: Record<string, { value: string; label: string }[]> = {
   openai:    [{ value: "gpt-4o-mini", label: "GPT-4o Mini" }, { value: "gpt-4o", label: "GPT-4o" }, { value: "gpt-4-turbo", label: "GPT-4 Turbo" }, { value: "gpt-3.5-turbo", label: "GPT-3.5 Turbo" }],
   anthropic: [{ value: "claude-3-5-sonnet-20241022", label: "Claude 3.5 Sonnet" }, { value: "claude-3-5-haiku-20241022", label: "Claude 3.5 Haiku" }, { value: "claude-3-opus-20240229", label: "Claude 3 Opus" }],
-  google:    [{ value: "gemini-3.5-flash-lite", label: "Gemini 3.5 Flash Lite (fastest — lowest latency)" }, { value: "gemini-3.6-flash", label: "Gemini 3.6 Flash (recommended)" }, { value: "gemini-3.5-flash", label: "Gemini 3.5 Flash (most capable)" }, { value: "gemini-3.1-flash-lite", label: "Gemini 3.1 Flash Lite (low-latency)" }, { value: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite (previous gen)" }, { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash (previous gen)" }, { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro (previous gen)" }],
+  google:    [{ value: "gemini-3.1-flash-live-preview", label: "Gemini 3.1 Flash Live (native audio only)" }],
   qwen:      [{ value: "qwen/qwen3-32b", label: "Qwen 3 32B (recommended)" }, { value: "qwen/qwen3-235b-a22b", label: "Qwen 3 235B" }],
   groq:      [{ value: "llama-3.3-70b-versatile", label: "Llama 3.3 70B (recommended)" }, { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B (fast)" }, { value: "gemma2-9b-it", label: "Gemma 2 9B" }],
   sarvam: [
-    { value: "sarvam-105b", label: "Sarvam 105B (recommended — Indian languages)" },
-    { value: "gemma4", label: "Gemma 4 31B (Sarvam open-source beta — tools + images)" },
-    { value: "glm5.2", label: "GLM-5.2 (Sarvam open-source beta — 512K context)" },
+    { value: "gemma4", label: "Gemma 4 31B (recommended — default)" },
+    { value: "sarvam-105b", label: "Sarvam 105B (Indian languages)" },
+    { value: "glm5.2", label: "GLM-5.2 (512K context)" },
   ],
   deepseek:  [{ value: "deepseek-chat", label: "DeepSeek Chat" }, { value: "deepseek-reasoner", label: "DeepSeek Reasoner" }],
   mistral:   [{ value: "mistral-large-latest", label: "Mistral Large" }, { value: "mistral-small-latest", label: "Mistral Small" }],

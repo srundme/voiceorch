@@ -3,10 +3,9 @@ export const ASR_PROVIDERS = [
 ];
 
 export const LLM_PROVIDERS = [
-  { value: "openai",   label: "OpenAI" },
-  { value: "google",   label: "Google Gemini" },
-  { value: "groq",     label: "Groq" },
   { value: "sarvam",   label: "Sarvam AI (India-hosted)" },
+  { value: "openai",   label: "OpenAI" },
+  { value: "groq",     label: "Groq" },
   { value: "krutrim",  label: "Krutrim Cloud (India-hosted)" },
 ];
 
@@ -40,19 +39,17 @@ export const LLM_MODELS: Record<string, { value: string; label: string }[]> = {
     { value: "gpt-4.1-mini", label: "GPT-4.1 Mini (Low Cost — Fast Voice)" },
     { value: "gpt-4o-mini",  label: "GPT-4o Mini" },
   ],
+  // Classic Gemini text models removed from the product catalog. `google` remains
+  // only for Gemini Live (native audio), selected via voice stack — not the LLM dropdown.
   google: [
-    { value: "gemini-3.5-flash-lite", label: "Gemini 3.5 Flash Lite (Fastest — Lowest Latency)" },
-    { value: "gemini-3.6-flash",      label: "Gemini 3.6 Flash (Recommended — Complex Reasoning & Tools)" },
-    { value: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite (Previous Gen)" },
-    { value: "gemini-2.5-flash",      label: "Gemini 2.5 Flash (Previous Gen)" },
-    { value: GEMINI_LIVE_LLM_MODEL,   label: "Gemini 3.1 Flash Live (Native Realtime Bidirectional Voice)" },
+    { value: GEMINI_LIVE_LLM_MODEL, label: "Gemini 3.1 Flash Live (Native Realtime Bidirectional Voice)" },
   ],
   qwen:      [{ value: "qwen/qwen3-32b", label: "Qwen 3 32B (recommended)" }, { value: "qwen/qwen3-235b-a22b", label: "Qwen 3 235B" }],
   groq:      [{ value: "llama-3.3-70b-versatile", label: "Llama 3.3 70B (recommended)" }, { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B (fast)" }, { value: "gemma2-9b-it", label: "Gemma 2 9B" }],
   sarvam: [
-    { value: "sarvam-105b", label: "Sarvam 105B (recommended — Indian languages)" },
-    { value: "gemma4", label: "Gemma 4 31B (Sarvam open-source beta — tools + images)" },
-    { value: "glm5.2", label: "GLM-5.2 (Sarvam open-source beta — 512K context)" },
+    { value: "gemma4", label: "Gemma 4 31B (recommended — default)" },
+    { value: "sarvam-105b", label: "Sarvam 105B (Indian languages)" },
+    { value: "glm5.2", label: "GLM-5.2 (512K context)" },
   ],
   together: [
     { value: "Qwen/Qwen3.6-35B-A3B",   label: "Qwen3.6 35B-A3B — fast, low cost (recommended)" },
@@ -527,33 +524,33 @@ export function isTamilLanguage(language: string | undefined | null): boolean {
   return language.toLowerCase().split("-")[0] === "ta";
 }
 
-/** The default Gemini model — first entry of the `google` LLM list. */
+/** @deprecated Classic Gemini text models removed — use defaultSarvamModel(). */
 export function defaultGeminiModel(): string {
-  return LLM_MODELS.google?.[0]?.value ?? "gemini-3.5-flash-lite";
+  return defaultSarvamModel();
+}
+
+/** Default Sarvam LLM — Gemma 4 on Sarvam /v2. */
+export function defaultSarvamModel(): string {
+  return LLM_MODELS.sarvam?.[0]?.value ?? "gemma4";
 }
 
 /** Canonical LLM defaults for the VoiceOrch auto-selection rule.
- *  Tamil stays on the classic STT→LLM→TTS stack (never auto-enters Gemini Live).
- *  Live remains an explicit model pick only. */
+ *  All languages → Sarvam Gemma 4 on the classic STT→LLM→TTS stack.
+ *  Live remains an explicit voice-stack pick only. */
 export const DEFAULT_TAMIL_LLM_PROVIDER = "sarvam" as const;
-export const DEFAULT_TAMIL_LLM_MODEL    = "sarvam-105b" as const;
+export const DEFAULT_TAMIL_LLM_MODEL    = "gemma4" as const;
 export const DEFAULT_NONTAMIL_LLM_PROVIDER = "sarvam" as const;
-export const DEFAULT_NONTAMIL_LLM_MODEL    = "sarvam-105b" as const;
+export const DEFAULT_NONTAMIL_LLM_MODEL    = "gemma4" as const;
 
 /**
  * Returns the canonical llmProvider + llmModel for the given language selection.
- * Tamil (any `ta-*` variant) → Gemini 3.5 Flash Lite on the classic voice stack.
- * All other languages → Groq Llama 3.3 70B (classic pipeline).
+ * All languages → Sarvam Gemma 4 on the classic voice stack.
  * Never returns the Gemini Live model — Live must be chosen explicitly.
  */
 export function defaultLlmForLanguages(
-  languages: string | string[] | undefined | null,
+  _languages: string | string[] | undefined | null,
 ): { llmProvider: string; llmModel: string } {
-  const arr = Array.isArray(languages) ? languages : (languages ? [languages] : []);
-  const hasTamil = arr.some(l => isTamilLanguage(l));
-  return hasTamil
-    ? { llmProvider: DEFAULT_TAMIL_LLM_PROVIDER,    llmModel: DEFAULT_TAMIL_LLM_MODEL }
-    : { llmProvider: DEFAULT_NONTAMIL_LLM_PROVIDER, llmModel: DEFAULT_NONTAMIL_LLM_MODEL };
+  return { llmProvider: DEFAULT_NONTAMIL_LLM_PROVIDER, llmModel: DEFAULT_NONTAMIL_LLM_MODEL };
 }
 
 export function isGeminiLiveLlmModel(model: string | undefined | null): boolean {

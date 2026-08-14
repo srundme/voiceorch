@@ -18,7 +18,6 @@ import {
   scheduledCallbacksTable,
   campaignsTable,
   campaignLeadsTable,
-  platformSettingsTable,
   type Journey,
   type JourneyPresetId,
   type JourneySettings,
@@ -28,6 +27,7 @@ import {
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logger } from "../lib/logger.js";
 import { startWorkflowRun } from "../services/workflow-engine.js";
+import { getSarvamManagedKey, platformChatText } from "../services/platform-chat-llm.js";
 import {
   buildJourneyPreset,
   listJourneyPresets,
@@ -132,47 +132,19 @@ async function assertAgentOwned(clerkId: string, agentId: number): Promise<boole
 
 // ── Preset catalog ───────────────────────────────────────────────────────────
 
-async function getGeminiKeyForPlanVibe(): Promise<string | null> {
-  try {
-    const [row] = await db.select().from(platformSettingsTable)
-      .where(eq(platformSettingsTable.key, "managed_gemini_key"));
-    return row?.value ?? process.env.GEMINI_API_KEY ?? null;
-  } catch {
-    return process.env.GEMINI_API_KEY ?? null;
-  }
+async function getPlanVibeKey(): Promise<string | null> {
+  return getSarvamManagedKey();
 }
 
-async function generatePlanVibeJson(key: string, system: string, user: string): Promise<string> {
-  const model = "gemini-3.5-flash-lite";
-  const resp = await Promise.race([
-    fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          system_instruction: { parts: [{ text: system }] },
-          contents: [{ role: "user", parts: [{ text: user }] }],
-          generationConfig: {
-            responseMimeType: "application/json",
-            temperature: 0.3,
-            maxOutputTokens: 512,
-          },
-        }),
-      },
-    ),
-    new Promise<never>((_, rej) => setTimeout(() => rej(new Error("gemini_timeout")), 20_000)),
-  ]);
-  if (!resp.ok) {
-    const txt = await resp.text();
-    throw new Error(`gemini_http_${resp.status}:${txt.slice(0, 200)}`);
-  }
-  const data = await resp.json() as {
-    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-  };
-  const text = data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
-  if (!text.trim()) throw new Error("gemini_empty");
-  return text;
+async function generatePlanVibeJson(_key: string, system: string, user: string): Promise<string> {
+  return platformChatText({
+    system,
+    messages: [{ role: "user", content: user }],
+    temperature: 0.3,
+    maxTokens: 512,
+    timeoutMs: 20_000,
+    json: true,
+  });
 }
 
 /** Draft a call plan from natural language (classify → client creates with recipes). */
@@ -183,7 +155,7 @@ router.post("/journeys/vibe-draft", requireAuth, async (req, res): Promise<void>
     return;
   }
   try {
-    const key = await getGeminiKeyForPlanVibe();
+    const key = await getPlanVibeKey();
     const draft = await draftCallPlanFromPrompt(prompt, key, generatePlanVibeJson);
     res.json(draft);
   } catch (err) {

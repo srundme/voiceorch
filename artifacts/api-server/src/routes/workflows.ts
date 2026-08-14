@@ -2,22 +2,22 @@
  * Workflow maker — authenticated CRUD, run history, and the chat builder.
  *
  * The chat builder (POST /workflows/chat) mirrors the Vibe agent builder: an
- * SSE stream driven by Gemini in JSON mode. The model turns a plain-language
- * description into a structured { trigger, steps } workflow that non-coders
- * never have to edit by hand.
+ * SSE stream driven by Sarvam Gemma 4 in JSON mode. The model turns a
+ * plain-language description into a structured { trigger, steps } workflow
+ * that non-coders never have to edit by hand.
  */
 
 import { Router, type IRouter } from "express";
 import { randomBytes } from "node:crypto";
 import { eq, and, desc } from "drizzle-orm";
-import { geminiThinkingConfig } from "../orchestration/adapters/llm/google.js";
 import {
-  db, workflowsTable, workflowRunsTable, agentsTable, platformSettingsTable,
+  db, workflowsTable, workflowRunsTable, agentsTable,
   type WorkflowTrigger, type WorkflowStep, type Workflow,
 } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logger } from "../lib/logger.js";
 import { startWorkflowRun } from "../services/workflow-engine.js";
+import { getSarvamManagedKey, platformChatText } from "../services/platform-chat-llm.js";
 
 const router: IRouter = Router();
 
@@ -180,21 +180,9 @@ router.get("/workflows/:id/runs", requireAuth, async (req, res): Promise<void> =
   })));
 });
 
-/* ═══════════════════════════ Chat builder (SSE + Gemini) ═══════════════════ */
+/* ═══════════════════════════ Chat builder (SSE + Sarvam Gemma 4) ═══════════ */
 
 interface ChatMessage { role: "user" | "assistant"; content: string; }
-
-const WORKFLOW_GEMINI_MODEL = "gemini-3.5-flash-lite";
-
-async function getGeminiKey(): Promise<string | null> {
-  try {
-    const [row] = await db.select().from(platformSettingsTable)
-      .where(eq(platformSettingsTable.key, "managed_gemini_key"));
-    return row?.value ?? process.env["GEMINI_API_KEY"] ?? null;
-  } catch {
-    return process.env["GEMINI_API_KEY"] ?? null;
-  }
-}
 
 function sleep(ms: number) { return new Promise<void>(r => setTimeout(r, ms)); }
 
@@ -265,39 +253,30 @@ function parseWorkflowJson(raw: string): WorkflowChatResult | null {
   }
 }
 
-async function callGemini(key: string, messages: ChatMessage[], systemPrompt: string): Promise<WorkflowChatResult> {
-  const contents = messages.map(m => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] }));
-  const body = JSON.stringify({
-    system_instruction: { parts: [{ text: systemPrompt }] },
-    contents,
-    generationConfig: { responseMimeType: "application/json", temperature: 0.4, maxOutputTokens: 8192, thinkingConfig: geminiThinkingConfig(WORKFLOW_GEMINI_MODEL) },
-  });
-
+async function callWorkflowLlm(messages: ChatMessage[], systemPrompt: string): Promise<WorkflowChatResult> {
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      const resp = await Promise.race([
-        fetch(`https://generativelanguage.googleapis.com/v1beta/models/${WORKFLOW_GEMINI_MODEL}:generateContent?key=${key}`,
-          { method: "POST", headers: { "Content-Type": "application/json" }, body }),
-        new Promise<never>((_, rej) => setTimeout(() => rej(new Error("gemini_timeout")), 60000)),
+      const text = await Promise.race([
+        platformChatText({
+          system: systemPrompt,
+          messages,
+          temperature: 0.4,
+          maxTokens: 8192,
+          timeoutMs: 60_000,
+          json: true,
+        }),
+        new Promise<never>((_, rej) => setTimeout(() => rej(new Error("workflow_llm_timeout")), 60000)),
       ]);
-      if (!resp.ok) {
-        if ((resp.status === 429 || resp.status >= 500) && attempt < 3) { await sleep(attempt * 1500); continue; }
-        throw new Error(`Gemini ${resp.status}`);
-      }
-      const data = await resp.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string; thought?: boolean }> } }> };
-      const parts = data.candidates?.[0]?.content?.parts ?? [];
-      const text = parts.filter(p => typeof p.text === "string" && !p.thought).map(p => p.text!).join("")
-        || parts.map(p => p.text ?? "").join("");
       const parsed = parseWorkflowJson(text);
       if (parsed) return parsed;
       if (attempt < 3) { await sleep(attempt * 1000); continue; }
-      throw new Error("Gemini JSON parse failed");
+      throw new Error("Workflow LLM JSON parse failed");
     } catch (err) {
       if (attempt >= 3) throw err;
       await sleep(attempt * 1500);
     }
   }
-  throw new Error("Gemini call failed");
+  throw new Error("Workflow LLM call failed");
 }
 
 function sanitizeWorkflow(raw: unknown): { name: string; description: string; trigger: WorkflowTrigger; steps: WorkflowStep[] } | null {
@@ -329,7 +308,7 @@ router.post("/workflows/chat", requireAuth, async (req, res): Promise<void> => {
   };
 
   try {
-    const key = await getGeminiKey();
+    const key = await getSarvamManagedKey();
     if (!key) { emit({ type: "error", message: "No AI key configured — contact the platform admin." }); res.end(); return; }
 
     const agents = await db.select({ id: agentsTable.id, name: agentsTable.name })
@@ -337,7 +316,7 @@ router.post("/workflows/chat", requireAuth, async (req, res): Promise<void> => {
 
     const systemPrompt = buildSystemPrompt({ agents });
 
-    const result = await callGemini(key, messages, systemPrompt);
+    const result = await callWorkflowLlm(messages, systemPrompt);
 
     // Stream the assistant reply as a typing effect.
     for (const ch of result.reply) { emit({ type: "text", delta: ch }); await sleep(6); }

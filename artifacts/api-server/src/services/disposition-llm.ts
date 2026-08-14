@@ -140,49 +140,8 @@ class SarvamDispositionLLM implements DispositionLLM {
   }
 }
 
-class GeminiDispositionLLM implements DispositionLLM {
-  private client: OpenAI;
-  private model: string;
-
-  constructor(apiKey: string, model = "gemini-3.6-flash") {
-    this.client = new OpenAI({
-      apiKey,
-      baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
-    });
-    this.model = model;
-  }
-
-  async extract(
-    systemPrompt: string,
-    schema: Record<string, unknown>,
-    transcript: string,
-  ): Promise<Record<string, unknown>> {
-    const response = await this.client.chat.completions.create({
-      model: this.model,
-      temperature: 0,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: withSchemaInstruction(systemPrompt, schema) },
-        { role: "user", content: `TRANSCRIPT:\n${transcript}` },
-      ],
-    });
-    const rawContent = response.choices[0]?.message?.content ?? "{}";
-    // Strip codeblock markdown if present
-    const cleaned = rawContent.replace(/^```(?:json)?\n?/i, "").replace(/\n?```$/i, "").trim();
-    return JSON.parse(cleaned) as Record<string, unknown>;
-  }
-}
-
 /** Resolve a managed key for a provider, falling back to env where applicable. */
 async function resolveManagedKey(provider: string): Promise<string | null> {
-  if (provider === "gemini" || provider === "google") {
-    return (
-      (await getSetting("managed_gemini_key"))?.trim() ||
-      (process.env["GEMINI_API_KEY"] ?? "").trim() ||
-      (process.env["GOOGLE_API_KEY"] ?? "").trim() ||
-      null
-    );
-  }
   if (provider === "openai") {
     return (await getSetting("managed_openai_key"))?.trim() || (process.env["OPENAI_API_KEY"] ?? "").trim() || null;
   }
@@ -199,60 +158,60 @@ async function resolveManagedKey(provider: string): Promise<string | null> {
 }
 
 function buildClient(provider: string, key: string): DispositionLLM {
-  if (provider === "gemini" || provider === "google") return new GeminiDispositionLLM(key);
   if (provider === "openai") return new OpenAIDispositionLLM(key);
   if (provider === "sarvam") return new SarvamDispositionLLM(key);
   return new QwenDispositionLLM(key);
 }
 
+const FALLBACK_ORDER = ["sarvam", "openai", "qwen"] as const;
+
+function normalizeProvider(preferred: string): string {
+  if (preferred === "groq" || preferred === "qwen") return "qwen";
+  // Legacy gemini/google overrides map to Sarvam Gemma — Gemini is no longer used.
+  if (preferred === "google" || preferred === "gemini") return "sarvam";
+  return preferred;
+}
+
 /**
  * Returns the appropriate DispositionLLM instance.
  * Provider selection: agentCfgOverride > DISPOSITION_LLM env > "sarvam" default
- * (Gemma 4 via managed Sarvam key — Gemini is still available as a fallback).
- * Falls back to any other provider whose managed key is configured, so
- * classification still runs as long as ONE managed key exists.
- * Returns null only if no managed key is available (never crashes the caller).
+ * (Gemma 4 via managed Sarvam key). Gemini is not in the chain.
+ * Falls back to OpenAI / Groq when Sarvam is unavailable.
  */
 export async function getDispositionLLM(
   agentCfgOverride?: string | null,
 ): Promise<DispositionLLM | null> {
-  const preferred = (
-    agentCfgOverride ??
-    process.env["DISPOSITION_LLM"] ??
-    "sarvam"
-  ).toLowerCase();
+  const preferred = normalizeProvider(
+    (agentCfgOverride ?? process.env["DISPOSITION_LLM"] ?? "sarvam").toLowerCase(),
+  );
 
-  const normalized = (preferred === "groq" || preferred === "qwen") ? "qwen" : (preferred === "google" ? "gemini" : preferred);
-
-  // Prefer Sarvam Gemma 4 first; Gemini / OpenAI / Groq remain as fallbacks.
-  const order = [normalized, ...["sarvam", "openai", "qwen", "gemini"].filter((p) => p !== normalized)];
+  const order = [preferred, ...FALLBACK_ORDER.filter((p) => p !== preferred)];
 
   for (const provider of order) {
     const key = await resolveManagedKey(provider);
     if (key) {
-      if (provider !== normalized) {
-        logger.info({ preferred: normalized, using: provider }, "disposition: preferred LLM key missing, falling back");
+      if (provider !== preferred) {
+        logger.info({ preferred, using: provider }, "disposition: preferred LLM key missing, falling back");
       }
       return buildClient(provider, key);
     }
   }
 
-  logger.warn("disposition: no managed LLM key configured (sarvam/openai/qwen/gemini), skipping LLM pass");
+  logger.warn("disposition: no managed LLM key configured (sarvam/openai/qwen), skipping LLM pass");
   return null;
 }
 
 /**
  * Returns every available DispositionLLM in preference order, so callers can
- * fall back to the next provider when one fails at call time (e.g. Gemini 403
- * from a billing/permission issue). Empty when no managed key is configured.
+ * fall back to the next provider when one fails at call time.
  */
 export async function getDispositionLLMChain(
   agentCfgOverride?: string | null,
 ): Promise<Array<{ provider: string; client: DispositionLLM }>> {
-  const preferred = (agentCfgOverride ?? process.env["DISPOSITION_LLM"] ?? "sarvam").toLowerCase();
-  const normalized =
-    preferred === "groq" || preferred === "qwen" ? "qwen" : preferred === "google" ? "gemini" : preferred;
-  const order = [normalized, ...["sarvam", "openai", "qwen", "gemini"].filter((p) => p !== normalized)];
+  const preferred = normalizeProvider(
+    (agentCfgOverride ?? process.env["DISPOSITION_LLM"] ?? "sarvam").toLowerCase(),
+  );
+  const order = [preferred, ...FALLBACK_ORDER.filter((p) => p !== preferred)];
 
   const chain: Array<{ provider: string; client: DispositionLLM }> = [];
   for (const provider of order) {

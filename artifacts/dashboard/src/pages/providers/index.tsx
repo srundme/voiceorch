@@ -61,7 +61,8 @@ const SUPPORTED_PROVIDERS: Record<string, ProviderDef[]> = {
     { label: "Cartesia", value: "cartesia", apiKeyLabel: "API Key", apiKeyPlaceholder: "Paste your Cartesia key…", docsUrl: "https://play.cartesia.ai/keys", docsLabel: "play.cartesia.ai" },
   ],
   llm: [
-    { label: "Google Gemini", value: "google", apiKeyLabel: "API Key", apiKeyPlaceholder: "AIzaSy…", docsUrl: "https://aistudio.google.com/app/apikey", docsLabel: "aistudio.google.com" },
+    { label: "Sarvam AI (recommended)", value: "sarvam", apiKeyLabel: "API Key", apiKeyPlaceholder: "Paste your Sarvam key…", docsUrl: "https://dashboard.sarvam.ai", docsLabel: "dashboard.sarvam.ai" },
+    { label: "OpenAI", value: "openai", apiKeyLabel: "API Key", apiKeyPlaceholder: "sk-…", docsUrl: "https://platform.openai.com/api-keys", docsLabel: "platform.openai.com" },
     { label: "Groq", value: "groq", apiKeyLabel: "API Key", apiKeyPlaceholder: "gsk_…", docsUrl: "https://console.groq.com/keys", docsLabel: "console.groq.com" },
     { label: "Krutrim Cloud", value: "krutrim", apiKeyLabel: "API Key", apiKeyPlaceholder: "Paste your Krutrim Cloud API key…", docsUrl: "https://cloud.olakrutrim.com", docsLabel: "cloud.olakrutrim.com" },
   ],

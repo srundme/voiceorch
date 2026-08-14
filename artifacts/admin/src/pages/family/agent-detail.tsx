@@ -40,8 +40,9 @@ const ASR_PROVIDERS = [
   { value: "cartesia",   label: "Cartesia" },
 ];
 const LLM_PROVIDERS = [
-  { value: "google",    label: "Google Gemini" },
+  { value: "sarvam",    label: "Sarvam AI (India-hosted)" },
   { value: "groq",      label: "Groq" },
+  { value: "openai",    label: "OpenAI" },
 ];
 const TTS_PROVIDERS = [
   { value: "elevenlabs",    label: "ElevenLabs" },    { value: "openai_tts",    label: "OpenAI TTS" },
@@ -81,16 +82,16 @@ const ASR_MODELS: Record<string, { value: string; label: string }[]> = {
 const LLM_MODELS: Record<string, { value: string; label: string }[]> = {
   openai:    [{ value: "gpt-4o-mini", label: "GPT-4o Mini" }, { value: "gpt-4o", label: "GPT-4o" }],
   anthropic: [{ value: "claude-opus-4-5", label: "Claude Opus 4" }, { value: "claude-3-5-sonnet-20241022", label: "Claude 3.5 Sonnet" }, { value: "claude-3-5-haiku-20241022", label: "Claude 3.5 Haiku" }],
-  google:    [{ value: "gemini-3.6-flash", label: "Gemini 3.6 Flash (recommended)" }, { value: "gemini-3.5-flash-lite", label: "Gemini 3.5 Flash Lite (fastest)" }, { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash (previous gen)" }],
+  google:    [{ value: "gemini-3.1-flash-live-preview", label: "Gemini 3.1 Flash Live (native audio only)" }],
   deepseek:  [{ value: "deepseek-chat", label: "DeepSeek V3 (chat)" }, { value: "deepseek-reasoner", label: "DeepSeek R1" }],
   mistral:   [{ value: "mistral-large-latest", label: "Mistral Large" }, { value: "mistral-small-latest", label: "Mistral Small" }],
   cohere:    [{ value: "command-r-plus-08-2024", label: "Command R+" }, { value: "command-r-08-2024", label: "Command R" }],
   qwen:      [{ value: "qwen/qwen3-32b", label: "Qwen 3 32B (recommended)" }, { value: "qwen/qwen3-235b-a22b", label: "Qwen 3 235B" }],
   groq:      [{ value: "llama-3.3-70b-versatile", label: "Llama 3.3 70B" }, { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B" }],
   sarvam: [
-    { value: "sarvam-105b", label: "Sarvam 105B (recommended — Indian languages)" },
-    { value: "gemma4", label: "Gemma 4 31B (Sarvam open-source beta)" },
-    { value: "glm5.2", label: "GLM-5.2 (Sarvam open-source beta)" },
+    { value: "gemma4", label: "Gemma 4 31B (recommended — default)" },
+    { value: "sarvam-105b", label: "Sarvam 105B (Indian languages)" },
+    { value: "glm5.2", label: "GLM-5.2 (512K context)" },
     { value: "sarvam-30b", label: "Sarvam 30B (legacy)" },
   ],
 };
