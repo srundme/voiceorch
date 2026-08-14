@@ -50,6 +50,9 @@
     "ws": "^8.21.0",
     "zod": "catalog:"
   },
+  "optionalDependencies": {
+    "@roamhq/wrtc": "^0.8.0"
+  },
   "devDependencies": {
     "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.19",

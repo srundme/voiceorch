@@ -785,6 +785,13 @@
       "when": 1791600011000,
       "tag": "0111_campaign_report_definitions",
       "breakpoints": true
+    },
+    {
+      "idx": 112,
+      "version": "7",
+      "when": 1791600012000,
+      "tag": "0112_whatsapp_calling",
+      "breakpoints": true
     }
   ]
 }

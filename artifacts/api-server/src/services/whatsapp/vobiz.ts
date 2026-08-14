@@ -22,6 +22,12 @@ import {
   type WhatsappChannel,
 } from "@workspace/db";
 import { logger } from "../../lib/logger.js";
+import {
+  assertWhatsappSendBalance,
+  debitWhatsappMessage,
+  getWhatsappMessageRates,
+  rateForTemplateCategory,
+} from "./billing.js";
 
 export const VOBIZ_API_BASE = "https://api.vobiz.ai/api/v1";
 
@@ -174,7 +180,7 @@ export interface SendResult {
   messageRowId?: string;
   vobizMessageId?: string | null;
   error?: string;
-  skipped?: "daily_cap" | "invalid_phone";
+  skipped?: "daily_cap" | "invalid_phone" | "insufficient_balance";
 }
 
 /** Send one template message and log it to whatsapp_messages. */
@@ -205,6 +211,17 @@ export async function sendWhatsappTemplate(args: SendTemplateArgs): Promise<Send
     tpl = catalog[hint] ?? catalog.call_summary;
   }
   const params = args.params.map((p) => sanitizeParam(p));
+
+  // Own-channel: SnapServe wallet bills per message. Shared Instant stays capped, not billed.
+  let billPaise = 0;
+  if (channel.mode === "own") {
+    const rates = await getWhatsappMessageRates();
+    billPaise = rateForTemplateCategory(rates, (args as { templateCategory?: string }).templateCategory);
+    const check = await assertWhatsappSendBalance(channel.userId, billPaise);
+    if (!check.ok) {
+      return { ok: false, skipped: "insufficient_balance", error: check.error };
+    }
+  }
 
   const [row] = await db.insert(whatsappMessagesTable).values({
     userId: channel.userId,
@@ -262,6 +279,17 @@ export async function sendWhatsappTemplate(args: SendTemplateArgs): Promise<Send
     await db.update(whatsappMessagesTable)
       .set({ vobizMessageId, metaMessageId, status, updatedAt: new Date() })
       .where(eq(whatsappMessagesTable.id, row!.id));
+    if (channel.mode === "own" && billPaise > 0) {
+      const billed = await debitWhatsappMessage({
+        clerkUserId: channel.userId,
+        messageRowId: row!.id,
+        amountPaise: billPaise,
+        description: `WhatsApp template ${tpl.name} → ${to}`,
+      });
+      if (!billed.ok && billed.code === "INSUFFICIENT_BALANCE") {
+        logger.warn({ channelId: channel.id, messageRowId: row!.id }, "whatsapp-native: send ok but wallet debit failed");
+      }
+    }
     logger.info({ channelId: channel.id, to, hint, vobizMessageId }, "whatsapp-native: template sent");
     return { ok: true, messageRowId: row!.id, vobizMessageId };
   } catch (err) {
@@ -411,6 +439,17 @@ export async function sendWhatsappFreeform(args: SendFreeformArgs): Promise<Send
   const preview = args.kind === "text"
     ? (args.text ?? "")
     : `[${args.kind}] ${args.media?.filename ?? args.media?.link ?? ""}`;
+
+  let billPaise = 0;
+  if (channel.mode === "own") {
+    const rates = await getWhatsappMessageRates();
+    billPaise = rates.freeformPaise;
+    const check = await assertWhatsappSendBalance(channel.userId, billPaise);
+    if (!check.ok) {
+      return { ok: false, skipped: "insufficient_balance", error: check.error };
+    }
+  }
+
   const [row] = await db.insert(whatsappMessagesTable).values({
     userId: channel.userId,
     channelId: channel.id,
@@ -467,6 +506,14 @@ export async function sendWhatsappFreeform(args: SendFreeformArgs): Promise<Send
     await db.update(whatsappMessagesTable)
       .set({ vobizMessageId, metaMessageId, status, updatedAt: new Date() })
       .where(eq(whatsappMessagesTable.id, row!.id));
+    if (channel.mode === "own" && billPaise > 0) {
+      await debitWhatsappMessage({
+        clerkUserId: channel.userId,
+        messageRowId: row!.id,
+        amountPaise: billPaise,
+        description: `WhatsApp ${args.kind} → ${to}`,
+      });
+    }
     logger.info({ channelId: channel.id, to, kind: args.kind, vobizMessageId }, "whatsapp: freeform sent");
     return { ok: true, messageRowId: row!.id, vobizMessageId };
   } catch (err) {

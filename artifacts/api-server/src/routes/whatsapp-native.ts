@@ -32,6 +32,7 @@ import {
   GST_RATE,
   PHONE_BASE_PAISE,
   PHONE_TOTAL_PAISE,
+  PHONE_WALLET_PURCHASE_MIN_BALANCE_PAISE,
   formatInr,
   gstPortionPaise,
 } from "../lib/money-inr.js";
@@ -52,6 +53,14 @@ import {
   sanitizeVobizError,
 } from "../services/whatsapp/vobiz.js";
 import { maybeSendBrochure, maybeChatbotReply } from "../services/whatsapp/auto-reply.js";
+import {
+  startOutboundWhatsappCall,
+  terminateWhatsappCall,
+  listWhatsappCalls,
+  handleWhatsappCallWebhook,
+} from "../services/whatsapp/call-session.js";
+import { getWhatsappMessageRates, DEFAULT_WA_MESSAGE_RATES } from "../services/whatsapp/billing.js";
+import { isWrtcAvailable } from "../services/whatsapp/webrtc-bridge.js";
 
 const router: IRouter = Router();
 
@@ -82,6 +91,8 @@ function formatChannel(row: WhatsappChannel) {
     status: row.status,
     lastError: row.lastError,
     active: row.active,
+    callingEnabled: (row as { callingEnabled?: boolean }).callingEnabled ?? false,
+    callingAgentId: (row as { callingAgentId?: number | null }).callingAgentId ?? null,
     templateCatalog: Array.isArray(row.templateCatalog) ? row.templateCatalog : [],
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
@@ -478,6 +489,12 @@ router.get("/whatsapp/numbers/available", requireAuth, async (req, res): Promise
       }))
       .filter((n) => n.number);
     // Carrier's raw monthly fee is never surfaced — SnapServe charges flat pricing.
+    const [walletUser] = await db
+      .select({ walletBalanceCents: usersTable.walletBalanceCents })
+      .from(usersTable)
+      .where(eq(usersTable.clerkId, userId))
+      .limit(1);
+    const balance = walletUser?.walletBalanceCents ?? 0;
     res.json({
       numbers,
       pricing: {
@@ -486,6 +503,9 @@ router.get("/whatsapp/numbers/available", requireAuth, async (req, res): Promise
         totalPaise: PHONE_TOTAL_PAISE,
         renewalPaise: RENEWAL_RATE_CENTS,
         currency: CURRENCY_INR,
+        walletPurchaseMinPaise: PHONE_WALLET_PURCHASE_MIN_BALANCE_PAISE,
+        walletEligible: balance > PHONE_WALLET_PURCHASE_MIN_BALANCE_PAISE && balance >= PHONE_TOTAL_PAISE,
+        walletBalanceCents: balance,
       },
     });
   } catch (err) {
@@ -877,6 +897,276 @@ router.post("/whatsapp/numbers/purchase/confirm", requireAuth, clientContext, de
   });
 });
 
+/**
+ * Pay for a WhatsApp number from wallet when balance > ₹20,000.
+ * Debits GST-inclusive total atomically, orders from VoBiz, creates channel.
+ * On carrier failure the wallet is refunded.
+ */
+router.post("/whatsapp/numbers/purchase/wallet", requireAuth, clientContext, denyManagedClient, async (req, res): Promise<void> => {
+  const userId = (req as any).clerkUserId as string;
+  const body = req.body as {
+    number?: string;
+    countryCode?: string;
+    region?: string;
+    wabaId?: string;
+    accessToken?: string;
+    businessName?: string;
+    inboundAgentId?: number | null;
+  };
+  const rawNumber = String(body.number ?? "").trim();
+  const countryCode = (String(body.countryCode ?? "IN").trim().toUpperCase() || "IN").slice(0, 2);
+  const wabaId = (body.wabaId ?? "").trim();
+  const accessToken = (body.accessToken ?? "").trim();
+  const businessName = (body.businessName ?? "").trim();
+  if (!rawNumber) { res.status(400).json({ error: "number is required" }); return; }
+  if (!wabaId || !accessToken || !businessName) {
+    res.status(400).json({ error: "businessName, wabaId and accessToken are required" });
+    return;
+  }
+  if (body.inboundAgentId != null && !(await validateAgentOwnership(userId, Number(body.inboundAgentId)))) {
+    res.status(404).json({ error: "Agent not found" });
+    return;
+  }
+  const number = toPlusE164(rawNumber);
+
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, userId));
+  if (!user) { res.status(404).json({ error: "User not found" }); return; }
+
+  if (user.walletBalanceCents <= PHONE_WALLET_PURCHASE_MIN_BALANCE_PAISE) {
+    res.status(403).json({
+      error: `Pay from wallet is available when your balance is above ${formatInr(PHONE_WALLET_PURCHASE_MIN_BALANCE_PAISE)}. Top up or pay by card instead.`,
+      code: "WALLET_PURCHASE_NOT_ELIGIBLE",
+      minBalancePaise: PHONE_WALLET_PURCHASE_MIN_BALANCE_PAISE,
+      balanceCents: user.walletBalanceCents,
+    });
+    return;
+  }
+
+  if (countryCode === "IN") {
+    const [kycAccount] = await db
+      .select({ kycStatus: vobizAccountsTable.kycStatus })
+      .from(vobizAccountsTable)
+      .where(eq(vobizAccountsTable.userId, userId));
+    if (!kycAccount || kycAccount.kycStatus !== "completed") {
+      res.status(403).json({ error: "Identity verification required to purchase Indian numbers.", code: "KYC_REQUIRED" });
+      return;
+    }
+  }
+
+  const payablePaise = PHONE_TOTAL_PAISE;
+  const basePaise = PHONE_BASE_PAISE;
+  if (user.walletBalanceCents < payablePaise) {
+    res.status(402).json({
+      error: `Insufficient wallet balance. Need ${formatInr(payablePaise)}, have ${formatInr(user.walletBalanceCents)}.`,
+      code: "INSUFFICIENT_BALANCE",
+      payablePaise,
+      balanceCents: user.walletBalanceCents,
+    });
+    return;
+  }
+
+  const creds = await getStrictSubAccountCreds(userId);
+  if (!creds) {
+    res.status(503).json({ error: "Could not prepare your VoBiz sub-account — please try again shortly" });
+    return;
+  }
+
+  const bareForm = number.replace(/^\+/, "");
+  const numberTakenWhere = and(
+    inArray(phoneNumbersTable.number, [number, bareForm]),
+    eq(phoneNumbersTable.status, "active"),
+  );
+
+  let orderRow: typeof phoneNumberOrdersTable.$inferSelect | undefined;
+  let debitOk = false;
+  try {
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`wa-num:${number}`}))`);
+      const [takenNow] = await tx.select({ id: phoneNumbersTable.id }).from(phoneNumbersTable).where(numberTakenWhere);
+      if (takenNow) throw Object.assign(new Error("This number is already taken."), { status: 409 });
+
+      const [debited] = await tx
+        .update(usersTable)
+        .set({
+          walletBalanceCents: sql`GREATEST(0, ${usersTable.walletBalanceCents} - ${payablePaise})`,
+        })
+        .where(and(
+          eq(usersTable.clerkId, userId),
+          gt(usersTable.walletBalanceCents, PHONE_WALLET_PURCHASE_MIN_BALANCE_PAISE),
+          sql`${usersTable.walletBalanceCents} >= ${payablePaise}`,
+        ))
+        .returning({ walletBalanceCents: usersTable.walletBalanceCents, id: usersTable.id });
+      if (!debited) throw Object.assign(new Error("Wallet debit failed — balance changed. Try again."), { status: 409 });
+      debitOk = true;
+
+      await tx.insert(walletTransactionsTable).values({
+        userId: user.id,
+        type: "debit",
+        amountCents: -payablePaise,
+        description: `WhatsApp number ${number} purchased from wallet (${formatInr(basePaise)} + GST = ${formatInr(payablePaise)})`,
+        status: "completed",
+      });
+
+      [orderRow] = await tx.insert(phoneNumberOrdersTable).values({
+        userId,
+        number,
+        countryCode,
+        region: body.region ?? null,
+        numberType: "whatsapp",
+        amountCents: payablePaise,
+        status: "processing",
+        razorpayOrderId: `wallet_wa_${user.id}_${Date.now()}`,
+      }).returning();
+    });
+  } catch (err) {
+    const status = (err as { status?: number }).status ?? 500;
+    res.status(status).json({ error: err instanceof Error ? err.message : "Purchase failed" });
+    return;
+  }
+  if (!orderRow) {
+    res.status(500).json({ error: "Could not create purchase order" });
+    return;
+  }
+
+  const refundWallet = async (reason: string) => {
+    if (!debitOk) return;
+    await db.transaction(async (tx) => {
+      await tx
+        .update(usersTable)
+        .set({ walletBalanceCents: sql`${usersTable.walletBalanceCents} + ${payablePaise}` })
+        .where(eq(usersTable.clerkId, userId));
+      await tx.insert(walletTransactionsTable).values({
+        userId: user.id,
+        type: "credit",
+        amountCents: payablePaise,
+        description: `Refund: WhatsApp number ${number} — ${reason.slice(0, 120)}`,
+        status: "completed",
+      });
+      await tx.update(phoneNumberOrdersTable)
+        .set({ status: "failed" })
+        .where(eq(phoneNumberOrdersTable.id, orderRow!.id));
+    });
+  };
+
+  let vobizNumberId: string | null = null;
+  try {
+    const resp = await fetch(`${VOBIZ_API_BASE}/messaging/numbers/whatsapp/orders`, {
+      method: "POST",
+      headers: vobizApiHeaders(creds.authId, creds.authToken),
+      body: JSON.stringify({
+        country_code: countryCode,
+        selected_phone_number: number,
+      }),
+      signal: AbortSignal.timeout(30_000),
+    });
+    const text = await resp.text().catch(() => "");
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${text.slice(0, 300)}`);
+    try {
+      const j = JSON.parse(text) as Record<string, any>;
+      const o = j["order"] ?? j["data"] ?? j;
+      vobizNumberId = o?.["id"] != null ? String(o["id"]) : null;
+    } catch { /* non-JSON */ }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.error({ err, number, userId }, "whatsapp-native: wallet buy — VoBiz order failed, refunding");
+    await refundWallet(`VoBiz order failed: ${msg}`);
+    res.status(502).json({ error: "Failed to provision the WhatsApp number. Your wallet has been refunded." });
+    return;
+  }
+
+  const now = new Date();
+  const nextRenewalAt = new Date(now.getTime() + RENEWAL_INTERVAL_DAYS * 24 * 60 * 60 * 1000);
+  let numberRow: typeof phoneNumbersTable.$inferSelect | undefined;
+  try {
+    const ownershipFields = {
+      userId,
+      number,
+      countryCode,
+      region: body.region ?? null,
+      numberType: "local" as const,
+      service: "whatsapp",
+      vobizNumberId,
+      agentId: null,
+      squadId: null,
+      status: "active",
+      monthlyRateCents: PHONE_BASE_PAISE,
+      renewalRateCents: RENEWAL_RATE_CENTS,
+      purchasedAt: now,
+      nextRenewalAt,
+      lastRenewalAt: now,
+      releasedAt: null,
+      routingRules: null,
+    };
+    const [existingRow] = await db.select().from(phoneNumbersTable)
+      .where(inArray(phoneNumbersTable.number, [number, bareForm]))
+      .limit(1);
+    if (existingRow && existingRow.status === "active") {
+      throw new Error(`phone_numbers row ${existingRow.id} for this number is still active`);
+    }
+    if (existingRow) {
+      [numberRow] = await db.update(phoneNumbersTable).set(ownershipFields).where(eq(phoneNumbersTable.id, existingRow.id)).returning();
+    } else {
+      [numberRow] = await db.insert(phoneNumbersTable).values(ownershipFields).returning();
+    }
+    await db.update(phoneNumberOrdersTable)
+      .set({ status: "completed", phoneNumberId: numberRow!.id })
+      .where(eq(phoneNumberOrdersTable.id, orderRow.id));
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.error({ err, userId, number, vobizNumberId }, "whatsapp-native: wallet buy bookkeeping failed — refunding");
+    await refundWallet(`Bookkeeping failed: ${msg}`);
+    res.status(500).json({ error: "Something went wrong recording your number. Your wallet has been refunded." });
+    return;
+  }
+
+  void issueInvoice({
+    user: { id: user.id, name: user.name, email: user.email },
+    type: "phone_number",
+    description: `WhatsApp business number ${number} — provisioning & 1 month rental (wallet)`,
+    hsnSac: "998411",
+    amountCents: PHONE_BASE_PAISE,
+    gstInclusive: false,
+    metadata: { number, phoneNumberId: numberRow!.id, service: "whatsapp", paidVia: "wallet" },
+  });
+
+  const created = await createVobizWhatsappChannel(creds, {
+    numberSource: "purchased",
+    wabaId,
+    accessToken,
+    phoneE164: number,
+  });
+
+  const channelValues = {
+    userId,
+    mode: "own" as const,
+    businessName: businessName.slice(0, 120),
+    inboundAgentId: body.inboundAgentId ?? null,
+    vobizChannelId: created.ok ? created.channelId : null,
+    wabaId,
+    phoneNumberId: created.ok ? created.phoneNumberId : null,
+    phoneE164: toPlusE164(number),
+    accessTokenLast4: accessToken.slice(-4),
+    status: created.ok ? created.status : "error",
+    lastError: created.ok ? null : created.error,
+    active: true,
+    updatedAt: new Date(),
+  };
+  const [channelRow] = await db.insert(whatsappChannelsTable)
+    .values(channelValues)
+    .onConflictDoUpdate({ target: whatsappChannelsTable.userId, set: channelValues })
+    .returning();
+
+  logger.info({ userId, number, channelOk: created.ok, vobizNumberId, paidVia: "wallet" }, "whatsapp-native: WhatsApp number purchased from wallet");
+
+  res.status(201).json({
+    purchased: true,
+    paidVia: "wallet",
+    number,
+    channel: formatChannel(channelRow!),
+    channelError: created.ok ? null : created.error,
+  });
+});
+
 /** Re-pull a pending own channel from VoBiz (buy_from_vobiz provisioning). */
 router.post("/whatsapp/channel/refresh", requireAuth, async (req, res): Promise<void> => {
   const userId = (req as any).clerkUserId as string;
@@ -937,7 +1227,7 @@ router.patch("/whatsapp/channel", requireAuth, async (req, res): Promise<void> =
   const updates: Record<string, unknown> = { updatedAt: new Date() };
 
   if (typeof body["businessName"] === "string") updates.businessName = body["businessName"].trim().slice(0, 120);
-  for (const k of ["notifyBookingConfirmed", "notifyCallSummary", "notifyCallbackScheduled", "active"] as const) {
+  for (const k of ["notifyBookingConfirmed", "notifyCallSummary", "notifyCallbackScheduled", "active", "callingEnabled"] as const) {
     if (typeof body[k] === "boolean") updates[k] = body[k];
   }
   if (body["inboundAgentId"] === null) updates.inboundAgentId = null;
@@ -947,6 +1237,14 @@ router.patch("/whatsapp/channel", requireAuth, async (req, res): Promise<void> =
       return;
     }
     updates.inboundAgentId = body["inboundAgentId"];
+  }
+  if (body["callingAgentId"] === null) updates.callingAgentId = null;
+  if (typeof body["callingAgentId"] === "number") {
+    if (!(await validateAgentOwnership(userId, body["callingAgentId"]))) {
+      res.status(404).json({ error: "Agent not found" });
+      return;
+    }
+    updates.callingAgentId = body["callingAgentId"];
   }
   if (typeof body["chatbotEnabled"] === "boolean") updates.chatbotEnabled = body["chatbotEnabled"];
   if (body["chatbotAgentId"] === null) updates.chatbotAgentId = null;
@@ -1295,11 +1593,60 @@ router.post("/webhooks/vobiz/whatsapp", async (req, res): Promise<void> => {
     (async () => {
       if (eventType === "message.status") await handleStatusEvent(data);
       else if (eventType === "message.inbound") await handleInboundEvent(data);
+      else if (eventType.startsWith("call.") || eventType === "call") await handleWhatsappCallWebhook(eventType, data);
       else logger.info({ eventType, eventId }, "whatsapp-native: unhandled webhook event type");
     })().catch((err) => {
       logger.warn({ err, eventType, eventId }, "whatsapp-native: webhook processing error");
     });
   });
+});
+
+/** Message rate card (own-channel wallet billing). */
+router.get("/whatsapp/rates", requireAuth, async (_req, res): Promise<void> => {
+  const rates = await getWhatsappMessageRates();
+  res.json({ rates, defaults: DEFAULT_WA_MESSAGE_RATES });
+});
+
+/** Outbound WhatsApp voice call (WebRTC via VoBiz). */
+router.post("/whatsapp/calls/outbound", requireAuth, async (req, res): Promise<void> => {
+  const userId = (req as any).clerkUserId as string;
+  const body = req.body as { to?: string; agentId?: number | null };
+  const to = String(body.to ?? "").trim();
+  if (!to) { res.status(400).json({ error: "to is required (E.164)" }); return; }
+  const channel = await getActiveChannel(userId);
+  if (!channel) { res.status(404).json({ error: "No active WhatsApp channel" }); return; }
+  if (body.agentId != null && !(await validateAgentOwnership(userId, Number(body.agentId)))) {
+    res.status(404).json({ error: "Agent not found" });
+    return;
+  }
+  const result = await startOutboundWhatsappCall({
+    userId,
+    channel,
+    toPhone: to,
+    agentId: body.agentId ?? null,
+  });
+  if (!result.ok) {
+    res.status(400).json({ error: result.error });
+    return;
+  }
+  res.status(201).json({
+    call: result.call,
+    mediaReady: result.mediaReady,
+    wrtcAvailable: await isWrtcAvailable(),
+  });
+});
+
+router.post("/whatsapp/calls/:id/terminate", requireAuth, async (req, res): Promise<void> => {
+  const userId = (req as any).clerkUserId as string;
+  const result = await terminateWhatsappCall({ userId, callId: String(req.params["id"]) });
+  if (!result.ok) { res.status(400).json({ error: result.error }); return; }
+  res.json({ ok: true });
+});
+
+router.get("/whatsapp/calls", requireAuth, async (req, res): Promise<void> => {
+  const userId = (req as any).clerkUserId as string;
+  const calls = await listWhatsappCalls(userId, 40);
+  res.json({ calls, wrtcAvailable: await isWrtcAvailable() });
 });
 
 export default router;

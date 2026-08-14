@@ -133,7 +133,7 @@
 - [Env restart can revert fresh edits](env-restart-edit-rollback.md) — an unexpected environment restart rolled back a just-made edit; re-verify recent edits before debugging "why didn't the fix work"
 - [db schema edits need tsc -b lib/db](db-package-stale-dist.md) — api-server typecheck reads lib/db/dist .d.ts; without a rebuild, new tables/columns "don't exist" (TS2724/TS2339 wall)
 - [WhatsApp BYON OTP capture](whatsapp-byon-otp-capture.md) — armed-only voice-webhook intercept (code_captured must NOT intercept or real calls get hijacked); SSRF-guarded recording URLs; never downgrade confirmed rows
-- [WhatsApp engagement expansion](whatsapp-engagement-expansion.md) — inbound short-circuit order dial>brochure>chatbot with caps; WhatsApp CALLING not feasible via VoBiz (webhook events only, no answer/media API)
+- [WhatsApp engagement expansion](whatsapp-engagement-expansion.md) — inbound short-circuit order dial>brochure>chatbot with caps; WhatsApp CALLING feasible via VoBiz WebRTC SDP APIs (Aug 2026)
 - [Query-param UI intents vs auto-redirect](query-param-ui-intent.md) — ?create=1-style signals need lazy initializer + reactive useSearch latch, and auto-redirect effects gated on the latched state
 - [Signup-time grants must prove email ownership](signup-grant-email-ownership.md) — email-keyed auto-grants apply only on verified (Google) signup; password signups hold for admin approval; 3 user-creation sites; atomic DELETE..RETURNING claim; lower(email) lookups
 - [Partner number provisioning + self-partner billing](partner-number-provisioning.md) — resolvePartnerBilling has 3 cases (client/self-partner/none); number↔agent changes must revoke BOTH inbound+outbound refs on old holders or caller-ID rights leak cross-account

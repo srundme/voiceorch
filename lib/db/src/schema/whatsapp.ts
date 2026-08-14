@@ -133,6 +133,10 @@ export const whatsappChannelsTable = pgTable("whatsapp_channels", {
   status: text("status").notNull().default("active"), // active | pending | error | disabled
   lastError: text("last_error"),
   active: boolean("active").notNull().default(true),
+  /** When true, inbound WhatsApp voice calls are answered with callingAgentId / inboundAgentId. */
+  callingEnabled: boolean("calling_enabled").notNull().default(false),
+  /** Agent used for WhatsApp voice calls; falls back to inboundAgentId. */
+  callingAgentId: integer("calling_agent_id").references(() => agentsTable.id, { onDelete: "set null" }),
   /** Full APPROVED template catalog last fetched from VoBiz / Meta for this channel. */
   templateCatalog: jsonb("template_catalog").$type<WaTemplateCatalogEntry[]>().notNull().default([]),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -197,6 +201,43 @@ export type WhatsappChannel = typeof whatsappChannelsTable.$inferSelect;
 export type InsertWhatsappChannel = typeof whatsappChannelsTable.$inferInsert;
 export type WhatsappMessage = typeof whatsappMessagesTable.$inferSelect;
 export type InsertWhatsappMessage = typeof whatsappMessagesTable.$inferInsert;
+
+/**
+ * WhatsApp Business voice calls (WebRTC via VoBiz Calling API).
+ * Separate from PSTN `calls` — media runs over WhatsApp's WebRTC stack.
+ */
+export const whatsappCallsTable = pgTable("whatsapp_calls", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: text("user_id").notNull(),
+  channelId: uuid("channel_id").notNull().references(() => whatsappChannelsTable.id, { onDelete: "cascade" }),
+  agentId: integer("agent_id").references(() => agentsTable.id, { onDelete: "set null" }),
+  /** SnapServe PSTN/orchestration call id when media bridge attaches a session. */
+  orchestrationCallId: integer("orchestration_call_id"),
+  direction: text("direction").notNull(), // inbound | outbound
+  fromNumber: text("from_number"),
+  toNumber: text("to_number"),
+  status: text("status").notNull().default("initiated"),
+  vobizCallId: text("vobiz_call_id"),
+  metaCallId: text("meta_call_id"),
+  offerSdp: text("offer_sdp"),
+  answerSdp: text("answer_sdp"),
+  durationSeconds: integer("duration_seconds"),
+  billedPaise: integer("billed_paise"),
+  hangupCause: text("hangup_cause"),
+  lastError: text("last_error"),
+  startedAt: timestamp("started_at", { withTimezone: true }),
+  answeredAt: timestamp("answered_at", { withTimezone: true }),
+  endedAt: timestamp("ended_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+}, (t) => [
+  index("wa_calls_user_created_idx").on(t.userId, t.createdAt),
+  index("wa_calls_vobiz_id_idx").on(t.vobizCallId),
+  index("wa_calls_channel_idx").on(t.channelId),
+]);
+
+export type WhatsappCall = typeof whatsappCallsTable.$inferSelect;
+export type InsertWhatsappCall = typeof whatsappCallsTable.$inferInsert;
 
 /** Raw binary column (PostgreSQL `bytea`) stored/returned as a Node Buffer. */
 const bytea = customType<{ data: Buffer; driverData: Buffer }>({

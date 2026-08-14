@@ -64,7 +64,7 @@ const BASE_CARDS: ConnCard[] = [
     setupId: "whatsapp",
     brand: "whatsapp",
     title: "WhatsApp",
-    blurb: "Send WhatsApp follow-ups after calls.",
+    blurb: "Buy a Vobiz number, connect Meta, or bring your BSP — messages & WhatsApp calls.",
   },
   {
     id: "email",
