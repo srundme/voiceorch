@@ -311,6 +311,36 @@ export function neutralGreeting(lang?: string | null): string {
 }
 
 /**
+ * The greeting LLM sometimes answers its own instructions instead of the caller.
+ * Call 9153 opened an outbound sales call with "Since no CALL FLOW or GREETING
+ * was provided in the prompt, I am unable to start the call. Please provide the
+ * script and flow." — spoken aloud to the lead before any pitch.
+ *
+ * These phrasings never occur in a genuine spoken opener, so matching one means
+ * the text must be discarded in favour of a safe fallback. A false positive only
+ * costs a generic greeting; a false negative reads internal prompt errors to a
+ * customer.
+ */
+const GREETING_META_REFUSAL: RegExp[] = [
+  /\b(?:unable|not able)\s+to\b/i,
+  /\bI\s+(?:cannot|can'?t|can\s+not)\s+(?:start|begin|initiate|proceed|continue|generate|provide|create)\b/i,
+  // Naming its own configuration rather than speaking to the caller.
+  /\bcall\s*flow\b/i,
+  /\bsystem\s*prompt\b/i,
+  /\bin\s+the\s+prompt\b/i,
+  /\bno\s+(?:greeting|script|instructions?)\b[^.]{0,30}\b(?:provided|given|specified|found)\b/i,
+  /\bplease\s+provide\b[^.]{0,40}\b(?:script|flow|prompt|greeting|instructions?)\b/i,
+  /\bas\s+an\s+AI\b/i,
+];
+
+/** True when greeting-LLM output is meta/refusal text that must never be spoken. */
+export function isMetaRefusalGreeting(text: string | null | undefined): boolean {
+  const t = (text ?? "").trim();
+  if (!t) return false;
+  return GREETING_META_REFUSAL.some(re => re.test(t));
+}
+
+/**
  * Instant returning-caller opener — no LLM round-trip.
  * Call 2636: Gemini recognition greeting blocked ~3.1s of silence before first TTS.
  *

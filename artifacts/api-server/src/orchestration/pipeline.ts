@@ -45,6 +45,7 @@ import {
   meetingWaitingReprompt,
   meetingInactivityFarewell,
   neutralGreeting,
+  isMetaRefusalGreeting,
   buildInstantReturningGreeting,
   AFFIRMATIONS,
   STALL_BACKSTOP_MS,
@@ -4856,6 +4857,31 @@ export class OrchestrationPipeline implements VoiceSession {
             .replace(/[^\S\r\n]{2,}/g, " ")
             .trim(),
         );
+        // The model sometimes answers the prompt instead of the caller (call
+        // 9153 spoke "…no CALL FLOW…I am unable to start the call" to a lead).
+        // Any fallback is better than reading an internal error down the line.
+        if (isMetaRefusalGreeting(greeting)) {
+          const rejected = greeting.slice(0, 160);
+          let safe = (this.agent.greetingMessage ?? "").trim();
+          if (this.callDirection === "outbound" && isStubGreeting(safe)) safe = "";
+          safe = safe || neutralGreeting(this.agent.language);
+          logger.error(
+            { callId: this.config.callId, agentId: this.agent.id, rejected },
+            "Greeting LLM returned meta/refusal text — speaking a safe opener instead",
+          );
+          this.logExec("LLM", "response", {
+            provider: this.agent.llmProvider,
+            status: "error",
+            turnNumber: 0,
+            responsePayload: {
+              purpose: "greeting",
+              error: "meta_refusal_rejected",
+              rejected,
+              fallback: safe.slice(0, 120),
+            },
+          });
+          greeting = safe;
+        }
         if (resumeDropped && greeting.trim()) {
           this.logExec("Agent", "system", {
             status: "info",
