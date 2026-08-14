@@ -26,7 +26,7 @@ import {
 } from "@workspace/db";
 import { and, eq, isNotNull, isNull, sql, inArray } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
-import { getDispositionLLM } from "./disposition-llm.js";
+import { getDispositionLLMChain, isRetryableProviderError } from "./disposition-llm.js";
 import {
   normalizeIntelligence,
   SENTIMENTS,
@@ -260,8 +260,8 @@ export async function analyzeCallIntelligence(
     .limit(1);
   const questions = (camp?.analyticsQuestions ?? []) as CampaignAnalyticsQuestion[];
 
-  const llm = await getDispositionLLM();
-  if (!llm) {
+  const chain = await getDispositionLLMChain();
+  if (chain.length === 0) {
     logger.warn({ callId: input.callId }, "call-intelligence: no LLM available");
     throw new CallIntelligenceLlmError(
       "No analysis model configured. Add a managed Gemini / OpenAI / Groq / Sarvam key in platform settings.",
@@ -285,12 +285,30 @@ export async function analyzeCallIntelligence(
     (schema.properties as Record<string, unknown>)["answers"] = answersSchema;
   }
 
-  let raw: Record<string, unknown>;
-  try {
-    raw = await llm.extract(systemPrompt, schema, transcript.slice(0, 12_000));
-  } catch (err) {
-    const detail = err instanceof Error ? err.message : String(err);
-    logger.warn({ callId: input.callId, err }, "call-intelligence: LLM extract failed");
+  let raw: Record<string, unknown> | null = null;
+  let lastErr: unknown = null;
+  const clip = transcript.slice(0, 12_000);
+  for (let idx = 0; idx < chain.length; idx++) {
+    const { provider, client } = chain[idx]!;
+    try {
+      raw = await client.extract(systemPrompt, schema, clip);
+      if (idx > 0) {
+        logger.info({ callId: input.callId, provider }, "call-intelligence: succeeded on fallback provider");
+      }
+      break;
+    } catch (err) {
+      lastErr = err;
+      const retryable = isRetryableProviderError(err);
+      logger.warn(
+        { callId: input.callId, provider, retryable, err },
+        "call-intelligence: LLM extract failed",
+      );
+      // Only fall through to the next provider on provider-level failures.
+      if (!retryable) break;
+    }
+  }
+  if (raw === null) {
+    const detail = lastErr instanceof Error ? lastErr.message : String(lastErr);
     // Surface as an error so backfill reports it instead of silently "skipping".
     throw new CallIntelligenceLlmError(`Analysis model error: ${detail.slice(0, 200)}`);
   }

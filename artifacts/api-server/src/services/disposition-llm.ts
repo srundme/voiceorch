@@ -235,3 +235,43 @@ export async function getDispositionLLM(
   logger.warn("disposition: no managed LLM key configured (gemini/openai/qwen/sarvam), skipping LLM pass");
   return null;
 }
+
+/**
+ * Returns every available DispositionLLM in preference order, so callers can
+ * fall back to the next provider when one fails at call time (e.g. Gemini 403
+ * from a billing/permission issue). Empty when no managed key is configured.
+ */
+export async function getDispositionLLMChain(
+  agentCfgOverride?: string | null,
+): Promise<Array<{ provider: string; client: DispositionLLM }>> {
+  const preferred = (agentCfgOverride ?? process.env["DISPOSITION_LLM"] ?? "gemini").toLowerCase();
+  const normalized =
+    preferred === "groq" || preferred === "qwen" ? "qwen" : preferred === "google" ? "gemini" : preferred;
+  const order = [normalized, ...["gemini", "openai", "qwen", "sarvam"].filter((p) => p !== normalized)];
+
+  const chain: Array<{ provider: string; client: DispositionLLM }> = [];
+  for (const provider of order) {
+    const key = await resolveManagedKey(provider);
+    if (key) chain.push({ provider, client: buildClient(provider, key) });
+  }
+  return chain;
+}
+
+/** True when an LLM error is provider-level (auth/quota/overload) and worth retrying on another provider. */
+export function isRetryableProviderError(err: unknown): boolean {
+  const status = (err as { status?: number })?.status;
+  if (typeof status === "number") {
+    return status === 401 || status === 403 || status === 429 || status >= 500;
+  }
+  const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
+  return (
+    msg.includes("403") ||
+    msg.includes("401") ||
+    msg.includes("429") ||
+    msg.includes("quota") ||
+    msg.includes("permission") ||
+    msg.includes("billing") ||
+    msg.includes("unavailable") ||
+    msg.includes("overload")
+  );
+}
