@@ -30,6 +30,11 @@ export const knowledgeSourcesTable = pgTable("knowledge_sources", {
    * Used by retry-crawl and the Needs-attention UI. NULL for non-website sources.
    */
   crawlFailedUrls: text("crawl_failed_urls"),
+  /**
+   * Human-readable reason the last import failed (e.g. scanned/encrypted PDF).
+   * Shown on the failed-pack banner. NULL when the source is healthy.
+   */
+  errorMessage: text("error_message"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

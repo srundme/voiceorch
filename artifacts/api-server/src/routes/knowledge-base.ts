@@ -102,6 +102,29 @@ async function extractDocumentText(file: Express.Multer.File): Promise<string> {
   return file.buffer.toString("utf-8");
 }
 
+/**
+ * Classify why a PDF produced no importable text, so the UI can tell a scanned
+ * PDF from an encrypted or corrupt one instead of a generic "Import failed".
+ */
+async function classifyPdfImportFailure(buffer: Buffer): Promise<string> {
+  try {
+    const require = createRequire(import.meta.url);
+    const pdfParse = require("pdf-parse") as (buf: Buffer) => Promise<{ text: string }>;
+    const parsed = await pdfParse(buffer);
+    const text = (parsed.text ?? "").trim();
+    if (!text) {
+      return "This looks like a scanned or image-only PDF — no selectable text was found. Upload a text-based PDF, a DOCX/TXT export, or run OCR first.";
+    }
+    return "We couldn't turn this PDF into knowledge entries. Try re-exporting it as a text-based PDF or DOCX.";
+  } catch (err) {
+    const msg = String((err as Error)?.message ?? err).toLowerCase();
+    if (msg.includes("password") || msg.includes("encrypt")) {
+      return "This PDF is password-protected or encrypted. Remove the protection, then upload it again.";
+    }
+    return "This PDF couldn't be read — it may be corrupt or not a valid PDF. Try re-exporting and uploading again.";
+  }
+}
+
 /* ── Helpers ─────────────────────────────────────────────────────────────── */
 
 function parseFailedUrls(raw: string | null | undefined): string[] {
@@ -626,7 +649,7 @@ router.post("/knowledge-sources/upload", requireAuth, clientContext, upload.sing
       created.push(entry!);
     }
     await db.update(knowledgeSourcesTable)
-      .set({ status: "ready", entryCount: created.length, updatedAt: new Date() })
+      .set({ status: "ready", entryCount: created.length, errorMessage: null, updatedAt: new Date() })
       .where(eq(knowledgeSourcesTable.id, sourceId));
     logger.info({ sourceId, file: file!.originalname, entryCount: created.length, via }, "KB file upload processed");
     kickKbEmbedWorker();
@@ -660,17 +683,23 @@ router.post("/knowledge-sources/upload", requireAuth, clientContext, upload.sing
           entries = legacyChunks(text);
         }
         if (!entries.length) {
+          const reason = await classifyPdfImportFailure(file.buffer).catch(
+            () => "No text could be extracted from this PDF.",
+          );
           await db.update(knowledgeSourcesTable)
-            .set({ status: "failed", updatedAt: new Date() })
+            .set({ status: "failed", errorMessage: reason, updatedAt: new Date() })
             .where(eq(knowledgeSourcesTable.id, sourceId));
-          logger.warn({ sourceId, file: file.originalname }, "KB PDF upload: no text extracted by either path");
+          logger.warn({ sourceId, file: file.originalname, reason }, "KB PDF upload: no text extracted by either path");
           return;
         }
         await persistEntries(entries, via);
       } catch (err) {
         logger.warn({ err, sourceId, file: file.originalname }, "KB PDF upload processing failed");
+        const reason = await classifyPdfImportFailure(file.buffer).catch(
+          () => "This PDF couldn't be processed. Please try again.",
+        );
         await db.update(knowledgeSourcesTable)
-          .set({ status: "failed", updatedAt: new Date() })
+          .set({ status: "failed", errorMessage: reason, updatedAt: new Date() })
           .where(eq(knowledgeSourcesTable.id, sourceId))
           .catch(() => {});
       }
@@ -682,22 +711,24 @@ router.post("/knowledge-sources/upload", requireAuth, clientContext, upload.sing
   try {
     const entries = legacyChunks(await extractDocumentText(file));
     if (!entries.length) {
+      const reason = `No text could be extracted from this ${ext.toUpperCase()} file. It may be empty or contain only images.`;
       await db.update(knowledgeSourcesTable)
-        .set({ status: "failed", updatedAt: new Date() })
+        .set({ status: "failed", errorMessage: reason, updatedAt: new Date() })
         .where(eq(knowledgeSourcesTable.id, sourceId));
-      res.status(400).json({ error: "No text could be extracted from the document" });
+      res.status(400).json({ error: reason });
       return;
     }
     const createdEntries = await persistEntries(entries, "local-extract");
     const [refreshed] = await db.select().from(knowledgeSourcesTable).where(eq(knowledgeSourcesTable.id, sourceId));
     res.status(201).json({ ...refreshed, entries: createdEntries });
   } catch (err) {
+    const reason = `We couldn't read this ${ext.toUpperCase()} file. It may be corrupt — try re-exporting and uploading again.`;
     await db.update(knowledgeSourcesTable)
-      .set({ status: "failed", updatedAt: new Date() })
+      .set({ status: "failed", errorMessage: reason, updatedAt: new Date() })
       .where(eq(knowledgeSourcesTable.id, sourceId))
       .catch(() => {});
     req.log.warn({ err, sourceId, file: file.originalname }, "KB file upload extraction failed");
-    res.status(400).json({ error: "Failed to extract text from the uploaded document" });
+    res.status(400).json({ error: reason });
   }
 });
 

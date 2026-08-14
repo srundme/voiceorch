@@ -77,6 +77,7 @@ type KnowledgeSourceView = KnowledgeSource & {
   failedPageCount?: number;
   attachedAgentCount?: number;
   embeddedCount?: number;
+  errorMessage?: string | null;
 };
 
 function sourceStatusMeta(source: KnowledgeSourceView) {
@@ -941,11 +942,15 @@ function DetailView({ sourceId, onBack }: { sourceId: number; onBack: () => void
         </div>
       )}
       {(source.status === "error" || source.status === "failed") && (
-        <div className="flex items-center gap-3 bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-3 text-sm text-red-400">
-          <XCircle className="w-4 h-4 shrink-0" />
-          {source.type === "website"
-            ? "Website import failed. Check that the URL is public and try again."
-            : "Import failed. Delete this pack and try again."}
+        <div className="flex items-start gap-3 bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-3 text-sm text-red-400">
+          <XCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>
+            {source.errorMessage
+              ? source.errorMessage
+              : source.type === "website"
+                ? "Website import failed. Check that the URL is public and try again."
+                : "Import failed. Delete this pack and try again."}
+          </span>
         </div>
       )}
 
