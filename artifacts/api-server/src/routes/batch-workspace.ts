@@ -23,6 +23,13 @@ const router: IRouter = Router();
 
 router.use(requireAuth, clientContext);
 
+/**
+ * Leads store the agent taxonomy label as "PRIMARY: sub" (formatDispositionLabel),
+ * but KPI cards and filters are keyed on the primary alone. Normalize to the
+ * primary segment so counting and filtering agree.
+ */
+const DISPOSITION_PRIMARY_SQL = sql<string>`btrim(split_part(${campaignLeadsTable.disposition}, ':', 1))`;
+
 async function requireBatch(campaignId: number, batchId: number, userId: string) {
   const [campaign] = await db.select({ id: campaignsTable.id })
     .from(campaignsTable)
@@ -122,6 +129,25 @@ router.get("/campaigns/:id/batches/:batchId/workspace/kpis", async (req, res): P
   }).from(campaignLeadsTable)
     .where(and(eq(campaignLeadsTable.batchId, batchId), isNotNull(campaignLeadsTable.lastAttemptAt)));
 
+  // Per-disposition counts. Leads store the agent taxonomy label as
+  // "PRIMARY: sub" (formatDispositionLabel), so group on the primary segment —
+  // that is what the UI filters and tabs are keyed on.
+  const dispositionRows = await db.select({
+    key:   DISPOSITION_PRIMARY_SQL,
+    count: sql<number>`count(*)::int`,
+  }).from(campaignLeadsTable)
+    .where(and(
+      eq(campaignLeadsTable.batchId, batchId),
+      isNotNull(campaignLeadsTable.disposition),
+      sql`btrim(${campaignLeadsTable.disposition}) <> ''`,
+    ))
+    .groupBy(DISPOSITION_PRIMARY_SQL)
+    .orderBy(desc(sql`count(*)`));
+
+  const dispositions = dispositionRows
+    .filter(r => (r.key ?? "").trim() !== "")
+    .map(r => ({ key: r.key, count: r.count }));
+
   const total        = leadKpis?.total        ?? 0;
   const called       = leadKpis?.called       ?? 0;
   const successCount = leadKpis?.success      ?? 0;
@@ -155,6 +181,7 @@ router.get("/campaigns/:id/batches/:batchId/workspace/kpis", async (req, res): P
     bookings,
     transfers,
     successRate,
+    dispositions,
     lastActivityAt:             lastActivity?.lastAt ?? null,
     avgCallDurationS:           costDuration?.avgDurationS ?? null,
     totalCostCents:             costDuration?.totalCostCents ?? 0,
@@ -226,16 +253,19 @@ router.get("/campaigns/:id/batches/:batchId/workspace/leads", async (req, res): 
     status === "voicemail" ? eq(campaignLeadsTable.callStatus, "voicemail") :
     status === "failed"    ? inArray(campaignLeadsTable.callStatus, ["failed", "busy", "no_pickup"]) :
     status === "calling"   ? eq(campaignLeadsTable.callStatus, "calling")   :
+    status === "connected" ? inArray(campaignLeadsTable.callStatus, ["connected", "completed", "transferred"]) :
     undefined;
 
   // Fixed system outcomes filter on operationalOutcome; any other non-"all"
-  // value is a dynamic disposition and filters on the lead disposition column.
+  // value is a dynamic disposition. Leads store "PRIMARY: sub", so match the
+  // primary segment — an exact match on the full label would miss every lead
+  // whose disposition carries a sub-value.
   const outcomeFilter =
     outcome === "all"                ? undefined :
     outcome === "booking_created"    ? eq(campaignLeadsTable.operationalOutcome, "booking_created")    :
     outcome === "transfer_completed" ? eq(campaignLeadsTable.operationalOutcome, "transfer_completed") :
     outcome === "callback_requested" ? eq(campaignLeadsTable.operationalOutcome, "callback_requested") :
-    eq(campaignLeadsTable.disposition, outcome);
+    sql`${DISPOSITION_PRIMARY_SQL} = ${outcome}`;
 
   const searchFilter = search
     ? or(
