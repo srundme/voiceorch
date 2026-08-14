@@ -10,6 +10,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "backfill-dispositions": "tsx ./src/scripts/backfill-dispositions.ts",
     "backfill-call-intelligence": "tsx ./src/scripts/backfill-call-intelligence.ts",
+    "diagnose-kb-pdf": "tsx ./src/scripts/diagnose-kb-pdf.ts",
     "test": "vitest run"
   },
   "dependencies": {

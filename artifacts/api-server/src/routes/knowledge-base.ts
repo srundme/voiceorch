@@ -8,6 +8,7 @@ import { ingestKbTextEntries, type KbEntryInput } from "../services/kb-ingest.js
 import { getKbEmbedBlock, isKbVectorReady, kickKbEmbedWorker } from "../services/kb-embeddings.js";
 import { kickKrutrimSummaryWorker } from "../services/kb-source-summary.js";
 import { extractPdfChunksWithLlm } from "../services/kb-pdf-extract.js";
+import { parsePdfText } from "../lib/pdf-text.js";
 import {
   buildKnowledgeSearchPayload,
   isPureNonLatinQuery,
@@ -86,11 +87,7 @@ async function extractDocumentText(file: Express.Multer.File): Promise<string> {
   const ext = name.includes(".") ? name.slice(name.lastIndexOf(".") + 1) : "";
 
   if (ext === "pdf" || file.mimetype === "application/pdf") {
-    // pdf-parse is CommonJS; load via createRequire to avoid ESM interop issues.
-    const require = createRequire(import.meta.url);
-    const pdfParse = require("pdf-parse") as (buf: Buffer) => Promise<{ text: string }>;
-    const result = await pdfParse(file.buffer);
-    return result.text ?? "";
+    return parsePdfText(file.buffer);
   }
 
   if (ext === "docx" || file.mimetype === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
@@ -108,10 +105,7 @@ async function extractDocumentText(file: Express.Multer.File): Promise<string> {
  */
 async function classifyPdfImportFailure(buffer: Buffer): Promise<string> {
   try {
-    const require = createRequire(import.meta.url);
-    const pdfParse = require("pdf-parse") as (buf: Buffer) => Promise<{ text: string }>;
-    const parsed = await pdfParse(buffer);
-    const text = (parsed.text ?? "").trim();
+    const text = (await parsePdfText(buffer)).trim();
     if (!text) {
       return "This looks like a scanned or image-only PDF — no selectable text was found. Upload a text-based PDF, a DOCX/TXT export, or run OCR first.";
     }

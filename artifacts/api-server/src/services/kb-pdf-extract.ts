@@ -9,8 +9,8 @@
  * timeout, unparseable output) — the caller then falls back to legacy
  * fixed-size chunking. NEVER throws.
  */
-import { createRequire } from "node:module";
 import { logger } from "../lib/logger.js";
+import { parsePdfText } from "../lib/pdf-text.js";
 import { getSarvamManagedKey, platformChatText } from "./platform-chat-llm.js";
 import type { KbEntryInput } from "./kb-ingest.js";
 
@@ -34,10 +34,7 @@ Respond with ONLY valid JSON in exactly this shape:
 
 async function extractPdfText(buffer: Buffer): Promise<string | null> {
   try {
-    const require = createRequire(import.meta.url);
-    const pdfParse = require("pdf-parse") as (buf: Buffer) => Promise<{ text: string }>;
-    const parsed = await pdfParse(buffer);
-    const text = (parsed.text ?? "").trim();
+    const text = (await parsePdfText(buffer)).trim();
     return text.length > 0 ? text : null;
   } catch (err) {
     logger.warn({ err: String(err) }, "KB PDF pdf-parse failed");
