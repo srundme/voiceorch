@@ -26,6 +26,8 @@ export async function getCampaignAnalyticsInsights(
   }>;
   hotLeads: Array<{
     leadId: number;
+    /** The lead's own campaign — the lead profile route validates against this. */
+    campaignId: number;
     callId: number | null;
     name: string | null;
     phone: string;
@@ -148,6 +150,7 @@ export async function getCampaignAnalyticsInsights(
       at: callExecutionsTable.createdAt,
       name: campaignLeadsTable.name,
       phone: campaignLeadsTable.phone,
+      leadCampaignId: campaignLeadsTable.campaignId,
     })
     .from(callExecutionsTable)
     .innerJoin(campaignLeadsTable, eq(callExecutionsTable.leadId, campaignLeadsTable.id))
@@ -174,6 +177,9 @@ export async function getCampaignAnalyticsInsights(
     questionScorecard,
     hotLeads: hotExecs.map((h) => ({
       leadId: h.leadId,
+      // Link against the lead's own campaign; the execution row's campaign_id
+      // can differ (re-campaigned leads / backfills), which 404s the profile.
+      campaignId: h.leadCampaignId ?? campaignId,
       callId: h.callId,
       name: h.name,
       phone: h.phone,

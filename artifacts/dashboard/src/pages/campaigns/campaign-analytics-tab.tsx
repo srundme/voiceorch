@@ -34,6 +34,7 @@ type Insights = {
   }>;
   hotLeads: Array<{
     leadId: number;
+    campaignId?: number;
     callId: number | null;
     name: string | null;
     phone: string;
@@ -436,7 +437,7 @@ export default function CampaignAnalyticsTab({
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <Link
-                      href={`/app/campaigns/${campaignId}/leads/${h.leadId}`}
+                              href={`/app/campaigns/${h.campaignId ?? campaignId}/leads/${h.leadId}`}
                       className="text-sm font-medium text-foreground hover:underline truncate"
                     >
                       {h.name || h.phone}
