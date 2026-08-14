@@ -97,16 +97,29 @@ class QwenDispositionLLM implements DispositionLLM {
   }
 }
 
+/** Default analytics/disposition model — Indic-tuned flagship reasoning. */
+export const DEFAULT_SARVAM_DISPOSITION_MODEL = "sarvam-105b";
+
+function resolveSarvamDispositionModel(): string {
+  const fromEnv = (process.env["DISPOSITION_MODEL"] ?? "").trim();
+  if (fromEnv) return fromEnv;
+  return DEFAULT_SARVAM_DISPOSITION_MODEL;
+}
+
+function isSarvamOpenSourceModel(model: string): boolean {
+  return model === "gemma4" || model === "glm5.2";
+}
+
 class SarvamDispositionLLM implements DispositionLLM {
   private client: OpenAI;
   private model: string;
 
   /**
-   * Default: Gemma 4 on Sarvam /v2 (open-source host). Native Sarvam models
-   * use /v1 — route by model id so we can still fall back to sarvam-105b.
+   * Default: sarvam-105b on /v1 (Indic reasoning). Open-source hosts (gemma4,
+   * glm5.2) use /v2. Override with DISPOSITION_MODEL.
    */
-  constructor(apiKey: string, model = "gemma4") {
-    const openSource = model === "gemma4" || model === "glm5.2";
+  constructor(apiKey: string, model = resolveSarvamDispositionModel()) {
+    const openSource = isSarvamOpenSourceModel(model);
     this.client = new OpenAI({
       apiKey,
       baseURL: openSource ? "https://api.sarvam.ai/v2" : "https://api.sarvam.ai/v1",
@@ -121,7 +134,9 @@ class SarvamDispositionLLM implements DispositionLLM {
   ): Promise<Record<string, unknown>> {
     // Sarvam json_object mode does not enforce a schema, so embed it in the prompt.
     // gemma4 never reasons — omit reasoning_effort. Native models default thinking
-    // ON at "low"; disable so reasoning doesn't consume the token budget.
+    // ON at "low"; for per-call structured JSON keep reasoning low so the budget
+    // goes to content (null disables; "low" is safer than empty content).
+    const openSource = isSarvamOpenSourceModel(this.model);
     const response = await this.client.chat.completions.create({
       model: this.model,
       temperature: 0,
@@ -130,7 +145,7 @@ class SarvamDispositionLLM implements DispositionLLM {
         { role: "system", content: withSchemaInstruction(systemPrompt, schema) },
         { role: "user", content: `TRANSCRIPT:\n${transcript}` },
       ],
-      ...(this.model !== "gemma4" ? ({ reasoning_effort: null } as object) : {}),
+      ...(!openSource ? ({ reasoning_effort: "low" } as object) : {}),
     });
     const msg = response.choices[0]?.message as
       | { content?: string | null; reasoning_content?: string | null }
@@ -175,7 +190,7 @@ function normalizeProvider(preferred: string): string {
 /**
  * Returns the appropriate DispositionLLM instance.
  * Provider selection: agentCfgOverride > DISPOSITION_LLM env > "sarvam" default
- * (Gemma 4 via managed Sarvam key). Gemini is not in the chain.
+ * (sarvam-105b via DISPOSITION_MODEL / managed Sarvam key). Gemini is not in the chain.
  * Falls back to OpenAI / Groq when Sarvam is unavailable.
  */
 export async function getDispositionLLM(

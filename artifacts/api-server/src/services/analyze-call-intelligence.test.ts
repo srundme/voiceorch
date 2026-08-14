@@ -37,4 +37,33 @@ describe("normalizeIntelligence", () => {
     expect(r.detectedIntent).toBe("callback_requested");
     expect(r.keyTopics).toHaveLength(6);
   });
+
+  it("normalises deep purchase / emotion / agent scores", () => {
+    const r = normalizeIntelligence({
+      sentiment: "positive",
+      detectedIntent: "interested",
+      keyTopics: ["pricing"],
+      purchaseIntentScore: 88,
+      urgency: "high",
+      objections: ["too expensive", "need to think"],
+      buyingSignals: ["asked for invoice"],
+      nextBestAction: "Send pricing PDF today",
+      emotion: "enthusiastic",
+      agentPerformance: {
+        talkListenBalance: 4,
+        empathy: 5,
+        objectionHandling: 3,
+        scriptAdherence: 4,
+        clarity: 5,
+        notes: "Good close",
+      },
+    });
+    expect(r.purchaseIntentScore).toBe(88);
+    expect(r.urgency).toBe("high");
+    expect(r.objections).toHaveLength(2);
+    expect(r.buyingSignals).toEqual(["asked for invoice"]);
+    expect(r.emotion).toBe("enthusiastic");
+    expect(r.agentPerformance?.empathy).toBe(5);
+    expect(r.nextBestAction).toContain("pricing");
+  });
 });

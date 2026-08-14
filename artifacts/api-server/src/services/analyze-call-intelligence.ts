@@ -31,6 +31,8 @@ import {
   normalizeIntelligence,
   SENTIMENTS,
   INTENTS,
+  URGENCIES,
+  EMOTIONS,
   type CallIntelligence,
   type Sentiment,
   type DetectedIntent,
@@ -45,6 +47,8 @@ export {
   normalizeIntelligence,
   SENTIMENTS,
   INTENTS,
+  URGENCIES,
+  EMOTIONS,
   type CallIntelligence,
   type Sentiment,
   type DetectedIntent,
@@ -81,8 +85,26 @@ const INTELLIGENCE_SCHEMA: Record<string, unknown> = {
       maxItems: 6,
     },
     summary: { type: "string" },
+    purchaseIntentScore: { type: "integer", minimum: 0, maximum: 100 },
+    urgency: { type: "string", enum: [...URGENCIES] },
+    objections: { type: "array", items: { type: "string" }, maxItems: 5 },
+    buyingSignals: { type: "array", items: { type: "string" }, maxItems: 5 },
+    nextBestAction: { type: "string" },
+    emotion: { type: "string", enum: [...EMOTIONS] },
+    agentPerformance: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        talkListenBalance: { type: "integer", minimum: 1, maximum: 5 },
+        empathy: { type: "integer", minimum: 1, maximum: 5 },
+        objectionHandling: { type: "integer", minimum: 1, maximum: 5 },
+        scriptAdherence: { type: "integer", minimum: 1, maximum: 5 },
+        clarity: { type: "integer", minimum: 1, maximum: 5 },
+        notes: { type: "string" },
+      },
+    },
   },
-  required: ["sentiment", "detectedIntent", "keyTopics"],
+  required: ["sentiment", "detectedIntent", "keyTopics", "purchaseIntentScore", "urgency"],
 };
 
 function buildIntelligencePrompt(opts: {
@@ -115,7 +137,7 @@ function buildIntelligencePrompt(opts: {
     answersHint = `\nAlso fill "answers" for these campaign research questions (null if unknown / not discussed):\n${lines.join("\n")}\n`;
   }
 
-  return `You analyse completed voice-agent call transcripts for campaign analytics.
+  return `You analyse completed voice-agent call transcripts for deep campaign analytics.
 
 Return JSON only with:
 - sentiment: overall customer tone — positive | neutral | negative
@@ -124,13 +146,21 @@ Return JSON only with:
   needs_info, complaint, dnc, wrong_person, no_decision, voicemail_or_no_talk
 - keyTopics: 0–6 short noun phrases (pricing, demo, competitor, payment, etc.)
 - summary: optional 1–2 sentence factual summary if none was provided
+- purchaseIntentScore: 0–100 how ready/willing the customer seems to pay or buy (0=clear no, 50=curious, 80+=ready to pay soon)
+- urgency: none | low | medium | high — how soon they want to act
+- objections: 0–5 short objection phrases (price, timing, trust, competitor, etc.)
+- buyingSignals: 0–5 short positive buying cues (asked about pricing, requested demo, etc.)
+- nextBestAction: one short recommended follow-up for the sales team
+- emotion: customer emotion — frustrated | curious | enthusiastic | skeptical | confused | calm | anxious | annoyed | friendly | indifferent
+- agentPerformance: scores 1–5 for talkListenBalance, empathy, objectionHandling, scriptAdherence, clarity, plus short notes on AI agent quality
 ${questions.length ? '- answers: object keyed by question id\n' : ""}
 Rules:
 - Judge from the CUSTOMER's words and behaviour, not the agent's script.
-- If the call never connected meaningfully / voicemail / hangup with no talk → sentiment=neutral, intent=voicemail_or_no_talk, topics=[].
-- Do not invent topics that were not discussed.
+- If the call never connected meaningfully / voicemail / hangup with no talk → sentiment=neutral, intent=voicemail_or_no_talk, topics=[], purchaseIntentScore=0, urgency=none, objections=[], buyingSignals=[], emotion=indifferent.
+- Do not invent topics, objections, or buying signals that were not discussed.
 - Prefer specific intents (booked, callback_requested) over vague ones when clear.
 - For research questions: answer only from evidence in the transcript; use null when unclear.
+- Agent performance rates the AI agent's behaviour on the call (not the customer).
 ${summaryHint}${dispHint}${answersHint}`;
 }
 
@@ -233,12 +263,14 @@ export async function analyzeCallIntelligence(
       .select({
         sentiment: callExecutionsTable.sentiment,
         analyticsAnswers: callExecutionsTable.analyticsAnswers,
+        purchaseIntentScore: callExecutionsTable.purchaseIntentScore,
       })
       .from(callExecutionsTable)
       .where(eq(callExecutionsTable.id, executionId))
       .limit(1);
-    // Skip only when sentiment already set AND (no campaign questions OR answers already filled).
-    if (row?.sentiment) {
+    // Skip only when sentiment already set AND deep fields present AND
+    // (no campaign questions OR answers already filled).
+    if (row?.sentiment && row.purchaseIntentScore != null) {
       const [camp] = await db
         .select({ analyticsQuestions: campaignsTable.analyticsQuestions })
         .from(campaignsTable)
@@ -324,6 +356,13 @@ export async function analyzeCallIntelligence(
       detectedIntent: intel.detectedIntent,
       keyTopics: intel.keyTopics,
       analyticsAnswers,
+      purchaseIntentScore: intel.purchaseIntentScore,
+      urgency: intel.urgency,
+      objections: intel.objections,
+      buyingSignals: intel.buyingSignals,
+      nextBestAction: intel.nextBestAction,
+      emotion: intel.emotion,
+      agentPerformance: intel.agentPerformance,
     })
     .where(eq(callExecutionsTable.id, executionId));
 
@@ -372,6 +411,9 @@ export async function analyzeCallIntelligence(
       sentiment: intel.sentiment,
       intent: intel.detectedIntent,
       topics: intel.keyTopics,
+      purchaseIntentScore: intel.purchaseIntentScore,
+      urgency: intel.urgency,
+      emotion: intel.emotion,
     },
   });
   await db.insert(leadTimelineTable).values({
@@ -387,6 +429,7 @@ export async function analyzeCallIntelligence(
       leadId: leadCtx.leadId,
       sentiment: intel.sentiment,
       intent: intel.detectedIntent,
+      purchaseIntentScore: intel.purchaseIntentScore,
     },
     "call-intelligence: saved",
   );

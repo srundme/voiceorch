@@ -37,6 +37,7 @@ import { cn } from "@/lib/utils";
 import { formatDistanceToNow, format, parseISO } from "date-fns";
 import { BATCH_STATUS_MAP, callStatusCfg, outcomeCfg } from "@/lib/campaign-status";
 import { CallDetailDrawer } from "@/components/call-detail-drawer";
+import CampaignAnalyticsTab from "../../campaign-analytics-tab";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
@@ -749,6 +750,7 @@ export default function BatchWorkspacePage() {
   const [remapName, setRemapName] = useState("name");
   const [remapEmail, setRemapEmail] = useState("email");
   const [remapSaving, setRemapSaving] = useState(false);
+  const [showInsights, setShowInsights] = useState(false);
 
   // Header data (light, kept in sync with polling)
   const { data: header } = useQuery<BatchHeader>({
@@ -1067,12 +1069,26 @@ export default function BatchWorkspacePage() {
           <MiniStat icon={<Calendar className="h-3 w-3" />}      label="Bookings"     value={kpis?.bookings  ?? "—"} />
           <MiniStat icon={<Bell className="h-3 w-3" />}          label="Callbacks"    value={kpis?.callbacks ?? "—"} />
           <MiniStat icon={<PhoneIncoming className="h-3 w-3" />} label="Incoming"     value={kpis?.incoming  ?? "—"} />
+          <Button
+            size="sm"
+            variant={showInsights ? "secondary" : "ghost"}
+            className="h-7 text-[11px] gap-1.5 text-muted-foreground"
+            onClick={() => setShowInsights((v) => !v)}
+          >
+            <BarChart2 className="h-3 w-3" /> {showInsights ? "Hide insights" : "Insights / reports"}
+          </Button>
           <Button size="sm" variant="ghost" className="ml-auto h-7 text-[11px] gap-1.5 text-muted-foreground"
             onClick={() => setRemapOpen(true)}>
             <Pencil className="h-3 w-3" /> Remap pending fields
           </Button>
         </div>
       </div>
+
+      {showInsights && (
+        <div className="px-5 pb-4 shrink-0 border-b border-border">
+          <CampaignAnalyticsTab campaignId={campaignId} batchId={batchId} />
+        </div>
+      )}
 
       <Dialog open={remapOpen} onOpenChange={setRemapOpen}>
         <DialogContent className="sm:max-w-md">

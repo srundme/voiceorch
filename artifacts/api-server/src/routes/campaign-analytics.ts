@@ -863,8 +863,15 @@ router.get("/campaigns/:id/analytics/insights", async (req, res): Promise<void> 
   if (!campaign) { res.status(404).json({ error: "Not found" }); return; }
 
   const days = Math.min(Math.max(parseInt(String(req.query["days"] ?? "14"), 10) || 14, 1), 90);
+  const batchIdRaw = req.query["batchId"];
+  const batchId = batchIdRaw != null && String(batchIdRaw) !== ""
+    ? parseInt(String(batchIdRaw), 10)
+    : null;
   const { getCampaignAnalyticsInsights } = await import("../services/campaign-analytics-insights.js");
-  const insights = await getCampaignAnalyticsInsights(campaignId, { days });
+  const insights = await getCampaignAnalyticsInsights(campaignId, {
+    days,
+    batchId: Number.isFinite(batchId as number) ? batchId : null,
+  });
   res.json(insights);
 });
 

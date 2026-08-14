@@ -771,6 +771,20 @@
       "when": 1791600009000,
       "tag": "0109_knowledge_source_error",
       "breakpoints": true
+    },
+    {
+      "idx": 110,
+      "version": "7",
+      "when": 1791600010000,
+      "tag": "0110_call_intelligence_deep",
+      "breakpoints": true
+    },
+    {
+      "idx": 111,
+      "version": "7",
+      "when": 1791600011000,
+      "tag": "0111_campaign_report_definitions",
+      "breakpoints": true
     }
   ]
 }
