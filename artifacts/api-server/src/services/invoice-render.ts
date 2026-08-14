@@ -38,6 +38,38 @@ export const NUMBER_PREFIX = "SS";
 
 export type InvoiceType = "wallet_topup" | "phone_number" | "concurrent_slot";
 
+/** Email-safe HTML rendition of the official three-bar SnapServe wordmark. */
+function invoiceLogoHtml(): string {
+  return (
+    "<table cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\"><tr>" +
+    "<td style=\"width:34px;vertical-align:middle;padding-right:11px\">" +
+    "<div style=\"height:7px;width:32px;border-radius:999px;background:#ffffff\"></div>" +
+    "<div style=\"height:7px;width:26px;border-radius:999px;background:rgba(255,255,255,.60);margin:5px 0 0 3px\"></div>" +
+    "<div style=\"height:7px;width:20px;border-radius:999px;background:rgba(255,255,255,.36);margin:5px 0 0 6px\"></div>" +
+    "</td>" +
+    "<td style=\"vertical-align:middle;white-space:nowrap;font-family:Arial,Helvetica,sans-serif;font-size:23px;line-height:1;color:#ffffff;letter-spacing:-.6px\">" +
+    "<strong style=\"font-weight:700\">Snap</strong><span style=\"font-weight:400\">Serve</span>" +
+    "</td></tr></table>"
+  );
+}
+
+/** Draw the official white SnapServe mark in PDFKit's header band. */
+function drawInvoiceLogo(doc: PDFKit.PDFDocument, x: number, y: number): void {
+  doc.save();
+  doc.fillColor("#ffffff").roundedRect(x, y, 32, 7, 3.5).fill();
+  doc.fillOpacity(0.6).roundedRect(x + 3, y + 12, 26, 7, 3.5).fill();
+  doc.fillOpacity(0.36).roundedRect(x + 6, y + 24, 20, 7, 3.5).fill();
+  doc.restore();
+
+  doc
+    .fillColor("#ffffff")
+    .fontSize(20)
+    .font("Helvetica-Bold")
+    .text("Snap", x + 44, y + 6, { continued: true })
+    .font("Helvetica")
+    .text("Serve");
+}
+
 /** Indian financial year label for a date, e.g. "2026-27" (FY starts 1 April). */
 export function financialYear(d: Date): string {
   const m = d.getMonth(); // 0 = Jan, 3 = Apr
@@ -136,10 +168,11 @@ export function renderInvoiceHtml(inv: Invoice): string {
     "<body style=\"margin:0;padding:0;background:#f4f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif\">" +
     "<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"background:#f4f4f6;padding:32px 12px\"><tr><td align=\"center\">" +
     "<table width=\"640\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"max-width:640px;width:100%;background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden\">" +
-    "<tr><td style=\"background:#09090b;padding:22px 28px\">" +
-    "<span style=\"font-size:1.2rem;font-weight:700;color:#fff;letter-spacing:-0.02em\">Snap<span style=\"color:#10b981\">Serve</span></span>" +
-    "<span style=\"float:right;color:#d1d5db;font-size:13px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase\">Tax Invoice cum Receipt</span>" +
-    "</td></tr>" +
+    "<tr><td style=\"background:#09090b;padding:20px 28px\">" +
+    "<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\"><tr>" +
+    `<td style="vertical-align:middle">${invoiceLogoHtml()}</td>` +
+    "<td style=\"vertical-align:middle;text-align:right;color:#d1d5db;font-size:13px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase\">Tax Invoice cum Receipt</td>" +
+    "</tr></table></td></tr>" +
     "<tr><td style=\"padding:24px 28px\">" +
     "<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\"><tr>" +
     "<td style=\"vertical-align:top;width:60%\">" +
@@ -205,13 +238,13 @@ export function renderInvoicePdf(inv: Invoice): Promise<Buffer> {
       const grey = "#6b7280";
 
       // Header band
-      doc.rect(0, 0, 595, 70).fill("#09090b");
-      doc.fillColor("#ffffff").fontSize(20).font("Helvetica-Bold").text("SnapServe", left, 26);
+      doc.rect(0, 0, 595, 76).fill("#09090b");
+      drawInvoiceLogo(doc, left, 22);
       doc.fillColor("#d1d5db").fontSize(11).font("Helvetica-Bold")
-        .text("TAX INVOICE CUM RECEIPT", 0, 30, { align: "right", width: right });
+        .text("TAX INVOICE CUM RECEIPT", 0, 33, { align: "right", width: right });
 
       // Seller
-      let y = 90;
+      let y = 96;
       doc.fillColor(dark).font("Helvetica-Bold").fontSize(12).text(SELLER.name, left, y);
       y += 16;
       doc.font("Helvetica").fontSize(9).fillColor(grey);
@@ -224,14 +257,14 @@ export function renderInvoicePdf(inv: Invoice): Promise<Buffer> {
 
       // Invoice meta (right column)
       doc.fillColor(dark).font("Helvetica-Bold").fontSize(10)
-        .text(`Invoice #: ${inv.invoiceNumber}`, 300, 90, { align: "right", width: right - 300 });
+        .text(`Invoice #: ${inv.invoiceNumber}`, 300, 96, { align: "right", width: right - 300 });
       doc.font("Helvetica").fontSize(9).fillColor(grey)
-        .text(`Date: ${dateStr}`, 300, 106, { align: "right", width: right - 300 });
+        .text(`Date: ${dateStr}`, 300, 112, { align: "right", width: right - 300 });
       if (inv.razorpayPaymentId) {
-        doc.text(`Payment Ref: ${inv.razorpayPaymentId}`, 300, 119, { align: "right", width: right - 300 });
+        doc.text(`Payment Ref: ${inv.razorpayPaymentId}`, 300, 125, { align: "right", width: right - 300 });
       }
       doc.font("Helvetica-Bold").fillColor("#15803d").fontSize(11)
-        .text("PAID", 300, 134, { align: "right", width: right - 300 });
+        .text("PAID", 300, 140, { align: "right", width: right - 300 });
 
       // Divider
       y = Math.max(y, 160) + 6;
