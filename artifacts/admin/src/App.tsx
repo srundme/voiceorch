@@ -14,6 +14,7 @@ import PartnersPage from "@/pages/partners";
 import UserDetail from "@/pages/user-detail";
 import Finance from "@/pages/finance";
 import Recharges from "@/pages/recharges";
+import PhonePurchases from "@/pages/phone-purchases";
 import Platform from "@/pages/platform";
 import Growth from "@/pages/growth";
 import BoardPulse from "@/pages/board/pulse";
@@ -96,6 +97,7 @@ function Router() {
       <ProtectedRoute path="/users/:clerkId/agents/:agentId" component={AdminAgentEdit} />
       <ProtectedRoute path="/finance" component={Finance} />
       <ProtectedRoute path="/recharges" component={Recharges} />
+      <ProtectedRoute path="/phone-purchases" component={PhonePurchases} />
       <ProtectedRoute path="/platform" component={Platform} />
       <ProtectedRoute path="/growth" component={Growth} />
       <ProtectedRoute path="/board/pulse" component={BoardPulse} />

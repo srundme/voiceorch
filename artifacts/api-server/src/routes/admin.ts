@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, usersTable, walletTransactionsTable, callsTable, agentsTable, scheduledCallbacksTable, bookingsTable, eventTypesTable, schedulingCalendarsTable, platformSettingsTable, usageSpikeDismissalsTable, usageSpikeNotificationsTable, alertNotificationLogTable, providerMinuteRatesTable, bookInternsTable, bookProgressTable, bookExamAttemptsTable, partnersTable } from "@workspace/db";
+import { db, usersTable, walletTransactionsTable, callsTable, agentsTable, scheduledCallbacksTable, bookingsTable, eventTypesTable, schedulingCalendarsTable, platformSettingsTable, usageSpikeDismissalsTable, usageSpikeNotificationsTable, alertNotificationLogTable, providerMinuteRatesTable, bookInternsTable, bookProgressTable, bookExamAttemptsTable, partnersTable, phoneNumberOrdersTable } from "@workspace/db";
 import { invalidateMinuteRatesCache } from "../services/minute-rates.js";
 import { sendTestEmail } from "../services/scheduling/notifications.js";
 import { eq, sql, count, sum, desc, lt, gt, and, inArray, ilike, like, type SQL, type AnyColumn } from "drizzle-orm";
@@ -478,6 +478,83 @@ router.get("/admin/finance/recharges", async (req, res): Promise<void> => {
     });
   } catch (err) {
     req.log.error({ err }, "admin/finance/recharges failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// Phone number purchase orders — who bought which number, how, and for how much.
+// Source of truth is phone_number_orders (Razorpay card + wallet purchases).
+router.get("/admin/phone-purchases", async (req, res): Promise<void> => {
+  try {
+    const limit = Math.min(Number(req.query["limit"] ?? 200), 500);
+    const offset = Number(req.query["offset"] ?? 0);
+    // Default to completed purchases; pass ?status=all for pending/failed/cancelled too.
+    const statusFilter = String(req.query["status"] ?? "completed");
+    const numberTypeFilter = String(req.query["numberType"] ?? "all"); // local | whatsapp | all
+
+    const conds: SQL[] = [];
+    if (statusFilter !== "all") {
+      conds.push(eq(phoneNumberOrdersTable.status, statusFilter));
+    }
+    if (numberTypeFilter !== "all") {
+      conds.push(eq(phoneNumberOrdersTable.numberType, numberTypeFilter));
+    }
+    const where = conds.length ? and(...conds) : undefined;
+
+    const [rows, [totals]] = await Promise.all([
+      db
+        .select({
+          id: phoneNumberOrdersTable.id,
+          userId: phoneNumberOrdersTable.userId,
+          number: phoneNumberOrdersTable.number,
+          countryCode: phoneNumberOrdersTable.countryCode,
+          region: phoneNumberOrdersTable.region,
+          numberType: phoneNumberOrdersTable.numberType,
+          amountCents: phoneNumberOrdersTable.amountCents,
+          promoCode: phoneNumberOrdersTable.promoCode,
+          discountPaise: phoneNumberOrdersTable.discountPaise,
+          renewalMode: phoneNumberOrdersTable.renewalMode,
+          status: phoneNumberOrdersTable.status,
+          razorpayOrderId: phoneNumberOrdersTable.razorpayOrderId,
+          razorpayPaymentId: phoneNumberOrdersTable.razorpayPaymentId,
+          phoneNumberId: phoneNumberOrdersTable.phoneNumberId,
+          failureReason: phoneNumberOrdersTable.failureReason,
+          createdAt: phoneNumberOrdersTable.createdAt,
+          updatedAt: phoneNumberOrdersTable.updatedAt,
+          userEmail: usersTable.email,
+          userName: usersTable.name,
+          userClerkId: usersTable.clerkId,
+          userIsTest: usersTable.isTest,
+        })
+        .from(phoneNumberOrdersTable)
+        .leftJoin(usersTable, eq(phoneNumberOrdersTable.userId, usersTable.clerkId))
+        .where(where)
+        .orderBy(desc(phoneNumberOrdersTable.createdAt))
+        .limit(limit)
+        .offset(offset),
+      db
+        .select({
+          total: count(),
+          amountCents: sum(phoneNumberOrdersTable.amountCents),
+        })
+        .from(phoneNumberOrdersTable)
+        .where(
+          and(
+            eq(phoneNumberOrdersTable.status, "completed"),
+            numberTypeFilter !== "all"
+              ? eq(phoneNumberOrdersTable.numberType, numberTypeFilter)
+              : undefined,
+          ),
+        ),
+    ]);
+
+    res.json({
+      rows,
+      total: Number(totals?.total ?? 0),
+      totalAmountCents: Number(totals?.amountCents ?? 0),
+    });
+  } catch (err) {
+    req.log.error({ err }, "admin/phone-purchases failed");
     res.status(500).json({ error: "Internal server error" });
   }
 });
