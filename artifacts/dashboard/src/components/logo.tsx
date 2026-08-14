@@ -1,8 +1,6 @@
-import { useId } from "react";
-
 /* ── SnapServe brand components ────────────────────────────────────────────
    SnapServeIcon   — the three-bar mark (SVG, inline, scalable)
-   SnapServeAgentIcon — the Headset agent mark (friendly face + brand bar)
+   SnapServeAgentIcon — Headset agent mark (from @workspace/brand-icons)
    SnapServeLogo   — icon + wordmark  ("Snap" Bold / "Serve" Regular)
    SnapServeLoader — full-screen splash with animated bars
    ─────────────────────────────────────────────────────────────────────────*/
@@ -74,57 +72,11 @@ export function SnapServeIcon({ size = 24, className = "" }: IconProps) {
   );
 }
 
-/* ── Agent bot mark -------------------------------------------------------- */
-
 /**
  * SnapServeAgentIcon — the Headset agent mark.
- *
- * A friendly voice-agent face: a tall rounded head with wide-set eyes and a
- * smile, flanked by headset ear pads and resting on a single SnapServe brand
- * bar. The face is knocked out through a mask so the whole mark stays a single
- * `currentColor` shape, keeping it crisp in sidebar active/inactive states and
- * at the 16–20 px navigation sizes.
+ * Re-exported from @workspace/brand-icons so sidebar + agent pages share one source.
  */
-export function SnapServeAgentIcon({ size = 24, className = "" }: IconProps) {
-  // useId can emit colons, which break `url(#…)` references in some browsers.
-  const maskId = `ss-agent-${useId().replace(/:/g, "")}`;
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      className={className}
-      role="img"
-      aria-label="SnapServe agent"
-    >
-      <mask id={maskId} maskUnits="userSpaceOnUse" x="0" y="0" width="24" height="24">
-        <rect width="24" height="24" fill="black" />
-        <rect x="4.3" y="3.2" width="15.4" height="14" rx="6" fill="white" />
-        <circle cx="9.3" cy="9" r="1.9" fill="black" />
-        <circle cx="14.7" cy="9" r="1.9" fill="black" />
-        <path
-          d="M9.9 12.8c.945 1.68 3.255 1.68 4.2 0"
-          stroke="black"
-          strokeWidth="1.35"
-          strokeLinecap="round"
-          fill="none"
-        />
-      </mask>
-
-      {/* headset ear pads */}
-      <rect x="1.1" y="7.9" width="3" height="6.4" rx="1.5" fill="currentColor" opacity="0.55" />
-      <rect x="19.9" y="7.9" width="3" height="6.4" rx="1.5" fill="currentColor" opacity="0.55" />
-
-      {/* head with the face punched out */}
-      <rect width="24" height="24" fill="currentColor" mask={`url(#${maskId})`} />
-
-      {/* SnapServe brand bar as shoulders */}
-      <rect x="5.4" y="19.2" width="13.2" height="3" rx="1.5" fill="currentColor" opacity="0.55" />
-    </svg>
-  );
-}
+export { AgentIcon as SnapServeAgentIcon } from "@workspace/brand-icons";
 
 /* ── Wordmark ------------------------------------------------------------- */
 
