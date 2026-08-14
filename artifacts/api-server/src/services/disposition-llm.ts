@@ -101,10 +101,15 @@ class SarvamDispositionLLM implements DispositionLLM {
   private client: OpenAI;
   private model: string;
 
-  constructor(apiKey: string, model = "sarvam-30b") {
+  /**
+   * Default: Gemma 4 on Sarvam /v2 (open-source host). Native Sarvam models
+   * use /v1 — route by model id so we can still fall back to sarvam-105b.
+   */
+  constructor(apiKey: string, model = "gemma4") {
+    const openSource = model === "gemma4" || model === "glm5.2";
     this.client = new OpenAI({
       apiKey,
-      baseURL: "https://api.sarvam.ai/v1",
+      baseURL: openSource ? "https://api.sarvam.ai/v2" : "https://api.sarvam.ai/v1",
     });
     this.model = model;
   }
@@ -115,8 +120,8 @@ class SarvamDispositionLLM implements DispositionLLM {
     transcript: string,
   ): Promise<Record<string, unknown>> {
     // Sarvam json_object mode does not enforce a schema, so embed it in the prompt.
-    // Thinking is ON by default at "low" — disable it so reasoning doesn't consume
-    // the token budget and leave content=null (chat skill gotcha).
+    // gemma4 never reasons — omit reasoning_effort. Native models default thinking
+    // ON at "low"; disable so reasoning doesn't consume the token budget.
     const response = await this.client.chat.completions.create({
       model: this.model,
       temperature: 0,
@@ -125,8 +130,7 @@ class SarvamDispositionLLM implements DispositionLLM {
         { role: "system", content: withSchemaInstruction(systemPrompt, schema) },
         { role: "user", content: `TRANSCRIPT:\n${transcript}` },
       ],
-      // Sarvam extension (OpenAI-compat); not on OpenAI's typed surface.
-      ...( { reasoning_effort: null } as object ),
+      ...(this.model !== "gemma4" ? ({ reasoning_effort: null } as object) : {}),
     });
     const msg = response.choices[0]?.message as
       | { content?: string | null; reasoning_content?: string | null }
@@ -203,7 +207,8 @@ function buildClient(provider: string, key: string): DispositionLLM {
 
 /**
  * Returns the appropriate DispositionLLM instance.
- * Provider selection: agentCfgOverride > DISPOSITION_LLM env > "gemini" default.
+ * Provider selection: agentCfgOverride > DISPOSITION_LLM env > "sarvam" default
+ * (Gemma 4 via managed Sarvam key — Gemini is still available as a fallback).
  * Falls back to any other provider whose managed key is configured, so
  * classification still runs as long as ONE managed key exists.
  * Returns null only if no managed key is available (never crashes the caller).
@@ -214,13 +219,13 @@ export async function getDispositionLLM(
   const preferred = (
     agentCfgOverride ??
     process.env["DISPOSITION_LLM"] ??
-    "gemini"
+    "sarvam"
   ).toLowerCase();
 
   const normalized = (preferred === "groq" || preferred === "qwen") ? "qwen" : (preferred === "google" ? "gemini" : preferred);
 
-  // Try the preferred provider first (defaulting to Gemini 3.6 Flash), then fall back to others
-  const order = [normalized, ...["gemini", "openai", "qwen", "sarvam"].filter((p) => p !== normalized)];
+  // Prefer Sarvam Gemma 4 first; Gemini / OpenAI / Groq remain as fallbacks.
+  const order = [normalized, ...["sarvam", "openai", "qwen", "gemini"].filter((p) => p !== normalized)];
 
   for (const provider of order) {
     const key = await resolveManagedKey(provider);
@@ -232,7 +237,7 @@ export async function getDispositionLLM(
     }
   }
 
-  logger.warn("disposition: no managed LLM key configured (gemini/openai/qwen/sarvam), skipping LLM pass");
+  logger.warn("disposition: no managed LLM key configured (sarvam/openai/qwen/gemini), skipping LLM pass");
   return null;
 }
 
@@ -244,10 +249,10 @@ export async function getDispositionLLM(
 export async function getDispositionLLMChain(
   agentCfgOverride?: string | null,
 ): Promise<Array<{ provider: string; client: DispositionLLM }>> {
-  const preferred = (agentCfgOverride ?? process.env["DISPOSITION_LLM"] ?? "gemini").toLowerCase();
+  const preferred = (agentCfgOverride ?? process.env["DISPOSITION_LLM"] ?? "sarvam").toLowerCase();
   const normalized =
     preferred === "groq" || preferred === "qwen" ? "qwen" : preferred === "google" ? "gemini" : preferred;
-  const order = [normalized, ...["gemini", "openai", "qwen", "sarvam"].filter((p) => p !== normalized)];
+  const order = [normalized, ...["sarvam", "openai", "qwen", "gemini"].filter((p) => p !== normalized)];
 
   const chain: Array<{ provider: string; client: DispositionLLM }> = [];
   for (const provider of order) {

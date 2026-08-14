@@ -264,7 +264,7 @@ export async function analyzeCallIntelligence(
   if (chain.length === 0) {
     logger.warn({ callId: input.callId }, "call-intelligence: no LLM available");
     throw new CallIntelligenceLlmError(
-      "No analysis model configured. Add a managed Gemini / OpenAI / Groq / Sarvam key in platform settings.",
+      "No analysis model configured. Add a managed Sarvam / OpenAI / Groq / Gemini key in platform settings.",
     );
   }
 
