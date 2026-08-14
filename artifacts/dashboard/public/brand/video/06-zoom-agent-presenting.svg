@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080" fill="none" role="img" aria-label="SnapServe agent presenting slides in Zoom">
+  <title>SnapServe agent presenting slides in Zoom</title>
+  <defs>
+    <style>
+      .ui    { font-family: 'Inter', Helvetica, Arial, sans-serif; }
+      .code  { font-size: 18px; fill: #F2F2F2; }
+      .meta  { font-size: 16px; fill: #A0A0A0; }
+      .name  { font-size: 17px; fill: #FFFFFF; font-weight: 500; }
+      .agn   { font-size: 17px; fill: #FFFFFF; font-weight: 700; }
+      .pill  { font-size: 14px; fill: #FFFFFF; font-weight: 700; }
+      .cap   { font-size: 19px; fill: #F2F2F2; }
+      .sTtl  { font-size: 58px; fill: #0F172A; font-weight: 700; letter-spacing: -1.2px; }
+      .sBul  { font-size: 30px; fill: #334155; }
+      .sFoot { font-size: 20px; fill: #94A3B8; }
+      .sKick { font-size: 20px; fill: #64748B; font-weight: 700; letter-spacing: 2.2px; }
+      .rail  { font-size: 15px; fill: #A0A0A0; }
+      .railS { font-size: 16px; fill: #F2F2F2; font-weight: 600; }
+      .ctl   { font-size: 13px; fill: #D6D6D6; }
+    </style>
+  </defs>
+
+  <rect width="1920" height="1080" fill="#1A1A1A"/>
+
+  <!-- top bar -->
+  <rect x="0" y="0" width="1920" height="68" fill="#242424"/>
+  <g transform="translate(40,20) scale(0.105)">
+    <rect width="256" height="256" rx="56" fill="#0B5CFF"/>
+    <path fill="#FFFFFF" d="M56 100a20 20 0 0 1 20-20h68a28 28 0 0 1 28 28v48a20 20 0 0 1-20 20H84a28 28 0 0 1-28-28v-48Z"/>
+    <path fill="#FFFFFF" d="M176 114.5l25.4-18.6c4.6-3.4 11.1-.1 11.1 5.6v53c0 5.7-6.5 9-11.1 5.6L176 141.5v-27Z"/>
+  </g>
+  <text x="82" y="42" class="ui code">SnapServe &#8212; Product demo</text>
+
+  <rect x="700" y="16" width="520" height="36" rx="18" fill="#1F3A24"/>
+  <circle cx="726" cy="34" r="6" fill="#4ADE80"/>
+  <text x="742" y="40" class="ui pill" fill="#4ADE80">You are viewing SnapServe Agent's screen</text>
+
+  <rect x="1744" y="18" width="136" height="32" rx="16" fill="#333333"/>
+  <circle cx="1766" cy="34" r="5" fill="#F04A4A"/>
+  <text x="1780" y="40" class="ui pill">Recording</text>
+
+  <!-- ===== shared deck ===== -->
+  <rect x="48" y="108" width="1400" height="780" rx="10" fill="#FFFFFF"/>
+
+  <g transform="translate(120,168) scale(0.30)">
+    <rect x="6"  y="14" width="88" height="20" rx="10" fill="#0F172A"/>
+    <rect x="14" y="42" width="72" height="20" rx="10" fill="#0F172A" opacity="0.60"/>
+    <rect x="22" y="70" width="56" height="20" rx="10" fill="#0F172A" opacity="0.36"/>
+  </g>
+  <text x="152" y="196" class="ui" font-size="22" fill="#0F172A"><tspan font-weight="700">Snap</tspan><tspan font-weight="400">Serve</tspan></text>
+
+  <text x="120" y="274" class="ui sKick">WHY VOICE AGENTS</text>
+  <text x="120" y="360" class="ui sTtl">AI agents that join</text>
+  <text x="120" y="428" class="ui sTtl">your meetings.</text>
+
+  <circle cx="132" cy="518" r="7" fill="#0F172A"/>
+  <text x="164" y="527" class="ui sBul">Joins Google Meet, Zoom and Teams</text>
+  <circle cx="132" cy="588" r="7" fill="#0F172A" opacity="0.6"/>
+  <text x="164" y="597" class="ui sBul">Speaks, listens and answers live</text>
+  <circle cx="132" cy="658" r="7" fill="#0F172A" opacity="0.36"/>
+  <text x="164" y="667" class="ui sBul">Books the follow-up before the call ends</text>
+
+  <g transform="translate(1000,458)">
+    <rect x="0"   y="120" width="46" height="90"  rx="10" fill="#0F172A" opacity="0.20"/>
+    <rect x="70"  y="72"  width="46" height="138" rx="10" fill="#0F172A" opacity="0.42"/>
+    <rect x="140" y="30"  width="46" height="180" rx="10" fill="#0F172A" opacity="0.68"/>
+    <rect x="210" y="0"   width="46" height="210" rx="10" fill="#0F172A"/>
+  </g>
+
+  <line x1="120" y1="788" x2="1376" y2="788" stroke="#E2E8F0" stroke-width="2"/>
+  <text x="120" y="830" class="ui sFoot">app.snapserve.ai</text>
+  <text x="1376" y="830" class="ui sFoot" text-anchor="end">3 / 12</text>
+
+  <!-- ===== right rail ===== -->
+  <rect x="1480" y="108" width="392" height="238" rx="10" fill="#2D2D2D"/>
+  <circle cx="1676" cy="214" r="52" fill="#4A4A4A"/>
+  <text x="1676" y="232" class="ui" font-size="42" fill="#F2F2F2" text-anchor="middle" font-weight="500">K</text>
+  <rect x="1496" y="302" width="120" height="30" rx="6" fill="#000000" opacity="0.55"/>
+  <text x="1510" y="323" class="ui name">Karthik</text>
+
+  <rect x="1480" y="366" width="392" height="238" rx="10" fill="#1F2A24"/>
+  <rect x="1480" y="366" width="392" height="238" rx="10" fill="none" stroke="#4ADE80" stroke-width="4"/>
+  <g transform="translate(1640,390) scale(3.0)">
+    <mask id="agZP" maskUnits="userSpaceOnUse" x="0" y="0" width="24" height="24">
+      <rect width="24" height="24" fill="black"/>
+      <rect x="4.3" y="3.2" width="15.4" height="14" rx="6" fill="white"/>
+      <circle cx="9.3" cy="9" r="1.9" fill="black"/>
+      <circle cx="14.7" cy="9" r="1.9" fill="black"/>
+      <path d="M9.9 12.8c.945 1.68 3.255 1.68 4.2 0" stroke="black" stroke-width="1.35" stroke-linecap="round" fill="none"/>
+    </mask>
+    <rect x="1.1" y="7.9" width="3" height="6.4" rx="1.5" fill="#FFFFFF" opacity="0.55"/>
+    <rect x="19.9" y="7.9" width="3" height="6.4" rx="1.5" fill="#FFFFFF" opacity="0.55"/>
+    <rect width="24" height="24" fill="#FFFFFF" mask="url(#agZP)"/>
+    <rect x="5.4" y="19.2" width="13.2" height="3" rx="1.5" fill="#FFFFFF" opacity="0.55"/>
+  </g>
+  <g fill="#4ADE80">
+    <rect x="1625" y="500" width="6" height="16" rx="3" opacity="0.45"/>
+    <rect x="1641" y="490" width="6" height="36" rx="3" opacity="0.7"/>
+    <rect x="1657" y="478" width="6" height="60" rx="3"/>
+    <rect x="1673" y="472" width="6" height="72" rx="3"/>
+    <rect x="1689" y="480" width="6" height="56" rx="3"/>
+    <rect x="1705" y="492" width="6" height="32" rx="3" opacity="0.7"/>
+    <rect x="1721" y="501" width="6" height="14" rx="3" opacity="0.45"/>
+  </g>
+  <rect x="1496" y="556" width="212" height="32" rx="6" fill="#000000" opacity="0.55"/>
+  <text x="1510" y="578" class="ui agn">SnapServe Agent</text>
+
+  <rect x="1480" y="624" width="392" height="140" rx="10" fill="#2D2D2D"/>
+  <text x="1504" y="660" class="ui railS">Agent slide control</text>
+  <text x="1504" y="690" class="ui rail">next_slide &#183; goto_slide</text>
+  <rect x="1504" y="706" width="150" height="34" rx="8" fill="#3A3A3A"/>
+  <text x="1524" y="729" class="ui rail" fill="#F2F2F2">Slide 3 of 12</text>
+  <rect x="1668" y="706" width="180" height="34" rx="8" fill="#1F3A24"/>
+  <circle cx="1690" cy="723" r="5" fill="#4ADE80"/>
+  <text x="1704" y="729" class="ui rail" fill="#4ADE80">Sharing screen</text>
+
+  <!-- caption -->
+  <rect x="48" y="906" width="1136" height="72" rx="12" fill="#000000" opacity="0.6"/>
+  <text x="76" y="936" class="ui meta">SnapServe Agent</text>
+  <text x="76" y="964" class="ui cap">On this slide you can see how the agent joins and books the follow-up.</text>
+
+  <!-- Zoom control bar -->
+  <rect x="0" y="1000" width="1920" height="80" fill="#242424"/>
+  <g>
+    <path d="M540 1018a8 8 0 0 1 8 8v9a8 8 0 0 1-16 0v-9a8 8 0 0 1 8-8Z" fill="#F2F2F2"/>
+    <path d="M527 1034a13 13 0 0 0 26 0" stroke="#F2F2F2" stroke-width="2.8" fill="none" stroke-linecap="round"/>
+    <text x="540" y="1066" class="ui ctl" text-anchor="middle">Mute</text>
+
+    <rect x="640" y="1018" width="30" height="21" rx="4.5" fill="#F2F2F2"/>
+    <path d="M670 1024l11-6v21l-11-6z" fill="#F2F2F2"/>
+    <text x="660" y="1066" class="ui ctl" text-anchor="middle">Video</text>
+
+    <circle cx="770" cy="1028" r="4" fill="#F2F2F2"/>
+    <circle cx="784" cy="1028" r="4" fill="#F2F2F2"/>
+    <circle cx="798" cy="1028" r="4" fill="#F2F2F2"/>
+    <text x="784" y="1066" class="ui ctl" text-anchor="middle">Participants</text>
+
+    <rect x="1020" y="1010" width="240" height="44" rx="8" fill="#4ADE80"/>
+    <text x="1140" y="1038" class="ui pill" fill="#14532D" text-anchor="middle">Stop Share</text>
+
+    <rect x="1740" y="1010" width="130" height="44" rx="8" fill="#F04A4A"/>
+    <text x="1805" y="1038" class="ui pill" text-anchor="middle">End</text>
+  </g>
+</svg>

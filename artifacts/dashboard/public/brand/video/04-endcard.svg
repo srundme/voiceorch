@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080" fill="none" role="img" aria-label="SnapServe end card">
+  <title>SnapServe &#8212; your AI agent is in the meeting</title>
+  <defs>
+    <style>
+      .ui  { font-family: 'Inter', 'Tex Gyre Heros', Helvetica, Arial, sans-serif; }
+      .wm  { font-size: 64px; fill: #0F172A; }
+      .h1  { font-size: 66px; font-weight: 700; fill: #0F172A; letter-spacing: -1.6px; }
+      .sub { font-size: 26px; fill: #64748B; }
+      .cta { font-size: 24px; font-weight: 600; fill: #FFFFFF; }
+      .ft  { font-size: 20px; fill: #94A3B8; }
+    </style>
+  </defs>
+
+  <rect width="1920" height="1080" fill="#FFFFFF"/>
+
+  <!-- brand lockup -->
+  <g transform="translate(806,196) scale(0.86)">
+    <rect x="6"  y="14" width="88" height="20" rx="10" fill="#0F172A"/>
+    <rect x="14" y="42" width="72" height="20" rx="10" fill="#0F172A" opacity="0.60"/>
+    <rect x="22" y="70" width="56" height="20" rx="10" fill="#0F172A" opacity="0.36"/>
+  </g>
+  <text x="900" y="272" class="ui wm"><tspan font-weight="700">Snap</tspan><tspan font-weight="400">Serve</tspan></text>
+
+  <text x="960" y="470" class="ui h1" text-anchor="middle">Your AI agent is in</text>
+  <text x="960" y="548" class="ui h1" text-anchor="middle">the meeting.</text>
+
+  <text x="960" y="618" class="ui sub" text-anchor="middle">Google Meet &#183; Zoom &#183; live voice</text>
+
+  <!-- platform marks -->
+  <g transform="translate(846,672) scale(0.42)">
+    <path fill="#00832d" d="M49.5 36l8.53 9.75 11.47 7.33 2-17.02-2-16.64-11.69 6.44z"/>
+    <path fill="#0066da" d="M0 51.5V66c0 3.315 2.685 6 6 6h14.5l3-10.96-3-9.54-9.95-3z"/>
+    <path fill="#e94235" d="M20.5 0L0 20.5l10.55 3 9.95-3 2.95-9.41z"/>
+    <path fill="#2684fc" d="M20.5 20.5H0v31h20.5z"/>
+    <path fill="#00ac47" d="M82.6 8.68L69.5 19.42v33.66l13.16 10.79c1.97 1.54 4.85.135 4.85-2.37V11c0-2.535-2.945-3.925-4.91-2.32zM49.5 36v15.5H20.5V72h43c3.315 0 6-2.685 6-6V53.08z"/>
+    <path fill="#ffba00" d="M63.5 0h-43v20.5h29V36l20-16.57V6c0-3.315-2.685-6-6-6z"/>
+  </g>
+  <g transform="translate(1004,668) scale(0.148)">
+    <rect width="256" height="256" rx="56" fill="#0B5CFF"/>
+    <path fill="#FFFFFF" d="M56 100a20 20 0 0 1 20-20h68a28 28 0 0 1 28 28v48a20 20 0 0 1-20 20H84a28 28 0 0 1-28-28v-48Z"/>
+    <path fill="#FFFFFF" d="M176 114.5l25.4-18.6c4.6-3.4 11.1-.1 11.1 5.6v53c0 5.7-6.5 9-11.1 5.6L176 141.5v-27Z"/>
+  </g>
+
+  <!-- CTA -->
+  <rect x="800" y="790" width="320" height="86" rx="43" fill="#0F172A"/>
+  <text x="960" y="843" class="ui cta" text-anchor="middle">Try SnapServe</text>
+
+  <text x="960" y="960" class="ui ft" text-anchor="middle">app.snapserve.ai</text>
+</svg>
