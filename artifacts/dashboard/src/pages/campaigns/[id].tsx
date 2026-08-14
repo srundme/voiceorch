@@ -1443,14 +1443,24 @@ export default function CampaignDetailPage() {
         analysed: number;
         skipped: number;
         failed: number;
+        error?: string;
       }>(`/api/campaigns/${campaignId}/intelligence/backfill`, {
         method: "POST",
         body: JSON.stringify({ limit: 500 }),
       });
-      toast({
-        title: "Outcome analysis updated",
-        description: `${result.analysed} analysed · ${result.skipped} skipped · ${result.failed} failed (of ${result.scanned} scanned)`,
-      });
+      if (result.error && result.analysed === 0) {
+        toast({
+          title: "Analysis model unavailable",
+          description: result.error,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Outcome analysis updated",
+          description: `${result.analysed} analysed · ${result.skipped} skipped · ${result.failed} failed (of ${result.scanned} scanned)`
+            + (result.error ? ` — ${result.error}` : ""),
+        });
+      }
       await qc.invalidateQueries({ queryKey: ["getCampaignAnalytics", campaignId] });
     } catch {
       toast({ title: "Could not analyse outcomes", variant: "destructive" });

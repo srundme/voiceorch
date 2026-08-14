@@ -50,6 +50,14 @@ export {
   type DetectedIntent,
 } from "./call-intelligence-normalize.js";
 
+/** Thrown when the analysis model is missing or errors — lets callers surface why. */
+export class CallIntelligenceLlmError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "CallIntelligenceLlmError";
+  }
+}
+
 export interface AnalyzeCallIntelligenceInput {
   callId: number;
   leadId?: number | null;
@@ -255,7 +263,9 @@ export async function analyzeCallIntelligence(
   const llm = await getDispositionLLM();
   if (!llm) {
     logger.warn({ callId: input.callId }, "call-intelligence: no LLM available");
-    return null;
+    throw new CallIntelligenceLlmError(
+      "No analysis model configured. Add a managed Gemini / OpenAI / Groq / Sarvam key in platform settings.",
+    );
   }
 
   const systemPrompt = buildIntelligencePrompt({
@@ -279,8 +289,10 @@ export async function analyzeCallIntelligence(
   try {
     raw = await llm.extract(systemPrompt, schema, transcript.slice(0, 12_000));
   } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
     logger.warn({ callId: input.callId, err }, "call-intelligence: LLM extract failed");
-    return null;
+    // Surface as an error so backfill reports it instead of silently "skipping".
+    throw new CallIntelligenceLlmError(`Analysis model error: ${detail.slice(0, 200)}`);
   }
 
   const intel = normalizeIntelligence(raw, input.callSummary);
@@ -370,6 +382,8 @@ export interface BackfillCampaignIntelligenceResult {
   analysed: number;
   skipped: number;
   failed: number;
+  /** First error reason (e.g. model unavailable / billing) when failures occur. */
+  error?: string;
 }
 
 /**
@@ -411,11 +425,15 @@ export async function backfillCampaignIntelligence(
   let analysed = 0;
   let skipped = 0;
   let failed = 0;
+  let firstError: string | undefined;
+  // When the model itself is unavailable (missing key / billing), every call
+  // will fail the same way — stop early instead of retrying hundreds of times.
+  let abortAll = false;
 
   // Simple concurrency pool
   let i = 0;
   async function worker() {
-    while (i < candidates.length) {
+    while (i < candidates.length && !abortAll) {
       const idx = i++;
       const c = candidates[idx]!;
       if (!c.callId || !c.transcript?.trim()) {
@@ -440,7 +458,10 @@ export async function backfillCampaignIntelligence(
         else skipped++;
       } catch (err) {
         failed++;
+        if (!firstError) firstError = err instanceof Error ? err.message : String(err);
         logger.warn({ campaignId, callId: c.callId, err }, "call-intelligence backfill failed");
+        // Model-level failure (no key / billing / auth) repeats for every call.
+        if (err instanceof CallIntelligenceLlmError) abortAll = true;
       }
     }
   }
@@ -453,6 +474,7 @@ export async function backfillCampaignIntelligence(
     analysed,
     skipped,
     failed,
+    ...(firstError ? { error: firstError } : {}),
   };
 }
 

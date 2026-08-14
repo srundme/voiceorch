@@ -160,15 +160,24 @@ export default function CampaignAnalyticsTab({
     setBackfilling(true);
     try {
       const result = await customFetch<{
-        scanned: number; analysed: number; skipped: number; failed: number;
+        scanned: number; analysed: number; skipped: number; failed: number; error?: string;
       }>(`/api/campaigns/${campaignId}/intelligence/backfill`, {
         method: "POST",
         body: JSON.stringify({ limit: 500, force: false }),
       });
-      toast({
-        title: "Analysis updated",
-        description: `${result.analysed} analysed · ${result.skipped} skipped · ${result.failed} failed`,
-      });
+      if (result.error && result.analysed === 0) {
+        toast({
+          title: "Analysis model unavailable",
+          description: result.error,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Analysis updated",
+          description: `${result.analysed} analysed · ${result.skipped} skipped · ${result.failed} failed`
+            + (result.error ? ` — ${result.error}` : ""),
+        });
+      }
       await loadInsights(days);
       onAnalysed?.();
     } catch {
