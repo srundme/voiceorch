@@ -16,8 +16,12 @@ import {
 } from "@workspace/db";
 import { eq, and, count, sql, desc, isNotNull, inArray, ne, or } from "drizzle-orm";
 import { normalizePhone } from "../lib/phone-normalize.js";
+import { canonicalDispositionBucket, dispositionBucketSql } from "../lib/disposition/canonical.js";
 
 const router: IRouter = Router();
+
+/** Canonical disposition bucket for campaign leads — see lib/disposition/canonical. */
+const CAMPAIGN_DISPOSITION_BUCKET_SQL = dispositionBucketSql(sql`${campaignLeadsTable.disposition}`);
 
 router.use(requireAuth, clientContext);
 
@@ -146,20 +150,24 @@ router.get("/campaigns/:id/analytics", async (req, res): Promise<void> => {
   }).from(campaignLeadsTable)
     .where(eq(campaignLeadsTable.campaignId, campaignId));
 
-  // Disposition breakdown
+  // Disposition breakdown, grouped on the canonical bucket. Grouping the raw
+  // label listed the same outcome several times ("no pickup: no pickup",
+  // "not pickup: no pickup", "NOT_CONNECTED: no_answer"), which also split the
+  // slice actions across rows that each acted on a fraction of the leads.
   const dispRows = await db
-    .select({ disposition: campaignLeadsTable.disposition, cnt: count() })
+    .select({ bucket: CAMPAIGN_DISPOSITION_BUCKET_SQL, cnt: count() })
     .from(campaignLeadsTable)
     .where(and(
       eq(campaignLeadsTable.campaignId, campaignId),
       isNotNull(campaignLeadsTable.disposition),
+      sql`btrim(${campaignLeadsTable.disposition}) <> ''`,
     ))
-    .groupBy(campaignLeadsTable.disposition);
+    .groupBy(CAMPAIGN_DISPOSITION_BUCKET_SQL);
 
-  const dispositions: Array<{ label: string; count: number }> = dispRows.map(r => ({
-    label: r.disposition ?? "unknown",
-    count: Number(r.cnt),
-  }));
+  const dispositions: Array<{ label: string; count: number }> = dispRows
+    .filter(r => (r.bucket ?? "").trim() !== "")
+    .map(r => ({ label: r.bucket, count: Number(r.cnt) }))
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
 
   // Status breakdown (per callStatus value)
   const statusRows = await db
@@ -201,8 +209,11 @@ router.get("/campaigns/:id/analytics", async (req, res): Promise<void> => {
   const voicemail   = funnel?.voicemail   ?? 0;
   const pending     = funnel?.pending     ?? 0;
 
-  // successRate = booked / called (primary conversion metric)
-  const successRate    = called > 0 ? Math.round((booked / called) * 100) : 0;
+  // successRate must mean the same thing as the batch workspace card, otherwise
+  // a campaign reads 0% while its only batch reads a real number. Both are now
+  // "leads that reached a positive outcome" — booked, transferred, or interested
+  // — not bookings alone.
+  const successRate    = called > 0 ? Math.round((interested / called) * 100) : 0;
   const connectionRate = called > 0 ? Math.round((connected / called) * 100) : 0;
   const bookingRate    = connected > 0 ? Math.round((booked / connected) * 100) : 0;
   const totalCostCents = costDuration?.totalCostCents ?? 0;
@@ -506,13 +517,15 @@ router.post("/campaigns/:id/dispositions/act", async (req, res): Promise<void> =
     return;
   }
 
+  // Match the canonical bucket, not the raw string, so a slice acts on every
+  // lead the card counted regardless of how the label was spelled.
   const leads = await db
     .select()
     .from(campaignLeadsTable)
     .where(
       and(
         eq(campaignLeadsTable.campaignId, campaignId),
-        eq(campaignLeadsTable.disposition, disposition),
+        sql`${CAMPAIGN_DISPOSITION_BUCKET_SQL} = ${canonicalDispositionBucket(disposition, "")}`,
       ),
     )
     .limit(5000);

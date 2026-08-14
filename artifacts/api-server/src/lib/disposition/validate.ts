@@ -1,5 +1,6 @@
 import type { CallEvent, DispositionConfig, DispositionResult } from "./types.js";
 import { clampDispositionText, extractBarePhone, isPhoneLikeDispositionField } from "./normalize-fields.js";
+import { canonicalDispositionBucket } from "./canonical.js";
 
 interface CallStats {
   durationSec?: number;
@@ -48,19 +49,37 @@ export function validate(
   const evidence = String(out["evidence"] ?? "");
   const summary = String(out["summary"] ?? "");
 
-  // Normalize the primary back to the configured taxonomy key, tolerating
-  // casing/whitespace differences (e.g. "Intent" → "intent"). Falls back to the
-  // raw value when no taxonomy key matches (genuinely-invalid classification).
-  const matchedKey = Object.keys(cfg.taxonomy).find(
-    (k) => k.toLowerCase() === rawPrimary.toLowerCase(),
+  // Normalize the primary back to the configured taxonomy key. Matching is done
+  // on the canonical token so "NOT_CONNECTED", "not connected" and "Not-Connected"
+  // all resolve to the same configured category.
+  const taxonomyKeys = Object.keys(cfg.taxonomy);
+  const canonicalPrimary = canonicalDispositionBucket(rawPrimary, "");
+  let matchedKey = taxonomyKeys.find(
+    (k) => canonicalDispositionBucket(k, "") === canonicalPrimary,
   );
+
+  // Providers routinely put the real outcome in `sub` and something invented in
+  // `primary` (the sub enum is flat across categories, so nothing stops them).
+  // Rather than persist a category the agent never configured, adopt the
+  // category that actually owns this sub.
+  if (!matchedKey && sub) {
+    const canonicalSub = canonicalDispositionBucket(sub, "");
+    matchedKey = taxonomyKeys.find((k) =>
+      (cfg.taxonomy[k] ?? []).some((s) => canonicalDispositionBucket(s, "") === canonicalSub),
+    );
+    if (matchedKey) confidence = Math.min(confidence, 0.6);
+  }
+
   const primary = matchedKey ?? rawPrimary;
 
-  // Match the sub against the chosen category's allowed values case-insensitively,
-  // normalizing to the configured value. If it's out of list, snap to the first
-  // valid sub (keeps a non-empty sub) and cap confidence.
+  // Match the sub against the chosen category's allowed values, normalizing to
+  // the configured spelling. If it's out of list, snap to the first valid sub
+  // (keeps a non-empty sub) and cap confidence.
   const validSubs: string[] = cfg.taxonomy[primary] ?? [];
-  const matchedSub = validSubs.find((s) => s.toLowerCase() === sub.toLowerCase());
+  const canonicalSub = canonicalDispositionBucket(sub, "");
+  const matchedSub = validSubs.find(
+    (s) => canonicalDispositionBucket(s, "") === canonicalSub,
+  );
   if (matchedSub) {
     sub = matchedSub;
   } else if (!validSubs.includes(sub)) {

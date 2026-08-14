@@ -26,6 +26,12 @@ import {
   leadTimelineTable,
   type OperationalOutcome,
 } from "@workspace/db/schema";
+import {
+  canonicalDispositionBucket,
+  canonicalDispositionFromLabel,
+  normalizeDispositionToken,
+  splitDispositionLabel,
+} from "../lib/disposition/canonical.js";
 
 export type { OperationalOutcome };
 
@@ -39,6 +45,35 @@ export const DEFAULT_POSITIVE_DISPOSITIONS = new Set([
   "hot",
   "warm",
 ]);
+
+/**
+ * Leads store "primary: sub", so a straight lookup of the whole label never hit
+ * the positive set — "outcome: interested" stayed pending and success rate read
+ * 0% on batches that clearly had interested leads. Compare the canonical bucket
+ * and both raw segments instead, normalizing separator style on both sides.
+ */
+function matchesPositiveDisposition(
+  disposition: string | null,
+  positiveDispositions: Set<string>,
+): boolean {
+  if (!disposition) return false;
+
+  const normalizedSet = new Set(
+    [...positiveDispositions].flatMap((d) => [
+      normalizeDispositionToken(d),
+      canonicalDispositionBucket(d, ""),
+    ]),
+  );
+  const { primary, sub } = splitDispositionLabel(disposition);
+  const candidates = [
+    canonicalDispositionFromLabel(disposition),
+    normalizeDispositionToken(disposition),
+    normalizeDispositionToken(primary),
+    normalizeDispositionToken(sub),
+  ];
+
+  return candidates.some((c) => c !== "" && normalizedSet.has(c));
+}
 
 /**
  * Compute the correct OperationalOutcome for a lead given its current state.
@@ -78,10 +113,7 @@ export function computeOperationalOutcome(params: {
   if (hasBooking) return "booking_created";
   if (hasCompletedTransfer) return "transfer_completed";
   if (hasPendingCallback || dispositionIsCallback) return "callback_requested";
-  if (
-    dispositionIsInterested ||
-    (disposition && positiveDispositions.has(disposition.toLowerCase()))
-  ) {
+  if (dispositionIsInterested || matchesPositiveDisposition(disposition, positiveDispositions)) {
     return "interest_confirmed";
   }
   if (maxAttemptsReached && callStatus !== "connected") return "no_contact";

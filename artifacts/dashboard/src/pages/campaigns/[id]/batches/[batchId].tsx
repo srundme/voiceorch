@@ -238,8 +238,13 @@ type BatchWorkspaceKpis = {
   total: number; connected: number; failed: number; pending: number;
   callbacks: number; incoming: number; bookings: number; transfers: number;
   voicemail: number; successRate: number; transferred: number;
-  /** Lead counts per agent disposition, keyed by the taxonomy primary. */
+  /**
+   * Lead counts per agent disposition, keyed by the canonical bucket the API
+   * derives from the taxonomy plus what leads actually carry.
+   */
   dispositions?: { key: string; count: number }[];
+  /** Leads with no agent disposition, so the row reconciles with `total`. */
+  undispositioned?: number;
 };
 
 type BatchWorkspaceLead = {
@@ -287,6 +292,10 @@ function fmtDuration(s: number | null | undefined): string {
 
 function fmtRelative(iso: string): string {
   return formatDistanceToNow(new Date(iso), { addSuffix: true });
+}
+
+function titleCase(s: string): string {
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 }
 
 /** Leads store dispositions as "PRIMARY: sub" — split for two-line display. */
@@ -777,23 +786,6 @@ export default function BatchWorkspacePage() {
   // The selected slice, shared between the KPI strip and the leads table.
   const [segment, setSegment] = useState("all");
 
-  // The campaign agent's configured disposition taxonomy. Its primaries become
-  // KPI cards so an agent's own outcomes are first-class here, not buried in a
-  // filter dropdown. 404 (no config) simply yields no extra cards.
-  const agentId = header?.campaign.agentId ?? null;
-  const { data: dispConfig } = useQuery<{ taxonomy: Record<string, string[]> } | null>({
-    queryKey: ["batch-ws-dispositions", agentId],
-    enabled: agentId != null,
-    queryFn: async () => {
-      try {
-        return await apiFetch<{ taxonomy: Record<string, string[]> }>(`${BASE}/api/disposition/config/${agentId}`);
-      } catch {
-        return null;
-      }
-    },
-    staleTime: 5 * 60_000,
-  });
-
   const coreSegments: KpiSegment[] = [
     { key: "all",       label: "Total Leads", value: kpis?.total     ?? "—", icon: <Users className="h-3 w-3" />,          hint: "Every lead in this batch" },
     { key: "pending",   label: "Pending",     value: kpis?.pending   ?? "—", icon: <Clock className="h-3 w-3" />,          color: "text-muted-foreground", hint: "Not called yet" },
@@ -805,22 +797,30 @@ export default function BatchWorkspacePage() {
     { key: "failed",    label: "Failed",      value: kpis?.failed    ?? "—", icon: <XCircle className="h-3 w-3" />,        color: "text-red-600 dark:text-red-500", hint: "Failed, busy, or no pickup" },
   ];
 
-  // Union of configured taxonomy and dispositions actually seen on leads, so a
-  // card appears at 0 for a configured outcome and legacy values aren't hidden.
-  const dispositionCounts = new Map((kpis?.dispositions ?? []).map(d => [d.key, d.count]));
-  const dispositionKeys = [
-    ...Object.keys(dispConfig?.taxonomy ?? {}),
-    ...[...dispositionCounts.keys()].filter(k => !(k in (dispConfig?.taxonomy ?? {}))),
-  ];
-
-  const dispositionSegments: KpiSegment[] = dispositionKeys.map(key => ({
-    key:   `${DISPOSITION_SEGMENT}${key}`,
-    label: key,
-    value: dispositionCounts.get(key) ?? 0,
+  // The API already merges the configured taxonomy with what leads actually
+  // carry, into one canonical bucket per outcome. Re-deriving that here is what
+  // produced duplicate cards for the same outcome, so just render what it sends.
+  const dispositionSegments: KpiSegment[] = (kpis?.dispositions ?? []).map(d => ({
+    key:   `${DISPOSITION_SEGMENT}${d.key}`,
+    label: titleCase(d.key),
+    value: d.count,
     icon:  <Tag className="h-3 w-3" />,
     color: "text-amber-600 dark:text-amber-400",
-    hint:  `Leads dispositioned as "${key}"`,
+    hint:  `Leads dispositioned as "${d.key}"`,
   }));
+
+  // Without this card the disposition row silently drops every lead the agent
+  // never labelled, so the row never adds up to the batch total.
+  if ((kpis?.undispositioned ?? 0) > 0) {
+    dispositionSegments.push({
+      key:   `${DISPOSITION_SEGMENT}__undispositioned__`,
+      label: "No disposition",
+      value: kpis?.undispositioned ?? 0,
+      icon:  <Tag className="h-3 w-3" />,
+      color: "text-muted-foreground",
+      hint:  "Calls that never produced an agent disposition",
+    });
+  }
 
   const segmentLabel =
     [...coreSegments, ...dispositionSegments].find(s => s.key === segment)?.label ?? "All leads";

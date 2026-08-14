@@ -636,7 +636,9 @@ function CallEndedCard({ summary }: { summary: CallEndedSummary }) {
 
 function ExecLogRow({ entry }: { entry: ExecutionLogEvent }) {
   const [expanded, setExpanded] = useState(false);
-  const ts = new Date(entry.ts).toISOString().replace("T", " ").substring(11, 23);
+  // Local time, matching the header and Call Details panel. toISOString() here
+  // rendered UTC, so an IST call started at 18:33 logged its first event at 13:03.
+  const ts = format(parseISO(entry.ts), "HH:mm:ss.SSS");
   const compCls = COMPONENT_COLORS[entry.component] ?? "bg-gray-500/15 text-gray-700 dark:text-gray-400 border-gray-500/25";
   const dirCls  = DIRECTION_COLORS[entry.direction] ?? "bg-gray-500/15 text-gray-700 dark:text-gray-400 border-gray-500/25";
   const hasPayload = !!(entry.requestPayload || entry.responsePayload || entry.metadata);
@@ -1511,7 +1513,7 @@ export function CallDetailContent({
           </Card>
           <Card className="border-0 shadow-none bg-transparent">
             <CardContent className="p-2.5">
-              <p className="text-[9px] text-muted-foreground/50 uppercase tracking-wider">Cost</p>
+              <p className="text-[9px] text-muted-foreground/50 uppercase tracking-wider">Platform fee</p>
               <p className="text-xs font-mono text-foreground/70">
                 {costCents > 0 ? `₹${(costCents / 100).toFixed(2)}` : "—"}
               </p>
