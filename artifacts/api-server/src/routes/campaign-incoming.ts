@@ -38,6 +38,12 @@ router.get("/campaigns/:id/incoming/metrics", async (req, res): Promise<void> =>
     res.status(404).json({ error: "Not found" }); return;
   }
 
+  // Link any inbound calls from this campaign's lead numbers that haven't been
+  // recorded yet (idempotent) — covers calls received before this feature and
+  // any missed live matches.
+  const { syncCampaignIncomingCalls } = await import("../services/incoming-call-match.js");
+  await syncCampaignIncomingCalls(campaignId, userId);
+
   const [m] = await db.select({
     unreviewed: sql<number>`count(*) filter (where ${incomingCallsTable.incomingCallStatus} = 'unreviewed')::int`,
     today:      sql<number>`count(*) filter (where date(${incomingCallsTable.createdAt} at time zone 'UTC') = current_date)::int`,

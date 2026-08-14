@@ -3567,6 +3567,35 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
             }
           }
 
+          // 2c. Inbound call → campaign matching ("who called us back?").
+          // Campaign dials carry campaignLeadId; anything else inbound from a
+          // known lead number gets linked into the campaign Incoming tab.
+          if (
+            !session.campaignLeadId &&
+            ag.userId &&
+            call.fromNumber &&
+            !call.fromNumber.startsWith("webcall") &&
+            !call.toNumber.startsWith("webcall")
+          ) {
+            let inboundDir = "inbound";
+            try {
+              const md = call.metadata ? JSON.parse(call.metadata) as Record<string, unknown> : {};
+              if (typeof md["direction"] === "string") inboundDir = md["direction"];
+            } catch { /* ignore */ }
+            if (inboundDir === "inbound") {
+              try {
+                const { matchInboundCallToCampaigns } = await import("../services/incoming-call-match.js");
+                await matchInboundCallToCampaigns({
+                  callId: session.callId,
+                  userId: ag.userId,
+                  callerPhone: call.fromNumber,
+                });
+              } catch (matchErr) {
+                logger.warn({ sessionId, matchErr }, "Inbound campaign match failed");
+              }
+            }
+          }
+
           // 3. Evaluate call success against agent's success criteria (if configured)
           const agentCfgForEval = (ag.agentConfig ?? {}) as Record<string, unknown>;
           const successCriteria = agentCfgForEval["successCriteria"] as string | undefined;
