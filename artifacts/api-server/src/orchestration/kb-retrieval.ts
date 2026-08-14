@@ -283,6 +283,7 @@ export function buildFairDump(
  * skipFts (pure non-Latin, e.g. Tamil-only) turns are VECTOR-ONLY: the turn
  * cannot produce anything until the query embed returns. Measured
  * gemini-embedding-001 latency for Tamil queries (2026-07-10, n=20):
+ * (historical note — embeddings now use OpenAI text-embedding-3-small @ 768d)
  * p50=510ms, p90=548ms, p99=1112ms — a 200ms budget meant the live semantic
  * path lost to the dump fallback on essentially every Tamil turn (call 2159:
  * 8/8 turns served the truncated dump). Default 800ms = p90 + vector-search
@@ -463,7 +464,7 @@ function kbCacheSet(key: string, text: string, source: KbRetrievalSource, contri
  *
  * Strategy:
  * - Non-empty `query`: HYBRID retrieval — semantic vector search (pgvector
- *   cosine over gemini-embedding-001 vectors, multilingual) fused with
+ *   cosine over text-embedding-3-small vectors, multilingual) fused with
  *   PostgreSQL FTS via reciprocal-rank fusion. Vector search degrades to []
  *   on any failure (latch off, no key, embed timeout), leaving pure FTS —
  *   i.e. exactly the pre-vector behavior. A total DB failure returns "".

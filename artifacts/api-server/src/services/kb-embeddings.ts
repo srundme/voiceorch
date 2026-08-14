@@ -1,9 +1,9 @@
 /**
  * KB embedding service — multilingual semantic vectors for knowledge_entries.
  *
- * Model: gemini-embedding-001 with outputDimensionality=768 (MRL truncation).
- * Truncated MRL vectors are NOT unit-norm, so every vector is re-normalized
- * before storage/search (cosine ops assume comparable norms).
+ * Model: OpenAI text-embedding-3-small with dimensions=768.
+ * (Sarvam has no embeddings API; Gemini embeddings were removed.)
+ * Vectors are L2-normalized before storage/search so cosine ops stay stable.
  *
  * Design invariants:
  * - `vectorReady` capability latch: probed once at startup. When the DB lacks
@@ -23,17 +23,18 @@
  *   and the reason is exposed to the dashboard. The breaker half-opens after
  *   EMBED_BLOCK_RETRY_MS so a fixed key/billing issue self-heals.
  */
+import OpenAI from "openai";
 import { db, knowledgeEntriesTable, platformSettingsTable } from "@workspace/db";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
 
-export const KB_EMBEDDING_MODEL = "gemini-embedding-001";
+export const KB_EMBEDDING_MODEL = "text-embedding-3-small";
 export const KB_EMBEDDING_DIMS = 768;
 
 const EMBED_QUERY_TIMEOUT_MS = Number(process.env["KB_EMBED_QUERY_TIMEOUT_MS"] ?? 1500);
 const EMBED_BATCH_TIMEOUT_MS = 30_000;
 const EMBED_BATCH_SIZE = 32;
-/** gemini-embedding-001 input cap is 2048 tokens — stay comfortably under it. */
+/** text-embedding-3-small supports 8191 tokens — stay comfortably under it. */
 const EMBED_DOC_MAX_CHARS = 6000;
 const QUERY_CACHE_MAX = 300;
 
@@ -83,19 +84,13 @@ let embedBlock: KbEmbedBlock | null = null;
 let consecutiveFailures = 0;
 
 class KbEmbedHttpError extends Error {
-  constructor(readonly status: number, readonly detail: string) {
-    super(`Gemini embed HTTP ${status}: ${detail}`);
-    this.name = "KbEmbedHttpError";
+  status: number;
+  detail: string;
+  constructor(status: number, detail: string) {
+    super(`embed_http_${status}`);
+    this.status = status;
+    this.detail = detail;
   }
-}
-
-/** 401/403 = key revoked or billing disabled, 429 = quota exhausted. None of
- * these clear on their own, so retrying every 10 min just burns the API. */
-function fatalReason(err: unknown): string | null {
-  if (!(err instanceof KbEmbedHttpError)) return null;
-  if (err.status === 401 || err.status === 403) return "Embedding API key rejected (check key and Google Cloud billing)";
-  if (err.status === 429) return "Embedding API quota exhausted";
-  return null;
 }
 
 function openEmbedBlock(reason: string, detail?: string): void {
@@ -116,35 +111,51 @@ export function getKbEmbedBlock(): KbEmbedBlock | null {
   return embedBlock;
 }
 
-/** True while the breaker is open and the retry window has not elapsed. */
 function embedBlocked(): boolean {
   if (!embedBlock) return false;
   if (Date.now() - embedBlock.at >= EMBED_BLOCK_RETRY_MS) {
     logger.info({ reason: embedBlock.reason }, "KB embedding breaker half-open — retrying provider");
     embedBlock = null;
-    cachedKey = null; // pick up a freshly configured key on the retry
+    consecutiveFailures = 0;
     return false;
   }
   return true;
 }
 
-/* ── Gemini key resolution (managed key → env fallback) ─────────────────── */
+function fatalReason(err: unknown): string | null {
+  if (err instanceof KbEmbedHttpError) {
+    if (err.status === 401 || err.status === 403) return "Embedding API key rejected";
+    if (err.status === 429) return "Embedding quota exhausted";
+    if (err.status === 402) return "Embedding billing disabled";
+  }
+  const msg = String(err).toLowerCase();
+  if (msg.includes("incorrect api key") || msg.includes("invalid_api_key")) return "Embedding API key rejected";
+  if (msg.includes("insufficient_quota") || msg.includes("billing")) return "Embedding quota / billing issue";
+  return null;
+}
+
+/* ── OpenAI key resolution (managed key → env fallback) ─────────────────── */
 
 let cachedKey: { value: string | null; at: number } | null = null;
 
-export async function getGeminiKey(): Promise<string | null> {
+export async function getOpenAiEmbedKey(): Promise<string | null> {
   if (cachedKey && Date.now() - cachedKey.at < 5 * 60_000) return cachedKey.value;
   let key: string | null = null;
   try {
     const [row] = await db
       .select({ value: platformSettingsTable.value })
       .from(platformSettingsTable)
-      .where(eq(platformSettingsTable.key, "managed_gemini_key"));
+      .where(eq(platformSettingsTable.key, "managed_openai_key"));
     key = (row?.value ?? "").trim() || null;
   } catch { /* fall through to env */ }
-  if (!key) key = (process.env["GEMINI_API_KEY"] ?? "").trim() || null;
+  if (!key) key = (process.env["OPENAI_API_KEY"] ?? "").trim() || null;
   cachedKey = { value: key, at: Date.now() };
   return key;
+}
+
+/** @deprecated Gemini embeddings removed — kept as alias for any leftover imports. */
+export async function getGeminiKey(): Promise<string | null> {
+  return null;
 }
 
 /* ── Embedding calls ─────────────────────────────────────────────────────── */
@@ -157,60 +168,48 @@ function renormalize(values: number[]): number[] {
   return values.map((v) => v / norm);
 }
 
-type EmbedTaskType = "RETRIEVAL_QUERY" | "RETRIEVAL_DOCUMENT";
-
 /**
- * Batch-embed texts via gemini-embedding-001. Returns null when no key is
- * configured; throws on API/network errors (caller decides fallback).
+ * Batch-embed texts via OpenAI text-embedding-3-small (768-d).
+ * Returns null when no key is configured; throws on API/network errors.
  */
 async function callBatchEmbed(
   texts: string[],
-  taskType: EmbedTaskType,
   timeoutMs: number,
 ): Promise<number[][] | null> {
-  const key = await getGeminiKey();
+  const key = await getOpenAiEmbedKey();
   if (!key) return null;
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${KB_EMBEDDING_MODEL}:batchEmbedContents`;
-  const body = {
-    requests: texts.map((t) => ({
-      model: `models/${KB_EMBEDDING_MODEL}`,
-      content: { parts: [{ text: t }] },
-      taskType,
-      outputDimensionality: KB_EMBEDDING_DIMS,
-    })),
-  };
-  const resp = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(timeoutMs),
-  });
-  if (!resp.ok) {
-    const detail = (await resp.text().catch(() => "")).slice(0, 300);
-    throw new KbEmbedHttpError(resp.status, detail);
-  }
-  const json = (await resp.json()) as { embeddings?: Array<{ values?: number[] }> };
-  const embs = json.embeddings;
-  if (!Array.isArray(embs) || embs.length !== texts.length) {
-    throw new Error(`Gemini embed returned ${embs?.length ?? 0} embeddings for ${texts.length} inputs`);
-  }
-  return embs.map((e) => {
-    const v = e.values;
-    if (!Array.isArray(v) || v.length !== KB_EMBEDDING_DIMS) {
-      throw new Error(`Gemini embed returned ${v?.length ?? 0} dims (expected ${KB_EMBEDDING_DIMS})`);
+
+  const client = new OpenAI({ apiKey: key, timeout: timeoutMs });
+  try {
+    const resp = await client.embeddings.create({
+      model: KB_EMBEDDING_MODEL,
+      input: texts,
+      dimensions: KB_EMBEDDING_DIMS,
+    });
+    const byIndex = new Map(resp.data.map((d) => [d.index, d.embedding]));
+    if (byIndex.size !== texts.length) {
+      throw new Error(`OpenAI embed returned ${byIndex.size} embeddings for ${texts.length} inputs`);
     }
-    return renormalize(v);
-  });
+    return texts.map((_, i) => {
+      const v = byIndex.get(i);
+      if (!Array.isArray(v) || v.length !== KB_EMBEDDING_DIMS) {
+        throw new Error(`OpenAI embed returned ${v?.length ?? 0} dims (expected ${KB_EMBEDDING_DIMS})`);
+      }
+      return renormalize(v);
+    });
+  } catch (err) {
+    const status = (err as { status?: number })?.status;
+    if (typeof status === "number") {
+      throw new KbEmbedHttpError(status, String((err as Error).message ?? err).slice(0, 300));
+    }
+    throw err;
+  }
 }
 
 /* ── Query embedding (per-turn hot path — cached, time-budgeted, non-fatal) ── */
 
 const queryCache = new Map<string, number[]>();
 
-/* Rolling query-embed latency stats: keeps the last N latencies and logs
- * p50/p90/p99 every STATS_LOG_EVERY embeds, so the per-turn retrieval budget
- * (KB_TURN_RETRIEVAL_BUDGET_SKIPFTS_MS — chosen from these numbers) can be
- * re-validated from production logs instead of one-off measurement scripts. */
 const EMBED_LATENCY_WINDOW = 200;
 const EMBED_STATS_LOG_EVERY = 25;
 const embedLatencies: number[] = [];
@@ -237,31 +236,33 @@ function recordEmbedLatency(ms: number, ok: boolean): void {
  */
 export async function embedKbQuery(query: string): Promise<number[] | null> {
   if (!vectorReady) return null;
-  // Skip the call entirely while the breaker is open: a dead provider would
-  // otherwise add the full query timeout to every conversational turn.
   if (embedBlocked()) return null;
   const text = query.trim().slice(0, 2000);
   if (!text) return null;
   const cacheKey = text.toLowerCase();
   const hit = queryCache.get(cacheKey);
   if (hit) {
-    // refresh LRU position
     queryCache.delete(cacheKey);
     queryCache.set(cacheKey, hit);
     return hit;
   }
+
   const t0 = Date.now();
   try {
-    const vecs = await callBatchEmbed([text], "RETRIEVAL_QUERY", EMBED_QUERY_TIMEOUT_MS);
-    const vec = vecs?.[0];
-    recordEmbedLatency(Date.now() - t0, !!vec);
-    if (!vec) return null;
-    queryCache.set(cacheKey, vec);
+    const vecs = await callBatchEmbed([text], EMBED_QUERY_TIMEOUT_MS);
+    const ms = Date.now() - t0;
+    if (!vecs?.[0]) {
+      recordEmbedLatency(ms, false);
+      return null;
+    }
+    recordEmbedLatency(ms, true);
+    clearEmbedBlock();
+    queryCache.set(cacheKey, vecs[0]);
     if (queryCache.size > QUERY_CACHE_MAX) {
       const oldest = queryCache.keys().next().value;
       if (oldest !== undefined) queryCache.delete(oldest);
     }
-    return vec;
+    return vecs[0];
   } catch (err) {
     recordEmbedLatency(Date.now() - t0, false);
     const fatal = fatalReason(err);
@@ -319,19 +320,43 @@ export function kickKbEmbedWorker(): void {
   })();
 }
 
+/**
+ * Drop vectors from a previous embedding model (e.g. gemini-embedding-001)
+ * so the worker re-embeds them with the current model. Mixed spaces would
+ * poison cosine search.
+ */
+async function invalidateStaleEmbeddings(): Promise<void> {
+  try {
+    const r = await db.execute(sql`
+      UPDATE knowledge_entries
+      SET embedding = NULL, embedding_model = NULL, embedded_at = NULL
+      WHERE embedding IS NOT NULL
+        AND (embedding_model IS DISTINCT FROM ${KB_EMBEDDING_MODEL})
+      RETURNING id
+    `);
+    const n = (r as { rows?: unknown[] }).rows?.length ?? 0;
+    if (n > 0) {
+      logger.info({ count: n, model: KB_EMBEDDING_MODEL }, "KB: invalidated stale embeddings for model switch");
+    }
+  } catch (err) {
+    logger.warn({ err: String(err) }, "KB stale-embedding invalidation failed");
+  }
+}
+
 /* ── Startup maintenance (probe + periodic re-kick + stale-source sweep) ── */
 
 /**
  * Called once at server startup AFTER migrations run:
- * - probes the pgvector capability latch, then kicks the embed worker to
- *   back-fill any rows left unembedded (e.g. pre-existing KBs, crashed runs);
- * - re-kicks every 10 min so transient Gemini outages self-heal;
- * - sweeps knowledge_sources stuck in a non-terminal status (e.g. an async
- *   PDF ingest orphaned by a server restart) to "failed" after 15 min.
+ * - probes the pgvector capability latch, invalidates foreign-model vectors,
+ *   then kicks the embed worker to back-fill;
+ * - re-kicks every 10 min so transient provider outages self-heal;
+ * - sweeps knowledge_sources stuck in a non-terminal status to "failed" after 15 min.
  */
 export function startKbEmbedMaintenance(): void {
-  void probeKbVectorSupport().then((ready) => {
-    if (ready) kickKbEmbedWorker();
+  void probeKbVectorSupport().then(async (ready) => {
+    if (!ready) return;
+    await invalidateStaleEmbeddings();
+    kickKbEmbedWorker();
   });
   const rekick = setInterval(() => {
     if (vectorReady) kickKbEmbedWorker();
@@ -375,7 +400,7 @@ async function embedMissingEntries(): Promise<void> {
     if (!rows.length) return;
 
     const texts = rows.map((r) => buildEmbedText(r));
-    const vecs = await callBatchEmbed(texts, "RETRIEVAL_DOCUMENT", EMBED_BATCH_TIMEOUT_MS);
+    const vecs = await callBatchEmbed(texts, EMBED_BATCH_TIMEOUT_MS);
     if (!vecs) {
       openEmbedBlock("No embedding API key configured");
       return;
@@ -386,8 +411,6 @@ async function embedMissingEntries(): Promise<void> {
     let updated = 0;
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i]!;
-      // Guard against a concurrent content edit: only fill the vector if the
-      // row is still unembedded AND the content is still what we embedded.
       const res = await db
         .update(knowledgeEntriesTable)
         .set({ embedding: vecs[i]!, embeddingModel: KB_EMBEDDING_MODEL, embeddedAt: now })
@@ -402,6 +425,6 @@ async function embedMissingEntries(): Promise<void> {
     logger.info({ batch: rows.length, updated }, "KB embed worker: batch embedded");
 
     if (rows.length < EMBED_BATCH_SIZE) return;
-    await new Promise((r) => setTimeout(r, 250)); // gentle pacing between batches
+    await new Promise((r) => setTimeout(r, 250));
   }
 }

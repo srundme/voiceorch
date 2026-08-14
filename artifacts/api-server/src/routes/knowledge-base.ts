@@ -7,7 +7,7 @@ import { logger } from "../lib/logger.js";
 import { ingestKbTextEntries, type KbEntryInput } from "../services/kb-ingest.js";
 import { getKbEmbedBlock, isKbVectorReady, kickKbEmbedWorker } from "../services/kb-embeddings.js";
 import { kickKrutrimSummaryWorker } from "../services/kb-source-summary.js";
-import { extractPdfChunksWithGemini } from "../services/kb-pdf-extract.js";
+import { extractPdfChunksWithLlm } from "../services/kb-pdf-extract.js";
 import {
   buildKnowledgeSearchPayload,
   isPureNonLatinQuery,
@@ -645,16 +645,15 @@ router.post("/knowledge-sources/upload", requireAuth, clientContext, upload.sing
 
   const isPdf = ext === "pdf" || file.mimetype === "application/pdf";
   if (isPdf) {
-    // PDFs go through Gemini multimodal understanding (text + tables + image
-    // descriptions), which can take tens of seconds — so this path is ASYNC:
-    // respond immediately with status "processing"; the dashboard already
-    // polls processing sources (website crawl uses the same lifecycle).
-    // Any Gemini failure falls back to the legacy pdf-parse extraction.
+    // PDFs go through pdf-parse + Sarvam GLM 5.2 semantic chunking, which can
+    // take tens of seconds — so this path is ASYNC: respond immediately with
+    // status "processing"; the dashboard already polls processing sources.
+    // Any LLM failure falls back to the legacy fixed-size pdf-parse chunks.
     res.status(201).json({ ...source, entries: [] });
     void (async () => {
       try {
-        let entries = await extractPdfChunksWithGemini(file.buffer, file.originalname);
-        let via = "gemini-multimodal";
+        let entries = await extractPdfChunksWithLlm(file.buffer, file.originalname);
+        let via = "sarvam-glm5.2";
         if (!entries?.length) {
           via = "pdf-parse-fallback";
           const text = await extractDocumentText(file);
