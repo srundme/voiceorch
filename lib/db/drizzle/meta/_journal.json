@@ -757,6 +757,13 @@
       "when": 1791600007000,
       "tag": "0107_partner_domains",
       "breakpoints": true
+    },
+    {
+      "idx": 108,
+      "version": "7",
+      "when": 1791600008000,
+      "tag": "0108_partner_login_branding",
+      "breakpoints": true
     }
   ]
 }

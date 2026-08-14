@@ -33,6 +33,10 @@ export interface PartnerBrandPublic {
   partnerId: number;
   companyName: string;
   logoUrl: string | null;
+  loginTitle: string | null;
+  loginSubtitle: string | null;
+  /** Partner white-label hosts always use email/password (no Google). */
+  authMode: "password";
   slug: string | null;
   subdomainHost: string | null;
   customDomain: string | null;
@@ -51,6 +55,8 @@ function toBrand(row: {
   id: number;
   companyName: string;
   logoToken: string | null;
+  loginTitle: string | null;
+  loginSubtitle: string | null;
   slug: string | null;
   customDomain: string | null;
   customDomainStatus: string | null;
@@ -60,6 +66,9 @@ function toBrand(row: {
     partnerId: row.id,
     companyName: row.companyName,
     logoUrl: logoUrlFor(row.logoToken),
+    loginTitle: row.loginTitle,
+    loginSubtitle: row.loginSubtitle,
+    authMode: "password",
     slug: row.slug,
     subdomainHost: row.slug ? subdomainHostForSlug(row.slug) : null,
     customDomain: row.customDomain,
@@ -80,6 +89,8 @@ export async function resolvePartnerByHost(rawHost: string): Promise<PartnerBran
           id: partnersTable.id,
           companyName: partnersTable.companyName,
           logoToken: partnersTable.logoToken,
+          loginTitle: partnersTable.loginTitle,
+          loginSubtitle: partnersTable.loginSubtitle,
           slug: partnersTable.slug,
           customDomain: partnersTable.customDomain,
           customDomainStatus: partnersTable.customDomainStatus,
@@ -97,6 +108,8 @@ export async function resolvePartnerByHost(rawHost: string): Promise<PartnerBran
       id: partnersTable.id,
       companyName: partnersTable.companyName,
       logoToken: partnersTable.logoToken,
+      loginTitle: partnersTable.loginTitle,
+      loginSubtitle: partnersTable.loginSubtitle,
       slug: partnersTable.slug,
       customDomain: partnersTable.customDomain,
       customDomainStatus: partnersTable.customDomainStatus,

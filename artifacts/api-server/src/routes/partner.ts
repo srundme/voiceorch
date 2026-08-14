@@ -16,6 +16,7 @@
  *  - POST        /partner/domain/custom/verify
  *  - GET  /public/partner-branding?host=      → public branding by Host (pre-login)
  *  - GET  /partner/clients                    → clients with balance/rate/month usage
+ *  - POST /partner/clients                    → provision client (email + password)
  *  - PATCH /partner/clients/:clerkId          → set per-client rate and/or allowAgentEdit
  *  - POST /partner/clients/:clerkId/transfer  → move balance partner → client
  *  - GET  /partner/clients/:clerkId/calls     → recent calls for one client
@@ -46,6 +47,7 @@ import { and, desc, eq, gte, inArray, isNull, ne, sql, count } from "drizzle-orm
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { sendBrevoEmail } from "../services/brevo.js";
 import { getSelfBaseUrl } from "../lib/app-domain.js";
+import { hashPassword } from "../lib/password.js";
 import {
   getPartnerCnameTarget,
   getPartnerSubdomainRoot,
@@ -100,6 +102,28 @@ async function getPartnerForUser(clerkId: string) {
 
 function logoPathFor(partner: { logoToken: string | null }): string | null {
   return partner.logoToken ? `/api/public/partner-logos/${partner.logoToken}` : null;
+}
+
+function generateUserApiKey() {
+  return `vok_${randomBytes(24).toString("hex")}`;
+}
+function generateUserOrgKey() {
+  return `voo_${randomBytes(24).toString("hex")}`;
+}
+
+/** Preferred public login URL for this partner (custom → subdomain → app). */
+function partnerLoginBaseUrl(partner: {
+  slug: string | null;
+  customDomain: string | null;
+  customDomainStatus: string | null;
+}): string {
+  if (partner.customDomain && partner.customDomainStatus === "active") {
+    return `https://${partner.customDomain}`;
+  }
+  if (partner.slug) {
+    return `https://${subdomainHostForSlug(partner.slug)}`;
+  }
+  return (process.env["APP_BASE_URL"]?.replace(/\/$/, "") || getSelfBaseUrl());
 }
 
 /** Require the signed-in user to be an ACTIVE partner; 403 otherwise. */
@@ -264,6 +288,9 @@ router.get("/partner/me", requireAuth, async (req, res): Promise<void> => {
       baseRateCentsPerMin: partner.baseRateCentsPerMin,
       defaultClientRateCentsPerMin: partner.defaultClientRateCentsPerMin,
       logoUrl: logoPathFor(partner),
+      loginTitle: partner.loginTitle ?? null,
+      loginSubtitle: partner.loginSubtitle ?? null,
+      loginUrl: `${partnerLoginBaseUrl(partner)}/sign-in`,
       slug: partner.slug ?? null,
       subdomainHost: partner.slug ? subdomainHostForSlug(partner.slug) : null,
       subdomainRoot: getPartnerSubdomainRoot(),
@@ -289,9 +316,11 @@ router.patch("/partner/me", requireAuth, async (req, res): Promise<void> => {
     const partner = await requireActivePartner(req, res);
     if (!partner) return;
 
-    const { companyName, defaultClientRateCentsPerMin } = (req.body ?? {}) as {
+    const { companyName, defaultClientRateCentsPerMin, loginTitle, loginSubtitle } = (req.body ?? {}) as {
       companyName?: string;
       defaultClientRateCentsPerMin?: number;
+      loginTitle?: string | null;
+      loginSubtitle?: string | null;
     };
 
     const set: Record<string, unknown> = {};
@@ -313,6 +342,20 @@ router.patch("/partner/me", requireAuth, async (req, res): Promise<void> => {
       }
       set["defaultClientRateCentsPerMin"] = rate;
     }
+    if (loginTitle !== undefined) {
+      if (loginTitle === null || String(loginTitle).trim() === "") {
+        set["loginTitle"] = null;
+      } else {
+        set["loginTitle"] = String(loginTitle).trim().slice(0, 120);
+      }
+    }
+    if (loginSubtitle !== undefined) {
+      if (loginSubtitle === null || String(loginSubtitle).trim() === "") {
+        set["loginSubtitle"] = null;
+      } else {
+        set["loginSubtitle"] = String(loginSubtitle).trim().slice(0, 280);
+      }
+    }
     if (Object.keys(set).length === 0) {
       res.status(400).json({ error: "Nothing to update" });
       return;
@@ -326,6 +369,8 @@ router.patch("/partner/me", requireAuth, async (req, res): Promise<void> => {
     res.json({
       companyName: updated!.companyName,
       defaultClientRateCentsPerMin: updated!.defaultClientRateCentsPerMin,
+      loginTitle: updated!.loginTitle ?? null,
+      loginSubtitle: updated!.loginSubtitle ?? null,
     });
   } catch (err) {
     req.log.error({ err }, "partner/me PATCH failed");
@@ -605,6 +650,197 @@ router.delete("/partner/domain/custom", requireAuth, async (req, res): Promise<v
 });
 
 /* ─── Clients ──────────────────────────────────────────────────────────────── */
+
+function clientWelcomeEmailHtml(opts: {
+  companyName: string;
+  clientName: string;
+  email: string;
+  password: string;
+  loginUrl: string;
+}): string {
+  return `<!DOCTYPE html><html><body style="font-family:system-ui,sans-serif;background:#f6f7fb;padding:24px;">
+  <div style="max-width:520px;margin:0 auto;background:#fff;border-radius:12px;padding:28px;border:1px solid #e8eaf0;">
+    <h1 style="font-size:20px;margin:0 0 12px;">Your ${opts.companyName} account is ready</h1>
+    <p style="color:#444;line-height:1.6;">
+      Hi ${opts.clientName}, ${opts.companyName} created a workspace for you. Sign in with the credentials below:
+    </p>
+    <div style="background:#f6f7fb;border-radius:8px;padding:14px 16px;margin:18px 0;font-size:14px;line-height:1.7;">
+      <div><strong>Email:</strong> ${opts.email}</div>
+      <div><strong>Password:</strong> ${opts.password}</div>
+    </div>
+    <p style="margin:28px 0;">
+      <a href="${opts.loginUrl}" style="background:#0f172a;color:#fff;text-decoration:none;padding:12px 24px;border-radius:8px;display:inline-block;">
+        Sign in
+      </a>
+    </p>
+    <p style="color:#888;font-size:12px;line-height:1.5;">
+      For security, change your password after your first sign-in if your administrator asked you to.
+    </p>
+  </div>
+</body></html>`;
+}
+
+/**
+ * Provision a managed client with email + password. They sign in on the
+ * partner's white-label gateway (no Google, no public self-signup).
+ */
+router.post("/partner/clients", requireAuth, async (req, res): Promise<void> => {
+  try {
+    const partner = await requireActivePartner(req, res);
+    if (!partner) return;
+
+    const { email, password, name, rateCentsPerMin, sendCredentials } = (req.body ?? {}) as {
+      email?: string;
+      password?: string;
+      name?: string;
+      rateCentsPerMin?: number;
+      sendCredentials?: boolean;
+    };
+
+    const cleanEmail = String(email ?? "").trim().toLowerCase();
+    if (!cleanEmail || !cleanEmail.includes("@") || cleanEmail.length > 200) {
+      res.status(400).json({ error: "Valid email address is required" });
+      return;
+    }
+    const pwd = String(password ?? "");
+    if (pwd.length < 8) {
+      res.status(400).json({ error: "Password must be at least 8 characters" });
+      return;
+    }
+
+    let rate = partner.defaultClientRateCentsPerMin;
+    if (rateCentsPerMin !== undefined && rateCentsPerMin !== null) {
+      rate = Number(rateCentsPerMin);
+      if (!Number.isInteger(rate) || rate < partner.baseRateCentsPerMin || rate > MAX_RATE_CENTS_PER_MIN) {
+        res.status(400).json({
+          error: `Rate must be an integer between your base rate (${fmtInr(partner.baseRateCentsPerMin)}/min) and ${fmtInr(MAX_RATE_CENTS_PER_MIN)}/min`,
+        });
+        return;
+      }
+    }
+
+    const sub = `email:${cleanEmail}`;
+    const [existing] = await db
+      .select({
+        id: usersTable.id,
+        clerkId: usersTable.clerkId,
+        partnerId: usersTable.partnerId,
+        status: usersTable.status,
+      })
+      .from(usersTable)
+      .where(eq(usersTable.clerkId, sub))
+      .limit(1);
+
+    if (existing && existing.status !== "deleted") {
+      if (existing.partnerId === partner.id) {
+        res.status(409).json({ error: "This client already exists in your account" });
+        return;
+      }
+      if (existing.partnerId) {
+        res.status(409).json({ error: "This email is already linked to another partner" });
+        return;
+      }
+      const otherPartner = await getPartnerForUser(existing.clerkId);
+      if (otherPartner) {
+        res.status(409).json({ error: "This email belongs to a partner account" });
+        return;
+      }
+      res.status(409).json({ error: "An account with that email already exists. Ask them to accept an invite instead." });
+      return;
+    }
+
+    // Also block google-only accounts with the same email from being dual-created silently.
+    const [emailTaken] = await db
+      .select({ clerkId: usersTable.clerkId, partnerId: usersTable.partnerId, status: usersTable.status })
+      .from(usersTable)
+      .where(and(eq(usersTable.email, cleanEmail), ne(usersTable.clerkId, sub)))
+      .limit(1);
+    if (emailTaken && emailTaken.status !== "deleted") {
+      res.status(409).json({ error: "An account with that email already exists" });
+      return;
+    }
+
+    const displayName = (name ?? "").trim().slice(0, 80) || cleanEmail.split("@")[0]!;
+    const passwordHash = await hashPassword(pwd);
+
+    let user: typeof usersTable.$inferSelect;
+    if (existing) {
+      [user] = await db
+        .update(usersTable)
+        .set({
+          name: displayName,
+          email: cleanEmail,
+          passwordHash,
+          status: "active",
+          suspendedAt: null,
+          suspendedReason: null,
+          partnerId: partner.id,
+          partnerRateCentsPerMin: rate,
+          partnerAllowAgentEdit: true,
+          walletBalanceCents: 0,
+          freeCreditsGranted: true,
+          onboardingCompleted: false,
+        })
+        .where(eq(usersTable.id, existing.id))
+        .returning();
+    } else {
+      [user] = await db
+        .insert(usersTable)
+        .values({
+          clerkId: sub,
+          email: cleanEmail,
+          name: displayName,
+          passwordHash,
+          walletBalanceCents: 0,
+          freeCreditsGranted: true,
+          apiKey: generateUserApiKey(),
+          orgKey: generateUserOrgKey(),
+          partnerId: partner.id,
+          partnerRateCentsPerMin: rate,
+          partnerAllowAgentEdit: true,
+        })
+        .returning();
+    }
+
+    const loginUrl = `${partnerLoginBaseUrl(partner)}/sign-in`;
+    let emailSent = false;
+    if (sendCredentials !== false) {
+      try {
+        await sendBrevoEmail(
+          cleanEmail,
+          `Your ${partner.companyName} account is ready`,
+          clientWelcomeEmailHtml({
+            companyName: partner.companyName,
+            clientName: displayName,
+            email: cleanEmail,
+            password: pwd,
+            loginUrl,
+          }),
+          undefined,
+          { emailType: "partner_client_credentials", toUserId: sub, toName: displayName },
+        );
+        emailSent = true;
+      } catch (emailErr) {
+        req.log.warn({ emailErr, cleanEmail }, "Partner client credentials email failed");
+      }
+    }
+
+    res.status(201).json({
+      client: {
+        clerkId: user.clerkId,
+        email: user.email,
+        name: user.name,
+        rateCentsPerMin: user.partnerRateCentsPerMin ?? rate,
+        walletBalanceCents: user.walletBalanceCents,
+      },
+      loginUrl,
+      emailSent,
+    });
+  } catch (err) {
+    req.log.error({ err }, "partner/clients POST failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
 
 router.get("/partner/clients", requireAuth, async (req, res): Promise<void> => {
   try {

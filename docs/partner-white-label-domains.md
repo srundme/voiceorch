@@ -20,7 +20,7 @@ Partners can already (after deploy):
 3. Optionally enter a **custom domain** and get DNS instructions
 4. Click **Verify DNS** when ready
 
-Clients still sign in with **Google**. OAuth callback stays on `app.snapserve.ai`; after login they are redirected back to the partner domain via `return_to`.
+Clients sign in with **email and password** on the partner host (Google is disabled there). Partners create client accounts from Partner Hub and customize login logo / headline / subtitle. The same universal `/sign-in` page brands itself from the Host.
 
 **Without DNS/TLS below, the Settings UI works but `*.snapserve.ai` will not open in a browser.**
 
@@ -34,7 +34,7 @@ Clients still sign in with **Google**. OAuth callback stays on `app.snapserve.ai
 | `*.snapserve.ai` DNS | Points all partner subdomains to the same dashboard/app edge |
 | TLS (HTTPS) | Wildcard cert for `*.snapserve.ai` |
 | SnapServe app | Reads `Host` header → loads that partner’s branding |
-| Google OAuth | Always callbacks on `https://app.snapserve.ai/...`; then redirects to partner host |
+| Login | Universal `/sign-in` gateway; partner hosts show email/password only (no Google) |
 
 Same app binary serves:
 
@@ -191,18 +191,16 @@ Expect:
 
 ### 6.3 Open the subdomain in a browser
 
-1. Open `https://qaacme.snapserve.ai`
-2. Confirm SnapServe login/dashboard loads over HTTPS
-3. Click **Continue with Google**
-4. In Network tab, confirm connect URL includes:
-   - `return_to=https%3A%2F%2Fqaacme.snapserve.ai`
-5. After Google login, confirm you land back on `https://qaacme.snapserve.ai/#session=...` (or equivalent session handoff)
+1. Open `https://qaacme.snapserve.ai/sign-in`
+2. Confirm the branded email/password login loads over HTTPS (partner logo + title)
+3. Confirm **Google is not shown**
+4. Sign in with a client email/password created in Partner Hub
 
 ### 6.4 Partner client path
 
-1. From Partner Hub, invite a test client email
-2. Tell the client to open **`https://qaacme.snapserve.ai`** (not `app.snapserve.ai`)
-3. Client signs in with Google
+1. From Partner Hub → Clients → **Create client** (email + password)
+2. Tell the client to open **`https://qaacme.snapserve.ai/sign-in`** (not `app.snapserve.ai`)
+3. Client signs in with email/password
 4. Confirm:
    - Session works
    - Partner logo / “Powered by …” branding appears for managed clients
@@ -259,7 +257,7 @@ If Verify fails, the UI/API error text usually includes what DNS is missing.
 | 2 | `*.snapserve.ai` DNS exists and resolves | ☐ |
 | 3 | `https://qaacme.snapserve.ai` loads with valid TLS | ☐ |
 | 4 | Branding API returns partner for that host | ☐ |
-| 5 | Google login returns to partner subdomain | ☐ |
+| 5 | Email/password login works on partner subdomain | ☐ |
 | 6 | Invited client can use partner URL | ☐ |
 | 7 | (Optional) Custom domain verify → Active | ☐ |
 
@@ -273,7 +271,7 @@ If something breaks:
 2. Partners can still use `https://app.snapserve.ai` as today
 3. Slugs saved in DB are harmless if DNS is down — they just won’t resolve
 
-Do **not** change `GOOGLE_LOGIN_REDIRECT_URI` away from `https://app.snapserve.ai/api/auth/google/callback` unless you intentionally reconfigure Google Cloud OAuth. Partner return is handled by `return_to`, not by changing the Google callback.
+Do **not** enable Google Sign-In on partner hosts. Partner clients are provisioned with email + password from the Partner Hub.
 
 ---
 
@@ -286,7 +284,7 @@ Do **not** change `GOOGLE_LOGIN_REDIRECT_URI` away from `https://app.snapserve.a
 | `qaacme.snapserve.ai` NXDOMAIN | Wildcard DNS missing | Add `*` CNAME |
 | Browser SSL error on subdomain | No wildcard TLS / proxy off | Enable Cloudflare proxy or wildcard cert |
 | Opens but always looks like main SnapServe | Host not reaching app / wrong service | Confirm wildcard points to same app as `app` |
-| Google login drops user on `app.snapserve.ai` | `return_to` missing or host not trusted yet | Confirm connect URL has `return_to`; ensure slug saved so host is trusted after cache refresh (~1 min) |
+| Login fails / Google button still visible | Host not resolving to partner | Confirm slug/custom domain saved & active; branding API returns logo/title |
 | Custom Verify fails | CNAME/TXT wrong or not propagated | `dig CNAME` / `dig TXT`; wait; fix record |
 
 Useful dig commands:
@@ -306,7 +304,7 @@ Short partner instructions you can copy:
 2. Under **Your domain**, choose a subdomain (letters/numbers/hyphens), e.g. `acme`
 3. Upload logo + company name
 4. Share this login link with your clients: `https://acme.snapserve.ai`
-5. Clients sign in with Google on that link
+5. Create clients in Partner Hub with email + password (they sign in on that link — no Google)
 6. (Optional) Add your own domain later with the DNS steps shown in Settings
 
 ---
@@ -331,7 +329,7 @@ Ask engineering if you want those next.
 2. Add `partners.snapserve.ai` → same target
 3. Ensure HTTPS works for a test subdomain
 4. Set `PARTNER_SUBDOMAIN_ROOT` + `PARTNER_CNAME_TARGET` on Railway
-5. QA with one partner slug + one Google login + one invited client
+5. QA with one partner slug + one created client (email/password) + login branding
 
 **You can defer:**
 

@@ -25,6 +25,9 @@ interface PartnerMe {
   baseRateCentsPerMin: number;
   defaultClientRateCentsPerMin: number;
   logoUrl: string | null;
+  loginTitle: string | null;
+  loginSubtitle: string | null;
+  loginUrl: string;
   slug: string | null;
   subdomainHost: string | null;
   subdomainRoot: string;
@@ -235,6 +238,12 @@ function ClientsTab({ me }: { me: PartnerMe }) {
   const [, navigate] = useLocation();
   const [rateClient, setRateClient] = useState<PartnerClient | null>(null);
   const [transferClient, setTransferClient] = useState<PartnerClient | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createEmail, setCreateEmail] = useState("");
+  const [createName, setCreateName] = useState("");
+  const [createPassword, setCreatePassword] = useState("");
+  const [createRateText, setCreateRateText] = useState((me.defaultClientRateCentsPerMin / 100).toFixed(2));
+  const [sendCredentials, setSendCredentials] = useState(true);
   const [rateText, setRateText] = useState("");
   const [amountText, setAmountText] = useState("");
 
@@ -249,6 +258,41 @@ function ClientsTab({ me }: { me: PartnerMe }) {
     queryClient.invalidateQueries({ queryKey: ["partner-clients"] });
     queryClient.invalidateQueries({ queryKey: ["partner-me"] });
   };
+
+  const createMutation = useMutation({
+    mutationFn: async () => {
+      const ratePaise = parseRupees(createRateText);
+      return partnerFetch<{
+        client: { clerkId: string; email: string | null };
+        loginUrl: string;
+        emailSent: boolean;
+      }>(getToken, "/api/partner/clients", {
+        method: "POST",
+        body: JSON.stringify({
+          email: createEmail.trim(),
+          password: createPassword,
+          name: createName.trim() || undefined,
+          ...(ratePaise !== null ? { rateCentsPerMin: ratePaise } : {}),
+          sendCredentials,
+        }),
+      });
+    },
+    onSuccess: (resp) => {
+      toast({
+        title: "Client created",
+        description: resp.emailSent
+          ? `Credentials emailed. They sign in at ${resp.loginUrl}`
+          : `Share login URL ${resp.loginUrl} and the password you set.`,
+      });
+      setCreateOpen(false);
+      setCreateEmail("");
+      setCreateName("");
+      setCreatePassword("");
+      setCreateRateText((me.defaultClientRateCentsPerMin / 100).toFixed(2));
+      invalidate();
+    },
+    onError: (err: Error) => toast({ title: "Could not create client", description: err.message, variant: "destructive" }),
+  });
 
   const rateMutation = useMutation({
     mutationFn: async ({ clerkId, rateCentsPerMin }: { clerkId: string; rateCentsPerMin: number }) =>
@@ -278,23 +322,33 @@ function ClientsTab({ me }: { me: PartnerMe }) {
     onError: (err: Error) => toast({ title: "Transfer failed", description: err.message, variant: "destructive" }),
   });
 
+  const createRatePaise = parseRupees(createRateText);
+
   return (
     <div className="rounded-xl border border-border bg-card">
       <div className="px-4 py-3 border-b border-border flex items-center justify-between gap-3">
         <div>
           <h2 className="text-sm font-medium">Your clients</h2>
           <p className="text-[11px] text-muted-foreground mt-0.5">
-            Clients get a full workspace. You set rate, fund their wallet, and assign numbers.
+            Create accounts with email + password. Clients sign in on your branded login page (no Google).
           </p>
         </div>
-        <span className="text-[11px] text-muted-foreground shrink-0">Base {inr(baseRate)}/min</span>
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="text-[11px] text-muted-foreground">Base {inr(baseRate)}/min</span>
+          <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => setCreateOpen(true)}>
+            <UserPlus className="w-3.5 h-3.5" /> Create client
+          </Button>
+        </div>
       </div>
       {isLoading ? (
         <div className="p-4 space-y-2 animate-pulse">{[0, 1, 2].map(i => <div key={i} className="h-10 rounded bg-muted" />)}</div>
       ) : clients.length === 0 ? (
         <div className="px-4 py-10 text-center">
           <Users className="w-8 h-8 text-muted-foreground/40 mx-auto" />
-          <p className="text-sm text-muted-foreground mt-2">No clients yet. Send an invite from the Invites tab.</p>
+          <p className="text-sm text-muted-foreground mt-2">No clients yet. Create one with email and password.</p>
+          <Button size="sm" className="mt-3 gap-1.5" onClick={() => setCreateOpen(true)}>
+            <UserPlus className="w-3.5 h-3.5" /> Create client
+          </Button>
         </div>
       ) : (
         <div className="overflow-x-auto">
@@ -405,6 +459,61 @@ function ClientsTab({ me }: { me: PartnerMe }) {
                 if (transferClient && paise) transferMutation.mutate({ clerkId: transferClient.clerkId, amountCents: paise });
               }}>
               {transferMutation.isPending ? "Transferring…" : "Transfer"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Create client account</DialogTitle>
+            <DialogDescription>
+              Sets email + password. They sign in at{" "}
+              <a className="underline underline-offset-2" href={me.loginUrl} target="_blank" rel="noreferrer">{me.loginUrl}</a>
+              {" "}— Google is disabled on your portal.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="create-email">Email</Label>
+              <Input id="create-email" type="email" value={createEmail} onChange={e => setCreateEmail(e.target.value)} placeholder="client@company.com" />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="create-name">Name (optional)</Label>
+              <Input id="create-name" value={createName} onChange={e => setCreateName(e.target.value)} placeholder="Acme Ops" />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="create-password">Temporary password</Label>
+              <Input id="create-password" type="text" value={createPassword} onChange={e => setCreatePassword(e.target.value)} placeholder="Min. 8 characters" />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="create-rate">Rate (₹ per minute)</Label>
+              <Input id="create-rate" inputMode="decimal" value={createRateText} onChange={e => setCreateRateText(e.target.value)} />
+              {createRatePaise !== null && createRatePaise >= me.baseRateCentsPerMin ? (
+                <p className="text-[11px] text-muted-foreground">You earn {inr(createRatePaise - me.baseRateCentsPerMin)}/min at this rate.</p>
+              ) : (
+                <p className="text-[11px] text-amber-500">Must be at least {inr(me.baseRateCentsPerMin)}/min.</p>
+              )}
+            </div>
+            <label className="flex items-center gap-2 text-sm text-muted-foreground">
+              <input type="checkbox" checked={sendCredentials} onChange={e => setSendCredentials(e.target.checked)} className="rounded border-border" />
+              Email credentials to the client
+            </label>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
+            <Button
+              disabled={
+                createMutation.isPending
+                || !createEmail.includes("@")
+                || createPassword.length < 8
+                || createRatePaise === null
+                || createRatePaise < me.baseRateCentsPerMin
+              }
+              onClick={() => createMutation.mutate()}
+            >
+              {createMutation.isPending ? "Creating…" : "Create client"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -554,6 +663,8 @@ function SettingsTab({ me }: { me: PartnerMe }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [companyName, setCompanyName] = useState(me.companyName);
+  const [loginTitle, setLoginTitle] = useState(me.loginTitle ?? "");
+  const [loginSubtitle, setLoginSubtitle] = useState(me.loginSubtitle ?? "");
   const [defaultRateText, setDefaultRateText] = useState((me.defaultClientRateCentsPerMin / 100).toFixed(2));
   const [uploading, setUploading] = useState(false);
   const [slugDraft, setSlugDraft] = useState(me.slug ?? "");
@@ -571,6 +682,8 @@ function SettingsTab({ me }: { me: PartnerMe }) {
         method: "PATCH",
         body: JSON.stringify({
           companyName: companyName.trim(),
+          loginTitle: loginTitle.trim() || null,
+          loginSubtitle: loginSubtitle.trim() || null,
           ...(paise !== null ? { defaultClientRateCentsPerMin: paise } : {}),
         }),
       });
@@ -718,6 +831,38 @@ function SettingsTab({ me }: { me: PartnerMe }) {
           </div>
           <p className="text-[11px] text-muted-foreground">PNG, JPEG or WebP, up to 512KB.</p>
         </div>
+      </div>
+
+      <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+        <h2 className="text-sm font-medium">Login page</h2>
+        <p className="text-[11px] text-muted-foreground -mt-1">
+          One universal gateway for your clients. They use email + password only — Google is hidden on your domain.
+        </p>
+        <div className="space-y-1.5">
+          <Label htmlFor="login-title">Headline</Label>
+          <Input
+            id="login-title"
+            value={loginTitle}
+            onChange={e => setLoginTitle(e.target.value)}
+            placeholder={`Sign in to ${companyName.trim() || "your company"}`}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="login-subtitle">Supporting text</Label>
+          <Input
+            id="login-subtitle"
+            value={loginSubtitle}
+            onChange={e => setLoginSubtitle(e.target.value)}
+            placeholder={`Use the email and password provided by ${companyName.trim() || "your company"}.`}
+          />
+        </div>
+        <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+          <Link2 className="h-3 w-3" />
+          Client login URL:{" "}
+          <a className="underline underline-offset-2" href={me.loginUrl} target="_blank" rel="noreferrer">
+            {me.loginUrl}
+          </a>
+        </p>
       </div>
 
       <div className="rounded-xl border border-border bg-card p-4 space-y-4">

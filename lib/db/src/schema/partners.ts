@@ -34,6 +34,10 @@ export const partnersTable = pgTable("partners", {
   logoMime: text("logo_mime"),
   /** Unguessable capability token for the public logo URL. */
   logoToken: text("logo_token").unique("partners_logo_token_unique"),
+  /** Custom headline on the white-label login gateway (null → default from company name). */
+  loginTitle: text("login_title"),
+  /** Supporting copy under the login headline. */
+  loginSubtitle: text("login_subtitle"),
   /**
    * White-label subdomain slug → `{slug}.{PARTNER_SUBDOMAIN_ROOT}`
    * e.g. slug "acme" → acme.snapserve.ai
