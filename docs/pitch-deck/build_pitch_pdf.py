@@ -319,7 +319,7 @@ def build():
     text(c, 0.8 * inch, Y(1.2), "Assumes Rs 5/min, Rs 1.87 variable, funded GTM after Rs 5 Cr raise. Forward-looking.", size=11, color=MUTED)
     cols = ["", "Today", "Year 1", "Year 2", "Year 3"]
     data = [
-        ["Monthly minutes", "~few K", "1.0 L", "5.0 L", "20 L"],
+        ["Monthly minutes", "~few K", "10 L", "50 L", "2 Cr"],
         ["Monthly revenue", "~Rs 35K", "Rs 50 L", "Rs 2.5 Cr", "Rs 10 Cr"],
         ["ARR run-rate", "-", "Rs 6 Cr", "Rs 30 Cr", "Rs 120 Cr"],
         ["Paying accounts", "Early", "250", "1,200", "4,000"],
@@ -335,10 +335,38 @@ def build():
             x = (0.6 + cc * 2.5) * inch
             col = GREEN if cc >= 2 else (MUTED if cc == 1 else FG)
             text(c, x + (1.1 * inch if cc else 0), Y(y), cell, size=14, bold=(cc == 0 or cc >= 2), color=col, align="center" if cc else "left")
-    text(c, 0.8 * inch, Y(6.6), "Y1 focus: cross break-even (~96K mins/mo) and hit durable Rs 50 L / mo run-rate.", size=13, color=ACCENT)
+    text(c, 0.8 * inch, Y(6.6), "Y1 exit: 10 L mins/mo x Rs 5 = Rs 50 L MRR; Rs 6 Cr ARR run-rate.", size=13, color=ACCENT)
     footer(c); c.showPage()
 
-    # 16 Ask
+    # 16 Annual P&L
+    new_page(c); tag(c, "Financials")
+    text(c, 0.8 * inch, Y(0.75), "Annual P&L projection (base case, Rs Cr)", size=24, bold=True)
+    text(c, 0.8 * inch, Y(1.2), "Uses average monthly volume, not exit run-rate. Forward-looking and unaudited.", size=11, color=MUTED)
+    pnl_cols = ["", "Year 1", "Year 2", "Year 3"]
+    pnl_data = [
+        ["Avg. monthly minutes", "3 L", "25 L", "1.10 Cr"],
+        ["Revenue", "Rs 1.80", "Rs 15.00", "Rs 66.00"],
+        ["Variable cost", "(Rs 0.67)", "(Rs 5.25)", "(Rs 21.12)"],
+        ["Gross contribution", "Rs 1.13", "Rs 9.75", "Rs 44.88"],
+        ["Operating expenses", "(Rs 2.40)", "(Rs 8.00)", "(Rs 24.00)"],
+        ["EBITDA", "(Rs 1.27)", "Rs 1.75", "Rs 20.88"],
+        ["EBITDA margin", "(70.7%)", "11.7%", "31.6%"],
+    ]
+    for i, h in enumerate(pnl_cols):
+        x = (0.8 + i * 3.0) * inch
+        text(c, x + (1.3 * inch if i else 0), Y(1.75), h, size=14, bold=True, color=MUTED, align="center" if i else "left")
+    for r, row in enumerate(pnl_data):
+        y = 2.25 + r * 0.58
+        for cc, cell in enumerate(row):
+            x = (0.8 + cc * 3.0) * inch
+            col = MUTED if cc == 0 else FG
+            if r in (3, 5) and cc:
+                col = ACCENT if cell.startswith("(") else GREEN
+            text(c, x + (1.3 * inch if cc else 0), Y(y), cell, size=14, bold=(cc == 0 or r in (3, 5)), color=col, align="center" if cc else "left")
+    text(c, 0.8 * inch, Y(6.6), "Expected fully loaded monthly operating break-even around the transition into Year 2.", size=12, color=ACCENT)
+    footer(c); c.showPage()
+
+    # 17 Ask
     new_page(c); tag(c, "Ask")
     text(c, 0.8 * inch, Y(0.85), "The ask", size=28, bold=True)
     text(c, 0.8 * inch, Y(1.4), "Raising  Rs 5 Crore  seed  ·  18-month runway  ·  India + global angels / seed funds", size=16, color=ACCENT)
@@ -357,13 +385,33 @@ def build():
         text(c, 5.5 * inch, Y(y + 0.48), d, size=13, color=MUTED)
     footer(c); c.showPage()
 
-    # 17 Milestones
+    # 18 Round structure
+    new_page(c); tag(c, "Round terms")
+    text(c, 0.8 * inch, Y(0.75), "One seed round - four committed CCPS drawdowns", size=24, bold=True)
+    text(c, 0.8 * inch, Y(1.25), "Rs 20 Cr pre-money - Rs 25 Cr post-money - 20% seed dilution", size=15, color=ACCENT)
+    tranches = [
+        ("A", "Rs 15 L", "At signing", "Immediate infra, compliance and delivery"),
+        ("B", "Rs 85 L", "Foundation", "Reliability plan + initial paying pipeline"),
+        ("C", "Rs 1.50 Cr", "Early scale", "Target: 100 paying; ~2 L mins/mo"),
+        ("D", "Rs 2.50 Cr", "Growth", "Target: 250 paying; path to 10 L mins/mo"),
+    ]
+    for i, (label, amount, stage, detail) in enumerate(tranches):
+        y = 1.55 + i * 1.05
+        card(c, 0.8 * inch, Y(y + 0.9), 11.7 * inch, 0.9 * inch)
+        text(c, 1.0 * inch, Y(y + 0.55), label, size=18, bold=True, color=GREEN)
+        text(c, 1.65 * inch, Y(y + 0.55), amount, size=18, bold=True)
+        text(c, 3.3 * inch, Y(y + 0.55), stage, size=15, bold=True, color=ACCENT)
+        text(c, 5.4 * inch, Y(y + 0.55), detail, size=13, color=MUTED)
+    text(c, 0.8 * inch, Y(6.45), "One financing, not four valuations. Indicative and non-binding; final terms subject to definitive documents.", size=12, color=MUTED)
+    footer(c); c.showPage()
+
+    # 19 Milestones
     new_page(c); tag(c, "Milestones")
     text(c, 0.8 * inch, Y(0.9), "18-month milestones", size=28, bold=True)
     miles = [
-        ("0-6 mo", "Cross break-even minutes, 100 paying, flagship vertical cases"),
-        ("6-12 mo", "Rs 50 L / mo run-rate, partner channel live, Meet+WA scale"),
-        ("12-18 mo", "Rs 6 Cr ARR trajectory, Series A ready metrics, expand cities"),
+        ("0-6 mo", "100 paying; ~2 L monthly minutes; flagship vertical cases"),
+        ("6-12 mo", "10 L mins / Rs 50 L MRR exit target; partner channel live"),
+        ("12-18 mo", "Repeatable GTM; positive monthly contribution; Series A ready"),
     ]
     for i, (t, d) in enumerate(miles):
         y = 1.5 + i * 1.55
@@ -372,7 +420,7 @@ def build():
         text(c, 1.1 * inch, Y(y + 1.0), d, size=15, color=FG)
     footer(c); c.showPage()
 
-    # 18 Close
+    # 20 Close
     new_page(c)
     text(c, W / 2, Y(2.8), "India will talk to AI.", size=36, bold=True, align="center")
     text(c, W / 2, Y(3.5), "SnapServe makes sure those calls convert.", size=22, color=ACCENT, align="center")

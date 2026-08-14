@@ -1,4 +1,4 @@
-# SnapServe AI — 3-Year Financial Projection (Seed, ₹5 Cr)
+# SnapServe AI — 3-Year Financial Projection & Seed Structure
 
 **As of:** 14 Aug 2026  
 **Legal:** SnapServe AI Pvt Limited · Chennai  
@@ -42,6 +42,32 @@ Approximate monthly cash burn today ≈ ₹3.0 L − (₹35K × 3.13/5) ≈ **�
 
 ---
 
+## Seed round structure
+
+**Round:** One ₹5.00 Cr seed round, not four separate rounds  
+**Instrument:** CCPS (Compulsorily Convertible Preference Shares), subject to definitive legal documents  
+**Indicative valuation:** ₹20.00 Cr pre-money / ₹25.00 Cr post-money  
+**Indicative dilution:** 20.0% to seed investors after the full ₹5.00 Cr is funded, before any new ESOP pool adjustment  
+**Founder ownership:** 80.0% after the round, before any new ESOP pool adjustment  
+
+The investment is proposed as four **committed drawdowns under one round**:
+
+| Tranche | Amount | Timing / release condition | Primary use |
+|---------|-------:|----------------------------|-------------|
+| A — Initial close | ₹15 L | Signing and completion of definitive documents | Immediate infra, compliance, customer delivery |
+| B — Foundation | ₹85 L | Product reliability plan and initial paying-customer pipeline validated | Core hiring, telephony capacity, first GTM hires |
+| C — Early scale | ₹1.50 Cr | Target: 100 paying accounts and ~2 L monthly minutes | Vertical sales, onboarding and partner channel |
+| D — Growth | ₹2.50 Cr | Target: 250 paying accounts and trajectory toward 10 L monthly minutes | National GTM scale and Series A readiness |
+| **Total** | **₹5.00 Cr** | **One seed round** | **18-month growth plan** |
+
+Milestones and drawdown dates are negotiation points. The deck should describe these terms as **indicative and non-binding**. A startup lawyer and CA/CS must finalize CCPS rights, conversion, liquidation preference, anti-dilution, reserved matters, information rights and ESOP treatment.
+
+### What to say when investors ask “how many rounds?”
+
+> “We are raising one ₹5 crore seed round through four committed CCPS drawdowns. We begin with ₹15 lakh at signing, followed by ₹85 lakh, ₹1.5 crore and ₹2.5 crore against agreed operating milestones. This is one financing round, not four separate valuation events.”
+
+---
+
 ## Use of ₹5 Cr
 
 | Bucket | % | Amount | Purpose |
@@ -61,36 +87,40 @@ Assumptions (explicit):
 - Price stays ₹5/min in Y1; mild mix improvement later (enterprise packs) lifts effective yield slightly.
 - Variable cost stays ~₹1.87 early; improves to ~₹1.60 by Y3 with volume + routing.
 - Raise closes and GTM hires start within 90 days.
-- No Series A assumed inside these three years (can raise earlier if ahead of plan).
+- A Series A is optional after the 18-month seed milestones; it is not required to fund this base model through the seed runway.
+- Exit monthly volume is supported by approximately 4,000–5,000 minutes per paying account.
 
 | | Today | End Y1 | End Y2 | End Y3 |
 |--|-------|--------|--------|--------|
-| Monthly minutes | ~few K run-rate | **1,00,000** | **5,00,000** | **20,00,000** |
+| Monthly minutes | ~few K run-rate | **10,00,000** | **50,00,000** | **2,00,00,000** |
 | Monthly recognized revenue | ~₹35K | **₹50 L** | **₹2.5 Cr** | **₹10 Cr** |
 | Exit ARR (run-rate × 12) | — | **₹6 Cr** | **₹30 Cr** | **₹120 Cr** |
 | Paying accounts | early / mixed | 250 | 1,200 | 4,000 |
 | Team | founders+ | 12 | 35 | 80 |
 | Var. gross margin | 62.6% | ~63% | ~65% | ~68% |
-| Monthly fixed (approx) | ₹3 L | ₹12 L | ₹40 L | ₹1.0 Cr |
+| Average monthly opex | ₹3 L | ₹20 L | ₹67 L | ₹2.0 Cr |
 
-### Year-1 monthly path (illustrative)
+### Annual P&L view (base case)
 
-| Month | Mins/mo | Revenue | Contrib (₹3.13) | Fixed | Net |
-|-------|---------|---------|-----------------|-------|-----|
-| M3 | 20,000 | ₹1.0 L | ₹0.63 L | ₹6 L | −₹5.4 L |
-| M6 | 50,000 | ₹2.5 L | ₹1.6 L | ₹8 L | −₹6.4 L |
-| M9 | 80,000 | ₹4.0 L | ₹2.5 L | ₹10 L | −₹7.5 L |
-| M12 | 1,00,000 | ₹5.0 L | ₹3.1 L | ₹12 L | −₹8.9 L* |
+| ₹ crore | Year 1 | Year 2 | Year 3 |
+|---------|-------:|-------:|-------:|
+| Average monthly minutes | 3.0 L | 25 L | 1.10 Cr |
+| Annual recognized revenue | **₹1.80 Cr** | **₹15.00 Cr** | **₹66.00 Cr** |
+| Variable delivery cost | (₹0.67 Cr) | (₹5.25 Cr) | (₹21.12 Cr) |
+| Gross contribution | **₹1.13 Cr** | **₹9.75 Cr** | **₹44.88 Cr** |
+| Operating expenses | (₹2.40 Cr) | (₹8.00 Cr) | (₹24.00 Cr) |
+| EBITDA | **(₹1.27 Cr)** | **₹1.75 Cr** | **₹20.88 Cr** |
+| EBITDA margin | (70.7%) | 11.7% | 31.6% |
 
-\*Y1 still investment-heavy (sales ramp). Break-even on **contribution vs today’s ₹3 L fixed** hits ~M9–M10 if minutes scale; fully loaded opex break-even lands later as headcount grows — funded by the ₹5 Cr.
+Year 1 is intentionally investment-heavy. The model reaches fully loaded monthly operating break-even around the transition into Year 2, depending on hiring pace and enterprise collection cycles.
 
 ### Sensitivity
 
-| Case | Y1 exit monthly mins | Y1 ARR run-rate |
-|------|----------------------|-----------------|
-| Conservative | 50,000 | ₹3 Cr |
-| **Base** | **1,00,000** | **₹6 Cr** |
-| Aggressive | 2,00,000 | ₹12 Cr |
+| Case | Y1 exit monthly mins | Y1 exit ARR run-rate |
+|------|----------------------|----------------------|
+| Conservative | 5,00,000 | ₹3 Cr |
+| **Base** | **10,00,000** | **₹6 Cr** |
+| Aggressive | 20,00,000 | ₹12 Cr |
 
 ---
 
@@ -100,6 +130,20 @@ Assumptions (explicit):
 2. Partner / white-label becomes a real channel, not a feature checkbox.  
 3. Keep contribution ≥ ₹3 / min while scaling Indic quality.  
 4. Fix wallet ledger reconciliation before diligence deepens.
+5. Convert the ₹5 Cr commitment into enforceable drawdown terms; do not rely on verbal promises for later tranches.
+
+## Investor questions to prepare for
+
+1. Why CCPS instead of CCD or equity?
+2. Is the entire ₹5 Cr legally committed on signing, or can later tranches be cancelled?
+3. What exact milestones release each tranche, and who certifies achievement?
+4. Is the ₹20 Cr pre-money valuation fixed across all tranches?
+5. Does the investor receive a 1× non-participating liquidation preference?
+6. What anti-dilution, pro-rata, board, information and reserved-matter rights are proposed?
+7. Is an ESOP pool created pre-money or post-money, and how does it change founder dilution?
+8. What happens if a milestone is delayed but the business is otherwise healthy?
+9. How long does each tranche fund the company, and what is the minimum viable plan if only ₹1 Cr closes?
+10. When would SnapServe consider a Series A, and what metrics trigger it?
 
 ---
 

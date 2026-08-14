@@ -387,7 +387,7 @@ def build():
     # Table header
     cols = ["", "Today", "Year 1", "Year 2", "Year 3"]
     data = [
-        ["Monthly minutes", "~4K (cumul.)", "1.0 L", "5.0 L", "20 L"],
+        ["Monthly minutes", "~4K (cumul.)", "10 L", "50 L", "2 Cr"],
         ["Monthly revenue", "~₹35K", "₹50 L", "₹2.5 Cr", "₹10 Cr"],
         ["ARR (exit run-rate)", "—", "₹6 Cr", "₹30 Cr", "₹120 Cr"],
         ["Paying accounts", "Early", "250", "1,200", "4,000"],
@@ -402,10 +402,39 @@ def build():
             color = GREEN if c >= 2 else FG
             add_text(s, Inches(0.5 + c * 2.5), y, Inches(2.4), Inches(0.55), cell, size=14, bold=(c == 0 or c >= 2), color=color if c else MUTED, align=PP_ALIGN.CENTER if c else PP_ALIGN.LEFT)
 
-    add_text(s, Inches(0.8), Inches(6.4), Inches(11.5), Inches(0.4), "Y1 focus: cross break-even (~96K mins/mo) and hit durable ₹50 L / mo run-rate.", size=14, color=ACCENT)
+    add_text(s, Inches(0.8), Inches(6.4), Inches(11.5), Inches(0.4), "Y1 exit target: 10 L mins/mo × ₹5 = ₹50 L MRR · ₹6 Cr ARR run-rate.", size=14, color=ACCENT)
     footer_logo(s)
 
-    # ── 16 Ask ───────────────────────────────────────────────
+    # ── 16 Annual P&L ────────────────────────────────────────
+    s = new_slide(prs)
+    section_tag(s, "FINANCIALS")
+    add_text(s, Inches(0.8), Inches(0.35), Inches(11), Inches(0.4), "Annual P&L projection (base case, ₹ Cr)", size=24, bold=True)
+    add_text(s, Inches(0.8), Inches(0.85), Inches(11.5), Inches(0.35), "Built from average monthly volume, not exit run-rate. Forward-looking and unaudited.", size=12, color=MUTED)
+    pnl_cols = ["", "Year 1", "Year 2", "Year 3"]
+    pnl_data = [
+        ["Avg. monthly minutes", "3 L", "25 L", "1.10 Cr"],
+        ["Revenue", "₹1.80", "₹15.00", "₹66.00"],
+        ["Variable cost", "(₹0.67)", "(₹5.25)", "(₹21.12)"],
+        ["Gross contribution", "₹1.13", "₹9.75", "₹44.88"],
+        ["Operating expenses", "(₹2.40)", "(₹8.00)", "(₹24.00)"],
+        ["EBITDA", "(₹1.27)", "₹1.75", "₹20.88"],
+        ["EBITDA margin", "(70.7%)", "11.7%", "31.6%"],
+    ]
+    for i, h in enumerate(pnl_cols):
+        add_text(s, Inches(0.8 + i * 3.0), Inches(1.35), Inches(2.8), Inches(0.35), h, size=14, bold=True, color=MUTED, align=PP_ALIGN.CENTER if i else PP_ALIGN.LEFT)
+    for r, row in enumerate(pnl_data):
+        y = Inches(1.85 + r * 0.62)
+        for c, cell in enumerate(row):
+            color = FG
+            if r in (3, 5) and c:
+                color = GREEN if not cell.startswith("(") else ACCENT
+            elif c == 0:
+                color = MUTED
+            add_text(s, Inches(0.8 + c * 3.0), y, Inches(2.8), Inches(0.5), cell, size=15, bold=(c == 0 or r in (3, 5)), color=color, align=PP_ALIGN.CENTER if c else PP_ALIGN.LEFT)
+    add_text(s, Inches(0.8), Inches(6.45), Inches(11.5), Inches(0.35), "Expected fully loaded monthly operating break-even around the transition into Year 2.", size=13, color=ACCENT)
+    footer_logo(s)
+
+    # ── 17 Ask ───────────────────────────────────────────────
     s = new_slide(prs)
     section_tag(s, "ASK")
     add_text(s, Inches(0.8), Inches(0.4), Inches(10), Inches(0.45), "The ask", size=28, bold=True)
@@ -426,14 +455,37 @@ def build():
         add_text(s, Inches(5.5), y + Inches(0.18), Inches(6.7), Inches(0.4), d, size=14, color=MUTED)
     footer_logo(s)
 
-    # ── 17 Milestones ────────────────────────────────────────
+    # ── 18 Round structure ───────────────────────────────────
+    s = new_slide(prs)
+    section_tag(s, "ROUND TERMS")
+    add_text(s, Inches(0.8), Inches(0.35), Inches(11), Inches(0.45), "One seed round · four committed CCPS drawdowns", size=25, bold=True)
+    add_text(s, Inches(0.8), Inches(0.9), Inches(11.5), Inches(0.4), "₹20 Cr pre-money · ₹25 Cr post-money · 20% seed dilution · indicative, non-binding", size=16, color=ACCENT)
+
+    tranches = [
+        ("A", "₹15 L", "At signing", "Immediate infra, compliance and delivery"),
+        ("B", "₹85 L", "Foundation", "Reliability plan + initial paying pipeline"),
+        ("C", "₹1.50 Cr", "Early scale", "Target: 100 paying · ~2 L mins/mo"),
+        ("D", "₹2.50 Cr", "Growth", "Target: 250 paying · path to 10 L mins/mo"),
+    ]
+    for i, (label, amount, stage, detail) in enumerate(tranches):
+        y = Inches(1.55 + i * 1.05)
+        card(s, Inches(0.8), y, Inches(11.7), Inches(0.9))
+        add_text(s, Inches(1.0), y + Inches(0.2), Inches(0.6), Inches(0.4), label, size=18, bold=True, color=GREEN)
+        add_text(s, Inches(1.65), y + Inches(0.2), Inches(1.6), Inches(0.4), amount, size=18, bold=True)
+        add_text(s, Inches(3.3), y + Inches(0.2), Inches(2.0), Inches(0.4), stage, size=15, bold=True, color=ACCENT)
+        add_text(s, Inches(5.4), y + Inches(0.2), Inches(6.6), Inches(0.4), detail, size=14, color=MUTED)
+
+    add_text(s, Inches(0.8), Inches(6.05), Inches(11.5), Inches(0.55), "Not four valuation rounds: one financing with milestone-linked releases. Final CCPS rights, ESOP treatment and drawdown protections subject to definitive documents.", size=13, color=MUTED)
+    footer_logo(s)
+
+    # ── 19 Milestones ────────────────────────────────────────
     s = new_slide(prs)
     section_tag(s, "MILESTONES")
     add_text(s, Inches(0.8), Inches(0.45), Inches(10), Inches(0.5), "18-month milestones", size=28, bold=True)
     miles = [
-        ("0–6 mo", "Hit break-even minutes · 100 paying · flagship vertical case studies"),
-        ("6–12 mo", "₹50 L / mo revenue run-rate · partner channel live · Meet+WA scale"),
-        ("12–18 mo", "₹6 Cr ARR trajectory · Series A ready metrics · expand cities"),
+        ("0–6 mo", "100 paying · ~2 L monthly minutes · flagship vertical case studies"),
+        ("6–12 mo", "10 L mins / ₹50 L MRR exit target · partner channel live"),
+        ("12–18 mo", "Repeatable GTM · positive monthly contribution · Series A ready"),
     ]
     for i, (t, d) in enumerate(miles):
         y = Inches(1.5 + i * 1.55)
@@ -442,7 +494,7 @@ def build():
         add_text(s, Inches(1.1), y + Inches(0.75), Inches(11.2), Inches(0.4), d, size=16, color=FG)
     footer_logo(s)
 
-    # ── 18 Close ─────────────────────────────────────────────
+    # ── 20 Close ─────────────────────────────────────────────
     s = new_slide(prs)
     add_text(s, Inches(0.9), Inches(2.0), Inches(11.5), Inches(0.8), "India will talk to AI.", size=36, bold=True, align=PP_ALIGN.CENTER)
     add_text(s, Inches(0.9), Inches(2.9), Inches(11.5), Inches(0.6), "SnapServe makes sure those calls convert.", size=24, color=ACCENT, align=PP_ALIGN.CENTER)
