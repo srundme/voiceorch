@@ -79,15 +79,21 @@ const CATEGORIES: Category[] = [
         placeholder: "gsk_...",
       },
       {
+        key: "managed_jina_key",
+        label: "Jina Embeddings API Key",
+        description: "Used for Knowledge Base semantic search (jina-embeddings-v3). Free tier at jina.ai — no OpenAI/Gemini needed.",
+        placeholder: "jina_...",
+      },
+      {
         key: "managed_gemini_key",
         label: "Google / Gemini API Key",
-        description: "Gemini 3.6 Flash, Gemini 3.5 Flash Lite, Gemini 2.5 Flash. Get from Google AI Studio (AIza... format).",
+        description: "Only needed for Gemini Live native audio (optional). Chat LLMs use Sarvam.",
         placeholder: "AIza...",
       },
       {
         key: "managed_openai_key",
         label: "OpenAI API Key",
-        description: "GPT-4o, GPT-4o Mini, GPT-4 Turbo. Also used for OpenAI TTS.",
+        description: "Optional — GPT models / OpenAI TTS if selected. Not required for KB embeddings.",
         placeholder: "sk-...",
       },
       {

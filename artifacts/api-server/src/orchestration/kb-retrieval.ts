@@ -464,7 +464,7 @@ function kbCacheSet(key: string, text: string, source: KbRetrievalSource, contri
  *
  * Strategy:
  * - Non-empty `query`: HYBRID retrieval — semantic vector search (pgvector
- *   cosine over text-embedding-3-small vectors, multilingual) fused with
+ *   cosine over jina-embeddings-v3 vectors, multilingual) fused with
  *   PostgreSQL FTS via reciprocal-rank fusion. Vector search degrades to []
  *   on any failure (latch off, no key, embed timeout), leaving pure FTS —
  *   i.e. exactly the pre-vector behavior. A total DB failure returns "".

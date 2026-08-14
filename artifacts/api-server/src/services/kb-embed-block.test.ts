@@ -5,14 +5,6 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const createEmbed = vi.fn();
-
-vi.mock("openai", () => ({
-  default: class {
-    embeddings = { create: (...args: unknown[]) => createEmbed(...args) };
-  },
-}));
-
 /** Chainable drizzle-ish stub: every builder method returns itself, awaiting it
  * resolves to [] (no managed key row → the env key is used). */
 function chain(): unknown {
@@ -42,34 +34,29 @@ vi.mock("../lib/logger.js", () => ({
 /** Fresh module instance per test — the breaker is module-level state. */
 async function loadService() {
   vi.resetModules();
-  // Re-apply mocks after resetModules so the fresh import still sees them.
-  vi.doMock("openai", () => ({
-    default: class {
-      embeddings = { create: (...args: unknown[]) => createEmbed(...args) };
-    },
-  }));
   const mod = await import("./kb-embeddings.js");
   await mod.probeKbVectorSupport();
   return mod;
 }
 
-function failEmbed(status: number, message = "Lightning dunning decision is deny for project") {
-  createEmbed.mockReset();
-  createEmbed.mockImplementation(async () => {
-    throw Object.assign(new Error(message), { status });
-  });
+function mockFetchStatus(status: number) {
+  const fn = vi.fn(async () => new Response("Lightning dunning decision is deny for project", { status }));
+  vi.stubGlobal("fetch", fn);
+  return fn;
 }
 
 describe("KB embed circuit breaker", () => {
   beforeEach(() => {
-    process.env["OPENAI_API_KEY"] = "test-key";
+    vi.unstubAllGlobals();
+    process.env["JINA_API_KEY"] = "test-key";
+    delete process.env["OPENAI_API_KEY"];
     delete process.env["GEMINI_API_KEY"];
     process.env["KB_EMBED_BLOCK_RETRY_MS"] = "60000";
-    failEmbed(403);
   });
 
   it("opens on a billing/auth rejection and reports why", async () => {
     const { embedKbQuery, getKbEmbedBlock } = await loadService();
+    mockFetchStatus(403);
 
     expect(await embedKbQuery("what are your prices")).toBeNull();
 
@@ -79,17 +66,19 @@ describe("KB embed circuit breaker", () => {
 
   it("stops calling the provider while open, so turns are not stalled", async () => {
     const { embedKbQuery } = await loadService();
+    const fetchMock = mockFetchStatus(403);
 
     await embedKbQuery("first question");
-    expect(createEmbed).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
 
     await embedKbQuery("second question");
     await embedKbQuery("third question");
-    expect(createEmbed).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("half-opens after the retry window so a fixed key self-heals", async () => {
     const { embedKbQuery, getKbEmbedBlock } = await loadService();
+    const fetchMock = mockFetchStatus(403);
 
     await embedKbQuery("first question");
     expect(getKbEmbedBlock()).not.toBeNull();
@@ -98,20 +87,20 @@ describe("KB embed circuit breaker", () => {
     Date.now = () => realNow() + 120_000;
     try {
       await embedKbQuery("later question");
-      expect(createEmbed).toHaveBeenCalledTimes(2);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
     } finally {
       Date.now = realNow;
     }
   });
 
   it("treats a transient 500 as retryable rather than fatal", async () => {
-    failEmbed(500);
     const { embedKbQuery, getKbEmbedBlock } = await loadService();
+    const fetchMock = mockFetchStatus(500);
 
     await embedKbQuery("first question");
     await embedKbQuery("second question");
 
     expect(getKbEmbedBlock()).toBeNull();
-    expect(createEmbed).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });

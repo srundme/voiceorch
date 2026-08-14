@@ -44,7 +44,7 @@ export const knowledgeEntriesTable = pgTable("knowledge_entries", {
   content: text("content").notNull(),
   keywords: text("keywords"),
   /**
-   * Multilingual semantic embedding (text-embedding-3-small @ 768 dims,
+   * Multilingual semantic embedding (jina-embeddings-v3 @ 768 dims,
    * L2-normalized). NULL = not yet embedded — the KB embed worker
    * back-fills NULL rows; every content write must reset this to NULL.
    * Column exists only when the pgvector extension is available (migration
