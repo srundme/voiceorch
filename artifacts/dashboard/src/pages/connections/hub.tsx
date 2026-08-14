@@ -155,8 +155,11 @@ export default function ConnectionsPage() {
     return [phone, ...BASE_CARDS];
   }, [isManagedWorkspace, phoneCount]);
 
+  // Mirror the URL in both directions. Only syncing when a setup id is present
+  // left the sub-page mounted after Back cleared `?setup=`, so the Back link
+  // looked dead (URL changed, view didn't).
   useEffect(() => {
-    if (isSetupId(setupParam)) setSetup(setupParam);
+    setSetup(isSetupId(setupParam) ? setupParam : null);
   }, [setupParam]);
 
   const openSetup = (id: SetupId) => {

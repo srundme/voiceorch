@@ -61,9 +61,9 @@ interface CapturedPayload {
 
 function StatusBadge({ status, pulse = false }: { status: ConnectionStatus; pulse?: boolean }) {
   const cfg = {
-    connected: { color: "bg-emerald-500/15 text-emerald-400 border-emerald-500/20", dot: "bg-emerald-500", label: "Connected" },
-    waiting:   { color: "bg-zinc-500/15 text-zinc-400 border-zinc-500/20",         dot: "bg-zinc-400",    label: "Waiting" },
-    error:     { color: "bg-red-500/15 text-red-400 border-red-500/20",            dot: "bg-red-500",     label: "Error" },
+    connected: { color: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/20", dot: "bg-emerald-500", label: "Connected" },
+    waiting:   { color: "bg-zinc-500/15 text-zinc-600 dark:text-zinc-400 border-zinc-500/20",         dot: "bg-zinc-400",    label: "Waiting" },
+    error:     { color: "bg-red-500/15 text-red-600 dark:text-red-400 border-red-500/20",            dot: "bg-red-500",     label: "Error" },
   }[status];
   const showPulse = pulse && status === "connected";
   return (
@@ -89,7 +89,7 @@ function CopyButton({ text, label }: { text: string; label?: string }) {
       className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
       title={`Copy ${label ?? ""}`}
     >
-      {copied ? <CheckCircle2 className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+      {copied ? <CheckCircle2 className="w-3 h-3 text-emerald-600 dark:text-emerald-400" /> : <Copy className="w-3 h-3" />}
       {label && <span>{copied ? "Copied!" : label}</span>}
     </button>
   );
@@ -142,9 +142,9 @@ function FieldMappingEditor({
             const isCore = coreRoles.includes(target);
             const currentSrc = mapping[target] ?? "";
             const icons: Record<string, React.ReactNode> = {
-              phone: <Phone className="w-3 h-3 text-blue-400" />,
-              name:  <User className="w-3 h-3 text-violet-400" />,
-              email: <Mail className="w-3 h-3 text-amber-400" />,
+              phone: <Phone className="w-3 h-3 text-blue-600 dark:text-blue-400" />,
+              name:  <User className="w-3 h-3 text-violet-600 dark:text-violet-400" />,
+              email: <Mail className="w-3 h-3 text-amber-600 dark:text-amber-400" />,
             };
             return (
               <div key={target} className="flex items-center gap-2">
@@ -153,7 +153,7 @@ function FieldMappingEditor({
                   <span className="text-xs font-mono text-foreground truncate">
                     {isCore ? target : `{{${target}}}`}
                   </span>
-                  {isCore && <span className="text-[9px] text-red-400">*</span>}
+                  {isCore && <span className="text-[9px] text-red-600 dark:text-red-400">*</span>}
                 </div>
                 <ArrowRight className="w-3 h-3 text-muted-foreground shrink-0" />
                 <select
@@ -352,7 +352,7 @@ function ListenDialog({
           {listenStatus === "expired" && (
             <div className="flex flex-col items-center gap-3 py-4">
               <div className="h-12 w-12 rounded-full bg-amber-500/10 flex items-center justify-center">
-                <Clock className="w-5 h-5 text-amber-400" />
+                <Clock className="w-5 h-5 text-amber-600 dark:text-amber-400" />
               </div>
               <p className="text-sm text-muted-foreground">Session expired. No event was received.</p>
               <Button size="sm" onClick={beginListen} className="h-8 text-xs">Try Again</Button>
@@ -361,7 +361,7 @@ function ListenDialog({
 
           {listenStatus === "captured" && captured && (
             <div className="space-y-4">
-              <div className="flex items-center gap-2 text-emerald-400">
+              <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
                 <CheckCircle2 className="w-4 h-4" />
                 <span className="text-sm font-medium">Event captured!</span>
                 <span className="text-xs text-muted-foreground ml-auto">
@@ -462,7 +462,7 @@ function HmacConfigDialog({
 
         <div className="space-y-4">
           {connection.hasHmacSecret && (
-            <div className="flex items-center gap-2 p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-400">
+            <div className="flex items-center gap-2 p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-600 dark:text-emerald-400">
               <Lock className="w-3.5 h-3.5 shrink-0" />
               Signature verification is active. Current hint: <code className="font-mono">{connection.hmacSecretHint}</code>
             </div>
@@ -592,8 +592,8 @@ function ConnectionCard({
 
   const typeLabel = connection.type === "meta_lead_ads" ? "Meta Lead Ads" : "Webhook";
   const typeIcon  = connection.type === "meta_lead_ads"
-    ? <Globe className="w-4 h-4 text-blue-400" />
-    : <Webhook className="w-4 h-4 text-violet-400" />;
+    ? <Globe className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+    : <Webhook className="w-4 h-4 text-violet-600 dark:text-violet-400" />;
 
   return (
     <>
@@ -653,7 +653,7 @@ function ConnectionCard({
                   className="h-7 px-2 text-muted-foreground hover:text-foreground"
                   title="Configure HMAC signature"
                 >
-                  <Lock className={cn("w-3.5 h-3.5", connection.hasHmacSecret && "text-emerald-400")} />
+                  <Lock className={cn("w-3.5 h-3.5", connection.hasHmacSecret && "text-emerald-600 dark:text-emerald-400")} />
                 </Button>
               </>
             )}
@@ -790,7 +790,7 @@ function WebhookRow({
               className="h-6 px-2 text-muted-foreground hover:text-foreground"
               title="Configure HMAC signature"
             >
-              <Lock className={cn("w-3 h-3", connection.hasHmacSecret && "text-emerald-400")} />
+              <Lock className={cn("w-3 h-3", connection.hasHmacSecret && "text-emerald-600 dark:text-emerald-400")} />
             </Button>
           </div>
         </div>
@@ -1559,7 +1559,7 @@ export function CrmImportDialog({
                             <div className="flex items-center gap-2">
                               <p className="text-xs font-medium truncate">{c.name ?? c.phone}</p>
                               {alreadyImported && (
-                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/30 shrink-0">
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 shrink-0">
                                   Already Imported
                                 </span>
                               )}
@@ -1650,17 +1650,17 @@ export function CrmImportDialog({
                   <p className="text-[10px] text-muted-foreground mt-0.5">Selected</p>
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-emerald-400">{withPhone.length}</p>
+                  <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{withPhone.length}</p>
                   <p className="text-[10px] text-muted-foreground mt-0.5">Ready</p>
                 </div>
                 <div>
-                  <p className={cn("text-2xl font-bold", invalidPhoneCount > 0 ? "text-red-400" : "text-muted-foreground")}>
+                  <p className={cn("text-2xl font-bold", invalidPhoneCount > 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground")}>
                     {invalidPhoneCount}
                   </p>
                   <p className="text-[10px] text-muted-foreground mt-0.5">Invalid format</p>
                 </div>
                 <div>
-                  <p className={cn("text-2xl font-bold", withoutPhone > 0 ? "text-amber-400" : "text-muted-foreground")}>
+                  <p className={cn("text-2xl font-bold", withoutPhone > 0 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground")}>
                     {withoutPhone}
                   </p>
                   <p className="text-[10px] text-muted-foreground mt-0.5">Missing phone</p>
@@ -1671,25 +1671,25 @@ export function CrmImportDialog({
             {/* Alerts */}
             {withPhone.length === 0 && (
               <div className="flex items-start gap-2 rounded-lg border border-red-500/20 bg-red-500/5 p-3">
-                <AlertCircle className="w-3.5 h-3.5 text-red-400 shrink-0 mt-0.5" />
-                <p className="text-xs text-red-400">
+                <AlertCircle className="w-3.5 h-3.5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+                <p className="text-xs text-red-600 dark:text-red-400">
                   No contacts have a valid phone under the mapped "{phoneField}" field. Go back and adjust the field mapping.
                 </p>
               </div>
             )}
             {invalidPhoneCount > 0 && (
               <div className="flex items-start gap-2 rounded-lg border border-red-500/20 bg-red-500/5 p-3">
-                <AlertCircle className="w-3.5 h-3.5 text-red-400 shrink-0 mt-0.5" />
+                <AlertCircle className="w-3.5 h-3.5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
                 <p className="text-xs text-muted-foreground">
-                  <span className="text-red-400 font-medium">{invalidPhoneCount} contacts</span> have an unrecognized phone format and will be skipped. Ensure numbers are 10-digit Indian or include a country code.
+                  <span className="text-red-600 dark:text-red-400 font-medium">{invalidPhoneCount} contacts</span> have an unrecognized phone format and will be skipped. Ensure numbers are 10-digit Indian or include a country code.
                 </p>
               </div>
             )}
             {alreadyImportedCount > 0 && (
               <div className="flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
-                <AlertCircle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                <AlertCircle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
                 <p className="text-xs text-muted-foreground">
-                  <span className="text-amber-400 font-medium">{alreadyImportedCount} contacts</span> appear to already be in this campaign. You'll set the duplicate policy in the next step.
+                  <span className="text-amber-600 dark:text-amber-400 font-medium">{alreadyImportedCount} contacts</span> appear to already be in this campaign. You'll set the duplicate policy in the next step.
                 </p>
               </div>
             )}
@@ -1717,17 +1717,17 @@ export function CrmImportDialog({
                       <td className="px-3 py-2 font-mono text-muted-foreground text-[10px]">{r.raw || "—"}</td>
                       <td className="px-3 py-2 font-mono text-[10px]">
                         {r.normalized
-                          ? <span className="text-emerald-400 font-semibold">{r.normalized}</span>
+                          ? <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{r.normalized}</span>
                           : <span className="text-muted-foreground/50">—</span>}
                       </td>
                       <td className="px-3 py-2">
                         {!r.hasRaw
-                          ? <span className="text-amber-400 text-[10px]">No phone</span>
+                          ? <span className="text-amber-600 dark:text-amber-400 text-[10px]">No phone</span>
                           : !r.validFormat
-                            ? <span className="text-red-400 text-[10px]">Invalid format</span>
+                            ? <span className="text-red-600 dark:text-red-400 text-[10px]">Invalid format</span>
                             : r.alreadyImported
-                              ? <span className="text-amber-400 text-[10px]">Already imported</span>
-                              : <span className="text-emerald-400 text-[10px]">Ready</span>}
+                              ? <span className="text-amber-600 dark:text-amber-400 text-[10px]">Already imported</span>
+                              : <span className="text-emerald-600 dark:text-emerald-400 text-[10px]">Ready</span>}
                       </td>
                     </tr>
                   ))}
@@ -1793,7 +1793,7 @@ export function CrmImportDialog({
                 className={cn("h-9 text-sm", batchNameError && "border-red-500/60 focus-visible:ring-red-500/40")}
               />
               {batchNameError && (
-                <p className="text-xs text-red-400 flex items-center gap-1.5">
+                <p className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1.5">
                   <AlertCircle className="w-3 h-3 shrink-0" />
                   {batchNameError}
                 </p>
@@ -1910,11 +1910,11 @@ export function CrmImportDialog({
                   <p className="text-[10px] text-muted-foreground">Selected</p>
                 </div>
                 <div>
-                  <p className="text-lg font-bold text-emerald-400">{withPhone.length}</p>
+                  <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400">{withPhone.length}</p>
                   <p className="text-[10px] text-muted-foreground">Will import</p>
                 </div>
                 <div>
-                  <p className={cn("text-lg font-bold", (withoutPhone + invalidPhoneCount) > 0 ? "text-amber-400" : "text-muted-foreground")}>
+                  <p className={cn("text-lg font-bold", (withoutPhone + invalidPhoneCount) > 0 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground")}>
                     {withoutPhone + invalidPhoneCount}
                   </p>
                   <p className="text-[10px] text-muted-foreground">Skipped</p>
@@ -2099,7 +2099,7 @@ function CrmConnectorSection() {
                       : ""}
                   </p>
                   {primary?.lastError && (
-                    <p className="mt-0.5 truncate text-[10px] text-red-400">{primary.lastError}</p>
+                    <p className="mt-0.5 truncate text-[10px] text-red-600 dark:text-red-400">{primary.lastError}</p>
                   )}
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
@@ -2438,7 +2438,7 @@ export default function ConnectionsPage() {
           </RecipeCard>
           <RecipeCard
             comingSoon
-            icon={<Globe className="h-4 w-4 text-blue-400" />}
+            icon={<Globe className="h-4 w-4 text-blue-600 dark:text-blue-400" />}
             title="Generic Webhook"
             description="Any platform that can POST JSON — n8n, custom servers, CRMs"
             badge="Universal"
@@ -2451,12 +2451,12 @@ export default function ConnectionsPage() {
                 or configure custom field mappings using the "Listen" feature.
               </p>
               <div className="space-y-0.5 rounded-lg bg-muted p-3 font-mono text-[11px] text-muted-foreground">
-                <p><span className="text-blue-400">POST</span> {firstWebhookUrl || "https://…/api/webhooks/lead/TOKEN"}</p>
-                <p><span className="text-violet-400">Content-Type</span>: application/json</p>
+                <p><span className="text-blue-600 dark:text-blue-400">POST</span> {firstWebhookUrl || "https://…/api/webhooks/lead/TOKEN"}</p>
+                <p><span className="text-violet-600 dark:text-violet-400">Content-Type</span>: application/json</p>
                 <p>{`{`}</p>
-                <p className="pl-4"><span className="text-amber-400">"phone"</span>: <span className="text-emerald-400">"+919876543210"</span>,</p>
-                <p className="pl-4"><span className="text-amber-400">"name"</span>: <span className="text-emerald-400">"Priya Sharma"</span>,</p>
-                <p className="pl-4"><span className="text-amber-400">"email"</span>: <span className="text-emerald-400">"priya@example.com"</span></p>
+                <p className="pl-4"><span className="text-amber-600 dark:text-amber-400">"phone"</span>: <span className="text-emerald-600 dark:text-emerald-400">"+919876543210"</span>,</p>
+                <p className="pl-4"><span className="text-amber-600 dark:text-amber-400">"name"</span>: <span className="text-emerald-600 dark:text-emerald-400">"Priya Sharma"</span>,</p>
+                <p className="pl-4"><span className="text-amber-600 dark:text-amber-400">"email"</span>: <span className="text-emerald-600 dark:text-emerald-400">"priya@example.com"</span></p>
                 <p>{`}`}</p>
               </div>
               {firstWebhookUrl && <CopyButton text={firstWebhookUrl} label="Copy webhook URL" />}

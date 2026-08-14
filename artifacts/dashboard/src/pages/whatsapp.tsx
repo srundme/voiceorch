@@ -143,11 +143,11 @@ function CopyButton({ text, label }: { text: string; label?: string }) {
 
 const MSG_STATUS_STYLES: Record<string, string> = {
   pending: "bg-muted/60 text-muted-foreground",
-  sent: "bg-sky-500/15 text-sky-400",
-  delivered: "bg-emerald-500/15 text-emerald-400",
-  read: "bg-teal-500/15 text-teal-300",
-  failed: "bg-red-500/15 text-red-400",
-  received: "bg-violet-500/15 text-violet-300",
+  sent: "bg-sky-500/15 text-sky-600 dark:text-sky-400",
+  delivered: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+  read: "bg-teal-500/15 text-teal-700 dark:text-teal-300",
+  failed: "bg-red-500/15 text-red-600 dark:text-red-400",
+  received: "bg-violet-500/15 text-violet-700 dark:text-violet-300",
 };
 
 function MsgStatusBadge({ status }: { status: string }) {
@@ -431,7 +431,7 @@ function NativeSection({
         <div className="space-y-4">
           {data?.purchasedNumber && (
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-500/25 bg-amber-500/5 px-3 py-2">
-              <p className="text-[11px] text-amber-300/90">
+              <p className="text-[11px] text-amber-700 dark:text-amber-300/90">
                 You own WhatsApp number <strong className="text-foreground">{data.purchasedNumber.number}</strong> but it isn't connected yet.
               </p>
               <div className="flex gap-2">
@@ -440,7 +440,7 @@ function NativeSection({
                 </Button>
                 {!isManagedWorkspace && (
                   <Button
-                    size="sm" variant="ghost" className="h-7 text-[11px] text-red-400"
+                    size="sm" variant="ghost" className="h-7 text-[11px] text-red-600 dark:text-red-400"
                     disabled={releaseNumber.isPending}
                     onClick={() => {
                       if (confirm(`Release ${data.purchasedNumber!.number}? The 30-day renewal billing stops and the number is gone for good.`)) {
@@ -466,9 +466,9 @@ function NativeSection({
             {/* Business → direct Meta Cloud API */}
             <div className="flex flex-col rounded-lg border border-sky-500/25 bg-sky-500/[0.04] p-4">
               <div className="flex flex-wrap items-center gap-2">
-                <Building2 className="h-4 w-4 text-sky-400" />
+                <Building2 className="h-4 w-4 text-sky-600 dark:text-sky-400" />
                 <h3 className="text-sm font-semibold">I have a WhatsApp Business account</h3>
-                <Badge className="border-transparent bg-sky-500/15 text-[10px] text-sky-300">Meta API · your brand</Badge>
+                <Badge className="border-transparent bg-sky-500/15 text-[10px] text-sky-700 dark:text-sky-300">Meta API · your brand</Badge>
               </div>
               <ul className="mt-3 flex-1 space-y-1.5 text-xs text-muted-foreground">
                 <li>• Messages from <strong className="text-foreground">your own WhatsApp number</strong></li>
@@ -478,7 +478,7 @@ function NativeSection({
               </ul>
               {metaConnected ? (
                 <>
-                  <div className="mt-4 flex items-center justify-center gap-1.5 rounded-md border border-emerald-500/30 bg-emerald-500/10 py-2 text-xs font-medium text-emerald-400">
+                  <div className="mt-4 flex items-center justify-center gap-1.5 rounded-md border border-emerald-500/30 bg-emerald-500/10 py-2 text-xs font-medium text-emerald-600 dark:text-emerald-400">
                     ✓ Already configured — see Your connections below
                   </div>
                   <Button size="sm" variant="ghost" className="mt-2 h-9 w-full text-[11px] text-muted-foreground" onClick={() => onChooseMeta?.()}>
@@ -499,15 +499,15 @@ function NativeSection({
             <div>
               <div className="flex items-center gap-2">
                 {channel.mode === "shared"
-                  ? <Sparkles className="w-4 h-4 text-emerald-400" />
-                  : <Building2 className="w-4 h-4 text-sky-400" />}
+                  ? <Sparkles className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                  : <Building2 className="w-4 h-4 text-sky-600 dark:text-sky-400" />}
                 <h3 className="text-sm font-semibold">
                   {channel.mode === "shared" ? "Legacy Instant WhatsApp" : "Your WhatsApp number"}
                 </h3>
                 <Badge
                   className={channel.status === "active"
-                    ? "bg-emerald-500/15 text-emerald-400 border-transparent text-[10px]"
-                    : "bg-amber-500/15 text-amber-400 border-transparent text-[10px]"}
+                    ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-transparent text-[10px]"
+                    : "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-transparent text-[10px]"}
                 >
                   {channel.status}
                 </Badge>
@@ -543,7 +543,7 @@ function NativeSection({
           </div>
 
           {channel.lastError && (
-            <div className="flex items-start justify-between gap-2 rounded-md border border-red-500/25 bg-red-500/5 px-3 py-2 text-[11px] text-red-400">
+            <div className="flex items-start justify-between gap-2 rounded-md border border-red-500/25 bg-red-500/5 px-3 py-2 text-[11px] text-red-600 dark:text-red-400">
               <div className="flex items-start gap-2 min-w-0">
                 <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
                 <span className="break-all">{channel.lastError}</span>
@@ -561,7 +561,7 @@ function NativeSection({
 
           {channel.mode === "own" && channel.vobizChannelId && channel.status !== "active" && (
             <div className="flex items-start justify-between gap-2 rounded-md border border-amber-500/25 bg-amber-500/5 px-3 py-2">
-              <p className="text-[11px] text-amber-300/90">
+              <p className="text-[11px] text-amber-700 dark:text-amber-300/90">
                 {channel.phoneNumberId
                   ? "Almost ready — waiting for the carrier to activate the channel."
                   : "Provisioning — the carrier is registering your WhatsApp number with Meta. Usually ready in a few minutes."}
@@ -587,7 +587,7 @@ function NativeSection({
               {!isManagedWorkspace && (
                 <button
                   type="button"
-                  className="text-red-400 hover:text-red-300"
+                  className="text-red-600 dark:text-red-400 hover:text-red-700 dark:text-red-300"
                   onClick={() => {
                     if (confirm(`Release ${data.purchasedNumber!.number}? WhatsApp sends from this number stop and renewal billing ends.`)) {
                       releaseNumber.mutate(data.purchasedNumber!.id);
@@ -685,8 +685,8 @@ function NativeSection({
                         </td>
                         <td className="px-3 py-2">
                           {m.direction === "outbound"
-                            ? <ArrowUpRight className="w-3.5 h-3.5 text-sky-400" />
-                            : <ArrowDownLeft className="w-3.5 h-3.5 text-violet-400" />}
+                            ? <ArrowUpRight className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400" />
+                            : <ArrowDownLeft className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400" />}
                         </td>
                         <td className="px-3 py-2 whitespace-nowrap">{m.phone}</td>
                         <td className="px-3 py-2 max-w-[280px]">
@@ -695,7 +695,7 @@ function NativeSection({
                             {m.bodyPreview}
                           </span>
                           {m.errorMessage && (
-                            <span className="block truncate text-[10px] text-red-400">{m.errorMessage}</span>
+                            <span className="block truncate text-[10px] text-red-600 dark:text-red-400">{m.errorMessage}</span>
                           )}
                         </td>
                         <td className="px-3 py-2"><MsgStatusBadge status={m.status} /></td>
@@ -798,7 +798,7 @@ function NativeSection({
           {bizStep === 1 ? (
             <div className="space-y-3">
               {retryNumber && (
-                <div className="rounded-md border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-[11px] text-amber-300/90">
+                <div className="rounded-md border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-[11px] text-amber-700 dark:text-amber-300/90">
                   Number <strong className="text-foreground">{retryNumber}</strong> is already yours — re-enter
                   your Meta details to finish connecting it. You won't be charged again.
                 </div>
@@ -865,12 +865,12 @@ function NativeSection({
                         {numbersLoading ? (
                           <p className="text-[11px] text-muted-foreground">Loading available numbers…</p>
                         ) : numbersError ? (
-                          <div className="text-[11px] text-red-400">
+                          <div className="text-[11px] text-red-600 dark:text-red-400">
                             Couldn't load numbers.{" "}
                             <button type="button" className="underline" onClick={() => refetchNumbers()}>Try again</button>
                           </div>
                         ) : (waNumbers?.numbers?.length ?? 0) === 0 ? (
-                          <p className="text-[11px] text-amber-400/90">
+                          <p className="text-[11px] text-amber-600 dark:text-amber-400/90">
                             No WhatsApp numbers in stock right now — try again shortly, or connect a Meta-registered number below.
                           </p>
                         ) : (
@@ -883,7 +883,7 @@ function NativeSection({
                                 onClick={() => setSelectedNumber(n.number)}
                               >
                                 <span className="font-mono">{n.number}</span>
-                                {selectedNumber === n.number && <CheckCircle2 className="w-3.5 h-3.5 text-sky-400" />}
+                                {selectedNumber === n.number && <CheckCircle2 className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400" />}
                               </button>
                             ))}
                           </div>
@@ -927,7 +927,7 @@ function NativeSection({
                 <div className="flex items-start gap-2">
                   <input type="radio" className="mt-1" checked={numberChoice === "voice"} onChange={() => setNumberChoice("voice")} />
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium">Use one of my SnapServe voice numbers <span className="text-emerald-400 font-semibold">₹0</span></p>
+                    <p className="text-xs font-medium">Use one of my SnapServe voice numbers <span className="text-emerald-600 dark:text-emerald-400 font-semibold">₹0</span></p>
                     <p className="text-[11px] text-muted-foreground mt-0.5">
                       WhatsApp-enable a number you already rent for calls — it keeps taking voice calls.
                       Verification calls land on the number itself, so SnapServe captures the code for you.
@@ -1374,18 +1374,19 @@ export default function WhatsAppPage() {
     returnToRaw && returnToRaw.startsWith("/app/") && !returnToRaw.startsWith("//")
       ? returnToRaw
       : "/app/connections";
+  // StripePage already renders a chevron, so the label is just the destination.
   const backLabel =
     returnLabelRaw?.trim()
     || (backHref.includes("/agents/")
-      ? "Back to Outcomes"
+      ? "Outcomes"
       : backHref.includes("section=tools")
-        ? "Back to Tools"
+        ? "Tools"
         : "Connections");
 
   return (
     <StripePage
       title="WhatsApp"
-      description="Connect your WhatsApp Business (Meta API) for mid-call and after-call messages. Use the back link above to return to your agent — this page only sets up the channel."
+      description={`Connect your WhatsApp Business account (Meta API) to send mid-call and after-call messages. This page only sets up the channel — return to ${backLabel} when you're done.`}
       back={{ href: backHref, label: backLabel }}
     >
       <div className="space-y-6">
@@ -1524,7 +1525,7 @@ export default function WhatsAppPage() {
                       <div className="text-[11px] text-muted-foreground flex flex-wrap gap-x-4 gap-y-1">
                         {c.lastInboundAt && <span>Last inbound: {new Date(c.lastInboundAt).toLocaleString()}</span>}
                         {c.lastOutboundAt && <span>Last outbound: {new Date(c.lastOutboundAt).toLocaleString()}</span>}
-                        {c.lastError && <span className="text-red-400">Error: {c.lastError}</span>}
+                        {c.lastError && <span className="text-red-600 dark:text-red-400">Error: {c.lastError}</span>}
                       </div>
                     )}
                   </div>

@@ -173,12 +173,12 @@ export function ConnectionsCalendarSetup() {
         back={{ href: "/app/connections", label: "Connections" }}
       >
         <div className="max-w-lg space-y-4">
-          <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-[12px] text-emerald-400">
+          <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-[12px] text-emerald-600 dark:text-emerald-400">
             <p className="font-medium flex items-center gap-2">
               <CheckCircle2 className="h-4 w-4" />
               3 of 3 ready
             </p>
-            <p className="mt-1 leading-relaxed text-emerald-400/90">
+            <p className="mt-1 leading-relaxed text-emerald-600 dark:text-emerald-400/90">
               On your agent → Tools → turn on Booking and pick this meeting, then watch appointments under Bookings.
             </p>
           </div>
@@ -236,7 +236,7 @@ export function ConnectionsCalendarSetup() {
           className={cn(
             "rounded-xl border px-4 py-3 text-[12px]",
             ready
-              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
               : "border-border/60 bg-muted/20 text-muted-foreground",
           )}
         >
@@ -269,7 +269,7 @@ export function ConnectionsCalendarSetup() {
                 >
                   <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border/50 bg-background/50">
                     {done ? (
-                      <Check className="h-4 w-4 text-emerald-400" />
+                      <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                     ) : (
                       <span className="text-[12px] font-semibold text-muted-foreground">{i + 1}</span>
                     )}
@@ -278,7 +278,7 @@ export function ConnectionsCalendarSetup() {
                     <p className="text-[13px] font-medium">
                       {step.title}
                       {done && !open ? (
-                        <span className="ml-2 text-[11px] font-normal text-emerald-400/80">Done</span>
+                        <span className="ml-2 text-[11px] font-normal text-emerald-600 dark:text-emerald-400/80">Done</span>
                       ) : null}
                     </p>
                     <p className="mt-0.5 text-[11px] text-muted-foreground leading-relaxed">{step.blurb}</p>
