@@ -1235,7 +1235,7 @@ function OverviewTab({
                   </div>
                   {ttsProvider === "sarvam" && (
                     <p className="text-[10px] text-muted-foreground/90 leading-relaxed">
-                      Default SnapServe stack · Powered by Sarvam
+                      Default SnapServe stack
                     </p>
                   )}
                   {ttsVoiceOpts.length > 0 && (
@@ -2050,7 +2050,7 @@ function VoiceTab({ form }: { form: any }) {
                   </div>
                   {ttsProvider === "sarvam" && (
                     <p className="text-[10px] text-muted-foreground leading-relaxed -mt-0.5 mb-1">
-                      Default SnapServe stack · Powered by Sarvam
+                      Default SnapServe stack
                     </p>
                   )}
                   <Select

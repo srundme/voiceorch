@@ -16,13 +16,12 @@ import { useAuth } from "@/lib/auth";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useGetWallet, customFetch } from "@workspace/api-client-react";
 import { useMinuteRatesMap, useUserProviderNames } from "@/hooks/use-minute-rates";
-import { SnapServeAgentIcon, SnapServeIcon, PoweredBySarvam } from "@/components/logo";
+import { SnapServeAgentIcon, SnapServeIcon } from "@/components/logo";
 import { Handshake } from "lucide-react";
 import { usePartnerContext } from "@/hooks/use-partner";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 import { loadActingAs, stopActingAs } from "@/lib/acting-as";
-import { SarvamFamilyAnnouncement } from "@/components/sarvam-family-announcement";
 
 /* ─── Error boundary ─────────────────────────────────────────────────────── */
 interface ErrorBoundaryState { hasError: boolean; error: unknown }
@@ -459,7 +458,6 @@ function SidebarContent({
                     <span style={{ fontWeight: 700 }}>Snap</span>
                     <span style={{ fontWeight: 400, opacity: 0.72 }}>Serve</span>
                   </span>
-                  <PoweredBySarvam variant="inline" className="justify-start" />
                 </span>
               )}
               {!collapsed && partnerCtx?.isPartner && (
@@ -580,8 +578,7 @@ function SidebarContent({
 
       {/* Quiet account footer */}
       <div className="shrink-0 border-t border-sidebar-border px-2 pt-1">
-        {/* Partner white-label branding (clients of a partner).
-            Intentionally NOT “Powered by Sarvam” — partner attribution wins. */}
+        {/* Partner white-label: company name only in the sidebar. */}
         {partnerCtx?.branding && (
           <div className="pt-1.5 flex items-center gap-2 px-2.5">
             {partnerCtx.branding.logoUrl && (
@@ -909,7 +906,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
                     <span style={{ fontWeight: 700 }}>Snap</span>
                     <span style={{ fontWeight: 400, opacity: 0.55 }}>Serve</span>
                   </span>
-                  <PoweredBySarvam variant="inline" className="justify-start" />
                 </span>
               </>
             )}
@@ -974,8 +970,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <NewAgentModal open={newAgentOpen} onClose={() => setNewAgentOpen(false)} />
 
       <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
-
-      <SarvamFamilyAnnouncement />
     </div>
   );
 }

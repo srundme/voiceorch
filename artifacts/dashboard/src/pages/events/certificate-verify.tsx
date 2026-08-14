@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useRoute } from "wouter";
-import { BrandMark, PoweredBySarvam } from "@/components/logo";
+import { BrandMark } from "@/components/logo";
 import { AlertCircle, CheckCircle, Loader2 } from "lucide-react";
 
 export default function CertificateVerifyPage() {
@@ -53,7 +53,6 @@ export default function CertificateVerifyPage() {
   return (
     <div className="min-h-dvh flex flex-col items-center justify-center gap-4 bg-muted/30 px-6 text-center">
       <BrandMark />
-      <PoweredBySarvam />
       <CheckCircle className="h-12 w-12 text-emerald-500" />
       <h1 className="text-2xl font-bold">Valid certificate</h1>
       <div className="text-sm space-y-1 max-w-md">

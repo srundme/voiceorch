@@ -32,7 +32,7 @@ function shell(body: string): string {
     '<p style="margin:0;font-size:12px;color:#9ca3af;line-height:1.7">' +
     "You received this from SnapServe &nbsp;&middot;&nbsp;" +
     '<a href="https://app.snapserve.ai" style="color:#6b7280;text-decoration:none">app.snapserve.ai</a><br>' +
-    "SnapServe &middot; Powered by Sarvam<br>" +
+    "SnapServe<br>" +
     "&copy; " + year + " SnapServe. All rights reserved." +
     "</p></div>" +
     "</td></tr>" +
@@ -157,7 +157,7 @@ export function onboardingDay1Email(name: string): string {
     '<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;padding:20px 24px;margin:20px 0">' +
     '<p style="margin:0 0 10px;font-size:14px;font-weight:600;color:#09090b">Creating an agent takes about 3 minutes</p>' +
     '<p style="margin:0 0 6px;font-size:13px;color:#6b7280">- Pick a name and write a short system prompt</p>' +
-    '<p style="margin:0 0 6px;font-size:13px;color:#6b7280">- Start with Sarvam STT + TTS (SnapServe powered by Sarvam), or bring your own providers</p>' +
+    '<p style="margin:0 0 6px;font-size:13px;color:#6b7280">- Start with India-hosted STT + TTS defaults, or bring your own providers</p>' +
     '<p style="margin:0;font-size:13px;color:#6b7280">- Click &ldquo;Web Call&rdquo; to talk to your agent live in the browser &mdash; no phone needed</p>' +
     "</div>" +
     '<div style="margin:24px 0">' + btn("Create my first agent", "https://app.snapserve.ai/agents") + "</div>" +
@@ -222,7 +222,7 @@ export function noAgentDay4Email(name: string, priorPlatform?: string): string {
     '<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;padding:20px 24px;margin:20px 0">' +
     '<p style="margin:0 0 12px;font-size:14px;font-weight:600;color:#09090b">Three things that are different here</p>' +
     '<p style="margin:0 0 10px;font-size:13px;color:#374151"><strong>1. You keep your own provider keys</strong> &mdash; no per-minute markup on LLM, TTS, or ASR. You pay providers at cost. SnapServe charges a flat orchestration fee of Rs.5/min.</p>' +
-    '<p style="margin:0 0 10px;font-size:13px;color:#374151"><strong>2. Tamil &amp; Hindi out of the box</strong> &mdash; Sarvam ASR + LLM is built in. Agents switch languages mid-call and remember caller names across calls.</p>' +
+    '<p style="margin:0 0 10px;font-size:13px;color:#374151"><strong>2. Tamil &amp; Hindi out of the box</strong> &mdash; India-hosted speech and language models are built in. Agents switch languages mid-call and remember caller names across calls.</p>' +
     '<p style="margin:0;font-size:13px;color:#374151"><strong>3. Caller memory</strong> &mdash; the agent remembers every caller &mdash; their name, preferences, past conversations &mdash; automatically, no extra setup.</p>' +
     "</div>" +
     '<div style="margin:24px 0">' + btn("Build my first agent \u2192", "https://app.snapserve.ai/agents/new") + "</div>" +
@@ -239,7 +239,7 @@ export function noAgentDay7Email(name: string): string {
     '<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;padding:20px 24px;margin:20px 0">' +
     '<p style="margin:0 0 10px;font-size:14px;font-weight:600;color:#09090b">Inbound FAQ agent (great first project)</p>' +
     '<p style="margin:0 0 8px;font-size:13px;color:#6b7280"><strong>System prompt:</strong> &ldquo;You are a helpful assistant for [your business]. Answer questions about pricing, hours, and bookings. Keep answers short and conversational.&rdquo;</p>' +
-    '<p style="margin:0 0 8px;font-size:13px;color:#6b7280"><strong>Providers:</strong> Sarvam ASR + Gemini Flash LLM + Cartesia TTS (all managed &mdash; no keys needed)</p>' +
+    '<p style="margin:0 0 8px;font-size:13px;color:#6b7280"><strong>Providers:</strong> Managed India-hosted STT + LLM + TTS defaults (no keys needed)</p>' +
     '<p style="margin:0;font-size:13px;color:#6b7280"><strong>Test it:</strong> click Web Call and talk to it. Takes 5 minutes. From there you can add a knowledge base, connect a phone number, or run a campaign.</p>' +
     "</div>" +
     '<div style="margin:24px 0">' + btn("Try this setup \u2192", "https://app.snapserve.ai/agents/new") + "</div>" +

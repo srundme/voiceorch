@@ -4,7 +4,7 @@ import { useRoute } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { BrandMark, PoweredBySarvam } from "@/components/logo";
+import { BrandMark } from "@/components/logo";
 import { AlertCircle, CheckCircle, Loader2, Plus, Trash2 } from "lucide-react";
 
 type PublicEvent = {
@@ -197,7 +197,6 @@ export default function PublicEventPage() {
           We will verify your team details. Once approved, an official event ticket containing the venue and date will be emailed to the leader.
         </p>
         <BrandMark className="mt-4 opacity-70" />
-        <PoweredBySarvam className="mt-2" />
       </div>
     );
   }
@@ -211,7 +210,6 @@ export default function PublicEventPage() {
       <div className="bg-primary/5 border-b border-border">
         <div className="mx-auto max-w-2xl px-4 py-6 sm:py-8">
           <BrandMark className="mb-4" />
-          <PoweredBySarvam className="mb-3 justify-start" />
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">{meta.title}</h1>
           {meta.tagline && <p className="text-sm text-muted-foreground mt-1">{meta.tagline}</p>}
           <p className="text-xs text-muted-foreground mt-2">

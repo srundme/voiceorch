@@ -1,8 +1,6 @@
 import { useEffect, useRef } from "react";
 import { Link } from "wouter";
 import { useAuth } from "@/lib/auth";
-import { PoweredBySarvam } from "@/components/logo";
-
 /* ─────────────────────────────────────────────────────────────────────────── */
 /*  DATA                                                                        */
 /* ─────────────────────────────────────────────────────────────────────────── */
@@ -207,7 +205,7 @@ export default function LandingPage() {
           </h1>
 
           <p className="hero-sub" style={{ fontSize: "clamp(1rem,1.8vw,1.2rem)", color: "#555", lineHeight: 1.7, maxWidth: 520, margin: "0 auto 44px", fontWeight: 400 }}>
-            SnapServe — powered by Sarvam — builds living memory of every caller so your Indic voice agents already know them next time.
+            SnapServe builds living memory of every caller so your Indic voice agents already know them next time.
           </p>
 
           {/* CTAs */}
@@ -448,12 +446,12 @@ export default function LandingPage() {
           <div className="reveal" style={{ marginBottom: 56 }}>
             <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "#a855f7", marginBottom: 16 }}>Pricing</p>
             <h2 style={{ fontWeight: 800, fontSize: "clamp(2rem,4vw,3rem)", letterSpacing: "-2px", lineHeight: 1.1, marginBottom: 10 }}>Pay per minute.<br/>No surprises.</h2>
-            <p style={{ color: "#444", fontSize: "0.95rem" }}>Default stack is Sarvam STT + TTS. Bring your own keys for other providers when you need them.</p>
+            <p style={{ color: "#444", fontSize: "0.95rem" }}>India-hosted defaults included. Bring your own provider keys when you need them.</p>
           </div>
 
           <div className="reveal" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14 }}>
             {[
-              { tier: "Starter", price: "₹5", unit: "/min", hi: false, features: ["Flat platform fee", "Sarvam-powered defaults", "10 concurrent calls", "Email support", "Caller memory included"] },
+              { tier: "Starter", price: "₹5", unit: "/min", hi: false, features: ["Flat platform fee", "India-hosted defaults", "10 concurrent calls", "Email support", "Caller memory included"] },
               { tier: "Production", price: "₹5", unit: "/min", hi: true,  features: ["Same flat ₹5/min", "Card wallet top-ups", "500 concurrent calls", "Priority support", "Smart SIP escalation"] },
               { tier: "Enterprise", price: "Custom", unit: "",    hi: false, features: ["Dedicated infrastructure", "Custom model fine-tuning", "Unlimited concurrency", "24/7 Slack support", "SLA guarantee"] },
             ].map(plan => (
@@ -522,7 +520,7 @@ export default function LandingPage() {
                 </svg>
                 <span style={{ fontWeight: 700, fontSize: 14, color: "#fff", letterSpacing: "-0.3px" }}>SnapServe AI</span>
               </div>
-              <p style={{ fontSize: 12, color: "#2a2a2a", lineHeight: 1.65 }}>SnapServe — powered by Sarvam. Indic voice agents with caller memory.</p>
+              <p style={{ fontSize: 12, color: "#2a2a2a", lineHeight: 1.65 }}>SnapServe. Indic voice agents with caller memory.</p>
             </div>
             <div style={{ display: "flex", gap: 60, flexWrap: "wrap" }}>
               {[
@@ -543,7 +541,6 @@ export default function LandingPage() {
           </div>
           <div style={{ borderTop: "1px solid rgba(255,255,255,0.04)", paddingTop: 24, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
             <p style={{ fontSize: 12, color: "#1f1f1f" }}>© 2026 SnapServe AI. All rights reserved.</p>
-            <PoweredBySarvam className="opacity-70 justify-center" />
           </div>
         </div>
       </footer>

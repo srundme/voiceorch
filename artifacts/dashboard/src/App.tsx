@@ -13,7 +13,7 @@ import { ThemeSync } from "@/components/theme-sync";
 
 import { Layout } from "@/components/layout";
 import { recordInAppNavigation } from "@/lib/nav-history";
-import { SnapServeLoader, PoweredBySarvam } from "@/components/logo";
+import { SnapServeLoader } from "@/components/logo";
 import { VoiceAssistant } from "@/components/VoiceAssistant";
 
 // ── Page imports ─────────────────────────────────────────────────────────────
@@ -185,7 +185,6 @@ function SignInPage() {
               <span style={{ fontWeight: 700 }}>Snap</span>
               <span style={{ fontWeight: 400, opacity: 0.55 }}>Serve</span>
             </span>
-            <PoweredBySarvam variant="inline" className="justify-center text-white/45 [&_span]:text-white/45" />
           </div>
         </div>
 

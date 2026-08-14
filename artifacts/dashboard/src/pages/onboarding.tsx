@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { BrandMark, PoweredBySarvam } from "@/components/logo";
+import { BrandMark } from "@/components/logo";
 import { useLocation } from "wouter";
 import { useCompleteOnboarding, useGetOnboardingStatus, getGetOnboardingStatusQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -461,7 +461,6 @@ export default function OnboardingPage() {
           <header className="flex items-center justify-between px-6 pt-6 pb-2 max-w-6xl mx-auto w-full">
             <span className="inline-flex items-center gap-2">
               <BrandMark iconSize={22} wordmarkHeight={16} />
-              <PoweredBySarvam variant="inline" className="border-l border-border pl-2" />
             </span>
             <StepCounter current={stepNum} total={totalSteps} />
           </header>
