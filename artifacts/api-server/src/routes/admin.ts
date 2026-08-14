@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, usersTable, walletTransactionsTable, callsTable, agentsTable, scheduledCallbacksTable, bookingsTable, eventTypesTable, schedulingCalendarsTable, platformSettingsTable, usageSpikeDismissalsTable, usageSpikeNotificationsTable, alertNotificationLogTable, providerMinuteRatesTable, bookInternsTable, bookProgressTable, bookExamAttemptsTable } from "@workspace/db";
+import { db, usersTable, walletTransactionsTable, callsTable, agentsTable, scheduledCallbacksTable, bookingsTable, eventTypesTable, schedulingCalendarsTable, platformSettingsTable, usageSpikeDismissalsTable, usageSpikeNotificationsTable, alertNotificationLogTable, providerMinuteRatesTable, bookInternsTable, bookProgressTable, bookExamAttemptsTable, partnersTable } from "@workspace/db";
 import { invalidateMinuteRatesCache } from "../services/minute-rates.js";
 import { sendTestEmail } from "../services/scheduling/notifications.js";
 import { eq, sql, count, sum, desc, lt, gt, and, inArray, ilike, like, type SQL, type AnyColumn } from "drizzle-orm";
@@ -198,7 +198,7 @@ router.get("/admin/users/:clerkId", async (req, res): Promise<void> => {
       return;
     }
 
-    const [calls, walletTransactions, agents] = await Promise.all([
+    const [calls, walletTransactions, agents, partnerRows] = await Promise.all([
       db
         .select()
         .from(callsTable)
@@ -212,9 +212,21 @@ router.get("/admin/users/:clerkId", async (req, res): Promise<void> => {
         .orderBy(desc(walletTransactionsTable.createdAt))
         .limit(50),
       db.select().from(agentsTable).where(eq(agentsTable.userId, clerkId!)),
+      // Lets the admin UI show partner status instead of offering "Make Partner"
+      // for someone who already is one (the POST would just 409).
+      db
+        .select({
+          id: partnersTable.id,
+          companyName: partnersTable.companyName,
+          status: partnersTable.status,
+          baseRateCentsPerMin: partnersTable.baseRateCentsPerMin,
+        })
+        .from(partnersTable)
+        .where(eq(partnersTable.userId, clerkId!))
+        .limit(1),
     ]);
 
-    res.json({ user, calls, walletTransactions, agents });
+    res.json({ user, calls, walletTransactions, agents, partner: partnerRows[0] ?? null });
   } catch (err) {
     req.log.error({ err }, "admin/users/:clerkId failed");
     res.status(500).json({ error: "Internal server error" });
