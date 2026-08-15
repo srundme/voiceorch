@@ -57,6 +57,13 @@ export function minTopupPaiseForUser(isPartner: boolean): number {
   return isPartner ? MIN_PARTNER_TOPUP_PAISE : MIN_TOPUP_PAISE;
 }
 
+/**
+ * Wallet-funded first phone purchase is allowed only when balance is
+ * strictly greater than ₹20,000 (2_000_000 paise). Card/UPI remains available
+ * for everyone else.
+ */
+export const PHONE_WALLET_PURCHASE_MIN_BALANCE_PAISE = 2_000_000;
+
 /** Autopay defaults */
 export const AUTOPAY_THRESHOLD_PAISE = 10_000; // ₹100
 export const AUTOPAY_AMOUNT_PAISE = 50_000;    // ₹500

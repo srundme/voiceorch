@@ -1603,6 +1603,56 @@ paths:
         "503":
           description: Payment platform not configured
 
+  /phone-numbers/purchase/wallet:
+    post:
+      operationId: purchasePhoneNumberFromWallet
+      tags: [phone-numbers]
+      summary: Buy a phone number by debiting wallet when balance is above ₹20,000. Provisions immediately; refunds wallet if carrier purchase fails.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PurchasePhoneNumberInput"
+      responses:
+        "201":
+          description: Number purchased and provisioned from wallet
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PhoneNumber"
+        "401":
+          description: Unauthorized
+        "402":
+          description: Insufficient wallet balance
+        "403":
+          description: Wallet balance at or below ₹20,000 threshold, or KYC required
+        "409":
+          description: Number already taken or pending order exists
+        "503":
+          description: Platform carrier not configured
+
+  /phone-numbers/promo/quote:
+    post:
+      operationId: quotePhoneNumberPromo
+      tags: [phone-numbers]
+      summary: Price a phone number with a promo code applied, without creating an order. Used by the checkout UI to validate a code before payment.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PhonePromoQuoteInput"
+      responses:
+        "200":
+          description: Quote — check `valid` to see whether the code was accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PhonePromoQuote"
+        "401":
+          description: Unauthorized
+
   /phone-numbers/purchase/confirm:
     post:
       operationId: confirmPhoneNumberPurchase
@@ -8899,6 +8949,9 @@ components:
           enum: [autopay, wallet]
           default: wallet
           description: Autopay keeps the number via card mandate top-ups; wallet renews from balance only (unpaid → release after grace).
+        promoCode:
+          type: string
+          description: Optional promo code. The server re-prices the order; an unknown or expired code is rejected with 400 rather than silently charging full price.
 
     InitiatePhoneNumberPurchaseResponse:
       type: object
@@ -8912,7 +8965,7 @@ components:
           description: Razorpay order id
         amountCents:
           type: integer
-          description: Payable amount in INR paise (₹800 + 18% GST = 94400)
+          description: Payable amount in INR paise, including GST
         amount:
           type: integer
           description: Amount in the smallest currency unit, as required by the Razorpay checkout widget
@@ -8921,6 +8974,66 @@ components:
         keyId:
           type: string
           description: Razorpay publishable key id for the checkout widget
+        basePaise:
+          type: integer
+          description: Taxable base actually charged, after any promo
+        gstPaise:
+          type: integer
+        payablePaise:
+          type: integer
+        gstRate:
+          type: number
+        promoCode:
+          type: ["string", "null"]
+          description: Promo applied to this order, or null at full price
+        discountPaise:
+          type: integer
+          description: Paise taken off the standard base by the promo
+        preferCard:
+          type: boolean
+
+    PhonePromoQuoteInput:
+      type: object
+      required: [code, number]
+      properties:
+        code:
+          type: string
+          description: Promo code as typed by the buyer (case-insensitive)
+        number:
+          type: string
+          description: E.164 number being priced — the standard base is tier-dependent
+
+    PhonePromoQuote:
+      type: object
+      required: [valid, basePaise, gstPaise, payablePaise, standardBasePaise, standardPayablePaise, discountPaise, gstRate]
+      properties:
+        valid:
+          type: boolean
+          description: False when the code is unknown or expired; the quote then shows full price
+        code:
+          type: ["string", "null"]
+          description: Canonical uppercase code when valid
+        label:
+          type: ["string", "null"]
+          description: Human name for the offer, e.g. "Voiceathon 2026"
+        message:
+          type: ["string", "null"]
+          description: Why an invalid code was rejected
+        basePaise:
+          type: integer
+        gstPaise:
+          type: integer
+        payablePaise:
+          type: integer
+        standardBasePaise:
+          type: integer
+        standardPayablePaise:
+          type: integer
+          description: What the buyer would pay without the promo — also the recurring renewal amount
+        discountPaise:
+          type: integer
+        gstRate:
+          type: number
 
     ConfirmPhoneNumberPurchaseInput:
       type: object

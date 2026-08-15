@@ -5,9 +5,10 @@ import { requireAuth } from "../middlewares/requireAuth.js";
 import { clientContext } from "../middlewares/clientContext.js";
 import { logger } from "../lib/logger.js";
 import { ingestKbTextEntries, type KbEntryInput } from "../services/kb-ingest.js";
-import { isKbVectorReady, kickKbEmbedWorker } from "../services/kb-embeddings.js";
+import { getKbEmbedBlock, isKbVectorReady, kickKbEmbedWorker } from "../services/kb-embeddings.js";
 import { kickKrutrimSummaryWorker } from "../services/kb-source-summary.js";
-import { extractPdfChunksWithGemini } from "../services/kb-pdf-extract.js";
+import { extractPdfChunksWithLlm } from "../services/kb-pdf-extract.js";
+import { parsePdfText } from "../lib/pdf-text.js";
 import {
   buildKnowledgeSearchPayload,
   isPureNonLatinQuery,
@@ -86,11 +87,7 @@ async function extractDocumentText(file: Express.Multer.File): Promise<string> {
   const ext = name.includes(".") ? name.slice(name.lastIndexOf(".") + 1) : "";
 
   if (ext === "pdf" || file.mimetype === "application/pdf") {
-    // pdf-parse is CommonJS; load via createRequire to avoid ESM interop issues.
-    const require = createRequire(import.meta.url);
-    const pdfParse = require("pdf-parse") as (buf: Buffer) => Promise<{ text: string }>;
-    const result = await pdfParse(file.buffer);
-    return result.text ?? "";
+    return parsePdfText(file.buffer);
   }
 
   if (ext === "docx" || file.mimetype === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
@@ -100,6 +97,26 @@ async function extractDocumentText(file: Express.Multer.File): Promise<string> {
 
   // txt / csv / md / markdown and any other plain-text format
   return file.buffer.toString("utf-8");
+}
+
+/**
+ * Classify why a PDF produced no importable text, so the UI can tell a scanned
+ * PDF from an encrypted or corrupt one instead of a generic "Import failed".
+ */
+async function classifyPdfImportFailure(buffer: Buffer): Promise<string> {
+  try {
+    const text = (await parsePdfText(buffer)).trim();
+    if (!text) {
+      return "This looks like a scanned or image-only PDF — no selectable text was found. Upload a text-based PDF, a DOCX/TXT export, or run OCR first.";
+    }
+    return "We couldn't turn this PDF into knowledge entries. Try re-exporting it as a text-based PDF or DOCX.";
+  } catch (err) {
+    const msg = String((err as Error)?.message ?? err).toLowerCase();
+    if (msg.includes("password") || msg.includes("encrypt")) {
+      return "This PDF is password-protected or encrypted. Remove the protection, then upload it again.";
+    }
+    return "This PDF couldn't be read — it may be corrupt or not a valid PDF. Try re-exporting and uploading again.";
+  }
 }
 
 /* ── Helpers ─────────────────────────────────────────────────────────────── */
@@ -120,6 +137,8 @@ async function enrichKnowledgeSources<T extends { id: number; status: string; en
 ): Promise<Array<T & {
   embeddedCount: number;
   indexing: boolean;
+  indexingBlocked: boolean;
+  indexingError: string | null;
   needsAttention: boolean;
   failedPageCount: number;
   attachedAgentCount: number;
@@ -127,6 +146,7 @@ async function enrichKnowledgeSources<T extends { id: number; status: string; en
   if (!sources.length) return [];
   const ids = sources.map((s) => s.id);
   const vectorReady = isKbVectorReady();
+  const embedBlock = getKbEmbedBlock();
 
   const embedCounts = new Map<number, number>();
   if (vectorReady) {
@@ -160,15 +180,20 @@ async function enrichKnowledgeSources<T extends { id: number; status: string; en
   return sources.map((s) => {
     const failed = parseFailedUrls(s.crawlFailedUrls);
     const embeddedCount = vectorReady ? (embedCounts.get(s.id) ?? 0) : s.entryCount;
-    const indexing =
+    const pending =
       terminalOk.has(s.status)
       && s.entryCount > 0
       && vectorReady
       && embeddedCount < s.entryCount;
+    // With the embed breaker open the remaining entries will never finish;
+    // the source is usable via keyword search, so say that instead of spinning.
+    const indexingBlocked = pending && !!embedBlock;
     return {
       ...s,
       embeddedCount,
-      indexing,
+      indexing: pending && !indexingBlocked,
+      indexingBlocked,
+      indexingError: indexingBlocked ? embedBlock!.reason : null,
       needsAttention: s.status === "partial" || failed.length > 0,
       failedPageCount: failed.length,
       attachedAgentCount: attachCounts.get(s.id) ?? 0,
@@ -618,7 +643,7 @@ router.post("/knowledge-sources/upload", requireAuth, clientContext, upload.sing
       created.push(entry!);
     }
     await db.update(knowledgeSourcesTable)
-      .set({ status: "ready", entryCount: created.length, updatedAt: new Date() })
+      .set({ status: "ready", entryCount: created.length, errorMessage: null, updatedAt: new Date() })
       .where(eq(knowledgeSourcesTable.id, sourceId));
     logger.info({ sourceId, file: file!.originalname, entryCount: created.length, via }, "KB file upload processed");
     kickKbEmbedWorker();
@@ -637,33 +662,38 @@ router.post("/knowledge-sources/upload", requireAuth, clientContext, upload.sing
 
   const isPdf = ext === "pdf" || file.mimetype === "application/pdf";
   if (isPdf) {
-    // PDFs go through Gemini multimodal understanding (text + tables + image
-    // descriptions), which can take tens of seconds — so this path is ASYNC:
-    // respond immediately with status "processing"; the dashboard already
-    // polls processing sources (website crawl uses the same lifecycle).
-    // Any Gemini failure falls back to the legacy pdf-parse extraction.
+    // PDFs go through pdf-parse + Sarvam GLM 5.2 semantic chunking, which can
+    // take tens of seconds — so this path is ASYNC: respond immediately with
+    // status "processing"; the dashboard already polls processing sources.
+    // Any LLM failure falls back to the legacy fixed-size pdf-parse chunks.
     res.status(201).json({ ...source, entries: [] });
     void (async () => {
       try {
-        let entries = await extractPdfChunksWithGemini(file.buffer, file.originalname);
-        let via = "gemini-multimodal";
+        let entries = await extractPdfChunksWithLlm(file.buffer, file.originalname);
+        let via = "sarvam-glm5.2";
         if (!entries?.length) {
           via = "pdf-parse-fallback";
           const text = await extractDocumentText(file);
           entries = legacyChunks(text);
         }
         if (!entries.length) {
+          const reason = await classifyPdfImportFailure(file.buffer).catch(
+            () => "No text could be extracted from this PDF.",
+          );
           await db.update(knowledgeSourcesTable)
-            .set({ status: "failed", updatedAt: new Date() })
+            .set({ status: "failed", errorMessage: reason, updatedAt: new Date() })
             .where(eq(knowledgeSourcesTable.id, sourceId));
-          logger.warn({ sourceId, file: file.originalname }, "KB PDF upload: no text extracted by either path");
+          logger.warn({ sourceId, file: file.originalname, reason }, "KB PDF upload: no text extracted by either path");
           return;
         }
         await persistEntries(entries, via);
       } catch (err) {
         logger.warn({ err, sourceId, file: file.originalname }, "KB PDF upload processing failed");
+        const reason = await classifyPdfImportFailure(file.buffer).catch(
+          () => "This PDF couldn't be processed. Please try again.",
+        );
         await db.update(knowledgeSourcesTable)
-          .set({ status: "failed", updatedAt: new Date() })
+          .set({ status: "failed", errorMessage: reason, updatedAt: new Date() })
           .where(eq(knowledgeSourcesTable.id, sourceId))
           .catch(() => {});
       }
@@ -675,22 +705,24 @@ router.post("/knowledge-sources/upload", requireAuth, clientContext, upload.sing
   try {
     const entries = legacyChunks(await extractDocumentText(file));
     if (!entries.length) {
+      const reason = `No text could be extracted from this ${ext.toUpperCase()} file. It may be empty or contain only images.`;
       await db.update(knowledgeSourcesTable)
-        .set({ status: "failed", updatedAt: new Date() })
+        .set({ status: "failed", errorMessage: reason, updatedAt: new Date() })
         .where(eq(knowledgeSourcesTable.id, sourceId));
-      res.status(400).json({ error: "No text could be extracted from the document" });
+      res.status(400).json({ error: reason });
       return;
     }
     const createdEntries = await persistEntries(entries, "local-extract");
     const [refreshed] = await db.select().from(knowledgeSourcesTable).where(eq(knowledgeSourcesTable.id, sourceId));
     res.status(201).json({ ...refreshed, entries: createdEntries });
   } catch (err) {
+    const reason = `We couldn't read this ${ext.toUpperCase()} file. It may be corrupt — try re-exporting and uploading again.`;
     await db.update(knowledgeSourcesTable)
-      .set({ status: "failed", updatedAt: new Date() })
+      .set({ status: "failed", errorMessage: reason, updatedAt: new Date() })
       .where(eq(knowledgeSourcesTable.id, sourceId))
       .catch(() => {});
     req.log.warn({ err, sourceId, file: file.originalname }, "KB file upload extraction failed");
-    res.status(400).json({ error: "Failed to extract text from the uploaded document" });
+    res.status(400).json({ error: reason });
   }
 });
 

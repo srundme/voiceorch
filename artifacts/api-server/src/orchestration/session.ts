@@ -3548,6 +3548,54 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
             }
           }
 
+          // 2b. Campaign conversation intelligence (sentiment / intent / topics).
+          // Universal signals for the campaign analytics board — runs after
+          // disposition so we can pass dispositionResult as a hint. Non-campaign
+          // calls are skipped inside analyzeCallIntelligence.
+          if (session.campaignLeadId && transcript && transcript.trim().length >= 20) {
+            try {
+              const { analyzeCallIntelligence } = await import("../services/analyze-call-intelligence.js");
+              await analyzeCallIntelligence({
+                callId: session.callId,
+                leadId: session.campaignLeadId,
+                transcript,
+                callSummary: callSummary || null,
+                dispositionResult,
+              });
+            } catch (intelErr) {
+              logger.warn({ sessionId, intelErr }, "Post-call intelligence analysis failed");
+            }
+          }
+
+          // 2c. Inbound call → campaign matching ("who called us back?").
+          // Campaign dials carry campaignLeadId; anything else inbound from a
+          // known lead number gets linked into the campaign Incoming tab.
+          if (
+            !session.campaignLeadId &&
+            ag.userId &&
+            call.fromNumber &&
+            !call.fromNumber.startsWith("webcall") &&
+            !call.toNumber.startsWith("webcall")
+          ) {
+            let inboundDir = "inbound";
+            try {
+              const md = call.metadata ? JSON.parse(call.metadata) as Record<string, unknown> : {};
+              if (typeof md["direction"] === "string") inboundDir = md["direction"];
+            } catch { /* ignore */ }
+            if (inboundDir === "inbound") {
+              try {
+                const { matchInboundCallToCampaigns } = await import("../services/incoming-call-match.js");
+                await matchInboundCallToCampaigns({
+                  callId: session.callId,
+                  userId: ag.userId,
+                  callerPhone: call.fromNumber,
+                });
+              } catch (matchErr) {
+                logger.warn({ sessionId, matchErr }, "Inbound campaign match failed");
+              }
+            }
+          }
+
           // 3. Evaluate call success against agent's success criteria (if configured)
           const agentCfgForEval = (ag.agentConfig ?? {}) as Record<string, unknown>;
           const successCriteria = agentCfgForEval["successCriteria"] as string | undefined;

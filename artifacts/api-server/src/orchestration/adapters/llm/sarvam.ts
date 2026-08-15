@@ -18,7 +18,63 @@ function rawSseDebugEnabled(): boolean {
 const RAW_SSE_DIAG_MAX_BUFFER = 2000;
 
 /** Models that support Sarvam's function-calling interface */
-const TOOL_CAPABLE_MODELS = new Set(["sarvam-30b", "sarvam-105b"]);
+const TOOL_CAPABLE_MODELS = new Set([
+  "sarvam-30b",
+  "sarvam-105b",
+  // Sarvam-hosted open-source models on /v2 (beta; key must be whitelisted).
+  "gemma4",
+  "glm5.2",
+]);
+
+/** Open-source models served on POST /v2/chat/completions (not /v1). */
+const OPEN_SOURCE_MODELS = new Set(["gemma4", "glm5.2"]);
+
+export function isSarvamOpenSourceModel(model: string): boolean {
+  return OPEN_SOURCE_MODELS.has(model);
+}
+
+export function sarvamChatCompletionsUrl(model: string): string {
+  return isSarvamOpenSourceModel(model)
+    ? "https://api.sarvam.ai/v2/chat/completions"
+    : "https://api.sarvam.ai/v1/chat/completions";
+}
+
+/** Normalize playground / docs aliases to the wire model ids. */
+export function normalizeSarvamLlmModel(model: string | null | undefined): string {
+  const ALIASES: Record<string, string> = {
+    "sarvam-m": "sarvam-105b",
+    "sarvam-2b": "sarvam-105b",
+    "sarvam-2b-v0.5": "sarvam-105b",
+    "sarvam-m1": "sarvam-105b",
+    "sarvam-30b-16k": "sarvam-105b",
+    "sarvam-105b-32k": "sarvam-105b",
+    "sarvam-30b": "sarvam-105b",
+    // Open-source beta ids (playground label "Gemma 4" → gemma4).
+    "gemma-4": "gemma4",
+    "gemma-4-31b": "gemma4",
+    "gemma4-31b": "gemma4",
+    "glm-5.2": "glm5.2",
+    "glm5-2": "glm5.2",
+    "glm-5-2": "glm5.2",
+  };
+  const raw = (model ?? "sarvam-105b").trim();
+  const key = raw.toLowerCase();
+  return ALIASES[key] ?? ALIASES[raw] ?? raw;
+}
+
+/** Abort hang / dead stream if first bytes never arrive (matches Google adapter). */
+const REQUEST_TIMEOUT_MS = Math.max(8_000, Number(process.env.SARVAM_REQUEST_TIMEOUT_MS) || 12_000);
+
+/**
+ * Soft ceiling for Gemma 4 voice turns. Sarvam's /v2 default is 2048 if omitted,
+ * which is far too long for spoken replies. Session already defaults Sarvam to
+ * 500; this clamps runaway agent configs so a 31B model cannot sit generating
+ * for seconds after the useful answer.
+ */
+const GEMMA4_VOICE_MAX_TOKENS = Math.max(
+  128,
+  Number(process.env.SARVAM_GEMMA4_VOICE_MAX_TOKENS) || 400,
+);
 
 /**
  * Sarvam requires strictly-alternating user/assistant turns starting with a user message.
@@ -222,54 +278,73 @@ export class SarvamLLM implements LLMAdapter {
   private model: string;
   private genParams: LLMGenerationParams;
   private callId?: number;
+  private abortController: AbortController | null = null;
 
   constructor(apiKey: string, model: string | null, genParams?: LLMGenerationParams, callId?: number) {
     this.key = apiKey;
     this.genParams = genParams ?? {};
     this.callId = callId;
-    const ALIASES: Record<string, string> = {
-      "sarvam-m": "sarvam-105b",
-      "sarvam-2b": "sarvam-105b",
-      "sarvam-2b-v0.5": "sarvam-105b",
-      "sarvam-m1": "sarvam-105b",
-      "sarvam-30b-16k": "sarvam-105b",
-      "sarvam-105b-32k": "sarvam-105b",
-      "sarvam-30b": "sarvam-105b",
-    };
-    const raw = model ?? "sarvam-105b";
-    this.model = ALIASES[raw] ?? raw;
+    this.model = normalizeSarvamLlmModel(model);
+  }
+
+  /**
+   * Abort the in-flight streaming HTTP body on barge-in so Gemma/Sarvam stop
+   * generating tokens the caller will never hear. Without this the stream runs
+   * to completion in the background and delays the next turn.
+   */
+  cancelInFlight(): void {
+    if (this.abortController) {
+      this.abortController.abort();
+      this.abortController = null;
+    }
   }
 
   private buildGenerationBody(): Record<string, unknown> {
     const p = this.genParams;
     const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+    const openSource = isSarvamOpenSourceModel(this.model);
 
     // Voice calls: thinking OFF by default. Sarvam's API defaults to "low", which
     // streams English chain-of-thought into `content` and gets spoken by TTS
     // (call 5646: "The user wants me to act as… Let me analyze the constraints").
     // Explicit null disables. medium/high remain available for agents that opt in.
+    // gemma4 never reasons — do not send reasoning_effort at all (no-op + noise).
+    // glm5.2 always reasons unless extra_body.chat_template_kwargs.enable_thinking=false.
     const body: Record<string, unknown> = {};
-    if (p.reasoningEffort === null) {
-      body["reasoning_effort"] = null;
-    } else if (p.reasoningEffort === "low" || p.reasoningEffort === "medium" || p.reasoningEffort === "high") {
-      body["reasoning_effort"] = p.reasoningEffort;
-    } else {
-      body["reasoning_effort"] = null;
+    if (this.model !== "gemma4") {
+      if (p.reasoningEffort === null) {
+        body["reasoning_effort"] = null;
+      } else if (p.reasoningEffort === "low" || p.reasoningEffort === "medium" || p.reasoningEffort === "high") {
+        body["reasoning_effort"] = p.reasoningEffort;
+      } else if (!openSource) {
+        body["reasoning_effort"] = null;
+      }
     }
 
     if (typeof p.temperature === "number" && Number.isFinite(p.temperature))
       body["temperature"] = clamp(p.temperature, 0, 2);
     if (typeof p.topP === "number" && Number.isFinite(p.topP))
       body["top_p"] = clamp(p.topP, 0, 1);
-    if (typeof p.maxTokens === "number" && Number.isFinite(p.maxTokens) && p.maxTokens > 0)
-      body["max_tokens"] = Math.floor(p.maxTokens);
+
+    let maxTokens =
+      typeof p.maxTokens === "number" && Number.isFinite(p.maxTokens) && p.maxTokens > 0
+        ? Math.floor(p.maxTokens)
+        : undefined;
+    // Gemma 4 answers directly with no thinking pass — keep the spoken budget
+    // tight so TTFT + full-turn latency stay voice-friendly.
+    if (this.model === "gemma4") {
+      maxTokens = Math.min(maxTokens ?? GEMMA4_VOICE_MAX_TOKENS, GEMMA4_VOICE_MAX_TOKENS);
+    }
+    if (typeof maxTokens === "number") body["max_tokens"] = maxTokens;
+
     if (typeof p.presencePenalty === "number" && Number.isFinite(p.presencePenalty))
       body["presence_penalty"] = clamp(p.presencePenalty, -2, 2);
     if (typeof p.frequencyPenalty === "number" && Number.isFinite(p.frequencyPenalty))
       body["frequency_penalty"] = clamp(p.frequencyPenalty, -2, 2);
     if (typeof p.seed === "number" && Number.isFinite(p.seed))
       body["seed"] = Math.trunc(p.seed);
-    if (typeof p.wikiGrounding === "boolean")
+    // wiki_grounding is Sarvam-native /v1 only — /v2 rejects it.
+    if (!openSource && typeof p.wikiGrounding === "boolean")
       body["wiki_grounding"] = p.wikiGrounding;
 
     if (typeof p.stop === "string" && p.stop.length > 0) {
@@ -297,6 +372,7 @@ export class SarvamLLM implements LLMAdapter {
   ): Promise<void> {
     const supportsTools = TOOL_CAPABLE_MODELS.has(this.model);
     const hasTools = supportsTools && (options?.tools?.length ?? 0) > 0;
+    const openSource = isSarvamOpenSourceModel(this.model);
     const validToolNames = new Set<string>((options?.tools ?? []).map((t) => t.name));
     const sanitized = sanitizeForAlternation(messages);
 
@@ -304,16 +380,31 @@ export class SarvamLLM implements LLMAdapter {
 
     // Reasoning tokens count toward max_tokens. Floor the budget whenever
     // thinking is on so content is not empty after the hidden trace (Sarvam gotcha).
-    if (genBody["reasoning_effort"] != null) {
+    // Skip for gemma4 (never reasons) and for glm5.2 when we disable thinking below.
+    if (genBody["reasoning_effort"] != null && !openSource) {
       const mt = genBody["max_tokens"];
       if (typeof mt !== "number" || mt < 500) genBody["max_tokens"] = 500;
     }
 
-    if (hasTools) {
+    if (hasTools && !openSource) {
       if (genBody["reasoning_effort"] == null) {
         genBody["reasoning_effort"] = "low";
         const mt = genBody["max_tokens"];
         if (typeof mt !== "number" || mt < 500) genBody["max_tokens"] = 500;
+      }
+    }
+
+    // glm5.2 reasons before every answer by default; that burns max_tokens and
+    // adds seconds of silence on voice. Turn thinking off for live calls unless
+    // the agent explicitly opted into medium/high reasoning_effort.
+    if (this.model === "glm5.2") {
+      const effort = genBody["reasoning_effort"];
+      const keepThinking = effort === "medium" || effort === "high";
+      if (!keepThinking) {
+        delete genBody["reasoning_effort"];
+        genBody["extra_body"] = {
+          chat_template_kwargs: { enable_thinking: false },
+        };
       }
     }
 
@@ -344,233 +435,280 @@ ${systemPrompt}`
       body["tool_choice"] = "auto";
     }
 
+    const endpoint = sarvamChatCompletionsUrl(this.model);
+
+    // Cancel any prior in-flight stream (barge-in / overlapping turns) before
+    // opening a new one, then arm a fresh AbortController for this call.
+    this.abortController?.abort();
+    const abort = new AbortController();
+    this.abortController = abort;
+    // Timeout covers connect + first headers only — clear once the SSE body is
+    // open so a long spoken reply is not cut mid-sentence.
+    let connectTimer: ReturnType<typeof setTimeout> | null = setTimeout(
+      () => abort.abort(),
+      REQUEST_TIMEOUT_MS,
+    );
+    const clearConnectTimer = () => {
+      if (connectTimer) {
+        clearTimeout(connectTimer);
+        connectTimer = null;
+      }
+    };
+
     // Fetch with up to 2 retries for transient 429 rate limit or 5xx server errors
     let resp: Response | null = null;
     let attempts = 0;
     const maxAttempts = 3;
     let lastErr = "";
 
-    while (attempts < maxAttempts) {
-      attempts++;
-      try {
-        resp = await fetch("https://api.sarvam.ai/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "api-subscription-key": this.key,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(body),
-        });
+    try {
+      while (attempts < maxAttempts) {
+        if (abort.signal.aborted) return; // barge-in / connect timeout
+        attempts++;
+        try {
+          resp = await fetch(endpoint, {
+            method: "POST",
+            headers: {
+              "api-subscription-key": this.key,
+              "Content-Type": "application/json",
+              Accept: "text/event-stream",
+            },
+            body: JSON.stringify(body),
+            signal: abort.signal,
+          });
 
-        if (resp.ok) break;
+          if (resp.ok) break;
 
-        lastErr = await resp.text();
-        if ((resp.status === 429 || resp.status >= 500) && attempts < maxAttempts) {
-          const delay = attempts * 300;
-          logger.warn(
-            { status: resp.status, attempt: attempts, delay, evt: "sarvam_llm_retry" },
-            `Sarvam LLM returned ${resp.status}, retrying in ${delay}ms...`
-          );
-          await new Promise((r) => setTimeout(r, delay));
-          continue;
-        }
-        throw new Error(`Sarvam LLM error ${resp.status}: ${lastErr}`);
-      } catch (err) {
-        if (attempts >= maxAttempts) throw err;
-      }
-    }
-
-    if (!resp || !resp.ok) {
-      throw new Error(`Sarvam LLM request failed: ${lastErr}`);
-    }
-
-    const reader = resp.body!.getReader();
-    const decoder = new TextDecoder();
-    let full = "";
-    let reasoningBuffer = "";
-    let usage: LLMUsage | undefined;
-
-    const toolAcc = new Map<number, { id: string; name: string; args: string }>();
-    let sawToolDelta = false;
-    let sawRealContent = false;
-    let jsonSniffDecided = false;
-    let bufferingJson = false;
-    let jsonBuffer = "";
-
-    const handleData = (data: string): void => {
-      if (data === "[DONE]") return;
-      try {
-        const parsed = JSON.parse(data) as {
-          choices: Array<{
-            finish_reason?: string | null;
-            delta?: {
-              content?: string;
-              reasoning_content?: string;
-              tool_calls?: Array<{
-                index?: number;
-                id?: string | null;
-                type?: string;
-                function?: { name?: string | null; arguments?: string | null };
-              }>;
-            };
-          }>;
-          usage?: { prompt_tokens?: number; completion_tokens?: number };
-        };
-
-        if (parsed.usage) {
-          usage = {
-            inputTokens: parsed.usage.prompt_tokens ?? 0,
-            outputTokens: parsed.usage.completion_tokens ?? 0,
-          };
-        }
-
-        const delta = parsed.choices[0]?.delta;
-        if (!delta) return;
-
-        // Collect reasoning trace as fallback
-        if (delta.reasoning_content) {
-          reasoningBuffer += delta.reasoning_content;
-        }
-
-        if (delta.tool_calls?.length) {
-          for (const tc of delta.tool_calls) {
-            const idx = typeof tc.index === "number" ? tc.index : 0;
-            sawToolDelta = true;
-            const cur = toolAcc.get(idx) ?? { id: "", name: "", args: "" };
-            if (tc.id) cur.id = tc.id;
-            if (tc.function?.name) cur.name = tc.function.name;
-            if (typeof tc.function?.arguments === "string") cur.args += tc.function.arguments;
-            toolAcc.set(idx, cur);
+          lastErr = await resp.text();
+          if ((resp.status === 429 || resp.status >= 500) && attempts < maxAttempts) {
+            const delay = attempts * 300;
+            logger.warn(
+              { status: resp.status, attempt: attempts, delay, model: this.model, endpoint, evt: "sarvam_llm_retry" },
+              `Sarvam LLM returned ${resp.status}, retrying in ${delay}ms...`
+            );
+            await new Promise((r) => setTimeout(r, delay));
+            continue;
           }
-          return;
+          throw new Error(`Sarvam LLM error ${resp.status}: ${lastErr}`);
+        } catch (err) {
+          if (abort.signal.aborted) return; // barge-in cancel — not an error
+          if (attempts >= maxAttempts) throw err;
         }
+      }
 
-        if (sawToolDelta) return;
+      if (!resp || !resp.ok) {
+        throw new Error(`Sarvam LLM request failed: ${lastErr}`);
+      }
 
-        let token = delta.content ?? "";
-        if (!token) return;
+      clearConnectTimer(); // headers received — let the stream run for voice length
 
-        // Comprehensive special token stripping for Sarvam thinking tokens
-        token = token.replace(/<\|(?:message|thinking|endofthinking|endofmessage|im_start|im_end|thought|[a-z_]+)\|>/gi, "");
-        if (!token) return;
+      const reader = resp.body!.getReader();
+      const decoder = new TextDecoder();
+      let full = "";
+      let reasoningBuffer = "";
+      let usage: LLMUsage | undefined;
 
-        if (hasTools) {
-          if (bufferingJson) {
-            jsonBuffer += token;
+      const toolAcc = new Map<number, { id: string; name: string; args: string }>();
+      let sawToolDelta = false;
+      let sawRealContent = false;
+      let jsonSniffDecided = false;
+      let bufferingJson = false;
+      let jsonBuffer = "";
+
+      const handleData = (data: string): void => {
+        if (data === "[DONE]") return;
+        try {
+          const parsed = JSON.parse(data) as {
+            choices: Array<{
+              finish_reason?: string | null;
+              delta?: {
+                content?: string;
+                reasoning_content?: string;
+                tool_calls?: Array<{
+                  index?: number;
+                  id?: string | null;
+                  type?: string;
+                  function?: { name?: string | null; arguments?: string | null };
+                }>;
+              };
+            }>;
+            usage?: { prompt_tokens?: number; completion_tokens?: number };
+          };
+
+          if (parsed.usage) {
+            usage = {
+              inputTokens: parsed.usage.prompt_tokens ?? 0,
+              outputTokens: parsed.usage.completion_tokens ?? 0,
+            };
+          }
+
+          const delta = parsed.choices[0]?.delta;
+          if (!delta) return;
+
+          // Collect reasoning trace as fallback
+          if (delta.reasoning_content) {
+            reasoningBuffer += delta.reasoning_content;
+          }
+
+          if (delta.tool_calls?.length) {
+            for (const tc of delta.tool_calls) {
+              const idx = typeof tc.index === "number" ? tc.index : 0;
+              sawToolDelta = true;
+              const cur = toolAcc.get(idx) ?? { id: "", name: "", args: "" };
+              if (tc.id) cur.id = tc.id;
+              if (tc.function?.name) cur.name = tc.function.name;
+              if (typeof tc.function?.arguments === "string") cur.args += tc.function.arguments;
+              toolAcc.set(idx, cur);
+            }
             return;
           }
-          if (!jsonSniffDecided) {
-            const peek = (jsonBuffer + token).replace(/^\s+/, "");
-            if (peek === "") {
+
+          if (sawToolDelta) return;
+
+          let token = delta.content ?? "";
+          if (!token) return;
+
+          // Comprehensive special token stripping for Sarvam thinking tokens
+          token = token.replace(/<\|(?:message|thinking|endofthinking|endofmessage|im_start|im_end|thought|[a-z_]+)\|>/gi, "");
+          if (!token) return;
+
+          if (hasTools) {
+            if (bufferingJson) {
               jsonBuffer += token;
               return;
             }
-            jsonSniffDecided = true;
-            const firstChar = peek[0];
-            if (firstChar === "{" || firstChar === "`" || firstChar === "[") {
-              bufferingJson = true;
-              jsonBuffer += token;
-              return;
+            if (!jsonSniffDecided) {
+              const peek = (jsonBuffer + token).replace(/^\s+/, "");
+              if (peek === "") {
+                jsonBuffer += token;
+                return;
+              }
+              jsonSniffDecided = true;
+              const firstChar = peek[0];
+              if (firstChar === "{" || firstChar === "`" || firstChar === "[") {
+                bufferingJson = true;
+                jsonBuffer += token;
+                return;
+              }
+              jsonBuffer = "";
+              token = peek;
             }
-            jsonBuffer = "";
-            token = peek;
+          }
+
+          if (!sawRealContent && /^\s*$/.test(token)) return;
+
+          sawRealContent = true;
+          full += token;
+          onToken(token);
+        } catch {
+          // Skip malformed chunk
+        }
+      };
+
+      let buffer = "";
+      try {
+        while (true) {
+          if (abort.signal.aborted) break;
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+
+          let nl: number;
+          while ((nl = buffer.indexOf("\n")) !== -1) {
+            const line = buffer.slice(0, nl).trim();
+            buffer = buffer.slice(nl + 1);
+            if (line.startsWith("data: ")) handleData(line.slice(6));
           }
         }
 
-        if (!sawRealContent && /^\s*$/.test(token)) return;
-
-        sawRealContent = true;
-        full += token;
-        onToken(token);
-      } catch {
-        // Skip malformed chunk
-      }
-    };
-
-    let buffer = "";
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-
-      let nl: number;
-      while ((nl = buffer.indexOf("\n")) !== -1) {
-        const line = buffer.slice(0, nl).trim();
-        buffer = buffer.slice(nl + 1);
-        if (line.startsWith("data: ")) handleData(line.slice(6));
-      }
-    }
-
-    buffer += decoder.decode();
-    const tail = buffer.trim();
-    if (tail.startsWith("data: ")) handleData(tail.slice(6));
-
-    if (usage) options?.onUsage?.(usage);
-
-    if (toolAcc.size > 0 && options?.onToolCall) {
-      const picked = [...toolAcc.entries()]
-        .sort((a, b) => a[0] - b[0])
-        .map(([, v]) => v)
-        .find((v) => v.name);
-      if (picked?.name) {
-        options.onToolDetected?.({ format: "structured" });
-        let args: Record<string, unknown> = {};
-        try {
-          args = JSON.parse(picked.args || "{}") as Record<string, unknown>;
-        } catch {
-          // Empty args on JSON parse error
+        if (!abort.signal.aborted) {
+          buffer += decoder.decode();
+          const tail = buffer.trim();
+          if (tail.startsWith("data: ")) handleData(tail.slice(6));
         }
-        options.onToolParsed?.({ name: picked.name, format: "structured", args });
-        options.onToolCall(picked.name, args);
-        return;
-      }
-    }
-
-    if (bufferingJson) {
-      const parsedCall = options?.onToolCall
-        ? parseToolEnvelope(jsonBuffer, validToolNames)
-        : null;
-      if (parsedCall) options?.onToolDetected?.({ format: parsedCall.format });
-
-      if (parsedCall && options?.onToolCall) {
-        options.onToolParsed?.({ name: parsedCall.name, format: parsedCall.format, args: parsedCall.args });
-        options.onToolCall(parsedCall.name, parsedCall.args);
-        return;
-      }
-      onDone("", usage);
-      return;
-    }
-
-    if (!sawToolDelta && !bufferingJson && options?.onToolCall && validToolNames.size > 0) {
-      const fnTagMatch = /^([\s\S]*?)\s*<function>([^<]+)<\/function>\s*$/.exec(full);
-      if (fnTagMatch) {
-        const textBefore = fnTagMatch[1] ?? "";
-        const toolName = (fnTagMatch[2] ?? "").trim();
-        if (validToolNames.has(toolName)) {
-          options.onToolDetected?.({ format: "function_tag" });
-          options.onToolParsed?.({ name: toolName, format: "function_tag", args: {} });
-          options.onToolCall(toolName, {});
+      } catch (err) {
+        if (abort.signal.aborted) {
+          try { await reader.cancel(); } catch { /* noop */ }
           return;
         }
-        full = textBefore.trim();
+        throw err;
       }
-    }
 
-    // Never speak reasoning_content. When thinking eats the token budget,
-    // content can be empty — falling back to the reasoning trace made the
-    // agent literally read its chain-of-thought aloud (call 5646).
-    if (!full.trim() && reasoningBuffer.trim()) {
-      logger.warn(
-        {
-          model: this.model,
-          evt: "sarvam_content_null_reasoning_dropped",
-          reasoningChars: reasoningBuffer.length,
-        },
-        "Sarvam content was null after reasoning; not speaking reasoning_content",
-      );
-    }
+      if (abort.signal.aborted) {
+        try { await reader.cancel(); } catch { /* noop */ }
+        return;
+      }
 
-    onDone(full, usage);
+      if (usage) options?.onUsage?.(usage);
+
+      if (toolAcc.size > 0 && options?.onToolCall) {
+        const picked = [...toolAcc.entries()]
+          .sort((a, b) => a[0] - b[0])
+          .map(([, v]) => v)
+          .find((v) => v.name);
+        if (picked?.name) {
+          options.onToolDetected?.({ format: "structured" });
+          let args: Record<string, unknown> = {};
+          try {
+            args = JSON.parse(picked.args || "{}") as Record<string, unknown>;
+          } catch {
+            // Empty args on JSON parse error
+          }
+          options.onToolParsed?.({ name: picked.name, format: "structured", args });
+          options.onToolCall(picked.name, args);
+          return;
+        }
+      }
+
+      if (bufferingJson) {
+        const parsedCall = options?.onToolCall
+          ? parseToolEnvelope(jsonBuffer, validToolNames)
+          : null;
+        if (parsedCall) options?.onToolDetected?.({ format: parsedCall.format });
+
+        if (parsedCall && options?.onToolCall) {
+          options.onToolParsed?.({ name: parsedCall.name, format: parsedCall.format, args: parsedCall.args });
+          options.onToolCall(parsedCall.name, parsedCall.args);
+          return;
+        }
+        onDone("", usage);
+        return;
+      }
+
+      if (!sawToolDelta && !bufferingJson && options?.onToolCall && validToolNames.size > 0) {
+        const fnTagMatch = /^([\s\S]*?)\s*<function>([^<]+)<\/function>\s*$/.exec(full);
+        if (fnTagMatch) {
+          const textBefore = fnTagMatch[1] ?? "";
+          const toolName = (fnTagMatch[2] ?? "").trim();
+          if (validToolNames.has(toolName)) {
+            options.onToolDetected?.({ format: "function_tag" });
+            options.onToolParsed?.({ name: toolName, format: "function_tag", args: {} });
+            options.onToolCall(toolName, {});
+            return;
+          }
+          full = textBefore.trim();
+        }
+      }
+
+      // Never speak reasoning_content. When thinking eats the token budget,
+      // content can be empty — falling back to the reasoning trace made the
+      // agent literally read its chain-of-thought aloud (call 5646).
+      if (!full.trim() && reasoningBuffer.trim()) {
+        logger.warn(
+          {
+            model: this.model,
+            evt: "sarvam_content_null_reasoning_dropped",
+            reasoningChars: reasoningBuffer.length,
+          },
+          "Sarvam content was null after reasoning; not speaking reasoning_content",
+        );
+      }
+
+      onDone(full, usage);
+    } finally {
+      clearConnectTimer();
+      if (this.abortController === abort) this.abortController = null;
+    }
   }
 }

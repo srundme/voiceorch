@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="880" viewBox="0 0 760 880" fill="none" role="img" aria-label="SnapServe - connect an agent to Google Meet">
+  <title>SnapServe - connect an agent to Google Meet</title>
+
+  <defs>
+    <style>
+      .ui      { font-family: 'Inter', 'Tex Gyre Heros', Helvetica, Arial, sans-serif; }
+      .h1      { font-size: 22px; font-weight: 700; fill: #0F172A; }
+      .sub     { font-size: 12.5px; fill: #64748B; }
+      .step    { font-size: 13.5px; font-weight: 600; fill: #0F172A; }
+      .body    { font-size: 11.5px; fill: #64748B; }
+      .strong  { font-size: 11.5px; fill: #0F172A; font-weight: 600; }
+      .label   { font-size: 12px; fill: #0F172A; }
+      .value   { font-size: 12.5px; fill: #0F172A; }
+      .btntxt  { font-size: 12.5px; font-weight: 600; fill: #FFFFFF; }
+      .ghosttx { font-size: 11.5px; font-weight: 600; fill: #0F172A; }
+      .mono    { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; fill: #0F172A; }
+      .badge   { font-size: 10.5px; font-weight: 600; fill: #166534; }
+    </style>
+  </defs>
+
+  <rect width="760" height="880" fill="#FFFFFF"/>
+
+  <!-- Header -->
+  <g class="ui">
+    <g transform="translate(40,34) scale(0.30)">
+      <rect x="6"  y="14" width="88" height="20" rx="10" fill="#0F172A"/>
+      <rect x="14" y="42" width="72" height="20" rx="10" fill="#0F172A" opacity="0.60"/>
+      <rect x="22" y="70" width="56" height="20" rx="10" fill="#0F172A" opacity="0.36"/>
+    </g>
+    <text x="76" y="56" font-size="15" fill="#0F172A">
+      <tspan font-weight="700">Snap</tspan><tspan font-weight="400">Serve</tspan>
+    </text>
+
+    <text x="40" y="102" class="h1">Meeting bots</text>
+    <text x="40" y="124" class="sub">Send an agent into a Meet / Zoom / Teams room that already exists.</text>
+
+    <g transform="translate(556,88)">
+      <rect width="164" height="44" rx="10" fill="#F8FAFC" stroke="#E2E8F0"/>
+      <g transform="translate(16,13) scale(0.2299)">
+        <path fill="#00832d" d="M49.5 36l8.53 9.75 11.47 7.33 2-17.02-2-16.64-11.69 6.44z"/>
+        <path fill="#0066da" d="M0 51.5V66c0 3.315 2.685 6 6 6h14.5l3-10.96-3-9.54-9.95-3z"/>
+        <path fill="#e94235" d="M20.5 0L0 20.5l10.55 3 9.95-3 2.95-9.41z"/>
+        <path fill="#2684fc" d="M20.5 20.5H0v31h20.5z"/>
+        <path fill="#00ac47" d="M82.6 8.68L69.5 19.42v33.66l13.16 10.79c1.97 1.54 4.85.135 4.85-2.37V11c0-2.535-2.945-3.925-4.91-2.32zM49.5 36v15.5H20.5V72h43c3.315 0 6-2.685 6-6V53.08z"/>
+        <path fill="#ffba00" d="M63.5 0h-43v20.5h29V36l20-16.57V6c0-3.315-2.685-6-6-6z"/>
+      </g>
+      <text x="46" y="27" class="strong">Meet</text>
+      <g transform="translate(96,12) scale(0.078)">
+        <rect width="256" height="256" rx="56" fill="#0B5CFF"/>
+        <path fill="#FFFFFF" d="M56 100a20 20 0 0 1 20-20h68a28 28 0 0 1 28 28v48a20 20 0 0 1-20 20H84a28 28 0 0 1-28-28v-48Z"/>
+        <path fill="#FFFFFF" d="M176 114.5l25.4-18.6c4.6-3.4 11.1-.1 11.1 5.6v53c0 5.7-6.5 9-11.1 5.6L176 141.5v-27Z"/>
+      </g>
+      <text x="120" y="27" class="strong">Zoom</text>
+    </g>
+  </g>
+
+  <!-- Three ways to join -->
+  <g class="ui" transform="translate(40,150)">
+    <rect width="680" height="104" rx="12" fill="#F8FAFC" stroke="#E2E8F0"/>
+    <text x="18" y="26" class="strong">Three ways to join</text>
+    <text x="18" y="50" class="body"><tspan class="strong">Join now</tspan> &#8212; paste a Meet/Zoom/Teams link (manual).</text>
+    <text x="18" y="70" class="body"><tspan class="strong">Calendar Join</tspan> &#8212; connect Google, toggle Join on events (semi-auto).</text>
+    <text x="18" y="90" class="body"><tspan class="strong">From bookings</tspan> &#8212; auto-join near the slot when the invite has a Meet link.</text>
+  </g>
+
+  <!-- Step 1: Pick agent -->
+  <g class="ui" transform="translate(40,286)">
+    <text x="0" y="0" class="step">1. Pick agent</text>
+    <text x="612" y="0" class="ghosttx" fill="#64748B">+ New agent</text>
+
+    <rect y="16" width="470" height="40" rx="8" fill="#FFFFFF" stroke="#CBD5E1"/>
+    <text x="14" y="41" class="value">Voiceathon &#8212; phone + meetings</text>
+    <path d="M448 33l5 6 5-6" stroke="#64748B" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <rect x="484" y="16" width="196" height="40" rx="8" fill="#FFFFFF" stroke="#CBD5E1"/>
+    <g transform="translate(502,26) scale(0.66)">
+      <mask id="ss-agent-btn" maskUnits="userSpaceOnUse" x="0" y="0" width="24" height="24">
+        <rect width="24" height="24" fill="black"/>
+        <rect x="4.3" y="3.2" width="15.4" height="14" rx="6" fill="white"/>
+        <circle cx="9.3" cy="9" r="1.9" fill="black"/>
+        <circle cx="14.7" cy="9" r="1.9" fill="black"/>
+        <path d="M9.9 12.8c.945 1.68 3.255 1.68 4.2 0" stroke="black" stroke-width="1.35" stroke-linecap="round" fill="none"/>
+      </mask>
+      <rect x="1.1" y="7.9" width="3" height="6.4" rx="1.5" fill="#0F172A" opacity="0.55"/>
+      <rect x="19.9" y="7.9" width="3" height="6.4" rx="1.5" fill="#0F172A" opacity="0.55"/>
+      <rect width="24" height="24" fill="#0F172A" mask="url(#ss-agent-btn)"/>
+      <rect x="5.4" y="19.2" width="13.2" height="3" rx="1.5" fill="#0F172A" opacity="0.55"/>
+    </g>
+    <text x="524" y="41" class="ghosttx">Meeting prompt</text>
+
+    <text x="0" y="78" class="body"><tspan class="strong">Voiceathon</tspan> will join when you toggle Join or paste a link.</text>
+  </g>
+
+  <!-- Step 2: Join now (paste link) -->
+  <g class="ui" transform="translate(40,398)">
+    <rect width="680" height="212" rx="12" fill="#FFFFFF" stroke="#E2E8F0"/>
+
+    <g transform="translate(18,22)">
+      <rect width="14" height="11" rx="2.5" fill="none" stroke="#0F172A" stroke-width="1.6"/>
+      <path d="M14 4.5l4.5-2.6v9.2L14 8.5z" fill="none" stroke="#0F172A" stroke-width="1.6" stroke-linejoin="round"/>
+    </g>
+    <text x="44" y="32" class="step">2. Join now (paste link)</text>
+    <text x="18" y="56" class="body">Manual: paste a room URL and send the agent in immediately.</text>
+
+    <text x="18" y="86" class="label">Meet / Zoom / Teams URL</text>
+    <rect x="18" y="96" width="644" height="40" rx="8" fill="#FFFFFF" stroke="#CBD5E1"/>
+    <g transform="translate(32,108) scale(0.187)">
+      <path fill="#00832d" d="M49.5 36l8.53 9.75 11.47 7.33 2-17.02-2-16.64-11.69 6.44z"/>
+      <path fill="#0066da" d="M0 51.5V66c0 3.315 2.685 6 6 6h14.5l3-10.96-3-9.54-9.95-3z"/>
+      <path fill="#e94235" d="M20.5 0L0 20.5l10.55 3 9.95-3 2.95-9.41z"/>
+      <path fill="#2684fc" d="M20.5 20.5H0v31h20.5z"/>
+      <path fill="#00ac47" d="M82.6 8.68L69.5 19.42v33.66l13.16 10.79c1.97 1.54 4.85.135 4.85-2.37V11c0-2.535-2.945-3.925-4.91-2.32zM49.5 36v15.5H20.5V72h43c3.315 0 6-2.685 6-6V53.08z"/>
+      <path fill="#ffba00" d="M63.5 0h-43v20.5h29V36l20-16.57V6c0-3.315-2.685-6-6-6z"/>
+    </g>
+    <text x="52" y="121" class="mono">https://meet.google.com/abc-defg-hij</text>
+
+    <text x="18" y="158" class="body">Admit <tspan class="mono">bot@snapserve.ai</tspan> from the waiting room if asked.</text>
+
+    <rect x="18" y="170" width="150" height="40" rx="8" fill="#0F172A"/>
+    <g transform="translate(38,184)">
+      <rect width="12" height="9.5" rx="2" fill="none" stroke="#FFFFFF" stroke-width="1.5"/>
+      <path d="M12 3.8l4-2.3v8l-4-2.3z" fill="none" stroke="#FFFFFF" stroke-width="1.5" stroke-linejoin="round"/>
+    </g>
+    <text x="62" y="195" class="btntxt">Join meeting</text>
+  </g>
+
+  <!-- Step 3: Calendar Join -->
+  <g class="ui" transform="translate(40,634)">
+    <rect width="680" height="206" rx="12" fill="#FFFFFF" stroke="#E2E8F0"/>
+
+    <g transform="translate(18,20)">
+      <rect y="2" width="15" height="13" rx="2.5" fill="none" stroke="#0F172A" stroke-width="1.6"/>
+      <path d="M4 0v4M11 0v4M0 7h15" stroke="#0F172A" stroke-width="1.6" stroke-linecap="round"/>
+    </g>
+    <text x="44" y="32" class="step">3. Calendar Join (auto on events you choose)</text>
+    <text x="18" y="56" class="body">Connect Google so you can toggle <tspan class="strong">Join</tspan> on upcoming events.</text>
+
+    <rect x="18" y="72" width="86" height="24" rx="12" fill="#DCFCE7"/>
+    <text x="36" y="88" class="badge">Connected</text>
+    <text x="116" y="88" class="body">karthik@snapserve.ai</text>
+
+    <rect x="18" y="110" width="644" height="76" rx="10" fill="#F8FAFC" stroke="#E2E8F0"/>
+    <text x="34" y="136" class="strong">Product demo &#8212; SnapServe</text>
+    <text x="34" y="156" class="body">Thu, Sep 5 &#183; 4:00 PM</text>
+    <g transform="translate(34,164) scale(0.135)">
+      <path fill="#00832d" d="M49.5 36l8.53 9.75 11.47 7.33 2-17.02-2-16.64-11.69 6.44z"/>
+      <path fill="#0066da" d="M0 51.5V66c0 3.315 2.685 6 6 6h14.5l3-10.96-3-9.54-9.95-3z"/>
+      <path fill="#e94235" d="M20.5 0L0 20.5l10.55 3 9.95-3 2.95-9.41z"/>
+      <path fill="#2684fc" d="M20.5 20.5H0v31h20.5z"/>
+      <path fill="#00ac47" d="M82.6 8.68L69.5 19.42v33.66l13.16 10.79c1.97 1.54 4.85.135 4.85-2.37V11c0-2.535-2.945-3.925-4.91-2.32zM49.5 36v15.5H20.5V72h43c3.315 0 6-2.685 6-6V53.08z"/>
+      <path fill="#ffba00" d="M63.5 0h-43v20.5h29V36l20-16.57V6c0-3.315-2.685-6-6-6z"/>
+    </g>
+    <text x="52" y="175" class="body">meet.google.com/abc-defg-hij</text>
+
+    <text x="548" y="153" class="strong">Join</text>
+    <rect x="584" y="138" width="60" height="30" rx="15" fill="#0F172A"/>
+    <circle cx="629" cy="153" r="11.5" fill="#FFFFFF"/>
+  </g>
+</svg>

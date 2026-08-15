@@ -16,6 +16,10 @@ export const phoneNumberOrdersTable = pgTable("phone_number_orders", {
   region:         text("region"),
   numberType:     text("number_type").notNull().default("local"),
   amountCents:    integer("amount_cents").notNull(),
+  /** Promo code applied at initiate, already reflected in amountCents. Null = paid full price. */
+  promoCode:      text("promo_code"),
+  /** Paise knocked off the standard base by promoCode (pre-GST), for reporting. */
+  discountPaise:  integer("discount_paise").notNull().default(0),
   /** Chosen at checkout: 'autopay' | 'wallet' — copied onto phone_numbers on confirm. */
   renewalMode:    text("renewal_mode").notNull().default("wallet"),
   // pending -> processing -> completed | failed | cancelled

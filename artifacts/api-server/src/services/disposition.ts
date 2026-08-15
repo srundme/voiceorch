@@ -11,7 +11,7 @@ import {
   type DispositionResult,
 } from "../lib/disposition/index.js";
 import { fillMissingPhoneFields } from "../lib/disposition/fill-phone-fields.js";
-import { getDispositionLLM } from "./disposition-llm.js";
+import { getDispositionLLMChain, isRetryableProviderError } from "./disposition-llm.js";
 
 // ── Config cache (60-second TTL) ─────────────────────────────────────────────
 
@@ -91,9 +91,11 @@ export async function disposeCall(input: DisposeCallInput): Promise<DispositionR
       summary:    `Matched platform rule: ${prefilter.rule}`,
     }, callEvents);
   } else {
-    // 2. LLM extract
-    const llm = await getDispositionLLM();
-    if (!llm || !transcript?.trim()) {
+    // 2. LLM extract — walk every configured provider so a call-time failure
+    // on one (e.g. Gemini 403 billing) falls back to the next working key
+    // instead of stamping a bogus NOT_CONNECTED on a connected call.
+    const chain = await getDispositionLLMChain();
+    if (chain.length === 0 || !transcript?.trim()) {
       result = {
         primary: "NOT_CONNECTED",
         sub: "no_answer",
@@ -108,11 +110,25 @@ export async function disposeCall(input: DisposeCallInput): Promise<DispositionR
       const systemPrompt = buildPrompt(cfg, input.callStartedAt ?? null, input.calledNumber ?? null);
       const schema       = buildSchema(cfg);
 
-      try {
-        const rawOut = await llm.extract(systemPrompt, schema, transcript);
+      let rawOut: Record<string, unknown> | null = null;
+      let lastErr: unknown = null;
+      for (let i = 0; i < chain.length; i++) {
+        const { provider, client } = chain[i]!;
+        try {
+          rawOut = await client.extract(systemPrompt, schema, transcript);
+          if (i > 0) logger.info({ agentId, callId, provider }, "disposition: succeeded on fallback provider");
+          break;
+        } catch (err) {
+          lastErr = err;
+          const retryable = isRetryableProviderError(err);
+          logger.error({ agentId, callId, provider, retryable, err }, "disposition: LLM extract failed");
+          if (!retryable) break;
+        }
+      }
+
+      if (rawOut) {
         result = validate(cfg, rawOut, callEvents);
-      } catch (err) {
-        logger.error({ agentId, callId, err }, "disposition: LLM extract failed");
+      } else {
         result = {
           primary: "NOT_CONNECTED",
           sub: "no_answer",
@@ -121,7 +137,7 @@ export async function disposeCall(input: DisposeCallInput): Promise<DispositionR
           summary: "LLM extraction failed",
           flags: ["llm_error"],
           needsReview: true,
-          error: String(err),
+          error: String(lastErr),
         };
       }
     }

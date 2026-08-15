@@ -315,12 +315,18 @@ export function startEmailScheduler(): void {
   void runOnboardingDrip().catch(err => logger.warn({ err }, "Onboarding drip startup run failed"));
   void runZeroAgentDrip().catch(err => logger.warn({ err }, "Zero-agent drip startup run failed"));
   void runMonthlySummary().catch(err => logger.warn({ err }, "Monthly summary startup run failed"));
+  void import("./campaign-report-scheduler.js")
+    .then((m) => m.runScheduledCampaignReports())
+    .catch((err) => logger.warn({ err }, "Campaign report schedule startup run failed"));
 
   setInterval(() => {
     void runOnboardingDrip().catch(err => logger.warn({ err }, "Onboarding drip tick failed"));
     void runZeroAgentDrip().catch(err => logger.warn({ err }, "Zero-agent drip tick failed"));
     void runMonthlySummary().catch(err => logger.warn({ err }, "Monthly summary tick failed"));
+    void import("./campaign-report-scheduler.js")
+      .then((m) => m.runScheduledCampaignReports())
+      .catch((err) => logger.warn({ err }, "Campaign report schedule tick failed"));
   }, TICK_MS);
 
-  logger.info("Email scheduler started (onboarding drip + monthly summary)");
+  logger.info("Email scheduler started (onboarding drip + monthly summary + campaign reports)");
 }

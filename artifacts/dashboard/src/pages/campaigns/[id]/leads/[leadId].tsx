@@ -8,7 +8,7 @@
 import { useState, useEffect } from "react";
 import { useRoute, Link } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useUpdateLeadCallback, useRetryCampaignLead, getClientContext } from "@workspace/api-client-react";
+import { useUpdateLeadCallback, useRetryCampaignLead, getClientContext, customFetch } from "@workspace/api-client-react";
 import type { UpdateLeadCallbackBodyStatus } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { DetailNav } from "@/components/detail-nav";
@@ -124,10 +124,14 @@ type InteractionSummary = { latestSummary: string | null; latestSentiment: strin
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+/**
+ * All lead-workspace reads/writes go through customFetch so they carry the
+ * bearer token and the partner `x-client-context` header. A bare fetch() here
+ * was unauthenticated, so every request 401'd and the page rendered
+ * "Lead not found".
+ */
 async function apiFetch<T>(url: string, opts?: RequestInit): Promise<T> {
-  const r = await fetch(url, { headers: { "Content-Type": "application/json" }, ...opts });
-  if (!r.ok) throw new Error(await r.text());
-  return r.json() as Promise<T>;
+  return customFetch<T>(url, opts as Parameters<typeof customFetch>[1]);
 }
 
 function fmtDuration(secs: number | null | undefined) {
@@ -914,7 +918,7 @@ export default function LeadCrmWorkspacePage() {
 
   const workspaceKey = ["lead-workspace", campaignId, leadId];
 
-  const { data: ws, isLoading, refetch } = useQuery<LeadWorkspace>({
+  const { data: ws, isLoading, refetch, error } = useQuery<LeadWorkspace>({
     queryKey: workspaceKey,
     queryFn: () => apiFetch<LeadWorkspace>(`${BASE}/api/campaigns/${campaignId}/leads/${leadId}/workspace`),
     refetchInterval: 30000,
@@ -980,6 +984,11 @@ export default function LeadCrmWorkspacePage() {
       <div className="flex-1 flex flex-col items-center justify-center h-full text-center gap-3">
         <AlertCircle className="h-10 w-10 text-muted-foreground/30" />
         <p className="text-sm text-muted-foreground">Lead not found</p>
+        {error ? (
+          <p className="max-w-md text-xs text-muted-foreground/70 break-words">
+            {error instanceof Error ? error.message : String(error)}
+          </p>
+        ) : null}
         <Button variant="outline" size="sm" className="gap-1.5"
           onClick={() => navigate(`/app/campaigns/${campaignId}`)}>
           <ArrowLeft className="h-3.5 w-3.5" /> Back to Campaign

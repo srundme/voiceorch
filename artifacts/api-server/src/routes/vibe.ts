@@ -2,7 +2,7 @@ import { Router } from "express";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { clientContext } from "../middlewares/clientContext.js";
 import {
-  db, agentsTable, platformSettingsTable, schedulingCalendarsTable,
+  db, agentsTable, schedulingCalendarsTable,
   availabilitySchedulesTable, eventTypesTable,
   platformListedVoicesTable, agentDispositionsTable, phoneNumbersTable,
   agentKnowledgeSourcesTable, knowledgeSourcesTable, knowledgeEntriesTable,
@@ -10,14 +10,14 @@ import {
 import { callEngineInsertDefaults } from "@workspace/db/call-engine-defaults";
 import { eq, and, inArray, sql } from "drizzle-orm";
 import { ingestKbTextEntries } from "../services/kb-ingest.js";
-import { geminiThinkingConfig } from "../orchestration/adapters/llm/google.js";
 import { logger } from "../lib/logger.js";
 import { logActivity } from "../lib/activity.js";
 import { resolveAmdConfig } from "../orchestration/telephony/dial.js";
 import { trackEvent } from "../services/track-event.js";
-import { parseVibeGeminiJson, extractGeminiResponseText, parseVoicePick, looksLikePhoneAssign, looksLikePhoneSkip, replyAsksCallFlow, looksLikeContinueIntent, applyAffirmationPhaseAdvance } from "./vibe-gemini-parse.js";
+import { parseVibeGeminiJson, parseVoicePick, looksLikePhoneAssign, looksLikePhoneSkip, replyAsksCallFlow, looksLikeContinueIntent, applyAffirmationPhaseAdvance } from "./vibe-gemini-parse.js";
 import { buildPatternSystemPrompt } from "./vibe-system-prompt-pattern.js";
 import { filterVoicesByAgentGender } from "./vibe-agent-gender.js";
+import { getSarvamManagedKey, platformChatText, PLATFORM_CHAT_MODEL } from "../services/platform-chat-llm.js";
 
 const router = Router();
 
@@ -100,14 +100,8 @@ function parseQaEntries(text: string): Array<{ title: string; content: string }>
   return pairs.length >= 2 ? pairs.map(p => ({ title: p.q, content: p.a })) : null;
 }
 
-async function getGeminiKey(): Promise<string | null> {
-  try {
-    const [row] = await db.select().from(platformSettingsTable)
-      .where(eq(platformSettingsTable.key, "managed_gemini_key"));
-    return row?.value ?? process.env.GEMINI_API_KEY ?? null;
-  } catch {
-    return process.env.GEMINI_API_KEY ?? null;
-  }
+async function getPlatformChatKey(): Promise<string | null> {
+  return getSarvamManagedKey();
 }
 
 interface VibeChatMessage { role: "user" | "assistant"; content: string; }
@@ -465,9 +459,8 @@ class VibeGeminiError extends Error {
 const VIBE_RECOVERY_NOTE =
   "IMPORTANT: Your previous response was cut off or was not valid JSON. Respond again to the conversation above with ONLY the complete, compact, valid JSON object matching the required schema — no markdown fences, no commentary, and keep the \"reply\" text brief.";
 
-/** Explicit minimal thinking (via geminiThinkingConfig) avoids thought-only candidates
- *  and keeps builder turns fast. */
-const VIBE_GEMINI_MODEL = "gemini-3.5-flash-lite";
+/** Explicit JSON mode + Gemma 4 keeps builder turns fast without Gemini. */
+const VIBE_CHAT_MODEL = PLATFORM_CHAT_MODEL;
 
 function lastUserContent(msgs: VibeChatMessage[]): string {
   for (let i = msgs.length - 1; i >= 0; i--) {
@@ -476,99 +469,34 @@ function lastUserContent(msgs: VibeChatMessage[]): string {
   return "";
 }
 
-/**
- * Build the Gemini request body.
- *
- * IMPORTANT: do NOT send `responseSchema` here. Vibe's `config` is a large open-ended
- * object; Gemini's OpenAPI-subset `responseSchema` rejects free-form `{ type: "object" }`
- * (and required+nullable config) with HTTP 400 — which fails every chat turn.
- * We rely on `responseMimeType: application/json` + parseVibeGeminiJson recovery instead.
- */
-function buildGeminiRequestBody(contents: Array<{ role: string; parts: Array<{ text: string }> }>): string {
-  return JSON.stringify({
-    system_instruction: { parts: [{ text: VIBE_SYSTEM_PROMPT }] },
-    contents,
-    generationConfig: {
-      responseMimeType: "application/json",
-      temperature: 0.4,
-      // Reply text + config JSON comfortably fit in 8k; the 16k cap only widened
-      // the truncation-retry window without helping normal turns.
-      maxOutputTokens: 8192,
-      thinkingConfig: geminiThinkingConfig(VIBE_GEMINI_MODEL),
-    },
-  });
-}
-
-async function callGemini(key: string, messages: VibeChatMessage[]): Promise<GeminiVibeResponse> {
-  const baseContents = messages.map(m => ({
-    role: m.role === "assistant" ? "model" : "user",
-    parts: [{ text: m.content }],
-  }));
-
+async function callVibeLlm(_key: string, messages: VibeChatMessage[]): Promise<GeminiVibeResponse> {
   const MAX_ATTEMPTS = 4;
   let lastErr: Error | undefined;
-  // Flipped after a truncated/unparseable response so the retry is a targeted
-  // recovery request instead of an identical (and identically doomed) repeat.
   let needsRecovery = false;
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    const contents = needsRecovery
-      ? [...baseContents, { role: "user", parts: [{ text: VIBE_RECOVERY_NOTE }] }]
-      : baseContents;
-
-    const body = buildGeminiRequestBody(contents);
+    const chatMessages = needsRecovery
+      ? [...messages, { role: "user" as const, content: VIBE_RECOVERY_NOTE }]
+      : messages;
 
     try {
-      const resp = await Promise.race([
-        fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${VIBE_GEMINI_MODEL}:generateContent?key=${key}`,
-          { method: "POST", headers: { "Content-Type": "application/json" }, body },
-        ),
-        new Promise<never>((_, rej) => setTimeout(() => rej(new Error("gemini_timeout")), 90000)),
+      const text = await Promise.race([
+        platformChatText({
+          system: VIBE_SYSTEM_PROMPT,
+          messages: chatMessages,
+          temperature: 0.4,
+          maxTokens: 8192,
+          timeoutMs: 90_000,
+          model: VIBE_CHAT_MODEL,
+          json: true,
+        }),
+        new Promise<never>((_, rej) => setTimeout(() => rej(new Error("vibe_llm_timeout")), 90000)),
       ]);
 
-      if (!resp.ok) {
-        const txt = await resp.text();
-        const isRateLimit = resp.status === 429;
-        logger.warn(
-          { evt: "vibe_gemini_attempt_failed", attempt, httpStatus: resp.status, rateLimited: isRateLimit, snippet: txt.slice(0, 500) },
-          "vibe-chat: Gemini HTTP error",
-        );
-        // 429 (shared-key rate limit under load) is the common "AI busy" case —
-        // classify it distinctly so the client can show a friendly retry message.
-        const err = new VibeGeminiError(
-          `Gemini ${resp.status}: ${txt.slice(0, 300)}`,
-          isRateLimit ? "rate_limited" : "unavailable",
-        );
-        // Retry on rate-limit or server error; fail fast on 400/401/403.
-        if (isRateLimit || resp.status >= 500) {
-          lastErr = err;
-          if (attempt < MAX_ATTEMPTS) {
-            // Honour Retry-After when present (seconds), else exponential backoff.
-            // Capped so the SSE stream never appears hung — the client retries too.
-            const retryAfterSec = Number(resp.headers.get("retry-after"));
-            const base = Number.isFinite(retryAfterSec) && retryAfterSec > 0
-              ? Math.min(retryAfterSec * 1000, 6000)
-              : Math.min(1000 * 2 ** (attempt - 1), 6000); // 1s, 2s, 4s, 6s
-            const jitter = Math.floor(Math.random() * 500);
-            await sleep(base + jitter);
-            continue;
-          }
-        }
-        throw err;
-      }
-
-      const data = await resp.json() as {
-        candidates: Array<{ finishReason?: string; content: { parts: Array<{ text: string; thought?: boolean }> } }>
-      };
-      const candidate = data.candidates?.[0];
-      const finishReason = candidate?.finishReason;
-      const parts = candidate?.content?.parts ?? [];
-      const text = extractGeminiResponseText(parts);
       if (!text.trim() || text.trim() === "{}") {
         logger.warn(
-          { evt: "vibe_gemini_empty_candidate", attempt, finishReason: finishReason ?? "unknown", partCount: parts.length },
-          "vibe-chat: Gemini returned no usable text parts",
+          { evt: "vibe_llm_empty", attempt, model: VIBE_CHAT_MODEL },
+          "vibe-chat: empty LLM response",
         );
         lastErr = new VibeGeminiError("empty candidate", "malformed");
         needsRecovery = true;
@@ -579,22 +507,17 @@ async function callGemini(key: string, messages: VibeChatMessage[]): Promise<Gem
       if (parsed) {
         return parsed as GeminiVibeResponse;
       }
-      const truncated = finishReason === "MAX_TOKENS";
       logger.warn(
         {
-          evt: "vibe_gemini_attempt_failed",
+          evt: "vibe_llm_parse_failed",
           attempt,
-          httpStatus: 200,
-          finishReason: finishReason ?? "unknown",
-          truncated,
+          model: VIBE_CHAT_MODEL,
           snippet: text.slice(0, 500),
         },
-        truncated
-          ? "vibe-chat: Gemini response truncated at token cap (MAX_TOKENS), JSON unparseable"
-          : "vibe-chat: Gemini JSON parse failed",
+        "vibe-chat: JSON parse failed",
       );
       lastErr = new VibeGeminiError(
-        `JSON parse failed (finishReason=${finishReason ?? "unknown"}): ${text.slice(0, 200)}`,
+        `JSON parse failed: ${text.slice(0, 200)}`,
         "malformed",
       );
       needsRecovery = true;
@@ -602,17 +525,24 @@ async function callGemini(key: string, messages: VibeChatMessage[]): Promise<Gem
       throw lastErr;
     } catch (err) {
       if (err instanceof VibeGeminiError) throw err;
-      const isTransient = (err as Error).message === "gemini_timeout" || (err as Error).message?.includes("fetch failed");
+      const msg = (err as Error).message ?? String(err);
+      const isRateLimit = /\b429\b/.test(msg) || /rate.?limit/i.test(msg);
+      const isTransient =
+        msg === "vibe_llm_timeout"
+        || msg.includes("fetch failed")
+        || isRateLimit
+        || /\b5\d\d\b/.test(msg);
       logger.warn(
         {
-          evt: "vibe_gemini_attempt_failed",
+          evt: "vibe_llm_attempt_failed",
           attempt,
           transient: isTransient,
-          snippet: String((err as Error).message ?? err).slice(0, 500),
+          rateLimited: isRateLimit,
+          snippet: msg.slice(0, 500),
         },
-        "vibe-chat: Gemini request error",
+        "vibe-chat: LLM request error",
       );
-      lastErr = new VibeGeminiError((err as Error).message ?? String(err), "unavailable");
+      lastErr = new VibeGeminiError(msg, isRateLimit ? "rate_limited" : "unavailable");
       if (isTransient && attempt < MAX_ATTEMPTS) {
         await sleep(attempt * 1500);
         continue;
@@ -621,7 +551,7 @@ async function callGemini(key: string, messages: VibeChatMessage[]): Promise<Gem
     }
   }
 
-  throw lastErr ?? new VibeGeminiError("Gemini call failed after retries", "unavailable")
+  throw lastErr ?? new VibeGeminiError("Vibe LLM call failed after retries", "unavailable");
 }
 
 /* ── POST /agents/vibe-chat ──────────────────────────────────────────────── */
@@ -670,7 +600,7 @@ router.post("/agents/vibe-chat", requireAuth, clientContext, async (req, res): P
   };
 
   try {
-    const geminiKey = await getGeminiKey();
+    const geminiKey = await getPlatformChatKey();
     if (!geminiKey) {
       emit({ type: "error", message: "No AI key configured — contact the platform admin." });
       res.end();
@@ -962,7 +892,7 @@ router.post("/agents/vibe-chat", requireAuth, clientContext, async (req, res): P
 
     let parsed: GeminiVibeResponse;
     try {
-      parsed = await callGemini(geminiKey, contextualMessages);
+      parsed = await callVibeLlm(geminiKey, contextualMessages);
     } catch (err) {
       const kind = err instanceof VibeGeminiError ? err.kind : "unavailable";
       const detail = err instanceof Error ? err.message : String(err);
@@ -1118,8 +1048,8 @@ router.post("/agents/vibe-chat", requireAuth, clientContext, async (req, res): P
     const langInfo    = LANG_MAP[cfg.language] ?? LANG_MAP["en-IN"]!;
     const isTamil     = cfg.hasTamil || langInfo.gemini ||
                         (cfg.multilingualLanguages ?? []).includes("ta-IN");
-    const llmProvider = isTamil ? "google" : "groq";
-    const llmModel    = isTamil ? "gemini-3.6-flash" : "llama-3.3-70b-versatile";
+    const llmProvider = "sarvam";
+    const llmModel    = "gemma4";
     const langCode    = cfg.languageMode === "multi" ? "en-IN" : langInfo.code;
     const langDisplay = cfg.languageMode === "multi" ? "Multi-language" : langInfo.label;
 

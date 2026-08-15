@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Switch, Route, Router as WouterRouter, useLocation, Redirect, Link } from "wouter";
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { Sparkles } from "lucide-react";
@@ -13,7 +13,7 @@ import { ThemeSync } from "@/components/theme-sync";
 
 import { Layout } from "@/components/layout";
 import { recordInAppNavigation } from "@/lib/nav-history";
-import { SnapServeLoader, PoweredBySarvam } from "@/components/logo";
+import { SnapServeLoader } from "@/components/logo";
 import { VoiceAssistant } from "@/components/VoiceAssistant";
 
 // ── Page imports ─────────────────────────────────────────────────────────────
@@ -145,10 +145,26 @@ function QueryClientCacheInvalidator() {
   return null;
 }
 
+interface PartnerLoginBrand {
+  partnerId: number;
+  companyName: string;
+  logoUrl: string | null;
+  loginTitle: string | null;
+  loginSubtitle: string | null;
+  authMode: "password";
+}
+
 function SignInPage() {
   const [location, navigate] = useLocation();
+  const { signIn } = useAuth();
   const [error, setError] = useState<string | null>(null);
+  const [branding, setBranding] = useState<PartnerLoginBrand | null>(null);
+  const [brandingLoaded, setBrandingLoaded] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const isSignup = location.startsWith("/sign-up");
+  const isPartnerGateway = !!branding;
 
   useEffect(() => {
     const reason = consumeSignOutReason();
@@ -156,6 +172,80 @@ function SignInPage() {
       setError("You've been signed out because your account access has changed. Please contact support if you believe this is a mistake.");
     }
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const host = window.location.host;
+        const res = await fetch(`/api/public/partner-branding?host=${encodeURIComponent(host)}`);
+        if (!res.ok) throw new Error("branding fetch failed");
+        const data = (await res.json()) as { branding: PartnerLoginBrand | null };
+        if (!cancelled) setBranding(data.branding ?? null);
+      } catch {
+        if (!cancelled) setBranding(null);
+      } finally {
+        if (!cancelled) setBrandingLoaded(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Partner portals: email/password only — bounce /sign-up to /sign-in.
+  useEffect(() => {
+    if (brandingLoaded && isPartnerGateway && isSignup) {
+      navigate("/sign-in", { replace: true });
+    }
+  }, [brandingLoaded, isPartnerGateway, isSignup, navigate]);
+
+  async function onPasswordSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: email.trim(),
+          password,
+          host: window.location.host,
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { token?: string; error?: string };
+      if (!res.ok || !data.token) {
+        setError(data.error || "Sign in failed. Please try again.");
+        return;
+      }
+      signIn(data.token);
+      navigate("/app");
+    } catch {
+      setError("Sign in failed. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  const title = isPartnerGateway
+    ? (branding.loginTitle?.trim() || `Sign in to ${branding.companyName}`)
+    : isSignup
+      ? "Create your account"
+      : "Sign in to SnapServe";
+
+  const subtitle = isPartnerGateway
+    ? (branding.loginSubtitle?.trim()
+      || `Use the email and password provided by ${branding.companyName}.`)
+    : isSignup
+      ? "Get started with your voice agents."
+      : "Sign in to manage your voice agents.";
+
+  if (!brandingLoaded) {
+    return (
+      <div className="min-h-[100dvh] w-full flex items-center justify-center bg-black">
+        <SnapServeLoader />
+      </div>
+    );
+  }
 
   return (
     <div className="relative min-h-[100dvh] w-full flex items-center justify-center overflow-hidden bg-black text-white">
@@ -172,33 +262,47 @@ function SignInPage() {
       />
       <div className="relative z-[2] w-full max-w-[400px] mx-4 flex flex-col items-center text-center rounded-2xl border border-white/[0.08] bg-[#0f0f12]/90 backdrop-blur-xl p-8 shadow-[0_24px_80px_rgba(0,0,0,0.8)] animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-500">
         <div className="flex flex-col items-center gap-4 mb-6">
-          <div className="flex flex-col gap-[6px] w-[46px]">
-            <div className="h-[10px] w-full rounded-full bg-white" />
-            <div className="h-[10px] w-[78%] rounded-full bg-white/60" />
-            <div className="h-[10px] w-[58%] rounded-full bg-white/35" />
-          </div>
+          {isPartnerGateway && branding.logoUrl ? (
+            <img
+              src={branding.logoUrl}
+              alt={branding.companyName}
+              className="h-12 w-12 rounded-xl object-contain bg-white/5 border border-white/10 p-1.5"
+            />
+          ) : (
+            <div className="flex flex-col gap-[6px] w-[46px]">
+              <div className="h-[10px] w-full rounded-full bg-white" />
+              <div className="h-[10px] w-[78%] rounded-full bg-white/60" />
+              <div className="h-[10px] w-[58%] rounded-full bg-white/35" />
+            </div>
+          )}
           <div className="flex flex-col items-center gap-1.5">
-            <span
-              className="leading-none text-[15px] text-white"
-              style={{ fontFamily: "system-ui, sans-serif", letterSpacing: "-0.02em" }}
-            >
-              <span style={{ fontWeight: 700 }}>Snap</span>
-              <span style={{ fontWeight: 400, opacity: 0.55 }}>Serve</span>
-            </span>
-            <PoweredBySarvam variant="inline" className="justify-center text-white/45 [&_span]:text-white/45" />
+            {isPartnerGateway ? (
+              <span
+                className="leading-none text-[15px] text-white font-semibold"
+                style={{ fontFamily: "system-ui, sans-serif", letterSpacing: "-0.02em" }}
+              >
+                {branding.companyName}
+              </span>
+            ) : (
+              <span
+                className="leading-none text-[15px] text-white"
+                style={{ fontFamily: "system-ui, sans-serif", letterSpacing: "-0.02em" }}
+              >
+                <span style={{ fontWeight: 700 }}>Snap</span>
+                <span style={{ fontWeight: 400, opacity: 0.55 }}>Serve</span>
+              </span>
+            )}
           </div>
         </div>
 
-        <h1 className="text-xl font-semibold tracking-tight mb-1.5">
-          {isSignup ? "Create your account" : "Sign in to SnapServe"}
-        </h1>
-        <p className="text-sm text-white/45 mb-5 leading-relaxed">
-          {isSignup ? "Get started with your voice agents." : "Sign in to manage your voice agents."}
-        </p>
+        <h1 className="text-xl font-semibold tracking-tight mb-1.5">{title}</h1>
+        <p className="text-sm text-white/45 mb-5 leading-relaxed">{subtitle}</p>
 
-        <div className="inline-flex items-center gap-1.5 mb-6 px-3 py-1 rounded-full border border-purple-400/20 bg-purple-400/10 text-[0.7rem] font-medium tracking-wide text-purple-200">
-          <Sparkles size={12} /> ₹500 free credit · ~100 minutes on us
-        </div>
+        {!isPartnerGateway && (
+          <div className="inline-flex items-center gap-1.5 mb-6 px-3 py-1 rounded-full border border-purple-400/20 bg-purple-400/10 text-[0.7rem] font-medium tracking-wide text-purple-200">
+            <Sparkles size={12} /> ₹500 free credit · ~100 minutes on us
+          </div>
+        )}
 
         {error && (
           <div className="w-full mb-4 px-3.5 py-2.5 rounded-lg border border-red-500/20 bg-red-500/[0.08] text-xs text-red-300 text-left">
@@ -206,30 +310,74 @@ function SignInPage() {
           </div>
         )}
 
-        <a
-          href="/api/auth/google/connect"
-          className="w-full flex items-center justify-center gap-2.5 rounded-lg bg-white text-black font-semibold text-sm py-3 transition-colors hover:bg-white/90"
-        >
-          <svg width="18" height="18" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
-            <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
-            <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
-            <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
-            <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.35-8.16 2.35-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
-            <path fill="none" d="M0 0h48v48H0z"/>
-          </svg>
-          {isSignup ? "Sign up with Google" : "Continue with Google"}
-        </a>
+        {isPartnerGateway ? (
+          <form onSubmit={onPasswordSubmit} className="w-full space-y-3 text-left">
+            <div className="space-y-1.5">
+              <label htmlFor="partner-email" className="text-xs text-white/55">Email</label>
+              <input
+                id="partner-email"
+                type="email"
+                autoComplete="username"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2.5 text-sm text-white placeholder:text-white/30 outline-none focus:border-white/25"
+                placeholder="you@company.com"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label htmlFor="partner-password" className="text-xs text-white/55">Password</label>
+              <input
+                id="partner-password"
+                type="password"
+                autoComplete="current-password"
+                required
+                minLength={8}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2.5 text-sm text-white placeholder:text-white/30 outline-none focus:border-white/25"
+                placeholder="••••••••"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={submitting || !email.trim() || password.length < 8}
+              className="w-full rounded-lg bg-white text-black font-semibold text-sm py-3 transition-colors hover:bg-white/90 disabled:opacity-50 disabled:pointer-events-none"
+            >
+              {submitting ? "Signing in…" : "Sign in"}
+            </button>
+            <p className="text-[0.72rem] text-white/35 text-center leading-relaxed pt-1">
+              Need an account? Ask {branding.companyName} to create one for you.
+            </p>
+          </form>
+        ) : (
+          <>
+            <a
+              href={`/api/auth/google/connect?return_to=${encodeURIComponent(window.location.origin)}`}
+              className="w-full flex items-center justify-center gap-2.5 rounded-lg bg-white text-black font-semibold text-sm py-3 transition-colors hover:bg-white/90"
+            >
+              <svg width="18" height="18" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+                <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+                <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+                <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+                <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.35-8.16 2.35-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+                <path fill="none" d="M0 0h48v48H0z"/>
+              </svg>
+              {isSignup ? "Sign up with Google" : "Continue with Google"}
+            </a>
 
-        <div className="mt-6 text-sm text-white/50">
-          {isSignup ? "Already have an account? " : "Don't have an account? "}
-          <button
-            type="button"
-            onClick={() => navigate(isSignup ? "/sign-in" : "/sign-up")}
-            className="text-white font-medium hover:underline underline-offset-2"
-          >
-            {isSignup ? "Sign in" : "Sign up"}
-          </button>
-        </div>
+            <div className="mt-6 text-sm text-white/50">
+              {isSignup ? "Already have an account? " : "Don't have an account? "}
+              <button
+                type="button"
+                onClick={() => navigate(isSignup ? "/sign-in" : "/sign-up")}
+                className="text-white font-medium hover:underline underline-offset-2"
+              >
+                {isSignup ? "Sign in" : "Sign up"}
+              </button>
+            </div>
+          </>
+        )}
 
         <p className="mt-4 text-[0.72rem] text-white/35 leading-relaxed">
           By continuing, you agree to our{" "}
@@ -252,7 +400,10 @@ function AppRoot() {
   const { data: agents, isLoading } = useListAgents({});
   if (isLoading) return <SnapServeLoader />;
   const list = Array.isArray(agents) ? agents : (agents as any)?.agents ?? [];
-  if (!list.length) return <Redirect to="/app/vibe" />;
+  // Accounts with no agents land in the builder, not Vibe. Vibe stays available
+  // from the "Build with AI" entry points, but it is opt-in rather than the
+  // forced first screen after signup.
+  if (!list.length) return <Redirect to="/app/agents" />;
   return <Redirect to="/app/home" />;
 }
 

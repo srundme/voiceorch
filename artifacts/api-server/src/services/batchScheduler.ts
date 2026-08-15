@@ -147,6 +147,7 @@ export async function evaluateBatchCompletion(batchId: number): Promise<boolean>
     const [batch] = await db.select({
       name: campaignBatchesTable.name,
       leadSource: campaignBatchesTable.leadSource,
+      campaignId: campaignBatchesTable.campaignId,
     }).from(campaignBatchesTable).where(eq(campaignBatchesTable.id, batchId)).limit(1);
     // Call-plan dial queue stays open like a continuous campaign source.
     if (batch?.name === "__call_plan_queue" || batch?.leadSource === "workflow") {
@@ -192,6 +193,26 @@ export async function evaluateBatchCompletion(batchId: number): Promise<boolean>
 
     if (updated.length > 0) {
       logger.info({ batchId, pendingCount, activeCount, retryCount }, "Batch completed — all leads processed & retries exhausted");
+      if (batch?.campaignId) {
+        void (async () => {
+          try {
+            const [camp] = await db
+              .select({ userId: campaignsTable.userId })
+              .from(campaignsTable)
+              .where(eq(campaignsTable.id, batch.campaignId))
+              .limit(1);
+            if (!camp?.userId) return;
+            const { maybeSendBatchCompleteReports } = await import("./campaign-report-email.js");
+            await maybeSendBatchCompleteReports({
+              campaignId: batch.campaignId,
+              batchId,
+              userId: camp.userId,
+            });
+          } catch (err) {
+            logger.warn({ err, batchId }, "batch_complete report email hook failed");
+          }
+        })();
+      }
       return true;
     }
     return false;

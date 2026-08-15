@@ -12,12 +12,16 @@ import { clientContext } from "../middlewares/clientContext.js";
 import {
   db, campaignsTable, campaignLeadsTable, campaignBatchesTable,
   callCallbacksTable, callRetriesTable, workspaceDncTable,
-  leadTimelineTable, callsTable,
+  leadTimelineTable, callsTable, callExecutionsTable,
 } from "@workspace/db";
 import { eq, and, count, sql, desc, isNotNull, inArray, ne, or } from "drizzle-orm";
 import { normalizePhone } from "../lib/phone-normalize.js";
+import { canonicalDispositionBucket, dispositionBucketSql } from "../lib/disposition/canonical.js";
 
 const router: IRouter = Router();
+
+/** Canonical disposition bucket for campaign leads — see lib/disposition/canonical. */
+const CAMPAIGN_DISPOSITION_BUCKET_SQL = dispositionBucketSql(sql`${campaignLeadsTable.disposition}`);
 
 router.use(requireAuth, clientContext);
 
@@ -146,20 +150,24 @@ router.get("/campaigns/:id/analytics", async (req, res): Promise<void> => {
   }).from(campaignLeadsTable)
     .where(eq(campaignLeadsTable.campaignId, campaignId));
 
-  // Disposition breakdown
+  // Disposition breakdown, grouped on the canonical bucket. Grouping the raw
+  // label listed the same outcome several times ("no pickup: no pickup",
+  // "not pickup: no pickup", "NOT_CONNECTED: no_answer"), which also split the
+  // slice actions across rows that each acted on a fraction of the leads.
   const dispRows = await db
-    .select({ disposition: campaignLeadsTable.disposition, cnt: count() })
+    .select({ bucket: CAMPAIGN_DISPOSITION_BUCKET_SQL, cnt: count() })
     .from(campaignLeadsTable)
     .where(and(
       eq(campaignLeadsTable.campaignId, campaignId),
       isNotNull(campaignLeadsTable.disposition),
+      sql`btrim(${campaignLeadsTable.disposition}) <> ''`,
     ))
-    .groupBy(campaignLeadsTable.disposition);
+    .groupBy(CAMPAIGN_DISPOSITION_BUCKET_SQL);
 
-  const dispositions: Array<{ label: string; count: number }> = dispRows.map(r => ({
-    label: r.disposition ?? "unknown",
-    count: Number(r.cnt),
-  }));
+  const dispositions: Array<{ label: string; count: number }> = dispRows
+    .filter(r => (r.bucket ?? "").trim() !== "")
+    .map(r => ({ label: r.bucket, count: Number(r.cnt) }))
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
 
   // Status breakdown (per callStatus value)
   const statusRows = await db
@@ -201,12 +209,20 @@ router.get("/campaigns/:id/analytics", async (req, res): Promise<void> => {
   const voicemail   = funnel?.voicemail   ?? 0;
   const pending     = funnel?.pending     ?? 0;
 
-  // successRate = booked / called (primary conversion metric)
-  const successRate    = called > 0 ? Math.round((booked / called) * 100) : 0;
+  // successRate must mean the same thing as the batch workspace card, otherwise
+  // a campaign reads 0% while its only batch reads a real number. Both are now
+  // "leads that reached a positive outcome" — booked, transferred, or interested
+  // — not bookings alone.
+  const successRate    = called > 0 ? Math.round((interested / called) * 100) : 0;
   const connectionRate = called > 0 ? Math.round((connected / called) * 100) : 0;
   const bookingRate    = connected > 0 ? Math.round((booked / connected) * 100) : 0;
   const totalCostCents = costDuration?.totalCostCents ?? 0;
   const avgCostPerBooking = booked > 0 ? Math.round(totalCostCents / booked) : null;
+
+  // Conversation intelligence (sentiment / intent / topics) — may be empty until
+  // backfill runs for older campaigns.
+  const { getCampaignIntelligenceStats } = await import("../services/analyze-call-intelligence.js");
+  const intelligence = await getCampaignIntelligenceStats(campaignId);
 
   res.json({
     campaignId,
@@ -231,6 +247,7 @@ router.get("/campaigns/:id/analytics", async (req, res): Promise<void> => {
     avgCallDurationS: costDuration?.avgDurationS ?? null,
     totalCostCents,
     avgCostPerBooking,
+    intelligence,
   });
 });
 
@@ -500,28 +517,87 @@ router.post("/campaigns/:id/dispositions/act", async (req, res): Promise<void> =
     return;
   }
 
+  // Match the canonical bucket, not the raw string, so a slice acts on every
+  // lead the card counted regardless of how the label was spelled.
   const leads = await db
     .select()
     .from(campaignLeadsTable)
     .where(
       and(
         eq(campaignLeadsTable.campaignId, campaignId),
-        eq(campaignLeadsTable.disposition, disposition),
+        sql`${CAMPAIGN_DISPOSITION_BUCKET_SQL} = ${canonicalDispositionBucket(disposition, "")}`,
       ),
     )
     .limit(5000);
 
   if (action === "export") {
-    const header = ["id", "phone", "name", "email", "disposition", "callStatus", "callId"];
-    const rows = leads.map((l) =>
-      [l.id, l.phone, l.name ?? "", l.email ?? "", l.disposition ?? "", l.callStatus, l.callId ?? ""]
-        .map((v) => {
-          const s = String(v);
-          return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-        })
-        .join(","),
+    // Enrich each lead with its call summary + transcript so the exported report
+    // is self-contained (users asked for these instead of re-opening every call).
+    const callIds = Array.from(
+      new Set(
+        leads
+          .map((l) => (l.callId != null ? Number(l.callId) : null))
+          .filter((id): id is number => id != null && Number.isFinite(id)),
+      ),
     );
-    const csv = [header.join(","), ...rows].join("\n");
+    const callById = new Map<number, { durationSeconds: number | null; summary: string | null; transcript: string | null }>();
+    const intelByCallId = new Map<number, { sentiment: string | null; intent: string | null; topics: string[] }>();
+    if (callIds.length > 0) {
+      const calls = await db
+        .select({
+          id: callsTable.id,
+          durationSeconds: callsTable.durationSeconds,
+          summary: callsTable.callSummary,
+          transcript: callsTable.transcript,
+        })
+        .from(callsTable)
+        .where(inArray(callsTable.id, callIds));
+      for (const c of calls) {
+        callById.set(c.id, { durationSeconds: c.durationSeconds, summary: c.summary, transcript: c.transcript });
+      }
+      const execs = await db
+        .select({
+          callId: callExecutionsTable.callId,
+          sentiment: callExecutionsTable.sentiment,
+          intent: callExecutionsTable.detectedIntent,
+          topics: callExecutionsTable.keyTopics,
+        })
+        .from(callExecutionsTable)
+        .where(inArray(callExecutionsTable.callId, callIds));
+      for (const e of execs) {
+        if (e.callId != null) {
+          intelByCallId.set(e.callId, {
+            sentiment: e.sentiment,
+            intent: e.intent,
+            topics: Array.isArray(e.topics) ? e.topics : [],
+          });
+        }
+      }
+    }
+
+    const csvCell = (v: unknown): string => {
+      const s = v == null ? "" : String(v);
+      return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+
+    const header = [
+      "id", "phone", "name", "email", "disposition", "callStatus", "callId",
+      "durationSec", "summary", "transcript", "sentiment", "intent", "topics",
+    ];
+    const rows = leads.map((l) => {
+      const call = l.callId != null ? callById.get(Number(l.callId)) : undefined;
+      const intel = l.callId != null ? intelByCallId.get(Number(l.callId)) : undefined;
+      return [
+        l.id, l.phone, l.name ?? "", l.email ?? "", l.disposition ?? "", l.callStatus, l.callId ?? "",
+        call?.durationSeconds ?? "", call?.summary ?? "", call?.transcript ?? "",
+        intel?.sentiment ?? "", intel?.intent ?? "", (intel?.topics ?? []).join("; "),
+      ]
+        .map(csvCell)
+        .join(",");
+    });
+    // Prepend a UTF-8 BOM so Excel renders transcripts (which may contain
+    // non-ASCII / Devanagari) correctly on open.
+    const csv = "\uFEFF" + [header.join(","), ...rows].join("\n");
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader(
       "Content-Disposition",
@@ -767,6 +843,134 @@ router.post("/campaigns/:id/recampaign", async (req, res): Promise<void> => {
     dispositions,
     callStatuses,
   });
+});
+
+// ── POST /campaigns/:id/intelligence/backfill ────────────────────────────────
+// Re-analyse completed campaign calls that are missing sentiment/intent/topics.
+// Safe to re-run; skips rows that already have sentiment unless force=true.
+router.post("/campaigns/:id/intelligence/backfill", async (req, res): Promise<void> => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const campaignId = parseInt(req.params["id"]!, 10);
+  const campaign = await requireCampaign(campaignId, userId);
+  if (!campaign) { res.status(404).json({ error: "Not found" }); return; }
+
+  const body = (req.body ?? {}) as { force?: boolean; limit?: number };
+  const force = body.force === true;
+  const limit = typeof body.limit === "number" ? body.limit : 500;
+
+  const { backfillCampaignIntelligence } = await import("../services/analyze-call-intelligence.js");
+  const result = await backfillCampaignIntelligence(campaignId, { force, limit, concurrency: 2 });
+  res.json(result);
+});
+
+// ── GET /campaigns/:id/analytics/insights ────────────────────────────────────
+// Trends (sentiment over time), custom-question scorecard, hot leads.
+router.get("/campaigns/:id/analytics/insights", async (req, res): Promise<void> => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const campaignId = parseInt(req.params["id"]!, 10);
+  const campaign = await requireCampaign(campaignId, userId);
+  if (!campaign) { res.status(404).json({ error: "Not found" }); return; }
+
+  const days = Math.min(Math.max(parseInt(String(req.query["days"] ?? "14"), 10) || 14, 1), 90);
+  const batchIdRaw = req.query["batchId"];
+  const batchId = batchIdRaw != null && String(batchIdRaw) !== ""
+    ? parseInt(String(batchIdRaw), 10)
+    : null;
+  const { getCampaignAnalyticsInsights } = await import("../services/campaign-analytics-insights.js");
+  const insights = await getCampaignAnalyticsInsights(campaignId, {
+    days,
+    batchId: Number.isFinite(batchId as number) ? batchId : null,
+  });
+  res.json(insights);
+});
+
+// ── GET/PUT /campaigns/:id/analytics-questions ───────────────────────────────
+router.get("/campaigns/:id/analytics-questions", async (req, res): Promise<void> => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const campaignId = parseInt(req.params["id"]!, 10);
+  const campaign = await requireCampaign(campaignId, userId);
+  if (!campaign) { res.status(404).json({ error: "Not found" }); return; }
+
+  res.json({ questions: (campaign as { analyticsQuestions?: unknown }).analyticsQuestions ?? [] });
+});
+
+router.put("/campaigns/:id/analytics-questions", async (req, res): Promise<void> => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const campaignId = parseInt(req.params["id"]!, 10);
+  const campaign = await requireCampaign(campaignId, userId);
+  if (!campaign) { res.status(404).json({ error: "Not found" }); return; }
+
+  const body = req.body as { questions?: unknown };
+  const raw = Array.isArray(body.questions) ? body.questions : [];
+  if (raw.length > 20) {
+    res.status(400).json({ error: "Maximum 20 analytics questions per campaign" });
+    return;
+  }
+
+  const questions: Array<{
+    id: string;
+    label: string;
+    type: "boolean" | "enum" | "text";
+    options?: string[];
+    description?: string;
+  }> = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const q = item as Record<string, unknown>;
+    const label = String(q["label"] ?? "").trim();
+    if (!label) continue;
+    const type: "boolean" | "enum" | "text" =
+      q["type"] === "enum" || q["type"] === "text" ? q["type"] : "boolean";
+    const idRaw = String(q["id"] ?? "").trim();
+    const slug =
+      label
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(/^_|_$/g, "")
+        .slice(0, 40);
+    const id = idRaw || slug || `q_${questions.length + 1}`;
+    const options = Array.isArray(q["options"])
+      ? q["options"].map((o: unknown) => String(o).trim()).filter(Boolean).slice(0, 12)
+      : undefined;
+    if (type === "enum" && (!options || options.length < 2)) {
+      res.status(400).json({ error: `Enum question "${label}" needs at least 2 options` });
+      return;
+    }
+    questions.push({
+      id,
+      label: label.slice(0, 160),
+      type,
+      options: type === "enum" ? options : undefined,
+      description: q["description"] ? String(q["description"]).trim().slice(0, 400) : undefined,
+    });
+  }
+
+  // Deduplicate ids
+  const seen = new Set<string>();
+  for (const q of questions) {
+    let id = q.id;
+    let n = 2;
+    while (seen.has(id)) {
+      id = `${q.id}_${n++}`;
+    }
+    q.id = id;
+    seen.add(id);
+  }
+
+  await db
+    .update(campaignsTable)
+    .set({ analyticsQuestions: questions })
+    .where(eq(campaignsTable.id, campaignId));
+
+  res.json({ questions });
 });
 
 export default router;

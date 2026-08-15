@@ -78,12 +78,30 @@ export const callExecutionsTable = pgTable("call_executions", {
   sentiment:       text("sentiment"),
   detectedIntent:  text("detected_intent"),
   keyTopics:       jsonb("key_topics").$type<string[]>().default([]),
+  /** Answers to campaign.analytics_questions — keyed by question id. */
+  analyticsAnswers: jsonb("analytics_answers").$type<Record<string, string | boolean | null>>().default({}),
+  /** 0–100 willingness-to-pay / purchase intent from deep analytics. */
+  purchaseIntentScore: integer("purchase_intent_score"),
+  urgency: text("urgency"),
+  objections: jsonb("objections").$type<string[]>().default([]),
+  buyingSignals: jsonb("buying_signals").$type<string[]>().default([]),
+  nextBestAction: text("next_best_action"),
+  emotion: text("emotion"),
+  agentPerformance: jsonb("agent_performance").$type<{
+    talkListenBalance: number | null;
+    empathy: number | null;
+    objectionHandling: number | null;
+    scriptAdherence: number | null;
+    clarity: number | null;
+    notes: string | null;
+  } | null>(),
   createdAt:       timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, t => [
   index("call_executions_lead_id_idx").on(t.leadId),
   index("call_executions_campaign_id_idx").on(t.campaignId),
   index("call_executions_call_id_idx").on(t.callId),
   index("call_executions_batch_id_idx").on(t.batchId),
+  index("call_executions_purchase_intent_idx").on(t.purchaseIntentScore),
 ]);
 
 export type CallExecution = typeof callExecutionsTable.$inferSelect;

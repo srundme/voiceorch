@@ -9,6 +9,7 @@ import {
   EMPTY_MEANING_MAP,
 } from "@workspace/db";
 import { dispositionMatchesAny, formatDispositionLabel } from "../lib/disposition-match.js";
+import { DEFAULT_POSITIVE_DISPOSITIONS } from "./operational-outcome.js";
 
 export type DispositionMeaning = "interested" | "callback" | "dnc";
 
@@ -91,7 +92,12 @@ export function meaningFlagsForOutcome(
 } {
   const meaning = resolveDispositionMeaning(dispositionResult, map, legacyLabel);
   const label = (legacyLabel || dispositionLabelForLead(dispositionResult)).toLowerCase();
-  const positive = new Set<string>();
+  // Seed with the platform defaults. computeOperationalOutcome only falls back
+  // to them when positiveDispositions is undefined, and this function always
+  // returns a Set — so returning a bare one silently disabled them and a plain
+  // "interested" disposition never reached interest_confirmed. An agent's
+  // meaning map should extend that floor, not replace it.
+  const positive = new Set<string>(DEFAULT_POSITIVE_DISPOSITIONS);
   if (meaning === "interested" && label) positive.add(label);
   // Also allow raw map tokens as positive set members for simple string matching
   if (map?.interested) {

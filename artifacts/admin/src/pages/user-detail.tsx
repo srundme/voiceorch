@@ -127,6 +127,7 @@ export default function UserDetail() {
       }
       setPartnerModal(false);
       queryClient.invalidateQueries({ queryKey: ["admin", "partners"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "users", clerkId] });
     },
     onError: (e) => toast({ title: "Could not create partner", description: formatApiError(e), variant: "destructive" }),
   });
@@ -221,6 +222,7 @@ export default function UserDetail() {
   if (!data?.user) return <div className="p-8 text-destructive">User not found.</div>;
 
   const { user } = data;
+  const partner = data.partner ?? null;
   const isSuspended = user.status === "suspended";
   const isDeleted = user.status === "deleted";
 
@@ -265,6 +267,17 @@ export default function UserDetail() {
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-2xl font-bold tracking-tight truncate">{user.email}</h1>
             <StatusBadge status={user.status} />
+            {partner && (
+              <Badge
+                variant="outline"
+                className={partner.status === "suspended"
+                  ? "gap-1 border-amber-500/40 text-amber-600 dark:text-amber-400"
+                  : "gap-1 border-sky-500/40 text-sky-600 dark:text-sky-400"}
+              >
+                <Handshake className="h-3 w-3" />
+                {partner.status === "suspended" ? "Partner · Suspended" : "Partner"}
+              </Badge>
+            )}
           </div>
           <p className="text-xs text-muted-foreground font-mono mt-1">{user.clerkId}</p>
           <p className="text-sm text-muted-foreground">{user.name || "No name"}</p>
@@ -294,15 +307,23 @@ export default function UserDetail() {
             Send Email
           </Button>
           {!isDeleted && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => { setPartnerCompany(user.name || ""); setPartnerModal(true); }}
-              disabled={!user.email}
-              className="gap-1.5"
-            >
-              <Handshake className="h-3.5 w-3.5" /> Make Partner
-            </Button>
+            partner ? (
+              <Button size="sm" variant="outline" asChild className="gap-1.5">
+                <Link href="/partners">
+                  <Handshake className="h-3.5 w-3.5" /> Manage Partner
+                </Link>
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => { setPartnerCompany(user.name || ""); setPartnerModal(true); }}
+                disabled={!user.email}
+                className="gap-1.5"
+              >
+                <Handshake className="h-3.5 w-3.5" /> Make Partner
+              </Button>
+            )
           )}
           {!isSuspended && !isDeleted && (
             <Button size="sm" variant="destructive" onClick={() => setSuspendModal(true)} className="gap-1.5">

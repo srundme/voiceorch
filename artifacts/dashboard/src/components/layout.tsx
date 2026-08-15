@@ -3,12 +3,9 @@ import { Link, useLocation } from "wouter";
 import { useTheme } from "@/components/theme-provider";
 import { GlobalSearch, useGlobalSearchTrigger } from "@/components/GlobalSearch";
 import {
-  Home, Bot, Phone, Hash, Workflow, Radio, History as HistoryIcon,
-  Settings, Wallet, Mic2, Key,
   Menu, ChevronDown, ChevronLeft, ChevronRight,
-  LogOut, Bell, Search, SlidersHorizontal, BookOpen, PlugZap, Sun, Moon, Sparkles,
-  Plus, X, Wand2, Wrench, Megaphone, Calendar, Video, MessageCircle,
-  Brain, BarChart3, GitBranch,
+  LogOut, Bell, Search, Sun, Moon,
+  Plus, X, Wand2, Wrench,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -16,13 +13,32 @@ import { useAuth } from "@/lib/auth";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useGetWallet, customFetch } from "@workspace/api-client-react";
 import { useMinuteRatesMap, useUserProviderNames } from "@/hooks/use-minute-rates";
-import { SnapServeIcon, PoweredBySarvam } from "@/components/logo";
-import { Handshake } from "lucide-react";
+import { SnapServeIcon } from "@/components/logo";
+import {
+  HomeIcon,
+  CampaignsIcon,
+  AgentIcon,
+  PhoneIcon,
+  ConnectionsIcon,
+  HistoryIcon,
+  AnalyticsIcon,
+  KnowledgeIcon,
+  MemoryIcon,
+  SquadsIcon,
+  BookingsIcon,
+  WorkspaceIcon,
+  ProvidersIcon,
+  DevelopersIcon,
+  BillingIcon,
+  PartnerIcon,
+  CreateIcon,
+  WalletIcon,
+  SettingsIcon,
+} from "@workspace/brand-icons";
 import { usePartnerContext } from "@/hooks/use-partner";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 import { loadActingAs, stopActingAs } from "@/lib/acting-as";
-import { SarvamFamilyAnnouncement } from "@/components/sarvam-family-announcement";
 
 /* ─── Error boundary ─────────────────────────────────────────────────────── */
 interface ErrorBoundaryState { hasError: boolean; error: unknown }
@@ -103,31 +119,31 @@ interface NavGroup {
 const NAV_GROUPS: NavGroup[] = [
   {
     items: [
-      { name: "Home",          href: "/app/home",           icon: Home },
-      { name: "Campaigns",     href: "/app/campaigns",      icon: Megaphone },
-      { name: "Agents",        href: "/app/agents",         icon: Bot },
-      { name: "Phone numbers", href: "/app/phone-numbers",  icon: Phone },
-      { name: "Connections",   href: "/app/connections",    icon: PlugZap },
+      { name: "Home",          href: "/app/home",           icon: HomeIcon },
+      { name: "Campaigns",     href: "/app/campaigns",      icon: CampaignsIcon },
+      { name: "Agents",        href: "/app/agents",         icon: AgentIcon },
+      { name: "Phone numbers", href: "/app/phone-numbers",  icon: PhoneIcon },
+      { name: "Connections",   href: "/app/connections",    icon: ConnectionsIcon },
       { name: "History",       href: "/app/history",        icon: HistoryIcon, callbackBadge: true },
-      { name: "Analytics",     href: "/app/analytics",      icon: BarChart3 },
+      { name: "Analytics",     href: "/app/analytics",      icon: AnalyticsIcon },
     ],
   },
   {
     group: "MORE",
     items: [
-      { name: "Knowledge", href: "/app/knowledge-bases", icon: BookOpen },
-      { name: "Memory",    href: "/app/memory",          icon: Brain },
-      { name: "Squads",    href: "/app/squads",          icon: GitBranch },
-      { name: "Bookings",  href: "/app/scheduling",      icon: Calendar },
+      { name: "Knowledge", href: "/app/knowledge-bases", icon: KnowledgeIcon },
+      { name: "Memory",    href: "/app/memory",          icon: MemoryIcon },
+      { name: "Squads",    href: "/app/squads",          icon: SquadsIcon },
+      { name: "Bookings",  href: "/app/scheduling",      icon: BookingsIcon },
     ],
   },
 ];
 
 const NAV_SETTINGS: NavItem[] = [
-  { name: "Workspace",  href: "/app/settings",  icon: Settings },
-  { name: "Providers",  href: "/app/providers", icon: Mic2 },
-  { name: "Developers", href: "/app/api-keys",  icon: Key },
-  { name: "Billing",    href: "/app/wallet",    icon: Wallet },
+  { name: "Workspace",  href: "/app/settings",  icon: WorkspaceIcon },
+  { name: "Providers",  href: "/app/providers", icon: ProvidersIcon },
+  { name: "Developers", href: "/app/api-keys",  icon: DevelopersIcon },
+  { name: "Billing",    href: "/app/wallet",    icon: BillingIcon },
 ];
 
 const SETTINGS_HREFS = NAV_SETTINGS.map(s => s.href);
@@ -184,7 +200,7 @@ function WalletChip({ compact = false }: { compact?: boolean }) {
   return (
     <Link href="/app/wallet">
       <div className={`flex items-center gap-1.5 px-2.5 py-[7px] rounded-lg border ${ring} bg-elevated/40 cursor-pointer hover:bg-elevated transition-colors w-full`}>
-        <Wallet className={`size-3.5 shrink-0 ${text}`} />
+        <WalletIcon className={`size-3.5 shrink-0 ${text}`} />
         {!compact && (
           <div className="flex flex-col gap-[3px] flex-1 min-w-0">
             {cents !== null ? (
@@ -260,7 +276,7 @@ function SidebarUser({ collapsed }: { collapsed: boolean }) {
                 onClick={() => setOpen(false)}
                 className="flex items-center gap-2.5 px-3.5 py-2.5 w-full text-left text-[13px] text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
               >
-                <Settings className="w-3.5 h-3.5" />
+                <SettingsIcon className="w-3.5 h-3.5" />
                 Settings
               </button>
             </Link>
@@ -410,7 +426,7 @@ function SidebarContent({
     : partnerCtx?.isPartner
       ? [
           ...NAV_GROUPS,
-          { group: "PARTNER", items: [{ name: "Partner Hub", href: "/app/partner", icon: Handshake }] },
+          { group: "PARTNER", items: [{ name: "Partner Hub", href: "/app/partner", icon: PartnerIcon }] },
         ]
       : NAV_GROUPS;
   const settingsItems: NavItem[] = NAV_SETTINGS;
@@ -459,7 +475,6 @@ function SidebarContent({
                     <span style={{ fontWeight: 700 }}>Snap</span>
                     <span style={{ fontWeight: 400, opacity: 0.72 }}>Serve</span>
                   </span>
-                  <PoweredBySarvam variant="inline" className="justify-start" />
                 </span>
               )}
               {!collapsed && partnerCtx?.isPartner && (
@@ -552,7 +567,7 @@ function SidebarContent({
               : "text-muted-foreground hover:bg-foreground/[0.05] hover:text-foreground",
           ].join(" ")}
         >
-          <SlidersHorizontal className={`size-4 shrink-0 ${isInSettings ? "text-foreground" : "text-muted-foreground"}`} />
+          <SettingsIcon className={`size-4 shrink-0 ${isInSettings ? "text-foreground" : "text-muted-foreground"}`} />
           {!collapsed && (
             <>
               <span className="flex-1 text-left">Settings</span>
@@ -580,8 +595,7 @@ function SidebarContent({
 
       {/* Quiet account footer */}
       <div className="shrink-0 border-t border-sidebar-border px-2 pt-1">
-        {/* Partner white-label branding (clients of a partner).
-            Intentionally NOT “Powered by Sarvam” — partner attribution wins. */}
+        {/* Partner white-label: company name only in the sidebar. */}
         {partnerCtx?.branding && (
           <div className="pt-1.5 flex items-center gap-2 px-2.5">
             {partnerCtx.branding.logoUrl && (
@@ -600,7 +614,7 @@ function SidebarContent({
             onClick={onNavClick}
             className="flex h-9 w-full items-center gap-2.5 rounded-md px-2.5 text-[13px] text-muted-foreground transition-colors hover:bg-foreground/[0.05] hover:text-foreground"
           >
-            <BookOpen className="size-4 shrink-0 text-muted-foreground" />
+            <KnowledgeIcon className="size-4 shrink-0 text-muted-foreground" />
             {!collapsed && <span>Documentation</span>}
           </Link>
         </div>
@@ -621,10 +635,10 @@ function SidebarContent({
 
 /* ─── Mobile bottom nav ──────────────────────────────────────────────────── */
 const MOBILE_BOTTOM_NAV_ITEMS = [
-  { name: "Home",      href: "/app/home",       icon: Home },
-  { name: "Campaigns", href: "/app/campaigns",  icon: Megaphone },
-  { name: "Create",    href: null,              icon: Sparkles }, // opens modal
-  { name: "Agents",    href: "/app/agents",     icon: Bot },
+  { name: "Home",      href: "/app/home",       icon: HomeIcon },
+  { name: "Campaigns", href: "/app/campaigns",  icon: CampaignsIcon },
+  { name: "Create",    href: null,              icon: CreateIcon }, // opens modal
+  { name: "Agents",    href: "/app/agents",     icon: AgentIcon },
   { name: "History",   href: "/app/history",    icon: HistoryIcon },
 ] as const;
 
@@ -808,7 +822,7 @@ function MobileTopbarUser() {
             </div>
             <Link href="/app/settings">
               <button type="button" onClick={() => setOpen(false)} className="flex items-center gap-2.5 px-3.5 py-2.5 w-full text-left text-[13px] text-muted-foreground hover:bg-accent hover:text-foreground transition-colors">
-                <Settings className="w-3.5 h-3.5" />Settings
+                <SettingsIcon className="w-3.5 h-3.5" />Settings
               </button>
             </Link>
             <button type="button" onClick={() => { setTheme(theme === "dark" ? "light" : "dark"); setOpen(false); }} className="flex items-center gap-2.5 px-3.5 py-2.5 w-full text-left text-[13px] text-muted-foreground hover:bg-accent hover:text-foreground transition-colors">
@@ -909,7 +923,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
                     <span style={{ fontWeight: 700 }}>Snap</span>
                     <span style={{ fontWeight: 400, opacity: 0.55 }}>Serve</span>
                   </span>
-                  <PoweredBySarvam variant="inline" className="justify-start" />
                 </span>
               </>
             )}
@@ -935,7 +948,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         {/* Partner acting-as-client banner */}
         {actingAs && (
           <div className="flex items-center gap-2 px-4 py-2 bg-amber-500/10 border-b border-amber-500/30">
-            <Handshake className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+            <PartnerIcon className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
             <p className="text-[12.5px] text-foreground truncate">
               Viewing{" "}
               <span className="font-semibold">{actingAs.clientName}</span>
@@ -974,8 +987,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <NewAgentModal open={newAgentOpen} onClose={() => setNewAgentOpen(false)} />
 
       <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
-
-      <SarvamFamilyAnnouncement />
     </div>
   );
 }

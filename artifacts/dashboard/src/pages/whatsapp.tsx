@@ -89,6 +89,8 @@ type WaChannel = {
   status: string;
   lastError: string | null;
   active: boolean;
+  callingEnabled?: boolean;
+  callingAgentId?: number | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -103,7 +105,16 @@ type WaChannelResponse = {
 
 type WaAvailableNumbers = {
   numbers: { number: string; country: string; region: string | null }[];
-  pricing: { basePaise: number; gstPaise: number; totalPaise: number; renewalPaise: number; currency: string };
+  pricing: {
+    basePaise: number;
+    gstPaise: number;
+    totalPaise: number;
+    renewalPaise: number;
+    currency: string;
+    walletPurchaseMinPaise?: number;
+    walletEligible?: boolean;
+    walletBalanceCents?: number;
+  };
 };
 
 type WaMessage = {
@@ -143,11 +154,11 @@ function CopyButton({ text, label }: { text: string; label?: string }) {
 
 const MSG_STATUS_STYLES: Record<string, string> = {
   pending: "bg-muted/60 text-muted-foreground",
-  sent: "bg-sky-500/15 text-sky-400",
-  delivered: "bg-emerald-500/15 text-emerald-400",
-  read: "bg-teal-500/15 text-teal-300",
-  failed: "bg-red-500/15 text-red-400",
-  received: "bg-violet-500/15 text-violet-300",
+  sent: "bg-sky-500/15 text-sky-600 dark:text-sky-400",
+  delivered: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+  read: "bg-teal-500/15 text-teal-700 dark:text-teal-300",
+  failed: "bg-red-500/15 text-red-600 dark:text-red-400",
+  received: "bg-violet-500/15 text-violet-700 dark:text-violet-300",
 };
 
 function MsgStatusBadge({ status }: { status: string }) {
@@ -202,9 +213,23 @@ function NativeSection({
   });
   const messages = msgData?.messages ?? [];
 
+  const { data: ratesData } = useQuery({
+    queryKey: ["whatsapp-rates"],
+    queryFn: () => customFetch<{ rates: { templateDefaultPaise: number; freeformPaise: number; callPerMinutePaise: number } }>(`${API}/whatsapp/rates`),
+    enabled: !!channel && channel.mode === "own",
+  });
+
+  const { data: callsData, refetch: refetchCalls } = useQuery({
+    queryKey: ["whatsapp-calls"],
+    queryFn: () => customFetch<{ calls: Array<{ id: string; direction: string; toNumber: string | null; fromNumber: string | null; status: string; durationSeconds: number | null; createdAt: string }>; wrtcAvailable: boolean }>(`${API}/whatsapp/calls`),
+    enabled: !!channel && channel.mode === "own",
+    refetchInterval: 15_000,
+  });
+
   const invalidate = () => {
     void qc.invalidateQueries({ queryKey: ["whatsapp-channel"] });
     void qc.invalidateQueries({ queryKey: ["whatsapp-native-messages"] });
+    void qc.invalidateQueries({ queryKey: ["whatsapp-calls"] });
   };
 
   /* dialogs */
@@ -227,6 +252,8 @@ function NativeSection({
   const [accessToken, setAccessToken] = useState("");
   const [existingChannelId, setExistingChannelId] = useState("");
   const [testPhone, setTestPhone] = useState("");
+  const [callPhone, setCallPhone] = useState("");
+  const [callingBusy, setCallingBusy] = useState(false);
 
   const connectOwn = useMutation({
     mutationFn: (vars: { numberSource: "direct" | "purchased" | "voice_number"; voicePhoneNumberId?: number }) =>
@@ -334,16 +361,48 @@ function NativeSection({
     setExistingChannelId("");
     setRetryNumber(reconnectNumber ?? null);
     setBizStep(1);
-    setNumberChoice("buy");
+    // Preserve numberChoice if caller already set buy/direct/voice; default buy for reconnect.
+    if (reconnectNumber) setNumberChoice("buy");
     setSelectedNumber(null);
     setBizOpen(true);
   };
 
-  /** Buy flow: Razorpay order → checkout → confirm (number + channel created server-side). */
-  const handleBuyAndConnect = async () => {
+  /** Buy flow: wallet (if eligible) or Razorpay → confirm (number + channel created server-side). */
+  const handleBuyAndConnect = async (payVia: "card" | "wallet" = "card") => {
     if (!selectedNumber) return;
     setBuying(true);
     try {
+      if (payVia === "wallet") {
+        const result = await customFetch<{ channel: WaChannel | null; channelError: string | null }>(
+          `${API}/whatsapp/numbers/purchase/wallet`,
+          {
+            method: "POST",
+            body: JSON.stringify({
+              number: selectedNumber,
+              countryCode: "IN",
+              wabaId: wabaId.trim(),
+              accessToken: accessToken.trim(),
+              businessName: businessName.trim(),
+              inboundAgentId: inboundAgentId === "" ? null : Number(inboundAgentId),
+            }),
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+        if (result.channelError) {
+          toast({
+            title: "Number purchased — connection needs one more try",
+            description: `${result.channelError} — use “Retry connection” on the card (your number is safe).`,
+            variant: "destructive",
+          });
+        } else {
+          toast({ title: "WhatsApp number purchased from wallet!", description: "The carrier is registering it with Meta — usually ready in a few minutes." });
+        }
+        invalidate();
+        setBizOpen(false);
+        setAccessToken("");
+        return;
+      }
+
       const init = await customFetch<{ purchaseOrderId: number; orderId: string; amountCents: number; keyId?: string }>(
         `${API}/whatsapp/numbers/purchase/initiate`,
         {
@@ -413,6 +472,12 @@ function NativeSection({
           description: "Indian numbers need a one-time KYC — complete it on the Phone Numbers page (takes ~2 minutes), then come back.",
           variant: "destructive",
         });
+      } else if (code === "WALLET_PURCHASE_NOT_ELIGIBLE") {
+        toast({
+          title: "Wallet balance too low for wallet purchase",
+          description: "Need more than ₹20,000 in wallet, or pay by card instead.",
+          variant: "destructive",
+        });
       } else {
         toast({ title: "Purchase failed", description: msg, variant: "destructive" });
       }
@@ -431,7 +496,7 @@ function NativeSection({
         <div className="space-y-4">
           {data?.purchasedNumber && (
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-500/25 bg-amber-500/5 px-3 py-2">
-              <p className="text-[11px] text-amber-300/90">
+              <p className="text-[11px] text-amber-700 dark:text-amber-300/90">
                 You own WhatsApp number <strong className="text-foreground">{data.purchasedNumber.number}</strong> but it isn't connected yet.
               </p>
               <div className="flex gap-2">
@@ -440,7 +505,7 @@ function NativeSection({
                 </Button>
                 {!isManagedWorkspace && (
                   <Button
-                    size="sm" variant="ghost" className="h-7 text-[11px] text-red-400"
+                    size="sm" variant="ghost" className="h-7 text-[11px] text-red-600 dark:text-red-400"
                     disabled={releaseNumber.isPending}
                     onClick={() => {
                       if (confirm(`Release ${data.purchasedNumber!.number}? The 30-day renewal billing stops and the number is gone for good.`)) {
@@ -456,41 +521,98 @@ function NativeSection({
           )}
 
           <div>
-            <h3 className="text-sm font-semibold">Connect WhatsApp Business</h3>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Use your own WhatsApp Business account via Meta API. SnapServe Instant WhatsApp is no longer offered.
+            <h3 className="text-sm font-semibold">Connect WhatsApp</h3>
+            <p className="mt-0.5 text-xs text-muted-foreground max-w-2xl">
+              Pick one path. Paths 1 and 2 need a Meta Business Manager (WABA ID + permanent system-user token).
+              SnapServe Instant WhatsApp is no longer offered for new signups.
             </p>
           </div>
 
-          <div className="max-w-xl">
-            {/* Business → direct Meta Cloud API */}
+          <div className="grid gap-3 md:grid-cols-3">
+            {/* Path A — Buy from SnapServe / Vobiz */}
+            {!isManagedWorkspace && (
+              <div className="flex flex-col rounded-lg border border-emerald-500/30 bg-emerald-500/[0.04] p-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  <h3 className="text-sm font-semibold">Get from SnapServe</h3>
+                  <Badge className="border-transparent bg-emerald-500/15 text-[10px] text-emerald-700 dark:text-emerald-300">Vobiz · recommended</Badge>
+                </div>
+                <ul className="mt-3 flex-1 space-y-1.5 text-xs text-muted-foreground">
+                  <li>• Buy a WhatsApp-ready number here</li>
+                  <li>• Message costs debit from your wallet</li>
+                  <li>• WhatsApp voice calling supported on this channel</li>
+                  <li>• Still need your Meta WABA + access token once</li>
+                </ul>
+                <Button
+                  size="sm"
+                  className="mt-4 h-9 w-full"
+                  onClick={() => {
+                    setNumberChoice("buy");
+                    openBizWizard();
+                  }}
+                >
+                  Buy number &amp; connect
+                </Button>
+              </div>
+            )}
+
+            {/* Path B — Existing Meta WABA */}
             <div className="flex flex-col rounded-lg border border-sky-500/25 bg-sky-500/[0.04] p-4">
               <div className="flex flex-wrap items-center gap-2">
-                <Building2 className="h-4 w-4 text-sky-400" />
-                <h3 className="text-sm font-semibold">I have a WhatsApp Business account</h3>
-                <Badge className="border-transparent bg-sky-500/15 text-[10px] text-sky-300">Meta API · your brand</Badge>
+                <Building2 className="h-4 w-4 text-sky-600 dark:text-sky-400" />
+                <h3 className="text-sm font-semibold">I already have WhatsApp Business</h3>
+                <Badge className="border-transparent bg-sky-500/15 text-[10px] text-sky-700 dark:text-sky-300">Meta WABA</Badge>
               </div>
               <ul className="mt-3 flex-1 space-y-1.5 text-xs text-muted-foreground">
-                <li>• Messages from <strong className="text-foreground">your own WhatsApp number</strong></li>
-                <li>• Connect with Meta token — we pull your approved templates</li>
-                <li>• Templates for call summary, booking &amp; callback</li>
-                <li>• Post-call, mid-call tool, and Request-a-Call supported</li>
+                <li>• Connect a number already in your WABA</li>
+                <li>• Or WhatsApp-enable a SnapServe voice DID</li>
+                <li>• Workspace channel for post-call + mid-call</li>
+                <li>• Same Meta token + WABA ID required</li>
               </ul>
+              <Button
+                size="sm"
+                className="mt-4 h-9 w-full"
+                onClick={() => {
+                  setNumberChoice("direct");
+                  openBizWizard();
+                }}
+              >
+                Connect my number
+              </Button>
               {metaConnected ? (
-                <>
-                  <div className="mt-4 flex items-center justify-center gap-1.5 rounded-md border border-emerald-500/30 bg-emerald-500/10 py-2 text-xs font-medium text-emerald-400">
-                    ✓ Already configured — see Your connections below
-                  </div>
-                  <Button size="sm" variant="ghost" className="mt-2 h-9 w-full text-[11px] text-muted-foreground" onClick={() => onChooseMeta?.()}>
-                    Add another connection
-                  </Button>
-                </>
+                <Button size="sm" variant="ghost" className="mt-2 h-8 w-full text-[11px] text-muted-foreground" onClick={() => onChooseMeta?.()}>
+                  Or add agent Meta connection
+                </Button>
               ) : (
-                <Button size="sm" className="mt-4 h-9 w-full" onClick={() => onChooseMeta?.()}>
-                  Connect Meta API
+                <Button size="sm" variant="ghost" className="mt-2 h-8 w-full text-[11px] text-muted-foreground" onClick={() => onChooseMeta?.()}>
+                  Prefer agent-scoped Meta API instead
                 </Button>
               )}
             </div>
+
+            {/* Path C — Other BSP */}
+            <div className="flex flex-col rounded-lg border border-border/60 bg-card/30 p-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <Webhook className="h-4 w-4 text-muted-foreground" />
+                <h3 className="text-sm font-semibold">I use another BSP</h3>
+                <Badge variant="outline" className="text-[10px]">Wati · Gupshup · Zapier</Badge>
+              </div>
+              <ul className="mt-3 flex-1 space-y-1.5 text-xs text-muted-foreground">
+                <li>• Keep your current provider</li>
+                <li>• SnapServe POSTs to your webhook</li>
+                <li>• Per-agent override of workspace channel</li>
+                <li>• No WhatsApp calling on this path</li>
+              </ul>
+              <Button size="sm" variant="outline" className="mt-4 h-9 w-full" onClick={() => onChooseBsp?.()}>
+                Connect BSP webhook
+              </Button>
+            </div>
+          </div>
+
+          <div className="rounded-md border border-border/50 bg-muted/20 px-3 py-2 text-[11px] text-muted-foreground max-w-3xl">
+            <strong className="text-foreground/90">Meta checklist:</strong> Business Manager → WhatsApp accounts → copy WABA ID;
+            System user → generate a permanent token with <code className="text-[10px]">whatsapp_business_messaging</code> +{" "}
+            <code className="text-[10px]">whatsapp_business_management</code>. A number can only live on one BSP at a time.
           </div>
         </div>
       ) : (
@@ -499,15 +621,15 @@ function NativeSection({
             <div>
               <div className="flex items-center gap-2">
                 {channel.mode === "shared"
-                  ? <Sparkles className="w-4 h-4 text-emerald-400" />
-                  : <Building2 className="w-4 h-4 text-sky-400" />}
+                  ? <Sparkles className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                  : <Building2 className="w-4 h-4 text-sky-600 dark:text-sky-400" />}
                 <h3 className="text-sm font-semibold">
                   {channel.mode === "shared" ? "Legacy Instant WhatsApp" : "Your WhatsApp number"}
                 </h3>
                 <Badge
                   className={channel.status === "active"
-                    ? "bg-emerald-500/15 text-emerald-400 border-transparent text-[10px]"
-                    : "bg-amber-500/15 text-amber-400 border-transparent text-[10px]"}
+                    ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-transparent text-[10px]"
+                    : "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-transparent text-[10px]"}
                 >
                   {channel.status}
                 </Badge>
@@ -519,11 +641,34 @@ function NativeSection({
                   <> · {data.usage.used24h}/{data.usage.cap} messages used (24h)</>
                 )}
               </p>
+              {channel.mode === "own" && (
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Workspace channel · messages billed from wallet · WhatsApp calling available when enabled on this number.
+                  An agent BSP connection overrides this channel for that agent.
+                </p>
+              )}
             </div>
             <div className="flex gap-1.5">
               {channel.mode === "shared" && (
                 <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => openBizWizard()}>
                   Upgrade to Business WhatsApp
+                </Button>
+              )}
+              {channel.mode === "own" && channel.status === "pending" && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-xs"
+                  onClick={() => {
+                    void customFetch(`${API}/whatsapp/channel/refresh`, { method: "POST" })
+                      .then(() => {
+                        invalidate();
+                        toast({ title: "Refreshed channel status" });
+                      })
+                      .catch((err: Error) => toast({ title: "Refresh failed", description: err.message, variant: "destructive" }));
+                  }}
+                >
+                  Refresh pending
                 </Button>
               )}
               <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={openSharedDialog}>
@@ -543,7 +688,7 @@ function NativeSection({
           </div>
 
           {channel.lastError && (
-            <div className="flex items-start justify-between gap-2 rounded-md border border-red-500/25 bg-red-500/5 px-3 py-2 text-[11px] text-red-400">
+            <div className="flex items-start justify-between gap-2 rounded-md border border-red-500/25 bg-red-500/5 px-3 py-2 text-[11px] text-red-600 dark:text-red-400">
               <div className="flex items-start gap-2 min-w-0">
                 <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
                 <span className="break-all">{channel.lastError}</span>
@@ -561,7 +706,7 @@ function NativeSection({
 
           {channel.mode === "own" && channel.vobizChannelId && channel.status !== "active" && (
             <div className="flex items-start justify-between gap-2 rounded-md border border-amber-500/25 bg-amber-500/5 px-3 py-2">
-              <p className="text-[11px] text-amber-300/90">
+              <p className="text-[11px] text-amber-700 dark:text-amber-300/90">
                 {channel.phoneNumberId
                   ? "Almost ready — waiting for the carrier to activate the channel."
                   : "Provisioning — the carrier is registering your WhatsApp number with Meta. Usually ready in a few minutes."}
@@ -587,7 +732,7 @@ function NativeSection({
               {!isManagedWorkspace && (
                 <button
                   type="button"
-                  className="text-red-400 hover:text-red-300"
+                  className="text-red-600 dark:text-red-400 hover:text-red-700 dark:text-red-300"
                   onClick={() => {
                     if (confirm(`Release ${data.purchasedNumber!.number}? WhatsApp sends from this number stop and renewal billing ends.`)) {
                       releaseNumber.mutate(data.purchasedNumber!.id);
@@ -656,6 +801,114 @@ function NativeSection({
             </div>
           </div>
 
+          {channel.mode === "own" && (
+            <div className="rounded-md border border-border/50 bg-muted/15 p-3 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-xs font-semibold">WhatsApp calling</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    Voice over WhatsApp (WebRTC). Enable Calling on this number in Meta Business Manager first.
+                    {ratesData?.rates && (
+                      <> · {inr(ratesData.rates.callPerMinutePaise)}/min from wallet · templates from {inr(ratesData.rates.templateDefaultPaise)}</>
+                    )}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-muted-foreground">Enable</span>
+                  <Switch
+                    checked={!!channel.callingEnabled}
+                    onCheckedChange={(v) => patchChannel.mutate({ callingEnabled: v })}
+                  />
+                </div>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Answer with agent</Label>
+                  <select
+                    className="mt-1 w-full h-9 rounded-md border border-input bg-background px-2 text-sm"
+                    value={channel.callingAgentId ?? channel.inboundAgentId ?? ""}
+                    onChange={(e) =>
+                      patchChannel.mutate({ callingAgentId: e.target.value ? Number(e.target.value) : null })}
+                  >
+                    <option value="">Same as “call me” / none</option>
+                    {agents.map((a) => (
+                      <option key={a.id} value={a.id}>{a.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Test outbound WhatsApp call</Label>
+                  <div className="mt-1 flex gap-2">
+                    <Input
+                      className="h-9"
+                      placeholder="+91 98765 43210"
+                      value={callPhone}
+                      onChange={(e) => setCallPhone(e.target.value)}
+                      disabled={!channel.callingEnabled}
+                    />
+                    <Button
+                      size="sm"
+                      className="h-9"
+                      disabled={!channel.callingEnabled || !callPhone.trim() || callingBusy}
+                      onClick={() => {
+                        setCallingBusy(true);
+                        void customFetch<{ mediaReady: boolean }>(`${API}/whatsapp/calls/outbound`, {
+                          method: "POST",
+                          body: JSON.stringify({ to: callPhone.trim() }),
+                          headers: { "Content-Type": "application/json" },
+                        })
+                          .then((r) => {
+                            toast({
+                              title: "WhatsApp call started",
+                              description: r.mediaReady
+                                ? "Media bridge is active."
+                                : "Signaling started — install @roamhq/wrtc on the server for full audio.",
+                            });
+                            void refetchCalls();
+                          })
+                          .catch((err: Error) => toast({ title: "Call failed", description: err.message, variant: "destructive" }))
+                          .finally(() => setCallingBusy(false));
+                      }}
+                    >
+                      <PhoneIncoming className="w-3.5 h-3.5 mr-1" /> Call
+                    </Button>
+                  </div>
+                </div>
+              </div>
+              {(callsData?.calls?.length ?? 0) > 0 && (
+                <div className="max-h-28 overflow-y-auto text-[11px] divide-y divide-border/40 rounded border border-border/40">
+                  {callsData!.calls.slice(0, 8).map((c) => (
+                    <div key={c.id} className="flex items-center justify-between gap-2 px-2 py-1.5">
+                      <span className="text-muted-foreground">
+                        {c.direction} · {c.toNumber ?? c.fromNumber ?? "—"} · {c.status}
+                        {c.durationSeconds != null ? ` · ${c.durationSeconds}s` : ""}
+                      </span>
+                      {(c.status === "initiated" || c.status === "ringing" || c.status === "accepted") && (
+                        <button
+                          type="button"
+                          className="text-red-600 dark:text-red-400 underline"
+                          onClick={() => {
+                            void customFetch(`${API}/whatsapp/calls/${c.id}/terminate`, { method: "POST" })
+                              .then(() => void refetchCalls())
+                              .catch((err: Error) => toast({ title: "Hangup failed", description: err.message, variant: "destructive" }));
+                          }}
+                        >
+                          End
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {callsData && !callsData.wrtcAvailable && (
+                <p className="text-[10px] text-amber-700 dark:text-amber-300/90">
+                  Server WebRTC package not loaded — calls can signal via VoBiz, but bidirectional agent audio needs{" "}
+                  <code>@roamhq/wrtc</code> on the API server.
+                </p>
+              )}
+            </div>
+          )}
+
           {/* Message log */}
           <div>
             <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
@@ -685,8 +938,8 @@ function NativeSection({
                         </td>
                         <td className="px-3 py-2">
                           {m.direction === "outbound"
-                            ? <ArrowUpRight className="w-3.5 h-3.5 text-sky-400" />
-                            : <ArrowDownLeft className="w-3.5 h-3.5 text-violet-400" />}
+                            ? <ArrowUpRight className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400" />
+                            : <ArrowDownLeft className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400" />}
                         </td>
                         <td className="px-3 py-2 whitespace-nowrap">{m.phone}</td>
                         <td className="px-3 py-2 max-w-[280px]">
@@ -695,7 +948,7 @@ function NativeSection({
                             {m.bodyPreview}
                           </span>
                           {m.errorMessage && (
-                            <span className="block truncate text-[10px] text-red-400">{m.errorMessage}</span>
+                            <span className="block truncate text-[10px] text-red-600 dark:text-red-400">{m.errorMessage}</span>
                           )}
                         </td>
                         <td className="px-3 py-2"><MsgStatusBadge status={m.status} /></td>
@@ -798,7 +1051,7 @@ function NativeSection({
           {bizStep === 1 ? (
             <div className="space-y-3">
               {retryNumber && (
-                <div className="rounded-md border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-[11px] text-amber-300/90">
+                <div className="rounded-md border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-[11px] text-amber-700 dark:text-amber-300/90">
                   Number <strong className="text-foreground">{retryNumber}</strong> is already yours — re-enter
                   your Meta details to finish connecting it. You won't be charged again.
                 </div>
@@ -865,12 +1118,12 @@ function NativeSection({
                         {numbersLoading ? (
                           <p className="text-[11px] text-muted-foreground">Loading available numbers…</p>
                         ) : numbersError ? (
-                          <div className="text-[11px] text-red-400">
+                          <div className="text-[11px] text-red-600 dark:text-red-400">
                             Couldn't load numbers.{" "}
                             <button type="button" className="underline" onClick={() => refetchNumbers()}>Try again</button>
                           </div>
                         ) : (waNumbers?.numbers?.length ?? 0) === 0 ? (
-                          <p className="text-[11px] text-amber-400/90">
+                          <p className="text-[11px] text-amber-600 dark:text-amber-400/90">
                             No WhatsApp numbers in stock right now — try again shortly, or connect a Meta-registered number below.
                           </p>
                         ) : (
@@ -883,7 +1136,7 @@ function NativeSection({
                                 onClick={() => setSelectedNumber(n.number)}
                               >
                                 <span className="font-mono">{n.number}</span>
-                                {selectedNumber === n.number && <CheckCircle2 className="w-3.5 h-3.5 text-sky-400" />}
+                                {selectedNumber === n.number && <CheckCircle2 className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400" />}
                               </button>
                             ))}
                           </div>
@@ -927,7 +1180,7 @@ function NativeSection({
                 <div className="flex items-start gap-2">
                   <input type="radio" className="mt-1" checked={numberChoice === "voice"} onChange={() => setNumberChoice("voice")} />
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium">Use one of my SnapServe voice numbers <span className="text-emerald-400 font-semibold">₹0</span></p>
+                    <p className="text-xs font-medium">Use one of my SnapServe voice numbers <span className="text-emerald-600 dark:text-emerald-400 font-semibold">₹0</span></p>
                     <p className="text-[11px] text-muted-foreground mt-0.5">
                       WhatsApp-enable a number you already rent for calls — it keeps taking voice calls.
                       Verification calls land on the number itself, so SnapServe captures the code for you.
@@ -976,9 +1229,16 @@ function NativeSection({
                 </Button>
               )
             ) : numberChoice === "buy" ? (
-              <Button disabled={!selectedNumber || buying} onClick={() => void handleBuyAndConnect()}>
-                {buying ? "Processing…" : `Pay ${inr(pricing.totalPaise)} & connect`}
-              </Button>
+              <div className="flex flex-wrap gap-2 justify-end">
+                {pricing.walletEligible && (
+                  <Button disabled={!selectedNumber || buying} variant="outline" onClick={() => void handleBuyAndConnect("wallet")}>
+                    {buying ? "Processing…" : `Pay ${inr(pricing.totalPaise)} from wallet`}
+                  </Button>
+                )}
+                <Button disabled={!selectedNumber || buying} onClick={() => void handleBuyAndConnect("card")}>
+                  {buying ? "Processing…" : `Pay ${inr(pricing.totalPaise)} by card`}
+                </Button>
+              </div>
             ) : numberChoice === "voice" ? (
               <Button
                 disabled={voiceNumberId == null || !phoneNumberId.trim() || connectOwn.isPending}
@@ -1374,26 +1634,45 @@ export default function WhatsAppPage() {
     returnToRaw && returnToRaw.startsWith("/app/") && !returnToRaw.startsWith("//")
       ? returnToRaw
       : "/app/connections";
+  // StripePage already renders a chevron, so the label is just the destination.
   const backLabel =
     returnLabelRaw?.trim()
     || (backHref.includes("/agents/")
-      ? "Back to Outcomes"
+      ? "Outcomes"
       : backHref.includes("section=tools")
-        ? "Back to Tools"
+        ? "Tools"
         : "Connections");
 
   return (
     <StripePage
       title="WhatsApp"
-      description="Connect your WhatsApp Business (Meta API) for mid-call and after-call messages. Use the back link above to return to your agent — this page only sets up the channel."
+      description={`Get a Vobiz number, connect your Meta WABA, or bring another BSP. Return to ${backLabel} when you're done.`}
       back={{ href: backHref, label: backLabel }}
     >
       <div className="space-y-6">
       <NativeSection agents={agents} onChooseBsp={() => openBspCreate("webhook")} onChooseMeta={() => openBspCreate("meta")} metaConnected={connections.some((c) => c.active && c.metaPhoneNumberId)} />
 
+      {(showByo || connections.length > 0) && <BspAdopterGuide />}
+
       {/* Your connections */}
-      {(connections.length > 0 || createdSecret || isLoading) && (
+      {(connections.length > 0 || createdSecret || isLoading || byoVisible) && (
       <div className="space-y-4 pb-4" id="bsp-adopter">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-semibold">Agent connections (advanced)</h2>
+              <p className="text-[11px] text-muted-foreground">
+                Per-agent Meta or BSP overrides. A BSP connection for an agent overrides the workspace channel for that agent.
+              </p>
+            </div>
+            <div className="flex gap-1.5">
+              <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => openBspCreate("meta")}>
+                Add Meta
+              </Button>
+              <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => openBspCreate("webhook")}>
+                Add BSP
+              </Button>
+            </div>
+          </div>
           <div className="space-y-5">
             {createdSecret && (
               <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">
@@ -1410,9 +1689,10 @@ export default function WhatsAppPage() {
 
             {isLoading ? (
               <p className="text-sm text-muted-foreground">Loading…</p>
-            ) : connections.length === 0 ? null : (
+            ) : connections.length === 0 ? (
+              <p className="text-xs text-muted-foreground">No agent overrides yet. Add Meta or BSP above if you need per-agent routing.</p>
+            ) : (
               <div className="space-y-3">
-                <h2 className="text-sm font-semibold">Your connections</h2>
                 {connections.map((c) => (
                   <div key={c.id} className="rounded-lg border border-border/60 bg-card/30 p-4 space-y-3">
                     <div className="flex flex-wrap items-start justify-between gap-2">
@@ -1524,7 +1804,7 @@ export default function WhatsAppPage() {
                       <div className="text-[11px] text-muted-foreground flex flex-wrap gap-x-4 gap-y-1">
                         {c.lastInboundAt && <span>Last inbound: {new Date(c.lastInboundAt).toLocaleString()}</span>}
                         {c.lastOutboundAt && <span>Last outbound: {new Date(c.lastOutboundAt).toLocaleString()}</span>}
-                        {c.lastError && <span className="text-red-400">Error: {c.lastError}</span>}
+                        {c.lastError && <span className="text-red-600 dark:text-red-400">Error: {c.lastError}</span>}
                       </div>
                     )}
                   </div>

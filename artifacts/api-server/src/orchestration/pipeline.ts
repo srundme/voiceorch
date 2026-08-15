@@ -19,7 +19,7 @@ import { toReadableError, envInt, parseJsonObject } from "./utils.js";
 import { createLLMAdapter } from "./adapters/llm/index.js";
 import { createTTSAdapter } from "./adapters/tts/index.js";
 import { CartesiaTTS } from "./adapters/tts/cartesia.js";
-import { encodeMulaw, upsample8to16, downsample16to8, decodeMulaw, hasSpeechEnergy, frameRms } from "./audio.js";
+import { encodeMulaw, upsample8to16, downsample16to8, createDownsampler16to8, decodeMulaw, hasSpeechEnergy, frameRms } from "./audio.js";
 import { resolveMicSensitivity, getMicSensitivityThresholds, type MicSensitivityThresholds } from "./mic-sensitivity.js";
 import { AmbientNoiseStream, FileAmbientNoiseStream, TRACK_PARAMS, loadPcmLoop, peekCachedPcmLoop, AMBIENT_LEVELS } from "./ambient.js";
 import { DtmfDetector } from "./dtmf.js";
@@ -45,6 +45,7 @@ import {
   meetingWaitingReprompt,
   meetingInactivityFarewell,
   neutralGreeting,
+  isMetaRefusalGreeting,
   buildInstantReturningGreeting,
   AFFIRMATIONS,
   STALL_BACKSTOP_MS,
@@ -991,6 +992,10 @@ export class OrchestrationPipeline implements VoiceSession {
   // once this reaches BARGE_IN_ECHO_FLOOR_MIN_SAMPLES; before that the conservative
   // cold-start fallback bar is used so returning echo can't self-trigger on frame 1.
   private playbackEchoFloorSamples = 0;
+  // Loudest inbound frame RMS seen since the current agent sentence started. If this
+  // never clears the echo bar, nothing but our own audio reached the mic during the
+  // sentence — used to veto word_count barge-ins fired by garbled echo transcripts.
+  private bargeInPeakRmsSinceSentence = 0;
   // Throttle for the periodic "energy barge-in monitor" diagnostic log line.
   private lastEnergyMonitorLogAt = 0;
   // Rolling record of text the agent recently synthesized (oldest first), with the
@@ -2191,9 +2196,11 @@ export class OrchestrationPipeline implements VoiceSession {
     guard:
       | "tail_echo_guard"
       | "self_echo_content_guard"
+      | "self_echo_energy_guard"
       | "ultra_short_fragment"
       | "false_interruption_scrap"
       | "transfer_in_progress"
+      | "end_call_in_progress"
       | "fragment_coalesce_hold"
       | "backchannel_during_playback",
   ): void {
@@ -2201,9 +2208,11 @@ export class OrchestrationPipeline implements VoiceSession {
     const reasonByGuard: Record<typeof guard, string> = {
       tail_echo_guard: "post-playback tail-echo window (content matched agent speech)",
       self_echo_content_guard: "content matched agent's own recent speech (self-echo)",
+      self_echo_energy_guard: "no caller energy above the echo bar while agent was speaking (self-echo)",
       ultra_short_fragment: "ultra-short STT noise stub — waiting for more speech",
       false_interruption_scrap: "post-barge scrap under interrupt-word threshold",
       transfer_in_progress: "transfer already in progress",
+      end_call_in_progress: "hangup already in progress",
       fragment_coalesce_hold: "short fragment held briefly for coalesce (not a drop)",
       backchannel_during_playback: "held ack fragment dropped — agent speaking at coalesce-timer fire (true backchannel)",
     };
@@ -2710,10 +2719,24 @@ export class OrchestrationPipeline implements VoiceSession {
                 const langPrefix = (this.currentLang || this.agent.language || "en").split(/[-_]/)[0]?.toLowerCase();
                 const isIndic = ["ta", "hi", "te", "kn", "ml", "mr", "bn", "gu"].includes(langPrefix ?? "");
                 const minChars = 4;
+                // Energy corroboration (mirrors the final-transcript guard): on
+                // carrier legs our own TTS echoes back as a *garbled* interim that
+                // can carry enough words to trip word_count before any final lands
+                // (call 5578: "How does today at 4" came back as "Why don't we
+                // panic?" and the agent cut itself off). If the inbound signal
+                // never rose above the measured echo bar this sentence, it is our
+                // own audio returning — suppress the self-barge. echoBarRms() is
+                // null on webcall / before the floor is warm, so a real caller is
+                // always given the benefit of the doubt there.
+                const interimEchoBar = this.echoBarRms();
+                const interimIsSelfEcho =
+                  interimEchoBar !== null
+                  && this.bargeInPeakRmsSinceSentence <= interimEchoBar;
                 if (
                   threshold > 0
                   && this.streamingBargeInWordCount >= threshold
                   && charCount >= minChars
+                  && !interimIsSelfEcho
                 ) {
                   // Path A: launch speculative LLM from substantive barge partial
                   // (energy-only barge stays non-speculative — see energy path).
@@ -2727,6 +2750,21 @@ export class OrchestrationPipeline implements VoiceSession {
                       text: text.slice(0, 80),
                     },
                     "Barge-in detected (streaming STT interim word-count — Bolna parity)",
+                  );
+                } else if (
+                  threshold > 0
+                  && this.streamingBargeInWordCount >= threshold
+                  && charCount >= minChars
+                  && interimIsSelfEcho
+                ) {
+                  logger.info(
+                    {
+                      callId: this.config.callId,
+                      text: text.slice(0, 80),
+                      peakRms: Math.round(this.bargeInPeakRmsSinceSentence),
+                      echoBar: Math.round(interimEchoBar ?? 0),
+                    },
+                    "Streaming STT interim: barge-in suppressed (no caller energy above echo bar — self-echo)",
                   );
                 }
               }
@@ -2902,6 +2940,33 @@ export class OrchestrationPipeline implements VoiceSession {
       // is still speaking the safety net is dormant — leave it untouched.
       if (!this.isPlaying) this.safetyNet.beginListening();
       return;
+    }
+
+    // Energy corroboration (additive to both guards above). The content guard only
+    // catches echo that STT transcribed faithfully. On a carrier leg the ASR routinely
+    // returns *garbled* text for our own audio — call 8538 turned "Am I speaking with
+    // the owner…" into a caller turn reading "speaking in English." — which no textual
+    // comparison can match, so it fired word_count barge-in and the agent cut itself off
+    // five times in 31 seconds. Energy is the tiebreaker: if the inbound signal never
+    // rose above the measured echo bar for this entire sentence, the only thing that
+    // reached the mic was our own audio coming back.
+    if (!isSemanticInterrupt(transcript) && this.isPlaying && !this.bargeInRequested) {
+      const echoBar = this.echoBarRms();
+      if (echoBar !== null && this.bargeInPeakRmsSinceSentence <= echoBar) {
+        this.streamingBargeInWordCount = 0;
+        logger.info(
+          {
+            callId: this.config.callId,
+            transcript: transcript.slice(0, 80),
+            peakRms: Math.round(this.bargeInPeakRmsSinceSentence),
+            echoBar: Math.round(echoBar),
+            echoFloor: Math.round(this.playbackEchoFloor),
+          },
+          "Streaming STT: discarding self-echo transcript (no caller energy above echo bar)",
+        );
+        this.logDiscardedTranscript(transcript, "self_echo_energy_guard");
+        return;
+      }
     }
 
     if (this.bargeInEnabled && this.isPlaying && !this.bargeInRequested) {
@@ -3678,6 +3743,12 @@ export class OrchestrationPipeline implements VoiceSession {
     // Used to apply a lower threshold and enable the streaming frame-count cap.
     const isWebcallStreaming = !respectHoldUntil && this.config.telephonyProvider === "webcall";
 
+    // Track the sentence's loudest inbound frame even during the echo grace — the
+    // word_count path uses it to tell a real caller from a garbled echo transcript.
+    if (streamingCarrier && currentRms > this.bargeInPeakRmsSinceSentence) {
+      this.bargeInPeakRmsSinceSentence = currentRms;
+    }
+
     const now = Date.now();
     // 600ms per-sentence start grace protects initial spoken words from self-echo false cuts.
     const startGraceMs = Math.max(600, this.bargeInEchoGraceMs);
@@ -3793,6 +3864,24 @@ export class OrchestrationPipeline implements VoiceSession {
    * genuine drop in echo level recovers quickly. Seeds on the first sample and counts
    * samples so the derived bar isn't trusted until the estimate is warm.
    */
+  /**
+   * Inbound RMS a real caller must exceed for us to believe them over returning
+   * carrier echo, or `null` when echo is not a concern / not yet measurable and the
+   * caller must therefore be given the benefit of the doubt:
+   *   - webcall legs, where the browser's AEC already removes our audio;
+   *   - while no TTS is on the wire, so there is nothing to echo;
+   *   - before the floor estimate is warm, when the bar would be a guess.
+   */
+  private echoBarRms(): number | null {
+    if (this.config.telephonyProvider === "webcall") return null;
+    if (!this.isSendingTtsAudio) return null;
+    if (this.playbackEchoFloorSamples < BARGE_IN_ECHO_FLOOR_MIN_SAMPLES) return null;
+    return Math.min(
+      this.playbackEchoFloor * BARGE_IN_ADAPTIVE_ECHO_MARGIN,
+      BARGE_IN_ADAPTIVE_MAX_THRESHOLD,
+    );
+  }
+
   private updateEchoFloor(rms: number): void {
     if (rms <= 0) return;
     this.playbackEchoFloorSamples++;
@@ -4768,6 +4857,31 @@ export class OrchestrationPipeline implements VoiceSession {
             .replace(/[^\S\r\n]{2,}/g, " ")
             .trim(),
         );
+        // The model sometimes answers the prompt instead of the caller (call
+        // 9153 spoke "…no CALL FLOW…I am unable to start the call" to a lead).
+        // Any fallback is better than reading an internal error down the line.
+        if (isMetaRefusalGreeting(greeting)) {
+          const rejected = greeting.slice(0, 160);
+          let safe = (this.agent.greetingMessage ?? "").trim();
+          if (this.callDirection === "outbound" && isStubGreeting(safe)) safe = "";
+          safe = safe || neutralGreeting(this.agent.language);
+          logger.error(
+            { callId: this.config.callId, agentId: this.agent.id, rejected },
+            "Greeting LLM returned meta/refusal text — speaking a safe opener instead",
+          );
+          this.logExec("LLM", "response", {
+            provider: this.agent.llmProvider,
+            status: "error",
+            turnNumber: 0,
+            responsePayload: {
+              purpose: "greeting",
+              error: "meta_refusal_rejected",
+              rejected,
+              fallback: safe.slice(0, 120),
+            },
+          });
+          greeting = safe;
+        }
         if (resumeDropped && greeting.trim()) {
           this.logExec("Agent", "system", {
             status: "info",
@@ -5817,6 +5931,7 @@ export class OrchestrationPipeline implements VoiceSession {
     // per-sentence 600 ms echo grace (bargeInSentenceStartAt + bargeInEchoGraceMs)
     // instead of the extended `bargeInHoldUntil` that protects the batch STT path.
     this.bargeInSentenceStartAt = Date.now();
+    this.bargeInPeakRmsSinceSentence = 0;
 
     /** Wire bytes actually sent (mulaw or PCM8k) — source of truth for pacedMs. */
     let bytesSent = 0;
@@ -5829,6 +5944,16 @@ export class OrchestrationPipeline implements VoiceSession {
       // Twilio with a burst of messages that overwhelms their playback buffer.
       const wireQueue: Buffer[] = [];
       let pcmIdx = 0;
+      // Block-continuous decimators. The stateless downsample16to8 renormalizes
+      // its kernel wherever taps fall outside the buffer, so calling it per 20 ms
+      // block corrupts the first ~7 and last ~3 output samples of EVERY block —
+      // a defect repeating at 50 Hz that is audible as buzzy/gritty voice on
+      // every 8 kHz leg (carrier and webcall alike). Carrying the tail across
+      // blocks makes the filter identical to one run over the whole sentence.
+      // Speech and the ambient-mixed copy are separate signals, so each needs
+      // its own filter state.
+      const speechDecim = createDownsampler16to8();
+      const mixedDecim = this.ambientStream ? createDownsampler16to8() : null;
 
       // Converts the next buffered pcm16k block into wire-ready chunks. This is
       // where recording + ambient mixing happen — at real "now", right before
@@ -5836,7 +5961,7 @@ export class OrchestrationPipeline implements VoiceSession {
       const processNextBlock = (): boolean => {
         if (pcmIdx >= job.pcmQueue.length) return false;
         const pcm16k = job.pcmQueue[pcmIdx++];
-        const pcm8k = downsample16to8(pcm16k);
+        const pcm8k = speechDecim.process(pcm16k);
         // Record agent audio (downsampled to match recording sample rate).
         // Recording stays clean — ambient is mixed only into the outbound copy.
         this.recording.addAgentChunk(pcm8k);
@@ -5849,7 +5974,7 @@ export class OrchestrationPipeline implements VoiceSession {
           const mixed16k = this.ambientStream ? this.ambientStream.mixIntoPcm16k(pcm16k) : pcm16k;
           const out = rate === 16000
             ? mixed16k
-            : (this.ambientStream ? downsample16to8(mixed16k) : pcm8k);
+            : (mixedDecim ? mixedDecim.process(mixed16k) : pcm8k);
           const PCM_CHUNK = CHUNK_SIZE_MULAW * 2 * (rate / 8000); // 20ms: 320B @8k, 640B @16k
           for (let i = 0; i < out.length; i += PCM_CHUNK) {
             wireQueue.push(out.slice(i, i + PCM_CHUNK));
@@ -5895,6 +6020,7 @@ export class OrchestrationPipeline implements VoiceSession {
       // otherwise consume the grace period before any audio is audible, and
       // caller audio during the wait could be sampled as "echo".
       this.bargeInSentenceStartAt = Date.now();
+      this.bargeInPeakRmsSinceSentence = 0;
 
       // Drift-compensated pacing: track the "ideal" next send time and adjust
       // each sleep so that accumulated setTimeout jitter is self-corrected.
@@ -7465,6 +7591,7 @@ export class OrchestrationPipeline implements VoiceSession {
           ...(kbResult?.contributingSourceIds ? { contributingSourceIds: kbResult.contributingSourceIds } : {}),
           ...(kbResult?.truncated !== undefined ? { truncated: kbResult.truncated } : {}),
           ...(kbResult?.cached ? { cached: true } : {}),
+          ...(kbResult?.truncated ? { truncated: true } : {}),
           ...(kbStaleFromTurn !== null ? { staleReuse: true, staleFromTurn: kbStaleFromTurn } : {}),
           ...(kbRaceTimedOut ? { raceTimedOut: true, raceMs: kbOuterRaceMs } : {}),
         },
@@ -7597,6 +7724,21 @@ export class OrchestrationPipeline implements VoiceSession {
         );
       }
       systemPromptForTurn += lines.join("\n");
+    } else {
+      // No booking/availability tool is configured for this agent. Without this
+      // guard the LLM cheerfully "confirms" a meeting and promises a calendar
+      // link that will never be sent (call 5578: agent said "I've locked in your
+      // demo for today at 4 PM. Our team will send over the meeting link" with
+      // only end_call + schedule_callback available). Forbid fabricated bookings.
+      const noBook = [
+        "",
+        "",
+        "[NO BOOKING CAPABILITY]",
+        "You CANNOT book meetings, create calendar events, or send calendar/meeting links — no booking tool is connected.",
+        "NEVER tell the caller a meeting, demo, or appointment is booked, scheduled, locked in, or confirmed, and NEVER promise that a meeting link or calendar invite will be sent.",
+        "If the caller wants to set something up, tell them a team member will follow up to arrange it (or arrange a callback only if they explicitly ask to be called back) — do not claim it is already scheduled.",
+      ];
+      systemPromptForTurn += noBook.join("\n");
     }
 
     // ── Tool-call preamble suppression ────────────────────────────────────────
@@ -8550,6 +8692,37 @@ export class OrchestrationPipeline implements VoiceSession {
     // are derived from the exact same fully-cleaned text.
     const cleanResponse = stripJsonMessageWrapper(stripToolArtifacts(stripBracketedInstructions(stripMarkupTags(stripFunctionTags(stripReasoningBlocks(llmResponse))))).trim());
     const baseSpokenResponse = stepGuard.truncated() ? truncateToSingleStep(cleanResponse).text : cleanResponse;
+
+    // Silent-turn recovery: the LLM produced no speakable text and no tool call
+    // even after the retry loop above (Sarvam/Gemma sometimes returns empty
+    // content — e.g. on "are you AI?" — and the last retry still comes back
+    // blank). Without this the turn ends with zero audio; a run of these reads
+    // as the agent going dead mid-call (call 8745: 6 empty turns in a row, the
+    // caller kept saying "Hello" and then hung up). Speak a short clarification
+    // in the caller's language so the line never goes silent. Safe because
+    // nothing streamed this turn (llmFirstTokenAt === null), so we can't
+    // double-speak.
+    if (
+      !cleanResponse.trim()
+      && !triggeredToolName
+      && !this.bargeInRequested
+      && llmFirstTokenAt === null
+      && !this.closed
+    ) {
+      const recoveryLang = this.currentLang || this.agent.sttConfig.language;
+      const recovery = pickClarificationPhrase(recoveryLang, String(this.config.callId));
+      logger.warn(
+        { callId: this.config.callId, recoveryLang, turnNumber: _currentTurnIndex },
+        "LLM returned empty response — speaking clarification recovery instead of dead air",
+      );
+      this.logExec("LLM", "system", {
+        status: "info",
+        turnNumber: _currentTurnIndex,
+        warningFlags: ["empty_llm_recovery"],
+        metadata: { event: "Empty LLM Recovery", spoken: recovery },
+      });
+      enqueue(recovery);
+    }
 
     // Final flush: the LLM token stream occasionally ends a few words early while
     // llmResponse (set by the onComplete callback) holds the complete text. Re-run

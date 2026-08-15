@@ -4,7 +4,7 @@ import { requireAuth } from "../middlewares/requireAuth.js";
 import { clientContext } from "../middlewares/clientContext.js";
 import {
   db, campaignsTable, campaignBatchesTable, campaignLeadsTable, callsTable,
-  leadTimelineTable, batchImportRunsTable, agentsTable,
+  leadTimelineTable, batchImportRunsTable, agentsTable, callExecutionsTable,
   type CampaignFieldMappings,
 } from "@workspace/db";
 import { eq, and, count, desc, inArray, sql, isNull } from "drizzle-orm";
@@ -860,11 +860,36 @@ router.get("/campaigns/:id/batches/:batchId/export.csv", async (req, res): Promi
   const headers = [
     "Lead Name", "Phone Number", "Email", "Date & Time", "Call ID",
     "Status", "Outcome", "Attempts", "Duration (s)", "Cost ($)",
-    "Disposition", "Notes",
+    "Disposition", "Notes", "Summary", "Transcript",
+    "Sentiment", "Intent", "Topics",
   ];
+
+  // Pull intelligence from call_executions when available
+  const execByCallId = new Map<number, { sentiment: string | null; intent: string | null; topics: string[] }>();
+  if (callIds.length > 0) {
+    const execs = await db
+      .select({
+        callId: callExecutionsTable.callId,
+        sentiment: callExecutionsTable.sentiment,
+        intent: callExecutionsTable.detectedIntent,
+        topics: callExecutionsTable.keyTopics,
+      })
+      .from(callExecutionsTable)
+      .where(inArray(callExecutionsTable.callId, callIds));
+    for (const e of execs) {
+      if (e.callId != null) {
+        execByCallId.set(e.callId, {
+          sentiment: e.sentiment,
+          intent: e.intent,
+          topics: Array.isArray(e.topics) ? e.topics : [],
+        });
+      }
+    }
+  }
 
   const rows = leads.map(lead => {
     const call = lead.callId ? callsMap.get(lead.callId) : undefined;
+    const intel = lead.callId ? execByCallId.get(lead.callId) : undefined;
     const currentAttempt = Math.min(Math.max(1, lead.callAttempts), maxAttempts);
     return [
       csvCell(lead.name ?? ""),
@@ -879,10 +904,16 @@ router.get("/campaigns/:id/batches/:batchId/export.csv", async (req, res): Promi
       csvCell(call?.costCents != null ? (call.costCents / 100).toFixed(3) : ""),
       csvCell(lead.disposition ?? ""),
       csvCell(lead.notes ?? ""),
+      csvCell(call?.callSummary ?? ""),
+      csvCell(call?.transcript ?? ""),
+      csvCell(intel?.sentiment ?? ""),
+      csvCell(intel?.intent ?? ""),
+      csvCell((intel?.topics ?? []).join("; ")),
     ].join(",");
   });
 
-  const csv = [headers.map(csvCell).join(","), ...rows].join("\r\n");
+  // UTF-8 BOM so Excel opens Devanagari/other non-ASCII transcripts correctly.
+  const csv = "\uFEFF" + [headers.map(csvCell).join(","), ...rows].join("\r\n");
 
   res.setHeader("Content-Type", "text/csv; charset=utf-8");
   res.setHeader("Content-Disposition", `attachment; filename="batch-${batchId}-report.csv"`);

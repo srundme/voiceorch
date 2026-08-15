@@ -11,13 +11,15 @@
  * The session token is an HS256 JWT. The frontend stores it in
  * localStorage["voiceorch:session"] and sends it as Authorization: Bearer <token>.
  */
-import { Router, type IRouter } from "express";
-import { scrypt, randomBytes, timingSafeEqual } from "node:crypto";
+import { Router, type IRouter, type Request } from "express";
+import { randomBytes } from "node:crypto";
 import { promisify } from "node:util";
+import { scrypt, timingSafeEqual } from "node:crypto";
 import { db, linkLegacyIdentitiesAtLogin } from "@workspace/db";
-import { usersTable, walletTransactionsTable, passwordResetOtpsTable, platformSettingsTable } from "@workspace/db/schema";
+import { usersTable, walletTransactionsTable, passwordResetOtpsTable, platformSettingsTable, partnersTable } from "@workspace/db/schema";
 import { eq, and, isNull, gt, desc, sql } from "drizzle-orm";
 import { createSessionToken } from "../lib/session.js";
+import { hashPassword, verifyPassword } from "../lib/password.js";
 import { logger } from "../lib/logger.js";
 import { sendBrevoEmail } from "../services/brevo.js";
 import { applyPendingPartnerPromotion } from "../services/partner-promotion.js";
@@ -30,8 +32,10 @@ import {
 import { registerTransientKey } from "../services/rate-limit-cleanup.js";
 import { getLoginAuthUrl, exchangeLoginCode } from "../services/auth/google-login.js";
 import { trackEvent } from "../services/track-event.js";
-import { deriveRedirectUri, dashboardBase } from "../lib/oauth-redirect.js";
+import { deriveRedirectUri, dashboardBase, isTrustedOrigin } from "../lib/oauth-redirect.js";
 import { SIGNUP_CREDIT_PAISE, formatInr } from "../lib/money-inr.js";
+import { resolvePartnerByHost } from "../services/partner-domains.js";
+import { normalizeDomain } from "../services/partner-domains-normalize.js";
 
 const OTP_RATE_LIMIT_MAX = parseInt(process.env.OTP_RATE_LIMIT_MAX ?? "3", 10);
 const OTP_RATE_LIMIT_WINDOW_MS = parseInt(process.env.OTP_RATE_LIMIT_WINDOW_MS ?? String(15 * 60 * 1000), 10);
@@ -47,21 +51,6 @@ const router: IRouter = Router();
 const scryptAsync = promisify(scrypt);
 
 const FREE_CREDIT_CENTS = SIGNUP_CREDIT_PAISE; // Rs.500 welcome credit
-
-async function hashPassword(password: string): Promise<string> {
-  const salt = randomBytes(16).toString("hex");
-  const buf = (await scryptAsync(password, salt, 64)) as Buffer;
-  return `${salt}:${buf.toString("hex")}`;
-}
-
-async function verifyPassword(password: string, stored: string): Promise<boolean> {
-  const [salt, hash] = stored.split(":");
-  if (!salt || !hash) return false;
-  const buf = (await scryptAsync(password, salt, 64)) as Buffer;
-  const expected = Buffer.from(hash, "hex");
-  if (buf.length !== expected.length) return false;
-  return timingSafeEqual(buf, expected);
-}
 
 async function hashOtp(otp: string): Promise<string> {
   const salt = randomBytes(16).toString("hex");
@@ -91,14 +80,40 @@ function generateOtp(): string {
   return num.toString().padStart(6, "0");
 }
 
+/** Resolve partner white-label host from request Host / forwarded headers / body. */
+async function partnerFromAuthRequest(req: Request, bodyHost?: string) {
+  const candidates = [
+    typeof bodyHost === "string" ? bodyHost : "",
+    (req.headers["x-forwarded-host"] as string | undefined)?.split(",")[0]?.trim() ?? "",
+    req.hostname ?? "",
+  ];
+  for (const raw of candidates) {
+    const host = normalizeDomain(raw);
+    if (!host) continue;
+    const brand = await resolvePartnerByHost(host);
+    if (brand) return brand;
+  }
+  return null;
+}
+
 // ── Register ──────────────────────────────────────────────────────────────────
 
 router.post("/auth/register", async (req, res): Promise<void> => {
-  const { email, password, name } = req.body as {
+  const { email, password, name, host: bodyHost } = req.body as {
     email?: string;
     password?: string;
     name?: string;
+    host?: string;
   };
+
+  // Partner white-label gateways are invite/provision only — no public self-signup.
+  const partnerBrand = await partnerFromAuthRequest(req, bodyHost);
+  if (partnerBrand) {
+    res.status(403).json({
+      error: `Accounts on this portal are created by ${partnerBrand.companyName}. Contact them for access.`,
+    });
+    return;
+  }
 
   if (!email || !password) {
     res.status(400).json({ error: "Email and password are required." });
@@ -215,7 +230,11 @@ router.post("/auth/register", async (req, res): Promise<void> => {
 // ── Login ─────────────────────────────────────────────────────────────────────
 
 router.post("/auth/login", async (req, res): Promise<void> => {
-  const { email, password } = req.body as { email?: string; password?: string };
+  const { email, password, host: bodyHost } = req.body as {
+    email?: string;
+    password?: string;
+    host?: string;
+  };
 
   if (!email || !password) {
     res.status(400).json({ error: "Email and password are required." });
@@ -224,6 +243,7 @@ router.post("/auth/login", async (req, res): Promise<void> => {
 
   const normalizedEmail = email.trim().toLowerCase();
   const sub = `email:${normalizedEmail}`;
+  const partnerBrand = await partnerFromAuthRequest(req, bodyHost);
 
   try {
     const [user] = await db
@@ -253,8 +273,26 @@ router.post("/auth/login", async (req, res): Promise<void> => {
       return;
     }
 
+    // On a partner white-label host, only that partner's clients (and the
+    // partner's own account) may sign in — keeps the gateway tenant-scoped.
+    if (partnerBrand) {
+      const [owner] = await db
+        .select({ userId: partnersTable.userId })
+        .from(partnersTable)
+        .where(eq(partnersTable.id, partnerBrand.partnerId))
+        .limit(1);
+      const isOwner = owner?.userId === user.clerkId;
+      const isClient = user.partnerId === partnerBrand.partnerId;
+      if (!isOwner && !isClient) {
+        res.status(403).json({
+          error: `This account is not registered with ${partnerBrand.companyName}.`,
+        });
+        return;
+      }
+    }
+
     const token = createSessionToken({ sub, email: user.email, name: user.name });
-    logger.info({ sub, email: normalizedEmail }, "User signed in");
+    logger.info({ sub, email: normalizedEmail, partnerId: partnerBrand?.partnerId ?? null }, "User signed in");
     res.json({ token });
   } catch (err) {
     logger.error({ err }, "Login error");
@@ -565,7 +603,16 @@ router.post("/auth/password-reset/verify", async (req, res): Promise<void> => {
 
 const LOGIN_CALLBACK_PATH = "/api/auth/google/callback";
 
-router.get("/auth/google/connect", (req, res): void => {
+router.get("/auth/google/connect", async (req, res): Promise<void> => {
+  // Partner white-label portals are email/password only.
+  const partnerBrand = await partnerFromAuthRequest(req);
+  if (partnerBrand) {
+    res.status(403).json({
+      error: `Google sign-in is not available on ${partnerBrand.companyName}'s portal. Use email and password.`,
+    });
+    return;
+  }
+
   if (!process.env["GOOGLE_CLIENT_ID"] || !process.env["GOOGLE_CLIENT_SECRET"]) {
     res.status(503).json({ error: "Google Sign-In is not configured on this platform." });
     return;
@@ -586,6 +633,24 @@ router.get("/auth/google/connect", (req, res): void => {
     maxAge: 10 * 60 * 1000, // 10 minutes
   });
 
+  // Partner white-label: after OAuth (which always callbacks on the primary
+  // app host), send the user back to the brand domain they started on.
+  const returnToRaw = typeof req.query["return_to"] === "string" ? req.query["return_to"].trim() : "";
+  if (returnToRaw) {
+    try {
+      const u = new URL(returnToRaw);
+      const origin = u.origin;
+      if (isTrustedOrigin(origin)) {
+        res.cookie("google_login_return", origin, {
+          httpOnly: true,
+          secure: process.env["NODE_ENV"] !== "development",
+          sameSite: "lax",
+          maxAge: 10 * 60 * 1000,
+        });
+      }
+    } catch { /* ignore bad return_to */ }
+  }
+
   const url = getLoginAuthUrl(state, redirectUri);
   logger.info({ redirectUri }, "Google Sign-In: redirecting to consent screen");
   res.redirect(url);
@@ -593,11 +658,15 @@ router.get("/auth/google/connect", (req, res): void => {
 
 router.get("/auth/google/callback", async (req, res): Promise<void> => {
   const { code, error, state } = req.query as { code?: string; error?: string; state?: string };
-  const base = dashboardBase(req);
+  const returnCookie = (req as any).cookies?.["google_login_return"] as string | undefined;
+  const returnBase =
+    returnCookie && isTrustedOrigin(returnCookie) ? returnCookie.replace(/\/$/, "") : null;
+  const base = returnBase ?? dashboardBase(req);
   const errorRedirect = `${base}/?google_error=true`;
 
   if (error || !code || !state) {
     logger.warn({ error }, "Google Sign-In callback: missing params or user denied access");
+    res.clearCookie("google_login_return");
     res.redirect(errorRedirect);
     return;
   }
@@ -607,12 +676,14 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
   const cookieState = (req as any).cookies?.["google_login_state"] as string | undefined;
   if (!cookieState || cookieState !== state) {
     logger.warn({ hasCookie: !!cookieState }, "Google Sign-In callback: CSRF state mismatch or missing cookie");
+    res.clearCookie("google_login_return");
     res.redirect(errorRedirect);
     return;
   }
 
   // Clear the one-time state cookie immediately
   res.clearCookie("google_login_state");
+  res.clearCookie("google_login_return");
 
   try {
     const redirectUri = deriveRedirectUri(req, LOGIN_CALLBACK_PATH);

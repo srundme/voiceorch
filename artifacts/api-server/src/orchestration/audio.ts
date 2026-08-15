@@ -67,6 +67,15 @@ export function upsample8to16(buf8k: Buffer): Buffer {
 // kernels give ~45 dB rejection while staying dependency-free and stateless
 // (same signatures / output lengths as before).  Block-edge samples renormalize
 // the kernel over the available window so chunked calls don't click or droop.
+//
+// IMPORTANT: renormalizing is only correct for a ONE-SHOT call over a whole
+// buffer.  On a chunked stream (the TTS drain sends 20 ms blocks) the taps that
+// fall outside the block are missing real audio, and renormalizing swaps the
+// filter's response for a wider, barely-anti-aliased one on those samples.  At
+// 20 ms blocks that is 10 of every 160 output samples, so the defect repeats at
+// exactly 50 Hz — an audible buzz/grit riding on the voice (~33 dB SNR vs a
+// continuous filter).  Streaming callers must use the stateful decimators below,
+// which carry the previous block's tail and therefore always see a full kernel.
 
 /** Hamming-windowed sinc low-pass kernel, unity DC gain. `cutoffNorm` = fc/fsIn. */
 function buildSincKernel(taps: number, cutoffNorm: number, fracOffset = 0): Float64Array {
@@ -136,6 +145,78 @@ export function downsample24to8(buf24k: Buffer): Buffer {
     out.writeInt16LE(firAt(buf24k, inSamples, i * 3 + 1, K24TO8), i * 2);
   }
   return out;
+}
+
+/**
+ * Block-continuous decimator: same kernels as the one-shot helpers above, but
+ * it retains the previous chunk's tail so every output sample is computed from
+ * a full kernel instead of a renormalized partial one.
+ *
+ * Output length per call matches the stateless helper exactly (`floor(n/factor)`
+ * samples), so wire framing and byte accounting are unchanged.  The cost is a
+ * fixed `half`-input-sample delay (0.44 ms at 16 kHz, 0.42 ms at 24 kHz), which
+ * is well inside a single 20 ms frame.
+ */
+export class StreamingDecimator {
+  private readonly half: number;
+  /** Input samples of lookahead, rounded up to a whole number of output samples so the decimation phase is unchanged. */
+  private readonly delay: number;
+  private readonly histSamples: number;
+  /** [ histSamples of context | <factor unconsumed remainder samples ]. */
+  private carry: Buffer;
+
+  constructor(
+    private readonly kernel: Float64Array,
+    private readonly factor: number,
+    private readonly offset = 0,
+  ) {
+    this.half = (kernel.length - 1) >> 1;
+    this.delay = Math.ceil(this.half / factor) * factor;
+    this.histSamples = this.delay + this.half;
+    this.carry = Buffer.alloc(this.histSamples * 2); // silence pre-roll
+  }
+
+  /** Output lag in whole output samples, relative to the one-shot helper. */
+  get delaySamples(): number {
+    return this.delay / this.factor;
+  }
+
+  /** Reset to a silent pre-roll — call between utterances so one sentence's tail cannot bleed into the next. */
+  reset(): void {
+    this.carry = Buffer.alloc(this.histSamples * 2);
+  }
+
+  process(input: Buffer): Buffer {
+    const combined = this.carry.length ? Buffer.concat([this.carry, input]) : input;
+    const available = combined.length / 2 - this.histSamples;
+    const outSamples = Math.max(0, Math.floor(available / this.factor));
+    const out = Buffer.allocUnsafe(outSamples * 2);
+    for (let i = 0; i < outSamples; i++) {
+      // Lag the newest input by `half` so the kernel's right-hand taps are
+      // always backed by real samples rather than zero-padding.
+      const center = this.half + i * this.factor + this.offset;
+      let acc = 0;
+      for (let k = 0; k < this.kernel.length; k++) {
+        acc += combined.readInt16LE((center - this.half + k) * 2) * this.kernel[k]!;
+      }
+      const s = Math.round(acc);
+      out.writeInt16LE(s > 32767 ? 32767 : s < -32768 ? -32768 : s, i * 2);
+    }
+    // Drop the samples now fully consumed; what remains is exactly the history
+    // window plus any sub-factor remainder to prepend to the next chunk.
+    this.carry = combined.subarray(outSamples * this.factor * 2);
+    return out;
+  }
+}
+
+/** Streaming 16 kHz → 8 kHz decimator (TTS wire output, webcall mic). */
+export function createDownsampler16to8(): StreamingDecimator {
+  return new StreamingDecimator(K16TO8, 2, 0);
+}
+
+/** Streaming 24 kHz → 8 kHz decimator (Gemini Live wire output). */
+export function createDownsampler24to8(): StreamingDecimator {
+  return new StreamingDecimator(K24TO8, 3, 1);
 }
 
 /**

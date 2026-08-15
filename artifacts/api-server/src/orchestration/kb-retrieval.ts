@@ -27,6 +27,19 @@ export type { KbRetrievalSource, KbSearchEntry } from "./kb-lexical.js";
  */
 const MAX_KB_ENTRIES = 200;
 
+/**
+ * Char ceiling for a single live per-turn retrieval block.
+ *
+ * Every other KB injection path is capped (prefetch dump and session bake both
+ * honour a dumpMaxChars budget); the per-turn query path was not, so a source
+ * whose entries are long shipped the whole top-K verbatim on EVERY turn —
+ * call 8538 sent an identical 12,839-char block six times, ~3.2k tokens each.
+ * It lands in the volatile tail of the system prompt, after the provider cache
+ * base, so nothing amortises it. Entries arrive in RRF relevance order, so the
+ * cut always drops the least relevant material first.
+ */
+const KB_TURN_MAX_CHARS = Math.max(1000, Number(process.env.KB_TURN_MAX_CHARS ?? 8000));
+
 /** Max candidates pulled from the vector search before RRF merge. */
 const VECTOR_TOP_K = 12;
 /** Max candidates from Indic-safe ILIKE / substring lexical fallback. */
@@ -66,8 +79,25 @@ function formatEntry(e: { title?: string | null; content: string; keywords?: str
   return parts.join("\n");
 }
 
-function formatEntries(entries: EntryRow[]): string {
-  return entries.map((e) => formatEntry(e)).join(ENTRY_SEP);
+/**
+ * Serialize ranked entries, stopping before the first one that would push the
+ * block past `maxChars`. Whole entries only — a half-truncated entry reads as
+ * corrupt context to the LLM. The first entry is always kept so a single
+ * oversized entry degrades to "one long answer" rather than no context at all.
+ */
+export function formatEntries(entries: EntryRow[], maxChars?: number): { text: string; truncated: boolean } {
+  const blocks: string[] = [];
+  let chars = 0;
+  for (const e of entries) {
+    const block = formatEntry(e);
+    const added = blocks.length ? ENTRY_SEP.length + block.length : block.length;
+    if (maxChars !== undefined && blocks.length > 0 && chars + added > maxChars) {
+      return { text: blocks.join(ENTRY_SEP), truncated: true };
+    }
+    blocks.push(block);
+    chars += added;
+  }
+  return { text: blocks.join(ENTRY_SEP), truncated: false };
 }
 
 /** Distinct source IDs (ascending) present in a result row set. */
@@ -190,7 +220,7 @@ export function buildFairDump(
   // 2. Per-source formatted blocks after the entry cap.
   const blocks = sourceIds.map((id, i) => {
     const kept = groups.get(id)!.slice(0, entryAlloc[i]!);
-    return { sourceId: id, kept, text: formatEntries(kept) };
+    return { sourceId: id, kept, text: formatEntries(kept).text };
   });
 
   // 3. Char budget, fair with rollover. Reserve the inter-source separators
@@ -253,6 +283,7 @@ export function buildFairDump(
  * skipFts (pure non-Latin, e.g. Tamil-only) turns are VECTOR-ONLY: the turn
  * cannot produce anything until the query embed returns. Measured
  * gemini-embedding-001 latency for Tamil queries (2026-07-10, n=20):
+ * (historical note — embeddings now use OpenAI text-embedding-3-small @ 768d)
  * p50=510ms, p90=548ms, p99=1112ms — a 200ms budget meant the live semantic
  * path lost to the dump fallback on essentially every Tamil turn (call 2159:
  * 8/8 turns served the truncated dump). Default 800ms = p90 + vector-search
@@ -379,6 +410,12 @@ export interface KbRetrievalOpts {
    */
   dumpMaxChars?: number;
   /**
+   * Character cap for the live per-turn query path. Defaults to
+   * KB_TURN_MAX_CHARS; set explicitly for callers that want the full ranked
+   * block (e.g. dashboard test search).
+   */
+  maxChars?: number;
+  /**
    * Entry titles to exclude from BOTH the dump and live-retrieval paths.
    * Used to keep provider-scoped synthetic entries (e.g. the Krutrim
    * auto-summary — see kb-source-summary.ts) out of every OTHER provider's
@@ -427,7 +464,7 @@ function kbCacheSet(key: string, text: string, source: KbRetrievalSource, contri
  *
  * Strategy:
  * - Non-empty `query`: HYBRID retrieval — semantic vector search (pgvector
- *   cosine over gemini-embedding-001 vectors, multilingual) fused with
+ *   cosine over jina-embeddings-v3 vectors, multilingual) fused with
  *   PostgreSQL FTS via reciprocal-rank fusion. Vector search degrades to []
  *   on any failure (latch off, no key, embed timeout), leaving pure FTS —
  *   i.e. exactly the pre-vector behavior. A total DB failure returns "".
@@ -523,9 +560,19 @@ export async function retrieveKbContextMultiEx(
       },
       "KB retrieval",
     );
-    const text = merged.length ? formatEntries(merged) : "";
-    kbCacheSet(cacheKey, text, source, contributingSourceIds);
-    return { text, source, latencyMs: Date.now() - t0, contributingSourceIds, entries: merged };
+    const formatted = merged.length
+      ? formatEntries(merged, opts.maxChars ?? KB_TURN_MAX_CHARS)
+      : { text: "", truncated: false };
+    // Cache the capped text, not the raw block, so the cap also bounds memory.
+    kbCacheSet(cacheKey, formatted.text, source, contributingSourceIds);
+    return {
+      text: formatted.text,
+      source,
+      latencyMs: Date.now() - t0,
+      contributingSourceIds,
+      truncated: formatted.truncated,
+      entries: merged,
+    };
   } catch (err) {
     logger.warn({ err, sourceIds: unique }, "KB context load failed");
     return { text: "", source: "none", latencyMs: Date.now() - t0, entries: [] };

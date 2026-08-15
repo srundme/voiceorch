@@ -1,6 +1,6 @@
 import type { WebSocket } from "ws";
 import { createSession, getSession, endSession, failSession } from "../session.js";
-import { downsample16to8 } from "../audio.js";
+import { createDownsampler16to8 } from "../audio.js";
 import { attachMeetSession, detachMeetSession } from "../../services/meet-roster.js";
 import { toReadableError } from "../utils.js";
 import { logger } from "../../lib/logger.js";
@@ -90,6 +90,12 @@ export async function handleWebcallWebSocket(
     }
   }
 
+  // Mic frames arrive as a continuous stream, so the 16→8 decimation must carry
+  // filter state across frames — a stateless per-frame call renormalizes the
+  // kernel at both block edges and injects a periodic buzz into the energy/VAD
+  // feed (see StreamingDecimator in audio.ts).
+  const micDecim = createDownsampler16to8();
+
   // ── Listeners FIRST (before awaiting createSession) ──────────────────────────
   ws.on("message", (raw: Buffer, isBinary: boolean) => {
     // `ws` delivers TEXT frames as a Buffer with isBinary=false, so isBinary is
@@ -124,7 +130,7 @@ export async function handleWebcallWebSocket(
       // round trip (upsample8to16 is pure interpolation, it can't invent lost
       // frequencies back), that information is gone for good. Threading the
       // real 16k mic audio through to the STT feed fixes that misrecognition.
-      session.pipeline.onRawPcm8kIn(downsample16to8(pcm16k), false, pcm16k);
+      session.pipeline.onRawPcm8kIn(micDecim.process(pcm16k), false, pcm16k);
       return;
     }
     // Text = control message.

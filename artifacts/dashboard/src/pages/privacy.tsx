@@ -15,7 +15,7 @@ export default function PrivacyPage() {
 
   return (
     <div className="min-h-screen w-full flex flex-col bg-background">
-      <PageHeader href="/" showSarvamCoBrand />
+      <PageHeader href="/" />
       <main className="flex-1 px-6 py-12">
         <div className="mx-auto max-w-3xl">
           {/* Header */}

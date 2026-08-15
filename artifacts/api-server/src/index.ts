@@ -558,6 +558,7 @@ server.listen(port, () => {
       logger.info({ migrationsFolder }, "DB migrations applied");
       void seedManagedKeyFromEnv("managed_qwen_key",     "GROQ_API_KEY");
       void seedManagedKeyFromEnv("managed_sarvam_key",   "SARVAM_API_KEY");
+      void seedManagedKeyFromEnv("managed_jina_key",     "JINA_API_KEY");
       void seedManagedKeyFromEnv("managed_cartesia_key", "CARTESIA_API_KEY");
       void seedManagedKeyFromEnv("managed_gemini_key",   "GEMINI_API_KEY");
       void seedManagedKeyFromEnv("managed_together_key",   "TOGETHER_API_KEY");

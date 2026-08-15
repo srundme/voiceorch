@@ -12,16 +12,19 @@ import {
   CURRENCY_INR,
   GST_RATE,
   PHONE_RENEWAL_TOTAL_PAISE,
+  PHONE_WALLET_PURCHASE_MIN_BALANCE_PAISE,
   phonePurchaseBasePaise,
   withGstPaise,
   formatInr,
   gstPortionPaise,
 } from "../lib/money-inr.js";
+import { pricePhonePurchase, resolvePhonePromo } from "../lib/phone-promo.js";
 import {
   ListPhoneNumbersResponse,
   ListAvailablePhoneNumbersQueryParams,
   ListAvailablePhoneNumbersResponse,
   InitiatePhoneNumberPurchaseBody,
+  QuotePhoneNumberPromoBody,
   ConfirmPhoneNumberPurchaseBody,
   AssignPhoneNumberParams,
   AssignPhoneNumberBody,
@@ -34,7 +37,9 @@ const router: IRouter = Router();
 
 // ── Pricing ───────────────────────────────────────────────────────────────────
 // Prefix-tiered monthly rental (before GST): +9180→₹599, +9179→₹699, else ₹659.
-// First purchase (Razorpay card) = monthly rental + ₹100 one-time setup + GST.
+// First purchase = monthly rental + ₹100 one-time setup + GST.
+//   • Default: Razorpay card/UPI
+//   • Wallet: allowed when balance > ₹20,000 (PHONE_WALLET_PURCHASE_MIN_BALANCE_PAISE)
 // Renewal every 30 days debits monthly rental + GST from the wallet
 // (see services/phone-renewal.ts). Carrier VoBiz INR cost is never surfaced.
 export const RENEWAL_RATE_CENTS = PHONE_RENEWAL_TOTAL_PAISE; // legacy flat rate — still used by WhatsApp numbers
@@ -665,6 +670,38 @@ router.get("/phone-numbers/available", requireAuth, async (req, res): Promise<vo
   }
 });
 
+// ── POST /phone-numbers/promo/quote ───────────────────────────────────────────
+// Prices a number with a promo applied so checkout can show the breakdown
+// before payment. Creates nothing; /purchase/initiate re-prices independently,
+// so this endpoint is display-only and never authorises a discount by itself.
+
+router.post("/phone-numbers/promo/quote", requireAuth, async (req, res): Promise<void> => {
+  const parsed = QuotePhoneNumberPromoBody.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "Validation failed", issues: parsed.error.issues }); return; }
+  const { code, number } = parsed.data;
+
+  const resolved = resolvePhonePromo(code);
+  const pricing = pricePhonePurchase(number, resolved.ok ? code : null);
+
+  res.json({
+    valid:   pricing.promoCode !== null,
+    code:    pricing.promoCode,
+    label:   pricing.promoLabel,
+    message: resolved.ok
+      ? null
+      : resolved.reason === "expired"
+        ? "This promo code has expired."
+        : "That promo code isn't valid.",
+    basePaise:            pricing.basePaise,
+    gstPaise:             pricing.gstPaise,
+    payablePaise:         pricing.payablePaise,
+    standardBasePaise:    pricing.standardBasePaise,
+    standardPayablePaise: withGstPaise(pricing.standardBasePaise),
+    discountPaise:        pricing.discountPaise,
+    gstRate:              GST_RATE,
+  });
+});
+
 // ── POST /phone-numbers/purchase/initiate ─────────────────────────────────────
 // Creates a real Razorpay INR order for ₹800 + GST. The number is
 // NOT touched (not purchased from Vobiz, not inserted into phone_numbers)
@@ -681,7 +718,14 @@ router.post("/phone-numbers/purchase/initiate", requireAuth, clientContext, deny
   const parsed = InitiatePhoneNumberPurchaseBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Validation failed", issues: parsed.error.issues }); return; }
 
-  const { number, countryCode, region, numberType, renewalMode } = parsed.data;
+  const { number, countryCode, region, numberType, renewalMode, promoCode } = parsed.data;
+
+  // Reject a bad code loudly. Falling through at full price would charge the
+  // buyer several hundred rupees more than the total they were just shown.
+  if (promoCode && promoCode.trim() && !resolvePhonePromo(promoCode).ok) {
+    res.status(400).json({ error: "That promo code isn't valid.", code: "PROMO_INVALID" });
+    return;
+  }
 
   const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, clerkId));
   if (!user) { res.status(404).json({ error: "User not found" }); return; }
@@ -726,9 +770,10 @@ router.post("/phone-numbers/purchase/initiate", requireAuth, clientContext, deny
     return;
   }
 
-  const basePaise = phonePurchaseBasePaise(number);
-  const gstPaise = gstPortionPaise(basePaise);
-  const payablePaise = withGstPaise(basePaise);
+  // Server-side pricing is authoritative: the client sends only the code, and
+  // the amount charged is derived here, never taken from the request.
+  const pricing = pricePhonePurchase(number, promoCode);
+  const { basePaise, gstPaise, payablePaise, discountPaise } = pricing;
   const razorpay = getRazorpay();
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -745,6 +790,7 @@ router.post("/phone-numbers/purchase/initiate", requireAuth, clientContext, deny
         basePaise: String(basePaise),
         gstPaise: String(gstPaise),
         gstRate: String(GST_RATE),
+        ...(pricing.promoCode ? { promoCode: pricing.promoCode, discountPaise: String(discountPaise) } : {}),
       },
       payment_capture: 1,
     } as any);
@@ -761,12 +807,17 @@ router.post("/phone-numbers/purchase/initiate", requireAuth, clientContext, deny
     region:          region ?? null,
     numberType:      numberType ?? "local",
     amountCents:     payablePaise, // Razorpay charge incl. GST (for refunds)
+    promoCode:       pricing.promoCode,
+    discountPaise,
     renewalMode,
     status:          "pending",
     razorpayOrderId: order.id,
   }).returning();
 
-  req.log.info({ userId: clerkId, number, orderId: order.id, payablePaise, renewalMode }, "Phone number purchase order initiated");
+  req.log.info(
+    { userId: clerkId, number, orderId: order.id, payablePaise, renewalMode, promoCode: pricing.promoCode, discountPaise },
+    "Phone number purchase order initiated",
+  );
 
   res.json({
     purchaseOrderId: orderRow!.id,
@@ -777,6 +828,8 @@ router.post("/phone-numbers/purchase/initiate", requireAuth, clientContext, deny
     gstPaise,
     payablePaise,
     gstRate:         GST_RATE,
+    promoCode:       pricing.promoCode,
+    discountPaise,
     currency:        CURRENCY_INR,
     keyId:           process.env["RAZORPAY_KEY_ID"],
     preferCard:      true,
@@ -830,8 +883,9 @@ router.post("/phone-numbers/purchase/confirm", requireAuth, clientContext, denyM
     return;
   }
 
-  const { number, countryCode, region, numberType, amountCents, renewalMode } = claimed;
+  const { number, countryCode, region, numberType, amountCents, renewalMode, promoCode } = claimed;
   const resolvedRenewalMode = renewalMode === "autopay" ? "autopay" : "wallet";
+  const promoNote = promoCode ? ` [promo ${promoCode}]` : "";
 
   // Always buy from the platform VoBiz master wallet. Per-user sub-accounts
   // are not funded for DID cost and caused "balance debit failed" after the
@@ -915,7 +969,7 @@ router.post("/phone-numbers/purchase/confirm", requireAuth, clientContext, denyM
     userId:            user.id,
     type:              "debit",
     amountCents:       -amountCents,
-    description:       `Phone number ${number} purchased (${formatInr(paidBasePaise)} + GST ${formatInr(amountCents - paidBasePaise)} = ${formatInr(amountCents)}, paid by card)`,
+    description:       `Phone number ${number} purchased (${formatInr(paidBasePaise)} + GST ${formatInr(amountCents - paidBasePaise)} = ${formatInr(amountCents)}, paid by card)${promoNote}`,
     status:            "completed",
     razorpayOrderId,
     razorpayPaymentId,
@@ -933,13 +987,13 @@ router.post("/phone-numbers/purchase/confirm", requireAuth, clientContext, denyM
   void issueInvoice({
     user: { id: user.id, name: user.name, email: user.email },
     type: "phone_number",
-    description: `Phone number ${number} — provisioning & 1 month rental`,
+    description: `Phone number ${number} — provisioning & 1 month rental${promoNote}`,
     hsnSac: "998411",
     amountCents: paidBasePaise,
     gstInclusive: false,
     razorpayOrderId,
     razorpayPaymentId,
-    metadata: { number, phoneNumberId: row!.id },
+    metadata: { number, phoneNumberId: row!.id, ...(promoCode ? { promoCode } : {}) },
   });
 
   req.log.info({ number, userId: clerkId, vobizId: vobizNumber.id, nextRenewalAt }, "Phone number purchased and provisioned after confirmed payment");
@@ -951,6 +1005,262 @@ router.post("/phone-numbers/purchase/confirm", requireAuth, clientContext, denyM
   res.status(201).json({
     ...(await enrichNumber(row!)),
     inboundLink: postLink,
+  });
+});
+
+// ── POST /phone-numbers/purchase/wallet ───────────────────────────────────────
+// Pay for a first-time voice DID from wallet when balance > ₹20,000. Debits the
+// GST-inclusive total atomically, provisions via VoBiz, invoices as usual.
+// On provisioning failure the wallet is refunded.
+
+router.post("/phone-numbers/purchase/wallet", requireAuth, clientContext, denyManagedClient, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+  const parsed = InitiatePhoneNumberPurchaseBody.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "Validation failed", issues: parsed.error.issues }); return; }
+
+  const { number, countryCode, region, numberType, renewalMode, promoCode } = parsed.data;
+
+  if (promoCode && promoCode.trim() && !resolvePhonePromo(promoCode).ok) {
+    res.status(400).json({ error: "That promo code isn't valid.", code: "PROMO_INVALID" });
+    return;
+  }
+
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, clerkId));
+  if (!user) { res.status(404).json({ error: "User not found" }); return; }
+
+  if (user.walletBalanceCents <= PHONE_WALLET_PURCHASE_MIN_BALANCE_PAISE) {
+    res.status(403).json({
+      error: `Pay from wallet is available when your balance is above ${formatInr(PHONE_WALLET_PURCHASE_MIN_BALANCE_PAISE)}. Top up or pay by card instead.`,
+      code: "WALLET_PURCHASE_NOT_ELIGIBLE",
+      minBalancePaise: PHONE_WALLET_PURCHASE_MIN_BALANCE_PAISE,
+      balanceCents: user.walletBalanceCents,
+    });
+    return;
+  }
+
+  if (renewalMode === "autopay") {
+    if (!user.razorpayCustomerId || !user.razorpayTokenId) {
+      res.status(400).json({
+        error: "Set up card auto-pay in Wallet before buying with Autopay renewal.",
+        code: "NEED_AUTOPAY_SETUP",
+      });
+      return;
+    }
+  }
+
+  if (!countryCode || countryCode.toUpperCase() === "IN") {
+    const [kycAccount] = await db
+      .select({ kycStatus: vobizAccountsTable.kycStatus })
+      .from(vobizAccountsTable)
+      .where(eq(vobizAccountsTable.userId, clerkId));
+    if (!kycAccount || kycAccount.kycStatus !== "completed") {
+      res.status(403).json({
+        error: "Identity verification required to purchase Indian numbers.",
+        code: "KYC_REQUIRED",
+      });
+      return;
+    }
+  }
+
+  const { configured, authId, authToken } = getPlatformVobizCreds();
+  if (!configured) {
+    res.status(503).json({ error: "Platform carrier credentials not configured.", code: "PLATFORM_NOT_CONFIGURED" });
+    return;
+  }
+
+  const pricing = pricePhonePurchase(number, promoCode);
+  const { basePaise, gstPaise, payablePaise, discountPaise } = pricing;
+  const promoNote = pricing.promoCode ? ` [promo ${pricing.promoCode}]` : "";
+  const resolvedRenewalMode = renewalMode === "autopay" ? "autopay" : "wallet";
+
+  if (user.walletBalanceCents < payablePaise) {
+    res.status(402).json({
+      error: `Insufficient wallet balance. Need ${formatInr(payablePaise)}, have ${formatInr(user.walletBalanceCents)}.`,
+      code: "INSUFFICIENT_BALANCE",
+      payablePaise,
+      balanceCents: user.walletBalanceCents,
+    });
+    return;
+  }
+
+  let orderRow: typeof phoneNumberOrdersTable.$inferSelect | undefined;
+  let debitOk = false;
+  try {
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`phone-num:${number}`}))`);
+
+      const [takenNow] = await tx.select({ id: phoneNumbersTable.id }).from(phoneNumbersTable)
+        .where(and(eq(phoneNumbersTable.number, number), eq(phoneNumbersTable.status, "active")));
+      if (takenNow) throw Object.assign(new Error("This number is already taken."), { status: 409 });
+
+      const [openNow] = await tx.select({ id: phoneNumberOrdersTable.id }).from(phoneNumberOrdersTable)
+        .where(and(
+          eq(phoneNumberOrdersTable.number, number),
+          inArray(phoneNumberOrdersTable.status, ["pending", "processing"]),
+        ));
+      if (openNow) throw Object.assign(new Error("A pending purchase already exists for this number."), { status: 409 });
+
+      const [debited] = await tx
+        .update(usersTable)
+        .set({ walletBalanceCents: sql`${usersTable.walletBalanceCents} - ${payablePaise}` })
+        .where(and(
+          eq(usersTable.id, user.id),
+          sql`${usersTable.walletBalanceCents} > ${PHONE_WALLET_PURCHASE_MIN_BALANCE_PAISE}`,
+          sql`${usersTable.walletBalanceCents} >= ${payablePaise}`,
+        ))
+        .returning({ id: usersTable.id, walletBalanceCents: usersTable.walletBalanceCents });
+      if (!debited) {
+        throw Object.assign(new Error("Insufficient wallet balance or below the ₹20,000 wallet-purchase threshold."), {
+          status: 402,
+          code: "INSUFFICIENT_BALANCE",
+        });
+      }
+      debitOk = true;
+
+      [orderRow] = await tx.insert(phoneNumberOrdersTable).values({
+        userId: clerkId,
+        number,
+        countryCode: countryCode.toUpperCase(),
+        region: region ?? null,
+        numberType: numberType ?? "local",
+        amountCents: payablePaise,
+        promoCode: pricing.promoCode,
+        discountPaise,
+        renewalMode: resolvedRenewalMode,
+        status: "processing",
+        razorpayOrderId: null,
+        razorpayPaymentId: null,
+      }).returning();
+    });
+  } catch (err: any) {
+    const status = typeof err?.status === "number" ? err.status : 500;
+    if (status !== 500) {
+      res.status(status).json({ error: err.message, ...(err.code ? { code: err.code } : {}) });
+      return;
+    }
+    req.log.error({ err, number }, "Phone wallet purchase transaction failed");
+    res.status(500).json({ error: "Could not start wallet purchase. Please try again." });
+    return;
+  }
+
+  if (!orderRow) {
+    res.status(500).json({ error: "Could not create purchase order." });
+    return;
+  }
+
+  const refundWallet = async (reason: string) => {
+    if (debitOk) {
+      await db
+        .update(usersTable)
+        .set({ walletBalanceCents: sql`${usersTable.walletBalanceCents} + ${payablePaise}` })
+        .where(eq(usersTable.id, user.id));
+      await db.insert(walletTransactionsTable).values({
+        userId: user.id,
+        type: "credit",
+        amountCents: payablePaise,
+        description: `Refund: phone number ${number} wallet purchase failed — ${reason.slice(0, 120)}`,
+        status: "completed",
+      });
+    }
+    await db.update(phoneNumberOrdersTable)
+      .set({ status: "failed", failureReason: reason.slice(0, 400) })
+      .where(eq(phoneNumberOrdersTable.id, orderRow!.id));
+  };
+
+  const webhookBase = deriveWebhookBase(req);
+  const linkResult = await configureVobizNumberWebhook(authId!, authToken!, number, webhookBase);
+  const snapserveAppId = linkResult.appId;
+
+  let vobizNumber: VobizOwnedNumber;
+  try {
+    vobizNumber = await purchaseVobizNumber(authId!, authToken!, number, snapserveAppId ?? undefined);
+  } catch (err: any) {
+    const msg: string = err?.message ?? "Vobiz provisioning failed";
+    req.log.error({ err, number }, "Vobiz purchase failed after wallet debit — refunding");
+    await refundWallet(`Vobiz provisioning failed: ${msg.slice(0, 200)}`);
+    res.status(502).json({
+      error: msg.toLowerCase().includes("not found")
+        ? "This number is no longer available. Your wallet has been refunded."
+        : "Failed to provision number. Your wallet has been refunded.",
+    });
+    return;
+  }
+
+  const now = new Date();
+  const nextRenewalAt = new Date(now.getTime() + RENEWAL_INTERVAL_DAYS * 24 * 60 * 60 * 1000);
+
+  const [row] = await db.insert(phoneNumbersTable).values({
+    userId: clerkId,
+    number,
+    countryCode: (vobizNumber.country ?? countryCode).toUpperCase(),
+    region: vobizNumber.region ?? region ?? null,
+    numberType: numberType ?? "local",
+    vobizNumberId: vobizNumber.id,
+    status: "active",
+    monthlyRateCents: phonePurchaseBasePaise(number),
+    renewalRateCents: withGstPaise(phonePurchaseBasePaise(number)),
+    renewalMode: resolvedRenewalMode,
+    purchasedAt: now,
+    nextRenewalAt,
+    lastRenewalAt: now,
+  }).returning();
+
+  if (resolvedRenewalMode === "autopay" && user.razorpayCustomerId && user.razorpayTokenId && !user.autoPayEnabled) {
+    await db.update(usersTable).set({ autoPayEnabled: true }).where(eq(usersTable.id, user.id));
+  }
+
+  await db.update(phoneNumberOrdersTable)
+    .set({ status: "completed", phoneNumberId: row!.id })
+    .where(eq(phoneNumberOrdersTable.id, orderRow.id));
+
+  await db.insert(walletTransactionsTable).values({
+    userId: user.id,
+    type: "debit",
+    amountCents: -payablePaise,
+    description: `Phone number ${number} purchased (${formatInr(basePaise)} + GST ${formatInr(gstPaise)} = ${formatInr(payablePaise)}, paid from wallet)${promoNote}`,
+    status: "completed",
+  });
+
+  await logActivity({
+    userId: clerkId,
+    eventType: "phone_number.purchased",
+    resourceType: "phone_number",
+    resourceId: String(row!.id),
+    description: `Phone number ${number} purchased (${formatInr(payablePaise)}, paid from wallet)`,
+  });
+
+  void issueInvoice({
+    user: { id: user.id, name: user.name, email: user.email },
+    type: "phone_number",
+    description: `Phone number ${number} — provisioning & 1 month rental${promoNote}`,
+    hsnSac: "998411",
+    amountCents: basePaise,
+    gstInclusive: false,
+    razorpayPaymentId: `wallet:phone:${orderRow.id}`,
+    metadata: {
+      number,
+      phoneNumberId: row!.id,
+      paymentMethod: "wallet",
+      phoneOrderId: orderRow.id,
+      ...(pricing.promoCode ? { promoCode: pricing.promoCode } : {}),
+    },
+  });
+
+  req.log.info(
+    { number, userId: clerkId, vobizId: vobizNumber.id, payablePaise, nextRenewalAt },
+    "Phone number purchased from wallet and provisioned",
+  );
+
+  const postLink = await ensureVobizInboundLinked(authId!, authToken!, number, webhookBase);
+  req.log.info({ number, ...postLink }, "Vobiz inbound link after wallet purchase");
+
+  res.status(201).json({
+    ...(await enrichNumber(row!)),
+    inboundLink: postLink,
+    paidFromWallet: true,
+    payablePaise,
+    basePaise,
+    gstPaise,
   });
 });
 

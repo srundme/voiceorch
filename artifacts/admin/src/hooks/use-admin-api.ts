@@ -352,6 +352,24 @@ export function useRecentRecharges(opts?: { limit?: number; status?: string }) {
   });
 }
 
+export function usePhonePurchases(opts?: {
+  limit?: number;
+  status?: string;
+  numberType?: string;
+}) {
+  const limit = opts?.limit ?? 200;
+  const status = opts?.status ?? "completed";
+  const numberType = opts?.numberType ?? "all";
+  return useQuery({
+    queryKey: ["admin", "phone-purchases", limit, status, numberType],
+    queryFn: () =>
+      adminFetch<{ rows: any[]; total: number; totalAmountCents: number }>(
+        `/phone-purchases?limit=${limit}&status=${encodeURIComponent(status)}&numberType=${encodeURIComponent(numberType)}`,
+      ),
+    refetchInterval: 30000,
+  });
+}
+
 function financeRangeParams(from?: string, to?: string) {
   const p = new URLSearchParams();
   if (from) p.set("from", from);

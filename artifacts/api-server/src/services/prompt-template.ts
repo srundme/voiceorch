@@ -1,6 +1,7 @@
 import { db, promptTemplatesTable, platformSettingsTable } from "@workspace/db";
 import { eq, desc, sql } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
+import { parsePdfText } from "../lib/pdf-text.js";
 
 export interface WizardInputs {
   useCase?: string;
@@ -86,12 +87,7 @@ export async function extractTextFromUpload(
 ): Promise<string> {
   const lower = filename.toLowerCase();
   if (mimeType === "application/pdf" || lower.endsWith(".pdf")) {
-    // pdf-parse is a CJS module; use default import shape that works under esbuild
-    const mod = (await import("pdf-parse")) as unknown as {
-      default: (b: Buffer) => Promise<{ text: string }>;
-    };
-    const parsed = await mod.default(buffer);
-    return parsed.text.trim();
+    return (await parsePdfText(buffer)).trim();
   }
   if (
     mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||

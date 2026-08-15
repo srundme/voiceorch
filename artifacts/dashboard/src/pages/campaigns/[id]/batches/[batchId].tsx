@@ -23,7 +23,7 @@ import {
   TrendingUp, Bell, PhoneIncoming, Voicemail,
   Eye, Database, RefreshCw, DollarSign,
   User, Search, X, CheckCircle2, Clock, Pencil,
-  Info, ChevronDown, FileDown, Package, Lock, BarChart2,
+  Info, ChevronDown, FileDown, Package, Lock, BarChart2, Tag,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -37,6 +37,7 @@ import { cn } from "@/lib/utils";
 import { formatDistanceToNow, format, parseISO } from "date-fns";
 import { BATCH_STATUS_MAP, callStatusCfg, outcomeCfg } from "@/lib/campaign-status";
 import { CallDetailDrawer } from "@/components/call-detail-drawer";
+import CampaignAnalyticsTab from "../../campaign-analytics-tab";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
@@ -236,7 +237,14 @@ function ScheduledInlineChip({
 type BatchWorkspaceKpis = {
   total: number; connected: number; failed: number; pending: number;
   callbacks: number; incoming: number; bookings: number; transfers: number;
-  voicemail: number; successRate: number;
+  voicemail: number; successRate: number; transferred: number;
+  /**
+   * Lead counts per agent disposition, keyed by the canonical bucket the API
+   * derives from the taxonomy plus what leads actually carry.
+   */
+  dispositions?: { key: string; count: number }[];
+  /** Leads with no agent disposition, so the row reconciles with `total`. */
+  undispositioned?: number;
 };
 
 type BatchWorkspaceLead = {
@@ -286,6 +294,17 @@ function fmtRelative(iso: string): string {
   return formatDistanceToNow(new Date(iso), { addSuffix: true });
 }
 
+function titleCase(s: string): string {
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+}
+
+/** Leads store dispositions as "PRIMARY: sub" — split for two-line display. */
+function splitDisposition(label: string): { primary: string; sub: string } {
+  const i = label.indexOf(":");
+  if (i === -1) return { primary: label.trim(), sub: "" };
+  return { primary: label.slice(0, i).trim(), sub: label.slice(i + 1).trim() };
+}
+
 // ── Status / outcome config — canonical maps from shared lib ─────────────────
 // BATCH_STATUS_MAP, callStatusCfg(), outcomeCfg() imported from @/lib/campaign-status
 
@@ -300,25 +319,85 @@ function BatchStatusBadge({ status }: { status: string }) {
   );
 }
 
+// ── Segments ──────────────────────────────────────────────────────────────────
+// A segment is the single source of truth for "what slice of leads am I looking
+// at". The KPI cards select it and the leads table reads from it, so the count
+// on a card always matches the rows underneath.
+
+const DISPOSITION_SEGMENT = "disp:";
+
+/** Segment → the `status` / `outcome` query params the leads endpoint expects. */
+function segmentToFilters(segment: string): { status: string; outcome: string } {
+  if (segment.startsWith(DISPOSITION_SEGMENT)) {
+    return { status: "all", outcome: segment.slice(DISPOSITION_SEGMENT.length) };
+  }
+  switch (segment) {
+    case "pending":   return { status: "pending",   outcome: "all" };
+    case "connected": return { status: "connected", outcome: "all" };
+    case "voicemail": return { status: "voicemail", outcome: "all" };
+    case "failed":    return { status: "failed",    outcome: "all" };
+    case "transfers": return { status: "all",       outcome: "transfer_completed" };
+    default:          return { status: "all",       outcome: "all" };
+  }
+}
+
+type KpiSegment = {
+  key: string;
+  label: string;
+  value: number | string;
+  icon: React.ReactNode;
+  color?: string;
+  hint: string;
+};
+
 // ── KPI Card ──────────────────────────────────────────────────────────────────
 
-function KpiCard({ icon, label, value, color }: {
+function KpiCard({ icon, label, value, color, active, onClick, hint }: {
   icon: React.ReactNode; label: string; value: number | string; color?: string;
+  active?: boolean; onClick?: () => void; hint?: string;
 }) {
   return (
-    <div className="bg-card px-3.5 py-3 flex flex-col gap-1.5">
+    <button
+      type="button"
+      onClick={onClick}
+      title={hint}
+      aria-pressed={active}
+      className={cn(
+        "relative bg-card px-3.5 py-3 flex flex-col gap-1.5 text-left transition-colors",
+        "hover:bg-muted/40 focus:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring",
+        active && "bg-muted/60",
+      )}
+    >
+      {active && <span className="absolute inset-x-0 top-0 h-[2px] bg-foreground/70" />}
       <div className="flex items-center gap-1.5">
         <span className={cn("text-muted-foreground/50", color)}>{icon}</span>
-        <span className="text-xs uppercase tracking-wider font-semibold text-muted-foreground/40 truncate">{label}</span>
+        <span className={cn(
+          "text-xs uppercase tracking-wider font-semibold truncate",
+          active ? "text-foreground/70" : "text-muted-foreground/40",
+        )}>{label}</span>
       </div>
       <p className={cn("text-xl font-bold tabular-nums", color ?? "text-foreground")}>{value}</p>
-    </div>
+    </button>
+  );
+}
+
+/** Secondary stat — shown inline because it doesn't slice the leads table. */
+function MiniStat({ icon, label, value }: { icon: React.ReactNode; label: string; value: number | string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground/60">
+      <span className="text-muted-foreground/40">{icon}</span>
+      {label}
+      <span className="font-semibold tabular-nums text-foreground/70">{value}</span>
+    </span>
   );
 }
 
 // ── Leads Tab ─────────────────────────────────────────────────────────────────
 
-function LeadsTab({ campaignId, batchId, maxAttempts, agentId }: { campaignId: number; batchId: number; maxAttempts: number; agentId: number | null }) {
+function LeadsTab({ campaignId, batchId, maxAttempts, segment, segmentLabel, onClearSegment }: {
+  campaignId: number; batchId: number; maxAttempts: number;
+  segment: string; segmentLabel: string; onClearSegment: () => void;
+}) {
   const qc = useQueryClient();
   const { toast } = useToast();
   const retry = useRetryCampaignLead();
@@ -326,18 +405,22 @@ function LeadsTab({ campaignId, batchId, maxAttempts, agentId }: { campaignId: n
   const [infoOpen,    setInfoOpen]    = useState(() => localStorage.getItem("batch-info-dismissed") !== "1");
   const [page,        setPage]        = useState(0);
   const [limit,       setLimit]       = useState(25);
-  const [status,      setStatus]      = useState("all");
-  const [outcome,     setOutcome]     = useState("all");
   const [searchInput, setSearchInput] = useState("");
   const [search,      setSearch]      = useState("");
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
   const LIMIT = limit;
+
+  const { status, outcome } = segmentToFilters(segment);
 
   // Debounce the search input so we don't fire a query on every keystroke.
   useEffect(() => {
     const t = setTimeout(() => { setSearch(searchInput.trim()); setPage(0); }, 300);
     return () => clearTimeout(t);
   }, [searchInput]);
+
+  // Switching segments must restart paging, otherwise a deep page on a large
+  // slice shows an empty table on a smaller one.
+  useEffect(() => { setPage(0); }, [segment]);
 
   const queryKey = ["batch-ws-leads", campaignId, batchId, status, outcome, search, page];
   const { data, isFetching } = useQuery<BatchLeadsPage>({
@@ -363,40 +446,13 @@ function LeadsTab({ campaignId, batchId, maxAttempts, agentId }: { campaignId: n
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / LIMIT));
 
-  const STATUS_FILTERS = [
-    { key: "all", label: "All" },
-    { key: "pending",   label: "Pending"   },
-    { key: "completed", label: "Completed" },
-    { key: "voicemail", label: "Voicemail" },
-    { key: "failed",    label: "Failed"    },
-    { key: "calling",   label: "Calling"   },
-  ];
+  const filtered = segment !== "all" || search !== "";
 
-  // Dynamic disposition tabs — derived from the campaign agent's configured
-  // disposition taxonomy. Each tab's filter key is the disposition value stored
-  // on the lead. Falls back gracefully (404 = no config) to no dynamic tabs.
-  const { data: dispConfig } = useQuery<{ taxonomy: Record<string, string[]> } | null>({
-    queryKey: ["batch-ws-dispositions", agentId],
-    enabled: agentId != null,
-    queryFn: async () => {
-      try {
-        return await apiFetch<{ taxonomy: Record<string, string[]> }>(`${BASE}/api/disposition/config/${agentId}`);
-      } catch {
-        return null;
-      }
-    },
-    staleTime: 5 * 60_000,
-  });
-
-  const dispositionTabs = Object.keys(dispConfig?.taxonomy ?? {}).map(key => ({ key, label: key }));
-
-  const OUTCOME_FILTERS = [
-    { key: "all", label: "All Outcomes" },
-    ...dispositionTabs,
-    { key: "booking_created",    label: "Booked"      },
-    { key: "transfer_completed", label: "Transferred" },
-    { key: "callback_requested", label: "Callback"    },
-  ];
+  function clearAll() {
+    onClearSegment();
+    setSearchInput("");
+    setPage(0);
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -436,37 +492,22 @@ function LeadsTab({ campaignId, batchId, maxAttempts, agentId }: { campaignId: n
         </div>
       )}
 
-      {/* Filters */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-3 border-b border-border/30">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-muted-foreground/40 uppercase tracking-wider shrink-0">Status</span>
-          <div className="inline-flex items-center rounded-lg border border-border/60 bg-card/40 overflow-hidden">
-            {STATUS_FILTERS.map(f => (
-              <button
-                key={f.key}
-                onClick={() => { setStatus(f.key); setPage(0); }}
-                className={cn(
-                  "px-3 py-1.5 text-xs font-medium transition-colors border-r border-border/40 last:border-r-0",
-                  status === f.key ? "bg-muted/60 text-foreground" : "text-muted-foreground hover:bg-muted/30",
-                )}
-              >{f.label}</button>
-            ))}
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-muted-foreground/40 uppercase tracking-wider shrink-0">Outcome</span>
-          <div className="inline-flex items-center rounded-lg border border-border/60 bg-card/40 overflow-hidden flex-wrap">
-            {OUTCOME_FILTERS.map(f => (
-              <button
-                key={f.key}
-                onClick={() => { setOutcome(f.key); setPage(0); }}
-                className={cn(
-                  "px-3 py-1.5 text-xs font-medium transition-colors border-r border-border/40 last:border-r-0",
-                  outcome === f.key ? "bg-muted/60 text-foreground" : "text-muted-foreground hover:bg-muted/30",
-                )}
-              >{f.label}</button>
-            ))}
-          </div>
+      {/* Context bar — reflects the segment picked in the KPI strip above */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-5 py-2.5 border-b border-border/30">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-xs text-muted-foreground/50 shrink-0">Showing</span>
+          <span className="inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-card/60 px-2.5 py-1 text-xs font-semibold text-foreground max-w-[240px]">
+            <span className="truncate">{segmentLabel}</span>
+            <span className="tabular-nums text-muted-foreground/60 font-medium">{total.toLocaleString()}</span>
+          </span>
+          {segment !== "all" && (
+            <button
+              onClick={onClearSegment}
+              className="inline-flex items-center gap-1 text-xs text-muted-foreground/60 hover:text-foreground transition-colors"
+              title="Show all leads">
+              <X className="h-3 w-3" /> Clear
+            </button>
+          )}
         </div>
         <div className="ml-auto flex items-center gap-2 shrink-0">
           <div className="relative">
@@ -487,15 +528,8 @@ function LeadsTab({ campaignId, batchId, maxAttempts, agentId }: { campaignId: n
               </button>
             )}
           </div>
-          {(status !== "all" || outcome !== "all" || search !== "") && (
-            <button
-              onClick={() => { setStatus("all"); setOutcome("all"); setSearchInput(""); setPage(0); }}
-              className="text-xs text-muted-foreground/60 underline-offset-2 hover:text-foreground hover:underline transition-colors">
-              Clear filters
-            </button>
-          )}
-          <span className="text-xs text-muted-foreground/40">{total.toLocaleString()} leads</span>
           <Button size="sm" variant="ghost" className={cn("h-6 w-6 p-0", isFetching && "opacity-60")}
+            title="Refresh"
             onClick={() => qc.invalidateQueries({ queryKey })}>
             <RefreshCw className={cn("h-3 w-3", isFetching && "animate-spin")} />
           </Button>
@@ -507,10 +541,12 @@ function LeadsTab({ campaignId, batchId, maxAttempts, agentId }: { campaignId: n
         {items.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-40 gap-2">
             <Users className="h-7 w-7 text-muted-foreground/20" />
-            <p className="text-sm text-muted-foreground/40">No leads match the current filters</p>
-            {(status !== "all" || outcome !== "all" || search !== "") && (
+            <p className="text-sm text-muted-foreground/40">
+              {filtered ? `No leads in "${segmentLabel}"` : "No leads in this batch yet"}
+            </p>
+            {filtered && (
               <button
-                onClick={() => { setStatus("all"); setOutcome("all"); setSearchInput(""); setPage(0); }}
+                onClick={clearAll}
                 className="text-xs text-muted-foreground/60 underline-offset-2 hover:text-foreground hover:underline transition-colors">
                 Clear filters
               </button>
@@ -524,7 +560,7 @@ function LeadsTab({ campaignId, batchId, maxAttempts, agentId }: { campaignId: n
                 <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground/40 uppercase tracking-wider hidden lg:table-cell">Date & Time</th>
                 <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground/40 uppercase tracking-wider hidden md:table-cell">Call ID</th>
                 <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground/40 uppercase tracking-wider">Status</th>
-                <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground/40 uppercase tracking-wider hidden sm:table-cell">Outcome</th>
+                <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground/40 uppercase tracking-wider hidden sm:table-cell">Disposition</th>
                 <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground/40 uppercase tracking-wider hidden md:table-cell">Attempts</th>
                 <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground/40 uppercase tracking-wider hidden xl:table-cell">Duration</th>
                 <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground/40 uppercase tracking-wider hidden xl:table-cell">Cost</th>
@@ -574,9 +610,24 @@ function LeadsTab({ campaignId, batchId, maxAttempts, agentId }: { campaignId: n
                         </p>
                       )}
                     </td>
-                    {/* Outcome */}
+                    {/* Disposition — the agent's own taxonomy result, with the
+                        system outcome as fallback when no call happened yet. */}
                     <td className="px-3 py-2.5 hidden sm:table-cell">
-                      <span className={cn("text-xs font-medium", oc.color)}>{oc.label}</span>
+                      {lead.disposition ? (
+                        <div className="min-w-0">
+                          <span className="inline-flex text-[10px] font-semibold px-2 py-0.5 rounded border border-border/60 bg-muted/40 text-foreground/80">
+                            {splitDisposition(lead.disposition).primary}
+                          </span>
+                          {splitDisposition(lead.disposition).sub && (
+                            <p className="text-[10px] text-muted-foreground/50 truncate max-w-[150px] mt-0.5"
+                              title={splitDisposition(lead.disposition).sub}>
+                              {splitDisposition(lead.disposition).sub}
+                            </p>
+                          )}
+                        </div>
+                      ) : (
+                        <span className={cn("text-xs font-medium", oc.color)}>{oc.label}</span>
+                      )}
                     </td>
                     {/* Attempts */}
                     <td className="px-3 py-2.5 hidden md:table-cell">
@@ -708,6 +759,7 @@ export default function BatchWorkspacePage() {
   const [remapName, setRemapName] = useState("name");
   const [remapEmail, setRemapEmail] = useState("email");
   const [remapSaving, setRemapSaving] = useState(false);
+  const [showInsights, setShowInsights] = useState(false);
 
   // Header data (light, kept in sync with polling)
   const { data: header } = useQuery<BatchHeader>({
@@ -730,6 +782,48 @@ export default function BatchWorkspacePage() {
     queryFn: () => apiFetch(`${BASE}/api/campaigns/${campaignId}/batches/${batchId}/workspace/kpis`),
     refetchInterval: 10000,
   });
+
+  // The selected slice, shared between the KPI strip and the leads table.
+  const [segment, setSegment] = useState("all");
+
+  const coreSegments: KpiSegment[] = [
+    { key: "all",       label: "Total Leads", value: kpis?.total     ?? "—", icon: <Users className="h-3 w-3" />,          hint: "Every lead in this batch" },
+    { key: "pending",   label: "Pending",     value: kpis?.pending   ?? "—", icon: <Clock className="h-3 w-3" />,          color: "text-muted-foreground", hint: "Not called yet" },
+    { key: "connected", label: "Connected",   value: kpis?.connected ?? "—", icon: <PhoneCall className="h-3 w-3" />,      color: "text-emerald-600 dark:text-emerald-500", hint: "Calls the lead answered" },
+    { key: "voicemail", label: "Voicemail",   value: kpis?.voicemail ?? "—", icon: <Voicemail className="h-3 w-3" />,      color: "text-violet-600 dark:text-violet-400", hint: "Reached voicemail" },
+    // Lead-level `transferred`, not the transfer-event count, so the number
+    // always equals the rows the card filters to.
+    { key: "transfers", label: "Transferred", value: kpis?.transferred ?? "—", icon: <ArrowRightLeft className="h-3 w-3" />, color: "text-sky-600 dark:text-sky-400", hint: "Handed to a human agent" },
+    { key: "failed",    label: "Failed",      value: kpis?.failed    ?? "—", icon: <XCircle className="h-3 w-3" />,        color: "text-red-600 dark:text-red-500", hint: "Failed, busy, or no pickup" },
+  ];
+
+  // The API already merges the configured taxonomy with what leads actually
+  // carry, into one canonical bucket per outcome. Re-deriving that here is what
+  // produced duplicate cards for the same outcome, so just render what it sends.
+  const dispositionSegments: KpiSegment[] = (kpis?.dispositions ?? []).map(d => ({
+    key:   `${DISPOSITION_SEGMENT}${d.key}`,
+    label: titleCase(d.key),
+    value: d.count,
+    icon:  <Tag className="h-3 w-3" />,
+    color: "text-amber-600 dark:text-amber-400",
+    hint:  `Leads dispositioned as "${d.key}"`,
+  }));
+
+  // Without this card the disposition row silently drops every lead the agent
+  // never labelled, so the row never adds up to the batch total.
+  if ((kpis?.undispositioned ?? 0) > 0) {
+    dispositionSegments.push({
+      key:   `${DISPOSITION_SEGMENT}__undispositioned__`,
+      label: "No disposition",
+      value: kpis?.undispositioned ?? 0,
+      icon:  <Tag className="h-3 w-3" />,
+      color: "text-muted-foreground",
+      hint:  "Calls that never produced an agent disposition",
+    });
+  }
+
+  const segmentLabel =
+    [...coreSegments, ...dispositionSegments].find(s => s.key === segment)?.label ?? "All leads";
 
   const batchStatus = header?.batch.status ?? "draft";
   // A terminal batch (completed / stopped / cancelled) has no more work, so it
@@ -937,26 +1031,64 @@ export default function BatchWorkspacePage() {
         />
       )}
 
-      {/* ── KPI Strip ───────────────────────────────────────────────────────── */}
-      <div className="px-5 py-3 shrink-0">
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-9 gap-px bg-border/60 border border-border/60 rounded-xl overflow-hidden">
-          <KpiCard icon={<Users className="h-3 w-3" />}        label="Total"     value={kpis?.total       ?? "—"} />
-          <KpiCard icon={<PhoneCall className="h-3 w-3" />}    label="Connected" value={kpis?.connected    ?? "—"} color="text-emerald-500" />
-          <KpiCard icon={<Bell className="h-3 w-3" />}         label="Callbacks" value={kpis?.callbacks    ?? "—"} color="text-amber-500"   />
-          <KpiCard icon={<PhoneIncoming className="h-3 w-3" />} label="Incoming" value={kpis?.incoming     ?? "—"} color="text-sky-500"     />
-          <KpiCard icon={<Calendar className="h-3 w-3" />}     label="Bookings"  value={kpis?.bookings     ?? "—"} color="text-violet-500"  />
-          <KpiCard icon={<ArrowRightLeft className="h-3 w-3" />} label="Transfers" value={kpis?.transfers  ?? "—"} color="text-sky-400"    />
-          <KpiCard icon={<Voicemail className="h-3 w-3" />}    label="Voicemail" value={kpis?.voicemail    ?? "—"} color="text-violet-500"  />
-          <KpiCard icon={<XCircle className="h-3 w-3" />}      label="Failed"    value={kpis?.failed       ?? "—"} color="text-red-500"     />
-          <KpiCard icon={<TrendingUp className="h-3 w-3" />}   label="Success"   value={kpis ? `${kpis.successRate}%` : "—"} color="text-emerald-500" />
+      {/* ── KPI Strip — click a card to filter the leads table below ────────── */}
+      <div className="px-5 py-3 shrink-0 space-y-3">
+        <div>
+          <div className="flex items-baseline justify-between mb-1.5">
+            <span className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground/40">Call outcomes</span>
+            <span className="text-[10px] text-muted-foreground/40">Click any card to filter the list</span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-px bg-border/60 border border-border/60 rounded-xl overflow-hidden">
+            {coreSegments.map(({ key, ...card }) => (
+              <KpiCard key={key} {...card} active={segment === key} onClick={() => setSegment(key)} />
+            ))}
+          </div>
         </div>
-        <div className="mt-2 flex justify-end">
-          <Button size="sm" variant="ghost" className="h-7 text-[11px] gap-1.5 text-muted-foreground"
+
+        {dispositionSegments.length > 0 && (
+          <div>
+            <div className="flex items-baseline justify-between mb-1.5">
+              <span className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground/40">
+                Agent dispositions
+              </span>
+              <span className="text-[10px] text-muted-foreground/40">
+                {header?.campaign.agentName ?? "Agent"} taxonomy
+              </span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-px bg-border/60 border border-border/60 rounded-xl overflow-hidden">
+              {dispositionSegments.map(({ key, ...card }) => (
+                <KpiCard key={key} {...card} active={segment === key} onClick={() => setSegment(key)} />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Secondary stats — informational, not filters */}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+          <MiniStat icon={<TrendingUp className="h-3 w-3" />}    label="Success rate" value={kpis ? `${kpis.successRate}%` : "—"} />
+          <MiniStat icon={<Calendar className="h-3 w-3" />}      label="Bookings"     value={kpis?.bookings  ?? "—"} />
+          <MiniStat icon={<Bell className="h-3 w-3" />}          label="Callbacks"    value={kpis?.callbacks ?? "—"} />
+          <MiniStat icon={<PhoneIncoming className="h-3 w-3" />} label="Incoming"     value={kpis?.incoming  ?? "—"} />
+          <Button
+            size="sm"
+            variant={showInsights ? "secondary" : "ghost"}
+            className="h-7 text-[11px] gap-1.5 text-muted-foreground"
+            onClick={() => setShowInsights((v) => !v)}
+          >
+            <BarChart2 className="h-3 w-3" /> {showInsights ? "Hide insights" : "Insights / reports"}
+          </Button>
+          <Button size="sm" variant="ghost" className="ml-auto h-7 text-[11px] gap-1.5 text-muted-foreground"
             onClick={() => setRemapOpen(true)}>
             <Pencil className="h-3 w-3" /> Remap pending fields
           </Button>
         </div>
       </div>
+
+      {showInsights && (
+        <div className="px-5 pb-4 shrink-0 border-b border-border">
+          <CampaignAnalyticsTab campaignId={campaignId} batchId={batchId} />
+        </div>
+      )}
 
       <Dialog open={remapOpen} onOpenChange={setRemapOpen}>
         <DialogContent className="sm:max-w-md">
@@ -1022,7 +1154,14 @@ export default function BatchWorkspacePage() {
 
       {/* ── Leads ───────────────────────────────────────────────────────────── */}
       <div className="flex-1 overflow-auto min-h-0">
-        <LeadsTab campaignId={campaignId} batchId={batchId} maxAttempts={header?.batch.maxAttempts ?? 1} agentId={header?.campaign.agentId ?? null} />
+        <LeadsTab
+          campaignId={campaignId}
+          batchId={batchId}
+          maxAttempts={header?.batch.maxAttempts ?? 1}
+          segment={segment}
+          segmentLabel={segmentLabel}
+          onClearSegment={() => setSegment("all")}
+        />
       </div>
 
     </div>

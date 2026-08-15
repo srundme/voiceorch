@@ -13,7 +13,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import {
   Handshake, Users, UserPlus, Wallet, TrendingUp, Clock, Mail,
-  Trash2, IndianRupee, ArrowRightLeft, Upload, X, Settings2,
+  Trash2, IndianRupee, ArrowRightLeft, Upload, X, Settings2, Globe, Link2, CheckCircle2,
 } from "lucide-react";
 import { useLocation } from "wouter";
 
@@ -25,6 +25,16 @@ interface PartnerMe {
   baseRateCentsPerMin: number;
   defaultClientRateCentsPerMin: number;
   logoUrl: string | null;
+  loginTitle: string | null;
+  loginSubtitle: string | null;
+  loginUrl: string;
+  slug: string | null;
+  subdomainHost: string | null;
+  subdomainRoot: string;
+  customDomain: string | null;
+  customDomainStatus: "none" | "pending" | "active" | "failed";
+  domainVerifyToken: string | null;
+  cnameTarget: string;
   walletBalanceCents: number;
   clientCount: number;
   pendingInvites: number;
@@ -228,6 +238,12 @@ function ClientsTab({ me }: { me: PartnerMe }) {
   const [, navigate] = useLocation();
   const [rateClient, setRateClient] = useState<PartnerClient | null>(null);
   const [transferClient, setTransferClient] = useState<PartnerClient | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createEmail, setCreateEmail] = useState("");
+  const [createName, setCreateName] = useState("");
+  const [createPassword, setCreatePassword] = useState("");
+  const [createRateText, setCreateRateText] = useState((me.defaultClientRateCentsPerMin / 100).toFixed(2));
+  const [sendCredentials, setSendCredentials] = useState(true);
   const [rateText, setRateText] = useState("");
   const [amountText, setAmountText] = useState("");
 
@@ -242,6 +258,41 @@ function ClientsTab({ me }: { me: PartnerMe }) {
     queryClient.invalidateQueries({ queryKey: ["partner-clients"] });
     queryClient.invalidateQueries({ queryKey: ["partner-me"] });
   };
+
+  const createMutation = useMutation({
+    mutationFn: async () => {
+      const ratePaise = parseRupees(createRateText);
+      return partnerFetch<{
+        client: { clerkId: string; email: string | null };
+        loginUrl: string;
+        emailSent: boolean;
+      }>(getToken, "/api/partner/clients", {
+        method: "POST",
+        body: JSON.stringify({
+          email: createEmail.trim(),
+          password: createPassword,
+          name: createName.trim() || undefined,
+          ...(ratePaise !== null ? { rateCentsPerMin: ratePaise } : {}),
+          sendCredentials,
+        }),
+      });
+    },
+    onSuccess: (resp) => {
+      toast({
+        title: "Client created",
+        description: resp.emailSent
+          ? `Credentials emailed. They sign in at ${resp.loginUrl}`
+          : `Share login URL ${resp.loginUrl} and the password you set.`,
+      });
+      setCreateOpen(false);
+      setCreateEmail("");
+      setCreateName("");
+      setCreatePassword("");
+      setCreateRateText((me.defaultClientRateCentsPerMin / 100).toFixed(2));
+      invalidate();
+    },
+    onError: (err: Error) => toast({ title: "Could not create client", description: err.message, variant: "destructive" }),
+  });
 
   const rateMutation = useMutation({
     mutationFn: async ({ clerkId, rateCentsPerMin }: { clerkId: string; rateCentsPerMin: number }) =>
@@ -271,23 +322,33 @@ function ClientsTab({ me }: { me: PartnerMe }) {
     onError: (err: Error) => toast({ title: "Transfer failed", description: err.message, variant: "destructive" }),
   });
 
+  const createRatePaise = parseRupees(createRateText);
+
   return (
     <div className="rounded-xl border border-border bg-card">
       <div className="px-4 py-3 border-b border-border flex items-center justify-between gap-3">
         <div>
           <h2 className="text-sm font-medium">Your clients</h2>
           <p className="text-[11px] text-muted-foreground mt-0.5">
-            Clients get a full workspace. You set rate, fund their wallet, and assign numbers.
+            Create accounts with email + password. Clients sign in on your branded login page (no Google).
           </p>
         </div>
-        <span className="text-[11px] text-muted-foreground shrink-0">Base {inr(baseRate)}/min</span>
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="text-[11px] text-muted-foreground">Base {inr(baseRate)}/min</span>
+          <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => setCreateOpen(true)}>
+            <UserPlus className="w-3.5 h-3.5" /> Create client
+          </Button>
+        </div>
       </div>
       {isLoading ? (
         <div className="p-4 space-y-2 animate-pulse">{[0, 1, 2].map(i => <div key={i} className="h-10 rounded bg-muted" />)}</div>
       ) : clients.length === 0 ? (
         <div className="px-4 py-10 text-center">
           <Users className="w-8 h-8 text-muted-foreground/40 mx-auto" />
-          <p className="text-sm text-muted-foreground mt-2">No clients yet. Send an invite from the Invites tab.</p>
+          <p className="text-sm text-muted-foreground mt-2">No clients yet. Create one with email and password.</p>
+          <Button size="sm" className="mt-3 gap-1.5" onClick={() => setCreateOpen(true)}>
+            <UserPlus className="w-3.5 h-3.5" /> Create client
+          </Button>
         </div>
       ) : (
         <div className="overflow-x-auto">
@@ -398,6 +459,61 @@ function ClientsTab({ me }: { me: PartnerMe }) {
                 if (transferClient && paise) transferMutation.mutate({ clerkId: transferClient.clerkId, amountCents: paise });
               }}>
               {transferMutation.isPending ? "Transferring…" : "Transfer"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Create client account</DialogTitle>
+            <DialogDescription>
+              Sets email + password. They sign in at{" "}
+              <a className="underline underline-offset-2" href={me.loginUrl} target="_blank" rel="noreferrer">{me.loginUrl}</a>
+              {" "}— Google is disabled on your portal.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="create-email">Email</Label>
+              <Input id="create-email" type="email" value={createEmail} onChange={e => setCreateEmail(e.target.value)} placeholder="client@company.com" />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="create-name">Name (optional)</Label>
+              <Input id="create-name" value={createName} onChange={e => setCreateName(e.target.value)} placeholder="Acme Ops" />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="create-password">Temporary password</Label>
+              <Input id="create-password" type="text" value={createPassword} onChange={e => setCreatePassword(e.target.value)} placeholder="Min. 8 characters" />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="create-rate">Rate (₹ per minute)</Label>
+              <Input id="create-rate" inputMode="decimal" value={createRateText} onChange={e => setCreateRateText(e.target.value)} />
+              {createRatePaise !== null && createRatePaise >= me.baseRateCentsPerMin ? (
+                <p className="text-[11px] text-muted-foreground">You earn {inr(createRatePaise - me.baseRateCentsPerMin)}/min at this rate.</p>
+              ) : (
+                <p className="text-[11px] text-amber-500">Must be at least {inr(me.baseRateCentsPerMin)}/min.</p>
+              )}
+            </div>
+            <label className="flex items-center gap-2 text-sm text-muted-foreground">
+              <input type="checkbox" checked={sendCredentials} onChange={e => setSendCredentials(e.target.checked)} className="rounded border-border" />
+              Email credentials to the client
+            </label>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
+            <Button
+              disabled={
+                createMutation.isPending
+                || !createEmail.includes("@")
+                || createPassword.length < 8
+                || createRatePaise === null
+                || createRatePaise < me.baseRateCentsPerMin
+              }
+              onClick={() => createMutation.mutate()}
+            >
+              {createMutation.isPending ? "Creating…" : "Create client"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -547,8 +663,12 @@ function SettingsTab({ me }: { me: PartnerMe }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [companyName, setCompanyName] = useState(me.companyName);
+  const [loginTitle, setLoginTitle] = useState(me.loginTitle ?? "");
+  const [loginSubtitle, setLoginSubtitle] = useState(me.loginSubtitle ?? "");
   const [defaultRateText, setDefaultRateText] = useState((me.defaultClientRateCentsPerMin / 100).toFixed(2));
   const [uploading, setUploading] = useState(false);
+  const [slugDraft, setSlugDraft] = useState(me.slug ?? "");
+  const [customDraft, setCustomDraft] = useState(me.customDomain ?? "");
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["partner-me"] });
@@ -562,12 +682,67 @@ function SettingsTab({ me }: { me: PartnerMe }) {
         method: "PATCH",
         body: JSON.stringify({
           companyName: companyName.trim(),
+          loginTitle: loginTitle.trim() || null,
+          loginSubtitle: loginSubtitle.trim() || null,
           ...(paise !== null ? { defaultClientRateCentsPerMin: paise } : {}),
         }),
       });
     },
     onSuccess: () => { toast({ title: "Settings saved" }); invalidate(); },
     onError: (err: Error) => toast({ title: "Could not save", description: err.message, variant: "destructive" }),
+  });
+
+  const slugMutation = useMutation({
+    mutationFn: () =>
+      partnerFetch<{ url: string }>(getToken, "/api/partner/domain/slug", {
+        method: "PUT",
+        body: JSON.stringify({ slug: slugDraft.trim() }),
+      }),
+    onSuccess: (data) => {
+      toast({ title: "Subdomain saved", description: data.url });
+      invalidate();
+    },
+    onError: (err: Error) => toast({ title: "Could not save subdomain", description: err.message, variant: "destructive" }),
+  });
+
+  const clearSlugMutation = useMutation({
+    mutationFn: () => partnerFetch(getToken, "/api/partner/domain/slug", { method: "DELETE" }),
+    onSuccess: () => { toast({ title: "Subdomain removed" }); setSlugDraft(""); invalidate(); },
+    onError: (err: Error) => toast({ title: "Could not remove subdomain", description: err.message, variant: "destructive" }),
+  });
+
+  const customMutation = useMutation({
+    mutationFn: () =>
+      partnerFetch<{
+        customDomain: string;
+        txtHost: string;
+        txtValue: string;
+        cnameTarget: string;
+      }>(getToken, "/api/partner/domain/custom", {
+        method: "PUT",
+        body: JSON.stringify({ domain: customDraft.trim() }),
+      }),
+    onSuccess: () => {
+      toast({ title: "Custom domain saved", description: "Add the DNS records below, then click Verify." });
+      invalidate();
+    },
+    onError: (err: Error) => toast({ title: "Could not save domain", description: err.message, variant: "destructive" }),
+  });
+
+  const verifyMutation = useMutation({
+    mutationFn: () =>
+      partnerFetch<{ url: string }>(getToken, "/api/partner/domain/custom/verify", { method: "POST" }),
+    onSuccess: (data) => {
+      toast({ title: "Domain verified", description: data.url });
+      invalidate();
+    },
+    onError: (err: Error) => toast({ title: "Verification failed", description: err.message, variant: "destructive" }),
+  });
+
+  const clearCustomMutation = useMutation({
+    mutationFn: () => partnerFetch(getToken, "/api/partner/domain/custom", { method: "DELETE" }),
+    onSuccess: () => { toast({ title: "Custom domain removed" }); setCustomDraft(""); invalidate(); },
+    onError: (err: Error) => toast({ title: "Could not remove domain", description: err.message, variant: "destructive" }),
   });
 
   async function onLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -610,6 +785,17 @@ function SettingsTab({ me }: { me: PartnerMe }) {
   });
 
   const ratePaise = parseRupees(defaultRateText);
+  const subdomainPreview = slugDraft.trim()
+    ? `${slugDraft.trim().toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-|-$/g, "")}.${me.subdomainRoot}`
+    : null;
+  const statusBadge =
+    me.customDomainStatus === "active"
+      ? { label: "Active", cls: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" }
+      : me.customDomainStatus === "pending"
+        ? { label: "Pending DNS", cls: "bg-amber-500/10 text-amber-600 border-amber-500/20" }
+        : me.customDomainStatus === "failed"
+          ? { label: "Failed", cls: "bg-red-500/10 text-red-600 border-red-500/20" }
+          : null;
 
   return (
     <div className="space-y-4 max-w-lg">
@@ -644,6 +830,146 @@ function SettingsTab({ me }: { me: PartnerMe }) {
             )}
           </div>
           <p className="text-[11px] text-muted-foreground">PNG, JPEG or WebP, up to 512KB.</p>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+        <h2 className="text-sm font-medium">Login page</h2>
+        <p className="text-[11px] text-muted-foreground -mt-1">
+          One universal gateway for your clients. They use email + password only — Google is hidden on your domain.
+        </p>
+        <div className="space-y-1.5">
+          <Label htmlFor="login-title">Headline</Label>
+          <Input
+            id="login-title"
+            value={loginTitle}
+            onChange={e => setLoginTitle(e.target.value)}
+            placeholder={`Sign in to ${companyName.trim() || "your company"}`}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="login-subtitle">Supporting text</Label>
+          <Input
+            id="login-subtitle"
+            value={loginSubtitle}
+            onChange={e => setLoginSubtitle(e.target.value)}
+            placeholder={`Use the email and password provided by ${companyName.trim() || "your company"}.`}
+          />
+        </div>
+        <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+          <Link2 className="h-3 w-3" />
+          Client login URL:{" "}
+          <a className="underline underline-offset-2" href={me.loginUrl} target="_blank" rel="noreferrer">
+            {me.loginUrl}
+          </a>
+        </p>
+      </div>
+
+      <div className="rounded-xl border border-border bg-card p-4 space-y-4">
+        <div className="flex items-center gap-2">
+          <Globe className="h-4 w-4 text-muted-foreground" />
+          <h2 className="text-sm font-medium">Your domain</h2>
+        </div>
+        <p className="text-[11px] text-muted-foreground -mt-2">
+          Give clients a branded login URL. Start with a SnapServe subdomain; add your own domain when DNS is ready.
+        </p>
+
+        <div className="space-y-2">
+          <Label htmlFor="slug">SnapServe subdomain</Label>
+          <div className="flex gap-2">
+            <Input
+              id="slug"
+              placeholder="acme"
+              value={slugDraft}
+              onChange={e => setSlugDraft(e.target.value.toLowerCase())}
+              className="font-mono text-sm"
+            />
+            <Button
+              size="sm"
+              className="shrink-0"
+              disabled={slugMutation.isPending || slugDraft.trim().length < 2}
+              onClick={() => slugMutation.mutate()}
+            >
+              {slugMutation.isPending ? "Saving…" : "Save"}
+            </Button>
+          </div>
+          {subdomainPreview && (
+            <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+              <Link2 className="h-3 w-3" />
+              <a className="underline underline-offset-2" href={`https://${subdomainPreview}`} target="_blank" rel="noreferrer">
+                https://{subdomainPreview}
+              </a>
+            </p>
+          )}
+          {me.slug && (
+            <Button size="sm" variant="ghost" className="h-7 text-xs text-muted-foreground px-0"
+              disabled={clearSlugMutation.isPending}
+              onClick={() => clearSlugMutation.mutate()}>
+              Remove subdomain
+            </Button>
+          )}
+        </div>
+
+        <div className="border-t border-border/60 pt-3 space-y-2">
+          <div className="flex items-center gap-2">
+            <Label htmlFor="custom-domain">Custom domain</Label>
+            {statusBadge && (
+              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${statusBadge.cls}`}>
+                {statusBadge.label}
+              </span>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <Input
+              id="custom-domain"
+              placeholder="app.yourbrand.com"
+              value={customDraft}
+              onChange={e => setCustomDraft(e.target.value)}
+              className="font-mono text-sm"
+            />
+            <Button
+              size="sm"
+              className="shrink-0"
+              disabled={customMutation.isPending || customDraft.trim().length < 4}
+              onClick={() => customMutation.mutate()}
+            >
+              {customMutation.isPending ? "Saving…" : "Save"}
+            </Button>
+          </div>
+          {(me.customDomainStatus === "pending" || me.customDomainStatus === "failed" || me.customDomainStatus === "active") && me.customDomain && (
+            <div className="rounded-lg border border-border/60 bg-muted/20 p-3 space-y-2 text-[11px] text-muted-foreground">
+              <p className="font-medium text-foreground/80">DNS setup</p>
+              <p>1. CNAME <code className="text-foreground">{me.customDomain}</code> → <code className="text-foreground">{me.cnameTarget}</code></p>
+              {me.domainVerifyToken && (
+                <p>
+                  2. Or TXT <code className="text-foreground">_snapserve-verify.{me.customDomain}</code> ={" "}
+                  <code className="text-foreground">snapserve-verify={me.domainVerifyToken}</code>
+                </p>
+              )}
+              <div className="flex flex-wrap gap-2 pt-1">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs gap-1"
+                  disabled={verifyMutation.isPending || me.customDomainStatus === "active"}
+                  onClick={() => verifyMutation.mutate()}
+                >
+                  {me.customDomainStatus === "active"
+                    ? <><CheckCircle2 className="h-3 w-3" /> Verified</>
+                    : verifyMutation.isPending ? "Checking DNS…" : "Verify DNS"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 text-xs text-muted-foreground"
+                  disabled={clearCustomMutation.isPending}
+                  onClick={() => clearCustomMutation.mutate()}
+                >
+                  Remove
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

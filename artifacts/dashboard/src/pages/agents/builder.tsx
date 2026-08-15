@@ -1096,24 +1096,34 @@ function OverviewTab({
               <FormField control={form.control} name="llmProvider" render={({ field }) => (
                 <FormItem className="space-y-1">
                   <FormLabel className="text-[10px] text-muted-foreground">Provider</FormLabel>
+                  {isGeminiLive ? (
+                    <p className="text-xs font-medium pt-1.5">Gemini Live (native audio)</p>
+                  ) : (
                   <SmallSelect value={field.value} onChange={(v) => {
                     field.onChange(v);
                     form.setValue("llmModel", "");
                     form.setValue("voiceStack", "classic");
                   }}
                     options={LLM_PROVIDERS.map(p => ({ value: p.value, label: p.label }))} />
+                  )}
                 </FormItem>
               )} />
-              {llmOptions.length > 0 && (
+              {isGeminiLive ? (
+                <div className="space-y-1">
+                  <p className="text-[10px] text-muted-foreground">Model</p>
+                  <p className="text-xs font-medium pt-1.5">{geminiLiveModelLabel()}</p>
+                </div>
+              ) : llmOptions.filter((m: { value: string }) => !isGeminiLiveLlmModel(m.value)).length > 0 && (
                 <FormField control={form.control} name="llmModel" render={({ field }) => (
                   <FormItem className="space-y-1">
                     <FormLabel className="text-[10px] text-muted-foreground">Model</FormLabel>
                     <SmallSelect value={field.value ?? ""} onChange={(v) => {
                       field.onChange(v);
-                      form.setValue("voiceStack", voiceStackForLlmModel(v));
-                      if (isGeminiLiveLlmModel(v)) form.setValue("llmProvider", "google");
+                      form.setValue("voiceStack", "classic");
                     }}
-                      options={llmOptions.map((m: any) => ({ value: m.value, label: m.label }))} placeholder="Default" />
+                      options={llmOptions
+                        .filter((m: { value: string }) => !isGeminiLiveLlmModel(m.value))
+                        .map((m: { value: string; label: string }) => ({ value: m.value, label: m.label }))} placeholder="Default" />
                     <FormMessage className="text-[10px]" />
                   </FormItem>
                 )} />
@@ -1225,7 +1235,7 @@ function OverviewTab({
                   </div>
                   {ttsProvider === "sarvam" && (
                     <p className="text-[10px] text-muted-foreground/90 leading-relaxed">
-                      Default SnapServe stack · Powered by Sarvam
+                      Default SnapServe stack
                     </p>
                   )}
                   {ttsVoiceOpts.length > 0 && (
@@ -2040,7 +2050,7 @@ function VoiceTab({ form }: { form: any }) {
                   </div>
                   {ttsProvider === "sarvam" && (
                     <p className="text-[10px] text-muted-foreground leading-relaxed -mt-0.5 mb-1">
-                      Default SnapServe stack · Powered by Sarvam
+                      Default SnapServe stack
                     </p>
                   )}
                   <Select
@@ -6590,7 +6600,7 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
     resolver: zodResolver(agentFormSchema),
     defaultValues: {
       name: "", description: "", asrProvider: "sarvam", asrModel: "saaras:v3",
-      llmProvider: "sarvam", llmModel: "sarvam-105b", ttsProvider: "cartesia",
+      llmProvider: "sarvam", llmModel: "gemma4", ttsProvider: "cartesia",
       ttsVoice: "c45bc5ec-dc68-4feb-8829-6ac1e9f4f478", ttsModel: "sonic-3.5", telephonyProvider: "vobiz",
       systemPrompt: "", temperature: 0.40, maxDuration: 480,
       greetingMessage: "Hello", firstSpeaker: "assistant", endCallPhrases: "", silenceTimeoutSeconds: 30,
@@ -7559,8 +7569,8 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
     tools: [
       { type: "end_call", name: "end_call", description: "End the call when the conversation is complete." },
     ],
-    llmProvider: "google",
-    llmModel: "gemini-3.6-flash",
+    llmProvider: "sarvam",
+    llmModel: "gemma4",
     ttsProvider: "cartesia",
     ttsModel: "sonic-3.5",
     ttsVoice: "c45bc5ec-dc68-4feb-8829-6ac1e9f4f478",

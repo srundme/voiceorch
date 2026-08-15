@@ -190,7 +190,8 @@ function PhoneCell({ number }: { number?: string | null }) {
     <Tooltip>
       <TooltipTrigger asChild>
         <button
-          onClick={handleCopy}
+          // The whole row opens the call, so copying must not also navigate.
+          onClick={(e) => { e.stopPropagation(); handleCopy(); }}
           className="font-mono text-[11px] text-foreground/70 max-w-full truncate block hover:text-foreground transition-colors text-left"
         >
           {number}
@@ -794,14 +795,13 @@ export default function CallsList() {
                   <TableHead className="w-[104px] py-3 px-4 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground/70">Date & Time</TableHead>
                   <TableHead className="w-[68px] py-3 px-4 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground/70">Call ID</TableHead>
                   <TableHead className="w-[160px] py-3 px-4 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground/70">Agent</TableHead>
-                  <TableHead className="hidden md:table-cell py-3 px-4 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground/70">From</TableHead>
-                  <TableHead className="hidden md:table-cell py-3 px-4 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground/70">To</TableHead>
+                  <TableHead className="hidden md:table-cell w-[150px] py-3 px-4 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground/70">From</TableHead>
+                  <TableHead className="hidden md:table-cell w-[150px] py-3 px-4 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground/70">To</TableHead>
                   <TableHead className="w-[118px] py-3 px-4 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground/70 text-center">Call Type</TableHead>
                   <TableHead className="w-[112px] py-3 px-4 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground/70 text-center">Status</TableHead>
                   <TableHead className="hidden lg:table-cell min-w-[120px] py-3 px-4 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground/70">Disposition</TableHead>
                   <TableHead className="w-[72px] py-3 px-4 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground/70 text-center">Duration</TableHead>
                   <TableHead className="w-[80px] py-3 px-4 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground/70 text-right">Cost</TableHead>
-                  <TableHead className="w-[64px] py-3 px-4 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground/70 text-center">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -818,7 +818,6 @@ export default function CallsList() {
                       <TableCell className="hidden lg:table-cell px-4 py-0"><Skeleton className="h-3 w-16" /></TableCell>
                       <TableCell className="px-4 py-0"><Skeleton className="h-3 w-10 mx-auto" /></TableCell>
                       <TableCell className="px-4 py-0"><Skeleton className="h-3 w-10 ml-auto" /></TableCell>
-                      <TableCell className="px-4 py-0"><Skeleton className="h-6 w-6 mx-auto rounded" /></TableCell>
                     </TableRow>
                   ))
                 ) : pagedCalls.length > 0 ? (
@@ -826,7 +825,20 @@ export default function CallsList() {
                     const costCents = (call as any).costCents ?? 0;
 
                     return (
-                      <TableRow key={call.id} className="group cursor-default h-16 border-b border-border/60 last:border-0 hover:bg-elevated/70 transition-colors">
+                      <TableRow
+                        key={call.id}
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`Open call ${getExecutionId(call)}`}
+                        onClick={() => setSelectedCallId(call.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            setSelectedCallId(call.id);
+                          }
+                        }}
+                        className="group cursor-pointer h-16 border-b border-border/60 last:border-0 hover:bg-elevated/70 transition-colors focus:outline-none focus-visible:bg-elevated/70 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
+                      >
                         <TableCell className="whitespace-nowrap px-4 py-0 align-middle">
                           <div className="text-[11px] text-foreground/80 font-medium">
                             {format(parseISO(call.createdAt), "MMM d, yyyy")}
@@ -848,10 +860,10 @@ export default function CallsList() {
                             </span>
                           </div>
                         </TableCell>
-                        <TableCell className="hidden md:table-cell px-4 py-0 align-middle max-w-0">
+                        <TableCell className="hidden md:table-cell px-4 py-0 align-middle w-[150px]">
                           <PhoneCell number={call.fromNumber} />
                         </TableCell>
-                        <TableCell className="hidden md:table-cell px-4 py-0 align-middle max-w-0">
+                        <TableCell className="hidden md:table-cell px-4 py-0 align-middle w-[150px]">
                           <PhoneCell number={call.toNumber} />
                         </TableCell>
                         <TableCell className="px-4 py-0 align-middle text-center">
@@ -916,16 +928,6 @@ export default function CallsList() {
                               </span>
                             )}
                           </div>
-                        </TableCell>
-                        <TableCell className="px-4 py-0 align-middle text-center">
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-8 w-8 opacity-100 transition-opacity"
-                            onClick={() => setSelectedCallId(call.id)}
-                          >
-                            <Eye className="h-3.5 w-3.5 text-muted-foreground/50" />
-                          </Button>
                         </TableCell>
                       </TableRow>
                     );

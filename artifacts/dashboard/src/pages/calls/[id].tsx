@@ -158,9 +158,9 @@ function ToolEventRow({ event }: { event: ToolEvent }) {
               <span className="text-[10px] font-mono text-muted-foreground/40">{event.durationMs}ms</span>
             )}
             <span className={`ml-auto text-[10px] font-semibold px-1.5 py-0.5 rounded border ${
-              event.status === "success" ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" :
-              event.status === "error"   ? "bg-red-500/10 text-red-400 border-red-500/20" :
-                                          "bg-yellow-500/10 text-yellow-400 border-yellow-500/20"
+              event.status === "success" ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20" :
+              event.status === "error"   ? "bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/20" :
+                                          "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border-yellow-500/20"
             }`}>
               {event.status}
             </span>
@@ -169,7 +169,7 @@ function ToolEventRow({ event }: { event: ToolEvent }) {
             <p className="text-xs text-muted-foreground/60 truncate font-mono">{event.result}</p>
           )}
           {!expanded && event.errorMessage && (
-            <p className="text-xs text-red-400/70 truncate font-mono">{event.errorMessage}</p>
+            <p className="text-xs text-red-700 dark:text-red-400/70 truncate font-mono">{event.errorMessage}</p>
           )}
         </div>
         {isExpandable && (
@@ -196,8 +196,8 @@ function ToolEventRow({ event }: { event: ToolEvent }) {
           )}
           {event.errorMessage && (
             <div>
-              <p className="text-[10px] uppercase tracking-wider text-red-400/60 mb-1">Error</p>
-              <pre className="text-[11px] font-mono text-red-400/70 bg-red-500/5 border border-red-500/15 rounded p-2 whitespace-pre-wrap">
+              <p className="text-[10px] uppercase tracking-wider text-red-700 dark:text-red-400/60 mb-1">Error</p>
+              <pre className="text-[11px] font-mono text-red-700 dark:text-red-400/70 bg-red-500/5 border border-red-500/15 rounded p-2 whitespace-pre-wrap">
                 {event.errorMessage}
               </pre>
             </div>
@@ -330,21 +330,24 @@ interface ExecutionLogEvent {
   metadata: Record<string, unknown> | null;
 }
 
+// The -300/-400 text tones only carry contrast against a dark surface; on the
+// light theme they wash out against the tinted background. Pair every badge
+// with a darker light-mode tone.
 const COMPONENT_COLORS: Record<string, string> = {
-  Agent:            "bg-slate-500/20 text-slate-300 border-slate-500/30",
-  STT:              "bg-violet-500/20 text-violet-300 border-violet-500/30",
-  LLM:              "bg-amber-500/20 text-amber-300 border-amber-500/30",
-  TTS:              "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
-  Tool:             "bg-orange-500/20 text-orange-300 border-orange-500/30",
-  Memory:           "bg-sky-500/20 text-sky-300 border-sky-500/30",
-  Knowledge:        "bg-teal-500/20 text-teal-300 border-teal-500/30",
-  VariableResolver: "bg-pink-500/20 text-pink-300 border-pink-500/30",
-  Webhook:          "bg-rose-500/20 text-rose-300 border-rose-500/30",
+  Agent:            "bg-slate-500/15   text-slate-700   dark:text-slate-300   border-slate-500/30",
+  STT:              "bg-violet-500/15  text-violet-700  dark:text-violet-300  border-violet-500/30",
+  LLM:              "bg-amber-500/15   text-amber-700   dark:text-amber-300   border-amber-500/30",
+  TTS:              "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30",
+  Tool:             "bg-orange-500/15  text-orange-700  dark:text-orange-300  border-orange-500/30",
+  Memory:           "bg-sky-500/15     text-sky-700     dark:text-sky-300     border-sky-500/30",
+  Knowledge:        "bg-teal-500/15    text-teal-700    dark:text-teal-300    border-teal-500/30",
+  VariableResolver: "bg-pink-500/15    text-pink-700    dark:text-pink-300    border-pink-500/30",
+  Webhook:          "bg-rose-500/15    text-rose-700    dark:text-rose-300    border-rose-500/30",
 };
 const DIRECTION_COLORS: Record<string, string> = {
-  request:  "bg-blue-500/15 text-blue-300 border-blue-500/25",
-  response: "bg-green-500/15 text-green-300 border-green-500/25",
-  system:   "bg-gray-500/15 text-gray-400 border-gray-500/25",
+  request:  "bg-blue-500/15  text-blue-700  dark:text-blue-300  border-blue-500/25",
+  response: "bg-green-500/15 text-green-700 dark:text-green-300 border-green-500/25",
+  system:   "bg-gray-500/15  text-gray-700  dark:text-gray-400  border-gray-500/25",
 };
 
 const PREVIEW_MAX = 160;
@@ -531,11 +534,11 @@ function JsonViewer({ data }: { data: Record<string, unknown> }) {
 const LOG_GRID_COLUMNS = "120px 46px minmax(0,1fr) 80px 110px 90px 64px 56px 16px";
 
 const OUTCOME_STYLE: Record<string, { dot: string; text: string; ring: string }> = {
-  Completed:         { dot: "bg-emerald-400", text: "text-emerald-300", ring: "border-emerald-500/30 bg-emerald-500/[0.07]" },
-  Transferred:       { dot: "bg-sky-400",     text: "text-sky-300",     ring: "border-sky-500/30 bg-sky-500/[0.07]" },
-  "Call Terminated": { dot: "bg-slate-400",   text: "text-slate-300",   ring: "border-slate-500/30 bg-slate-500/[0.07]" },
-  Timeout:           { dot: "bg-amber-400",   text: "text-amber-300",   ring: "border-amber-500/30 bg-amber-500/[0.07]" },
-  Error:             { dot: "bg-red-400",     text: "text-red-300",     ring: "border-red-500/30 bg-red-500/[0.07]" },
+  Completed:         { dot: "bg-emerald-400", text: "text-emerald-700 dark:text-emerald-300", ring: "border-emerald-500/30 bg-emerald-500/[0.07]" },
+  Transferred:       { dot: "bg-sky-400",     text: "text-sky-700 dark:text-sky-300",     ring: "border-sky-500/30 bg-sky-500/[0.07]" },
+  "Call Terminated": { dot: "bg-slate-400",   text: "text-slate-700 dark:text-slate-300",   ring: "border-slate-500/30 bg-slate-500/[0.07]" },
+  Timeout:           { dot: "bg-amber-400",   text: "text-amber-700 dark:text-amber-300",   ring: "border-amber-500/30 bg-amber-500/[0.07]" },
+  Error:             { dot: "bg-red-400",     text: "text-red-700 dark:text-red-300",     ring: "border-red-500/30 bg-red-500/[0.07]" },
 };
 
 function CallEndedCard({ summary }: { summary: CallEndedSummary }) {
@@ -562,7 +565,7 @@ function CallEndedCard({ summary }: { summary: CallEndedSummary }) {
         <span className={`h-2 w-2 rounded-full ${st.dot}`} />
         <span className={`text-sm font-semibold ${st.text}`}>Call Ended — {summary.reasonLabel}</span>
         {!summary.expected && (
-          <span className="ml-auto inline-flex items-center rounded bg-red-500/20 text-red-300 border border-red-500/30 text-[9px] font-bold uppercase px-1.5 py-0.5">
+          <span className="ml-auto inline-flex items-center rounded bg-red-500/20 text-red-700 dark:text-red-300 border border-red-500/30 text-[9px] font-bold uppercase px-1.5 py-0.5">
             Unexpected
           </span>
         )}
@@ -578,18 +581,18 @@ function CallEndedCard({ summary }: { summary: CallEndedSummary }) {
       {(summary.errorMessage || summary.retryAttempted || summary.fallbackAttempted || summary.recoverySucceeded != null) && (
         <div className="flex flex-wrap items-center gap-1.5 mt-2.5 pt-2.5 border-t border-border">
           {summary.errorMessage && (
-            <span className="inline-flex items-center rounded bg-red-500/15 text-red-300/90 border border-red-500/25 text-[10px] font-medium px-1.5 py-0.5">
+            <span className="inline-flex items-center rounded bg-red-500/15 text-red-700 dark:text-red-300/90 border border-red-500/25 text-[10px] font-medium px-1.5 py-0.5">
               {summary.errorCode != null ? `[${summary.errorCode}] ` : ""}{summary.errorMessage}
             </span>
           )}
           {summary.retryAttempted && (
-            <span className="inline-flex items-center rounded bg-orange-500/15 text-orange-300/80 border border-orange-500/25 text-[10px] font-medium px-1.5 py-0.5">↻ retry attempted</span>
+            <span className="inline-flex items-center rounded bg-orange-500/15 text-orange-700 dark:text-orange-300/80 border border-orange-500/25 text-[10px] font-medium px-1.5 py-0.5">↻ retry attempted</span>
           )}
           {summary.fallbackAttempted && (
-            <span className="inline-flex items-center rounded bg-amber-500/15 text-amber-300/80 border border-amber-500/25 text-[10px] font-medium px-1.5 py-0.5">⤳ fallback attempted</span>
+            <span className="inline-flex items-center rounded bg-amber-500/15 text-amber-700 dark:text-amber-300/80 border border-amber-500/25 text-[10px] font-medium px-1.5 py-0.5">⤳ fallback attempted</span>
           )}
           {summary.recoverySucceeded != null && (
-            <span className={`inline-flex items-center rounded text-[10px] font-medium px-1.5 py-0.5 border ${summary.recoverySucceeded ? "bg-emerald-500/15 text-emerald-300/80 border-emerald-500/25" : "bg-red-500/15 text-red-300/80 border-red-500/25"}`}>
+            <span className={`inline-flex items-center rounded text-[10px] font-medium px-1.5 py-0.5 border ${summary.recoverySucceeded ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300/80 border-emerald-500/25" : "bg-red-500/15 text-red-700 dark:text-red-300/80 border-red-500/25"}`}>
               {summary.recoverySucceeded ? <><CheckCircle2 className="h-3 w-3 inline mr-0.5" />recovered</> : <><XCircle className="h-3 w-3 inline mr-0.5" />recovery failed</>}
             </span>
           )}
@@ -598,16 +601,16 @@ function CallEndedCard({ summary }: { summary: CallEndedSummary }) {
       {hasHealth && (
         <div className="flex flex-wrap items-center gap-1.5 mt-2.5 pt-2.5 border-t border-border">
           {errorCount > 0 && (
-            <span className="inline-flex items-center rounded bg-red-500/15 text-red-300/90 border border-red-500/25 text-[10px] font-medium px-1.5 py-0.5">{errorCount} error{errorCount === 1 ? "" : "s"}</span>
+            <span className="inline-flex items-center rounded bg-red-500/15 text-red-700 dark:text-red-300/90 border border-red-500/25 text-[10px] font-medium px-1.5 py-0.5">{errorCount} error{errorCount === 1 ? "" : "s"}</span>
           )}
           {warningCount > 0 && (
-            <span className="inline-flex items-center rounded bg-yellow-500/15 text-yellow-300/90 border border-yellow-500/25 text-[10px] font-medium px-1.5 py-0.5">{warningCount} warning{warningCount === 1 ? "" : "s"}</span>
+            <span className="inline-flex items-center rounded bg-yellow-500/15 text-yellow-700 dark:text-yellow-300/90 border border-yellow-500/25 text-[10px] font-medium px-1.5 py-0.5">{warningCount} warning{warningCount === 1 ? "" : "s"}</span>
           )}
           {retryCount > 0 && (
-            <span className="inline-flex items-center rounded bg-orange-500/15 text-orange-300/80 border border-orange-500/25 text-[10px] font-medium px-1.5 py-0.5">↻ {retryCount} retr{retryCount === 1 ? "y" : "ies"}</span>
+            <span className="inline-flex items-center rounded bg-orange-500/15 text-orange-700 dark:text-orange-300/80 border border-orange-500/25 text-[10px] font-medium px-1.5 py-0.5">↻ {retryCount} retr{retryCount === 1 ? "y" : "ies"}</span>
           )}
           {fallbackCount > 0 && (
-            <span className="inline-flex items-center rounded bg-amber-500/15 text-amber-300/80 border border-amber-500/25 text-[10px] font-medium px-1.5 py-0.5">⤳ {fallbackCount} fallback{fallbackCount === 1 ? "" : "s"}</span>
+            <span className="inline-flex items-center rounded bg-amber-500/15 text-amber-700 dark:text-amber-300/80 border border-amber-500/25 text-[10px] font-medium px-1.5 py-0.5">⤳ {fallbackCount} fallback{fallbackCount === 1 ? "" : "s"}</span>
           )}
         </div>
       )}
@@ -633,9 +636,11 @@ function CallEndedCard({ summary }: { summary: CallEndedSummary }) {
 
 function ExecLogRow({ entry }: { entry: ExecutionLogEvent }) {
   const [expanded, setExpanded] = useState(false);
-  const ts = new Date(entry.ts).toISOString().replace("T", " ").substring(11, 23);
-  const compCls = COMPONENT_COLORS[entry.component] ?? "bg-gray-500/15 text-gray-400 border-gray-500/25";
-  const dirCls  = DIRECTION_COLORS[entry.direction] ?? "bg-gray-500/15 text-gray-400 border-gray-500/25";
+  // Local time, matching the header and Call Details panel. toISOString() here
+  // rendered UTC, so an IST call started at 18:33 logged its first event at 13:03.
+  const ts = format(parseISO(entry.ts), "HH:mm:ss.SSS");
+  const compCls = COMPONENT_COLORS[entry.component] ?? "bg-gray-500/15 text-gray-700 dark:text-gray-400 border-gray-500/25";
+  const dirCls  = DIRECTION_COLORS[entry.direction] ?? "bg-gray-500/15 text-gray-700 dark:text-gray-400 border-gray-500/25";
   const hasPayload = !!(entry.requestPayload || entry.responsePayload || entry.metadata);
   const en = getEnrichment(entry);
   const durMs = en.durationMs ?? entry.latencyMs ?? null;
@@ -647,7 +652,7 @@ function ExecLogRow({ entry }: { entry: ExecutionLogEvent }) {
         onClick={() => { if (hasPayload) setExpanded(e => !e); }}
       >
         <span className="font-mono text-muted-foreground/70 tabular-nums pt-0.5">{ts}</span>
-        <span className="font-mono text-cyan-300/50 tabular-nums text-center pt-0.5">
+        <span className="font-mono text-cyan-700 dark:text-cyan-300/50 tabular-nums text-center pt-0.5">
           {en.turnNumber != null ? `#${en.turnNumber}` : <span className="text-muted-foreground/40">—</span>}
         </span>
         <div className="min-w-0">
@@ -655,17 +660,17 @@ function ExecLogRow({ entry }: { entry: ExecutionLogEvent }) {
           {(en.warningFlags?.length || en.retryCount || en.errorMessage) && (
             <div className="flex flex-wrap items-center gap-1 mt-1">
               {en.warningFlags?.map(f => (
-                <span key={f} className="inline-flex items-center gap-0.5 rounded bg-amber-500/15 text-amber-300/80 border border-amber-500/25 text-[9px] font-medium px-1 py-px">
+                <span key={f} className="inline-flex items-center gap-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300/80 border border-amber-500/25 text-[9px] font-medium px-1 py-px">
                   <AlertTriangle className="h-3 w-3 shrink-0" />{f}
                 </span>
               ))}
               {en.retryCount != null && en.retryCount > 0 && (
-                <span className="inline-flex items-center rounded bg-orange-500/15 text-orange-300/80 border border-orange-500/25 text-[9px] font-medium px-1 py-px">
+                <span className="inline-flex items-center rounded bg-orange-500/15 text-orange-700 dark:text-orange-300/80 border border-orange-500/25 text-[9px] font-medium px-1 py-px">
                   ↻ retry {en.retryCount}
                 </span>
               )}
               {en.errorMessage && (
-                <span className="inline-flex items-center rounded bg-red-500/15 text-red-300/90 border border-red-500/25 text-[9px] font-medium px-1 py-px max-w-full truncate">
+                <span className="inline-flex items-center rounded bg-red-500/15 text-red-700 dark:text-red-300/90 border border-red-500/25 text-[9px] font-medium px-1 py-px max-w-full truncate">
                   {en.errorCode != null ? `[${en.errorCode}] ` : ""}{en.errorMessage}
                 </span>
               )}
@@ -683,8 +688,8 @@ function ExecLogRow({ entry }: { entry: ExecutionLogEvent }) {
           {durMs != null ? (durMs >= 1000 ? `${(durMs / 1000).toFixed(1)}s` : `${durMs}ms`) : <span className="text-muted-foreground/40">—</span>}
         </span>
         <span className={`inline-flex items-center justify-center text-[9px] font-bold uppercase rounded px-1 py-0.5 mt-0.5 ${
-          entry.status === "error" ? "bg-red-500/20 text-red-400" :
-          entry.status === "success" ? "bg-emerald-500/15 text-emerald-400" :
+          entry.status === "error" ? "bg-red-500/20 text-red-700 dark:text-red-400" :
+          entry.status === "success" ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" :
           "bg-muted text-muted-foreground/60"
         }`}>
           {entry.status === "error" ? "ERR" : entry.status === "success" ? "OK" : "—"}
@@ -1508,7 +1513,7 @@ export function CallDetailContent({
           </Card>
           <Card className="border-0 shadow-none bg-transparent">
             <CardContent className="p-2.5">
-              <p className="text-[9px] text-muted-foreground/50 uppercase tracking-wider">Cost</p>
+              <p className="text-[9px] text-muted-foreground/50 uppercase tracking-wider">Platform fee</p>
               <p className="text-xs font-mono text-foreground/70">
                 {costCents > 0 ? `₹${(costCents / 100).toFixed(2)}` : "—"}
               </p>

@@ -34,6 +34,22 @@ export const partnersTable = pgTable("partners", {
   logoMime: text("logo_mime"),
   /** Unguessable capability token for the public logo URL. */
   logoToken: text("logo_token").unique("partners_logo_token_unique"),
+  /** Custom headline on the white-label login gateway (null → default from company name). */
+  loginTitle: text("login_title"),
+  /** Supporting copy under the login headline. */
+  loginSubtitle: text("login_subtitle"),
+  /**
+   * White-label subdomain slug → `{slug}.{PARTNER_SUBDOMAIN_ROOT}`
+   * e.g. slug "acme" → acme.snapserve.ai
+   */
+  slug: text("slug").unique("partners_slug_unique"),
+  /** Partner-owned hostname (e.g. app.acme.com). */
+  customDomain: text("custom_domain").unique("partners_custom_domain_unique"),
+  /** none | pending | active | failed */
+  customDomainStatus: text("custom_domain_status").notNull().default("none"),
+  /** TXT / verify token for custom-domain DNS proof. */
+  domainVerifyToken: text("domain_verify_token"),
+  customDomainVerifiedAt: timestamp("custom_domain_verified_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

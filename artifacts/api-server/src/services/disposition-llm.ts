@@ -97,14 +97,32 @@ class QwenDispositionLLM implements DispositionLLM {
   }
 }
 
+/** Default analytics/disposition model — Indic-tuned flagship reasoning. */
+export const DEFAULT_SARVAM_DISPOSITION_MODEL = "sarvam-105b";
+
+function resolveSarvamDispositionModel(): string {
+  const fromEnv = (process.env["DISPOSITION_MODEL"] ?? "").trim();
+  if (fromEnv) return fromEnv;
+  return DEFAULT_SARVAM_DISPOSITION_MODEL;
+}
+
+function isSarvamOpenSourceModel(model: string): boolean {
+  return model === "gemma4" || model === "glm5.2";
+}
+
 class SarvamDispositionLLM implements DispositionLLM {
   private client: OpenAI;
   private model: string;
 
-  constructor(apiKey: string, model = "sarvam-30b") {
+  /**
+   * Default: sarvam-105b on /v1 (Indic reasoning). Open-source hosts (gemma4,
+   * glm5.2) use /v2. Override with DISPOSITION_MODEL.
+   */
+  constructor(apiKey: string, model = resolveSarvamDispositionModel()) {
+    const openSource = isSarvamOpenSourceModel(model);
     this.client = new OpenAI({
       apiKey,
-      baseURL: "https://api.sarvam.ai/v1",
+      baseURL: openSource ? "https://api.sarvam.ai/v2" : "https://api.sarvam.ai/v1",
     });
     this.model = model;
   }
@@ -115,8 +133,10 @@ class SarvamDispositionLLM implements DispositionLLM {
     transcript: string,
   ): Promise<Record<string, unknown>> {
     // Sarvam json_object mode does not enforce a schema, so embed it in the prompt.
-    // Thinking is ON by default at "low" — disable it so reasoning doesn't consume
-    // the token budget and leave content=null (chat skill gotcha).
+    // gemma4 never reasons — omit reasoning_effort. Native models default thinking
+    // ON at "low"; for per-call structured JSON keep reasoning low so the budget
+    // goes to content (null disables; "low" is safer than empty content).
+    const openSource = isSarvamOpenSourceModel(this.model);
     const response = await this.client.chat.completions.create({
       model: this.model,
       temperature: 0,
@@ -125,8 +145,7 @@ class SarvamDispositionLLM implements DispositionLLM {
         { role: "system", content: withSchemaInstruction(systemPrompt, schema) },
         { role: "user", content: `TRANSCRIPT:\n${transcript}` },
       ],
-      // Sarvam extension (OpenAI-compat); not on OpenAI's typed surface.
-      ...( { reasoning_effort: null } as object ),
+      ...(!openSource ? ({ reasoning_effort: "low" } as object) : {}),
     });
     const msg = response.choices[0]?.message as
       | { content?: string | null; reasoning_content?: string | null }
@@ -136,49 +155,8 @@ class SarvamDispositionLLM implements DispositionLLM {
   }
 }
 
-class GeminiDispositionLLM implements DispositionLLM {
-  private client: OpenAI;
-  private model: string;
-
-  constructor(apiKey: string, model = "gemini-3.6-flash") {
-    this.client = new OpenAI({
-      apiKey,
-      baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
-    });
-    this.model = model;
-  }
-
-  async extract(
-    systemPrompt: string,
-    schema: Record<string, unknown>,
-    transcript: string,
-  ): Promise<Record<string, unknown>> {
-    const response = await this.client.chat.completions.create({
-      model: this.model,
-      temperature: 0,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: withSchemaInstruction(systemPrompt, schema) },
-        { role: "user", content: `TRANSCRIPT:\n${transcript}` },
-      ],
-    });
-    const rawContent = response.choices[0]?.message?.content ?? "{}";
-    // Strip codeblock markdown if present
-    const cleaned = rawContent.replace(/^```(?:json)?\n?/i, "").replace(/\n?```$/i, "").trim();
-    return JSON.parse(cleaned) as Record<string, unknown>;
-  }
-}
-
 /** Resolve a managed key for a provider, falling back to env where applicable. */
 async function resolveManagedKey(provider: string): Promise<string | null> {
-  if (provider === "gemini" || provider === "google") {
-    return (
-      (await getSetting("managed_gemini_key"))?.trim() ||
-      (process.env["GEMINI_API_KEY"] ?? "").trim() ||
-      (process.env["GOOGLE_API_KEY"] ?? "").trim() ||
-      null
-    );
-  }
   if (provider === "openai") {
     return (await getSetting("managed_openai_key"))?.trim() || (process.env["OPENAI_API_KEY"] ?? "").trim() || null;
   }
@@ -195,43 +173,84 @@ async function resolveManagedKey(provider: string): Promise<string | null> {
 }
 
 function buildClient(provider: string, key: string): DispositionLLM {
-  if (provider === "gemini" || provider === "google") return new GeminiDispositionLLM(key);
   if (provider === "openai") return new OpenAIDispositionLLM(key);
   if (provider === "sarvam") return new SarvamDispositionLLM(key);
   return new QwenDispositionLLM(key);
 }
 
+const FALLBACK_ORDER = ["sarvam", "openai", "qwen"] as const;
+
+function normalizeProvider(preferred: string): string {
+  if (preferred === "groq" || preferred === "qwen") return "qwen";
+  // Legacy gemini/google overrides map to Sarvam Gemma — Gemini is no longer used.
+  if (preferred === "google" || preferred === "gemini") return "sarvam";
+  return preferred;
+}
+
 /**
  * Returns the appropriate DispositionLLM instance.
- * Provider selection: agentCfgOverride > DISPOSITION_LLM env > "gemini" default.
- * Falls back to any other provider whose managed key is configured, so
- * classification still runs as long as ONE managed key exists.
- * Returns null only if no managed key is available (never crashes the caller).
+ * Provider selection: agentCfgOverride > DISPOSITION_LLM env > "sarvam" default
+ * (sarvam-105b via DISPOSITION_MODEL / managed Sarvam key). Gemini is not in the chain.
+ * Falls back to OpenAI / Groq when Sarvam is unavailable.
  */
 export async function getDispositionLLM(
   agentCfgOverride?: string | null,
 ): Promise<DispositionLLM | null> {
-  const preferred = (
-    agentCfgOverride ??
-    process.env["DISPOSITION_LLM"] ??
-    "gemini"
-  ).toLowerCase();
+  const preferred = normalizeProvider(
+    (agentCfgOverride ?? process.env["DISPOSITION_LLM"] ?? "sarvam").toLowerCase(),
+  );
 
-  const normalized = (preferred === "groq" || preferred === "qwen") ? "qwen" : (preferred === "google" ? "gemini" : preferred);
-
-  // Try the preferred provider first (defaulting to Gemini 3.6 Flash), then fall back to others
-  const order = [normalized, ...["gemini", "openai", "qwen", "sarvam"].filter((p) => p !== normalized)];
+  const order = [preferred, ...FALLBACK_ORDER.filter((p) => p !== preferred)];
 
   for (const provider of order) {
     const key = await resolveManagedKey(provider);
     if (key) {
-      if (provider !== normalized) {
-        logger.info({ preferred: normalized, using: provider }, "disposition: preferred LLM key missing, falling back");
+      if (provider !== preferred) {
+        logger.info({ preferred, using: provider }, "disposition: preferred LLM key missing, falling back");
       }
       return buildClient(provider, key);
     }
   }
 
-  logger.warn("disposition: no managed LLM key configured (gemini/openai/qwen/sarvam), skipping LLM pass");
+  logger.warn("disposition: no managed LLM key configured (sarvam/openai/qwen), skipping LLM pass");
   return null;
+}
+
+/**
+ * Returns every available DispositionLLM in preference order, so callers can
+ * fall back to the next provider when one fails at call time.
+ */
+export async function getDispositionLLMChain(
+  agentCfgOverride?: string | null,
+): Promise<Array<{ provider: string; client: DispositionLLM }>> {
+  const preferred = normalizeProvider(
+    (agentCfgOverride ?? process.env["DISPOSITION_LLM"] ?? "sarvam").toLowerCase(),
+  );
+  const order = [preferred, ...FALLBACK_ORDER.filter((p) => p !== preferred)];
+
+  const chain: Array<{ provider: string; client: DispositionLLM }> = [];
+  for (const provider of order) {
+    const key = await resolveManagedKey(provider);
+    if (key) chain.push({ provider, client: buildClient(provider, key) });
+  }
+  return chain;
+}
+
+/** True when an LLM error is provider-level (auth/quota/overload) and worth retrying on another provider. */
+export function isRetryableProviderError(err: unknown): boolean {
+  const status = (err as { status?: number })?.status;
+  if (typeof status === "number") {
+    return status === 401 || status === 403 || status === 429 || status >= 500;
+  }
+  const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
+  return (
+    msg.includes("403") ||
+    msg.includes("401") ||
+    msg.includes("429") ||
+    msg.includes("quota") ||
+    msg.includes("permission") ||
+    msg.includes("billing") ||
+    msg.includes("unavailable") ||
+    msg.includes("overload")
+  );
 }

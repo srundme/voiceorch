@@ -30,6 +30,11 @@ export const knowledgeSourcesTable = pgTable("knowledge_sources", {
    * Used by retry-crawl and the Needs-attention UI. NULL for non-website sources.
    */
   crawlFailedUrls: text("crawl_failed_urls"),
+  /**
+   * Human-readable reason the last import failed (e.g. scanned/encrypted PDF).
+   * Shown on the failed-pack banner. NULL when the source is healthy.
+   */
+  errorMessage: text("error_message"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
@@ -44,8 +49,8 @@ export const knowledgeEntriesTable = pgTable("knowledge_entries", {
   content: text("content").notNull(),
   keywords: text("keywords"),
   /**
-   * Multilingual semantic embedding (gemini-embedding-001, MRL-truncated to 768
-   * dims and re-normalized). NULL = not yet embedded — the KB embed worker
+   * Multilingual semantic embedding (jina-embeddings-v3 @ 768 dims,
+   * L2-normalized). NULL = not yet embedded — the KB embed worker
    * back-fills NULL rows; every content write must reset this to NULL.
    * Column exists only when the pgvector extension is available (migration
    * 0045 soft-fails without it); runtime code gates on isKbVectorReady().

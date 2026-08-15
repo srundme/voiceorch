@@ -2037,16 +2037,47 @@ export const InitiatePhoneNumberPurchaseBody = zod.object({
   "countryCode": zod.string(),
   "region": zod.string().optional(),
   "numberType": zod.enum(['local', 'toll_free', 'mobile']).default(initiatePhoneNumberPurchaseBodyNumberTypeDefault),
-  "renewalMode": zod.enum(['autopay', 'wallet']).default(initiatePhoneNumberPurchaseBodyRenewalModeDefault).describe('Autopay keeps the number via card mandate top-ups; wallet renews from balance only (unpaid → release after grace).')
+  "renewalMode": zod.enum(['autopay', 'wallet']).default(initiatePhoneNumberPurchaseBodyRenewalModeDefault).describe('Autopay keeps the number via card mandate top-ups; wallet renews from balance only (unpaid → release after grace).'),
+  "promoCode": zod.string().optional().describe('Optional promo code. The server re-prices the order; an unknown or expired code is rejected with 400 rather than silently charging full price.')
 })
 
 export const InitiatePhoneNumberPurchaseResponse = zod.object({
   "purchaseOrderId": zod.number().describe('Internal order id — pass back in ConfirmPhoneNumberPurchaseInput'),
   "orderId": zod.string().describe('Razorpay order id'),
-  "amountCents": zod.number().describe('Payable amount in INR paise (₹800 + 18% GST = 94400)'),
+  "amountCents": zod.number().describe('Payable amount in INR paise, including GST'),
   "amount": zod.number().describe('Amount in the smallest currency unit, as required by the Razorpay checkout widget'),
   "currency": zod.string(),
-  "keyId": zod.string().describe('Razorpay publishable key id for the checkout widget')
+  "keyId": zod.string().describe('Razorpay publishable key id for the checkout widget'),
+  "basePaise": zod.number().optional().describe('Taxable base actually charged, after any promo'),
+  "gstPaise": zod.number().optional(),
+  "payablePaise": zod.number().optional(),
+  "gstRate": zod.number().optional(),
+  "promoCode": zod.string().nullish().describe('Promo applied to this order, or null at full price'),
+  "discountPaise": zod.number().optional().describe('Paise taken off the standard base by the promo'),
+  "preferCard": zod.boolean().optional()
+})
+
+
+/**
+ * @summary Price a phone number with a promo code applied, without creating an order. Used by the checkout UI to validate a code before payment.
+ */
+export const QuotePhoneNumberPromoBody = zod.object({
+  "code": zod.string().describe('Promo code as typed by the buyer (case-insensitive)'),
+  "number": zod.string().describe('E.164 number being priced — the standard base is tier-dependent')
+})
+
+export const QuotePhoneNumberPromoResponse = zod.object({
+  "valid": zod.boolean().describe('False when the code is unknown or expired; the quote then shows full price'),
+  "code": zod.string().nullish().describe('Canonical uppercase code when valid'),
+  "label": zod.string().nullish().describe('Human name for the offer, e.g. \"Voiceathon 2026\"'),
+  "message": zod.string().nullish().describe('Why an invalid code was rejected'),
+  "basePaise": zod.number(),
+  "gstPaise": zod.number(),
+  "payablePaise": zod.number(),
+  "standardBasePaise": zod.number(),
+  "standardPayablePaise": zod.number().describe('What the buyer would pay without the promo — also the recurring renewal amount'),
+  "discountPaise": zod.number(),
+  "gstRate": zod.number()
 })
 
 
@@ -4975,7 +5006,7 @@ export const CreateEventTypeBody = zod.object({
   "bufferAfterMins": zod.number().default(createEventTypeBodyBufferAfterMinsDefault),
   "confirmationMode": zod.enum(['instant', 'manual']).default(createEventTypeBodyConfirmationModeDefault),
   "maxBookingsPerSlot": zod.number().default(createEventTypeBodyMaxBookingsPerSlotDefault),
-  "enableGoogleMeet": zod.boolean().default(createEventTypeBodyEnableGoogleMeetDefault),
+  "enableGoogleMeet": zod.boolean().default(createEventTypeBodyEnableGoogleMeetDefault).describe('When true, Google Calendar invites include a Meet link'),
   "isActive": zod.boolean().default(createEventTypeBodyIsActiveDefault)
 })
 
@@ -7177,5 +7208,99 @@ export const GetBookExamAttemptsResponse = zod.object({
   "passed": zod.boolean(),
   "attemptCount": zod.number()
 })
+
+
+/**
+ * Sends the selected agent into a video meeting. Requires a logged-in session
+(dashboard). Enable Meetings on the agent and set a meeting prompt first.
+
+ * @summary Launch a meeting bot into Meet / Zoom / Teams
+ */
+export const CreateMeetBotBody = zod.object({
+  "agentId": zod.number().describe('Agent configured for meetings'),
+  "meetingUrl": zod.string().url().describe('Google Meet, Zoom, or Teams URL'),
+  "joinAsSelected": zod.boolean().optional().describe('When true, skip booking delegate swap and join as agentId')
+})
+
+export const CreateMeetBotResponse = zod.object({
+  "botId": zod.string(),
+  "status": zod.string(),
+  "agentId": zod.number(),
+  "configuredAgentId": zod.number().optional()
+})
+
+
+/**
+ * @summary Bot email / Meet identity for invites and admit
+ */
+export const GetMeetBotIdentityResponse = zod.record(zod.string(), zod.unknown())
+
+
+/**
+ * @summary Get meeting bot status
+ */
+export const GetMeetBotParams = zod.object({
+  "botId": zod.coerce.string()
+})
+
+export const GetMeetBotResponse = zod.object({
+  "botId": zod.string(),
+  "status": zod.string()
+})
+
+
+/**
+ * @summary Make the meeting bot leave
+ */
+export const LeaveMeetBotParams = zod.object({
+  "botId": zod.coerce.string()
+})
+
+export const LeaveMeetBotResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+/**
+ * Readonly calendar connect used for Join toggles on /app/meet (not booking write calendar).
+ * @summary AI meetings Google Calendar connection status
+ */
+export const GetMeetCalendarConnectionResponse = zod.record(zod.string(), zod.unknown())
+
+
+/**
+ * @summary Disconnect AI meetings Google Calendar
+ */
+export const DisconnectMeetCalendarResponse = zod.record(zod.string(), zod.unknown())
+
+
+/**
+ * @summary List upcoming calendar events with Join flags
+ */
+export const ListMeetCalendarEventsResponse = zod.record(zod.string(), zod.unknown())
+
+
+/**
+ * @summary Enable agent auto-join for a calendar event
+ */
+export const EnableMeetCalendarEventBotParams = zod.object({
+  "eventId": zod.coerce.string()
+})
+
+export const EnableMeetCalendarEventBotBody = zod.object({
+  "agentId": zod.number()
+})
+
+export const EnableMeetCalendarEventBotResponse = zod.record(zod.string(), zod.unknown())
+
+
+/**
+ * @summary Disable agent auto-join for a calendar event
+ */
+export const DisableMeetCalendarEventBotParams = zod.object({
+  "eventId": zod.coerce.string()
+})
+
+export const DisableMeetCalendarEventBotResponse = zod.record(zod.string(), zod.unknown())
 
 

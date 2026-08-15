@@ -16,12 +16,21 @@ import {
   incomingCallsTable, callTransfersTable, leadTimelineTable,
   batchImportRunsTable, leadSourcesTable,
   agentsTable, callRetriesTable, callsTable, scheduledCallbacksTable,
+  agentDispositionsTable,
 } from "@workspace/db";
 import { eq, and, sql, desc, isNotNull, inArray, asc, or, ilike } from "drizzle-orm";
+import { canonicalDispositionBucket, dispositionBucketSql } from "../lib/disposition/canonical.js";
 
 const router: IRouter = Router();
 
 router.use(requireAuth, clientContext);
+
+/**
+ * Leads store the agent taxonomy label as "PRIMARY: sub" (formatDispositionLabel).
+ * Counting the raw primary produced one card per spelling of the same outcome, so
+ * KPI cards and filters are both keyed on the canonical bucket instead.
+ */
+const DISPOSITION_BUCKET_SQL = dispositionBucketSql(sql`${campaignLeadsTable.disposition}`);
 
 async function requireBatch(campaignId: number, batchId: number, userId: string) {
   const [campaign] = await db.select({ id: campaignsTable.id })
@@ -73,13 +82,20 @@ router.get("/campaigns/:id/batches/:batchId/workspace/kpis", async (req, res): P
   }).from(campaignLeadsTable)
     .where(eq(campaignLeadsTable.batchId, batchId));
 
-  // Callbacks (join via lead)
+  // Callbacks. Two tables record them: callCallbacks (transcript detector +
+  // manual) and scheduledCallbacks (the schedule_callback tool). Counting only
+  // the first showed 0 for batches full of callback dispositions, so count
+  // distinct leads across both.
   const [{ callbacks }] = await db.select({
-    callbacks: sql<number>`count(distinct ${callCallbacksTable.id})::int`,
-  }).from(callCallbacksTable)
-    .innerJoin(campaignLeadsTable,
-      and(eq(callCallbacksTable.leadId, campaignLeadsTable.id), eq(campaignLeadsTable.batchId, batchId))!,
-    );
+    callbacks: sql<number>`count(distinct ${campaignLeadsTable.id})::int`,
+  }).from(campaignLeadsTable)
+    .where(and(
+      eq(campaignLeadsTable.batchId, batchId),
+      or(
+        sql`exists (select 1 from ${callCallbacksTable} where ${callCallbacksTable.leadId} = ${campaignLeadsTable.id})`,
+        sql`exists (select 1 from ${scheduledCallbacksTable} where ${scheduledCallbacksTable.campaignLeadId} = ${campaignLeadsTable.id})`,
+      ),
+    ));
 
   // Incoming calls
   const [{ incoming }] = await db.select({
@@ -122,6 +138,47 @@ router.get("/campaigns/:id/batches/:batchId/workspace/kpis", async (req, res): P
   }).from(campaignLeadsTable)
     .where(and(eq(campaignLeadsTable.batchId, batchId), isNotNull(campaignLeadsTable.lastAttemptAt)));
 
+  // Per-disposition counts, grouped on the canonical bucket so "no pickup",
+  // "not pickup" and "NOT_CONNECTED: no_answer" land on one card.
+  const dispositionRows = await db.select({
+    key:   DISPOSITION_BUCKET_SQL,
+    count: sql<number>`count(*)::int`,
+  }).from(campaignLeadsTable)
+    .where(and(
+      eq(campaignLeadsTable.batchId, batchId),
+      isNotNull(campaignLeadsTable.disposition),
+      sql`btrim(${campaignLeadsTable.disposition}) <> ''`,
+    ))
+    .groupBy(DISPOSITION_BUCKET_SQL)
+    .orderBy(desc(sql`count(*)`));
+
+  const observed = dispositionRows
+    .filter(r => (r.key ?? "").trim() !== "")
+    .map(r => ({ key: r.key, count: r.count }));
+
+  // Leads the agent never dispositioned. Surfacing this makes the disposition
+  // row add up to the batch total instead of silently losing leads.
+  const dispositionedCount = observed.reduce((sum, d) => sum + d.count, 0);
+
+  // Configured categories should show at 0 rather than disappear, but they have
+  // to be bucketed the same way as the observed values or the same outcome gets
+  // two cards. Building the union here keeps one canonicalization, server-side.
+  const configuredTaxonomy = campaign?.agentId
+    ? (await db.select({ taxonomy: agentDispositionsTable.taxonomy })
+        .from(agentDispositionsTable)
+        .where(eq(agentDispositionsTable.agentId, campaign.agentId)))[0]?.taxonomy
+    : null;
+
+  const dispositionMap = new Map(observed.map(d => [d.key, d.count]));
+  for (const key of Object.keys(configuredTaxonomy ?? {})) {
+    const bucket = canonicalDispositionBucket(key, "");
+    if (bucket && !dispositionMap.has(bucket)) dispositionMap.set(bucket, 0);
+  }
+
+  const dispositions = [...dispositionMap.entries()]
+    .map(([key, count]) => ({ key, count }))
+    .sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
+
   const total        = leadKpis?.total        ?? 0;
   const called       = leadKpis?.called       ?? 0;
   const successCount = leadKpis?.success      ?? 0;
@@ -155,6 +212,8 @@ router.get("/campaigns/:id/batches/:batchId/workspace/kpis", async (req, res): P
     bookings,
     transfers,
     successRate,
+    dispositions,
+    undispositioned: Math.max(0, total - dispositionedCount),
     lastActivityAt:             lastActivity?.lastAt ?? null,
     avgCallDurationS:           costDuration?.avgDurationS ?? null,
     totalCostCents:             costDuration?.totalCostCents ?? 0,
@@ -226,16 +285,23 @@ router.get("/campaigns/:id/batches/:batchId/workspace/leads", async (req, res): 
     status === "voicemail" ? eq(campaignLeadsTable.callStatus, "voicemail") :
     status === "failed"    ? inArray(campaignLeadsTable.callStatus, ["failed", "busy", "no_pickup"]) :
     status === "calling"   ? eq(campaignLeadsTable.callStatus, "calling")   :
+    status === "connected" ? inArray(campaignLeadsTable.callStatus, ["connected", "completed", "transferred"]) :
     undefined;
 
   // Fixed system outcomes filter on operationalOutcome; any other non-"all"
-  // value is a dynamic disposition and filters on the lead disposition column.
+  // value is a dynamic disposition, matched on the same canonical bucket the
+  // KPI cards are counted with so a card and its filtered list always agree.
   const outcomeFilter =
     outcome === "all"                ? undefined :
     outcome === "booking_created"    ? eq(campaignLeadsTable.operationalOutcome, "booking_created")    :
     outcome === "transfer_completed" ? eq(campaignLeadsTable.operationalOutcome, "transfer_completed") :
     outcome === "callback_requested" ? eq(campaignLeadsTable.operationalOutcome, "callback_requested") :
-    eq(campaignLeadsTable.disposition, outcome);
+    outcome === "__undispositioned__"
+      ? or(
+          sql`${campaignLeadsTable.disposition} is null`,
+          sql`btrim(${campaignLeadsTable.disposition}) = ''`,
+        )
+      : sql`${DISPOSITION_BUCKET_SQL} = ${canonicalDispositionBucket(outcome, "")}`;
 
   const searchFilter = search
     ? or(

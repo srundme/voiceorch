@@ -746,6 +746,7 @@ const MANAGED_KEY_NAMES = [
   // STT
   "managed_deepgram_key",
   "managed_sarvam_key",
+  "managed_jina_key",
   "managed_assemblyai_key",
   "managed_azure_speech_key",
   "managed_azure_speech_region",

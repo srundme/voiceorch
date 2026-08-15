@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { BrandMark, PoweredBySarvam } from "@/components/logo";
+import { BrandMark } from "@/components/logo";
 import { useLocation } from "wouter";
 import { useCompleteOnboarding, useGetOnboardingStatus, getGetOnboardingStatusQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -410,13 +410,17 @@ export default function OnboardingPage() {
   const totalSteps = answers.usedVoiceAgents === true ? 5 : 4;
 
   const submitOnboarding = useCallback((finalAnswers: Answers) => {
-    const goToVibe = () => {
+    // Finish onboarding in the agent builder with the create dialog open.
+    // Vibe is still reachable from "Build with AI", but it is no longer the
+    // screen every new signup is dropped into. The name is still stashed so
+    // Vibe can greet them whenever they choose to open it.
+    const goToBuilder = () => {
       try {
         if (finalAnswers.name.trim()) {
           sessionStorage.setItem("vibe:welcomeName", finalAnswers.name.trim());
         }
       } catch { /* ignore */ }
-      setLocation("/app/vibe");
+      setLocation("/app/agents?create=1");
     };
     complete(
       {
@@ -431,9 +435,9 @@ export default function OnboardingPage() {
       {
         onSuccess: (result) => {
           qc.setQueryData(getGetOnboardingStatusQueryKey(), result);
-          goToVibe();
+          goToBuilder();
         },
-        onError: goToVibe,
+        onError: goToBuilder,
       }
     );
   }, [complete, qc, setLocation]);
@@ -442,7 +446,7 @@ export default function OnboardingPage() {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-3">
         <div className="h-8 w-8 rounded-full border-2 border-border border-t-primary animate-spin" />
-        <p className="text-sm text-muted-foreground">{isPending ? "Opening Vibe Build…" : "Loading…"}</p>
+        <p className="text-sm text-muted-foreground">{isPending ? "Opening agent builder…" : "Loading…"}</p>
       </div>
     );
   }
@@ -457,7 +461,6 @@ export default function OnboardingPage() {
           <header className="flex items-center justify-between px-6 pt-6 pb-2 max-w-6xl mx-auto w-full">
             <span className="inline-flex items-center gap-2">
               <BrandMark iconSize={22} wordmarkHeight={16} />
-              <PoweredBySarvam variant="inline" className="border-l border-border pl-2" />
             </span>
             <StepCounter current={stepNum} total={totalSteps} />
           </header>
@@ -512,7 +515,7 @@ export default function OnboardingPage() {
                     // Has prior experience → ask which platforms
                     setTimeout(() => setStep(5), 80);
                   } else {
-                    // No prior experience → skip Q5, submit and go straight to Vibe Build
+                    // No prior experience → skip Q5, submit and go straight to the builder
                     setTimeout(() => submitOnboarding(updated), 180);
                   }
                 }}
