@@ -1,0 +1,547 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1080, height=1080" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      @font-face {
+        font-family: "Tex Gyre Heros";
+        src: local("Tex Gyre Heros"), local("TeXGyreHeros"), local("Helvetica Neue"), local("Helvetica");
+        font-weight: 400 700;
+        font-style: normal;
+      }
+
+      :root {
+        --sky: #d7e8f6;
+        --paper: #f4f8fc;
+        --blue: #1d4ed8;
+        --ink: #111827;
+        --mute: #334155;
+        --line: #c5d7e8;
+      }
+
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+
+      html, body {
+        width: 1080px;
+        height: 1080px;
+        overflow: hidden;
+        background: var(--sky);
+        color: var(--ink);
+      }
+
+      body {
+        font-family: "Inter", sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .brand { font-family: "Tex Gyre Heros", "Inter", sans-serif; }
+
+      #root {
+        position: relative;
+        width: 1080px;
+        height: 1080px;
+        overflow: hidden;
+        isolation: isolate;
+        background:
+          radial-gradient(circle at 50% 46%, #ffffff 0%, #eef6fc 42%, #cfe3f4 100%);
+      }
+
+      .wash-a, .wash-b {
+        position: absolute;
+        border-radius: 50%;
+        z-index: -5;
+        pointer-events: none;
+      }
+      .wash-a {
+        left: -80px;
+        top: 80px;
+        width: 520px;
+        height: 380px;
+        background: radial-gradient(circle, rgba(186, 214, 236, 0.7) 0%, transparent 70%);
+      }
+      .wash-b {
+        right: -60px;
+        bottom: 40px;
+        width: 560px;
+        height: 420px;
+        background: radial-gradient(circle, rgba(176, 208, 232, 0.65) 0%, transparent 72%);
+      }
+
+      .grid {
+        position: absolute;
+        inset: 0;
+        z-index: -4;
+        background-image:
+          linear-gradient(rgba(120, 164, 196, 0.28) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(120, 164, 196, 0.28) 1px, transparent 1px);
+        background-size: 90px 90px;
+        background-position: 0 0;
+      }
+
+      .grain {
+        position: absolute;
+        inset: 0;
+        z-index: 70;
+        pointer-events: none;
+        opacity: 0.22;
+        background-image: radial-gradient(circle, rgba(80, 110, 140, 0.35) 0.55px, transparent 0.7px);
+        background-size: 3px 3px;
+      }
+
+      section.clip, #world.clip {
+        position: absolute;
+        inset: 0;
+      }
+      .scene-inner { position: absolute; inset: 0; }
+
+      .hero-mark {
+        position: absolute;
+        left: 390px;
+        top: 390px;
+        width: 300px;
+        height: 300px;
+      }
+      .hero-mark img { width: 100%; height: 100%; display: block; }
+
+      .win {
+        position: absolute;
+        left: 90px;
+        top: 210px;
+        width: 900px;
+        height: 660px;
+        background: #ffffff;
+        border-radius: 22px;
+        border: 1px solid #dbe7f1;
+        box-shadow: 0 28px 70px rgba(30, 64, 120, 0.16);
+        overflow: hidden;
+      }
+      .titlebar {
+        height: 46px;
+        background: #eef2f6;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 18px;
+      }
+      .tl {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+      }
+      .tl.r { background: #ff5f57; }
+      .tl.y { background: #febc2e; }
+      .tl.g { background: #28c840; }
+
+      .who {
+        position: absolute;
+        font-size: 18px;
+        font-weight: 700;
+        color: var(--mute);
+      }
+      .who.host { right: 56px; top: 318px; }
+      .who.agent { left: 56px; top: 430px; }
+
+      .pill {
+        position: absolute;
+        background: #ffffff;
+        border-radius: 999px;
+        box-shadow: 0 10px 28px rgba(30, 64, 120, 0.12);
+        border: 1px solid #e8eef4;
+        display: flex;
+        align-items: center;
+        padding: 0 28px;
+        font-size: 24px;
+        font-weight: 650;
+        color: var(--ink);
+        white-space: nowrap;
+      }
+      .host-pill {
+        right: 48px;
+        top: 352px;
+        height: 72px;
+        max-width: 760px;
+      }
+      .dots-pill {
+        left: 48px;
+        top: 464px;
+        height: 64px;
+        width: 132px;
+        justify-content: center;
+        gap: 10px;
+      }
+      .agent-pill {
+        left: 48px;
+        top: 464px;
+        height: 72px;
+      }
+      .dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: #2563eb;
+      }
+      .typed {
+        overflow: hidden;
+        white-space: nowrap;
+        width: 0;
+      }
+
+      .agent-orb {
+        position: absolute;
+        left: 118px;
+        top: 390px;
+        width: 220px;
+        height: 220px;
+        border-radius: 50%;
+        background: #ffffff;
+        box-shadow: 0 18px 40px rgba(30, 64, 120, 0.14);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .agent-orb img { width: 118px; height: 118px; display: block; }
+      .speak-pill {
+        position: absolute;
+        left: 360px;
+        top: 458px;
+        height: 84px;
+        padding: 0 36px;
+        font-size: 28px;
+      }
+
+      .line {
+        position: absolute;
+        left: 64px;
+        top: 470px;
+        width: 952px;
+        text-align: center;
+        font-size: 48px;
+        font-weight: 800;
+        letter-spacing: -1.2px;
+        line-height: 1.15;
+      }
+      .line .hi { color: var(--blue); }
+
+      .slide {
+        position: absolute;
+        left: 150px;
+        top: 250px;
+        width: 780px;
+        height: 460px;
+        background: #ffffff;
+        border-radius: 28px;
+        box-shadow: 0 24px 60px rgba(30, 64, 120, 0.14);
+        padding: 48px 52px 40px;
+      }
+      .slide .kicker {
+        font-size: 16px;
+        font-weight: 800;
+        letter-spacing: 0.16em;
+        color: var(--blue);
+        margin-bottom: 10px;
+      }
+      .slide h3 {
+        font-size: 40px;
+        font-weight: 800;
+        letter-spacing: -1px;
+        color: var(--ink);
+        margin-bottom: 22px;
+      }
+      .slide li {
+        list-style: none;
+        font-size: 24px;
+        font-weight: 650;
+        color: #1e293b;
+        margin-top: 12px;
+      }
+      .write { overflow: hidden; white-space: nowrap; width: 0; }
+      .toolrow {
+        position: absolute;
+        left: 150px;
+        top: 740px;
+        width: 780px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .tool {
+        height: 56px;
+        padding: 0 22px;
+        border-radius: 999px;
+        background: #ffffff;
+        box-shadow: 0 10px 24px rgba(30, 64, 120, 0.12);
+        font-size: 20px;
+        font-weight: 800;
+        color: var(--blue);
+        display: flex;
+        align-items: center;
+      }
+      .count {
+        height: 36px;
+        overflow: hidden;
+        font-size: 24px;
+        font-weight: 800;
+        color: var(--ink);
+      }
+      .count div { height: 36px; line-height: 36px; }
+
+      .end-mark {
+        position: absolute;
+        left: 430px;
+        top: 150px;
+        width: 220px;
+        height: 220px;
+      }
+      .end-mark img { width: 100%; height: 100%; display: block; }
+      .wave {
+        position: absolute;
+        left: 180px;
+        top: 200px;
+        width: 720px;
+        height: 120px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+      }
+      .wave b {
+        display: block;
+        width: 8px;
+        height: 28px;
+        border-radius: 4px;
+        background: #2563eb;
+        transform-origin: center center;
+      }
+      .end-word {
+        position: absolute;
+        left: 0;
+        top: 390px;
+        width: 1080px;
+        text-align: center;
+        font-size: 64px;
+        letter-spacing: -1.6px;
+        color: var(--ink);
+      }
+      .end-word b { font-weight: 700; }
+      .end-word span { font-weight: 400; color: #334155; }
+      .rooms {
+        position: absolute;
+        left: 170px;
+        top: 500px;
+        width: 740px;
+        display: flex;
+        gap: 16px;
+      }
+      .room {
+        flex: 1;
+        height: 150px;
+        background: #ffffff;
+        border-radius: 22px;
+        box-shadow: 0 12px 30px rgba(30, 64, 120, 0.12);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+      }
+      .room img { width: 44px; height: 44px; display: block; }
+      .room .name {
+        font-size: 16px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        color: var(--mute);
+      }
+      .end-tag {
+        position: absolute;
+        left: 0;
+        top: 700px;
+        width: 1080px;
+        text-align: center;
+        font-size: 30px;
+        font-weight: 750;
+        color: var(--ink);
+      }
+      .end-url {
+        position: absolute;
+        left: 0;
+        top: 860px;
+        width: 1080px;
+        text-align: center;
+        font-size: 18px;
+        letter-spacing: 0.22em;
+        font-weight: 700;
+        color: var(--blue);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="25" data-width="1080" data-height="1080">
+      <div class="wash-a" data-layout-allow-overflow></div>
+      <div class="wash-b" data-layout-allow-overflow></div>
+      <div class="grid"></div>
+
+      <audio id="music" class="clip" data-start="0" data-duration="25" data-track-index="0" data-volume="0.18" src="assets/music/happy-beats-business-moves-vol-12-by-ende-dot-app.mp3"></audio>
+      <audio id="sfx-open" class="clip" data-start="0.2" data-duration="1.48" data-track-index="8" data-volume="0.26" src="assets/sfx/impactBell_heavy_000.ogg"></audio>
+      <audio id="sfx-win" class="clip" data-start="2.5" data-duration="0.4" data-track-index="9" data-volume="0.26" src="assets/sfx/card-slide-1.ogg"></audio>
+      <audio id="sfx-join" class="clip" data-start="6.7" data-duration="0.12" data-track-index="10" data-volume="0.26" src="assets/sfx/drop_001.ogg"></audio>
+      <audio id="sfx-talk" class="clip" data-start="8.4" data-duration="0.18" data-track-index="11" data-volume="0.26" src="assets/sfx/impactSoft_medium_001.ogg"></audio>
+      <audio id="sfx-next" class="clip" data-start="18.7" data-duration="0.5" data-track-index="12" data-volume="0.26" src="assets/sfx/switch_004.ogg"></audio>
+      <audio id="sfx-end" class="clip" data-start="20.7" data-duration="1.48" data-track-index="13" data-volume="0.28" src="assets/sfx/impactBell_heavy_000.ogg"></audio>
+
+      <div id="world" class="clip" data-start="0" data-duration="25" data-track-index="2"></div>
+
+      <section id="scene-1" class="clip" data-start="0" data-duration="2.4" data-track-index="1">
+        <div id="s1" class="scene-inner">
+          <div id="hero-mark" class="hero-mark"><img src="assets/brand/snapserve-mark-ink.svg" alt="SnapServe" /></div>
+        </div>
+      </section>
+
+      <section id="scene-2" class="clip" data-start="2.4" data-duration="5.8" data-track-index="1">
+        <div id="s2" class="scene-inner">
+          <div id="win" class="win">
+            <div class="titlebar">
+              <span class="tl r"></span>
+              <span class="tl y"></span>
+              <span class="tl g"></span>
+            </div>
+            <div id="host-who" class="who host">Host</div>
+            <div id="host-pill" class="pill host-pill">
+              <div id="host-typed" class="typed" data-layout-allow-overflow>Join this Google Meet and present the deck.</div>
+            </div>
+            <div id="agent-who" class="who agent">Agent</div>
+            <div id="dots" class="pill dots-pill">
+              <span class="dot d1"></span>
+              <span class="dot d2"></span>
+              <span class="dot d3"></span>
+            </div>
+            <div id="reply" class="pill agent-pill">Joining the meeting.</div>
+          </div>
+        </div>
+      </section>
+
+      <section id="scene-3" class="clip" data-start="8.2" data-duration="4.2" data-track-index="1">
+        <div id="s3" class="scene-inner">
+          <div id="orb" class="agent-orb"><img src="assets/brand/snapserve-agent-icon-ink.svg" alt="" /></div>
+          <div id="speak" class="pill speak-pill">I’m on camera.</div>
+        </div>
+      </section>
+
+      <section id="scene-4" class="clip" data-start="12.4" data-duration="3.8" data-track-index="1">
+        <div id="s4" class="scene-inner">
+          <div id="claim" class="line"><span class="hi">Join</span> Google Meet and Zoom.</div>
+        </div>
+      </section>
+
+      <section id="scene-5" class="clip" data-start="16.2" data-duration="4.4" data-track-index="1">
+        <div id="s5" class="scene-inner">
+          <div id="slide" class="slide">
+            <div id="kicker" class="kicker write">DECK</div>
+            <h3 id="stitle" class="write">Then they present.</h3>
+            <ul>
+              <li id="b1" class="write">Walk the room through pricing</li>
+              <li id="b2" class="write">Answer live on camera</li>
+              <li id="b3" class="write">Advance the slides themselves</li>
+            </ul>
+          </div>
+          <div class="toolrow">
+            <div id="tool" class="tool">next_slide</div>
+            <div class="count" data-layout-allow-overflow>
+              <div id="cnt-a" data-layout-allow-overflow data-layout-allow-occlusion>3 / 12</div>
+              <div id="cnt-b" data-layout-allow-overflow data-layout-allow-occlusion>4 / 12</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="scene-6" class="clip" data-start="20.6" data-duration="4.4" data-track-index="1">
+        <div id="s6" class="scene-inner">
+          <div id="wave" class="wave" data-layout-allow-overlap>
+            <b class="wb"></b><b class="wb"></b><b class="wb"></b><b class="wb"></b><b class="wb"></b>
+            <b class="wb"></b><b class="wb"></b><b class="wb"></b><b class="wb"></b><b class="wb"></b>
+            <b class="wb"></b><b class="wb"></b><b class="wb"></b><b class="wb"></b><b class="wb"></b>
+            <b class="wb"></b><b class="wb"></b><b class="wb"></b><b class="wb"></b><b class="wb"></b>
+          </div>
+          <div id="end-mark" class="end-mark" data-layout-allow-overlap><img src="assets/brand/snapserve-mark-ink-end.svg" alt="" /></div>
+          <div id="end-word" class="end-word brand"><b>Snap</b><span>Serve</span></div>
+          <div class="rooms" id="rooms">
+            <div class="room"><img src="assets/brand/google-meet-logo-end.svg" alt="" /><div class="name">MEET</div></div>
+            <div class="room"><img src="assets/brand/zoom-logo.svg" alt="" /><div class="name">ZOOM</div></div>
+            <div class="room"><img src="assets/brand/teams-logo.svg" alt="" /><div class="name">TEAMS</div></div>
+          </div>
+          <div id="end-tag" class="end-tag">Meeting agents. Live now.</div>
+          <div id="end-url" class="end-url">APP.SNAPSERVE.AI</div>
+        </div>
+      </section>
+
+      <div class="grain"></div>
+    </div>
+
+    <script>
+      window.__timelines = window.__timelines || {};
+      const tl = gsap.timeline({ paused: true });
+
+      gsap.set(["#host-who", "#host-pill", "#agent-who", "#dots", "#reply"], { opacity: 0 });
+      gsap.set("#cnt-b", { yPercent: 110 });
+      gsap.set("#reply", { opacity: 0 });
+
+      tl.from(".wash-a", { opacity: 0, duration: 1.1, ease: "power2.out" }, 0);
+      tl.from(".wash-b", { opacity: 0, duration: 1.2, ease: "power2.out" }, 0.12);
+      tl.from(".grid", { opacity: 0, duration: 1.0, ease: "power2.out" }, 0.08);
+      tl.from("#hero-mark", { opacity: 0, scale: 0.78, duration: 0.85, ease: "power3.out" }, 0.28);
+      tl.to("#s1", { opacity: 0, duration: 0.22, ease: "power2.in" }, 2.18);
+      tl.set("#s1", { opacity: 0 }, 2.4);
+
+      tl.from("#win", { opacity: 0, y: 36, scale: 0.96, duration: 0.55, ease: "power3.out" }, 2.46);
+      tl.to("#host-who", { opacity: 1, duration: 0.2 }, 2.95);
+      tl.to("#host-pill", { opacity: 1, duration: 0.22 }, 3.05);
+      tl.to("#host-typed", { width: 620, duration: 1.7, ease: "steps(38)" }, 3.12);
+      tl.to("#agent-who", { opacity: 1, duration: 0.18 }, 4.95);
+      tl.to("#dots", { opacity: 1, duration: 0.2 }, 5.05);
+      document.querySelectorAll(".dot").forEach((dot, i) => {
+        tl.to(dot, { opacity: 0.28, y: -4, duration: 0.22, yoyo: true, repeat: 5, ease: "sine.inOut" }, 5.1 + i * 0.08);
+      });
+      tl.to("#dots", { opacity: 0, duration: 0.16 }, 6.55);
+      tl.set("#dots", { opacity: 0 }, 6.71);
+      tl.to("#reply", { opacity: 1, duration: 0.28, ease: "power2.out" }, 6.62);
+      tl.to("#s2", { opacity: 0, duration: 0.22, ease: "power2.in" }, 7.98);
+      tl.set("#s2", { opacity: 0 }, 8.2);
+
+      tl.from("#orb", { opacity: 0, scale: 0.7, duration: 0.55, ease: "power3.out" }, 8.28);
+      tl.from("#speak", { opacity: 0, x: 24, duration: 0.42, ease: "power3.out" }, 8.7);
+      tl.to("#s3", { opacity: 0, duration: 0.22, ease: "power2.in" }, 12.18);
+      tl.set("#s3", { opacity: 0 }, 12.4);
+
+      tl.from("#claim", { opacity: 0, y: 18, duration: 0.5, ease: "power3.out" }, 12.48);
+      tl.to("#s4", { opacity: 0, duration: 0.22, ease: "power2.in" }, 15.98);
+      tl.set("#s4", { opacity: 0 }, 16.2);
+
+      tl.from("#slide", { opacity: 0, y: 28, duration: 0.48, ease: "power3.out" }, 16.28);
+      tl.to("#kicker", { width: 90, duration: 0.24, ease: "power2.out" }, 16.6);
+      tl.to("#stitle", { width: 520, duration: 0.36, ease: "power2.out" }, 16.78);
+      tl.to("#b1", { width: 520, duration: 0.28, ease: "power2.out" }, 17.12);
+      tl.to("#b2", { width: 420, duration: 0.28, ease: "power2.out" }, 17.36);
+      tl.to("#b3", { width: 520, duration: 0.28, ease: "power2.out" }, 17.6);
+      tl.from("#tool", { opacity: 0, y: 10, duration: 0.28, ease: "power2.out" }, 18.05);
+      tl.from(".count", { opacity: 0, duration: 0.2 }, 18.15);
+      tl.to("#cnt-a", { yPercent: -110, duration: 0.24, ease: "power2.in" }, 18.72);
+      tl.to("#cnt-b", { yPercent: 0, duration: 0.28, ease: "power3.out" }, 18.76);
+      tl.to("#s5", { opacity: 0, duration: 0.22, ease: "power2.in" }, 20.38);
+      tl.set("#s5", { opacity: 0 }, 20.6);
+
+      tl.from("#end-mark", { opacity: 0, scale: 0.8, duration: 0.5, ease: "power3.out" }, 20.68);
+      tl.from("#end-word", { opacity: 0, y: 12, duration: 0.36, ease: "power3.out" }, 20.95);
+      tl.from("#rooms .room", { opacity: 0, y: 16, duration: 0.36, stagger: 0.08, ease: "power3.out" }, 21.15);
+      tl.from("#end-tag", { opacity: 0, y: 10, duration: 0.32, ease: "power3.out" }, 21.5);
+      tl.from("#end-url", { opacity: 0, y: 8, duration: 0.28, ease: "power2.out" }, 21.75);
+      document.querySelectorAll(".wb").forEach((bar, i) => {
+        const h = 16 + ((i * 37) % 70);
+        gsap.set(bar, { height: h });
+        tl.to(bar, { scaleY: 0.45 + ((i * 13) % 50) / 100, duration: 0.28, yoyo: true, repeat: 10, ease: "sine.inOut" }, 20.7 + (i % 6) * 0.04);
+      });
+
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>
