@@ -438,7 +438,7 @@ export default function AgentEdit() {
     resolver: zodResolver(agentFormSchema) as any,
     defaultValues: {
       name: "", description: "", asrProvider: "sarvam", asrModel: "saaras:v3",
-      llmProvider: "sarvam", llmModel: "gemma4", ttsProvider: "sarvam",
+      llmProvider: "sarvam", llmModel: "sarvam-105b-conversations", ttsProvider: "sarvam",
       ttsVoice: "priya", ttsModel: "bulbul:v3", telephonyProvider: "vobiz",
       systemPrompt: "", temperature: 0.10, maxDuration: 300,
       firstSpeaker: "assistant", endCallPhrases: "", silenceTimeoutSeconds: 30,
@@ -689,7 +689,7 @@ export default function AgentEdit() {
     // Gemini Live keeps provider=google internally (voice stack path).
     const migratedLlm =
       !liveOnLoad && (agent.llmProvider === "google" || agent.llmProvider === "gemini")
-        ? { llmProvider: "sarvam", llmModel: "gemma4" }
+        ? { llmProvider: "sarvam", llmModel: "sarvam-105b-conversations" }
         : { llmProvider: agent.llmProvider, llmModel: agent.llmModel ?? "" };
     form.reset({
       name:              agent.name,

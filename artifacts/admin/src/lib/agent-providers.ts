@@ -46,8 +46,9 @@ export const LLM_MODELS: Record<string, { value: string; label: string }[]> = {
   qwen:      [{ value: "qwen/qwen3-32b", label: "Qwen 3 32B (recommended)" }, { value: "qwen/qwen3-235b-a22b", label: "Qwen 3 235B" }],
   groq:      [{ value: "llama-3.3-70b-versatile", label: "Llama 3.3 70B (recommended)" }, { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B (fast)" }, { value: "gemma2-9b-it", label: "Gemma 2 9B" }],
   sarvam: [
-    { value: "gemma4", label: "Gemma 4 31B (recommended — default)" },
-    { value: "sarvam-105b", label: "Sarvam 105B (Indian languages)" },
+    { value: "sarvam-105b-conversations", label: "Sarvam 105B Conversations (recommended — voice)" },
+    { value: "gemma4", label: "Gemma 4 31B" },
+    { value: "sarvam-105b", label: "Sarvam 105B (reasoning / agentic)" },
     { value: "glm5.2", label: "GLM-5.2 (512K context)" },
   ],
   deepseek:  [{ value: "deepseek-chat", label: "DeepSeek Chat" }, { value: "deepseek-reasoner", label: "DeepSeek Reasoner" }],

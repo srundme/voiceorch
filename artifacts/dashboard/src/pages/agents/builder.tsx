@@ -6600,7 +6600,7 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
     resolver: zodResolver(agentFormSchema),
     defaultValues: {
       name: "", description: "", asrProvider: "sarvam", asrModel: "saaras:v3",
-      llmProvider: "sarvam", llmModel: "gemma4", ttsProvider: "cartesia",
+      llmProvider: "sarvam", llmModel: "sarvam-105b-conversations", ttsProvider: "cartesia",
       ttsVoice: "c45bc5ec-dc68-4feb-8829-6ac1e9f4f478", ttsModel: "sonic-3.5", telephonyProvider: "vobiz",
       systemPrompt: "", temperature: 0.40, maxDuration: 480,
       greetingMessage: "Hello", firstSpeaker: "assistant", endCallPhrases: "", silenceTimeoutSeconds: 30,
@@ -7570,7 +7570,7 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
       { type: "end_call", name: "end_call", description: "End the call when the conversation is complete." },
     ],
     llmProvider: "sarvam",
-    llmModel: "gemma4",
+    llmModel: "sarvam-105b-conversations",
     ttsProvider: "cartesia",
     ttsModel: "sonic-3.5",
     ttsVoice: "c45bc5ec-dc68-4feb-8829-6ac1e9f4f478",

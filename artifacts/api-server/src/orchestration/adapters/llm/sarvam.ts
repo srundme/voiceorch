@@ -17,10 +17,16 @@ function rawSseDebugEnabled(): boolean {
 /** Max chars of the withheld content buffer to include in a diagnostic record. */
 const RAW_SSE_DIAG_MAX_BUFFER = 2000;
 
+/** Flagship reasoning model — complex / agentic / analytics (not the voice default). */
+export const SARVAM_FLAGSHIP_MODEL = "sarvam-105b" as const;
+/** Post-trained dialogue model — voice agents & real-time chat (/v1 only). */
+export const SARVAM_CONVERSATIONS_MODEL = "sarvam-105b-conversations" as const;
+
 /** Models that support Sarvam's function-calling interface */
 const TOOL_CAPABLE_MODELS = new Set([
   "sarvam-30b",
-  "sarvam-105b",
+  SARVAM_FLAGSHIP_MODEL,
+  SARVAM_CONVERSATIONS_MODEL,
   // Sarvam-hosted open-source models on /v2 (beta; key must be whitelisted).
   "gemma4",
   "glm5.2",
@@ -33,7 +39,12 @@ export function isSarvamOpenSourceModel(model: string): boolean {
   return OPEN_SOURCE_MODELS.has(model);
 }
 
+export function isSarvamConversationsModel(model: string): boolean {
+  return model === SARVAM_CONVERSATIONS_MODEL;
+}
+
 export function sarvamChatCompletionsUrl(model: string): string {
+  // Docs: sarvam-105b-conversations is /v1 only; open-source hosts use /v2.
   return isSarvamOpenSourceModel(model)
     ? "https://api.sarvam.ai/v2/chat/completions"
     : "https://api.sarvam.ai/v1/chat/completions";
@@ -42,13 +53,17 @@ export function sarvamChatCompletionsUrl(model: string): string {
 /** Normalize playground / docs aliases to the wire model ids. */
 export function normalizeSarvamLlmModel(model: string | null | undefined): string {
   const ALIASES: Record<string, string> = {
-    "sarvam-m": "sarvam-105b",
-    "sarvam-2b": "sarvam-105b",
-    "sarvam-2b-v0.5": "sarvam-105b",
-    "sarvam-m1": "sarvam-105b",
-    "sarvam-30b-16k": "sarvam-105b",
-    "sarvam-105b-32k": "sarvam-105b",
-    "sarvam-30b": "sarvam-105b",
+    "sarvam-m": SARVAM_FLAGSHIP_MODEL,
+    "sarvam-2b": SARVAM_FLAGSHIP_MODEL,
+    "sarvam-2b-v0.5": SARVAM_FLAGSHIP_MODEL,
+    "sarvam-m1": SARVAM_FLAGSHIP_MODEL,
+    "sarvam-30b-16k": SARVAM_FLAGSHIP_MODEL,
+    "sarvam-105b-32k": SARVAM_FLAGSHIP_MODEL,
+    "sarvam-30b": SARVAM_FLAGSHIP_MODEL,
+    // Conversational aliases
+    "sarvam-105b-conversation": SARVAM_CONVERSATIONS_MODEL,
+    "sarvam-105b-chat": SARVAM_CONVERSATIONS_MODEL,
+    "sarvam-conversations": SARVAM_CONVERSATIONS_MODEL,
     // Open-source beta ids (playground label "Gemma 4" → gemma4).
     "gemma-4": "gemma4",
     "gemma-4-31b": "gemma4",
@@ -57,7 +72,7 @@ export function normalizeSarvamLlmModel(model: string | null | undefined): strin
     "glm5-2": "glm5.2",
     "glm-5-2": "glm5.2",
   };
-  const raw = (model ?? "sarvam-105b").trim();
+  const raw = (model ?? SARVAM_FLAGSHIP_MODEL).trim();
   const key = raw.toLowerCase();
   return ALIASES[key] ?? ALIASES[raw] ?? raw;
 }
@@ -386,7 +401,10 @@ export class SarvamLLM implements LLMAdapter {
       if (typeof mt !== "number" || mt < 500) genBody["max_tokens"] = 500;
     }
 
-    if (hasTools && !openSource) {
+    // Tool turns on the flagship model get a light reasoning pass. The
+    // conversations variant is for voice — keep reasoning off even with tools
+    // so TTFT stays low and reasoning tokens don't eat the spoken budget.
+    if (hasTools && !openSource && !isSarvamConversationsModel(this.model)) {
       if (genBody["reasoning_effort"] == null) {
         genBody["reasoning_effort"] = "low";
         const mt = genBody["max_tokens"];
