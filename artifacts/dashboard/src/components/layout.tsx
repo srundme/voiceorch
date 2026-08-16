@@ -350,10 +350,15 @@ function NavItemEl({
   const isActive = navItemIsActive(location, item.href);
 
   return (
-    <Link href={item.href} onClick={onClick}>
+    <Link
+      href={item.href}
+      onClick={onClick}
+      aria-current={isActive ? "page" : undefined}
+      className="block rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+    >
       <div
         className={[
-          "relative flex h-9 items-center gap-2.5 rounded-md px-2.5 text-[13px] transition-colors duration-100 cursor-pointer select-none",
+          "relative flex h-9 items-center gap-2.5 rounded-md px-2.5 text-[13px] transition-colors duration-200 cursor-pointer select-none",
           indent ? "pl-2" : "",
           isActive
             ? "bg-foreground/[0.08] text-foreground font-medium"

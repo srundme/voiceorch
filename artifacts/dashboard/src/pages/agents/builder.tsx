@@ -16,6 +16,7 @@ import { format, formatDistanceToNow } from "date-fns";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { canGoBackInApp } from "@/lib/nav-history";
+import { EmptyState } from "@/components/empty-state";
 import { WebcallPanel } from "@/components/webcall-panel";
 import { AgentConfigCard, EditConfigDialog } from "@/components/agent-config-card";
 import { GeminiLiveVoicePicker } from "@/components/gemini-live-voice-picker";
@@ -4108,14 +4109,33 @@ function AgentListPanel({ selectedId, onSelect, className }: {
           <div key={i} className="px-2 py-2"><Skeleton className="mb-1.5 h-4 w-3/4" /><Skeleton className="h-3 w-1/2" /></div>
         ))}
         {!isLoading && filtered.length === 0 && (
-          <div className="px-2 py-8 text-center">
-            <p className="text-xs font-medium">{search ? "No matches" : "No agents yet"}</p>
-            {!search && (
-              <Button size="sm" className="mt-3 h-8 gap-1 text-xs" onClick={() => navigate("/app/vibe")}>
-                <Sparkles className="size-3" /> Build with AI
-              </Button>
-            )}
-          </div>
+          <EmptyState
+            variant="inline"
+            icon={<Bot />}
+            title={search ? "No matches" : "No agents yet"}
+            description={
+              search
+                ? "Try a different name or clear the search."
+                : "Build the voice agent first, then attach it to a campaign."
+            }
+            action={
+              search
+                ? undefined
+                : {
+                    label: "Build with AI",
+                    icon: <Sparkles className="size-3" />,
+                    onClick: () => navigate("/app/vibe"),
+                  }
+            }
+            secondaryAction={
+              search
+                ? undefined
+                : {
+                    label: "Configure manually",
+                    onClick: () => navigate("/app/agents?create=1"),
+                  }
+            }
+          />
         )}
         {filtered.map((agent) => {
           const isSelected = agent.id === selectedId;

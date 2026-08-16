@@ -14,6 +14,7 @@ import {
 import type { Campaign, ConsentBasisBasisType } from "@workspace/api-client-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -89,7 +90,8 @@ function CopyButton({ text }: { text: string }) {
           setTimeout(() => setCopied(false), 1500);
         });
       }}
-      className="text-muted-foreground/30 hover:text-muted-foreground transition-colors"
+      aria-label={copied ? "Copied" : "Copy"}
+      className="text-muted-foreground/30 hover:text-muted-foreground transition-colors duration-200"
     >
       {copied ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
     </button>
@@ -1731,20 +1733,20 @@ export default function CampaignsPage() {
                     ))}
                   </div>
                 ) : filtered.length === 0 ? (
-                  <div className="px-4 py-12 text-center">
-                    <p className="text-sm text-muted-foreground/40">No campaigns match your filters.</p>
-                    <button
-                      type="button"
-                      className="mt-2 text-xs text-muted-foreground/50 underline underline-offset-2 hover:text-foreground"
-                      onClick={() => {
+                  <EmptyState
+                    variant="inline"
+                    icon={<Megaphone />}
+                    title="No campaigns match your filters"
+                    description="Clear search or filters to see every campaign again."
+                    action={{
+                      label: "Clear filters",
+                      onClick: () => {
                         setSearch("");
                         setFilterSource("__all__");
                         setFilterStatus("__all__");
-                      }}
-                    >
-                      Clear filters
-                    </button>
-                  </div>
+                      },
+                    }}
+                  />
                 ) : (
                   <>
                     <TableHeader listLabel="Campaign" />
@@ -1773,11 +1775,21 @@ export default function CampaignsPage() {
           )}
 
           {!isLoading && !hasCampaigns && (
-            <div className="rounded-2xl border border-dashed border-border/70 px-6 py-10 text-center">
-              <p className="text-[13px] text-muted-foreground">
-                Your campaigns will show up here after you start one.
-              </p>
-            </div>
+            <EmptyState
+              variant="panel"
+              icon={<Megaphone />}
+              title="No campaigns yet"
+              description="Pick a lead source, attach an agent, and start dialing. Campaigns you create will show up here."
+              action={{
+                label: "Start a CSV campaign",
+                icon: <Upload className="size-3.5" />,
+                onClick: () => startFrom("csv"),
+              }}
+              secondaryAction={{
+                label: "Campaign guide",
+                onClick: () => setHelpOpen(true),
+              }}
+            />
           )}
         </div>
       </section>

@@ -36,10 +36,11 @@ export function PageHeader({
           containerClassName
         }
       >
-        <Link href={href}>
-          <span className="inline-flex items-center gap-2 cursor-pointer">
-            <BrandMark iconSize={22} wordmarkHeight={16} />
-          </span>
+        <Link
+          href={href}
+          className="inline-flex items-center gap-2 rounded-md cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        >
+          <BrandMark iconSize={22} wordmarkHeight={16} />
         </Link>
         {actions && <div className="flex items-center gap-3">{actions}</div>}
       </div>

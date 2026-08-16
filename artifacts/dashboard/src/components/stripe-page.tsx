@@ -52,7 +52,7 @@ export function StripePage({
           <button
             type="button"
             onClick={onBack}
-            className="mb-3 inline-flex items-center gap-1 text-[12px] font-medium text-muted-foreground transition-colors hover:text-foreground"
+            className="mb-3 inline-flex items-center gap-1 rounded-md text-[12px] font-medium text-muted-foreground transition-colors duration-200 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           >
             <ChevronLeft className="size-3.5" />
             {back.label}
