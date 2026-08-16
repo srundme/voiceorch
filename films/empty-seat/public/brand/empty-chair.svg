@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 64 64" fill="none" role="img" aria-label="Empty seat">
+  <rect x="18" y="10" width="28" height="22" rx="6" stroke="#8E8E93" stroke-width="2.4"/>
+  <rect x="14" y="34" width="36" height="10" rx="4" stroke="#8E8E93" stroke-width="2.4"/>
+  <path d="M20 44v12M44 44v12" stroke="#8E8E93" stroke-width="2.4" stroke-linecap="round"/>
+</svg>
