@@ -319,10 +319,10 @@ export class SarvamLLM implements LLMAdapter {
     const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
     const openSource = isSarvamOpenSourceModel(this.model);
 
-    // Voice calls: thinking OFF by default. Sarvam's API defaults to "low", which
-    // streams English chain-of-thought into `content` and gets spoken by TTS
-    // (call 5646: "The user wants me to act as… Let me analyze the constraints").
-    // Explicit null disables. medium/high remain available for agents that opt in.
+    // Voice calls: thinking OFF by default. Sarvam's /v1 API defaults to
+    // "medium" (docs 2026-08), which streams chain-of-thought before content
+    // and can exhaust max_tokens with empty spoken replies. Explicit null
+    // disables. low/medium/high remain available for agents that opt in.
     // gemma4 never reasons — do not send reasoning_effort at all (no-op + noise).
     // glm5.2 always reasons unless extra_body.chat_template_kwargs.enable_thinking=false.
     const body: Record<string, unknown> = {};
@@ -332,6 +332,8 @@ export class SarvamLLM implements LLMAdapter {
       } else if (p.reasoningEffort === "low" || p.reasoningEffort === "medium" || p.reasoningEffort === "high") {
         body["reasoning_effort"] = p.reasoningEffort;
       } else if (!openSource) {
+        // Native Sarvam models (/v1): always send null for voice unless opted in.
+        // Omitting the field leaves the API default ("medium") ON.
         body["reasoning_effort"] = null;
       }
     }
@@ -401,10 +403,10 @@ export class SarvamLLM implements LLMAdapter {
       if (typeof mt !== "number" || mt < 500) genBody["max_tokens"] = 500;
     }
 
-    // Tool turns on the flagship model get a light reasoning pass. The
-    // conversations variant is for voice — keep reasoning off even with tools
-    // so TTFT stays low and reasoning tokens don't eat the spoken budget.
-    if (hasTools && !openSource && !isSarvamConversationsModel(this.model)) {
+    // Tool turns need reasoning on — with effort null, Sarvam stays conversational
+    // and ignores tools (confirmed). Flagship and conversations both bump to "low"
+    // for tools; non-tool voice turns keep reasoning off for TTFT.
+    if (hasTools && !openSource) {
       if (genBody["reasoning_effort"] == null) {
         genBody["reasoning_effort"] = "low";
         const mt = genBody["max_tokens"];
@@ -488,6 +490,7 @@ ${systemPrompt}`
             method: "POST",
             headers: {
               "api-subscription-key": this.key,
+              Authorization: `Bearer ${this.key}`,
               "Content-Type": "application/json",
               Accept: "text/event-stream",
             },

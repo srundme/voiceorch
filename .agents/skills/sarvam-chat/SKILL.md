@@ -10,16 +10,17 @@ metadata:
 # Chat Completions — Sarvam AI
 
 > [!IMPORTANT]
-> Auth: `api-subscription-key` header — NOT `Authorization: Bearer`. Base URL: `https://api.sarvam.ai/v1`
+> Auth: send both `api-subscription-key` and `Authorization: Bearer <key>`.
+> Base URL: `https://api.sarvam.ai/v1` (only `sarvam-105b` + `sarvam-105b-conversations`).
 
 ## Models
 
 | Model | Context | Best For |
 |-------|---------|----------|
 | `sarvam-105b` | 128K | Complex reasoning, coding, agentic workflows |
-| `sarvam-30b` | 64K | Real-time chat, voice agents, conversational AI |
+| `sarvam-105b-conversations` | — | Real-time chat, voice agents, conversational AI |
 
-The fixed-context variants (`sarvam-105b-32k`, `sarvam-30b-16k`) are retired — base models serve their full context window directly.
+Open-source hosts (`gemma4`, `glm5.2`) use `/v2/chat/completions`. Older `sarvam-30b` / fixed-context variants are retired.
 
 ## Quick Start (Python)
 
@@ -75,7 +76,7 @@ response = client.chat.completions.create(model="sarvam-30b", messages=[...])
 | **SDK method** | Python: `client.chat.completions(...)`, JS: `client.chat.completions({...})` — no `.create()` in either. OpenAI SDK uses `.create()` as usual. |
 | **JS constructor** | `new SarvamAIClient({ apiSubscriptionKey: "..." })` — NOT `SarvamAI()`. Key is passed explicitly. |
 | **`content` can be `None`** | Models produce `reasoning_content` before `content`. If `max_tokens` is too low, reasoning consumes the budget, `finish_reason` is `"length"`, and `content` is `None`. Omit `max_tokens`, set 500+, or disable reasoning with `reasoning_effort=None`. Check `reasoning_content` as fallback. |
-| **reasoning_effort** | Thinking is **on by default** at `"low"`. Values: `"low"\|"medium"\|"high"`, or `None` to disable reasoning entirely. NOT `thinking=True`. Reasoning tokens count toward completion tokens and billing. |
+| **reasoning_effort** | Thinking is **on by default** at `"medium"` (API ref 2026-08). Values: `"low"\|"medium"\|"high"`, or `None`/`null` to disable. Omitting the field leaves medium ON. NOT `thinking=True`. Reasoning tokens count toward completion tokens and billing. |
 
 ## Full Docs
 

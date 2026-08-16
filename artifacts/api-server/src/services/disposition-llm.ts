@@ -123,6 +123,8 @@ class SarvamDispositionLLM implements DispositionLLM {
     this.client = new OpenAI({
       apiKey,
       baseURL: openSource ? "https://api.sarvam.ai/v2" : "https://api.sarvam.ai/v1",
+      // Docs require api-subscription-key; SDK also sends Authorization: Bearer.
+      defaultHeaders: { "api-subscription-key": apiKey },
     });
     this.model = model;
   }
@@ -133,9 +135,9 @@ class SarvamDispositionLLM implements DispositionLLM {
     transcript: string,
   ): Promise<Record<string, unknown>> {
     // Sarvam json_object mode does not enforce a schema, so embed it in the prompt.
-    // gemma4 never reasons — omit reasoning_effort. Native models default thinking
-    // ON at "low"; for per-call structured JSON keep reasoning low so the budget
-    // goes to content (null disables; "low" is safer than empty content).
+    // gemma4 never reasons — omit reasoning_effort. Native /v1 defaults thinking
+    // ON at "medium"; for per-call structured JSON keep "low" so the budget
+    // goes to content (null disables; omitting leaves medium on).
     const openSource = isSarvamOpenSourceModel(this.model);
     const response = await this.client.chat.completions.create({
       model: this.model,

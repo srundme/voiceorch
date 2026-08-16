@@ -261,11 +261,11 @@ async function callQwen(
 /**
  * Non-streaming Sarvam chat call — the Indic-language counterpart of callQwen.
  * Uses sarvam-105b (highest quality; prompt generation is not latency-sensitive)
- * with thinking explicitly disabled (`reasoning_effort: null` — Sarvam's default
- * is ON). Auth header is `api-subscription-key`. Throws if the managed key is
- * missing or the call fails/returns empty. Defensively strips leaked
- * `<|message|>`-style special tokens plus any reasoning/fences.
- * Pass `systemInstruction: null` to send a single user message only.
+ * with thinking explicitly disabled (`reasoning_effort: null` — /v1 default is
+ * `medium`). Auth: both `api-subscription-key` and `Authorization: Bearer`.
+ * Throws if the managed key is missing or the call fails/returns empty.
+ * Defensively strips leaked `<|message|>`-style special tokens plus any
+ * reasoning/fences. Pass `systemInstruction: null` for a single user message.
  */
 export async function callSarvam(
   systemInstruction: string | null,
@@ -285,7 +285,7 @@ export async function callSarvam(
 
   const body: Record<string, unknown> = {
     model: "sarvam-105b",
-    // Thinking is ON by default on Sarvam — disable it explicitly.
+    // /v1 defaults reasoning_effort to "medium" — disable for prompt gen.
     reasoning_effort: null,
     max_tokens: opts?.maxTokens ?? 4096,
     messages,
@@ -299,6 +299,7 @@ export async function callSarvam(
     method: "POST",
     headers: {
       "api-subscription-key": sarvamKey,
+      Authorization: `Bearer ${sarvamKey}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify(body),
