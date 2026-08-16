@@ -7,6 +7,11 @@ import { Flip } from "./bolna/Flip";
 import { EndCard } from "./bolna/EndCard";
 import { EmptySeat } from "./EmptySeat";
 import { Tutorial } from "./Tutorial";
+import { MeetingFilm } from "./MeetingFilm";
+import { World } from "./meeting/World";
+import { Host } from "./meeting/Host";
+import { Enter } from "./meeting/Enter";
+import { Speak } from "./meeting/Speak";
 import { Open } from "./tutorial/Open";
 import { Idea } from "./tutorial/Idea";
 import { Agent } from "./tutorial/Agent";
@@ -22,6 +27,20 @@ import { End } from "./tutorial/End";
 export const RemotionRoot: React.FC = () => {
   return (
     <>
+      <Composition
+        id="MeetingTalk"
+        component={MeetingFilm}
+        durationInFrames={600}
+        fps={30}
+        width={1080}
+        height={1080}
+      />
+      <Folder name="Meeting-Scenes">
+        <Composition id="M-World" component={World} durationInFrames={600} fps={30} width={1080} height={1080} />
+        <Composition id="M-Host" component={Host} durationInFrames={250} fps={30} width={1080} height={1080} />
+        <Composition id="M-Enter" component={Enter} durationInFrames={280} fps={30} width={1080} height={1080} />
+        <Composition id="M-Speak" component={Speak} durationInFrames={180} fps={30} width={1080} height={1080} />
+      </Folder>
       <Composition
         id="Tutorial"
         component={Tutorial}
