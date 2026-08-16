@@ -6,10 +6,43 @@ import { Kinetic } from "./bolna/Kinetic";
 import { Flip } from "./bolna/Flip";
 import { EndCard } from "./bolna/EndCard";
 import { EmptySeat } from "./EmptySeat";
+import { Tutorial } from "./Tutorial";
+import { Open } from "./tutorial/Open";
+import { Idea } from "./tutorial/Idea";
+import { Agent } from "./tutorial/Agent";
+import { Campaign } from "./tutorial/Campaign";
+import { Call } from "./tutorial/Call";
+import { Book } from "./tutorial/Book";
+import { Join } from "./tutorial/Join";
+import { Deck } from "./tutorial/Deck";
+import { WhatsApp } from "./tutorial/WhatsApp";
+import { Recap } from "./tutorial/Recap";
+import { End } from "./tutorial/End";
 
 export const RemotionRoot: React.FC = () => {
   return (
     <>
+      <Composition
+        id="Tutorial"
+        component={Tutorial}
+        durationInFrames={3600}
+        fps={30}
+        width={1920}
+        height={1080}
+      />
+      <Folder name="Tutorial-Scenes">
+        <Composition id="T-Open" component={Open} durationInFrames={240} fps={30} width={1920} height={1080} />
+        <Composition id="T-Idea" component={Idea} durationInFrames={300} fps={30} width={1920} height={1080} />
+        <Composition id="T-Agent" component={Agent} durationInFrames={420} fps={30} width={1920} height={1080} />
+        <Composition id="T-Campaign" component={Campaign} durationInFrames={420} fps={30} width={1920} height={1080} />
+        <Composition id="T-Call" component={Call} durationInFrames={360} fps={30} width={1920} height={1080} />
+        <Composition id="T-Book" component={Book} durationInFrames={360} fps={30} width={1920} height={1080} />
+        <Composition id="T-Join" component={Join} durationInFrames={480} fps={30} width={1920} height={1080} />
+        <Composition id="T-Deck" component={Deck} durationInFrames={360} fps={30} width={1920} height={1080} />
+        <Composition id="T-WhatsApp" component={WhatsApp} durationInFrames={360} fps={30} width={1920} height={1080} />
+        <Composition id="T-Recap" component={Recap} durationInFrames={180} fps={30} width={1920} height={1080} />
+        <Composition id="T-End" component={End} durationInFrames={240} fps={30} width={1920} height={1080} />
+      </Folder>
       <Composition
         id="BolnaMotion"
         component={BolnaFilm}
