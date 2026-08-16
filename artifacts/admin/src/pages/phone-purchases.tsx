@@ -17,6 +17,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PhoneIcon } from "@workspace/brand-icons";
 import { RefreshCw, Search } from "lucide-react";
+import { SectionSubNav } from "@/components/section-subnav";
+import { MONEY_TABS } from "@/lib/nav-config";
 
 type PhonePurchase = {
   id: number;
@@ -89,6 +91,7 @@ export default function PhonePurchases() {
 
   return (
     <div className="space-y-6">
+      <SectionSubNav tabs={MONEY_TABS} />
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">

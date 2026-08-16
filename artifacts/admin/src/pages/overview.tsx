@@ -1,15 +1,55 @@
 import { useState } from "react";
-import { useOverview, useSpikeAlerts, useDismissSpikeAlert, usePromptTemplates, useVobizWalletStatus, type UserSegment } from "@/hooks/use-admin-api";
+import { useQuery } from "@tanstack/react-query";
+import { format } from "date-fns";
+import {
+  useOverview,
+  useSpikeAlerts,
+  useDismissSpikeAlert,
+  usePromptTemplates,
+  useVobizWalletStatus,
+  usePlatformActive,
+  usePlatformFailedCalls,
+  usePlatformFailedCallsByReason,
+  type UserSegment,
+} from "@/hooks/use-admin-api";
+import { adminFetch } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
-import { Users, PhoneCall, Activity, Clock, AlertCircle, Bell, X, Mail, Wallet, RefreshCw, TrendingDown, ChevronDown, ChevronUp, CheckCircle2, Timer } from "lucide-react";
+import {
+  Users,
+  PhoneCall,
+  Activity,
+  Clock,
+  AlertCircle,
+  Bell,
+  X,
+  Mail,
+  Wallet,
+  RefreshCw,
+  TrendingDown,
+  ChevronDown,
+  ChevronUp,
+  CheckCircle2,
+  Timer,
+  Handshake,
+} from "lucide-react";
 import { formatApiError } from "@/lib/format-api-error";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { NoActiveTemplateBanner } from "@/components/no-active-template-banner";
 import { CallVolumeChart } from "@/components/call-volume-chart";
+import { PageHeader } from "@/components/page-header";
+import { SectionSubNav } from "@/components/section-subnav";
+import { OPS_TABS } from "@/lib/nav-config";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 function SpikeAlertsPanel() {
   const { data: alertsData, isLoading } = useSpikeAlerts();
@@ -247,6 +287,167 @@ function VobizWalletCard() {
   );
 }
 
+function HealthLights() {
+  const { data, isLoading } = useQuery({
+    queryKey: ["admin", "health"],
+    queryFn: () => adminFetch<{ status: string; checks: Record<string, { status: string }> }>("/health"),
+    refetchInterval: 15_000,
+  });
+
+  const entries = Object.entries(data?.checks ?? {}).slice(0, 6);
+
+  return (
+    <Card className="border-border shadow-none">
+      <CardHeader className="pb-2 pt-3 px-4">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+            Health
+          </CardTitle>
+          <Button variant="ghost" size="sm" className="h-7 text-xs cursor-pointer" asChild>
+            <Link href="/health">Open →</Link>
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="px-4 pb-3">
+        {isLoading ? (
+          <p className="text-xs text-muted-foreground animate-pulse">Checking…</p>
+        ) : entries.length === 0 ? (
+          <p className="text-xs text-muted-foreground">No checks returned.</p>
+        ) : (
+          <ul className="space-y-1.5">
+            {entries.map(([name, check]) => {
+              const ok = check.status === "ok";
+              return (
+                <li key={name} className="flex items-center justify-between gap-2 text-xs">
+                  <span className="truncate text-muted-foreground">{name}</span>
+                  <span className="inline-flex items-center gap-1.5 shrink-0">
+                    <span
+                      className={`h-1.5 w-1.5 rounded-full ${ok ? "bg-emerald-500" : "bg-destructive"}`}
+                      aria-hidden
+                    />
+                    <span className={ok ? "text-foreground" : "text-destructive"}>{ok ? "ok" : check.status}</span>
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function FailedStrip() {
+  const { data, isLoading } = usePlatformFailedCallsByReason();
+  const rows = (data ?? []).slice(0, 5);
+  const total = (data ?? []).reduce((sum, r) => sum + r.count, 0);
+
+  return (
+    <Card className="border-border shadow-none">
+      <CardHeader className="pb-2 pt-3 px-4">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+            Fail reasons
+          </CardTitle>
+          <Button variant="ghost" size="sm" className="h-7 text-xs cursor-pointer" asChild>
+            <Link href="/platform">Triage →</Link>
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="px-4 pb-3 space-y-2">
+        {isLoading ? (
+          <p className="text-xs text-muted-foreground animate-pulse">Loading…</p>
+        ) : rows.length === 0 ? (
+          <p className="text-xs text-emerald-600 dark:text-emerald-400">No failures in the last sample.</p>
+        ) : (
+          rows.map((row) => {
+            const pct = total ? Math.round((row.count / total) * 100) : 0;
+            return (
+              <div key={row.reason} className="space-y-1">
+                <div className="flex justify-between gap-3 text-xs">
+                  <span className="truncate">{row.reason}</span>
+                  <span className="font-mono text-muted-foreground shrink-0">{row.count}</span>
+                </div>
+                <div className="h-1 rounded-full bg-muted overflow-hidden">
+                  <div className="h-full bg-destructive/70" style={{ width: `${pct}%` }} />
+                </div>
+              </div>
+            );
+          })
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function RecentFailedUsers() {
+  const { data, isLoading } = usePlatformFailedCalls({ limit: 8, page: 1 });
+  const rows = data?.data ?? [];
+
+  return (
+    <Card className="border-border shadow-none">
+      <CardHeader className="pb-2 pt-3 px-4">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+            Recent failed calls
+          </CardTitle>
+          <Button variant="ghost" size="sm" className="h-7 text-xs cursor-pointer" asChild>
+            <Link href="/platform">All fails →</Link>
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="px-4 pb-3">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>When</TableHead>
+              <TableHead>User</TableHead>
+              <TableHead>Agent</TableHead>
+              <TableHead>Reason</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {isLoading ? (
+              <TableRow>
+                <TableCell colSpan={4} className="text-xs text-muted-foreground">Loading…</TableCell>
+              </TableRow>
+            ) : rows.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={4} className="text-xs text-muted-foreground">No recent failures.</TableCell>
+              </TableRow>
+            ) : (
+              rows.map((call) => {
+                const userLabel = call.userName ?? call.userEmail ?? call.userId ?? "—";
+                return (
+                  <TableRow key={call.id}>
+                    <TableCell className="font-mono text-xs text-muted-foreground">
+                      {call.createdAt ? format(new Date(call.createdAt), "MMM d HH:mm") : "—"}
+                    </TableCell>
+                    <TableCell className="text-xs">
+                      {call.userId ? (
+                        <Link
+                          href={`/users/${call.userId}`}
+                          className="underline underline-offset-2 hover:text-foreground cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+                        >
+                          {userLabel}
+                        </Link>
+                      ) : (
+                        userLabel
+                      )}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{call.agentName ?? "—"}</TableCell>
+                    <TableCell className="text-xs truncate max-w-[220px]">{call.errorMessage ?? "—"}</TableCell>
+                  </TableRow>
+                );
+              })
+            )}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  );
+}
+
 const SEGMENTS: { id: UserSegment; label: string }[] = [
   { id: "real", label: "Real" },
   { id: "test", label: "Test" },
@@ -313,110 +514,166 @@ export default function Overview() {
   const pendingCount = overview?.pendingCallbacks ?? 0;
   const recentCallsCount = overview?.recentCalls ?? 0;
 
+  const { data: live } = usePlatformActive();
+  const liveSessions = live?.count ?? activeCount;
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
+      <SectionSubNav tabs={OPS_TABS} />
       {!hasActiveTemplate && <NoActiveTemplateBanner />}
 
-      {/* Status strip — h-9 pill row */}
-      <div className="flex items-center h-9 gap-5 flex-wrap text-[11px] uppercase tracking-[0.14em] text-muted-foreground ring-1 ring-border rounded-md px-4 bg-card">
-        <span className="font-semibold text-foreground">Call Center</span>
-        <span className="text-border">|</span>
-        <span className="flex items-center gap-1.5">
-          <span className="relative flex h-1.5 w-1.5">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
-          </span>
-          <span>{activeCount} Live</span>
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="h-1.5 w-1.5 rounded-full bg-zinc-400" />
-          <span>{pendingCount} Queue</span>
-        </span>
-        <span className="ml-auto text-[10px] font-semibold text-foreground">
-          {successRate}% success
-        </span>
-      </div>
-
-      {/* Page header */}
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <h1 className="text-3xl font-bold tracking-tight">Platform Overview</h1>
-        <div className="flex items-center gap-3">
-          {/* Real / Test / All segment toggle */}
-          <div className="inline-flex items-center rounded-md border border-border bg-card p-0.5">
-            {SEGMENTS.map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                onClick={() => setSegment(s.id)}
-                className={`px-2.5 h-6 text-[11px] font-medium rounded-[5px] transition-colors ${
-                  segment === s.id
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {s.label}
-              </button>
-            ))}
-          </div>
-          <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-            <span className="relative flex h-1.5 w-1.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-60" />
-              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-primary" />
+      <PageHeader
+        title="Today"
+        subtitle="What needs a hand right now. User tools stay on this page — spikes, wallets, and account totals are not gone."
+        actions={
+          <div className="flex items-center gap-3">
+            <div className="inline-flex items-center rounded-md border border-border bg-card p-0.5">
+              {SEGMENTS.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => setSegment(s.id)}
+                  className={`px-2.5 h-7 text-[11px] font-medium rounded-[5px] cursor-pointer transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                    segment === s.id
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+            <span className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="motion-safe:animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
+              </span>
+              Live
             </span>
-            <RefreshCw className="h-3 w-3" />
-            <span>Live</span>
           </div>
-        </div>
+        }
+      />
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <Card className="border-border shadow-none">
+          <CardHeader className="pb-1 pt-3 px-4">
+            <CardTitle className="text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.14em]">Live</CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-3">
+            <div className="text-2xl font-bold font-mono tabular-nums">{liveSessions}</div>
+            <p className="text-xs text-muted-foreground mt-0.5">on a call now</p>
+          </CardContent>
+        </Card>
+        <Card className="border-border shadow-none">
+          <CardHeader className="pb-1 pt-3 px-4">
+            <CardTitle className="text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.14em]">Queue</CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-3">
+            <div className="text-2xl font-bold font-mono tabular-nums">{pendingCount}</div>
+            <p className="text-xs text-muted-foreground mt-0.5">pending callbacks</p>
+          </CardContent>
+        </Card>
+        <Card className="border-border shadow-none">
+          <CardHeader className="pb-1 pt-3 px-4">
+            <CardTitle className="text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.14em]">Calls 24h</CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-3">
+            <div className="text-2xl font-bold font-mono tabular-nums">{recentCallsCount.toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground mt-0.5">{successRate}% lifetime success</p>
+          </CardContent>
+        </Card>
+        <Card className="border-border shadow-none">
+          <CardHeader className="pb-1 pt-3 px-4">
+            <CardTitle className="text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.14em]">Users</CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-3">
+            <div className="text-2xl font-bold font-mono tabular-nums">{overview?.totalUsers?.toLocaleString() || "0"}</div>
+            <Link href="/users" className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground cursor-pointer">
+              Open directory →
+            </Link>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* KPI grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {metrics.map((metric, i) => (
-          <Card key={i} className="border-border bg-card shadow-none hover:border-muted-foreground/30 transition-colors">
-            <CardHeader className="flex flex-row items-center justify-between pb-2 pt-3 px-4">
-              <CardTitle className="text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.14em]">
-                {metric.title}
-              </CardTitle>
-              <metric.icon className="h-3.5 w-3.5 text-muted-foreground" />
-            </CardHeader>
-            <CardContent className="px-4 pb-3">
-              <div className="text-2xl font-bold font-mono tabular-nums">{metric.value}</div>
-              <p className="text-xs text-muted-foreground mt-0.5">{metric.description}</p>
-            </CardContent>
-          </Card>
+      <div className="flex flex-wrap gap-2">
+        {[
+          { href: "/users", label: "Users", icon: Users },
+          { href: "/partners", label: "Partners", icon: Handshake },
+          { href: "/all-agents", label: "All agents", icon: Activity },
+          { href: "/emails", label: "Emails", icon: Mail },
+          { href: "/recharges", label: "Recharges", icon: Wallet },
+          { href: "/platform", label: "Failed calls", icon: AlertCircle },
+        ].map((a) => (
+          <Button key={a.href} variant="outline" size="sm" className="h-8 text-xs cursor-pointer" asChild>
+            <Link href={a.href}>
+              <a.icon className="h-3.5 w-3.5 mr-1.5" aria-hidden />
+              {a.label}
+            </Link>
+          </Button>
         ))}
       </div>
 
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+        <VobizWalletCard />
+        <HealthLights />
+      </div>
+
+      <SpikeAlertsPanel />
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+        <FailedStrip />
+        <Card className="border-border shadow-none">
+          <CardHeader className="pb-2 pt-3 px-4">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+                Recent calls
+              </CardTitle>
+              <div className="flex gap-2">
+                <Button variant="ghost" size="sm" className="h-7 text-xs cursor-pointer" asChild>
+                  <Link href="/platform">Live log →</Link>
+                </Button>
+                <Button variant="ghost" size="sm" className="h-7 text-xs cursor-pointer" asChild>
+                  <Link href="/usage/history">Usage history →</Link>
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="px-4 pb-3">
+            <div className="flex items-end gap-3">
+              <span className="font-mono font-bold text-2xl tabular-nums">{recentCallsCount.toLocaleString()}</span>
+              <p className="text-xs text-muted-foreground pb-1">
+                in the last 24 hours · lifetime success {successRate}%
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <RecentFailedUsers />
+
       <CallVolumeChart compact defaultPreset="month" showViewAll segment={segment} />
 
-      {/* Recent Calls summary */}
-      <Card className="border-border shadow-none">
-        <CardHeader className="pb-2 pt-3 px-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <PhoneCall className="h-4 w-4 text-zinc-500" />
-              <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-                Recent Calls
-              </CardTitle>
-            </div>
-            <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground" asChild>
-              <Link href="/usage/history">View all →</Link>
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="px-4 pb-3">
-          <div className="flex items-center gap-3 py-1 text-sm">
-            <span className="font-mono font-bold text-2xl tabular-nums">{recentCallsCount.toLocaleString()}</span>
-            <div className="text-xs text-muted-foreground">
-              <div>calls in last 24 hours</div>
-              <div className="text-emerald-500 font-medium">{successRate}% success rate</div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <VobizWalletCard />
-      <SpikeAlertsPanel />
+      <div>
+        <h2 className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3">
+          Platform totals
+        </h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          {metrics.map((metric) => (
+            <Card key={metric.title} className="border-border bg-card shadow-none">
+              <CardHeader className="flex flex-row items-center justify-between pb-2 pt-3 px-4">
+                <CardTitle className="text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.14em]">
+                  {metric.title}
+                </CardTitle>
+                <metric.icon className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
+              </CardHeader>
+              <CardContent className="px-4 pb-3">
+                <div className="text-2xl font-bold font-mono tabular-nums">{metric.value}</div>
+                <p className="text-xs text-muted-foreground mt-0.5">{metric.description}</p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

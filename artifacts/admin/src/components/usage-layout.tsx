@@ -1,5 +1,7 @@
 import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
+import { SectionSubNav } from "@/components/section-subnav";
+import { ANALYTICS_TABS } from "@/lib/nav-config";
 
 const TABS = [
   { href: "/usage", label: "Overview", exact: true },
@@ -17,8 +19,9 @@ const TABS = [
 export function UsageSubNav() {
   const [location] = useLocation();
   return (
-    <div className="border-b border-border">
-      <nav className="flex items-center gap-1 overflow-x-auto pb-px">
+    <div>
+      <SectionSubNav tabs={ANALYTICS_TABS} />
+      <nav className="flex items-center gap-1 overflow-x-auto border-b border-border pb-px">
         {TABS.map((t) => {
           const active = t.exact ? location === t.href : location === t.href || location.startsWith(`${t.href}/`);
           return (

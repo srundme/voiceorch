@@ -12,6 +12,8 @@ import {
   downloadFinanceCsv,
 } from "@/hooks/use-admin-api";
 import { formatCentsToDollars } from "@/lib/api";
+import { SectionSubNav } from "@/components/section-subnav";
+import { MONEY_TABS } from "@/lib/nav-config";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -129,6 +131,7 @@ export default function Finance() {
 
   return (
     <div className="space-y-6">
+      <SectionSubNav tabs={MONEY_TABS} />
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Finance &amp; Analytics</h1>

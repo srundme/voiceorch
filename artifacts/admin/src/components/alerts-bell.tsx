@@ -23,7 +23,7 @@ export function AlertsBell() {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative h-9 w-9" data-testid="button-alerts-bell">
+        <Button variant="ghost" size="icon" className="relative h-9 w-9 cursor-pointer" aria-label={count > 0 ? `${count} unacknowledged alerts` : "Alerts"} data-testid="button-alerts-bell">
           <Bell className="h-4 w-4" />
           {count > 0 && (
             <span className="absolute -top-1 -right-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">

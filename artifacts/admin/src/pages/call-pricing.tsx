@@ -12,6 +12,8 @@ import { Badge } from "@/components/ui/badge";
 import { Plus, Pencil, Trash2, RefreshCw, Wallet, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError } from "@/lib/format-api-error";
+import { SectionSubNav } from "@/components/section-subnav";
+import { MONEY_TABS } from "@/lib/nav-config";
 
 /* ── Types ────────────────────────────────────────────────────────────────── */
 
@@ -301,6 +303,7 @@ export default function CallPricingPage() {
 
   return (
     <div className="space-y-6 p-6 max-w-5xl mx-auto w-full">
+      <SectionSubNav tabs={MONEY_TABS} />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Call Pricing</h1>

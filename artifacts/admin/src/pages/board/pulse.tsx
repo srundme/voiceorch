@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Clock, TrendingUp, Settings2, Info } from "lucide-react";
+import { SectionSubNav } from "@/components/section-subnav";
+import { ANALYTICS_TABS } from "@/lib/nav-config";
 
 function Kpi({
   label,
@@ -124,6 +126,7 @@ export default function BoardPulse() {
 
   return (
     <div className="space-y-6">
+      <SectionSubNav tabs={ANALYTICS_TABS} />
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Company Pulse</h1>
         <p className="text-sm text-muted-foreground mt-1">

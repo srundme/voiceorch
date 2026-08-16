@@ -16,6 +16,8 @@ import {
 import { ChevronLeft, ChevronRight, Mail, Send, Eye } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError } from "@/lib/format-api-error";
+import { SectionSubNav } from "@/components/section-subnav";
+import { EMAIL_TABS } from "@/lib/nav-config";
 
 const TYPE_COLORS: Record<string, string> = {
   manual: "secondary",
@@ -90,6 +92,7 @@ export default function EmailsPage() {
 
   return (
     <div className="space-y-6">
+      <SectionSubNav tabs={EMAIL_TABS} />
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <Mail className="h-6 w-6 text-muted-foreground" />

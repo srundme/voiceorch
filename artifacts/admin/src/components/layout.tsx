@@ -1,52 +1,22 @@
 import { useState } from "react";
-import { Link, useLocation } from "wouter";
-import {
-  AgentIcon,
-  SettingsIcon,
-  PartnerIcon,
-  OverviewIcon,
-  HealthIcon,
-  PulseIcon,
-  LineGrowthIcon,
-  RetentionIcon,
-  MoatIcon,
-  UnitEconomicsIcon,
-  CallAnalyticsIcon,
-  UsersIcon,
-  RechargesIcon,
-  PhoneIcon,
-  AuditIcon,
-  UsageIcon,
-  PlatformIcon,
-  GrowthIcon,
-  SignupsIcon,
-  EmailIcon,
-  ManagedKeysIcon,
-  ManagedNumbersIcon,
-  VoicesIcon,
-  PromptIcon,
-  TemplatesIcon,
-  AmbientIcon,
-  SchedulingIcon,
-  GCalIcon,
-  CallPricingIcon,
-  DpdpIcon,
-  DeploymentsIcon,
-  WorkshopsIcon,
-  TrophyIcon,
-  GraduationIcon,
-  BuildingIcon,
-  ShieldAgentIcon,
-  LogOutIcon,
-  WalletIcon,
-} from "@workspace/brand-icons";
+import { Link } from "wouter";
+import { LogOutIcon } from "@workspace/brand-icons";
+import { Menu, Search, Moon, Sun } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Kbd } from "@/components/ui/kbd";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { AlertsBell } from "@/components/alerts-bell";
+import { NavTree } from "@/components/nav-tree";
+import { CommandPalette } from "@/components/command-palette";
+import { useTheme } from "@/components/theme-provider";
 
 function BrandMark({ compact = false }: { compact?: boolean }) {
   return (
-    <Link href="/" className="flex items-center gap-2 group">
+    <Link
+      href="/"
+      className="flex items-center gap-2 group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-md"
+    >
       <img
         src={`${import.meta.env.BASE_URL}snapserve-icon-light.png`}
         alt=""
@@ -72,137 +42,122 @@ function BrandMark({ compact = false }: { compact?: boolean }) {
   );
 }
 
-type NavItem = {
-  href: string;
-  label: string;
-  icon: React.ElementType;
-  section?: string;
-};
+function ThemeToggle() {
+  const { theme, setTheme } = useTheme();
+  const dark = theme === "dark" || (theme === "system" && typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      className="h-9 w-9 cursor-pointer"
+      onClick={() => setTheme(dark ? "light" : "dark")}
+      aria-label={dark ? "Switch to light theme" : "Switch to dark theme"}
+    >
+      {dark ? <Sun className="h-4 w-4" aria-hidden /> : <Moon className="h-4 w-4" aria-hidden />}
+    </Button>
+  );
+}
 
 export function Layout({ children }: { children: React.ReactNode }) {
-  const [location] = useLocation();
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [commandOpen, setCommandOpen] = useState(false);
 
   const handleLogout = () => {
     localStorage.removeItem("adminToken");
     window.location.href = `${import.meta.env.BASE_URL}login`;
   };
 
-  const navItems: NavItem[] = [
-    { href: "/board/pulse",           label: "Company Pulse",      icon: PulseIcon, section: "Board" },
-    { href: "/board/growth",          label: "Growth Metrics",     icon: LineGrowthIcon },
-    { href: "/board/retention",       label: "Retention & Health", icon: RetentionIcon },
-    { href: "/board/moat",            label: "Product Moat",       icon: MoatIcon },
-    { href: "/board/unit-economics",  label: "Unit Economics",     icon: UnitEconomicsIcon },
-    { href: "/",               label: "Overview",         icon: OverviewIcon },
-    { href: "/call-analytics", label: "Call Analytics",   icon: CallAnalyticsIcon },
-    { href: "/users",          label: "Users",            icon: UsersIcon },
-    { href: "/partners",       label: "Partners",         icon: PartnerIcon },
-    { href: "/finance",        label: "Finance",          icon: WalletIcon },
-    { href: "/recharges",      label: "Recharges",        icon: RechargesIcon },
-    { href: "/phone-purchases",label: "Phone Purchases",  icon: PhoneIcon },
-    { href: "/audit-logs",     label: "Audit Logs",       icon: AuditIcon },
-    { href: "/usage",          label: "Usage Monitoring", icon: UsageIcon },
-    { href: "/platform",       label: "Platform",         icon: PlatformIcon },
-    { href: "/health",         label: "Health",           icon: HealthIcon },
-    { href: "/growth",         label: "Growth",           icon: GrowthIcon },
-    { href: "/reports/signups",label: "Signups Report",   icon: SignupsIcon },
-    { href: "/reports/emails", label: "Email Reports",    icon: EmailIcon },
-    { href: "/managed-keys",   label: "Managed Keys",     icon: ManagedKeysIcon },
-    { href: "/managed-numbers",label: "Managed Numbers",  icon: ManagedNumbersIcon },
-    { href: "/voices",         label: "Voices",           icon: VoicesIcon },
-    { href: "/prompt-template",label: "Prompt Template",  icon: PromptIcon },
-    { href: "/system-prompt-templates", label: "System Prompt Templates", icon: TemplatesIcon },
-    { href: "/ambient-sounds", label: "Ambient Sounds",   icon: AmbientIcon },
-    { href: "/all-agents",     label: "All Agents",       icon: AgentIcon },
-    { href: "/scheduling",       label: "Scheduling",        icon: SchedulingIcon },
-    { href: "/gcal-connections", label: "GCal Connections", icon: GCalIcon },
-    { href: "/call-pricing",     label: "Call Pricing",      icon: CallPricingIcon },
-    { href: "/settings",       label: "Settings",         icon: SettingsIcon },
-    { href: "/dpdp",           label: "DPDP Erasure",     icon: DpdpIcon },
-    { href: "/deployments",    label: "Deployments",      icon: DeploymentsIcon },
-    { href: "/emails",         label: "Emails",            icon: EmailIcon },
-    { href: "/events",           label: "Workshops",        icon: WorkshopsIcon, section: "Workshops" },
-    { href: "/voiceathon",       label: "Voice-a-thons",    icon: TrophyIcon, section: "Voice-a-thons" },
-    { href: "/book-interns",     label: "Book Interns",     icon: GraduationIcon, section: "Engineering Programme" },
-    { href: "/family/companies", label: "Companies",      icon: BuildingIcon,  section: "Family Insurance" },
-    { href: "/family/agents",    label: "AI Agents",      icon: ShieldAgentIcon },
-  ];
-
   return (
     <div className="flex min-h-screen bg-background text-foreground selection:bg-primary selection:text-primary-foreground font-sans text-sm">
-      {/* Sidebar */}
-      <aside className="w-64 border-r border-border bg-card flex flex-col hidden md:flex shrink-0">
-        <div className="h-16 flex items-center px-5 border-b border-border">
+      <aside className="w-64 border-r border-border bg-card flex-col hidden md:flex shrink-0">
+        <div className="h-14 flex items-center px-4 border-b border-border">
           <BrandMark />
         </div>
-        
-        <nav className="flex-1 overflow-y-auto p-3 space-y-0.5">
-          {navItems.map((item, idx) => {
-            const isActive = location === item.href || (item.href !== "/" && location.startsWith(item.href));
-            const Icon = item.icon;
-            const showSection = item.section && (idx === 0 || !navItems[idx - 1].section);
-
-            return (
-              <div key={item.href}>
-                {showSection && (
-                  <div className="px-3 pt-4 pb-1">
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1 h-px bg-border" />
-                      <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/60">
-                        {item.section}
-                      </span>
-                      <div className="flex-1 h-px bg-border" />
-                    </div>
-                  </div>
-                )}
-                <Link
-                  href={item.href}
-                  className={cn(
-                    "flex items-center px-3 py-2 rounded-md text-[13px] font-medium transition-colors",
-                    isActive
-                      ? "bg-muted text-foreground"
-                      : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                  )}
-                  data-testid={`nav-${item.label.toLowerCase()}`}
-                >
-                  <Icon className={cn("h-4 w-4 mr-2.5", isActive ? "opacity-100 text-primary" : "opacity-70")} />
-                  {item.label}
-                </Link>
-              </div>
-            );
-          })}
+        <nav className="flex-1 overflow-y-auto p-2" aria-label="Admin">
+          <NavTree />
         </nav>
-        
-        <div className="p-3 border-t border-border">
-          <Button 
-            variant="ghost" 
-            className="w-full justify-start text-muted-foreground hover:text-foreground hover:bg-muted h-9 px-3"
+        <div className="p-2 border-t border-border">
+          <Button
+            variant="ghost"
+            className="w-full justify-start text-muted-foreground hover:text-foreground hover:bg-muted h-9 px-3 cursor-pointer"
             onClick={handleLogout}
             data-testid="button-logout"
           >
-            <LogOutIcon className="h-4 w-4 mr-2.5 opacity-70" />
+            <LogOutIcon className="h-4 w-4 mr-2.5 opacity-70" aria-hidden />
             Sign Out
           </Button>
         </div>
       </aside>
 
-      {/* Main Content */}
-      <main className="flex-1 flex flex-col min-w-0">
-        <div className="h-14 border-b border-border flex items-center justify-between px-4 md:px-8 bg-card">
-          <div className="flex items-center md:hidden">
+      <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+        <SheetContent side="left" className="w-72 p-0 flex flex-col">
+          <SheetHeader className="h-14 px-4 border-b border-border justify-center">
+            <SheetTitle className="sr-only">Admin navigation</SheetTitle>
             <BrandMark compact />
+          </SheetHeader>
+          <nav className="flex-1 overflow-y-auto p-2" aria-label="Admin">
+            <NavTree onNavigate={() => setMobileOpen(false)} />
+          </nav>
+          <div className="p-2 border-t border-border">
+            <Button
+              variant="ghost"
+              className="w-full justify-start text-muted-foreground h-9 px-3 cursor-pointer"
+              onClick={handleLogout}
+            >
+              <LogOutIcon className="h-4 w-4 mr-2.5 opacity-70" aria-hidden />
+              Sign Out
+            </Button>
           </div>
-          <div className="hidden md:block" />
-          <div className="flex items-center gap-2">
+        </SheetContent>
+      </Sheet>
+
+      <main className="flex-1 flex flex-col min-w-0">
+        <div className="h-14 border-b border-border flex items-center justify-between gap-3 px-3 md:px-6 bg-card sticky top-0 z-20">
+          <div className="flex items-center gap-2 min-w-0">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 md:hidden cursor-pointer"
+              onClick={() => setMobileOpen(true)}
+              aria-label="Open navigation"
+            >
+              <Menu className="h-4 w-4" aria-hidden />
+            </Button>
+            <div className="md:hidden">
+              <BrandMark compact />
+            </div>
+            <Button
+              variant="outline"
+              className="hidden sm:inline-flex h-9 gap-2 text-muted-foreground font-normal cursor-pointer"
+              onClick={() => setCommandOpen(true)}
+              aria-label="Search pages"
+            >
+              <Search className="h-3.5 w-3.5" aria-hidden />
+              <span className="text-xs">Jump to page</span>
+              <Kbd className="ml-2 hidden lg:inline-flex">⌘K</Kbd>
+            </Button>
+          </div>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 sm:hidden cursor-pointer"
+              onClick={() => setCommandOpen(true)}
+              aria-label="Search pages"
+            >
+              <Search className="h-4 w-4" aria-hidden />
+            </Button>
+            <ThemeToggle />
             <AlertsBell />
           </div>
         </div>
-        <div className="flex-1 overflow-auto p-6 md:p-8">
-          <div className="max-w-7xl mx-auto space-y-8">
-            {children}
-          </div>
+        <div className="flex-1 overflow-auto p-4 md:p-6 scroll-pt-16">
+          <div className="max-w-7xl mx-auto space-y-6">{children}</div>
         </div>
       </main>
+
+      <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
     </div>
   );
 }

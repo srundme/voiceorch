@@ -19,6 +19,8 @@ import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
 import { format, formatDistanceToNow } from "date-fns";
 import { Search, Download, Instagram, Youtube, Search as SearchIcon, Link2, Sparkles, KeyRound, Mail } from "lucide-react";
+import { SectionSubNav } from "@/components/section-subnav";
+import { ANALYTICS_TABS } from "@/lib/nav-config";
 
 const SEGMENTS: { id: UserSegment; label: string }[] = [
   { id: "all", label: "All" },
@@ -177,6 +179,7 @@ export default function SignupsReport() {
 
   return (
     <div className="space-y-6">
+      <SectionSubNav tabs={ANALYTICS_TABS} />
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Signups Report</h1>
