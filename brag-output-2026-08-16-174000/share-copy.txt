@@ -1,0 +1,36 @@
+LinkedIn (primary)
+------------------
+Your voice agent shouldn't stop at the phone line.
+
+SnapServe agents can now join Google Meet, Zoom and Teams.
+
+Paste a room link — the agent walks in as a participant. It's on camera. It
+speaks, listens and answers live.
+
+And the part I'm most proud of: it presents your deck. Not a screenshot of one —
+it screenshares the slides and advances them itself, calling next_slide and
+goto_slide as the conversation moves.
+
+Slide 3 of 12 → 4 of 12, driven by the agent, while it keeps talking.
+
+Meeting agents are live now on app.snapserve.ai.
+
+#VoiceAI #AIAgents #GoogleMeet #Zoom #SaaS #ProductLaunch
+
+
+Short (X / threads)
+-------------------
+SnapServe agents now join Google Meet and Zoom.
+
+Paste a link → the agent is in the room, on camera, answering live.
+
+Then it screenshares your deck and drives the slides itself (next_slide,
+goto_slide).
+
+app.snapserve.ai
+
+
+One-liner
+---------
+SnapServe agents now join your Meet and Zoom calls — and present the deck
+themselves.

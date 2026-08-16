@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080" fill="none" role="img" aria-label="SnapServe agent live in Zoom">
+  <title>SnapServe agent live in Zoom</title>
+  <defs>
+    <style>
+      .ui   { font-family: 'Inter', Helvetica, Arial, sans-serif; }
+      .name { font-size: 20px; fill: #FFFFFF; font-weight: 500; }
+      .agn  { font-size: 22px; fill: #FFFFFF; font-weight: 700; }
+      .meta { font-size: 17px; fill: #A0A0A0; }
+      .code { font-size: 18px; fill: #F2F2F2; }
+      .cap  { font-size: 19px; fill: #F2F2F2; }
+      .pill { font-size: 14px; fill: #FFFFFF; font-weight: 700; }
+      .ctl  { font-size: 13px; fill: #D6D6D6; }
+    </style>
+  </defs>
+
+  <rect width="1920" height="1080" fill="#1A1A1A"/>
+
+  <!-- top bar -->
+  <rect x="0" y="0" width="1920" height="72" fill="#242424"/>
+  <g transform="translate(40,22) scale(0.11)">
+    <rect width="256" height="256" rx="56" fill="#0B5CFF"/>
+    <path fill="#FFFFFF" d="M56 100a20 20 0 0 1 20-20h68a28 28 0 0 1 28 28v48a20 20 0 0 1-20 20H84a28 28 0 0 1-28-28v-48Z"/>
+    <path fill="#FFFFFF" d="M176 114.5l25.4-18.6c4.6-3.4 11.1-.1 11.1 5.6v53c0 5.7-6.5 9-11.1 5.6L176 141.5v-27Z"/>
+  </g>
+  <text x="84" y="45" class="ui code">SnapServe &#8212; Product demo</text>
+  <rect x="1740" y="20" width="140" height="32" rx="16" fill="#333333"/>
+  <circle cx="1762" cy="36" r="5" fill="#F04A4A"/>
+  <text x="1776" y="42" class="ui pill">Recording</text>
+
+  <!-- == gallery tiles == -->
+  <!-- Karthik -->
+  <rect x="48" y="112" width="880" height="496" rx="10" fill="#2D2D2D"/>
+  <circle cx="488" cy="344" r="92" fill="#4A4A4A"/>
+  <text x="488" y="360" class="ui" font-size="72" fill="#F2F2F2" text-anchor="middle" font-weight="500">K</text>
+  <rect x="68" y="548" width="150" height="34" rx="6" fill="#000000" opacity="0.55"/>
+  <text x="84" y="572" class="ui name">Karthik</text>
+
+  <!-- SnapServe agent &#8212; ACTIVE SPEAKER (Zoom green border) -->
+  <rect x="960" y="112" width="880" height="496" rx="10" fill="#1F2A24"/>
+  <rect x="960" y="112" width="880" height="496" rx="10" fill="none" stroke="#4ADE80" stroke-width="5"/>
+
+  <g transform="translate(1290,230) scale(10)">
+    <mask id="agZ" maskUnits="userSpaceOnUse" x="0" y="0" width="24" height="24">
+      <rect width="24" height="24" fill="black"/>
+      <rect x="4.3" y="3.2" width="15.4" height="14" rx="6" fill="white"/>
+      <circle cx="9.3" cy="9" r="1.9" fill="black"/>
+      <circle cx="14.7" cy="9" r="1.9" fill="black"/>
+      <path d="M9.9 12.8c.945 1.68 3.255 1.68 4.2 0" stroke="black" stroke-width="1.35" stroke-linecap="round" fill="none"/>
+    </mask>
+    <rect x="1.1" y="7.9" width="3" height="6.4" rx="1.5" fill="#FFFFFF" opacity="0.55"/>
+    <rect x="19.9" y="7.9" width="3" height="6.4" rx="1.5" fill="#FFFFFF" opacity="0.55"/>
+    <rect width="24" height="24" fill="#FFFFFF" mask="url(#agZ)"/>
+    <rect x="5.4" y="19.2" width="13.2" height="3" rx="1.5" fill="#FFFFFF" opacity="0.55"/>
+  </g>
+
+  <g fill="#4ADE80">
+    <rect x="1268" y="504" width="9" height="26" rx="4.5" opacity="0.45"/>
+    <rect x="1290" y="488" width="9" height="58" rx="4.5" opacity="0.7"/>
+    <rect x="1312" y="470" width="9" height="94" rx="4.5"/>
+    <rect x="1334" y="454" width="9" height="126" rx="4.5"/>
+    <rect x="1356" y="472" width="9" height="90" rx="4.5"/>
+    <rect x="1378" y="490" width="9" height="54" rx="4.5" opacity="0.7"/>
+    <rect x="1400" y="506" width="9" height="22" rx="4.5" opacity="0.45"/>
+  </g>
+
+  <rect x="980" y="548" width="290" height="34" rx="6" fill="#000000" opacity="0.55"/>
+  <text x="996" y="572" class="ui agn">SnapServe Agent</text>
+
+  <rect x="1700" y="140" width="116" height="32" rx="16" fill="#4ADE80"/>
+  <circle cx="1722" cy="156" r="5" fill="#14532D"/>
+  <text x="1736" y="162" class="ui pill" fill="#14532D">TALKING</text>
+
+  <!-- caption -->
+  <rect x="360" y="648" width="1200" height="88" rx="12" fill="#000000" opacity="0.6"/>
+  <text x="392" y="684" class="ui meta">SnapServe Agent</text>
+  <text x="392" y="714" class="ui cap">I've noted that &#8212; I'll send the proposal and book your follow-up.</text>
+
+  <!-- == Zoom control bar == -->
+  <rect x="0" y="960" width="1920" height="120" fill="#242424"/>
+  <g>
+    <path d="M700 986a9 9 0 0 1 9 9v11a9 9 0 0 1-18 0v-11a9 9 0 0 1 9-9Z" fill="#F2F2F2"/>
+    <path d="M685 1005a15 15 0 0 0 30 0M700 1020v8" stroke="#F2F2F2" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <text x="700" y="1050" class="ui ctl" text-anchor="middle">Mute</text>
+
+    <rect x="810" y="988" width="34" height="24" rx="5" fill="#F2F2F2"/>
+    <path d="M844 995l13-7v26l-13-7z" fill="#F2F2F2"/>
+    <text x="832" y="1050" class="ui ctl" text-anchor="middle">Video</text>
+
+    <circle cx="960" cy="1000" r="4" fill="#F2F2F2"/>
+    <circle cx="974" cy="1000" r="4" fill="#F2F2F2"/>
+    <circle cx="988" cy="1000" r="4" fill="#F2F2F2"/>
+    <text x="974" y="1050" class="ui ctl" text-anchor="middle">Participants</text>
+
+    <rect x="1096" y="986" width="36" height="28" rx="5" fill="none" stroke="#F2F2F2" stroke-width="3"/>
+    <path d="M1114 994v12M1108 1000h12" stroke="#F2F2F2" stroke-width="3" stroke-linecap="round"/>
+    <text x="1114" y="1050" class="ui ctl" text-anchor="middle">Share</text>
+
+    <rect x="1740" y="984" width="130" height="44" rx="8" fill="#F04A4A"/>
+    <text x="1805" y="1013" class="ui pill" text-anchor="middle">End</text>
+  </g>
+</svg>
