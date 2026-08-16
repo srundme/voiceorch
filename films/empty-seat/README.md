@@ -1,6 +1,6 @@
-# Empty seat — SnapServe LinkedIn film
+# SnapServe LinkedIn film (Remotion)
 
-24s, 1080×1080 Remotion remake of the empty-seat story. Not Hyperframes.
+`BolnaMotion` is the current cut: 20s, 1080×1080, dark Bolna motion graphics. Not Hyperframes.
 
 ```bash
 cd films/empty-seat
@@ -8,7 +8,7 @@ npm i
 npm run dev
 ```
 
-Studio opens `EmptySeat`. Render only when you ask:
+Open `BolnaMotion` in Studio. Render only when you ask:
 
 ```bash
 npx remotion render EmptySeat
