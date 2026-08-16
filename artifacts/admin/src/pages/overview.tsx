@@ -458,15 +458,8 @@ export default function Overview() {
   const [segment, setSegment] = useState<UserSegment>("real");
   const { data: overview, isLoading, isError, error } = useOverview(segment);
   const { data: templates } = usePromptTemplates();
+  const { data: live } = usePlatformActive();
   const hasActiveTemplate = templates === undefined || templates.some((t) => t.isActive);
-
-  if (isLoading) {
-    return <div className="p-8 text-muted-foreground animate-pulse">Loading platform metrics...</div>;
-  }
-
-  if (isError) {
-    return <div className="p-8 text-destructive">Error loading overview: {formatApiError(error)}</div>;
-  }
 
   const metrics = [
     {
@@ -513,9 +506,25 @@ export default function Overview() {
   const activeCount = overview?.activeCalls ?? 0;
   const pendingCount = overview?.pendingCallbacks ?? 0;
   const recentCallsCount = overview?.recentCalls ?? 0;
-
-  const { data: live } = usePlatformActive();
   const liveSessions = live?.count ?? activeCount;
+
+  if (isLoading) {
+    return (
+      <div className="space-y-5">
+        <SectionSubNav tabs={OPS_TABS} />
+        <p className="text-muted-foreground animate-pulse">Loading platform metrics…</p>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="space-y-5">
+        <SectionSubNav tabs={OPS_TABS} />
+        <p className="text-destructive">Error loading overview: {formatApiError(error)}</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5">
