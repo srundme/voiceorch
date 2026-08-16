@@ -553,7 +553,8 @@ function LeadsTab({ campaignId, batchId, maxAttempts, segment, segmentLabel, onC
             )}
           </div>
         ) : (
-          <table className="w-full text-xs">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[720px] text-xs">
             <thead className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b border-border/40">
               <tr>
                 <th className="px-4 py-2.5 text-left text-[10px] font-semibold text-muted-foreground/40 uppercase tracking-wider">Lead</th>
@@ -573,7 +574,7 @@ function LeadsTab({ campaignId, batchId, maxAttempts, segment, segmentLabel, onC
                 const oc = outcomeCfg(lead.operationalOutcome ?? "");
                 const ts = lead.lastAttemptAt ?? lead.createdAt;
                 return (
-                  <tr key={lead.id} className="group hover:bg-muted/30 transition-colors duration-100 cursor-default">
+                  <tr key={lead.id} className="group cursor-default transition-colors duration-200 hover:bg-muted/30">
                     {/* Lead */}
                     <td className="px-4 py-2.5">
                       <div className="flex items-center gap-2.5">
@@ -698,6 +699,7 @@ function LeadsTab({ campaignId, batchId, maxAttempts, segment, segmentLabel, onC
               })}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 

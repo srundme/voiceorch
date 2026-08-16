@@ -312,9 +312,17 @@ function CampaignRow({
 
   return (
     <div
-      className="group hidden md:grid items-center gap-3 px-4 py-3.5 hover:bg-muted/20 transition-colors cursor-pointer border-b border-border/40 last:border-0"
+      className="group hidden md:grid items-center gap-3 border-b border-border/40 px-4 py-3 last:border-0 cursor-pointer transition-colors duration-200 hover:bg-muted/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
       style={{ gridTemplateColumns: "2fr 1fr 1fr 80px 70px 100px 56px 80px 100px" }}
+      role="link"
+      tabIndex={0}
       onClick={() => navigate(`${BASE}/app/campaigns/${campaign.id}`)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          navigate(`${BASE}/app/campaigns/${campaign.id}`);
+        }
+      }}
     >
       {/* Campaign name + source */}
       <div className="min-w-0">
@@ -1404,7 +1412,7 @@ const START_SOURCES: {
     title: "Meta",
     description: "Connect a Lead Ad form, assign an agent, and dial new fills.",
     cta: "Connect Meta",
-    icon: <BrandLogoBadge brand="meta" size={22} className="!h-11 !w-11 !rounded-xl" />,
+    icon: <BrandLogoBadge brand="meta" size={16} className="!h-7 !w-7 !rounded-md" />,
   },
   {
     id: "webhook",
@@ -1412,8 +1420,8 @@ const START_SOURCES: {
     description: "Form submissions → dial. Get an intake URL / embed — not the same as Developers event subscriptions.",
     cta: "Set up form intake",
     icon: (
-      <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-border bg-background">
-        <Globe className="h-5 w-5 text-muted-foreground" />
+      <div className="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-background">
+        <Globe className="h-3.5 w-3.5 text-muted-foreground" />
       </div>
     ),
   },
@@ -1422,7 +1430,7 @@ const START_SOURCES: {
     title: "Google Sheets · Automatic Calls",
     description: "New rows dial automatically (Automatic Calls). Not the same as a one-shot CSV campaign upload.",
     cta: "Open Automatic Calls",
-    icon: <BrandLogoBadge brand="googleSheets" size={22} className="!h-11 !w-11 !rounded-xl" />,
+    icon: <BrandLogoBadge brand="googleSheets" size={16} className="!h-7 !w-7 !rounded-md" />,
   },
   {
     id: "csv",
@@ -1430,8 +1438,8 @@ const START_SOURCES: {
     description: "Create a campaign, then upload a batch to dial once.",
     cta: "Upload CSV",
     icon: (
-      <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-border bg-background">
-        <Upload className="h-5 w-5 text-muted-foreground" />
+      <div className="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-background">
+        <Upload className="h-3.5 w-3.5 text-muted-foreground" />
       </div>
     ),
   },
@@ -1440,7 +1448,7 @@ const START_SOURCES: {
     title: "Zoho CRM",
     description: "Connect Zoho, then import or auto-dial new CRM leads.",
     cta: "Connect Zoho",
-    icon: <BrandLogoBadge brand="zoho" size={22} className="!h-11 !w-11 !rounded-xl" />,
+    icon: <BrandLogoBadge brand="zoho" size={16} className="!h-7 !w-7 !rounded-md" />,
   },
 ];
 
@@ -1570,48 +1578,37 @@ export default function CampaignsPage() {
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
-      {/* Start a campaign */}
-      <section className="shrink-0 border-b border-border px-4 py-6 sm:px-6 lg:px-8">
+      {/* Start a campaign — compact strip so the list stays above the fold */}
+      <section className="shrink-0 border-b border-border px-4 py-3 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-5xl">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-              Start a campaign
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="mr-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              New from
             </p>
-            <h2 className="mt-1.5 text-xl font-semibold tracking-[-0.03em] sm:text-2xl">
-              Where are your leads coming from?
-            </h2>
-            <p className="mt-1.5 max-w-xl text-[13px] leading-relaxed text-muted-foreground">
-              Each source has its own setup — connect the channel first, then dial.
-            </p>
-          </div>
-
-          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {START_SOURCES.map((src) => {
               const zohoNeedsConnect = src.id === "crm" && !zohoConnected;
+              const label = src.id === "webhook" ? "Website" : src.id === "sheets" ? "Sheets" : src.title;
               return (
                 <button
                   key={src.id}
                   type="button"
+                  title={src.description}
                   onClick={() => startFrom(src.id)}
-                  className="group flex min-h-[120px] flex-col items-start gap-3 rounded-2xl border border-border bg-card p-4 text-left transition-colors hover:bg-muted/35"
+                  className="group inline-flex h-9 items-center gap-2 rounded-lg border border-border bg-card px-2.5 text-left text-[12px] font-medium transition-colors duration-200 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
-                  <div className="flex w-full items-start justify-between gap-3">
-                    {src.icon}
-                    <ArrowRight className="mt-1 size-3.5 shrink-0 text-muted-foreground/40 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[14px] font-semibold tracking-[-0.01em]">{src.title}</p>
-                    <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
-                      {src.description}
-                    </p>
-                    <p className="mt-2.5 text-[11px] font-medium text-foreground/80">
-                      {zohoNeedsConnect ? "Connect Zoho →" : `${src.cta} →`}
-                    </p>
-                  </div>
+                  {src.icon}
+                  <span className="max-w-[9rem] truncate sm:max-w-none">{label}</span>
+                  <ArrowRight className="size-3 shrink-0 text-muted-foreground/40 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-foreground" />
+                  <span className="sr-only">{zohoNeedsConnect ? "Connect Zoho" : src.cta}</span>
                 </button>
               );
             })}
           </div>
+          {!hasCampaigns && (
+            <p className="mt-2 text-[12px] text-muted-foreground">
+              Pick a source, attach an agent, then dial. Each channel has its own setup.
+            </p>
+          )}
         </div>
       </section>
 
@@ -1663,8 +1660,8 @@ export default function CampaignsPage() {
                 <MetricCard label="Listening" value={stats?.listeningCampaigns ?? 0} sub="Real-time intake" icon={<Wifi />} loading={isLoading} />
                 <MetricCard label="Live calls" value={stats?.liveCalls ?? 0} sub="In progress" icon={<PhoneCall />} loading={isLoading} />
                 <MetricCard label="Queued" value={stats?.queuedLeads ?? 0} sub="Pending call" icon={<Timer />} loading={isLoading} />
-                <MetricCard label="Leads today" value={stats?.todayLeads ?? 0} icon={<Users />} loading={isLoading} />
-                <MetricCard label="Bookings today" value={stats?.todayBookings ?? 0} icon={<BookMarked />} loading={isLoading} />
+                <MetricCard label="Leads" value={stats?.todayLeads ?? 0} sub="Today" icon={<Users />} loading={isLoading} />
+                <MetricCard label="Booked" value={stats?.todayBookings ?? 0} sub="Today" icon={<BookMarked />} loading={isLoading} />
               </MetricStrip>
             </div>
           )}
@@ -1675,7 +1672,7 @@ export default function CampaignsPage() {
                 <div className="relative min-w-[160px] max-w-xs flex-1">
                   <Activity className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/40" />
                   <input
-                    className="h-8 w-full rounded-lg border border-border/60 bg-muted/40 pl-8 pr-3 text-xs text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:ring-1 focus:ring-ring"
+                    className="h-8 w-full rounded-lg border border-border/60 bg-muted/40 pl-8 pr-3 text-xs text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     placeholder="Search campaigns…"
                     value={search}
                     onChange={e => setSearch(e.target.value)}
@@ -1721,7 +1718,7 @@ export default function CampaignsPage() {
                 </span>
               </div>
 
-              <div ref={listScrollRef} className="min-h-0 flex-1 overflow-y-auto">
+              <div ref={listScrollRef} className="min-h-0 flex-1 overflow-x-auto overflow-y-auto">
                 {isLoading ? (
                   <div>
                     {[...Array(4)].map((_, i) => (

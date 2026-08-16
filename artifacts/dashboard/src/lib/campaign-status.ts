@@ -24,14 +24,21 @@ export const BATCH_STATUS_MAP: Record<string, StatusCfg> = {
 };
 
 export const CALL_STATUS_MAP: Record<string, StatusCfg> = {
-  pending:   { label: "Pending",   cls: "bg-muted/50 text-muted-foreground border-border" },
-  calling:   { label: "Calling",   cls: "bg-blue-500/10 text-blue-600 border-blue-500/20" },
-  connected: { label: "In Progress", cls: "bg-blue-500/10 text-blue-600 border-blue-500/20" },
-  completed: { label: "Completed", cls: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" },
-  voicemail: { label: "Voicemail", cls: "bg-violet-500/10 text-violet-600 border-violet-500/20" },
-  failed:    { label: "Failed",    cls: "bg-red-500/10 text-red-500 border-red-500/20" },
-  busy:      { label: "Busy",      cls: "bg-slate-500/10 text-slate-500 border-slate-500/20" },
-  skipped:   { label: "Skipped",   cls: "bg-muted/30 text-muted-foreground/60 border-border" },
+  pending:           { label: "Pending",     cls: "bg-muted/50 text-muted-foreground border-border" },
+  queued:            { label: "Queued",      cls: "bg-amber-500/10 text-amber-600 border-amber-500/20" },
+  calling:           { label: "Calling",     cls: "bg-blue-500/10 text-blue-600 border-blue-500/20" },
+  connected:         { label: "In Progress", cls: "bg-blue-500/10 text-blue-600 border-blue-500/20" },
+  completed:         { label: "Completed",   cls: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" },
+  voicemail:         { label: "Voicemail",   cls: "bg-violet-500/10 text-violet-600 border-violet-500/20" },
+  failed:            { label: "Failed",      cls: "bg-red-500/10 text-red-500 border-red-500/20" },
+  busy:              { label: "Busy",        cls: "bg-slate-500/10 text-slate-500 border-slate-500/20" },
+  no_pickup:         { label: "No pickup",   cls: "bg-muted/50 text-muted-foreground border-border" },
+  skipped:           { label: "Skipped",     cls: "bg-muted/30 text-muted-foreground/60 border-border" },
+  exhausted:         { label: "Exhausted",   cls: "bg-red-500/10 text-red-500 border-red-500/20" },
+  transferred:       { label: "Transferred", cls: "bg-purple-500/10 text-purple-600 border-purple-500/20" },
+  booked:            { label: "Booked",      cls: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" },
+  callback_pending:  { label: "Callback",    cls: "bg-amber-500/10 text-amber-600 border-amber-500/20" },
+  dnc_blocked:       { label: "DNC",         cls: "bg-red-500/10 text-red-500 border-red-500/20" },
 };
 
 export const OUTCOME_MAP: Record<string, { label: string; color: string }> = {
@@ -46,7 +53,11 @@ export const OUTCOME_MAP: Record<string, { label: string; color: string }> = {
 };
 
 export function callStatusCfg(status: string): StatusCfg {
-  return CALL_STATUS_MAP[status] ?? { label: status, cls: "bg-muted/50 text-muted-foreground border-border" };
+  const key = status.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  return CALL_STATUS_MAP[key] ?? {
+    label: status.replace(/_/g, " "),
+    cls: "bg-muted/50 text-muted-foreground border-border",
+  };
 }
 
 export function outcomeCfg(outcome: string): { label: string; color: string } {

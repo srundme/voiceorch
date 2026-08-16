@@ -33,7 +33,7 @@ export function MetricCard({
         </div>
       )}
       <div className="min-w-0 flex-1 flex flex-col justify-center">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground leading-none mb-1.5 truncate">
+        <p className="mb-1.5 text-[10px] font-semibold uppercase leading-tight tracking-[0.08em] text-muted-foreground">
           {label}
         </p>
         {loading ? (
