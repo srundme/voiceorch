@@ -165,41 +165,82 @@ export async function transferMasterBalanceToSubAccount(
   }
 }
 
+function extractPartnerAccountList(data: unknown): VobizPartnerCustomerAccount[] {
+  if (Array.isArray(data)) return data as VobizPartnerCustomerAccount[];
+  if (!data || typeof data !== "object") return [];
+  const o = data as Record<string, unknown>;
+  for (const key of ["accounts", "objects", "items", "customers", "results", "data"]) {
+    const v = o[key];
+    if (Array.isArray(v)) return v as VobizPartnerCustomerAccount[];
+    if (v && typeof v === "object") {
+      const nested = (v as Record<string, unknown>)["accounts"];
+      if (Array.isArray(nested)) return nested as VobizPartnerCustomerAccount[];
+    }
+  }
+  return [];
+}
+
+export async function fetchPartnerCustomerByAuthId(
+  customerAuthId: string,
+): Promise<VobizPartnerCustomerAccount | null> {
+  if (!customerAuthId) return null;
+  try {
+    const resp = await fetch(`${VOBIZ_PARTNER_BASE}/accounts/${encodeURIComponent(customerAuthId)}`, {
+      method: "GET",
+      headers: getPartnerHeaders(),
+    });
+    if (!resp.ok) return null;
+    const data = (await resp.json()) as VobizPartnerCustomerAccount & { account?: VobizPartnerCustomerAccount };
+    const account = data.auth_id ? data : data.account;
+    if (account?.auth_id) return account;
+  } catch (err) {
+    logger.warn({ err, customerAuthId }, "fetchPartnerCustomerByAuthId error");
+  }
+  return null;
+}
+
 /**
- * 4. Lookup existing partner customer sub-account by email address
+ * Lookup an existing partner customer by email.
+ * Prefer `search` (documented) so we do not miss accounts past page 10.
  */
 export async function lookupPartnerCustomerByEmail(
   email: string,
 ): Promise<VobizPartnerCustomerAccount | null> {
   const targetEmail = email.toLowerCase().trim();
-  let page = 1;
+  if (!targetEmail) return null;
 
-  while (page <= 10) {
-    try {
-      const resp = await fetch(`${VOBIZ_PARTNER_BASE}/accounts?page=${page}&per_page=100`, {
-        method: "GET",
-        headers: getPartnerHeaders(),
-      });
+  const urls = [
+    `${VOBIZ_PARTNER_BASE}/accounts?search=${encodeURIComponent(targetEmail)}&page=1&per_page=20`,
+    `${VOBIZ_PARTNER_BASE}/accounts?page=1&per_page=100`,
+  ];
 
-      if (!resp.ok) break;
+  for (const url of urls) {
+    let page = 1;
+    while (page <= 10) {
+      const paged = url.includes("page=1") && page > 1
+        ? url.replace("page=1", `page=${page}`)
+        : url;
+      try {
+        const resp = await fetch(paged, { method: "GET", headers: getPartnerHeaders() });
+        if (!resp.ok) break;
+        const list = extractPartnerAccountList(await resp.json());
+        if (list.length === 0) break;
 
-      const data = (await resp.json()) as {
-        accounts?: VobizPartnerCustomerAccount[];
-        objects?: VobizPartnerCustomerAccount[];
-        items?: VobizPartnerCustomerAccount[];
-      };
-      const list = data.accounts ?? data.objects ?? data.items ?? [];
-      if (list.length === 0) break;
+        const match = list.find((acc) => acc.email?.toLowerCase().trim() === targetEmail);
+        if (match?.auth_id) {
+          const full = match.auth_token
+            ? match
+            : (await fetchPartnerCustomerByAuthId(match.auth_id)) ?? match;
+          logger.info({ email: targetEmail, authId: full.auth_id }, "lookupPartnerCustomerByEmail matched");
+          return full;
+        }
 
-      const match = list.find((acc) => acc.email?.toLowerCase().trim() === targetEmail);
-      if (match && match.auth_id) {
-        logger.info({ email: targetEmail, authId: match.auth_id }, "lookupPartnerCustomerByEmail matched");
-        return match;
+        if (url.includes("search=")) break;
+        page++;
+      } catch (err) {
+        logger.warn({ err, email, url: paged }, "lookupPartnerCustomerByEmail error");
+        break;
       }
-      page++;
-    } catch (err) {
-      logger.warn({ err, email }, "lookupPartnerCustomerByEmail error");
-      break;
     }
   }
 

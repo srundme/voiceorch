@@ -200,6 +200,23 @@ import {
   type VobizPartnerCustomerAccount,
 } from "../services/vobiz-partner-service.js";
 
+async function findCompletedKycSession(accountAuthId: string): Promise<boolean> {
+  if (!accountAuthId) return false;
+  try {
+    const resp = await fetch(
+      `${VOBIZ_PARTNER_BASE}/kyc-sessions?account_auth_id=${encodeURIComponent(accountAuthId)}&page=1&size=20`,
+      { method: "GET", headers: partnerHeaders() },
+    );
+    if (!resp.ok) return false;
+    const body = (await resp.json()) as { sessions?: Array<{ status?: string }> };
+    const sessions = Array.isArray(body.sessions) ? body.sessions : [];
+    return sessions.some((s) => s.status === "kyc_completed");
+  } catch (err) {
+    logger.warn({ err, accountAuthId }, "findCompletedKycSession failed");
+    return false;
+  }
+}
+
 export async function ensureVobizSubAccount(
   clerkId: string,
   name?: string | null,
@@ -474,51 +491,70 @@ router.post("/kyc/start", requireAuth, async (req, res): Promise<void> => {
   const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, clerkId));
   if (!user) { res.status(404).json({ error: "User not found" }); return; }
 
-  // 1. Get or create VoBiz sub-account
+  // 1. Get or create VoBiz sub-account. Re-link if the email already exists
+  // on the carrier (DB wipe, retry, or a previous SnapServe signup).
+  const email = user.email ?? `${clerkId}@snapserve.ai`;
+  try {
+    await ensureVobizSubAccount(clerkId, user.name, email);
+  } catch (err) {
+    req.log.error({ err, clerkId }, "ensureVobizSubAccount threw during KYC start");
+  }
+
   let [account] = await db
     .select()
     .from(vobizAccountsTable)
     .where(eq(vobizAccountsTable.userId, clerkId));
 
   if (!account) {
-    let vobizAccount: VobizCreateAccountResponse;
-    try {
-      vobizAccount = await createVobizSubAccount(user.name ?? user.email ?? clerkId, user.email ?? `${clerkId}@snapserve.ai`);
-    } catch (err: any) {
-      if (err instanceof VobizAccountExistsError) {
-        // Account exists on VoBiz side but not in our DB (e.g. after a DB wipe).
-        // Try to recover by listing accounts and finding the match.
-        req.log.warn({ clerkId, email: user.email }, "VoBiz account already exists — attempting to recover by lookup");
-        const existing = await fetchVobizSubAccountByEmail(user.email ?? "");
-        if (!existing) {
-          req.log.error({ clerkId }, "VoBiz account exists but could not be retrieved via list endpoint");
-          res.status(409).json({ error: "A verification account for this email already exists on the carrier but could not be re-linked. Please contact support." });
-          return;
-        }
-        vobizAccount = existing;
-        req.log.info({ clerkId, vobizAuthId: existing.auth_id }, "Recovered existing VoBiz account via lookup");
-      } else {
-        req.log.error({ err, clerkId }, "Failed to create Vobiz sub-account");
-        res.status(502).json({ error: "Failed to provision verification account. Please try again." });
-        return;
-      }
+    req.log.warn({ clerkId, email }, "No local VoBiz row after provision — looking up carrier account by email");
+    const existing =
+      (await lookupPartnerCustomerByEmail(email)) ??
+      (await fetchVobizSubAccountByEmail(email));
+    if (!existing?.auth_id) {
+      req.log.error({ clerkId, email }, "VoBiz account exists or provision failed; could not re-link by email");
+      res.status(409).json({
+        error: "A verification account for this email already exists on the carrier but could not be re-linked. Please contact support.",
+      });
+      return;
     }
 
     [account] = await db
       .insert(vobizAccountsTable)
       .values({
-        userId:                  clerkId,
-        vobizAuthId:             vobizAccount.auth_id ?? "",
-        vobizAuthTokenEncrypted: encryptKey(vobizAccount.auth_token ?? ""),
-        kycStatus:               "pending",
+        userId: clerkId,
+        vobizAuthId: existing.auth_id,
+        vobizAuthTokenEncrypted: encryptKey(existing.auth_token ?? ""),
+        kycStatus: "pending",
+      })
+      .onConflictDoUpdate({
+        target: vobizAccountsTable.userId,
+        set: {
+          vobizAuthId: existing.auth_id,
+          vobizAuthTokenEncrypted: encryptKey(existing.auth_token ?? ""),
+        },
       })
       .returning();
 
+    req.log.info({ clerkId, vobizAuthId: existing.auth_id }, "Re-linked existing VoBiz account by email");
     await audit("account_provisioned", {
-      userId:    clerkId,
-      eventData: { vobizAuthId: vobizAccount.auth_id },
+      userId: clerkId,
+      eventData: { vobizAuthId: existing.auth_id, recovered: true },
       ip,
     });
+  }
+
+  if (!account || !account.vobizAuthId) {
+    res.status(502).json({ error: "Failed to provision verification account. Please try again." });
+    return;
+  }
+
+  if (account.kycStatus !== "completed" && (await findCompletedKycSession(account.vobizAuthId))) {
+    await db
+      .update(vobizAccountsTable)
+      .set({ kycStatus: "completed" })
+      .where(eq(vobizAccountsTable.userId, clerkId));
+    account = { ...account, kycStatus: "completed" };
+    req.log.info({ clerkId, vobizAuthId: account.vobizAuthId }, "Synced already-completed carrier KYC");
   }
 
   // Already completed — return early
