@@ -35,6 +35,12 @@ interface PartnerMe {
   customDomainStatus: "none" | "pending" | "active" | "failed";
   domainVerifyToken: string | null;
   cnameTarget: string;
+  customDns?: {
+    zone: string;
+    host: string;
+    isApex: boolean;
+    records: Array<{ type: "CNAME" | "TXT"; host: string; value: string; required: boolean; purpose: string }>;
+  } | null;
   mailFromName: string | null;
   mailFromEmail: string | null;
   mailDomainStatus: "none" | "pending" | "verified" | "failed";
@@ -96,6 +102,147 @@ function parseRupees(text: string): number | null {
   const v = Number.parseFloat(text);
   if (!Number.isFinite(v) || v < 0) return null;
   return Math.round(v * 100);
+}
+
+/** DNS panels want Host relative to the zone, not the full hostname. */
+function splitCustomDomain(fqdn: string): { host: string; zone: string } {
+  const parts = fqdn.toLowerCase().replace(/\.$/, "").split(".").filter(Boolean);
+  if (parts.length <= 2) return { host: "@", zone: fqdn };
+  return { host: parts.slice(0, -2).join("."), zone: parts.slice(-2).join(".") };
+}
+
+function DnsCopyCell({ value }: { value: string }) {
+  const { toast } = useToast();
+  return (
+    <button
+      type="button"
+      className="inline-flex items-start gap-1 text-left font-mono break-all hover:underline"
+      onClick={() => {
+        void navigator.clipboard.writeText(value);
+        toast({ title: "Copied" });
+      }}
+    >
+      <Copy className="h-3 w-3 mt-0.5 shrink-0" />
+      {value}
+    </button>
+  );
+}
+
+function CustomDomainDnsCard({
+  domain,
+  cnameTarget,
+  verifyToken,
+  dns,
+  status,
+  verifying,
+  removing,
+  onVerify,
+  onRemove,
+}: {
+  domain: string;
+  cnameTarget: string;
+  verifyToken: string | null;
+  dns: PartnerMe["customDns"];
+  status: PartnerMe["customDomainStatus"];
+  verifying: boolean;
+  removing: boolean;
+  onVerify: () => void;
+  onRemove: () => void;
+}) {
+  const split = splitCustomDomain(domain);
+  const zone = dns?.zone ?? split.zone;
+  const host = dns?.host ?? split.host;
+  const isApex = dns?.isApex ?? host === "@";
+  const records = dns?.records ?? [
+    ...(!isApex
+      ? [{ type: "CNAME" as const, host, value: cnameTarget, required: true, purpose: "Sends visitors to your branded login" }]
+      : []),
+    ...(verifyToken
+      ? [{
+          type: "TXT" as const,
+          host: isApex ? "_snapserve-verify" : `_snapserve-verify.${host}`,
+          value: `snapserve-verify=${verifyToken}`,
+          required: isApex,
+          purpose: isApex ? "Proves you own the domain" : "Optional if the CNAME is already live",
+        }]
+      : []),
+  ];
+
+  return (
+    <div className="rounded-lg border border-border/60 bg-muted/20 p-3 space-y-3 text-[11px] text-muted-foreground">
+      <div className="space-y-1">
+        <p className="font-medium text-foreground">Add these records in DNS for <span className="font-mono">{zone}</span></p>
+        <p>
+          Open your domain registrar (GoDaddy, Cloudflare, Namecheap, Google Domains, etc.) and edit DNS for{" "}
+          <span className="font-mono text-foreground">{zone}</span>. Put only the Host column in the Host/Name field — not the full website address.
+        </p>
+      </div>
+      <div className="overflow-x-auto rounded-md border border-border bg-background">
+        <table className="w-full text-[11px]">
+          <thead>
+            <tr className="text-left text-muted-foreground border-b border-border">
+              <th className="px-2 py-1.5 font-medium">Type</th>
+              <th className="px-2 py-1.5 font-medium">Host</th>
+              <th className="px-2 py-1.5 font-medium">Value / Points to</th>
+              <th className="px-2 py-1.5 font-medium">Need this?</th>
+            </tr>
+          </thead>
+          <tbody>
+            {records.map((rec) => (
+              <tr key={`${rec.type}-${rec.host}`} className="border-b border-border/60 last:border-0 align-top">
+                <td className="px-2 py-1.5 font-mono text-foreground">{rec.type}</td>
+                <td className="px-2 py-1.5 text-foreground"><DnsCopyCell value={rec.host} /></td>
+                <td className="px-2 py-1.5 text-foreground"><DnsCopyCell value={rec.value} /></td>
+                <td className="px-2 py-1.5">
+                  {rec.required ? <span className="text-foreground font-medium">Required</span> : "Optional"}
+                  <span className="block text-[10px] leading-snug mt-0.5">{rec.purpose}</span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <ul className="list-disc pl-4 space-y-1 leading-relaxed">
+        <li>
+          Host is <span className="font-mono text-foreground">{host}</span>
+          {host !== "@" && <> — never <span className="font-mono">{domain}</span></>}.
+        </li>
+        {!isApex && (
+          <li>Delete any A or AAAA record on that same Host first. A CNAME cannot share the name.</li>
+        )}
+        {isApex && (
+          <li>
+            Root domains cannot use a CNAME. Add the TXT row, then an ALIAS / ANAME / flattened CNAME to{" "}
+            <span className="font-mono text-foreground">{cnameTarget}</span> if your DNS host supports it.
+          </li>
+        )}
+        <li>Cloudflare: Proxy status must be DNS only (grey cloud), not Proxied.</li>
+        <li>TTL can stay Auto or 300. Wait a few minutes, then click Verify DNS.</li>
+      </ul>
+      <div className="flex flex-wrap gap-2 pt-1">
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 text-xs gap-1"
+          disabled={verifying || status === "active"}
+          onClick={onVerify}
+        >
+          {status === "active"
+            ? <><CheckCircle2 className="h-3 w-3" /> Verified</>
+            : verifying ? "Checking DNS…" : "Verify DNS"}
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-7 text-xs text-muted-foreground"
+          disabled={removing}
+          onClick={onRemove}
+        >
+          Remove
+        </Button>
+      </div>
+    </div>
+  );
 }
 
 function StatCard({ icon, label, value, sub }: { icon: React.ReactNode; label: string; value: string; sub?: string }) {
@@ -996,38 +1143,17 @@ function SettingsTab({ me }: { me: PartnerMe }) {
             </Button>
           </div>
           {(me.customDomainStatus === "pending" || me.customDomainStatus === "failed" || me.customDomainStatus === "active") && me.customDomain && (
-            <div className="rounded-lg border border-border/60 bg-muted/20 p-3 space-y-2 text-[11px] text-muted-foreground">
-              <p className="font-medium text-foreground/80">DNS setup</p>
-              <p>1. CNAME <code className="text-foreground">{me.customDomain}</code> → <code className="text-foreground">{me.cnameTarget}</code></p>
-              {me.domainVerifyToken && (
-                <p>
-                  2. Or TXT <code className="text-foreground">_snapserve-verify.{me.customDomain}</code> ={" "}
-                  <code className="text-foreground">snapserve-verify={me.domainVerifyToken}</code>
-                </p>
-              )}
-              <div className="flex flex-wrap gap-2 pt-1">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 text-xs gap-1"
-                  disabled={verifyMutation.isPending || me.customDomainStatus === "active"}
-                  onClick={() => verifyMutation.mutate()}
-                >
-                  {me.customDomainStatus === "active"
-                    ? <><CheckCircle2 className="h-3 w-3" /> Verified</>
-                    : verifyMutation.isPending ? "Checking DNS…" : "Verify DNS"}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 text-xs text-muted-foreground"
-                  disabled={clearCustomMutation.isPending}
-                  onClick={() => clearCustomMutation.mutate()}
-                >
-                  Remove
-                </Button>
-              </div>
-            </div>
+            <CustomDomainDnsCard
+              domain={me.customDomain}
+              cnameTarget={me.cnameTarget}
+              verifyToken={me.domainVerifyToken}
+              dns={me.customDns}
+              status={me.customDomainStatus}
+              verifying={verifyMutation.isPending}
+              removing={clearCustomMutation.isPending}
+              onVerify={() => verifyMutation.mutate()}
+              onRemove={() => clearCustomMutation.mutate()}
+            />
           )}
         </div>
       </div>

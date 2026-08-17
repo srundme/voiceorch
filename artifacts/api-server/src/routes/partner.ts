@@ -54,6 +54,7 @@ import {
 import { getSelfBaseUrl } from "../lib/app-domain.js";
 import { hashPassword } from "../lib/password.js";
 import {
+  customDomainDnsGuide,
   getPartnerCnameTarget,
   getPartnerSubdomainRoot,
   invalidatePartnerHostCache,
@@ -348,6 +349,13 @@ router.get("/partner/me", requireAuth, async (req, res): Promise<void> => {
       customDomainStatus: partner.customDomainStatus ?? "none",
       domainVerifyToken: partner.domainVerifyToken ?? null,
       cnameTarget: getPartnerCnameTarget(),
+      customDns: partner.customDomain
+        ? customDomainDnsGuide({
+            domain: partner.customDomain,
+            cnameTarget: getPartnerCnameTarget(),
+            verifyToken: partner.domainVerifyToken,
+          })
+        : null,
       mailFromName: partner.mailFromName ?? null,
       mailFromEmail: partner.mailFromEmail ?? null,
       mailDomainStatus: partner.mailDomainStatus ?? "none",
@@ -743,16 +751,25 @@ router.put("/partner/domain/custom", requireAuth, async (req, res): Promise<void
       .returning();
 
     invalidatePartnerHostCache();
+    const dns = customDomainDnsGuide({
+      domain,
+      cnameTarget: getPartnerCnameTarget(),
+      verifyToken: token,
+    });
     res.json({
       customDomain: updated!.customDomain,
       customDomainStatus: updated!.customDomainStatus,
       domainVerifyToken: updated!.domainVerifyToken,
       cnameTarget: getPartnerCnameTarget(),
-      txtHost: `_snapserve-verify.${domain}`,
+      customDns: dns,
+      txtHost: dns.records.find((r) => r.type === "TXT")?.host ?? `_snapserve-verify.${dns.host}`,
       txtValue: `snapserve-verify=${token}`,
       instructions: {
-        cname: `Point a CNAME from ${domain} to ${getPartnerCnameTarget()}`,
-        txt: `Or add TXT at _snapserve-verify.${domain} = snapserve-verify=${token}`,
+        zone: dns.zone,
+        cname: dns.isApex
+          ? `Apex domains cannot use a CNAME. Add TXT Host=_snapserve-verify Value=snapserve-verify=${token}, then an ALIAS/ANAME to ${getPartnerCnameTarget()}`
+          : `In the ${dns.zone} DNS panel, add CNAME Host=${dns.host} Value=${getPartnerCnameTarget()}`,
+        txt: `Optional TXT Host=${dns.records.find((r) => r.type === "TXT")?.host ?? "_snapserve-verify"} Value=snapserve-verify=${token}`,
       },
     });
   } catch (err) {

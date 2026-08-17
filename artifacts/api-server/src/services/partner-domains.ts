@@ -11,6 +11,7 @@ import { and, eq, or } from "drizzle-orm";
 import { db, partnersTable } from "@workspace/db";
 import { logger } from "../lib/logger.js";
 import {
+  customDomainDnsGuide,
   getPartnerCnameTarget,
   getPartnerSubdomainRoot,
   normalizeDomain,
@@ -19,13 +20,16 @@ import {
 } from "./partner-domains-normalize.js";
 
 export {
+  customDomainDnsGuide,
   getPartnerCnameTarget,
   getPartnerSubdomainRoot,
   normalizeDomain,
   normalizeSlug,
+  splitDnsHostZone,
   subdomainHostForSlug,
   validateDomain,
   validateSlug,
+  type CustomDomainDnsRecord,
   type CustomDomainStatus,
 } from "./partner-domains-normalize.js";
 
@@ -231,9 +235,15 @@ export async function verifyCustomDomainDns(opts: {
   const txtOk = txt.some((t) => t.trim() === expected || t.includes(opts.verifyToken));
 
   if (cnameOk || txtOk) return { ok: true, cname, txt };
+  const guide = customDomainDnsGuide({ domain, cnameTarget: target, verifyToken: opts.verifyToken });
+  const cnameRow = guide.records.find((r) => r.type === "CNAME");
+  const txtRow = guide.records.find((r) => r.type === "TXT");
+  const hint = cnameRow
+    ? `In the ${guide.zone} DNS panel add CNAME Host=${cnameRow.host} Value=${cnameRow.value}`
+    : `In the ${guide.zone} DNS panel add TXT Host=${txtRow?.host ?? "_snapserve-verify"} Value=${expected}`;
   return {
     ok: false,
-    reason: `DNS not ready. Add CNAME ${domain} → ${target} (or TXT _snapserve-verify.${domain} = ${expected})`,
+    reason: `DNS not ready. ${hint}` + (txtRow && cnameRow ? ` (or TXT Host=${txtRow.host} Value=${txtRow.value})` : "") + ".",
     cname,
     txt,
   };
