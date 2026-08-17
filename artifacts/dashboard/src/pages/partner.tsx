@@ -13,7 +13,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import {
   Handshake, Users, UserPlus, Wallet, TrendingUp, Clock, Mail,
-  Trash2, IndianRupee, ArrowRightLeft, Upload, X, Settings2, Globe, Link2, CheckCircle2, Copy,
+  Trash2, IndianRupee, ArrowRightLeft, Upload, X, Settings2, Globe, Link2, CheckCircle2, Copy, LifeBuoy,
 } from "lucide-react";
 import { useLocation } from "wouter";
 
@@ -39,6 +39,11 @@ interface PartnerMe {
   mailFromEmail: string | null;
   mailDomainStatus: "none" | "pending" | "verified" | "failed";
   mailDnsRecords: Array<{ key: string; host: string; type: string; value: string; ok: boolean }>;
+  supportEmail: string | null;
+  supportUrl: string | null;
+  docsUrl: string | null;
+  termsUrl: string | null;
+  privacyUrl: string | null;
   walletBalanceCents: number;
   clientCount: number;
   pendingInvites: number;
@@ -675,6 +680,11 @@ function SettingsTab({ me }: { me: PartnerMe }) {
   const [customDraft, setCustomDraft] = useState(me.customDomain ?? "");
   const [mailName, setMailName] = useState(me.mailFromName ?? me.companyName);
   const [mailEmail, setMailEmail] = useState(me.mailFromEmail ?? "");
+  const [supportEmail, setSupportEmail] = useState(me.supportEmail ?? "");
+  const [supportUrl, setSupportUrl] = useState(me.supportUrl ?? "");
+  const [docsUrl, setDocsUrl] = useState(me.docsUrl ?? "");
+  const [termsUrl, setTermsUrl] = useState(me.termsUrl ?? "");
+  const [privacyUrl, setPrivacyUrl] = useState(me.privacyUrl ?? "");
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["partner-me"] });
@@ -690,6 +700,11 @@ function SettingsTab({ me }: { me: PartnerMe }) {
           companyName: companyName.trim(),
           loginTitle: loginTitle.trim() || null,
           loginSubtitle: loginSubtitle.trim() || null,
+          supportEmail: supportEmail.trim() || null,
+          supportUrl: supportUrl.trim() || null,
+          docsUrl: docsUrl.trim() || null,
+          termsUrl: termsUrl.trim() || null,
+          privacyUrl: privacyUrl.trim() || null,
           ...(paise !== null ? { defaultClientRateCentsPerMin: paise } : {}),
         }),
       });
@@ -1115,6 +1130,38 @@ function SettingsTab({ me }: { me: PartnerMe }) {
             </table>
           </div>
         )}
+      </div>
+
+      <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <LifeBuoy className="h-4 w-4 text-muted-foreground" />
+          <h2 className="text-sm font-medium">Help &amp; legal for clients</h2>
+        </div>
+        <p className="text-[11px] text-muted-foreground -mt-1">
+          Clients never see SnapServe support or docs. Point them at your own help desk, docs, terms, and privacy pages.
+        </p>
+        <div className="space-y-1.5">
+          <Label htmlFor="support-email">Support email</Label>
+          <Input id="support-email" type="email" value={supportEmail} onChange={e => setSupportEmail(e.target.value)} placeholder="help@yourcompany.com" />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="support-url">Support URL</Label>
+          <Input id="support-url" value={supportUrl} onChange={e => setSupportUrl(e.target.value)} placeholder="https://yourcompany.com/support" />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="docs-url">Documentation URL</Label>
+          <Input id="docs-url" value={docsUrl} onChange={e => setDocsUrl(e.target.value)} placeholder="https://docs.yourcompany.com" />
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="terms-url">Terms URL</Label>
+            <Input id="terms-url" value={termsUrl} onChange={e => setTermsUrl(e.target.value)} placeholder="https://yourcompany.com/terms" />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="privacy-url">Privacy URL</Label>
+            <Input id="privacy-url" value={privacyUrl} onChange={e => setPrivacyUrl(e.target.value)} placeholder="https://yourcompany.com/privacy" />
+          </div>
+        </div>
       </div>
 
       <div className="rounded-xl border border-border bg-card p-4 space-y-3">

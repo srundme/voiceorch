@@ -65,6 +65,12 @@ export const partnersTable = pgTable("partners", {
     ok: boolean;
   }>>(),
   mailDomainVerifiedAt: timestamp("mail_domain_verified_at", { withTimezone: true }),
+  /** Shown to managed clients instead of support@snapserve.ai */
+  supportEmail: text("support_email"),
+  supportUrl: text("support_url"),
+  docsUrl: text("docs_url"),
+  termsUrl: text("terms_url"),
+  privacyUrl: text("privacy_url"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

@@ -41,6 +41,11 @@ export interface PartnerBrandPublic {
   subdomainHost: string | null;
   customDomain: string | null;
   customDomainStatus: CustomDomainStatus;
+  supportEmail: string | null;
+  supportUrl: string | null;
+  docsUrl: string | null;
+  termsUrl: string | null;
+  privacyUrl: string | null;
 }
 
 export function newDomainVerifyToken(): string {
@@ -60,6 +65,11 @@ function toBrand(row: {
   slug: string | null;
   customDomain: string | null;
   customDomainStatus: string | null;
+  supportEmail: string | null;
+  supportUrl: string | null;
+  docsUrl: string | null;
+  termsUrl: string | null;
+  privacyUrl: string | null;
 }): PartnerBrandPublic {
   const status = (row.customDomainStatus ?? "none") as CustomDomainStatus;
   return {
@@ -73,6 +83,11 @@ function toBrand(row: {
     subdomainHost: row.slug ? subdomainHostForSlug(row.slug) : null,
     customDomain: row.customDomain,
     customDomainStatus: status,
+    supportEmail: row.supportEmail,
+    supportUrl: row.supportUrl,
+    docsUrl: row.docsUrl,
+    termsUrl: row.termsUrl,
+    privacyUrl: row.privacyUrl,
   };
 }
 
@@ -94,6 +109,11 @@ export async function resolvePartnerByHost(rawHost: string): Promise<PartnerBran
           slug: partnersTable.slug,
           customDomain: partnersTable.customDomain,
           customDomainStatus: partnersTable.customDomainStatus,
+          supportEmail: partnersTable.supportEmail,
+          supportUrl: partnersTable.supportUrl,
+          docsUrl: partnersTable.docsUrl,
+          termsUrl: partnersTable.termsUrl,
+          privacyUrl: partnersTable.privacyUrl,
           status: partnersTable.status,
         })
         .from(partnersTable)
@@ -113,6 +133,11 @@ export async function resolvePartnerByHost(rawHost: string): Promise<PartnerBran
       slug: partnersTable.slug,
       customDomain: partnersTable.customDomain,
       customDomainStatus: partnersTable.customDomainStatus,
+      supportEmail: partnersTable.supportEmail,
+      supportUrl: partnersTable.supportUrl,
+      docsUrl: partnersTable.docsUrl,
+      termsUrl: partnersTable.termsUrl,
+      privacyUrl: partnersTable.privacyUrl,
       status: partnersTable.status,
     })
     .from(partnersTable)

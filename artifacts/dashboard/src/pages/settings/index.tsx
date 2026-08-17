@@ -329,7 +329,7 @@ function AccountBillingCard() {
             <div className="flex items-center gap-2.5 p-3.5 rounded-lg border border-border/60 bg-muted/10">
               <Key className="h-4 w-4 text-muted-foreground shrink-0" />
               <p className="text-xs text-muted-foreground flex-1">
-                Looking to call the SnapServe REST API? Manage your API keys on the dedicated{" "}
+                Looking to call the REST API? Manage your API keys on the dedicated{" "}
                 <Link href="/app/api-keys" className="text-primary hover:underline font-medium">API Keys page</Link>.
               </p>
               <Link href="/app/api-keys">
@@ -633,6 +633,18 @@ function DangerZoneCard() {
 }
 
 function NeedHelpCard() {
+  const { partnerCtx, isManagedWorkspace, partnerName } = usePartnerManagedWorkspace();
+  const docsHref = isManagedWorkspace
+    ? (partnerCtx?.branding?.docsUrl ?? null)
+    : "/docs";
+  const docsExternal = isManagedWorkspace && !!partnerCtx?.branding?.docsUrl;
+  const supportHref = isManagedWorkspace
+    ? (partnerCtx?.branding?.supportUrl
+      || (partnerCtx?.branding?.supportEmail ? `mailto:${partnerCtx.branding.supportEmail}` : null))
+    : "mailto:support@snapserve.ai";
+
+  if (isManagedWorkspace && !docsHref && !supportHref) return null;
+
   return (
     <Card>
       <CardContent className="p-5 flex flex-col sm:flex-row items-start sm:items-center gap-4">
@@ -641,19 +653,27 @@ function NeedHelpCard() {
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-foreground">Need help?</p>
-          <p className="text-xs text-muted-foreground mt-0.5">Check our documentation or contact support.</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {isManagedWorkspace
+              ? `Reach out to ${partnerName} if you need a hand.`
+              : "Check our documentation or contact support."}
+          </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <a href="/docs" target="_blank" rel="noopener noreferrer">
-            <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
-              <BookOpen className="h-3.5 w-3.5" /> View Documentation
-            </Button>
-          </a>
-          <a href="mailto:support@snapserve.ai">
-            <Button size="sm" className="h-8 text-xs gap-1.5">
-              <LifeBuoy className="h-3.5 w-3.5" /> Contact Support
-            </Button>
-          </a>
+          {docsHref && (
+            <a href={docsHref} target={docsExternal ? "_blank" : undefined} rel={docsExternal ? "noopener noreferrer" : undefined}>
+              <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
+                <BookOpen className="h-3.5 w-3.5" /> View Documentation
+              </Button>
+            </a>
+          )}
+          {supportHref && (
+            <a href={supportHref} target={supportHref.startsWith("http") ? "_blank" : undefined} rel="noopener noreferrer">
+              <Button size="sm" className="h-8 text-xs gap-1.5">
+                <LifeBuoy className="h-3.5 w-3.5" /> Contact Support
+              </Button>
+            </a>
+          )}
         </div>
       </CardContent>
     </Card>

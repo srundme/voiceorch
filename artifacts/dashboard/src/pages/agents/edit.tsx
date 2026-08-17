@@ -30,6 +30,7 @@ import {
 } from "./edit.schema";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { SnapServeAgentIcon } from "@/components/logo";
+import { isDirectSnapServeHost } from "@/lib/white-label";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -2484,7 +2485,7 @@ export default function AgentEdit() {
             </CardContent>
           </Card>
 
-          {/* ── SnapServe Integration ── */}
+          {isDirectSnapServeHost() && (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
@@ -2508,6 +2509,7 @@ export default function AgentEdit() {
               )} />
             </CardContent>
           </Card>
+          )}
 
           <div className="fixed bottom-0 left-0 md:left-64 right-0 p-4 bg-background/80 backdrop-blur-sm border-t border-border flex justify-end z-10">
             <div className="max-w-5xl mx-auto w-full flex justify-end gap-4">

@@ -494,7 +494,7 @@ const SOURCE_OPTIONS: {
   {
     value: "webhook",
     label: "Form intake",
-    description: "Website enquiry forms POST into SnapServe; each submission can trigger an immediate call.",
+    description: "Website enquiry forms POST into this workspace; each submission can trigger an immediate call.",
     icon: <Globe className="h-5 w-5" />,
     defaultTrigger: "instant",
   },

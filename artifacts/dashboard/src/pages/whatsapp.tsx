@@ -524,7 +524,7 @@ function NativeSection({
             <h3 className="text-sm font-semibold">Connect WhatsApp</h3>
             <p className="mt-0.5 text-xs text-muted-foreground max-w-2xl">
               Pick one path. Paths 1 and 2 need a Meta Business Manager (WABA ID + permanent system-user token).
-              SnapServe Instant WhatsApp is no longer offered for new signups.
+              Instant WhatsApp is no longer offered for new signups.
             </p>
           </div>
 
@@ -565,7 +565,7 @@ function NativeSection({
               </div>
               <ul className="mt-3 flex-1 space-y-1.5 text-xs text-muted-foreground">
                 <li>• Connect a number already in your WABA</li>
-                <li>• Or WhatsApp-enable a SnapServe voice DID</li>
+                <li>• Or WhatsApp-enable a voice DID already on this workspace</li>
                 <li>• Workspace channel for post-call + mid-call</li>
                 <li>• Same Meta token + WABA ID required</li>
               </ul>
@@ -599,7 +599,7 @@ function NativeSection({
               </div>
               <ul className="mt-3 flex-1 space-y-1.5 text-xs text-muted-foreground">
                 <li>• Keep your current provider</li>
-                <li>• SnapServe POSTs to your webhook</li>
+                <li>• This workspace POSTs to your webhook</li>
                 <li>• Per-agent override of workspace channel</li>
                 <li>• No WhatsApp calling on this path</li>
               </ul>
@@ -724,7 +724,7 @@ function NativeSection({
           {channel.mode === "own" && data?.purchasedNumber && (
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
               <span>
-                SnapServe WhatsApp number <strong className="text-foreground">{data.purchasedNumber.number}</strong>
+                WhatsApp number <strong className="text-foreground">{data.purchasedNumber.number}</strong>
                 {data.purchasedNumber.nextRenewalAt && (
                   <> · renews {new Date(data.purchasedNumber.nextRenewalAt).toLocaleDateString()} ({inr(data.purchasedNumber.renewalPaise)} from wallet)</>
                 )}
@@ -1073,7 +1073,7 @@ function NativeSection({
                   onChange={(e) => setAccessToken(e.target.value)}
                 />
                 <p className="text-[11px] text-muted-foreground mt-1">
-                  Passed securely to the messaging carrier — SnapServe never stores it.
+                  Passed securely to the messaging carrier — it is not stored here.
                 </p>
               </div>
               <div>
@@ -1286,7 +1286,7 @@ function BspAdopterGuide() {
       <div>
         <h2 className="text-sm font-semibold">Bring your BSP — 4 steps</h2>
         <p className="mt-1 text-xs text-muted-foreground max-w-2xl">
-          Create templates in your WhatsApp provider. SnapServe POSTs to your webhook; your BSP sends the message.
+          Create templates in your WhatsApp provider. This workspace POSTs to your webhook; your BSP sends the message.
           A BSP connection for an agent overrides Meta API / Business post-call for that agent.
         </p>
       </div>
@@ -1516,7 +1516,7 @@ export default function WhatsAppPage() {
           {renderMetaTplSelect("After a booking", metaSelBooking, setMetaSelBooking)}
           {renderMetaTplSelect("After a callback", metaSelCallback, setMetaSelCallback)}
           <p className="text-[10px] text-muted-foreground">
-            These rows are SnapServe send-moments — each dropdown lists any approved template from your WABA (any Meta name).
+            These rows are send-moments — each dropdown lists any approved template from your WABA (any Meta name).
           </p>
         </div>
       )}
@@ -1773,7 +1773,7 @@ export default function WhatsAppPage() {
                     ) : (
                       <div>
                         <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                          Outbound webhook — SnapServe POSTs here to send a template
+                          Outbound webhook — we POST here to send a template
                         </Label>
                         {c.outboundWebhookUrl ? (
                           <div className="mt-1 flex items-center gap-2 rounded-md bg-muted/40 px-2.5 py-1.5">
@@ -1870,11 +1870,11 @@ export default function WhatsAppPage() {
                 onChange={(e) => setOutboundUrl(e.target.value)}
               />
               <p className="text-[11px] text-muted-foreground mt-1">
-                SnapServe POSTs here when a template should be sent (post-call or mid-call tool).
+                We POST here when a template should be sent (post-call or mid-call tool).
               </p>
             </div>
             <div className="rounded-md border border-border/50 p-3 space-y-2">
-              <p className="text-xs font-medium">Map SnapServe moments → your BSP template names</p>
+              <p className="text-xs font-medium">Map send-moments → your BSP template names</p>
               <div>
                 <Label className="text-[10px] text-muted-foreground">Default (fallback)</Label>
                 <Input className="mt-1 h-8 text-xs font-mono" placeholder="your_default_template" value={tplDefault} onChange={(e) => setTplDefault(e.target.value)} />
@@ -1945,7 +1945,7 @@ export default function WhatsAppPage() {
               />
             </div>
             <div className="rounded-md border border-border/50 p-3 space-y-2">
-              <p className="text-xs font-medium">Map SnapServe moments → your BSP template names</p>
+              <p className="text-xs font-medium">Map send-moments → your BSP template names</p>
               <div>
                 <Label className="text-[10px] text-muted-foreground">Default (fallback)</Label>
                 <Input className="mt-1 h-8 text-xs font-mono" value={tplDefault} onChange={(e) => setTplDefault(e.target.value)} />

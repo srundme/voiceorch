@@ -13,7 +13,8 @@ import { ThemeSync } from "@/components/theme-sync";
 
 import { Layout } from "@/components/layout";
 import { recordInAppNavigation } from "@/lib/nav-history";
-import { SnapServeLoader } from "@/components/logo";
+import { AppLoader } from "@/components/logo";
+import { isDirectSnapServeHost, loadHostBrand, type HostBrand } from "@/lib/white-label";
 import { VoiceAssistant } from "@/components/VoiceAssistant";
 
 // ── Page imports ─────────────────────────────────────────────────────────────
@@ -92,6 +93,7 @@ import TeamPage             from "@/pages/team";
 import ImpersonatePage      from "@/pages/impersonate";
 import { ImpersonationBanner } from "@/components/ImpersonationBanner";
 import { initMetaPixel } from "@/lib/meta-pixel";
+import { usePartnerContext } from "@/hooks/use-partner";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -145,14 +147,7 @@ function QueryClientCacheInvalidator() {
   return null;
 }
 
-interface PartnerLoginBrand {
-  partnerId: number;
-  companyName: string;
-  logoUrl: string | null;
-  loginTitle: string | null;
-  loginSubtitle: string | null;
-  authMode: "password";
-}
+type PartnerLoginBrand = HostBrand & { authMode?: "password" };
 
 function SignInPage() {
   const [location, navigate] = useLocation();
@@ -176,16 +171,10 @@ function SignInPage() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      try {
-        const host = window.location.host;
-        const res = await fetch(`/api/public/partner-branding?host=${encodeURIComponent(host)}`);
-        if (!res.ok) throw new Error("branding fetch failed");
-        const data = (await res.json()) as { branding: PartnerLoginBrand | null };
-        if (!cancelled) setBranding(data.branding ?? null);
-      } catch {
-        if (!cancelled) setBranding(null);
-      } finally {
-        if (!cancelled) setBrandingLoaded(true);
+      const brand = await loadHostBrand();
+      if (!cancelled) {
+        setBranding(brand);
+        setBrandingLoaded(true);
       }
     })();
     return () => { cancelled = true; };
@@ -242,7 +231,7 @@ function SignInPage() {
   if (!brandingLoaded) {
     return (
       <div className="min-h-[100dvh] w-full flex items-center justify-center bg-black">
-        <SnapServeLoader />
+        <AppLoader />
       </div>
     );
   }
@@ -268,6 +257,10 @@ function SignInPage() {
               alt={branding.companyName}
               className="h-12 w-12 rounded-xl object-contain bg-white/5 border border-white/10 p-1.5"
             />
+          ) : isPartnerGateway ? (
+            <div className="h-12 w-12 rounded-xl bg-white/10 border border-white/10 flex items-center justify-center text-lg font-semibold">
+              {branding.companyName.charAt(0).toUpperCase()}
+            </div>
           ) : (
             <div className="flex flex-col gap-[6px] w-[46px]">
               <div className="h-[10px] w-full rounded-full bg-white" />
@@ -381,8 +374,18 @@ function SignInPage() {
 
         <p className="mt-4 text-[0.72rem] text-white/35 leading-relaxed">
           By continuing, you agree to our{" "}
-          <Link href="/terms" className="text-white/55 hover:text-white/80">Terms of Service</Link> and{" "}
-          <Link href="/privacy" className="text-white/55 hover:text-white/80">Privacy Policy</Link>.
+          {isPartnerGateway && branding.termsUrl ? (
+            <a href={branding.termsUrl} target="_blank" rel="noopener noreferrer" className="text-white/55 hover:text-white/80">Terms of Service</a>
+          ) : (
+            <Link href="/terms" className="text-white/55 hover:text-white/80">Terms of Service</Link>
+          )}{" "}and{" "}
+          {isPartnerGateway && branding.privacyUrl ? (
+            <a href={branding.privacyUrl} target="_blank" rel="noopener noreferrer" className="text-white/55 hover:text-white/80">Privacy Policy</a>
+          ) : isPartnerGateway ? (
+            <span>Privacy Policy</span>
+          ) : (
+            <Link href="/privacy" className="text-white/55 hover:text-white/80">Privacy Policy</Link>
+          )}.
         </p>
       </div>
     </div>
@@ -391,14 +394,14 @@ function SignInPage() {
 
 function HomeRedirect() {
   const { isLoaded, isSignedIn } = useAuth();
-  if (!isLoaded) return <SnapServeLoader />;
+  if (!isLoaded) return <AppLoader />;
   if (isSignedIn) return <Redirect to="/app" />;
   return <SignInPage />;
 }
 
 function AppRoot() {
   const { data: agents, isLoading } = useListAgents({});
-  if (isLoading) return <SnapServeLoader />;
+  if (isLoading) return <AppLoader />;
   const list = Array.isArray(agents) ? agents : (agents as any)?.agents ?? [];
   // Accounts with no agents land in the builder, not Vibe. Vibe stays available
   // from the "Build with AI" entry points, but it is opt-in rather than the
@@ -417,6 +420,7 @@ function TabRedirect({ to }: { to: string }) {
 function AppRoutes() {
   const [location] = useLocation();
   const { data: onboardingStatus, isLoading: onboardingLoading } = useGetOnboardingStatus();
+  const { data: partnerCtx, isLoading: partnerLoading } = usePartnerContext();
 
   // Restore a partner invite link stashed while the visitor was signed out.
   useEffect(() => {
@@ -431,13 +435,14 @@ function AppRoutes() {
     } catch { /* sessionStorage unavailable */ }
   }, []);
 
-  if (onboardingLoading) return <SnapServeLoader />;
+  if (onboardingLoading || partnerLoading) return <AppLoader />;
 
   const onOnboardingPage = location.startsWith("/app/onboarding");
   // Partner invite acceptance must survive the onboarding gate — a fresh
   // signup can accept the invite first, then complete onboarding.
   const onPartnerJoinPage = location.startsWith("/app/partner-join");
-  if (onboardingStatus?.completed === false && !onOnboardingPage && !onPartnerJoinPage) {
+  const skipOnboarding = partnerCtx?.isManagedClient === true;
+  if (!skipOnboarding && onboardingStatus?.completed === false && !onOnboardingPage && !onPartnerJoinPage) {
     return <Redirect to="/app/onboarding" />;
   }
 
@@ -607,7 +612,7 @@ function SignedOutRedirect() {
 
 function ProtectedApp() {
   const { isLoaded } = useAuth();
-  if (!isLoaded) return <SnapServeLoader />;
+  if (!isLoaded) return <AppLoader />;
   return (
     <>
       <ImpersonationBanner />
@@ -640,6 +645,26 @@ function NavHistoryTracker() {
   return null;
 }
 
+function SnapServeOnlyDocs() {
+  if (!isDirectSnapServeHost()) return <Redirect to="/" />;
+  return <DocsPage />;
+}
+
+function SnapServeOnlyLegal({ kind }: { kind: "terms" | "privacy" }) {
+  const [, navigate] = useLocation();
+  const Page = kind === "terms" ? TermsPage : PrivacyPage;
+  useEffect(() => {
+    if (isDirectSnapServeHost()) return;
+    void loadHostBrand().then((brand) => {
+      const dest = kind === "terms" ? brand?.termsUrl : brand?.privacyUrl;
+      if (dest) window.location.replace(dest);
+      else navigate("/", { replace: true });
+    });
+  }, [kind, navigate]);
+  if (!isDirectSnapServeHost()) return <AppLoader />;
+  return <Page />;
+}
+
 function Router() {
   return (
     <AuthProvider>
@@ -663,11 +688,11 @@ function Router() {
           <Route path="/events/judge/:token" component={JudgePortalPage} />
           <Route path="/events/certificates/:code/verify" component={CertificateVerifyPage} />
           <Route path="/events/:slug" component={PublicEventPage} />
-          <Route path="/docs" component={DocsPage} />
-          <Route path="/docs/api-reference/:op" component={DocsPage} />
-          <Route path="/docs/:section" component={DocsPage} />
-          <Route path="/privacy" component={PrivacyPage} />
-          <Route path="/terms" component={TermsPage} />
+          <Route path="/docs" component={SnapServeOnlyDocs} />
+          <Route path="/docs/api-reference/:op" component={SnapServeOnlyDocs} />
+          <Route path="/docs/:section" component={SnapServeOnlyDocs} />
+          <Route path="/privacy">{() => <SnapServeOnlyLegal kind="privacy" />}</Route>
+          <Route path="/terms">{() => <SnapServeOnlyLegal kind="terms" />}</Route>
           <Route component={NotFound} />
         </Switch>
       </QueryClientProvider>

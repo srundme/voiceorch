@@ -9,6 +9,8 @@ import { and, eq } from "drizzle-orm";
 import { db, partnersTable, usersTable, type Partner } from "@workspace/db";
 import { logger } from "../lib/logger.js";
 import { sendBrevoEmail, type BrevoEmailMeta } from "./brevo.js";
+import { subdomainHostForSlug } from "./partner-domains-normalize.js";
+import type { EmailBrand } from "./email-templates.js";
 
 const BREVO_DOMAINS = "https://api.brevo.com/v3/senders/domains";
 const BREVO_SENDERS = "https://api.brevo.com/v3/senders";
@@ -175,6 +177,30 @@ export async function sendPartnerEmail(
     replyTo,
     sentBy: meta.sentBy ?? `partner:${partner.id}`,
   });
+}
+
+export async function getManagedClientEmailBrand(clientClerkId: string): Promise<EmailBrand | null> {
+  const [row] = await db
+    .select({
+      id: partnersTable.id,
+      companyName: partnersTable.companyName,
+      slug: partnersTable.slug,
+      customDomain: partnersTable.customDomain,
+      customDomainStatus: partnersTable.customDomainStatus,
+      partnerUserId: partnersTable.userId,
+    })
+    .from(usersTable)
+    .innerJoin(partnersTable, eq(usersTable.partnerId, partnersTable.id))
+    .where(and(eq(usersTable.clerkId, clientClerkId), eq(partnersTable.status, "active")))
+    .limit(1);
+  if (!row || row.partnerUserId === clientClerkId) return null;
+  let loginUrl = process.env["APP_BASE_URL"]?.replace(/\/$/, "") || "https://app.snapserve.ai";
+  if (row.customDomain && row.customDomainStatus === "active") {
+    loginUrl = `https://${row.customDomain}`;
+  } else if (row.slug) {
+    loginUrl = `https://${subdomainHostForSlug(row.slug)}`;
+  }
+  return { companyName: row.companyName, loginUrl };
 }
 
 export async function sendManagedClientEmail(

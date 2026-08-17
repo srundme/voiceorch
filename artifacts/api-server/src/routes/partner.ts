@@ -131,6 +131,30 @@ function partnerLoginBaseUrl(partner: {
   return (process.env["APP_BASE_URL"]?.replace(/\/$/, "") || getSelfBaseUrl());
 }
 
+function optionalHttpsUrl(raw: unknown, label: string): string | null | { error: string } {
+  if (raw === null || String(raw).trim() === "") return null;
+  const s = String(raw).trim();
+  if (s.length > 300) return { error: `${label} is too long` };
+  try {
+    const u = new URL(s);
+    if (u.protocol !== "https:" && u.protocol !== "http:") {
+      return { error: `${label} must be an http(s) URL` };
+    }
+    return s;
+  } catch {
+    return { error: `${label} must be a valid URL` };
+  }
+}
+
+function optionalSupportEmail(raw: unknown): string | null | { error: string } {
+  if (raw === null || String(raw).trim() === "") return null;
+  const s = String(raw).trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s) || s.length > 200) {
+    return { error: "Enter a valid support email" };
+  }
+  return s;
+}
+
 /** Require the signed-in user to be an ACTIVE partner; 403 otherwise. */
 async function requireActivePartner(req: any, res: any) {
   const partner = await getPartnerForUser(clerkIdOf(req));
@@ -198,18 +222,39 @@ router.get("/partner/context", requireAuth, async (req, res): Promise<void> => {
 
     const ownPartner = await getPartnerForUser(clerkId);
 
-    let branding: { companyName: string; logoUrl: string | null } | null = null;
+    let branding: {
+      companyName: string;
+      logoUrl: string | null;
+      supportEmail: string | null;
+      supportUrl: string | null;
+      docsUrl: string | null;
+      termsUrl: string | null;
+      privacyUrl: string | null;
+    } | null = null;
     if (me?.partnerId) {
       const [p] = await db
         .select({
           companyName: partnersTable.companyName,
           logoToken: partnersTable.logoToken,
           status: partnersTable.status,
+          supportEmail: partnersTable.supportEmail,
+          supportUrl: partnersTable.supportUrl,
+          docsUrl: partnersTable.docsUrl,
+          termsUrl: partnersTable.termsUrl,
+          privacyUrl: partnersTable.privacyUrl,
         })
         .from(partnersTable)
         .where(eq(partnersTable.id, me.partnerId));
       if (p && p.status === "active") {
-        branding = { companyName: p.companyName, logoUrl: logoPathFor(p) };
+        branding = {
+          companyName: p.companyName,
+          logoUrl: logoPathFor(p),
+          supportEmail: p.supportEmail ?? null,
+          supportUrl: p.supportUrl ?? null,
+          docsUrl: p.docsUrl ?? null,
+          termsUrl: p.termsUrl ?? null,
+          privacyUrl: p.privacyUrl ?? null,
+        };
       }
     }
 
@@ -307,6 +352,11 @@ router.get("/partner/me", requireAuth, async (req, res): Promise<void> => {
       mailFromEmail: partner.mailFromEmail ?? null,
       mailDomainStatus: partner.mailDomainStatus ?? "none",
       mailDnsRecords: partner.mailDnsRecords ?? [],
+      supportEmail: partner.supportEmail ?? null,
+      supportUrl: partner.supportUrl ?? null,
+      docsUrl: partner.docsUrl ?? null,
+      termsUrl: partner.termsUrl ?? null,
+      privacyUrl: partner.privacyUrl ?? null,
       walletBalanceCents: partnerUser?.walletBalanceCents ?? 0,
       clientCount: Number(clientCountRow?.n ?? 0),
       pendingInvites: Number(pendingInvitesRow?.n ?? 0),
@@ -325,11 +375,19 @@ router.patch("/partner/me", requireAuth, async (req, res): Promise<void> => {
     const partner = await requireActivePartner(req, res);
     if (!partner) return;
 
-    const { companyName, defaultClientRateCentsPerMin, loginTitle, loginSubtitle } = (req.body ?? {}) as {
+    const {
+      companyName, defaultClientRateCentsPerMin, loginTitle, loginSubtitle,
+      supportEmail, supportUrl, docsUrl, termsUrl, privacyUrl,
+    } = (req.body ?? {}) as {
       companyName?: string;
       defaultClientRateCentsPerMin?: number;
       loginTitle?: string | null;
       loginSubtitle?: string | null;
+      supportEmail?: string | null;
+      supportUrl?: string | null;
+      docsUrl?: string | null;
+      termsUrl?: string | null;
+      privacyUrl?: string | null;
     };
 
     const set: Record<string, unknown> = {};
@@ -365,6 +423,22 @@ router.patch("/partner/me", requireAuth, async (req, res): Promise<void> => {
         set["loginSubtitle"] = String(loginSubtitle).trim().slice(0, 280);
       }
     }
+    if (supportEmail !== undefined) {
+      const v = optionalSupportEmail(supportEmail);
+      if (v && typeof v === "object" && "error" in v) { res.status(400).json(v); return; }
+      set["supportEmail"] = v;
+    }
+    for (const [key, raw, label] of [
+      ["supportUrl", supportUrl, "Support URL"],
+      ["docsUrl", docsUrl, "Docs URL"],
+      ["termsUrl", termsUrl, "Terms URL"],
+      ["privacyUrl", privacyUrl, "Privacy URL"],
+    ] as const) {
+      if (raw === undefined) continue;
+      const v = optionalHttpsUrl(raw, label);
+      if (v && typeof v === "object" && "error" in v) { res.status(400).json(v); return; }
+      set[key] = v;
+    }
     if (Object.keys(set).length === 0) {
       res.status(400).json({ error: "Nothing to update" });
       return;
@@ -380,6 +454,11 @@ router.patch("/partner/me", requireAuth, async (req, res): Promise<void> => {
       defaultClientRateCentsPerMin: updated!.defaultClientRateCentsPerMin,
       loginTitle: updated!.loginTitle ?? null,
       loginSubtitle: updated!.loginSubtitle ?? null,
+      supportEmail: updated!.supportEmail ?? null,
+      supportUrl: updated!.supportUrl ?? null,
+      docsUrl: updated!.docsUrl ?? null,
+      termsUrl: updated!.termsUrl ?? null,
+      privacyUrl: updated!.privacyUrl ?? null,
     });
   } catch (err) {
     req.log.error({ err }, "partner/me PATCH failed");
@@ -882,7 +961,7 @@ router.post("/partner/clients", requireAuth, async (req, res): Promise<void> => 
           partnerAllowAgentEdit: true,
           walletBalanceCents: 0,
           freeCreditsGranted: true,
-          onboardingCompleted: false,
+          onboardingCompleted: true,
         })
         .where(eq(usersTable.id, existing.id))
         .returning();
@@ -901,6 +980,7 @@ router.post("/partner/clients", requireAuth, async (req, res): Promise<void> => 
           partnerId: partner.id,
           partnerRateCentsPerMin: rate,
           partnerAllowAgentEdit: true,
+          onboardingCompleted: true,
         })
         .returning();
     }
@@ -1762,6 +1842,7 @@ router.post("/partner/invites/accept", requireAuth, async (req, res): Promise<vo
           partnerId: partner.id,
           partnerRateCentsPerMin: rate,
           partnerAllowAgentEdit: true,
+          onboardingCompleted: true,
         })
         .where(and(eq(usersTable.id, me.id), isNull(usersTable.partnerId)))
         .returning({ id: usersTable.id });

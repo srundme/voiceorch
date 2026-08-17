@@ -22,7 +22,7 @@ import { createSessionToken } from "../lib/session.js";
 import { hashPassword, verifyPassword } from "../lib/password.js";
 import { logger } from "../lib/logger.js";
 import { sendBrevoEmail } from "../services/brevo.js";
-import { sendManagedClientEmail } from "../services/partner-mail.js";
+import { sendManagedClientEmail, getManagedClientEmailBrand } from "../services/partner-mail.js";
 import { applyPendingPartnerPromotion } from "../services/partner-promotion.js";
 import {
   welcomeEmail,
@@ -382,11 +382,12 @@ router.post("/auth/password-reset/request", async (req, res): Promise<void> => {
     });
 
     try {
+      const brand = await getManagedClientEmailBrand(user.clerkId);
       await sendManagedClientEmail(
         user.clerkId,
         normalizedEmail,
         "Your password reset code",
-        passwordResetOtpEmail(otp),
+        passwordResetOtpEmail(otp, brand),
         { emailType: "password_reset", toUserId: user.clerkId ?? String(user.id), toName: user.name },
       );
     } catch (emailErr) {
@@ -585,12 +586,14 @@ router.post("/auth/password-reset/verify", async (req, res): Promise<void> => {
     logger.info({ email: normalizedEmail }, "Password reset successful");
 
     // Password-changed confirmation — fire-and-forget
-    sendManagedClientEmail(
-      user.clerkId,
-      normalizedEmail,
-      "Your password was changed",
-      passwordChangedEmail(user.name ?? normalizedEmail.split("@")[0]!),
-      { emailType: "password_changed", toUserId: user.clerkId ?? String(user.id), toName: user.name },
+    getManagedClientEmailBrand(user.clerkId).then((brand) =>
+      sendManagedClientEmail(
+        user.clerkId,
+        normalizedEmail,
+        "Your password was changed",
+        passwordChangedEmail(user.name ?? normalizedEmail.split("@")[0]!, brand),
+        { emailType: "password_changed", toUserId: user.clerkId ?? String(user.id), toName: user.name },
+      ),
     ).catch(err => logger.warn({ err, email: normalizedEmail }, "Password-changed email send failed"));
 
     res.json({ token });

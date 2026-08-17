@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { BrandMark } from "@/components/logo";
+import { HostBrandMark } from "@/components/logo";
 import { useLocation } from "wouter";
 import { useCompleteOnboarding, useGetOnboardingStatus, getGetOnboardingStatusQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
 import { Check } from "lucide-react";
+import { usePartnerContext } from "@/hooks/use-partner";
 
 /* ── Types ─────────────────────────────────────────────────────────────── */
 
@@ -385,6 +386,7 @@ export default function OnboardingPage() {
   const [, setLocation] = useLocation();
   const qc = useQueryClient();
   const { data: status, isLoading: statusLoading } = useGetOnboardingStatus();
+  const { data: partnerCtx } = usePartnerContext();
   const { mutate: complete, isPending } = useCompleteOnboarding();
 
   const [step, setStep] = useState(0);   // 0 = loading, 1–5 = questions, 6 = done
@@ -400,12 +402,16 @@ export default function OnboardingPage() {
   // If the query is in error state (data=undefined), keep showing the loader
   // rather than jumping straight into the questionnaire.
   useEffect(() => {
+    if (partnerCtx?.isManagedClient) {
+      setLocation("/app/home");
+      return;
+    }
     if (!statusLoading && status?.completed) {
       setLocation("/app/home");
     } else if (!statusLoading && status?.completed === false) {
       setStep(1);
     }
-  }, [status, statusLoading, setLocation]);
+  }, [status, statusLoading, setLocation, partnerCtx?.isManagedClient]);
 
   const totalSteps = answers.usedVoiceAgents === true ? 5 : 4;
 
@@ -460,7 +466,7 @@ export default function OnboardingPage() {
           <ProgressBar current={stepNum - 1} total={totalSteps} />
           <header className="flex items-center justify-between px-6 pt-6 pb-2 max-w-6xl mx-auto w-full">
             <span className="inline-flex items-center gap-2">
-              <BrandMark iconSize={22} wordmarkHeight={16} />
+              <HostBrandMark iconSize={22} wordmarkHeight={16} />
             </span>
             <StepCounter current={stepNum} total={totalSteps} />
           </header>

@@ -614,14 +614,26 @@ function SidebarContent({
           </div>
         )}
         <div className="pb-0.5">
-          <Link
-            href="/docs"
-            onClick={onNavClick}
-            className="flex h-9 w-full items-center gap-2.5 rounded-md px-2.5 text-[13px] text-muted-foreground transition-colors hover:bg-foreground/[0.05] hover:text-foreground"
-          >
-            <KnowledgeIcon className="size-4 shrink-0 text-muted-foreground" />
-            {!collapsed && <span>Documentation</span>}
-          </Link>
+          {partnerCtx?.isManagedClient && partnerCtx.branding?.docsUrl ? (
+            <a
+              href={partnerCtx.branding.docsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex h-9 w-full items-center gap-2.5 rounded-md px-2.5 text-[13px] text-muted-foreground transition-colors hover:bg-foreground/[0.05] hover:text-foreground"
+            >
+              <KnowledgeIcon className="size-4 shrink-0 text-muted-foreground" />
+              {!collapsed && <span>Documentation</span>}
+            </a>
+          ) : partnerCtx?.isManagedClient ? null : (
+            <Link
+              href="/docs"
+              onClick={onNavClick}
+              className="flex h-9 w-full items-center gap-2.5 rounded-md px-2.5 text-[13px] text-muted-foreground transition-colors hover:bg-foreground/[0.05] hover:text-foreground"
+            >
+              <KnowledgeIcon className="size-4 shrink-0 text-muted-foreground" />
+              {!collapsed && <span>Documentation</span>}
+            </Link>
+          )}
         </div>
 
         {/* Wallet chip */}

@@ -93,6 +93,7 @@ import {
   type StoredDomainField,
 } from "@/lib/disposition-fields";
 import { SnapServeAgentIcon } from "@/components/logo";
+import { hostProductName } from "@/lib/white-label";
 import {
   ASR_PROVIDERS, LLM_PROVIDERS, TTS_PROVIDERS,
   LANGUAGES, SARVAM_PERSONALISATION_LANGUAGES, ASR_MODELS, LLM_MODELS, TTS_MODELS, TTS_VOICES, AGENT_TIMEZONES,
@@ -416,7 +417,7 @@ function AgentCostSummary({
   const totalPerMin = platformCents / 100; // paise → INR (map already reflects account-level partner rates)
 
   const segments = [
-    { key: "platform", label: "Platform", provider: "SnapServe", cost: totalPerMin, color: "#059669" },
+    { key: "platform", label: "Platform", provider: "Platform", cost: totalPerMin, color: "#059669" },
   ];
   const breakdown = segments.filter(s => s.cost > 0);
   const barTotal = Math.max(breakdown.reduce((s, x) => s + x.cost, 0), 0.0001);
@@ -478,7 +479,7 @@ function AgentCostSummary({
               <div key={seg.key} className="flex items-center justify-between gap-3">
                 <span className="font-medium">
                   {seg.label}
-                  {seg.provider && seg.provider !== "SnapServe" && (
+                  {seg.provider && seg.provider !== "Platform" && (
                     <span className="text-muted-foreground ml-1 capitalize">({seg.provider})</span>
                   )}
                 </span>
@@ -1236,7 +1237,7 @@ function OverviewTab({
                   </div>
                   {ttsProvider === "sarvam" && (
                     <p className="text-[10px] text-muted-foreground/90 leading-relaxed">
-                      Default SnapServe stack
+                      Default stack
                     </p>
                   )}
                   {ttsVoiceOpts.length > 0 && (
@@ -2051,7 +2052,7 @@ function VoiceTab({ form }: { form: any }) {
                   </div>
                   {ttsProvider === "sarvam" && (
                     <p className="text-[10px] text-muted-foreground leading-relaxed -mt-0.5 mb-1">
-                      Default SnapServe stack
+                      Default stack
                     </p>
                   )}
                   <Select
@@ -6998,9 +6999,10 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
   const watchedName = form.watch("name") as string | undefined;
   useEffect(() => {
     const label = (watchedName ?? agent?.name)?.trim();
-    document.title = label ? `${label} · Agent · SnapServe` : "Agent · SnapServe";
+    const product = hostProductName();
+    document.title = label ? `${label} · Agent · ${product}` : `Agent · ${product}`;
     return () => {
-      document.title = "SnapServe";
+      document.title = product;
     };
   }, [watchedName, agent?.name]);
 

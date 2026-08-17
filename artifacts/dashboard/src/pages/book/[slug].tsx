@@ -18,7 +18,8 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatApiError } from "@/lib/format-api-error";
-import { BrandMark } from "@/components/logo";
+import { HostBrandMark } from "@/components/logo";
+import { hostProductName } from "@/lib/white-label";
 
 
 export default function PublicBookingPage() {
@@ -46,13 +47,14 @@ export default function PublicBookingPage() {
   const nowRef = serverNow?.now ?? new Date().toISOString();
 
   useEffect(() => {
+    const product = hostProductName();
     if (eventType?.name) {
-      document.title = `${eventType.name} — powered by SnapServe`;
+      document.title = `${eventType.name} — ${product}`;
     } else {
-      document.title = "Book a meeting · SnapServe";
+      document.title = `Book a meeting · ${product}`;
     }
     return () => {
-      document.title = "SnapServe";
+      document.title = product;
     };
   }, [eventType?.name]);
 
@@ -114,7 +116,7 @@ export default function PublicBookingPage() {
 
   const BrandHeader = () => (
     <div className="flex flex-col items-center gap-1 mb-8">
-      <BrandMark iconSize={26} wordmarkHeight={20} />
+      <HostBrandMark iconSize={26} wordmarkHeight={20} />
     </div>
   );
 
