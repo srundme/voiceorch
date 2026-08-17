@@ -1,6 +1,8 @@
 /**
  * Platform-wide text LLM for builders / planners / drafts.
- * Default: Sarvam-hosted Gemma 4 (`gemma4` on /v2). Gemini is not used here.
+ * Default: Sarvam-hosted Gemma 4 (`gemma4` on /v2) — fast, no thinking.
+ * Quality-sensitive callers (Vibe) pass `sarvam-105b` + reasoningEffort.
+ * Gemini is not used here.
  */
 import OpenAI from "openai";
 import { db, platformSettingsTable } from "@workspace/db";
@@ -46,6 +48,12 @@ export async function platformChatText(opts: {
   model?: string;
   /** When true, request JSON object mode (caller must still parse). */
   json?: boolean;
+  /**
+   * Native Sarvam /v1 thinking. Omit or pass null to keep thinking off
+   * (journeys / drafts). Vibe passes "high" on sarvam-105b.
+   * gemma4 never reasons — this field is ignored for that model.
+   */
+  reasoningEffort?: "low" | "medium" | "high" | null;
 }): Promise<string> {
   const key = await getSarvamManagedKey();
   if (!key) {
@@ -68,8 +76,18 @@ export async function platformChatText(opts: {
       { role: "system", content: opts.system },
       ...opts.messages,
     ],
-    // gemma4 never reasons; native Sarvam models default thinking ON.
-    ...(model !== "gemma4" ? ({ reasoning_effort: null } as object) : {}),
+    // gemma4 never reasons. Native /v1 defaults thinking ON — send null unless
+    // the caller opted in, otherwise drafts burn tokens on chain-of-thought.
+    ...(model === "gemma4"
+      ? {}
+      : ({
+          reasoning_effort:
+            opts.reasoningEffort === "low"
+            || opts.reasoningEffort === "medium"
+            || opts.reasoningEffort === "high"
+              ? opts.reasoningEffort
+              : null,
+        } as object)),
   });
 
   const msg = response.choices[0]?.message as

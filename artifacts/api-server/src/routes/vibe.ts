@@ -17,7 +17,8 @@ import { trackEvent } from "../services/track-event.js";
 import { parseVibeGeminiJson, parseVoicePick, looksLikePhoneAssign, looksLikePhoneSkip, replyAsksCallFlow, looksLikeContinueIntent, applyAffirmationPhaseAdvance } from "./vibe-gemini-parse.js";
 import { buildPatternSystemPrompt } from "./vibe-system-prompt-pattern.js";
 import { filterVoicesByAgentGender } from "./vibe-agent-gender.js";
-import { getSarvamManagedKey, platformChatText, PLATFORM_CHAT_MODEL } from "../services/platform-chat-llm.js";
+import { getSarvamManagedKey, platformChatText } from "../services/platform-chat-llm.js";
+import { SARVAM_FLAGSHIP_MODEL } from "../orchestration/adapters/llm/sarvam.js";
 
 const router = Router();
 
@@ -459,8 +460,9 @@ class VibeGeminiError extends Error {
 const VIBE_RECOVERY_NOTE =
   "IMPORTANT: Your previous response was cut off or was not valid JSON. Respond again to the conversation above with ONLY the complete, compact, valid JSON object matching the required schema — no markdown fences, no commentary, and keep the \"reply\" text brief.";
 
-/** Explicit JSON mode + Gemma 4 keeps builder turns fast without Gemini. */
-const VIBE_CHAT_MODEL = PLATFORM_CHAT_MODEL;
+/** Flagship Sarvam 105B with thinking on — better agent specs than Gemma 4. */
+const VIBE_CHAT_MODEL = SARVAM_FLAGSHIP_MODEL;
+const VIBE_LLM_TIMEOUT_MS = 120_000;
 
 function lastUserContent(msgs: VibeChatMessage[]): string {
   for (let i = msgs.length - 1; i >= 0; i--) {
@@ -485,12 +487,13 @@ async function callVibeLlm(_key: string, messages: VibeChatMessage[]): Promise<G
           system: VIBE_SYSTEM_PROMPT,
           messages: chatMessages,
           temperature: 0.4,
-          maxTokens: 8192,
-          timeoutMs: 90_000,
+          maxTokens: 16_384,
+          timeoutMs: VIBE_LLM_TIMEOUT_MS,
           model: VIBE_CHAT_MODEL,
           json: true,
+          reasoningEffort: "high",
         }),
-        new Promise<never>((_, rej) => setTimeout(() => rej(new Error("vibe_llm_timeout")), 90000)),
+        new Promise<never>((_, rej) => setTimeout(() => rej(new Error("vibe_llm_timeout")), VIBE_LLM_TIMEOUT_MS)),
       ]);
 
       if (!text.trim() || text.trim() === "{}") {
