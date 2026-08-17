@@ -254,7 +254,8 @@ export default function HomePage() {
               Build the voice agent first, then create a campaign to dial leads.
             </p>
           </div>
-          <div className="grid gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-2">
+          <div className={`grid gap-px overflow-hidden rounded-lg border border-border bg-border ${isManagedWorkspace ? "" : "sm:grid-cols-2"}`}>
+            {!isManagedWorkspace && (
             <button
               type="button"
               onClick={() => navigate("/app/vibe")}
@@ -269,6 +270,7 @@ export default function HomePage() {
                 Start building <ArrowRight className="size-3" />
               </span>
             </button>
+            )}
             <button
               type="button"
               onClick={() => navigate("/app/agents?create=1")}

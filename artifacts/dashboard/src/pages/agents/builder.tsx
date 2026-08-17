@@ -94,6 +94,7 @@ import {
 } from "@/lib/disposition-fields";
 import { SnapServeAgentIcon } from "@/components/logo";
 import { hostProductName } from "@/lib/white-label";
+import { usePartnerManagedWorkspace } from "@/hooks/use-partner";
 import {
   ASR_PROVIDERS, LLM_PROVIDERS, TTS_PROVIDERS,
   LANGUAGES, SARVAM_PERSONALISATION_LANGUAGES, ASR_MODELS, LLM_MODELS, TTS_MODELS, TTS_VOICES, AGENT_TIMEZONES,
@@ -4046,6 +4047,7 @@ function AgentListPanel({ selectedId, onSelect, className }: {
 }) {
   const [search, setSearch] = useState("");
   const [, navigate] = useLocation();
+  const { isManagedWorkspace } = usePartnerManagedWorkspace();
   const { toast } = useToast();
   const { data: agents, isLoading } = useListAgents({ query: { queryKey: getListAgentsQueryKey() } });
   const { teamByAgentId } = useAgentTeamMap();
@@ -4122,14 +4124,19 @@ function AgentListPanel({ selectedId, onSelect, className }: {
             action={
               search
                 ? undefined
-                : {
+                : isManagedWorkspace
+                  ? {
+                      label: "New agent",
+                      onClick: () => navigate("/app/agents?create=1"),
+                    }
+                  : {
                     label: "Build with AI",
                     icon: <Sparkles className="size-3" />,
                     onClick: () => navigate("/app/vibe"),
                   }
             }
             secondaryAction={
-              search
+              search || isManagedWorkspace
                 ? undefined
                 : {
                     label: "Configure manually",
@@ -4185,6 +4192,7 @@ function AgentListPanel({ selectedId, onSelect, className }: {
           );
         })}
       </div>
+      {!isManagedWorkspace && (
       <div className="border-t border-border/70 p-2">
         <button
           type="button"
@@ -4195,6 +4203,7 @@ function AgentListPanel({ selectedId, onSelect, className }: {
           Create with Vibe
         </button>
       </div>
+      )}
     </div>
   );
 }
@@ -6566,6 +6575,7 @@ function VersionsTab({ agentId }: { agentId: number }) {
 
 function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAgents?: () => void }) {
   const [, navigate] = useLocation();
+  const { isManagedWorkspace } = usePartnerManagedWorkspace();
   const search = useSearch();
   const [activeTab, setActiveTab] = useState<TabId>(() => sectionFromSearch(search));
   const tabContentRef = useRef<HTMLDivElement>(null);
@@ -7134,12 +7144,16 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
               <DropdownMenuItem onClick={() => setPublishModalOpen(true)}>
                 <Upload className="mr-2 size-3.5" /> Publish version
               </DropdownMenuItem>
+              {!isManagedWorkspace && (
               <DropdownMenuItem onClick={() => navigate(`/app/vibe?refine=${agentId}`)}>
                 <Sparkles className="mr-2 size-3.5" /> Refine with AI
               </DropdownMenuItem>
+              )}
+              {!isManagedWorkspace && (
               <DropdownMenuItem onClick={() => navigate("/app/providers")}>
                 <Star className="mr-2 size-3.5" /> API keys
               </DropdownMenuItem>
+              )}
               <DropdownMenuItem className="text-destructive" onClick={handleDelete}>
                 <Trash2 className="mr-2 size-3.5" /> Delete agent
               </DropdownMenuItem>
@@ -7565,6 +7579,7 @@ function AgentTeamStrip({ agentId, compact }: { agentId: number; compact?: boole
 
 function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [, navigate] = useLocation();
+  const { isManagedWorkspace } = usePartnerManagedWorkspace();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [step, setStep] = useState<"compose" | "surfaces" | "name">("compose");
@@ -7786,6 +7801,7 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
                 <p className="text-xs text-muted-foreground mt-0.5">Create two agents that hand off mid-call</p>
               </div>
             </button>
+            {!isManagedWorkspace && (
             <button
               type="button"
               onClick={() => { handleClose(); navigate("/app/vibe"); }}
@@ -7794,6 +7810,7 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
               <Sparkles className="h-3.5 w-3.5" />
               Or build with AI (guided)
             </button>
+            )}
           </div>
         )}
 
@@ -7948,6 +7965,7 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
 
 function StudioEmptyCanvas({ onCreate }: { onCreate: () => void }) {
   const [, navigate] = useLocation();
+  const { isManagedWorkspace } = usePartnerManagedWorkspace();
   return (
     <div className="flex-1 flex items-center justify-center p-8 bg-background">
       <div className="text-center max-w-sm space-y-4">
@@ -7964,9 +7982,11 @@ function StudioEmptyCanvas({ onCreate }: { onCreate: () => void }) {
           <Button className="h-11 min-h-11 rounded-xl gap-1.5 text-xs w-full sm:w-auto" onClick={onCreate}>
             <Plus className="h-3.5 w-3.5" /> New agent
           </Button>
+          {!isManagedWorkspace && (
           <Button variant="outline" className="h-11 min-h-11 rounded-xl gap-1.5 text-xs w-full sm:w-auto" onClick={() => navigate("/app/vibe")}>
             <Sparkles className="h-3.5 w-3.5" /> Build with AI
           </Button>
+          )}
         </div>
       </div>
     </div>

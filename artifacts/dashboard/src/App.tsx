@@ -93,7 +93,8 @@ import TeamPage             from "@/pages/team";
 import ImpersonatePage      from "@/pages/impersonate";
 import { ImpersonationBanner } from "@/components/ImpersonationBanner";
 import { initMetaPixel } from "@/lib/meta-pixel";
-import { usePartnerContext } from "@/hooks/use-partner";
+import { usePartnerContext, usePartnerManagedWorkspace } from "@/hooks/use-partner";
+import { isBlockedForManagedClient } from "@/lib/managed-client-surface";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -421,6 +422,7 @@ function AppRoutes() {
   const [location] = useLocation();
   const { data: onboardingStatus, isLoading: onboardingLoading } = useGetOnboardingStatus();
   const { data: partnerCtx, isLoading: partnerLoading } = usePartnerContext();
+  const { isManagedWorkspace } = usePartnerManagedWorkspace();
 
   // Restore a partner invite link stashed while the visitor was signed out.
   useEffect(() => {
@@ -444,6 +446,9 @@ function AppRoutes() {
   const skipOnboarding = partnerCtx?.isManagedClient === true;
   if (!skipOnboarding && onboardingStatus?.completed === false && !onOnboardingPage && !onPartnerJoinPage) {
     return <Redirect to="/app/onboarding" />;
+  }
+  if (isManagedWorkspace && isBlockedForManagedClient(location)) {
+    return <Redirect to="/app/home" />;
   }
 
   return (
@@ -610,6 +615,12 @@ function SignedOutRedirect() {
   return <Redirect to="/" />;
 }
 
+function VibeRoute() {
+  const { isManagedWorkspace } = usePartnerManagedWorkspace();
+  if (isManagedWorkspace) return <Redirect to="/app/agents?create=1" />;
+  return <VibePage />;
+}
+
 function ProtectedApp() {
   const { isLoaded } = useAuth();
   if (!isLoaded) return <AppLoader />;
@@ -620,7 +631,7 @@ function ProtectedApp() {
         <Switch>
           {/* Full-screen pages — no sidebar layout */}
           <Route path="/app/onboarding" component={OnboardingPage} />
-          <Route path="/app/vibe" component={VibePage} />
+          <Route path="/app/vibe" component={VibeRoute} />
           {/* All other /app/* routes go through the onboarding gate + Layout */}
           <Route path="/app/*?" component={AppRoutes} />
         </Switch>
@@ -646,7 +657,8 @@ function NavHistoryTracker() {
 }
 
 function SnapServeOnlyDocs() {
-  if (!isDirectSnapServeHost()) return <Redirect to="/" />;
+  const { data: partnerCtx } = usePartnerContext();
+  if (!isDirectSnapServeHost() || partnerCtx?.isManagedClient) return <Redirect to="/" />;
   return <DocsPage />;
 }
 

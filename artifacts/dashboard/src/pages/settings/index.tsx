@@ -326,6 +326,7 @@ function AccountBillingCard() {
           <div className="h-24 bg-muted/30 rounded-lg animate-pulse" />
         ) : (
           <>
+            {!isManagedWorkspace && (
             <div className="flex items-center gap-2.5 p-3.5 rounded-lg border border-border/60 bg-muted/10">
               <Key className="h-4 w-4 text-muted-foreground shrink-0" />
               <p className="text-xs text-muted-foreground flex-1">
@@ -338,6 +339,7 @@ function AccountBillingCard() {
                 </Button>
               </Link>
             </div>
+            )}
 
             <div className="flex items-center justify-between p-4 rounded-lg border border-border/60 bg-muted/20">
               <div className="flex items-start gap-3">
@@ -544,6 +546,7 @@ function CategoryCard({
 }
 
 function CategoryGrid({ onOpenGeneral }: { onOpenGeneral: () => void }) {
+  const { isManagedWorkspace } = usePartnerManagedWorkspace();
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
       <CategoryCard
@@ -556,6 +559,7 @@ function CategoryGrid({ onOpenGeneral }: { onOpenGeneral: () => void }) {
           { icon: Lock, label: "Change Password", onClick: onOpenGeneral },
         ]}
       />
+      {!isManagedWorkspace && (
       <CategoryCard
         icon={Terminal}
         title="API & Developers"
@@ -566,16 +570,20 @@ function CategoryGrid({ onOpenGeneral }: { onOpenGeneral: () => void }) {
           { icon: Webhook, label: "Event subscriptions", href: "/app/webhooks" },
         ]}
       />
+      )}
       <CategoryCard
         icon={Phone}
         title="Telephony"
-        description="Configure providers and manage phone numbers."
+        description={isManagedWorkspace ? "Phone numbers assigned to this workspace." : "Configure providers and manage phone numbers."}
         iconClassName="bg-muted text-muted-foreground"
-        links={[
-          { icon: Layers, label: "Providers", href: "/app/providers" },
-          { icon: Phone, label: "Phone Numbers", href: "/app/phone-numbers" },
-        ]}
+        links={isManagedWorkspace
+          ? [{ icon: Phone, label: "Phone Numbers", href: "/app/phone-numbers" }]
+          : [
+              { icon: Layers, label: "Providers", href: "/app/providers" },
+              { icon: Phone, label: "Phone Numbers", href: "/app/phone-numbers" },
+            ]}
       />
+      {!isManagedWorkspace && (
       <CategoryCard
         icon={Sparkles}
         title="AI Configuration"
@@ -586,17 +594,21 @@ function CategoryGrid({ onOpenGeneral }: { onOpenGeneral: () => void }) {
           { icon: Layers, label: "AI Providers (BYOP)", href: "/app/providers" },
         ]}
       />
+      )}
       <CategoryCard
         icon={CreditCard}
         title="Billing & Usage"
-        description="Manage wallet, usage and your subscription."
+        description={isManagedWorkspace ? "View wallet balance for this workspace." : "Manage wallet, usage and your subscription."}
         iconClassName="bg-muted text-muted-foreground"
-        links={[
-          { icon: Wallet, label: "Wallet", href: "/app/wallet" },
-          { icon: BarChart3, label: "Usage", href: "/app/usage" },
-          { icon: Users, label: "Concurrent Call Slots", onClick: onOpenGeneral },
-        ]}
+        links={isManagedWorkspace
+          ? [{ icon: Wallet, label: "Wallet", href: "/app/wallet" }]
+          : [
+              { icon: Wallet, label: "Wallet", href: "/app/wallet" },
+              { icon: BarChart3, label: "Usage", href: "/app/usage" },
+              { icon: Users, label: "Concurrent Call Slots", onClick: onOpenGeneral },
+            ]}
       />
+      {!isManagedWorkspace && (
       <CategoryCard
         icon={Shield}
         title="Security"
@@ -606,6 +618,7 @@ function CategoryGrid({ onOpenGeneral }: { onOpenGeneral: () => void }) {
           { icon: ScrollText, label: "Audit Logs", href: "/app/activity" },
         ]}
       />
+      )}
     </div>
   );
 }
@@ -634,10 +647,7 @@ function DangerZoneCard() {
 
 function NeedHelpCard() {
   const { partnerCtx, isManagedWorkspace, partnerName } = usePartnerManagedWorkspace();
-  const docsHref = isManagedWorkspace
-    ? (partnerCtx?.branding?.docsUrl ?? null)
-    : "/docs";
-  const docsExternal = isManagedWorkspace && !!partnerCtx?.branding?.docsUrl;
+  const docsHref = isManagedWorkspace ? null : "/docs";
   const supportHref = isManagedWorkspace
     ? (partnerCtx?.branding?.supportUrl
       || (partnerCtx?.branding?.supportEmail ? `mailto:${partnerCtx.branding.supportEmail}` : null))
@@ -661,7 +671,7 @@ function NeedHelpCard() {
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {docsHref && (
-            <a href={docsHref} target={docsExternal ? "_blank" : undefined} rel={docsExternal ? "noopener noreferrer" : undefined}>
+            <a href={docsHref} target="_blank" rel="noopener noreferrer">
               <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
                 <BookOpen className="h-3.5 w-3.5" /> View Documentation
               </Button>
@@ -682,6 +692,7 @@ function NeedHelpCard() {
 
 export default function SettingsPage() {
   const [view, setView] = useState<"overview" | "general">("overview");
+  const { isManagedWorkspace } = usePartnerManagedWorkspace();
 
   return (
     <div className="h-full overflow-y-auto">
@@ -693,7 +704,7 @@ export default function SettingsPage() {
             {/* Parent StripeTabPage owns the Workspace title */}
             <QuickOverview />
             <CategoryGrid onOpenGeneral={() => setView("general")} />
-            <DangerZoneCard />
+            {!isManagedWorkspace && <DangerZoneCard />}
             <NeedHelpCard />
           </>
         )}
