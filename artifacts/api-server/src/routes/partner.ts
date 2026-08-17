@@ -45,7 +45,12 @@ import {
 } from "@workspace/db";
 import { and, desc, eq, gte, inArray, isNull, ne, sql, count } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
-import { sendBrevoEmail } from "../services/brevo.js";
+import {
+  provisionPartnerMailDomain,
+  verifyPartnerMailDomain,
+  mailDomainFromEmail,
+  sendPartnerEmail,
+} from "../services/partner-mail.js";
 import { getSelfBaseUrl } from "../lib/app-domain.js";
 import { hashPassword } from "../lib/password.js";
 import {
@@ -298,6 +303,10 @@ router.get("/partner/me", requireAuth, async (req, res): Promise<void> => {
       customDomainStatus: partner.customDomainStatus ?? "none",
       domainVerifyToken: partner.domainVerifyToken ?? null,
       cnameTarget: getPartnerCnameTarget(),
+      mailFromName: partner.mailFromName ?? null,
+      mailFromEmail: partner.mailFromEmail ?? null,
+      mailDomainStatus: partner.mailDomainStatus ?? "none",
+      mailDnsRecords: partner.mailDnsRecords ?? [],
       walletBalanceCents: partnerUser?.walletBalanceCents ?? 0,
       clientCount: Number(clientCountRow?.n ?? 0),
       pendingInvites: Number(pendingInvitesRow?.n ?? 0),
@@ -374,6 +383,100 @@ router.patch("/partner/me", requireAuth, async (req, res): Promise<void> => {
     });
   } catch (err) {
     req.log.error({ err }, "partner/me PATCH failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+/* ─── Client email From domain (white-label) ───────────────────────────────── */
+
+router.put("/partner/mail", requireAuth, async (req, res): Promise<void> => {
+  try {
+    const partner = await requireActivePartner(req, res);
+    if (!partner) return;
+
+    const fromName = String((req.body as { fromName?: string })?.fromName ?? partner.companyName).trim().slice(0, 80);
+    const fromEmailRaw = String((req.body as { fromEmail?: string })?.fromEmail ?? "").trim();
+    if (!fromEmailRaw) {
+      res.status(400).json({ error: "From email is required, e.g. noreply@yourcompany.com" });
+      return;
+    }
+
+    const provisioned = await provisionPartnerMailDomain(fromName || partner.companyName, fromEmailRaw);
+    const [updated] = await db
+      .update(partnersTable)
+      .set({
+        mailFromName: fromName || partner.companyName,
+        mailFromEmail: provisioned.email,
+        mailDomainStatus: provisioned.status,
+        mailDnsRecords: provisioned.dnsRecords,
+        mailDomainVerifiedAt: provisioned.status === "verified" ? new Date() : null,
+      })
+      .where(eq(partnersTable.id, partner.id))
+      .returning();
+
+    res.json({
+      mailFromName: updated!.mailFromName,
+      mailFromEmail: updated!.mailFromEmail,
+      mailDomainStatus: updated!.mailDomainStatus,
+      mailDnsRecords: updated!.mailDnsRecords ?? [],
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Could not save sending domain";
+    req.log.warn({ err }, "partner/mail PUT failed");
+    res.status(400).json({ error: message });
+  }
+});
+
+router.post("/partner/mail/verify", requireAuth, async (req, res): Promise<void> => {
+  try {
+    const partner = await requireActivePartner(req, res);
+    if (!partner) return;
+    const domain = mailDomainFromEmail(partner.mailFromEmail ?? "");
+    if (!domain) {
+      res.status(400).json({ error: "Save a From address on your domain first" });
+      return;
+    }
+
+    const result = await verifyPartnerMailDomain(domain);
+    const [updated] = await db
+      .update(partnersTable)
+      .set({
+        mailDomainStatus: result.status,
+        mailDnsRecords: result.dnsRecords,
+        mailDomainVerifiedAt: result.status === "verified" ? new Date() : partner.mailDomainVerifiedAt,
+      })
+      .where(eq(partnersTable.id, partner.id))
+      .returning();
+
+    res.json({
+      mailFromName: updated!.mailFromName,
+      mailFromEmail: updated!.mailFromEmail,
+      mailDomainStatus: updated!.mailDomainStatus,
+      mailDnsRecords: updated!.mailDnsRecords ?? [],
+    });
+  } catch (err) {
+    req.log.error({ err }, "partner/mail verify failed");
+    res.status(500).json({ error: "Could not check DNS yet. Wait a minute and try again." });
+  }
+});
+
+router.delete("/partner/mail", requireAuth, async (req, res): Promise<void> => {
+  try {
+    const partner = await requireActivePartner(req, res);
+    if (!partner) return;
+    await db
+      .update(partnersTable)
+      .set({
+        mailFromName: null,
+        mailFromEmail: null,
+        mailDomainStatus: "none",
+        mailDnsRecords: null,
+        mailDomainVerifiedAt: null,
+      })
+      .where(eq(partnersTable.id, partner.id));
+    res.sendStatus(204);
+  } catch (err) {
+    req.log.error({ err }, "partner/mail DELETE failed");
     res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -806,7 +909,8 @@ router.post("/partner/clients", requireAuth, async (req, res): Promise<void> => 
     let emailSent = false;
     if (sendCredentials !== false) {
       try {
-        await sendBrevoEmail(
+        await sendPartnerEmail(
+          partner,
           cleanEmail,
           `Your ${partner.companyName} account is ready`,
           clientWelcomeEmailHtml({
@@ -816,7 +920,6 @@ router.post("/partner/clients", requireAuth, async (req, res): Promise<void> => 
             password: pwd,
             loginUrl,
           }),
-          undefined,
           { emailType: "partner_client_credentials", toUserId: sub, toName: displayName },
         );
         emailSent = true;
@@ -1385,8 +1488,8 @@ function inviteEmailHtml(companyName: string, inviteUrl: string): string {
     <div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:12px;padding:32px;">
       <h1 style="font-size:20px;margin:0 0 12px;">${companyName} invited you to their AI voice-agent platform</h1>
       <p style="color:#444;line-height:1.6;">
-        ${companyName} uses SnapServe AI to run AI voice agents and has invited you to join as a client.
-        You'll get your own account with agents, call logs and a prepaid wallet — managed in partnership with ${companyName}.
+        ${companyName} invited you to join their AI voice-agent workspace.
+        You'll get your own account with agents, call logs and a prepaid wallet — managed by ${companyName}.
       </p>
       <p style="margin:28px 0;">
         <a href="${inviteUrl}" style="background:#4f46e5;color:#fff;text-decoration:none;padding:12px 24px;border-radius:8px;display:inline-block;">
@@ -1489,11 +1592,11 @@ router.post("/partner/invites", requireAuth, async (req, res): Promise<void> => 
     const inviteUrl = `${appBase}/app/partner-join?token=${token}`;
     let emailSent = true;
     try {
-      await sendBrevoEmail(
+      await sendPartnerEmail(
+        partner,
         cleanEmail,
-        `${partner.companyName} invited you to SnapServe AI`,
+        `${partner.companyName} invited you to join`,
         inviteEmailHtml(partner.companyName, inviteUrl),
-        undefined,
         { emailType: "partner_invite" },
       );
     } catch (emailErr) {

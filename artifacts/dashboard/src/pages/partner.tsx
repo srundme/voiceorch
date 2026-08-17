@@ -13,7 +13,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import {
   Handshake, Users, UserPlus, Wallet, TrendingUp, Clock, Mail,
-  Trash2, IndianRupee, ArrowRightLeft, Upload, X, Settings2, Globe, Link2, CheckCircle2,
+  Trash2, IndianRupee, ArrowRightLeft, Upload, X, Settings2, Globe, Link2, CheckCircle2, Copy,
 } from "lucide-react";
 import { useLocation } from "wouter";
 
@@ -35,6 +35,10 @@ interface PartnerMe {
   customDomainStatus: "none" | "pending" | "active" | "failed";
   domainVerifyToken: string | null;
   cnameTarget: string;
+  mailFromName: string | null;
+  mailFromEmail: string | null;
+  mailDomainStatus: "none" | "pending" | "verified" | "failed";
+  mailDnsRecords: Array<{ key: string; host: string; type: string; value: string; ok: boolean }>;
   walletBalanceCents: number;
   clientCount: number;
   pendingInvites: number;
@@ -669,6 +673,8 @@ function SettingsTab({ me }: { me: PartnerMe }) {
   const [uploading, setUploading] = useState(false);
   const [slugDraft, setSlugDraft] = useState(me.slug ?? "");
   const [customDraft, setCustomDraft] = useState(me.customDomain ?? "");
+  const [mailName, setMailName] = useState(me.mailFromName ?? me.companyName);
+  const [mailEmail, setMailEmail] = useState(me.mailFromEmail ?? "");
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["partner-me"] });
@@ -743,6 +749,44 @@ function SettingsTab({ me }: { me: PartnerMe }) {
     mutationFn: () => partnerFetch(getToken, "/api/partner/domain/custom", { method: "DELETE" }),
     onSuccess: () => { toast({ title: "Custom domain removed" }); setCustomDraft(""); invalidate(); },
     onError: (err: Error) => toast({ title: "Could not remove domain", description: err.message, variant: "destructive" }),
+  });
+
+  const saveMailMutation = useMutation({
+    mutationFn: () =>
+      partnerFetch(getToken, "/api/partner/mail", {
+        method: "PUT",
+        body: JSON.stringify({ fromName: mailName.trim(), fromEmail: mailEmail.trim() }),
+      }),
+    onSuccess: () => {
+      toast({ title: "Sending domain saved", description: "Add the DNS records below, then click Check DNS." });
+      invalidate();
+    },
+    onError: (err: Error) => toast({ title: "Could not save mail domain", description: err.message, variant: "destructive" }),
+  });
+
+  const verifyMailMutation = useMutation({
+    mutationFn: () =>
+      partnerFetch<{ mailDomainStatus: string }>(getToken, "/api/partner/mail/verify", { method: "POST" }),
+    onSuccess: (data) => {
+      toast({
+        title: data.mailDomainStatus === "verified" ? "Mail domain verified" : "DNS not complete yet",
+        description: data.mailDomainStatus === "verified"
+          ? "Client emails will send from your address."
+          : "Wait a few minutes after adding the records, then check again.",
+      });
+      invalidate();
+    },
+    onError: (err: Error) => toast({ title: "Could not verify mail domain", description: err.message, variant: "destructive" }),
+  });
+
+  const clearMailMutation = useMutation({
+    mutationFn: () => partnerFetch(getToken, "/api/partner/mail", { method: "DELETE" }),
+    onSuccess: () => {
+      setMailEmail("");
+      toast({ title: "Sending domain removed" });
+      invalidate();
+    },
+    onError: (err: Error) => toast({ title: "Could not remove mail domain", description: err.message, variant: "destructive" }),
   });
 
   async function onLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -971,6 +1015,106 @@ function SettingsTab({ me }: { me: PartnerMe }) {
             </div>
           )}
         </div>
+      </div>
+
+      <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <Mail className="h-4 w-4 text-muted-foreground" />
+          <h2 className="text-sm font-medium">Client emails</h2>
+          {me.mailDomainStatus === "verified" && (
+            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded border bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
+              Sending from your domain
+            </span>
+          )}
+          {me.mailDomainStatus === "pending" && (
+            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded border bg-amber-500/10 text-amber-600 border-amber-500/20">
+              Add DNS
+            </span>
+          )}
+        </div>
+        <p className="text-[11px] text-muted-foreground -mt-1">
+          Invites, passwords, and reset codes should come from your company — not SnapServe.
+          Use an address on a domain you control (for example noreply@yourcompany.com), then add the DNS records.
+        </p>
+        <div className="space-y-1.5">
+          <Label htmlFor="mail-name">From name</Label>
+          <Input id="mail-name" value={mailName} onChange={e => setMailName(e.target.value)} placeholder={companyName.trim() || "Acme"} />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="mail-email">From email</Label>
+          <Input
+            id="mail-email"
+            type="email"
+            value={mailEmail}
+            onChange={e => setMailEmail(e.target.value)}
+            placeholder="noreply@yourcompany.com"
+            className="font-mono text-sm"
+          />
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            disabled={saveMailMutation.isPending || !mailEmail.includes("@")}
+            onClick={() => saveMailMutation.mutate()}
+          >
+            {saveMailMutation.isPending ? "Saving…" : "Save sending domain"}
+          </Button>
+          {me.mailFromEmail && me.mailDomainStatus !== "verified" && (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={verifyMailMutation.isPending}
+              onClick={() => verifyMailMutation.mutate()}
+            >
+              {verifyMailMutation.isPending ? "Checking…" : "Check DNS"}
+            </Button>
+          )}
+          {me.mailFromEmail && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-muted-foreground"
+              disabled={clearMailMutation.isPending}
+              onClick={() => clearMailMutation.mutate()}
+            >
+              Remove
+            </Button>
+          )}
+        </div>
+        {(me.mailDnsRecords?.length ?? 0) > 0 && me.mailDomainStatus !== "verified" && (
+          <div className="overflow-x-auto rounded-lg border border-border">
+            <table className="w-full text-[11px]">
+              <thead>
+                <tr className="text-left text-muted-foreground border-b border-border">
+                  <th className="px-2 py-1.5 font-medium">Type</th>
+                  <th className="px-2 py-1.5 font-medium">Host</th>
+                  <th className="px-2 py-1.5 font-medium">Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                {me.mailDnsRecords.map((rec) => (
+                  <tr key={rec.key} className="border-b border-border/60 last:border-0 align-top">
+                    <td className="px-2 py-1.5 font-mono">{rec.type}</td>
+                    <td className="px-2 py-1.5 font-mono break-all">{rec.host}</td>
+                    <td className="px-2 py-1.5 font-mono break-all">
+                      <button
+                        type="button"
+                        className="inline-flex items-start gap-1 text-left hover:underline"
+                        onClick={() => {
+                          void navigator.clipboard.writeText(rec.value);
+                          toast({ title: "Copied DNS value" });
+                        }}
+                      >
+                        <Copy className="h-3 w-3 mt-0.5 shrink-0" />
+                        {rec.value}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       <div className="rounded-xl border border-border bg-card p-4 space-y-3">
