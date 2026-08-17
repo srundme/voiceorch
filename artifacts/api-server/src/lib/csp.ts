@@ -15,6 +15,10 @@ export const dashboardCspDirectives: Record<string, string[]> = {
   scriptSrc: [
     "'self'",
     "'unsafe-inline'",
+    // Chrome treats AudioWorklet.addModule(blob:) as a script, not a worker.
+    // workerSrc blob: is not enough — without this, live test fails with
+    // "Unable to load a worklet's module."
+    "blob:",
     "https://www.googletagmanager.com",
     "https://www.google-analytics.com",
     "https://www.googleadservices.com",

@@ -153,7 +153,7 @@ export function WebcallPanel({
     setState("connecting");
     try {
       if (!shareToken) {
-        const walletResp = await fetch("/api/wallet/me", { credentials: "include" });
+        const walletResp = await fetch("/api/wallet", { credentials: "include" });
         if (!walletResp.ok && walletResp.status === 401) throw new Error("You need to be signed in to start a test call.");
         if (walletResp.ok) {
           const walletData = await walletResp.json() as { balanceCents?: number };
@@ -171,8 +171,16 @@ export function WebcallPanel({
       const capture = new AudioContext({ sampleRate: 16000 });
       captureCtxRef.current = capture;
       await capture.resume();
-      const blobUrl = URL.createObjectURL(new Blob([CAPTURE_WORKLET], { type: "application/javascript" }));
-      try { await capture.audioWorklet.addModule(blobUrl); } finally { URL.revokeObjectURL(blobUrl); }
+      try {
+        await capture.audioWorklet.addModule("/worklets/pcm-capture.js");
+      } catch {
+        const blobUrl = URL.createObjectURL(new Blob([CAPTURE_WORKLET], { type: "application/javascript" }));
+        try {
+          await capture.audioWorklet.addModule(blobUrl);
+        } finally {
+          URL.revokeObjectURL(blobUrl);
+        }
+      }
 
       const srcNode = capture.createMediaStreamSource(stream);
       sourceNodeRef.current = srcNode;
