@@ -2446,6 +2446,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
   const genderEnabled = form.watch("genderDetectionEnabled") ?? false;
   const voiceMemoryEnabled = form.watch("voiceMemoryEnabled") ?? false;
   const recordingEnabled = form.watch("recordingEnabled") ?? true;
+  const summarizationEnabled = form.watch("summarizationEnabled") ?? false;
   const watchedTools  = (form.watch("tools") ?? []) as any[];
   const { toast } = useToast();
 
@@ -3135,6 +3136,36 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
               <Switch
                 checked={recordingEnabled}
                 onCheckedChange={(v) => form.setValue("recordingEnabled", v, { shouldDirty: true })}
+                onClick={e => e.stopPropagation()}
+              />
+            </div>
+          </div>
+        </div>
+
+        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-1 mt-4">After the call</p>
+        <div className={cn("rounded-xl border transition-all duration-150", summarizationEnabled ? "border-border/70 bg-card/40" : "border-border/40 bg-card/20")}>
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={(e) => { if (!e.nativeEvent.isTrusted) return; form.setValue("summarizationEnabled", !summarizationEnabled, { shouldDirty: true }); }}
+            onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); form.setValue("summarizationEnabled", !summarizationEnabled, { shouldDirty: true }); } }}
+            className="w-full text-left p-4 flex items-start gap-3 cursor-pointer"
+          >
+            <div className="mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center shrink-0 bg-muted/30">
+              <Sparkles className={cn("h-4 w-4", summarizationEnabled ? "text-foreground/70" : "text-muted-foreground/35")} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-0.5">
+                <span className="text-xs font-semibold text-foreground/80">Auto Summarization</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground/60 leading-relaxed">
+                After each completed call, write a short AI summary on the History → Summary tab.
+              </p>
+            </div>
+            <div className="shrink-0 mt-1">
+              <Switch
+                checked={summarizationEnabled}
+                onCheckedChange={(v) => form.setValue("summarizationEnabled", v, { shouldDirty: true })}
                 onClick={e => e.stopPropagation()}
               />
             </div>
@@ -5231,7 +5262,7 @@ const COMPARE_SECTIONS: Array<{ label: string; keys: string[] }> = [
   { label: "LLM",           keys: ["llmProvider", "llmModel", "temperature"] },
   { label: "TTS / Voice",   keys: ["ttsProvider", "ttsVoice", "ttsModel"] },
   { label: "Telephony",     keys: ["telephonyProvider"] },
-  { label: "Call Settings", keys: ["maxDuration", "silenceTimeoutSeconds", "language", "webhookUrl", "noiseCancellationEnabled", "backchannelingEnabled"] },
+  { label: "Call Settings", keys: ["maxDuration", "silenceTimeoutSeconds", "language", "webhookUrl", "noiseCancellationEnabled", "backchannelingEnabled", "recordingEnabled", "summarizationEnabled"] },
   { label: "Tools",         keys: ["tools"] },
   { label: "Knowledge Base", keys: ["knowledgeSourceIds"] },
   { label: "Scheduling",    keys: ["schedulingCalendarId", "schedulingEventTypeId"] },
@@ -5263,6 +5294,8 @@ const FIELD_LABELS: Record<string, string> = {
   webhookUrl: "Post-call notify URL",
   noiseCancellationEnabled: "Noise Cancellation",
   backchannelingEnabled: "Backchannel",
+  recordingEnabled: "Call Recording",
+  summarizationEnabled: "Auto Summarization",
   tools: "Tools",
   knowledgeSourceIds: "Knowledge Sources",
   schedulingCalendarId: "Scheduling Calendar",
@@ -6913,6 +6946,7 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
         timezone:                 "prompt",
         autoRedialEnabled:        "settings",
         autoRedialMaxAttempts:    "settings",
+        summarizationEnabled:     "tools",
         machineDetectionMode:     "voicemail",
         voicemailAction:          "voicemail",
         voicemailMessage:         "voicemail",

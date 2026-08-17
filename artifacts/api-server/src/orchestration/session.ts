@@ -3388,9 +3388,10 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
           let dispositionResult: Record<string, unknown> | null = null;
           let successEvaluation: string | null = null;
 
-          // 1. Generate call summary — always runs for every completed call.
+          // 1. Generate call summary when the agent has Auto Summarization on.
           // Uses BYOP key when available; falls back to platform managed key (Groq).
-          if (ag.userId) {
+          const summarizationEnabled = agCfgForWebhook["summarizationEnabled"] === true;
+          if (ag.userId && summarizationEnabled) {
             try {
               const hasTranscript = !!(transcript && transcript.trim().length > 0);
               if (!hasTranscript) {
