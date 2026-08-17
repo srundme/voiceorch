@@ -54,6 +54,19 @@ describe("mobile responsiveness smoke", () => {
     expect(vibe).toMatch(/pb-safe/);
   });
 
+  it("vibe studio keeps agent, connect, and test in the same page", () => {
+    const vibe = src("src/pages/vibe/index.tsx");
+    const nav = src("src/pages/vibe/studio-nav.tsx");
+    expect(nav).toMatch(/Chat/);
+    expect(nav).toMatch(/Agent/);
+    expect(nav).toMatch(/Connect/);
+    expect(nav).toMatch(/Test/);
+    expect(vibe).toMatch(/AgentEditorPanel/);
+    expect(vibe).toMatch(/VibeConnectPane/);
+    expect(vibe).toMatch(/VibeTestPane/);
+    expect(vibe).toMatch(/embedded/);
+  });
+
   it("home page uses a responsive command-center layout", () => {
     const home = src("src/pages/home/index.tsx");
     expect(home).toMatch(/lg:grid-cols-\[minmax\(0,1fr\)_300px\]/);

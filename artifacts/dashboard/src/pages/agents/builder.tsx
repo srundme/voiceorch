@@ -6606,7 +6606,7 @@ function VersionsTab({ agentId }: { agentId: number }) {
 
 /* ── Agent editor panel ─────────────────────────────────────────────────────── */
 
-function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAgents?: () => void }) {
+export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId: number; onOpenAgents?: () => void; embedded?: boolean }) {
   const [, navigate] = useLocation();
   const { isManagedWorkspace } = usePartnerManagedWorkspace();
   const search = useSearch();
@@ -6981,7 +6981,9 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
       try { localStorage.removeItem(LAST_AGENT_ID_KEY); } catch {}
       await queryClient.invalidateQueries({ queryKey: getListAgentsQueryKey() });
       const nextList = (queryClient.getQueryData(getListAgentsQueryKey()) as any[])?.filter(a => a.id !== agentId) || [];
-      if (nextList.length > 0) {
+      if (embedded) {
+        navigate("/app/vibe", { replace: true });
+      } else if (nextList.length > 0) {
         navigate(`/app/agents/${nextList[0].id}`, { replace: true });
       } else {
         navigate("/app/agents", { replace: true });
@@ -7076,20 +7078,22 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
       {/* Single toolbar — agent identity + actions */}
       <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border bg-background px-3 sm:h-16 sm:px-5">
         <div className="flex min-w-0 items-center gap-2.5">
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            className="h-8 gap-1 px-2 text-[11px] text-muted-foreground hover:text-foreground"
-            onClick={() => {
-              if (canGoBackInApp()) window.history.back();
-              else navigate("/app/home");
-            }}
-          >
-            <ChevronLeft className="size-3.5" />
-            <span className="hidden sm:inline">Back</span>
-          </Button>
-          {onOpenAgents && (
+          {!embedded && (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-8 gap-1 px-2 text-[11px] text-muted-foreground hover:text-foreground"
+              onClick={() => {
+                if (canGoBackInApp()) window.history.back();
+                else navigate("/app/home");
+              }}
+            >
+              <ChevronLeft className="size-3.5" />
+              <span className="hidden sm:inline">Back</span>
+            </Button>
+          )}
+          {!embedded && onOpenAgents && (
             <Button
               type="button"
               size="sm"
@@ -7102,7 +7106,7 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
               <ChevronDown className="size-3 text-muted-foreground" />
             </Button>
           )}
-          <div className="h-4 w-px shrink-0 bg-border/80" />
+          {!embedded && <div className="h-4 w-px shrink-0 bg-border/80" />}
           <button
             type="button"
             onClick={() => { setRenameValue(agent.name ?? ""); setRenameDialogOpen(true); }}
@@ -7178,7 +7182,7 @@ function AgentEditorPanel({ agentId, onOpenAgents }: { agentId: number; onOpenAg
               <DropdownMenuItem onClick={() => setPublishModalOpen(true)}>
                 <Upload className="mr-2 size-3.5" /> Publish version
               </DropdownMenuItem>
-              {!isManagedWorkspace && (
+              {!isManagedWorkspace && !embedded && (
               <DropdownMenuItem onClick={() => navigate(`/app/vibe?refine=${agentId}`)}>
                 <Sparkles className="mr-2 size-3.5" /> Refine with AI
               </DropdownMenuItem>

@@ -126,7 +126,7 @@ function StatusChip({ ready, label }: { ready: boolean; label: string }) {
   );
 }
 
-export default function ConnectionsPage() {
+export function ConnectionsHub({ embedded = false }: { embedded?: boolean }) {
   const [, navigate] = useLocation();
   const search = useSearch();
   const setupParam = new URLSearchParams(search).get("setup") as SetupId;
@@ -162,10 +162,35 @@ export default function ConnectionsPage() {
     setSetup(isSetupId(setupParam) ? setupParam : null);
   }, [setupParam]);
 
+  const hubHref = useMemo(() => {
+    if (!embedded) return "/app/connections";
+    const u = new URL(window.location.href);
+    u.searchParams.delete("setup");
+    u.searchParams.set("studio", "connect");
+    const q = u.searchParams.toString();
+    return `${u.pathname}${q ? `?${q}` : ""}`;
+  }, [embedded, search]);
+
   const openSetup = (id: SetupId) => {
     setSetup(id);
     // Push (not replace) so the Connections hub stays on the history stack and
     // browser Back from a setup page returns here — not the prior sidebar page.
+    if (embedded) {
+      const u = new URL(window.location.href);
+      if (id) u.searchParams.set("setup", id);
+      else u.searchParams.delete("setup");
+      u.searchParams.set("studio", "connect");
+      if (id) {
+        u.searchParams.set("returnTo", hubHref);
+        u.searchParams.set("returnLabel", "Vibe");
+      } else {
+        u.searchParams.delete("returnTo");
+        u.searchParams.delete("returnLabel");
+      }
+      const q = u.searchParams.toString();
+      navigate(`${u.pathname}${q ? `?${q}` : ""}`);
+      return;
+    }
     if (id) navigate(`/app/connections?setup=${id}`);
     else navigate("/app/connections");
   };
@@ -277,7 +302,7 @@ export default function ConnectionsPage() {
       : null;
 
   if (setup === "calendar") {
-    return <ConnectionsCalendarSetup />;
+    return <ConnectionsCalendarSetup backHref={hubHref} backLabel={embedded ? "Vibe" : "Connections"} />;
   }
 
   // Same pattern as email/meta/sheets — stay under Connections (?setup=whatsapp).
@@ -291,7 +316,7 @@ export default function ConnectionsPage() {
       <StripePage
         title="Email (Brevo)"
         description="Three steps: from address, API key, test. Template is optional. Use the back link to return where you came from."
-        back={setupBackFromReturn ?? { href: "/app/connections", label: "Connections" }}
+        back={setupBackFromReturn ?? { href: hubHref, label: embedded ? "Vibe" : "Connections" }}
       >
         <div className="max-w-lg">
           <EmailChannelCard forceExpanded setupMode />
@@ -304,7 +329,7 @@ export default function ConnectionsPage() {
   const setupBack = setupBackFromReturn
     ?? (fromCampaigns
       ? { href: "/app/campaigns", label: "Campaigns" }
-      : { href: "/app/connections", label: "Connections" });
+      : { href: hubHref, label: embedded ? "Vibe" : "Connections" });
 
   if (setup === "website") {
     return (
@@ -341,7 +366,7 @@ export default function ConnectionsPage() {
       <StripePage
         title="Google Sheets"
         description="Connect once, then use the sheet under Automatic calls or attach it when outreach is ready."
-        back={{ href: "/app/connections", label: "Connections" }}
+        back={{ href: hubHref, label: embedded ? "Vibe" : "Connections" }}
       >
         <div className="max-w-lg space-y-4">
           <div className="overflow-hidden rounded-2xl border border-border bg-card">
@@ -404,13 +429,8 @@ export default function ConnectionsPage() {
     );
   }
 
-  return (
-    <StripePage
-      title="Connections"
-      description="Phone numbers, Sheets, calendar, meetings, WhatsApp, email, and lead forms."
-      back={{ href: "/app/home", label: "Home" }}
-    >
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+  const grid = (
+      <div className={cn("grid gap-3 sm:grid-cols-2 lg:grid-cols-3", embedded && "pt-1")}>
         {cards.map((card) => {
           const ready = card.id === "phone-numbers"
             ? phoneCount > 0
@@ -456,6 +476,33 @@ export default function ConnectionsPage() {
           );
         })}
       </div>
+  );
+
+  if (embedded) {
+    return (
+      <div className="space-y-3">
+        <div>
+          <p className="text-[15px] font-semibold tracking-tight">Workspace integrations</p>
+          <p className="text-[12px] text-muted-foreground mt-0.5">
+            WhatsApp, email, calendar, sheets, and lead forms — same connections the rest of the app uses.
+          </p>
+        </div>
+        {grid}
+      </div>
+    );
+  }
+
+  return (
+    <StripePage
+      title="Connections"
+      description="Phone numbers, Sheets, calendar, meetings, WhatsApp, email, and lead forms."
+      back={{ href: "/app/home", label: "Home" }}
+    >
+      {grid}
     </StripePage>
   );
+}
+
+export default function ConnectionsPage() {
+  return <ConnectionsHub />;
 }

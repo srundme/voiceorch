@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useListAgents, useRunToolTest } from "@workspace/api-client-react";
 import type { Agent } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
@@ -195,15 +195,25 @@ function RunCard({ entry }: { entry: RunEntry }) {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-export default function TestSimulatorPage() {
+export function ToolTestSimulator({
+  lockedAgentId,
+  embedded = false,
+}: {
+  lockedAgentId?: number;
+  embedded?: boolean;
+}) {
   const { data: agents = [], isLoading: agentsLoading } = useListAgents();
   const { mutateAsync: runToolTest, isPending } = useRunToolTest();
 
-  const [selectedAgentId, setSelectedAgentId] = useState<number | null>(null);
+  const [selectedAgentId, setSelectedAgentId] = useState<number | null>(lockedAgentId ?? null);
   const [selectedToolName, setSelectedToolName] = useState<string | null>(null);
   const [params, setParams] = useState<Record<string, string>>({});
   const [runs, setRuns] = useState<RunEntry[]>([]);
   const outputRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (lockedAgentId != null) setSelectedAgentId(lockedAgentId);
+  }, [lockedAgentId]);
 
   const selectedAgent = agents.find((a) => a.id === selectedAgentId) ?? null;
 
@@ -265,7 +275,7 @@ export default function TestSimulatorPage() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* Header */}
+      {!embedded && (
       <div className="px-6 py-4 border-b border-border shrink-0">
         <div className="flex items-center gap-2.5">
           <FlaskConical className="w-4 h-4 text-muted-foreground/60" />
@@ -277,12 +287,14 @@ export default function TestSimulatorPage() {
           </div>
         </div>
       </div>
+      )}
 
       {/* Body */}
       <div className="flex-1 min-h-0 overflow-y-auto">
         <div className="max-w-2xl mx-auto px-6 py-6 space-y-6">
           {/* Agent + Tool selectors */}
           <div className="space-y-4">
+            {lockedAgentId == null && (
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground uppercase tracking-wide">Agent</Label>
               {agentsLoading ? (
@@ -307,6 +319,7 @@ export default function TestSimulatorPage() {
                 </Select>
               )}
             </div>
+            )}
 
             {selectedAgent && (
               <div className="space-y-1.5">
@@ -403,4 +416,8 @@ export default function TestSimulatorPage() {
       </div>
     </div>
   );
+}
+
+export default function TestSimulatorPage() {
+  return <ToolTestSimulator />;
 }
