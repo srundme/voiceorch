@@ -31,12 +31,20 @@ describe("parseCookieHeader", () => {
 });
 
 describe("extractRequestToken", () => {
-  it("prefers Authorization Bearer over the session cookie", () => {
+  it("prefers a real Bearer JWT over the session cookie", () => {
     const token = extractRequestToken(fakeReq({
-      authorization: "Bearer header-jwt",
+      authorization: "Bearer hdr.pay.sig",
       cookies: { [SESSION_COOKIE_NAME]: "cookie-jwt" },
     }));
-    expect(token).toBe("header-jwt");
+    expect(token).toBe("hdr.pay.sig");
+  });
+
+  it("ignores Bearer null / non-JWT so the session cookie still wins", () => {
+    const token = extractRequestToken(fakeReq({
+      authorization: "Bearer null",
+      cookies: { [SESSION_COOKIE_NAME]: "cookie-jwt" },
+    }));
+    expect(token).toBe("cookie-jwt");
   });
 
   it("reads the HttpOnly session cookie", () => {

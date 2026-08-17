@@ -79,13 +79,19 @@ export function verifySessionToken(token: string): SessionPayload | null {
   }
 }
 
+function looksLikeSessionJwt(token: string): boolean {
+  const parts = token.split(".");
+  return parts.length === 3 && parts.every((p) => p.length > 0);
+}
+
 /** Pull a session JWT from Bearer, the HttpOnly cookie, or `?token=` (EventSource / WS). */
 export function extractRequestToken(req: Request): string | null {
   const header = req.headers["authorization"];
   if (typeof header === "string" && header.startsWith("Bearer ")) {
     const t = header.slice(7).trim();
     // Developer API keys (`sk_live_…`) are handled by authenticateApiKey, not here.
-    if (t && !t.startsWith("sk_live_") && !t.startsWith("sk_test_")) return t;
+    // Garbage values like `Bearer null` must not shadow the session cookie.
+    if (t && looksLikeSessionJwt(t)) return t;
   }
   const cookies = (req as Request & { cookies?: Record<string, string> }).cookies;
   const fromParser = cookies?.[SESSION_COOKIE_NAME];
